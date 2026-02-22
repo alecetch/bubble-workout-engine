@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import pg from "pg";
 import { fetchInputs } from "./bubbleClient.js";
+import { runPipeline } from "./engine/runPipeline.js";
 
 const { Pool } = pg;
 const app = express();
@@ -12,7 +13,7 @@ app.use(
     verify: (req, res, buf) => {
       req.rawBody = buf.toString("utf8");
     },
-  })
+  }),
 );
 
 // Postgres pool
@@ -42,21 +43,15 @@ app.post("/generate-plan", async (req, res) => {
   try {
     const { clientProfileId, programType = "hypertrophy" } = req.body ?? {};
 
-    const inputs = await fetchInputs({ clientProfileId });
+const inputs = await fetchInputs({ clientProfileId });
 
-    return res.json({
-      ok: true,
-      programType,
-      bubble: {
-        clientProfileId: inputs?.clientProfile?.response?._id ?? null,
-        exerciseCount:
-          inputs?.exercises?.response?.results?.length ?? 0,
-        repRulesCount:
-          inputs?.configs?.repRules?.response?.results?.length ?? 0,
-        narrationCount:
-          inputs?.configs?.narration?.response?.results?.length ?? 0,
-      },
-    });
+const plan = await runPipeline({
+  inputs,
+  programType,
+  request: req.body, // so Bubble can pass allowed_ids_csv later
+});
+
+return res.json({ ok: true, plan });
   } catch (err) {
     console.error("generate-plan error:", err);
     return res
