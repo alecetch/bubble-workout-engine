@@ -3,9 +3,12 @@ import express from "express";
 import pg from "pg";
 import { fetchInputs } from "./bubbleClient.js";
 import { runPipeline } from "./engine/runPipeline.js";
+import { importEmitterRouter } from "./src/routes/importEmitter.js";
 
 const { Pool } = pg;
 const app = express();
+
+app.use("/api", importEmitterRouter);
 
 // Parse JSON
 app.use(
@@ -15,6 +18,9 @@ app.use(
     },
   }),
 );
+
+// ✅ mount router
+app.use("/api", importEmitterRouter);
 
 // Postgres pool
 const pool = new Pool({
@@ -43,15 +49,15 @@ app.post("/generate-plan", async (req, res) => {
   try {
     const { clientProfileId, programType = "hypertrophy" } = req.body ?? {};
 
-const inputs = await fetchInputs({ clientProfileId });
+    const inputs = await fetchInputs({ clientProfileId });
 
-const plan = await runPipeline({
-  inputs,
-  programType,
-  request: req.body, // so Bubble can pass allowed_ids_csv later
-});
+    const plan = await runPipeline({
+      inputs,
+      programType,
+      request: req.body,
+    });
 
-return res.json({ ok: true, plan });
+    return res.json({ ok: true, plan });
   } catch (err) {
     console.error("generate-plan error:", err);
     return res

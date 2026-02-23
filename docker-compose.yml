@@ -30,5 +30,13 @@ services:
     depends_on:
       - db
 
+  flyway:
+    image: flyway/flyway:12
+    depends_on:
+      - db
+    volumes:
+      - ./migrations:/flyway/sql
+    command: -url=jdbc:postgresql://db:5432/app -user=app -password=app -schemas=public migrate
+
 volumes:
   pgdata:
