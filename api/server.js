@@ -4,11 +4,11 @@ import pg from "pg";
 import { fetchInputs } from "./bubbleClient.js";
 import { runPipeline } from "./engine/runPipeline.js";
 import { importEmitterRouter } from "./src/routes/importEmitter.js";
+import { readProgramRouter } from "./src/routes/readProgram.js";
+
 
 const { Pool } = pg;
 const app = express();
-
-app.use("/api", importEmitterRouter);
 
 // Parse JSON
 app.use(
@@ -21,6 +21,7 @@ app.use(
 
 // ✅ mount router
 app.use("/api", importEmitterRouter);
+app.use("/api", readProgramRouter);
 
 // Postgres pool
 const pool = new Pool({
@@ -73,4 +74,4 @@ app.use((err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, () => console.log(`API listening on :${port}`));
+app.listen(port, "0.0.0.0", () => console.log(`API listening on :${port}`));

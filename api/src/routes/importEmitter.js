@@ -1,16 +1,37 @@
 // api/src/routes/importEmitter.js
+import { createHash, randomUUID } from "node:crypto";
 import express from "express";
 import { pool } from "../db.js";
 
 export const importEmitterRouter = express.Router();
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const EXPECTED_COLS = {
+  PRG: 9,
+  WEEK: 4,
+  DAY: 14,
+  SEG: 19,
+  EX: 26,
+};
+
+class ValidationError extends Error {
+  constructor(message, details = []) {
+    super(message);
+    this.name = "ValidationError";
+    this.status = 400;
+    this.details = details;
+  }
+}
+
 function s(v) {
   return (v ?? "").toString().trim();
 }
+
 function toInt(v, fallback = 0) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : fallback;
 }
+
 function safeJsonParse(v, fallback) {
   try {
     if (v == null) return fallback;
@@ -23,7 +44,6 @@ function safeJsonParse(v, fallback) {
   }
 }
 
-// Convert ms -> UTC date (YYYY-MM-DD) for SQL DATE
 function utcDateFromMs(ms) {
   const d = new Date(ms);
   const yyyy = d.getUTCFullYear();
@@ -32,25 +52,42 @@ function utcDateFromMs(ms) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// Floor to UTC midnight in ms
 function floorUtcDayMs(ms) {
   const d = new Date(ms);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
 function splitRow(line) {
-  // emitter already strips newlines inside fields; '|' is delimiter; it also replaced '|' inside text with '/'
   return String(line).split("|");
 }
 
-/**
- * Expected row formats:
- * PRG: 9 cols
- * WEEK: 4 cols
- * DAY: 14 cols
- * SEG: 19 cols
- * EX: 26 cols
- */
+function isPlainObject(v) {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function hashImportPayload(payload) {
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function logEvent(level, event, payload) {
+  const entry = {
+    ts: new Date().toISOString(),
+    level,
+    event,
+    ...payload,
+  };
+  const msg = JSON.stringify(entry);
+  if (level === "error") {
+    console.error(msg);
+    return;
+  }
+  if (level === "warn") {
+    console.warn(msg);
+    return;
+  }
+  console.info(msg);
+}
+
 function parseEmitterRows(rows) {
   const parsed = {
     prg: null,
@@ -60,12 +97,27 @@ function parseEmitterRows(rows) {
     exs: [],
   };
 
-  for (const line of rows) {
-    if (!line) continue;
+  for (let i = 0; i < rows.length; i += 1) {
+    const line = rows[i];
+    if (line == null || String(line).trim() === "") continue;
+
     const cols = splitRow(line);
-    const rowType = cols[0];
+    const rowType = s(cols[0]).toUpperCase();
+
+    if (!EXPECTED_COLS[rowType]) {
+      throw new ValidationError(`Unknown emitter row type '${rowType}' at row ${i + 1}`);
+    }
+
+    if (cols.length !== EXPECTED_COLS[rowType]) {
+      throw new ValidationError(
+        `${rowType} row ${i + 1} expected ${EXPECTED_COLS[rowType]} columns, got ${cols.length}`,
+      );
+    }
 
     if (rowType === "PRG") {
+      if (parsed.prg) {
+        throw new ValidationError("Multiple PRG rows found; exactly one PRG row is required");
+      }
       parsed.prg = {
         program_title: s(cols[1]),
         program_summary: s(cols[2]),
@@ -76,13 +128,19 @@ function parseEmitterRows(rows) {
         start_weekday: s(cols[7]),
         preferred_days_sorted_json: safeJsonParse(cols[8], []),
       };
-    } else if (rowType === "WEEK") {
+      continue;
+    }
+
+    if (rowType === "WEEK") {
       parsed.weeks.push({
         week_number: toInt(cols[1], 0),
         focus: s(cols[2]),
         notes: s(cols[3]),
       });
-    } else if (rowType === "DAY") {
+      continue;
+    }
+
+    if (rowType === "DAY") {
       parsed.days.push({
         week_number: toInt(cols[1], 0),
         day_number: toInt(cols[2], 0),
@@ -98,7 +156,10 @@ function parseEmitterRows(rows) {
         scheduled_weekday: s(cols[12]),
         program_day_key: s(cols[13]),
       });
-    } else if (rowType === "SEG") {
+      continue;
+    }
+
+    if (rowType === "SEG") {
       parsed.segs.push({
         segment_key: s(cols[1]),
         segment_type: s(cols[2]),
@@ -116,347 +177,258 @@ function parseEmitterRows(rows) {
         block_order: toInt(cols[14], 1),
         purpose: s(cols[15]),
         purpose_label: s(cols[16]),
-        reserved: s(cols[17]),
         program_day_key: s(cols[18]),
       });
-    } else if (rowType === "EX") {
-      parsed.exs.push({
-        exercise_id: s(cols[1]),
-        order_in_day: toInt(cols[2], 0),
-        block_order: toInt(cols[3], 0),
-        purpose: s(cols[4]),
-        purpose_label: s(cols[5]),
-        order_in_block: toInt(cols[6], 0),
-        sets_prescribed: toInt(cols[7], 0),
-        reps_prescribed: s(cols[8]),
-        reps_unit: s(cols[9]) || "reps",
-        intensity_prescription: s(cols[10]),
-        tempo: s(cols[11]),
-        rest_seconds: toInt(cols[12], 0),
-        notes: s(cols[13]),
-        block_key: s(cols[14]),
-        segment_key: s(cols[17]),
-        segment_type: s(cols[18]),
-        segment_rounds: toInt(cols[20], 1),
-        item_index_in_segment: toInt(cols[22], 0),
-        reserved_json: safeJsonParse(cols[23], {}),
-        program_day_key: s(cols[25]),
-      });
+      continue;
     }
+
+    parsed.exs.push({
+      exercise_id: s(cols[1]),
+      order_in_day: toInt(cols[2], 0),
+      block_order: toInt(cols[3], 0),
+      purpose: s(cols[4]),
+      purpose_label: s(cols[5]),
+      order_in_block: toInt(cols[6], 0),
+      sets_prescribed: toInt(cols[7], 0),
+      reps_prescribed: s(cols[8]),
+      reps_unit: s(cols[9]) || "reps",
+      intensity_prescription: s(cols[10]),
+      tempo: s(cols[11]),
+      rest_seconds: toInt(cols[12], 0),
+      notes: s(cols[13]),
+      segment_key: s(cols[17]),
+      segment_type: s(cols[18]),
+      program_day_key: s(cols[25]),
+    });
   }
 
-  if (!parsed.prg) throw new Error("No PRG row found in emitter rows");
+  if (!parsed.prg) {
+    throw new ValidationError("No PRG row found in emitter rows");
+  }
 
   return parsed;
 }
 
+function validateParsed(parsed) {
+  const errors = [];
+  const { prg, weeks, days, segs, exs } = parsed;
+
+  if (!prg.program_title) errors.push("PRG.program_title is required");
+  if (!prg.program_summary) errors.push("PRG.program_summary is required");
+  if (!Number.isInteger(prg.weeks_count) || prg.weeks_count < 1) errors.push("PRG.weeks_count must be >= 1");
+  if (!Number.isInteger(prg.days_per_week) || prg.days_per_week < 1 || prg.days_per_week > 7) {
+    errors.push("PRG.days_per_week must be between 1 and 7");
+  }
+  if (!prg.start_weekday) errors.push("PRG.start_weekday is required");
+  if (!Array.isArray(prg.preferred_days_sorted_json)) {
+    errors.push("PRG.preferred_days_sorted_json must be a JSON array");
+  }
+  if (!isPlainObject(prg.program_outline_json)) {
+    errors.push("PRG.program_outline_json must be a JSON object");
+  }
+
+  if (!weeks.length) errors.push("At least one WEEK row is required");
+  if (!days.length) errors.push("At least one DAY row is required");
+
+  const weekNumbers = new Set();
+  for (const w of weeks) {
+    if (!Number.isInteger(w.week_number) || w.week_number < 1) {
+      errors.push(`Invalid WEEK.week_number=${w.week_number}`);
+      continue;
+    }
+    if (weekNumbers.has(w.week_number)) {
+      errors.push(`Duplicate WEEK.week_number=${w.week_number}`);
+    }
+    weekNumbers.add(w.week_number);
+  }
+
+  const dayKeySet = new Set();
+  const dayByWeekAndNumber = new Set();
+  const globalDaySet = new Set();
+
+  for (const d of days) {
+    if (!weekNumbers.has(d.week_number)) {
+      errors.push(`DAY references missing week_number=${d.week_number}`);
+    }
+    if (!Number.isInteger(d.day_number) || d.day_number < 1 || d.day_number > 7) {
+      errors.push(`Invalid DAY.day_number=${d.day_number}`);
+    }
+    if (!Number.isInteger(d.global_day_index) || d.global_day_index < 1) {
+      errors.push(`Invalid DAY.global_day_index=${d.global_day_index}`);
+    }
+    if (!d.program_day_key) {
+      errors.push("DAY.program_day_key is required");
+    } else if (dayKeySet.has(d.program_day_key)) {
+      errors.push(`Duplicate DAY.program_day_key=${d.program_day_key}`);
+    } else {
+      dayKeySet.add(d.program_day_key);
+    }
+
+    const wkDayKey = `${d.week_number}::${d.day_number}`;
+    if (dayByWeekAndNumber.has(wkDayKey)) {
+      errors.push(`Duplicate DAY week/day pair ${wkDayKey}`);
+    }
+    dayByWeekAndNumber.add(wkDayKey);
+
+    if (globalDaySet.has(d.global_day_index)) {
+      errors.push(`Duplicate DAY.global_day_index=${d.global_day_index}`);
+    }
+    globalDaySet.add(d.global_day_index);
+
+    if (!d.scheduled_weekday) {
+      errors.push(`DAY.scheduled_weekday required for ${d.program_day_key || wkDayKey}`);
+    }
+  }
+
+  const segByDayAndKey = new Set();
+  const segByDayOrder = new Set();
+  for (const seg of segs) {
+    if (!dayKeySet.has(seg.program_day_key)) {
+      errors.push(`SEG references missing DAY.program_day_key=${seg.program_day_key}`);
+    }
+    if (!seg.segment_key) errors.push(`SEG.segment_key missing on day=${seg.program_day_key}`);
+    if (!seg.block_key) errors.push(`SEG.block_key missing on day=${seg.program_day_key}`);
+    if (!seg.segment_type) errors.push(`SEG.segment_type missing on day=${seg.program_day_key}`);
+    if (!seg.purpose) errors.push(`SEG.purpose missing on day=${seg.program_day_key}`);
+    if (!Number.isInteger(seg.rounds) || seg.rounds < 1) {
+      errors.push(`SEG.rounds must be >= 1 for day=${seg.program_day_key}, segment=${seg.segment_key}`);
+    }
+
+    const daySeg = `${seg.program_day_key}::${seg.segment_key}`;
+    if (segByDayAndKey.has(daySeg)) {
+      errors.push(`Duplicate SEG key ${daySeg}`);
+    }
+    segByDayAndKey.add(daySeg);
+
+    const dayOrder = `${seg.program_day_key}::${seg.block_order}::${seg.segment_order_in_block}`;
+    if (segByDayOrder.has(dayOrder)) {
+      errors.push(`Duplicate SEG ordering ${dayOrder}`);
+    }
+    segByDayOrder.add(dayOrder);
+  }
+
+  const exByDayOrder = new Set();
+  const exBySegmentOrderAndExercise = new Set();
+  for (const ex of exs) {
+    if (!dayKeySet.has(ex.program_day_key)) {
+      errors.push(`EX references missing DAY.program_day_key=${ex.program_day_key}`);
+    }
+    if (!ex.exercise_id) errors.push(`EX.exercise_id missing on day=${ex.program_day_key}`);
+    if (!ex.segment_key) errors.push(`EX.segment_key missing on day=${ex.program_day_key}`);
+    if (!ex.segment_type) errors.push(`EX.segment_type missing on day=${ex.program_day_key}`);
+    if (!ex.purpose) errors.push(`EX.purpose missing on day=${ex.program_day_key}`);
+    if (!Number.isInteger(ex.order_in_day) || ex.order_in_day < 1) {
+      errors.push(`EX.order_in_day must be >= 1 for exercise=${ex.exercise_id}`);
+    }
+    if (!Number.isInteger(ex.block_order) || ex.block_order < 1) {
+      errors.push(`EX.block_order must be >= 1 for exercise=${ex.exercise_id}`);
+    }
+    if (!Number.isInteger(ex.order_in_block) || ex.order_in_block < 1) {
+      errors.push(`EX.order_in_block must be >= 1 for exercise=${ex.exercise_id}`);
+    }
+    if (!Number.isInteger(ex.sets_prescribed) || ex.sets_prescribed < 0) {
+      errors.push(`EX.sets_prescribed must be >= 0 for exercise=${ex.exercise_id}`);
+    }
+    if (!Number.isInteger(ex.rest_seconds) || ex.rest_seconds < 0) {
+      errors.push(`EX.rest_seconds must be >= 0 for exercise=${ex.exercise_id}`);
+    }
+
+    const dayOrder = `${ex.program_day_key}::${ex.order_in_day}`;
+    if (exByDayOrder.has(dayOrder)) {
+      errors.push(`Duplicate EX order_in_day ${dayOrder}`);
+    }
+    exByDayOrder.add(dayOrder);
+
+    const segOrderEx = `${ex.program_day_key}::${ex.segment_key}::${ex.order_in_block}::${ex.exercise_id}`;
+    if (exBySegmentOrderAndExercise.has(segOrderEx)) {
+      errors.push(`Duplicate EX key ${segOrderEx}`);
+    }
+    exBySegmentOrderAndExercise.add(segOrderEx);
+
+    const segRef = `${ex.program_day_key}::${ex.segment_key}`;
+    if (!segByDayAndKey.has(segRef)) {
+      errors.push(`EX references missing SEG ${segRef}`);
+    }
+  }
+
+  if (errors.length) {
+    throw new ValidationError("Emitter validation failed", errors);
+  }
+}
+
+function mapPgErrorToHttp(err) {
+  if (!err || typeof err !== "object") {
+    return { status: 500, code: "internal_error", message: "Unhandled error" };
+  }
+
+  // Common Postgres constraint failures.
+  if (err.code === "23505") {
+    return { status: 409, code: "unique_violation", message: "Duplicate data conflicts with existing records" };
+  }
+  if (err.code === "23503") {
+    return { status: 400, code: "foreign_key_violation", message: "Invalid reference in request payload" };
+  }
+  if (err.code === "23502") {
+    return { status: 400, code: "not_null_violation", message: "Missing required field for database insert" };
+  }
+  if (err.code === "23514") {
+    return { status: 400, code: "check_violation", message: "Invalid value violates database check constraint" };
+  }
+
+  if (err instanceof ValidationError) {
+    return { status: 400, code: "validation_error", message: err.message, details: err.details };
+  }
+
+  return { status: 500, code: "internal_error", message: err.message || "Internal server error" };
+}
+
 importEmitterRouter.post("/import/emitter", express.json({ limit: "10mb" }), async (req, res) => {
+  const request_id = s(req.headers["x-request-id"]) || randomUUID();
+  const startedAt = Date.now();
+
   const user_id = s(req.body?.user_id);
   const anchor_date_ms = req.body?.anchor_date_ms;
 
   let rows = req.body?.rows;
-
-  // allow raw string with newlines too
   if (!rows && typeof req.body?.emitter_output === "string") {
     rows = req.body.emitter_output.split(/\r?\n/).filter(Boolean);
   }
 
-  if (!user_id) return res.status(400).json({ ok: false, error: "Missing user_id" });
-  if (!Number.isFinite(Number(anchor_date_ms))) return res.status(400).json({ ok: false, error: "Missing anchor_date_ms" });
-  if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ ok: false, error: "Missing rows[]" });
-
-  const anchorDayMs = floorUtcDayMs(Number(anchor_date_ms));
-  const parsed = parseEmitterRows(rows);
-
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    if (!user_id) {
+      throw new ValidationError("Missing user_id");
+    }
+    if (!Number.isFinite(Number(anchor_date_ms))) {
+      throw new ValidationError("Missing anchor_date_ms");
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new ValidationError("Missing rows[]");
+    }
 
-    // 1) Insert program
-    // NOTE: adjust column names here ONLY if your actual program table differs.
+    const anchorDayMs = floorUtcDayMs(Number(anchor_date_ms));
+    const parsed = parseEmitterRows(rows);
+    validateParsed(parsed);
+
     const prg = parsed.prg;
+    const programStartMs = anchorDayMs + prg.start_offset_days * DAY_MS;
+    const start_date = utcDateFromMs(programStartMs);
 
-    // Compute program-level start_date ONCE
-const programStartMs =
-  anchorDayMs + prg.start_offset_days * 24 * 60 * 60 * 1000;
-
-const start_date = utcDateFromMs(programStartMs);
-
-    const insertProgramSql = `
-      INSERT INTO program (
-        user_id,
-        program_title,
-        program_summary,
-        weeks_count,
-        days_per_week,
-        program_outline_json,
-        start_date,
-        start_offset_days,
-        start_weekday,
-        preferred_days_sorted_json
-      )
-      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::date,$8,$9,$10::jsonb)
-      RETURNING id
-    `;
-
-    const programResult = await client.query(insertProgramSql, [
+    const import_signature = hashImportPayload({
       user_id,
-      prg.program_title,
-      prg.program_summary,
-      prg.weeks_count,
-      prg.days_per_week,
-      JSON.stringify(prg.program_outline_json || {}),
-      start_date,
-      prg.start_offset_days,
-      prg.start_weekday,
-      JSON.stringify(prg.preferred_days_sorted_json || []),
-    ]);
+      anchor_day_ms: anchorDayMs,
+      prg: parsed.prg,
+      weeks: parsed.weeks,
+      days: parsed.days,
+      segs: parsed.segs,
+      exs: parsed.exs,
+    });
 
-    const program_id = programResult.rows[0].id;
+    const dayKeys = parsed.days.map((d) => d.program_day_key);
 
-    // 2) Insert weeks + map week_number -> program_week_id
-    const weekIdByNumber = new Map();
-
-    for (const w of parsed.weeks) {
-      const r = await client.query(
-        `
-        INSERT INTO program_week (program_id, week_number, focus, notes)
-        VALUES ($1,$2,$3,$4)
-        RETURNING id
-        `,
-        [program_id, w.week_number, w.focus, w.notes]
-      );
-      weekIdByNumber.set(w.week_number, r.rows[0].id);
-    }
-
-    // 3) Insert days + map program_day_key -> program_day_id
-    const dayIdByKey = new Map();
-
-for (const d of parsed.days) {
-  const program_week_id = weekIdByNumber.get(d.week_number);
-  if (!program_week_id)
-    throw new Error(`No program_week_id found for week_number=${d.week_number}`);
-
-  const scheduledDateMs =
-    anchorDayMs + d.scheduled_offset_days * 24 * 60 * 60 * 1000;
-
-  const scheduled_date = utcDateFromMs(scheduledDateMs);
-
-      const r = await client.query(
-        `
-        INSERT INTO program_day (
-          program_id,
-          program_week_id,
-          week_number,
-          day_number,
-          global_day_index,
-          program_day_key,
-          day_label,
-          day_type,
-          session_duration_mins,
-          day_format_text,
-          block_format_main_text,
-          block_format_secondary_text,
-          block_format_finisher_text,
-          scheduled_offset_days,
-          scheduled_weekday,
-          scheduled_date
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::date)
-        RETURNING id
-        `,
-        [
-          program_id,
-          program_week_id,
-          d.week_number,
-          d.day_number,
-          d.global_day_index,
-          d.program_day_key,
-          d.day_label,
-          d.day_type,
-          d.session_duration_mins,
-          d.day_format_text,
-          d.block_format_main_text,
-          d.block_format_secondary_text,
-          d.block_format_finisher_text,
-          d.scheduled_offset_days,
-          d.scheduled_weekday,
-          scheduled_date,
-        ]
-      );
-
-      dayIdByKey.set(d.program_day_key, r.rows[0].id);
-
-      // 4) Calendar day row (training day = true)
-      await client.query(
-        `
-        INSERT INTO program_calendar_day (
-          program_id,
-          program_week_id,
-          program_day_id,
-          week_number,
-          scheduled_offset_days,
-          scheduled_weekday,
-          scheduled_date,
-          global_day_index,
-          is_training_day,
-          program_day_key
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,true,$9)
-        `,
-        [
-          program_id,
-          program_week_id,
-          r.rows[0].id,
-          d.week_number,
-          d.scheduled_offset_days,
-          d.scheduled_weekday,
-          scheduled_date,
-          d.global_day_index,
-          d.program_day_key,
-        ]
-      );
-    }
-
-// After inserting all days:
-if (!dayIdByKey.size) {
-  throw new Error(
-    `No days inserted. parsed.days=${parsed.days.length}. First DAY keys: ${
-      parsed.days.slice(0, 5).map(d => d.program_day_key).join(", ")
-    }`
-  );
-}
-
-if (!dayIdByKey.has("PD_W1_D1")) {
-  throw new Error(
-    `DAY map does not include PD_W1_D1. Keys inserted: ${
-      Array.from(dayIdByKey.keys()).slice(0, 20).join(", ")
-    }`
-  );
-}
-
-    // 5) Insert segments + map (program_day_key, segment_key) -> workout_segment_id
-    const segmentIdByDayAndKey = new Map();
-
-    for (const seg of parsed.segs) {
-      const program_day_id = dayIdByKey.get(seg.program_day_key);
-      if (!program_day_id) throw new Error(`No program_day_id found for program_day_key=${seg.program_day_key}`);
-
-      const programStartMs = anchorDayMs + (prg.start_offset_days * 24 * 60 * 60 * 1000);
-const start_date = utcDateFromMs(programStartMs);
-      const r = await client.query(
-        `
-        INSERT INTO workout_segment (
-          program_id,
-          program_day_id,
-          program_day_key,
-          segment_key,
-          block_key,
-          block_order,
-          segment_order_in_block,
-          segment_type,
-          purpose,
-          purpose_label,
-          segment_title,
-          segment_notes,
-          rounds,
-          score_type,
-          primary_score_label,
-          secondary_score_label,
-          segment_scheme_json,
-          segment_duration_seconds,
-          segment_duration_mmss
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19)
-        RETURNING id
-        `,
-        [
-          program_id,
-          program_day_id,
-          seg.program_day_key,
-          seg.segment_key,
-          seg.block_key,
-          seg.block_order,
-          seg.segment_order_in_block,
-          seg.segment_type,
-          seg.purpose,
-          seg.purpose_label,
-          seg.segment_title,
-          seg.segment_notes,
-          seg.rounds,
-          seg.score_type || "none",
-          seg.primary_score_label,
-          seg.secondary_score_label,
-          JSON.stringify(seg.segment_scheme_json || {}),
-          seg.segment_duration_seconds,
-          seg.segment_duration_mmss,
-        ]
-      );
-
-      segmentIdByDayAndKey.set(`${seg.program_day_key}::${seg.segment_key}`, r.rows[0].id);
-    }
-
-    // 6) Insert exercises
-    for (const ex of parsed.exs) {
-      const program_day_id = dayIdByKey.get(ex.program_day_key);
-      if (!program_day_id) throw new Error(`No program_day_id found for program_day_key=${ex.program_day_key}`);
-
-      const workout_segment_id = segmentIdByDayAndKey.get(`${ex.program_day_key}::${ex.segment_key}`) || null;
-
-      await client.query(
-        `
-        INSERT INTO program_exercise (
-          program_id,
-          program_day_id,
-          workout_segment_id,
-          program_day_key,
-          segment_key,
-          segment_type,
-          exercise_id,
-          order_in_day,
-          block_order,
-          order_in_block,
-          purpose,
-          purpose_label,
-          sets_prescribed,
-          reps_prescribed,
-          reps_unit,
-          intensity_prescription,
-          tempo,
-          rest_seconds,
-          notes
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-        `,
-        [
-          program_id,
-          program_day_id,
-          workout_segment_id,
-          ex.program_day_key,
-          ex.segment_key,
-          ex.segment_type,
-          ex.exercise_id,
-          ex.order_in_day,
-          ex.block_order,
-          ex.order_in_block,
-          ex.purpose,
-          ex.purpose_label,
-          ex.sets_prescribed,
-          ex.reps_prescribed,
-          ex.reps_unit,
-          ex.intensity_prescription,
-          ex.tempo,
-          ex.rest_seconds,
-          ex.notes,
-        ]
-      );
-    }
-
-    await client.query("COMMIT");
-
-    return res.json({
-      ok: true,
-      program_id,
+    logEvent("info", "import_emitter.started", {
+      request_id,
+      user_id,
+      rows_count: rows.length,
       counts: {
         weeks: parsed.weeks.length,
         days: parsed.days.length,
@@ -464,10 +436,394 @@ const start_date = utcDateFromMs(programStartMs);
         exercises: parsed.exs.length,
       },
     });
+
+    const client = await pool.connect();
+    let program_id = null;
+
+    try {
+      await client.query("BEGIN");
+
+      // Transaction-scoped advisory lock prevents duplicate inserts on retried concurrent requests.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [import_signature]);
+
+      const idempotentCheck = await client.query(
+        `
+        SELECT p.id
+        FROM program p
+        WHERE p.user_id = $1
+          AND p.program_title = $2
+          AND p.program_summary = $3
+          AND p.weeks_count = $4
+          AND p.days_per_week = $5
+          AND p.program_outline_json = $6::jsonb
+          AND p.start_date = $7::date
+          AND p.start_offset_days = $8
+          AND p.start_weekday = $9
+          AND p.preferred_days_sorted_json = $10::jsonb
+          AND (SELECT count(*) FROM program_week w WHERE w.program_id = p.id) = $11
+          AND (SELECT count(*) FROM program_day d WHERE d.program_id = p.id) = $12
+          AND (SELECT count(*) FROM workout_segment s WHERE s.program_id = p.id) = $13
+          AND (SELECT count(*) FROM program_exercise e WHERE e.program_id = p.id) = $14
+          AND NOT EXISTS (
+            SELECT 1
+            FROM unnest($15::text[]) AS dk(day_key)
+            LEFT JOIN program_day d2
+              ON d2.program_id = p.id
+             AND d2.program_day_key = dk.day_key
+            WHERE d2.id IS NULL
+          )
+        ORDER BY p.created_at DESC
+        LIMIT 1
+        `,
+        [
+          user_id,
+          prg.program_title,
+          prg.program_summary,
+          prg.weeks_count,
+          prg.days_per_week,
+          JSON.stringify(prg.program_outline_json || {}),
+          start_date,
+          prg.start_offset_days,
+          prg.start_weekday,
+          JSON.stringify(prg.preferred_days_sorted_json || []),
+          parsed.weeks.length,
+          parsed.days.length,
+          parsed.segs.length,
+          parsed.exs.length,
+          dayKeys,
+        ],
+      );
+
+      if (idempotentCheck.rowCount > 0) {
+        program_id = idempotentCheck.rows[0].id;
+        await client.query("COMMIT");
+
+        logEvent("info", "import_emitter.idempotent_hit", {
+          request_id,
+          user_id,
+          program_id,
+          duration_ms: Date.now() - startedAt,
+        });
+
+        return res.json({
+          ok: true,
+          idempotent: true,
+          program_id,
+          counts: {
+            weeks: parsed.weeks.length,
+            days: parsed.days.length,
+            segments: parsed.segs.length,
+            exercises: parsed.exs.length,
+          },
+        });
+      }
+
+      const insertProgramSql = `
+        INSERT INTO program (
+          user_id,
+          program_title,
+          program_summary,
+          weeks_count,
+          days_per_week,
+          program_outline_json,
+          start_date,
+          start_offset_days,
+          start_weekday,
+          preferred_days_sorted_json
+        )
+        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::date,$8,$9,$10::jsonb)
+        RETURNING id
+      `;
+
+      const programResult = await client.query(insertProgramSql, [
+        user_id,
+        prg.program_title,
+        prg.program_summary,
+        prg.weeks_count,
+        prg.days_per_week,
+        JSON.stringify(prg.program_outline_json || {}),
+        start_date,
+        prg.start_offset_days,
+        prg.start_weekday,
+        JSON.stringify(prg.preferred_days_sorted_json || []),
+      ]);
+
+      program_id = programResult.rows[0].id;
+
+      const weekIdByNumber = new Map();
+      for (const w of parsed.weeks) {
+        const r = await client.query(
+          `
+          INSERT INTO program_week (program_id, week_number, focus, notes)
+          VALUES ($1,$2,$3,$4)
+          RETURNING id
+          `,
+          [program_id, w.week_number, w.focus, w.notes],
+        );
+        weekIdByNumber.set(w.week_number, r.rows[0].id);
+      }
+
+      const dayIdByKey = new Map();
+      for (const d of parsed.days) {
+        const program_week_id = weekIdByNumber.get(d.week_number);
+        if (!program_week_id) {
+          throw new ValidationError(`No program_week found for DAY week_number=${d.week_number}`);
+        }
+
+        const scheduledDateMs = anchorDayMs + d.scheduled_offset_days * DAY_MS;
+        const scheduled_date = utcDateFromMs(scheduledDateMs);
+
+        const r = await client.query(
+          `
+          INSERT INTO program_day (
+            program_id,
+            program_week_id,
+            week_number,
+            day_number,
+            global_day_index,
+            program_day_key,
+            day_label,
+            day_type,
+            session_duration_mins,
+            day_format_text,
+            block_format_main_text,
+            block_format_secondary_text,
+            block_format_finisher_text,
+            scheduled_offset_days,
+            scheduled_weekday,
+            scheduled_date
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::date)
+          RETURNING id
+          `,
+          [
+            program_id,
+            program_week_id,
+            d.week_number,
+            d.day_number,
+            d.global_day_index,
+            d.program_day_key,
+            d.day_label,
+            d.day_type,
+            d.session_duration_mins,
+            d.day_format_text,
+            d.block_format_main_text,
+            d.block_format_secondary_text,
+            d.block_format_finisher_text,
+            d.scheduled_offset_days,
+            d.scheduled_weekday,
+            scheduled_date,
+          ],
+        );
+
+        const program_day_id = r.rows[0].id;
+        dayIdByKey.set(d.program_day_key, program_day_id);
+
+        await client.query(
+          `
+          INSERT INTO program_calendar_day (
+            program_id,
+            program_week_id,
+            program_day_id,
+            week_number,
+            scheduled_offset_days,
+            scheduled_weekday,
+            scheduled_date,
+            global_day_index,
+            is_training_day,
+            program_day_key
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,true,$9)
+          `,
+          [
+            program_id,
+            program_week_id,
+            program_day_id,
+            d.week_number,
+            d.scheduled_offset_days,
+            d.scheduled_weekday,
+            scheduled_date,
+            d.global_day_index,
+            d.program_day_key,
+          ],
+        );
+      }
+
+      const segmentIdByDayAndKey = new Map();
+      for (const seg of parsed.segs) {
+        const program_day_id = dayIdByKey.get(seg.program_day_key);
+        if (!program_day_id) {
+          throw new ValidationError(`No program_day found for SEG program_day_key=${seg.program_day_key}`);
+        }
+
+        const r = await client.query(
+          `
+          INSERT INTO workout_segment (
+            program_id,
+            program_day_id,
+            program_day_key,
+            segment_key,
+            block_key,
+            block_order,
+            segment_order_in_block,
+            segment_type,
+            purpose,
+            purpose_label,
+            segment_title,
+            segment_notes,
+            rounds,
+            score_type,
+            primary_score_label,
+            secondary_score_label,
+            segment_scheme_json,
+            segment_duration_seconds,
+            segment_duration_mmss
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19)
+          RETURNING id
+          `,
+          [
+            program_id,
+            program_day_id,
+            seg.program_day_key,
+            seg.segment_key,
+            seg.block_key,
+            seg.block_order,
+            seg.segment_order_in_block,
+            seg.segment_type,
+            seg.purpose,
+            seg.purpose_label,
+            seg.segment_title,
+            seg.segment_notes,
+            seg.rounds,
+            seg.score_type || "none",
+            seg.primary_score_label,
+            seg.secondary_score_label,
+            JSON.stringify(seg.segment_scheme_json || {}),
+            seg.segment_duration_seconds,
+            seg.segment_duration_mmss,
+          ],
+        );
+
+        segmentIdByDayAndKey.set(`${seg.program_day_key}::${seg.segment_key}`, r.rows[0].id);
+      }
+
+      for (const ex of parsed.exs) {
+        const program_day_id = dayIdByKey.get(ex.program_day_key);
+        if (!program_day_id) {
+          throw new ValidationError(`No program_day found for EX program_day_key=${ex.program_day_key}`);
+        }
+
+        const workout_segment_id = segmentIdByDayAndKey.get(`${ex.program_day_key}::${ex.segment_key}`) || null;
+        if (!workout_segment_id) {
+          throw new ValidationError(
+            `No workout_segment found for EX day=${ex.program_day_key}, segment=${ex.segment_key}`,
+          );
+        }
+
+        await client.query(
+          `
+          INSERT INTO program_exercise (
+            program_id,
+            program_day_id,
+            workout_segment_id,
+            program_day_key,
+            segment_key,
+            segment_type,
+            exercise_id,
+            order_in_day,
+            block_order,
+            order_in_block,
+            purpose,
+            purpose_label,
+            sets_prescribed,
+            reps_prescribed,
+            reps_unit,
+            intensity_prescription,
+            tempo,
+            rest_seconds,
+            notes
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          `,
+          [
+            program_id,
+            program_day_id,
+            workout_segment_id,
+            ex.program_day_key,
+            ex.segment_key,
+            ex.segment_type,
+            ex.exercise_id,
+            ex.order_in_day,
+            ex.block_order,
+            ex.order_in_block,
+            ex.purpose,
+            ex.purpose_label,
+            ex.sets_prescribed,
+            ex.reps_prescribed,
+            ex.reps_unit,
+            ex.intensity_prescription,
+            ex.tempo,
+            ex.rest_seconds,
+            ex.notes,
+          ],
+        );
+      }
+
+      await client.query("COMMIT");
+
+      logEvent("info", "import_emitter.committed", {
+        request_id,
+        user_id,
+        program_id,
+        duration_ms: Date.now() - startedAt,
+      });
+
+      return res.json({
+        ok: true,
+        idempotent: false,
+        program_id,
+        counts: {
+          weeks: parsed.weeks.length,
+          days: parsed.days.length,
+          segments: parsed.segs.length,
+          exercises: parsed.exs.length,
+        },
+      });
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackErr) {
+        logEvent("error", "import_emitter.rollback_failed", {
+          request_id,
+          user_id,
+          error: rollbackErr.message,
+        });
+      }
+
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
-    await client.query("ROLLBACK");
-    return res.status(500).json({ ok: false, error: err?.message || String(err) });
-  } finally {
-    client.release();
+    const mapped = mapPgErrorToHttp(err);
+
+    logEvent("error", "import_emitter.failed", {
+      request_id,
+      user_id,
+      duration_ms: Date.now() - startedAt,
+      code: mapped.code,
+      error: err?.message || String(err),
+      details: mapped.details,
+      pg_code: err?.code,
+    });
+
+    return res.status(mapped.status).json({
+      ok: false,
+      request_id,
+      code: mapped.code,
+      error: mapped.message,
+      details: mapped.details,
+    });
   }
 });
