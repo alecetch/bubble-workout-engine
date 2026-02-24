@@ -14,12 +14,21 @@ class ValidationError extends Error {
   }
 }
 
+class NotFoundError extends Error {
+  constructor(message, details = []) {
+    super(message);
+    this.name = "NotFoundError";
+    this.status = 404;
+    this.details = details;
+  }
+}
+
 function s(v) {
   return (v ?? "").toString().trim();
 }
 
 function isUuid(v) {
-  // Accept standard UUID v4/v1 formats (case-insensitive)
+  // Accept standard UUID v1-v5 formats (case-insensitive).
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s(v));
 }
 
@@ -28,7 +37,7 @@ function uniq(arr) {
 }
 
 function parseEquipmentSlugs(rows) {
-  // equipment_items_slugs_csv is a text column (default ''), comma-separated
+  // equipment_items_slugs_csv is a text column (default ''), comma-separated.
   const slugs = [];
   for (const r of rows) {
     const csv = s(r.equipment_items_slugs_csv);
@@ -41,35 +50,68 @@ function parseEquipmentSlugs(rows) {
   return uniq(slugs);
 }
 
+async function resolveUserId(client, query) {
+  const user_id = s(query.user_id);
+  const bubble_user_id = s(query.bubble_user_id);
+
+  if (user_id) {
+    if (!isUuid(user_id)) {
+      throw new ValidationError("Invalid user_id");
+    }
+    return user_id;
+  }
+
+  if (!bubble_user_id) {
+    throw new ValidationError("Provide user_id or bubble_user_id");
+  }
+
+  const r = await client.query(
+    `
+    SELECT id
+    FROM app_user
+    WHERE bubble_user_id = $1
+    LIMIT 1
+    `,
+    [bubble_user_id],
+  );
+
+  if (r.rowCount === 0) {
+    throw new NotFoundError("User not found for bubble_user_id");
+  }
+
+  return r.rows[0].id;
+}
+
 function mapError(err) {
-  if (err instanceof ValidationError) {
-    return { status: err.status ?? 400, code: "validation_error", message: err.message, details: err.details };
+  if (err instanceof ValidationError || err instanceof NotFoundError) {
+    return { status: err.status ?? 400, code: err instanceof NotFoundError ? "not_found" : "validation_error", message: err.message, details: err.details };
   }
   if (err && typeof err === "object") {
-    // Common Postgres codes
+    // Common Postgres codes.
     if (err.code === "22P02") return { status: 400, code: "invalid_input", message: "Invalid input format" };
     if (err.code === "23503") return { status: 400, code: "foreign_key_violation", message: "Invalid reference" };
     if (err.code === "23505") return { status: 409, code: "unique_violation", message: "Duplicate conflict" };
+    if (err.code === "42P01") return { status: 500, code: "schema_missing", message: "Required table is missing; run migrations" };
   }
   return { status: 500, code: "internal_error", message: err?.message || "Internal server error" };
 }
 
 // ---- GET /api/program/:program_id/overview ----
-// Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs)
+// Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs).
 readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
   const program_id = s(req.params.program_id);
-  const user_id = s(req.query.user_id);
   const selected_program_day_id = s(req.query.selected_program_day_id);
 
   try {
     if (!isUuid(program_id)) throw new ValidationError("Invalid program_id");
-    if (!isUuid(user_id)) throw new ValidationError("Invalid user_id");
     if (selected_program_day_id && !isUuid(selected_program_day_id)) {
       throw new ValidationError("Invalid selected_program_day_id");
     }
 
     const client = await pool.connect();
     try {
+      const user_id = await resolveUserId(client, req.query);
+
       // 1) Program (guard by user_id)
       const prgR = await client.query(
         `
@@ -88,7 +130,7 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
       );
 
       if (prgR.rowCount === 0) {
-        // Don’t leak existence if wrong user_id
+        // Do not leak existence if wrong user resolution.
         return res.status(404).json({ ok: false, code: "not_found", error: "Program not found" });
       }
 
@@ -181,7 +223,7 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
         if (dayR.rowCount > 0) {
           selected_day = dayR.rows[0];
 
-          // Equipment slugs for selected day only (fast + good UX)
+          // Equipment slugs for selected day only (fast + good UX).
           const eqR = await client.query(
             `
             SELECT equipment_items_slugs_csv
@@ -221,17 +263,17 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
 });
 
 // ---- GET /api/day/:program_day_id/full ----
-// Returns: day header + ordered segments[] with nested items[]
+// Returns: day header + ordered segments[] with nested items[].
 readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
   const program_day_id = s(req.params.program_day_id);
-  const user_id = s(req.query.user_id);
 
   try {
     if (!isUuid(program_day_id)) throw new ValidationError("Invalid program_day_id");
-    if (!isUuid(user_id)) throw new ValidationError("Invalid user_id");
 
     const client = await pool.connect();
     try {
+      const user_id = await resolveUserId(client, req.query);
+
       // 1) Day header (guard by user_id via program)
       const dayR = await client.query(
         `
@@ -320,11 +362,11 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
         [program_day_id],
       );
 
-      // Group exercises by segment id
+      // Group exercises by segment id.
       const itemsBySegmentId = new Map();
       for (const ex of exR.rows) {
         const key = ex.workout_segment_id;
-        if (!key) continue; // should not happen in your current importer
+        if (!key) continue; // Should not happen in current importer.
         if (!itemsBySegmentId.has(key)) itemsBySegmentId.set(key, []);
         itemsBySegmentId.get(key).push(ex);
       }
@@ -334,7 +376,7 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
         items: itemsBySegmentId.get(seg.workout_segment_id) || [],
       }));
 
-      // Optionally surface unassigned exercises if any exist
+      // Optionally surface unassigned exercises if any exist.
       const unassigned = exR.rows.filter((x) => !x.workout_segment_id);
       if (unassigned.length) {
         segments.push({

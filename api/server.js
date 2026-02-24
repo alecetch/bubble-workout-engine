@@ -5,7 +5,8 @@ import { fetchInputs } from "./bubbleClient.js";
 import { runPipeline } from "./engine/runPipeline.js";
 import { importEmitterRouter } from "./src/routes/importEmitter.js";
 import { readProgramRouter } from "./src/routes/readProgram.js";
-
+import { userBootstrapRouter } from "./src/routes/userBootstrap.js";
+import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstrap.js";
 
 const { Pool } = pg;
 const app = express();
@@ -19,9 +20,11 @@ app.use(
   }),
 );
 
-// ✅ mount router
+// mount routers
 app.use("/api", importEmitterRouter);
 app.use("/api", readProgramRouter);
+app.use("/api", userBootstrapRouter);
+app.use("/api", clientProfileBootstrapRouter);
 
 // Postgres pool
 const pool = new Pool({
