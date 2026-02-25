@@ -24,8 +24,41 @@ Notes:
 - Non-API unmatched routes return Express default HTML 404.
 
 ## Auth
-- Only `POST /generate-plan` enforces auth (`x-engine-key` header).
-- `/api/*` routes currently have **no auth middleware**.
+
+> **Current mode: internal token (temporary).**
+> TODO: replace with per-user JWT or session auth before public launch.
+
+### Write routes (`POST /api/*`)
+All four write routes now require:
+```
+X-Internal-Token: <value>
+```
+where `<value>` must match env var `INTERNAL_API_TOKEN`.
+
+Applies to:
+- `POST /api/user/bootstrap`
+- `POST /api/client_profile/bootstrap`
+- `POST /api/program/generate`
+- `POST /api/import/emitter`
+
+Missing or incorrect token returns:
+```json
+{
+  "ok": false,
+  "request_id": "<uuid>",
+  "code": "unauthorized",
+  "error": "Invalid or missing X-Internal-Token"
+}
+```
+Status: `401`
+
+If `INTERNAL_API_TOKEN` is not set in the environment, all write requests are rejected (fail-safe).
+
+### Read routes (`GET /api/*`)
+- Currently unauthenticated. TODO: add auth before public launch.
+
+### Legacy route
+- `POST /generate-plan` enforces a separate `x-engine-key` header (unchanged).
 
 ## Pagination
 - No endpoint currently supports explicit pagination (`limit/offset/cursor`) in responses.

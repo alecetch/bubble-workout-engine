@@ -99,6 +99,7 @@ function mapError(err) {
 // ---- GET /api/program/:program_id/overview ----
 // Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs).
 readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
+  const { request_id } = req;
   const program_id = s(req.params.program_id);
   const selected_program_day_id = s(req.query.selected_program_day_id);
 
@@ -130,8 +131,7 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
       );
 
       if (prgR.rowCount === 0) {
-        // Do not leak existence if wrong user resolution.
-        return res.status(404).json({ ok: false, code: "not_found", error: "Program not found" });
+        throw new NotFoundError("Program not found");
       }
 
       const program = prgR.rows[0];
@@ -255,6 +255,7 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
     const mapped = mapError(err);
     return res.status(mapped.status).json({
       ok: false,
+      request_id,
       code: mapped.code,
       error: mapped.message,
       details: mapped.details,
@@ -265,6 +266,7 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
 // ---- GET /api/day/:program_day_id/full ----
 // Returns: day header + ordered segments[] with nested items[].
 readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
+  const { request_id } = req;
   const program_day_id = s(req.params.program_day_id);
 
   try {
@@ -302,7 +304,7 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
       );
 
       if (dayR.rowCount === 0) {
-        return res.status(404).json({ ok: false, code: "not_found", error: "Day not found" });
+        throw new NotFoundError("Day not found");
       }
 
       const day = dayR.rows[0];
@@ -413,6 +415,7 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
     const mapped = mapError(err);
     return res.status(mapped.status).json({
       ok: false,
+      request_id,
       code: mapped.code,
       error: mapped.message,
       details: mapped.details,

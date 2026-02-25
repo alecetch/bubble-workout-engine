@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
 import express from "express";
 import { fetchInputs } from "../../bubbleClient.js";
 import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { pool } from "../db.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
+import { requireInternalToken } from "../middleware/auth.js";
 
 export const generateProgramRouter = express.Router();
 
@@ -44,8 +44,8 @@ async function resolveInjuryColumn(client) {
   throw new Error("client_profile missing injury flags column (injury_flags_slugs or injury_flags)");
 }
 
-generateProgramRouter.post("/program/generate", async (req, res) => {
-  const request_id = s(req.headers["x-request-id"]) || randomUUID();
+generateProgramRouter.post("/program/generate", requireInternalToken, async (req, res) => {
+  const { request_id } = req;
 
   const bubble_user_id = s(req.body?.bubble_user_id);
   const bubble_client_profile_id = s(req.body?.bubble_client_profile_id);
@@ -67,65 +67,78 @@ generateProgramRouter.post("/program/generate", async (req, res) => {
     return res.status(e.status).json(e.body);
   }
 
-  const client = await pool.connect();
   try {
-    const userR = await client.query(
-      `
-      SELECT id
-      FROM app_user
-      WHERE bubble_user_id = $1
-      LIMIT 1
-      `,
-      [bubble_user_id],
-    );
+    // ── Phase 1: DB reads ────────────────────────────────────────────────────
+    // Acquire a client, resolve user/profile/allowedIds, then release before
+    // any external I/O so the connection is not held during the Bubble call.
+    let pg_user_id;
+    let pg_client_profile_id;
+    let allowedIds;
 
-    if (userR.rowCount === 0) {
-      const e = mapError(404, "not_found", "User not bootstrapped");
-      return res.status(e.status).json(e.body);
-    }
+    const client = await pool.connect();
+    try {
+      const userR = await client.query(
+        `
+        SELECT id
+        FROM app_user
+        WHERE bubble_user_id = $1
+        LIMIT 1
+        `,
+        [bubble_user_id],
+      );
 
-    const pg_user_id = userR.rows[0].id;
-    const injuryColumn = await resolveInjuryColumn(client);
+      if (userR.rowCount === 0) {
+        const e = mapError(404, "not_found", "User not bootstrapped");
+        return res.status(e.status).json(e.body);
+      }
 
-    const profileR = await client.query(
-      `
-      SELECT
-        id,
+      pg_user_id = userR.rows[0].id;
+      const injuryColumn = await resolveInjuryColumn(client);
+
+      const profileR = await client.query(
+        `
+        SELECT
+          id,
+          fitness_rank,
+          equipment_items_slugs,
+          ${injuryColumn} AS injury_flags_slugs
+        FROM client_profile
+        WHERE bubble_client_profile_id = $1
+          AND user_id = $2
+        LIMIT 1
+        `,
+        [bubble_client_profile_id, pg_user_id],
+      );
+
+      if (profileR.rowCount === 0) {
+        const e = mapError(404, "not_found", "Client profile not found");
+        return res.status(e.status).json(e.body);
+      }
+
+      const profile = profileR.rows[0];
+      pg_client_profile_id = profile.id;
+
+      const fitness_rank = Number.isFinite(profile.fitness_rank)
+        ? profile.fitness_rank
+        : Number(profile.fitness_rank || 0);
+      const injury_flags_slugs = Array.isArray(profile.injury_flags_slugs)
+        ? profile.injury_flags_slugs
+        : [];
+      const equipment_items_slugs = Array.isArray(profile.equipment_items_slugs)
+        ? profile.equipment_items_slugs
+        : [];
+
+      allowedIds = await getAllowedExerciseIds(client, {
         fitness_rank,
+        injury_flags_slugs,
         equipment_items_slugs,
-        ${injuryColumn} AS injury_flags_slugs
-      FROM client_profile
-      WHERE bubble_client_profile_id = $1
-        AND user_id = $2
-      LIMIT 1
-      `,
-      [bubble_client_profile_id, pg_user_id],
-    );
-
-    if (profileR.rowCount === 0) {
-      const e = mapError(404, "not_found", "Client profile not found");
-      return res.status(e.status).json(e.body);
+      });
+    } finally {
+      client.release();
+      // Pool connection is free. Nothing below holds a DB client until Phase 4.
     }
 
-    const profile = profileR.rows[0];
-    const fitness_rank = Number.isFinite(profile.fitness_rank)
-      ? profile.fitness_rank
-      : Number(profile.fitness_rank || 0);
-
-    const injury_flags_slugs = Array.isArray(profile.injury_flags_slugs)
-      ? profile.injury_flags_slugs
-      : [];
-
-    const equipment_items_slugs = Array.isArray(profile.equipment_items_slugs)
-      ? profile.equipment_items_slugs
-      : [];
-
-    const allowedIds = await getAllowedExerciseIds(client, {
-      fitness_rank,
-      injury_flags_slugs,
-      equipment_items_slugs,
-    });
-
+    // ── Phase 2: External HTTP — no DB connection held ────────────────────────
     const inputs = await fetchInputs({ clientProfileId: bubble_client_profile_id });
     if (!inputs || typeof inputs !== "object") {
       const e = mapError(400, "validation_error", "Failed to load generation inputs");
@@ -134,8 +147,9 @@ generateProgramRouter.post("/program/generate", async (req, res) => {
 
     inputs.allowed_exercise_ids = allowedIds;
     inputs.pg_user_id = pg_user_id;
-    inputs.pg_client_profile_id = profile.id;
+    inputs.pg_client_profile_id = pg_client_profile_id;
 
+    // ── Phase 3: CPU pipeline — no DB connection held ─────────────────────────
     const pipelineOut = await runPipeline({
       inputs,
       programType,
@@ -153,8 +167,9 @@ generateProgramRouter.post("/program/generate", async (req, res) => {
       throw new Error("Pipeline did not produce emitter rows");
     }
 
+    // ── Phase 4: Transactional write — importEmitterPayload acquires its own client ──
     const importResult = await importEmitterPayload({
-      poolOrClient: client,
+      poolOrClient: pool,
       payload: {
         user_id: pg_user_id,
         anchor_date_ms,
@@ -171,12 +186,19 @@ generateProgramRouter.post("/program/generate", async (req, res) => {
       allowed_count: allowedIds.length,
     });
   } catch (err) {
+    console.error(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: "error",
+      event: "program_generate.error",
+      request_id,
+      error: err?.message,
+      stack: err?.stack,
+    }));
     return res.status(500).json({
       ok: false,
+      request_id,
       code: "internal_error",
       error: err?.message || "Internal server error",
     });
-  } finally {
-    client.release();
   }
 });

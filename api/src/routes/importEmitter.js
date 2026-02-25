@@ -1,8 +1,8 @@
 // api/src/routes/importEmitter.js
-import { randomUUID } from "node:crypto";
 import express from "express";
 import { pool } from "../db.js";
 import { importEmitterPayload, ValidationError } from "../services/importEmitterService.js";
+import { requireInternalToken } from "../middleware/auth.js";
 
 export const importEmitterRouter = express.Router();
 
@@ -35,8 +35,8 @@ function mapPgErrorToHttp(err) {
   return { status: 500, code: "internal_error", message: err.message || "Internal server error" };
 }
 
-importEmitterRouter.post("/import/emitter", async (req, res) => {
-  const request_id = s(req.headers["x-request-id"]) || randomUUID();
+importEmitterRouter.post("/import/emitter", requireInternalToken, async (req, res) => {
+  const { request_id } = req;
 
   const user_id = s(req.body?.user_id);
   const anchor_date_ms = req.body?.anchor_date_ms;

@@ -58,8 +58,8 @@ Purpose: program header and lifecycle metadata for a generated plan.
 
 - Key columns:
   - `id uuid pk`
-  - `user_id uuid not null` (ownership)
-  - `client_profile_id uuid null` (currently not FK-constrained)
+  - `user_id uuid not null references app_user(id)` — ownership; RESTRICT on delete (V6)
+  - `client_profile_id uuid null references client_profile(id) on delete set null` (V6)
   - program metadata (`program_title`, `program_summary`, `weeks_count`, `days_per_week`)
   - schedule anchors (`start_date`, `start_offset_days`, `start_weekday`, `preferred_days_sorted_json`)
   - status/revision/parent linkage (`status`, `revision`, `parent_program_id -> program(id)`)
@@ -135,7 +135,7 @@ Purpose: user performance logging for prescribed exercises/segments.
 
 - Key columns:
   - `id uuid pk`
-  - `user_id uuid not null`
+  - `user_id uuid not null references app_user(id)` — RESTRICT on delete (V6)
   - `program_id fk -> program(id) on delete cascade`
   - `program_day_id fk -> program_day(id) on delete cascade`
   - optional refs: `workout_segment_id` and `program_exercise_id` (`on delete set null`)

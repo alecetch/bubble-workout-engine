@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git -C \"c:/Users/alecp/bubble-workout-engine\" status)"
+      "Bash(git -C \"c:/Users/alecp/bubble-workout-engine\" status)",
+      "Bash(cmd.exe /c \"cd /d c:/Users/alecp/bubble-workout-engine/api && node --check server.js && node --check src/routes/generateProgram.js && node --check src/routes/readProgram.js && echo ALL OK\")",
+      "Bash(git -C \"c:/Users/alecp/bubble-workout-engine\" diff)"
     ]
   }
 }

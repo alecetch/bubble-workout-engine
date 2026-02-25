@@ -1,6 +1,7 @@
 // api/src/routes/userBootstrap.js
 import express from "express";
 import { pool } from "../db.js";
+import { requireInternalToken } from "../middleware/auth.js";
 
 export const userBootstrapRouter = express.Router();
 
@@ -32,7 +33,7 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: err?.message || "Internal server error" };
 }
 
-userBootstrapRouter.post("/user/bootstrap", express.json({ limit: "1mb" }), async (req, res) => {
+userBootstrapRouter.post("/user/bootstrap", requireInternalToken, express.json({ limit: "1mb" }), async (req, res) => {
   const bubble_user_id = s(req.body?.bubble_user_id);
 
   try {
@@ -71,6 +72,7 @@ userBootstrapRouter.post("/user/bootstrap", express.json({ limit: "1mb" }), asyn
     const mapped = mapError(err);
     return res.status(mapped.status).json({
       ok: false,
+      request_id: req.request_id,
       code: mapped.code,
       error: mapped.message,
       details: mapped.details,

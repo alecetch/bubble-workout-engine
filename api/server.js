@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import pg from "pg";
 import { fetchInputs } from "./bubbleClient.js";
 import { runPipeline } from "./engine/runPipeline.js";
 import { importEmitterRouter } from "./src/routes/importEmitter.js";
@@ -9,9 +8,13 @@ import { userBootstrapRouter } from "./src/routes/userBootstrap.js";
 import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstrap.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramRouter } from "./src/routes/generateProgram.js";
+import { pool } from "./src/db.js";
+import { requestId } from "./src/middleware/requestId.js";
 
-const { Pool } = pg;
 const app = express();
+
+// Assign/echo request_id before any other middleware or route handler.
+app.use(requestId);
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -52,15 +55,6 @@ app.use("/api", clientProfileBootstrapRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", generateProgramRouter);
 
-// Postgres pool.
-const pool = new Pool({
-  host: process.env.PGHOST,
-  port: Number(process.env.PGPORT || 5432),
-  user: process.env.PGUSER,
-  password: process.env.PGPASSWORD,
-  database: process.env.PGDATABASE,
-});
-
 // Health route.
 app.get("/health", async (req, res) => {
   const r = await pool.query("select now() as now");
@@ -69,7 +63,11 @@ app.get("/health", async (req, res) => {
 
 // Generate plan route (uses global JSON parser only).
 app.post("/generate-plan", async (req, res) => {
-  console.log("generate-plan hit", req.headers["content-type"], req.body);
+  console.info(JSON.stringify({
+    ts: new Date().toISOString(),
+    event: "generate_plan.request",
+    content_type: req.headers["content-type"] || "",
+  }));
 
   // Auth
   if (req.headers["x-engine-key"] !== process.env.ENGINE_KEY) {
@@ -112,6 +110,7 @@ app.use((err, req, res, next) => {
 
     return res.status(400).json({
       ok: false,
+      request_id: req.request_id,
       code: "invalid_json",
       error: "Invalid JSON",
     });
@@ -125,6 +124,7 @@ app.use((err, req, res, next) => {
   console.error("Unhandled error:", err?.stack || err);
   return res.status(500).json({
     ok: false,
+    request_id: req.request_id,
     code: "internal_error",
     error: err?.message || "Internal server error",
   });
