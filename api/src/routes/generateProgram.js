@@ -1,6 +1,10 @@
+import { randomUUID } from "node:crypto";
 import express from "express";
-import { pool } from "../db.js";
+import { fetchInputs } from "../../bubbleClient.js";
+import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
+import { pool } from "../db.js";
+import { importEmitterPayload } from "../services/importEmitterService.js";
 
 export const generateProgramRouter = express.Router();
 
@@ -41,6 +45,8 @@ async function resolveInjuryColumn(client) {
 }
 
 generateProgramRouter.post("/program/generate", async (req, res) => {
+  const request_id = s(req.headers["x-request-id"]) || randomUUID();
+
   const bubble_user_id = s(req.body?.bubble_user_id);
   const bubble_client_profile_id = s(req.body?.bubble_client_profile_id);
   const programType = s(req.body?.programType) || "hypertrophy";
@@ -114,20 +120,55 @@ generateProgramRouter.post("/program/generate", async (req, res) => {
       ? profile.equipment_items_slugs
       : [];
 
-    const allowed = await getAllowedExerciseIds(client, {
+    const allowedIds = await getAllowedExerciseIds(client, {
       fitness_rank,
       injury_flags_slugs,
       equipment_items_slugs,
     });
 
+    const inputs = await fetchInputs({ clientProfileId: bubble_client_profile_id });
+    if (!inputs || typeof inputs !== "object") {
+      const e = mapError(400, "validation_error", "Failed to load generation inputs");
+      return res.status(e.status).json(e.body);
+    }
+
+    inputs.allowed_exercise_ids = allowedIds;
+    inputs.pg_user_id = pg_user_id;
+    inputs.pg_client_profile_id = profile.id;
+
+    const pipelineOut = await runPipeline({
+      inputs,
+      programType,
+      request: req.body,
+    });
+
+    // Existing emitter is reused via runPipeline -> engine/steps/06_emitPlan.js as pipelineOut.rows.
+    const rows = Array.isArray(pipelineOut?.rows)
+      ? pipelineOut.rows
+      : Array.isArray(pipelineOut?.plan?.rows)
+        ? pipelineOut.plan.rows
+        : null;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error("Pipeline did not produce emitter rows");
+    }
+
+    const importResult = await importEmitterPayload({
+      poolOrClient: client,
+      payload: {
+        user_id: pg_user_id,
+        anchor_date_ms,
+        rows,
+      },
+      request_id,
+    });
+
     return res.json({
       ok: true,
-      pg_user_id,
-      pg_client_profile_id: profile.id,
-      programType,
-      anchor_date_ms,
-      allowed_count: allowed.length,
-      allowed_ids_preview: allowed.slice(0, 25),
+      program_id: importResult.program_id,
+      idempotent: importResult.idempotent,
+      counts: importResult.counts,
+      allowed_count: allowedIds.length,
     });
   } catch (err) {
     return res.status(500).json({
