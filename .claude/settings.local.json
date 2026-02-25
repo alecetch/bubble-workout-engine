@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"c:/Users/alecp/bubble-workout-engine\" status)"
+    ]
+  }
+}
