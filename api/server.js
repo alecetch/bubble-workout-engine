@@ -36,6 +36,14 @@ const profilePatchKeys = [
   "onboardingCompletedAt",
 ];
 
+const presetColumnByCode = {
+  commercial_gym: "commercial_gym",
+  crossfit_hyrox_gym: "crossfit_hyrox_gym",
+  decent_home_gym: "decent_home_gym",
+  minimal_equipment: "minimal_equipment",
+  no_equipment: "no_equipment",
+};
+
 function createDevProfile(id, userId) {
   return {
     id,
@@ -156,14 +164,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Mount routers.
-app.use("/api", importEmitterRouter);
-app.use("/api", readProgramRouter);
-app.use("/api", userBootstrapRouter);
-app.use("/api", clientProfileBootstrapRouter);
-app.use("/api", debugAllowedExercisesRouter);
-app.use("/api", generateProgramRouter);
-
 // Health route.
 app.get("/health", async (req, res) => {
   const r = await pool.query("select now() as now");
@@ -172,6 +172,42 @@ app.get("/health", async (req, res) => {
 
 app.get("/reference-data", (req, res) => {
   return res.status(200).json(devReferenceData);
+});
+
+// Verify:
+// curl "http://localhost:3000/equipment-items?preset=commercial_gym"
+app.get("/equipment-items", async (req, res) => {
+  const preset = typeof req.query.preset === "string" ? req.query.preset : "";
+  if (!preset) {
+    return res.status(400).json({ error: "preset is required" });
+  }
+
+  const mappedColumn = presetColumnByCode[preset];
+  if (!mappedColumn) {
+    return res.status(400).json({ error: "invalid preset" });
+  }
+
+  try {
+    const sql = `
+      SELECT id, bubble_id, category, name, exercise_slug
+      FROM equipment_items
+      WHERE ${mappedColumn} = true
+      ORDER BY category NULLS LAST, name ASC
+    `;
+    const result = await pool.query(sql);
+    const items = result.rows.map((row) => ({
+      id: row.id,
+      bubbleId: row.bubble_id,
+      category: row.category,
+      label: row.name,
+      code: row.exercise_slug,
+    }));
+
+    return res.status(200).json({ preset, items });
+  } catch (err) {
+    console.error("equipment-items error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // TODO: Replace with authenticated user when auth layer is implemented
@@ -240,6 +276,14 @@ app.patch("/users/me", (req, res) => {
     clientProfileId,
   });
 });
+
+// Mount routers.
+app.use("/api", importEmitterRouter);
+app.use("/api", readProgramRouter);
+app.use("/api", userBootstrapRouter);
+app.use("/api", clientProfileBootstrapRouter);
+app.use("/api", debugAllowedExercisesRouter);
+app.use("/api", generateProgramRouter);
 
 // Generate plan route (uses global JSON parser only).
 app.post("/generate-plan", async (req, res) => {

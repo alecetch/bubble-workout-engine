@@ -11,15 +11,7 @@ export const GOAL_TYPES = [
 
 export type GoalType = (typeof GOAL_TYPES)[number];
 
-export const EQUIPMENT_PRESETS = [
-  "Commercial gym",
-  "Crosfit/Hyrox gym",
-  "Decent home gym",
-  "Minimal equipment",
-  "No equipment",
-] as const;
-
-export type EquipmentPreset = (typeof EQUIPMENT_PRESETS)[number];
+export type EquipmentPreset = string;
 
 export const FITNESS_LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"] as const;
 export type FitnessLevel = (typeof FITNESS_LEVELS)[number];
@@ -45,7 +37,7 @@ export type DayOfWeek = (typeof DAYS_OF_WEEK)[number];
 export const SEX_OPTIONS = ["Male", "Female", "Prefer not to say"] as const;
 export type Sex = (typeof SEX_OPTIONS)[number];
 
-export const AGE_RANGES = ["Under 18", "18–24", "25–34", "35–44", "45–54", "55–64", "65+"] as const;
+export const AGE_RANGES = ["Under 18", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"] as const;
 export type AgeRange = (typeof AGE_RANGES)[number];
 
 export type OnboardingDraft = {
@@ -53,6 +45,9 @@ export type OnboardingDraft = {
   fitnessLevel: FitnessLevel | null;
   injuryFlags: InjuryFlag[];
   goalNotes: string;
+  equipmentPresetCode: EquipmentPreset | null;
+  selectedEquipmentCodes: string[];
+  // Backward compatibility for existing API payload mapping.
   equipmentPreset: EquipmentPreset | null;
   equipmentItemCodes: string[];
   preferredDays: DayOfWeek[];
@@ -84,6 +79,8 @@ export const DEFAULT_ONBOARDING_DRAFT: OnboardingDraft = {
   fitnessLevel: null,
   injuryFlags: [],
   goalNotes: "",
+  equipmentPresetCode: null,
+  selectedEquipmentCodes: [],
   equipmentPreset: null,
   equipmentItemCodes: [],
   preferredDays: [],

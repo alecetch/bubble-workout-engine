@@ -38,11 +38,11 @@ function validateStep1(draft: OnboardingDraft): FieldErrors {
 function validateStep2(draft: OnboardingDraft): FieldErrors {
   const errors: FieldErrors = {};
 
-  if (!draft.equipmentPreset) {
+  if (!draft.equipmentPresetCode) {
     errors.equipmentPreset = ERROR_MESSAGES.equipmentPresetRequired;
   }
 
-  if (draft.equipmentItemCodes.length < 1) {
+  if (draft.selectedEquipmentCodes.length < 1) {
     errors.equipmentItemCodes = ERROR_MESSAGES.equipmentItemsRequired;
   }
 

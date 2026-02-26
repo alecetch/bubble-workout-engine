@@ -3,7 +3,6 @@ import {
   AGE_RANGES,
   DAYS_OF_WEEK,
   DEFAULT_ONBOARDING_DRAFT,
-  EQUIPMENT_PRESETS,
   FITNESS_LEVELS,
   GOAL_TYPES,
   INJURY_FLAGS,
@@ -70,7 +69,8 @@ function toInjuryFlags(value: unknown): InjuryFlag[] {
 }
 
 function toEquipmentPreset(value: unknown): EquipmentPreset | null {
-  return matchesLiteral(value, EQUIPMENT_PRESETS);
+  const raw = String(value ?? "").trim();
+  return raw ? raw : null;
 }
 
 function toDays(value: unknown): DayOfWeek[] {
@@ -116,7 +116,17 @@ function fromProfile(profileLike: ProfileLike): OnboardingDraft {
     toInjuryFlags(profileLike.injuryFlags ?? profileLike.injury_flags ?? profileLike.injury_flags_slugs ?? []),
   );
   const equipmentPreset = toEquipmentPreset(
-    profileLike.equipmentPreset ?? profileLike.equipment_preset ?? profileLike.equipment_preset_slug,
+    profileLike.equipmentPresetCode ??
+      profileLike.equipmentPreset ??
+      profileLike.equipment_preset ??
+      profileLike.equipment_preset_slug,
+  );
+  const selectedEquipmentCodes = toStringArray(
+    profileLike.selectedEquipmentCodes ??
+      profileLike.equipmentItemCodes ??
+      profileLike.equipment_item_codes ??
+      profileLike.equipment_items_slugs ??
+      [],
   );
   const preferredDays = toDays(profileLike.preferredDays ?? profileLike.preferred_days ?? []);
 
@@ -125,10 +135,10 @@ function fromProfile(profileLike: ProfileLike): OnboardingDraft {
     fitnessLevel,
     injuryFlags,
     goalNotes: String(profileLike.goalNotes ?? profileLike.goal_notes ?? ""),
+    equipmentPresetCode: equipmentPreset,
+    selectedEquipmentCodes,
     equipmentPreset,
-    equipmentItemCodes: toStringArray(
-      profileLike.equipmentItemCodes ?? profileLike.equipment_item_codes ?? profileLike.equipment_items_slugs ?? [],
-    ),
+    equipmentItemCodes: selectedEquipmentCodes,
     preferredDays,
     scheduleConstraints: String(profileLike.scheduleConstraints ?? profileLike.schedule_constraints ?? ""),
     heightCm: toNumberOrNull(profileLike.heightCm ?? profileLike.height_cm),
@@ -156,6 +166,18 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setDraft: (partial) => {
     set((state) => {
       const merged = { ...state.draft, ...partial };
+      if (Object.prototype.hasOwnProperty.call(partial, "equipmentPresetCode")) {
+        merged.equipmentPreset = partial.equipmentPresetCode ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(partial, "selectedEquipmentCodes")) {
+        merged.equipmentItemCodes = partial.selectedEquipmentCodes ?? [];
+      }
+      if (Object.prototype.hasOwnProperty.call(partial, "equipmentPreset")) {
+        merged.equipmentPresetCode = partial.equipmentPreset ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(partial, "equipmentItemCodes")) {
+        merged.selectedEquipmentCodes = partial.equipmentItemCodes ?? [];
+      }
       if (partial.injuryFlags) {
         merged.injuryFlags = applyExclusivity(partial.injuryFlags);
       }

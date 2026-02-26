@@ -6,7 +6,14 @@ import { StatusBar } from "expo-status-bar";
 import { OnboardingNavigator } from "./src/navigation/OnboardingNavigator";
 import { colors } from "./src/theme/colors";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+    },
+  },
+});
 
 const appTheme: Theme = {
   ...DefaultTheme,

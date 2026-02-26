@@ -13,7 +13,7 @@ import {
   type CreateClientProfileInput,
   type UpdateClientProfileInput,
 } from "./clientProfiles";
-import { getEquipmentItemsForPreset, type EquipmentItemOption } from "./equipmentPresets";
+import { getEquipmentItemsForPreset, type EquipmentItemsForPresetResponse } from "./equipmentPresets";
 import { getMe, linkClientProfileToMe, type MeResponse } from "./me";
 import { getReferenceData, type ReferenceDataResponse } from "./referenceData";
 import type { EquipmentPreset } from "../state/onboarding/types";
@@ -22,7 +22,7 @@ const queryKeys = {
   me: ["me"] as const,
   referenceData: ["referenceData"] as const,
   clientProfile: (profileId: string) => ["clientProfile", profileId] as const,
-  equipmentItemsForPreset: (preset: EquipmentPreset | null) => ["equipmentItemsForPreset", preset] as const,
+  equipmentItems: (presetCode: string | null) => ["equipmentItems", presetCode] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -83,12 +83,13 @@ export function useUpdateClientProfile(
   });
 }
 
-export function useEquipmentItemsForPreset(
-  preset: EquipmentPreset | null,
-): UseQueryResult<EquipmentItemOption[]> {
+export function useEquipmentItems(
+  presetCode: string | null,
+): UseQueryResult<EquipmentItemsForPresetResponse> {
   return useQuery({
-    queryKey: queryKeys.equipmentItemsForPreset(preset),
-    queryFn: () => getEquipmentItemsForPreset(preset as EquipmentPreset),
-    enabled: Boolean(preset),
+    queryKey: queryKeys.equipmentItems(presetCode),
+    queryFn: () => getEquipmentItemsForPreset(presetCode as EquipmentPreset),
+    enabled: Boolean(presetCode),
+    staleTime: 5 * 60 * 1000,
   });
 }
