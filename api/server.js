@@ -12,6 +12,115 @@ import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
 
 const app = express();
+const DEV_USER_ID = "dev-user-1";
+
+// TODO: Dev-only in-memory store. Replace with Postgres-backed persistence.
+const profilesById = new Map();
+const userToProfileId = new Map();
+
+const profilePatchKeys = [
+  "goals",
+  "fitnessLevel",
+  "injuryFlags",
+  "goalNotes",
+  "equipmentPreset",
+  "equipmentItemCodes",
+  "preferredDays",
+  "scheduleConstraints",
+  "heightCm",
+  "weightKg",
+  "minutesPerSession",
+  "sex",
+  "ageRange",
+  "onboardingStepCompleted",
+  "onboardingCompletedAt",
+];
+
+function createDevProfile(id, userId) {
+  return {
+    id,
+    userId,
+    goals: [],
+    fitnessLevel: null,
+    injuryFlags: [],
+    goalNotes: "",
+    equipmentPreset: null,
+    equipmentItemCodes: [],
+    preferredDays: [],
+    scheduleConstraints: "",
+    heightCm: null,
+    weightKg: null,
+    minutesPerSession: null,
+    sex: null,
+    ageRange: null,
+    onboardingStepCompleted: 0,
+    onboardingCompletedAt: null,
+  };
+}
+
+// TODO: Dev-only static reference data. Move these lists into Postgres-backed tables.
+const devReferenceData = {
+  goalTypes: [
+    { code: "fat_loss", label: "Fat Loss" },
+    { code: "general_fitness", label: "General Fitness" },
+    { code: "strength", label: "Strength" },
+    { code: "hypertrophy", label: "Hypertrophy" },
+    { code: "hyrox_competition", label: "HYROX Competition" },
+    { code: "turf_games_competition", label: "Turf Games Competition" },
+    { code: "endurance", label: "Endurance" },
+    { code: "rehab_return_from_injury", label: "Rehab / Return From Injury" },
+  ],
+  equipmentPresets: [
+    { code: "commercial_gym", label: "Commercial Gym" },
+    { code: "decent_home_gym", label: "Decent Home Gym" },
+    { code: "minimal_equipment", label: "Minimal Equipment" },
+    { code: "no_equipment", label: "No Equipment" },
+    { code: "crossfit_hyrox_gym", label: "CrossFit / HYROX Gym" },
+  ],
+  fitnessLevels: [
+    { rank: 1, code: "beginner", label: "Beginner" },
+    { rank: 2, code: "intermediate", label: "Intermediate" },
+    { rank: 3, code: "advanced", label: "Advanced" },
+    { rank: 4, code: "elite", label: "Elite" },
+  ],
+  injuryFlags: [
+    { code: "shoulder_issues", label: "Shoulder Issues" },
+    { code: "knee_issues", label: "Knee Issues" },
+    { code: "lower_back_spine", label: "Lower Back / Spine" },
+    { code: "ankle_foot", label: "Ankle / Foot" },
+    { code: "wrist_elbow", label: "Wrist / Elbow" },
+    { code: "cardiovascular_limitations", label: "Cardiovascular Limitations" },
+    { code: "no_known_issues", label: "No Known Issues" },
+  ],
+  minutesOptions: [
+    { minutes: 40, label: "40" },
+    { minutes: 50, label: "50" },
+    { minutes: 60, label: "60" },
+  ],
+  daysOfWeek: [
+    { code: "mon", label: "Mon" },
+    { code: "tue", label: "Tue" },
+    { code: "wed", label: "Wed" },
+    { code: "thu", label: "Thu" },
+    { code: "fri", label: "Fri" },
+    { code: "sat", label: "Sat" },
+    { code: "sun", label: "Sun" },
+  ],
+  sexOptions: [
+    { code: "male", label: "Male" },
+    { code: "female", label: "Female" },
+    { code: "prefer_not_to_say", label: "Prefer Not To Say" },
+  ],
+  ageRanges: [
+    { code: "under_18", label: "Under 18", isAdult: false },
+    { code: "18_24", label: "18-24", isAdult: true },
+    { code: "25_34", label: "25-34", isAdult: true },
+    { code: "35_44", label: "35-44", isAdult: true },
+    { code: "45_54", label: "45-54", isAdult: true },
+    { code: "55_64", label: "55-64", isAdult: true },
+    { code: "65_plus", label: "65+", isAdult: true },
+  ],
+};
 
 // Assign/echo request_id before any other middleware or route handler.
 app.use(requestId);
@@ -59,6 +168,77 @@ app.use("/api", generateProgramRouter);
 app.get("/health", async (req, res) => {
   const r = await pool.query("select now() as now");
   res.json({ ok: true, dbTime: r.rows[0].now });
+});
+
+app.get("/reference-data", (req, res) => {
+  return res.status(200).json(devReferenceData);
+});
+
+// TODO: Replace with authenticated user when auth layer is implemented
+app.get("/me", (req, res) => {
+  const clientProfileId = userToProfileId.get(DEV_USER_ID) ?? null;
+  return res.status(200).json({
+    id: DEV_USER_ID,
+    clientProfileId,
+  });
+});
+
+// TODO: Dev-only in-memory routes. Replace with authenticated + Postgres-backed routes.
+app.post("/client-profiles", (req, res) => {
+  const existingProfileId = userToProfileId.get(DEV_USER_ID);
+  if (existingProfileId) {
+    const existingProfile = profilesById.get(existingProfileId);
+    if (existingProfile) {
+      return res.status(200).json(existingProfile);
+    }
+  }
+
+  const id = "dev-profile-1";
+  const profile = createDevProfile(id, DEV_USER_ID);
+  profilesById.set(id, profile);
+  userToProfileId.set(DEV_USER_ID, id);
+  return res.status(200).json(profile);
+});
+
+app.get("/client-profiles/:id", (req, res) => {
+  const profile = profilesById.get(req.params.id);
+  if (!profile) {
+    return res.status(404).json({ error: "not found" });
+  }
+
+  return res.status(200).json(profile);
+});
+
+app.patch("/client-profiles/:id", (req, res) => {
+  const profile = profilesById.get(req.params.id);
+  if (!profile) {
+    return res.status(404).json({ error: "not found" });
+  }
+
+  const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  for (const key of profilePatchKeys) {
+    if (Object.prototype.hasOwnProperty.call(patch, key)) {
+      profile[key] = patch[key];
+    }
+  }
+
+  profilesById.set(profile.id, profile);
+  return res.status(200).json(profile);
+});
+
+app.patch("/users/me", (req, res) => {
+  const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  const clientProfileId = typeof patch.clientProfileId === "string" ? patch.clientProfileId : null;
+  if (clientProfileId) {
+    userToProfileId.set(DEV_USER_ID, clientProfileId);
+  } else {
+    userToProfileId.delete(DEV_USER_ID);
+  }
+
+  return res.status(200).json({
+    id: DEV_USER_ID,
+    clientProfileId,
+  });
 });
 
 // Generate plan route (uses global JSON parser only).
