@@ -15,6 +15,14 @@ import {
 } from "./clientProfiles";
 import { getEquipmentItemsForPreset, type EquipmentItemsForPresetResponse } from "./equipmentPresets";
 import { getMe, linkClientProfileToMe, type MeResponse } from "./me";
+import {
+  getProgramDayFull,
+  getProgramOverview,
+  type ProgramDayFullResponse,
+  type ProgramOverviewOptions,
+  type ProgramOverviewResponse,
+  type ViewerIdentityOptions,
+} from "./programViewer";
 import { getReferenceData, type ReferenceDataResponse } from "./referenceData";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
@@ -23,6 +31,15 @@ const queryKeys = {
   referenceData: ["referenceData"] as const,
   clientProfile: (profileId: string) => ["clientProfile", profileId] as const,
   equipmentItems: (presetCode: string | null) => ["equipmentItems", presetCode] as const,
+  // selectedProgramDayId intentionally excluded — overview is static per program/user.
+  // Selection state belongs to the UI layer only, not the cache key.
+  programOverview: (programId: string, opts: { userId?: string | null; bubbleUserId?: string | null }) =>
+    ["programOverview", programId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
+  // Per-day preview: independent cache entry per selected day.
+  dayPreview: (programId: string, programDayId: string, opts: { userId?: string | null; bubbleUserId?: string | null }) =>
+    ["dayPreview", programId, programDayId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
+  programDayFull: (programDayId: string, opts: ViewerIdentityOptions) =>
+    ["programDayFull", programDayId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -91,5 +108,52 @@ export function useEquipmentItems(
     queryFn: () => getEquipmentItemsForPreset(presetCode as EquipmentPreset),
     enabled: Boolean(presetCode),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useProgramOverview(
+  programId: string,
+  opts: { userId?: string; bubbleUserId?: string },
+): UseQueryResult<ProgramOverviewResponse> {
+  return useQuery({
+    queryKey: queryKeys.programOverview(programId, opts),
+    queryFn: () => getProgramOverview(programId, opts),
+    enabled: Boolean(programId && (opts.bubbleUserId || opts.userId)),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Fetches the day preview for a specific programDayId.
+ *
+ * This is intentionally a SEPARATE query from useProgramOverview so that
+ * day selection never appears in the overview query key. The overview fetches
+ * once; this query fires only when the user explicitly picks a different day.
+ *
+ * Uses the same /overview endpoint with selected_program_day_id and selects
+ * only the selectedDayPreview slice to keep the cache granular.
+ */
+export function useDayPreview(
+  programId: string,
+  programDayId: string | undefined,
+  opts: { userId?: string; bubbleUserId?: string },
+): UseQueryResult<ProgramOverviewResponse["selectedDayPreview"]> {
+  return useQuery({
+    queryKey: queryKeys.dayPreview(programId, programDayId ?? "", opts),
+    queryFn: () => getProgramOverview(programId, { ...opts, selectedProgramDayId: programDayId }),
+    select: (data) => data.selectedDayPreview,
+    enabled: Boolean(programId && programDayId && (opts.bubbleUserId || opts.userId)),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useProgramDayFull(
+  programDayId: string,
+  opts: { userId?: string; bubbleUserId?: string },
+): UseQueryResult<ProgramDayFullResponse> {
+  return useQuery({
+    queryKey: queryKeys.programDayFull(programDayId, opts),
+    queryFn: () => getProgramDayFull(programDayId, opts),
+    enabled: Boolean(programDayId && (opts.bubbleUserId || opts.userId)),
   });
 }

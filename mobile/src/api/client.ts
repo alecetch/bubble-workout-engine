@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./config";
+import { API_BASE_URL, ENGINE_KEY } from "./config";
 
 type ApiDiagnostics = {
   lastAttemptedUrl: string | null;
@@ -51,15 +51,21 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   }
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, headers, signal } = options;
-  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+type InternalRequestOptions = RequestOptions & {
+  extraHeaders?: Record<string, string>;
+};
+
+async function requestJson<T>(path: string, options: InternalRequestOptions = {}): Promise<T> {
+  const { method = "GET", body, headers, signal, extraHeaders } = options;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${API_BASE_URL}${normalizedPath}`;
   apiDiagnostics.lastAttemptedUrl = url;
 
   console.log(`[api] request ${method} ${url}`);
 
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
+    ...extraHeaders,
     ...headers,
   };
 
@@ -95,6 +101,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   apiDiagnostics.lastErrorMessage = null;
   return data as T;
+}
+
+export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return requestJson<T>(path, options);
+}
+
+export async function engineFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (!ENGINE_KEY) {
+    throw new Error("ENGINE_KEY missing in app runtime. Set EXPO_PUBLIC_ENGINE_KEY for Expo builds.");
+  }
+
+  const extraHeaders: Record<string, string> = {
+    "X-Engine-Key": ENGINE_KEY,
+  };
+
+  return requestJson<T>(path, { ...options, extraHeaders });
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { method = "GET", body, headers, signal } = options;
+  return apiFetch<T>(path, { method, body, headers, signal });
 }
 
 export function getJson<T>(path: string, options?: Omit<RequestOptions, "method" | "body">): Promise<T> {

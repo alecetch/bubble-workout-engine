@@ -13,12 +13,11 @@ import { useErrorPulse } from "../../components/onboarding/useErrorPulse";
 import { PillGrid } from "../../components/onboarding/PillGrid";
 import { MultilineField } from "../../components/onboarding/MultilineField";
 import { hapticHeavy } from "../../components/interaction/haptics";
-import { useMe, useUpdateClientProfile } from "../../api/hooks";
+import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import {
   FITNESS_LEVELS,
   GOAL_TYPES,
-  INJURY_FLAGS,
   type FitnessLevel,
   type GoalType,
   type InjuryFlag,
@@ -28,6 +27,7 @@ import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
+import { toggleInjuryFlag } from "./toggleInjuryFlag";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Step1Goals">;
 
@@ -50,6 +50,7 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
   const notesPulse = useErrorPulse();
 
   const meQuery = useMe();
+  const referenceDataQuery = useReferenceData();
   const profileId = meQuery.data?.clientProfileId ?? "";
   const updateClientProfile = useUpdateClientProfile(profileId || "");
 
@@ -62,17 +63,32 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
   const setFieldErrors = useOnboardingStore((state) => state.setFieldErrors);
   const setAttempted = useOnboardingStore((state) => state.setAttempted);
   const setIsSaving = useOnboardingStore((state) => state.setIsSaving);
-  const applyInjuryExclusivity = useOnboardingStore((state) => state.applyInjuryExclusivity);
 
   const goalOptions = useMemo(() => GOAL_TYPES.map((goal) => ({ label: goal, value: goal })), []);
   const fitnessOptions = useMemo(
     () => FITNESS_LEVELS.map((level) => ({ label: level, value: level })),
     [],
   );
-  const injuryOptions = useMemo(
-    () => INJURY_FLAGS.map((injury) => ({ label: injury, value: injury })),
-    [],
-  );
+  const injuryOptions = useMemo(() => {
+    const fromReferenceData = referenceDataQuery.data?.injuryFlags ?? [];
+    if (fromReferenceData.length > 0) {
+      return fromReferenceData.map((injury) => ({
+        label: injury.label,
+        value: injury.label,
+      }));
+    }
+    return [];
+  }, [referenceDataQuery.data?.injuryFlags]);
+
+  const noneInjurySlug = useMemo(() => {
+    const options = referenceDataQuery.data?.injuryFlags ?? [];
+    const matched = options.find((option) => {
+      const label = String(option.label ?? "").toLowerCase();
+      const code = String(option.code ?? "").toLowerCase();
+      return label.includes("no known") || label.includes("none") || code.includes("no_known") || code.includes("none");
+    });
+    return matched?.label ?? "No known issues";
+  }, [referenceDataQuery.data?.injuryFlags]);
 
   const updateDraftWithValidation = (partial: Partial<typeof draft>): void => {
     const nextDraft = { ...draft, ...partial };
@@ -93,14 +109,24 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
     updateDraftWithValidation({ fitnessLevel: nextValue });
   };
 
-  const toggleInjury = (injury: InjuryFlag): void => {
-    const toggled = draft.injuryFlags.includes(injury)
-      ? draft.injuryFlags.filter((item) => item !== injury)
-      : [...draft.injuryFlags, injury];
+  const toggleInjury = (injury: string): void => {
+    const currentDraft = useOnboardingStore.getState().draft;
+    const nextInjuryFlags = toggleInjuryFlag(
+      currentDraft.injuryFlags,
+      injury,
+      noneInjurySlug,
+    ) as InjuryFlag[];
 
-    const normalized = applyInjuryExclusivity(toggled);
-    const nextDraft = { ...draft, injuryFlags: normalized };
-    const validation = validateStep(1, nextDraft);
+    if (__DEV__) {
+      console.log("[step1:injury-toggle]", {
+        clicked: injury,
+        currentInjuryFlags: currentDraft.injuryFlags,
+        nextInjuryFlags,
+      });
+    }
+
+    setDraft({ injuryFlags: nextInjuryFlags });
+    const validation = validateStep(1, { ...currentDraft, injuryFlags: nextInjuryFlags });
     setFieldErrors(validation.fieldErrors);
   };
 
@@ -233,7 +259,7 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
           <PillGrid
             options={injuryOptions}
             selectedValues={draft.injuryFlags}
-            onToggle={(value) => toggleInjury(value as InjuryFlag)}
+            onToggle={(value) => toggleInjury(value)}
           />
           {fieldErrors.injuryFlags ? <Text style={styles.errorText}>{fieldErrors.injuryFlags}</Text> : null}
         </SectionCard>

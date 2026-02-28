@@ -8,6 +8,7 @@ import { userBootstrapRouter } from "./src/routes/userBootstrap.js";
 import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstrap.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramRouter } from "./src/routes/generateProgram.js";
+import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
 
@@ -17,6 +18,7 @@ const DEV_USER_ID = "dev-user-1";
 // TODO: Dev-only in-memory store. Replace with Postgres-backed persistence.
 const profilesById = new Map();
 const userToProfileId = new Map();
+app.locals.profilesById = profilesById;
 
 const profilePatchKeys = [
   "goals",
@@ -284,6 +286,7 @@ app.use("/api", userBootstrapRouter);
 app.use("/api", clientProfileBootstrapRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", generateProgramRouter);
+app.use(generateProgramV2Router);
 
 // Generate plan route (uses global JSON parser only).
 app.post("/generate-plan", async (req, res) => {

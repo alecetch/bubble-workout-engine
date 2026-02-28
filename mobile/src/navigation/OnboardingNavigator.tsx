@@ -7,7 +7,9 @@ import { OnboardingEntry } from "../screens/onboarding/OnboardingEntry";
 import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
 import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
-import { ProgramReviewScreen } from "../screens/ProgramReviewScreen";
+import { ProgramDashboardScreen } from "../screens/program/ProgramDashboardScreen";
+import { ProgramDayScreen } from "../screens/program/ProgramDayScreen";
+import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
 
 export type OnboardingStackParamList = {
   OnboardingEntry: undefined;
@@ -15,6 +17,12 @@ export type OnboardingStackParamList = {
   Step2Equipment: undefined;
   Step3Schedule: undefined;
   ProgramReview: undefined;
+  ProgramDashboard: {
+    programId?: string;
+  } | undefined;
+  ProgramDay: {
+    programDayId: string;
+  };
 };
 
 const Stack = createNativeStackNavigator<OnboardingStackParamList>();
@@ -25,10 +33,14 @@ const stepTransitionOptions: NativeStackNavigationOptions = {
   gestureEnabled: true,
 };
 
-export function OnboardingNavigator(): React.JSX.Element {
+type OnboardingNavigatorProps = {
+  initialRouteName?: keyof OnboardingStackParamList;
+};
+
+export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: OnboardingNavigatorProps): React.JSX.Element {
   return (
     <Stack.Navigator
-      initialRouteName="OnboardingEntry"
+      initialRouteName={initialRouteName}
       screenOptions={{
         headerShown: false,
       }}
@@ -38,6 +50,8 @@ export function OnboardingNavigator(): React.JSX.Element {
       <Stack.Screen name="Step2Equipment" component={Step2EquipmentScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="ProgramDay" component={ProgramDayScreen} options={stepTransitionOptions} />
     </Stack.Navigator>
   );
 }

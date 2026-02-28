@@ -1,5 +1,6 @@
 import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "../interaction/PressableScale";
 import { hapticMedium } from "../interaction/haptics";
 import { colors } from "../../theme/colors";
@@ -22,6 +23,7 @@ export function StickyNavBar({
   nextDisabled,
   isSaving,
 }: StickyNavBarProps): React.JSX.Element {
+  const insets = useSafeAreaInsets();
   const backBlocked = isSaving;
   const nextBlocked = nextDisabled || isSaving;
 
@@ -32,27 +34,33 @@ export function StickyNavBar({
   };
 
   return (
-    <View style={styles.wrapper}>
-      <PressableScale
-        style={[styles.backButton, backBlocked && styles.backButtonDisabled]}
-        onPress={onBack}
-        disabled={backBlocked}
-      >
-        <Text style={styles.backText}>Back</Text>
-      </PressableScale>
-
-      <PressableScale
-        style={[styles.nextButton, nextBlocked && styles.nextButtonDisabled]}
-        onPress={() => {
-          void handleNext();
-        }}
-        disabled={nextBlocked}
-      >
-        <View style={styles.nextInner}>
-          {isSaving ? <ActivityIndicator size="small" color={colors.textPrimary} /> : null}
-          <Text style={styles.nextText}>{isSaving ? "Saving…" : nextLabel}</Text>
+    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+      <View style={styles.row}>
+        <View style={styles.buttonSlot}>
+          <PressableScale
+            style={[styles.backButton, backBlocked && styles.backButtonDisabled]}
+            onPress={onBack}
+            disabled={backBlocked}
+          >
+            <Text style={styles.backText}>Back</Text>
+          </PressableScale>
         </View>
-      </PressableScale>
+
+        <View style={styles.buttonSlot}>
+          <PressableScale
+            style={[styles.nextButton, nextBlocked && styles.nextButtonDisabled]}
+            onPress={() => {
+              void handleNext();
+            }}
+            disabled={nextBlocked}
+          >
+            <View style={styles.nextInner}>
+              {isSaving ? <ActivityIndicator size="small" color={colors.textPrimary} /> : null}
+              <Text style={styles.nextText}>{isSaving ? "Saving..." : nextLabel}</Text>
+            </View>
+          </PressableScale>
+        </View>
+      </View>
     </View>
   );
 }
@@ -60,10 +68,18 @@ export function StickyNavBar({
 const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
-    left: spacing.md,
-    right: spacing.md,
-    bottom: spacing.md,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  row: {
+    width: "100%",
+    minWidth: 0,
     flexDirection: "row",
+    alignItems: "stretch",
     gap: spacing.sm,
     padding: spacing.sm,
     borderRadius: radii.card,
@@ -72,9 +88,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadows.card,
   },
-  backButton: {
+  buttonSlot: {
     flex: 1,
-    minHeight: 52,
+    minWidth: 0,
+  },
+  backButton: {
+    width: "100%",
+    minHeight: 58,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radii.pill,
@@ -86,13 +106,17 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "500",
+    width: "100%",
+    textAlign: "center",
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
   backButtonDisabled: {
     opacity: 0.55,
   },
   nextButton: {
-    flex: 1.4,
-    minHeight: 52,
+    width: "100%",
+    minHeight: 58,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radii.pill,
@@ -105,11 +129,18 @@ const styles = StyleSheet.create({
   nextInner: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    minWidth: 0,
     gap: spacing.sm,
   },
   nextText: {
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",
+    textAlign: "center",
+    textAlignVertical: "center",
+    includeFontPadding: false,
+    flexShrink: 1,
   },
 });

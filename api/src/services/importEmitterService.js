@@ -205,12 +205,14 @@ function parseEmitterRows(rows) {
   return parsed;
 }
 
-function validateParsed(parsed) {
+function validateParsed(parsed, { requireTitleSummary = true } = {}) {
   const errors = [];
   const { prg, weeks, days, segs, exs } = parsed;
 
-  if (!prg.program_title) errors.push("PRG.program_title is required");
-  if (!prg.program_summary) errors.push("PRG.program_summary is required");
+  if (requireTitleSummary) {
+    if (!prg.program_title) errors.push("PRG.program_title is required");
+    if (!prg.program_summary) errors.push("PRG.program_summary is required");
+  }
   if (!Number.isInteger(prg.weeks_count) || prg.weeks_count < 1) errors.push("PRG.weeks_count must be >= 1");
   if (!Number.isInteger(prg.days_per_week) || prg.days_per_week < 1 || prg.days_per_week > 7) {
     errors.push("PRG.days_per_week must be between 1 and 7");
@@ -367,6 +369,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
   const user_id = s(payload?.user_id);
   const anchor_date_ms = payload?.anchor_date_ms;
   const rows = getRowsFromPayload(payload);
+  const existing_program_id = s(payload?.program_id) || null;
 
   if (!user_id) {
     throw new ValidationError("Missing user_id");
@@ -380,7 +383,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
 
   const anchorDayMs = floorUtcDayMs(Number(anchor_date_ms));
   const parsed = parseEmitterRows(rows);
-  validateParsed(parsed);
+  validateParsed(parsed, { requireTitleSummary: !existing_program_id });
 
   const prg = parsed.prg;
   const programStartMs = anchorDayMs + prg.start_offset_days * DAY_MS;
@@ -424,38 +427,116 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
 
     await client.query("BEGIN");
 
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [import_signature]);
+    // Advisory lock keyed by program_id in attach mode, otherwise by content hash.
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [
+      existing_program_id ?? import_signature,
+    ]);
 
-    const idempotentCheck = await client.query(
-      `
-      SELECT p.id
-      FROM program p
-      WHERE p.user_id = $1
-        AND p.program_title = $2
-        AND p.program_summary = $3
-        AND p.weeks_count = $4
-        AND p.days_per_week = $5
-        AND p.program_outline_json = $6::jsonb
-        AND p.start_date = $7::date
-        AND p.start_offset_days = $8
-        AND p.start_weekday = $9
-        AND p.preferred_days_sorted_json = $10::jsonb
-        AND (SELECT count(*) FROM program_week w WHERE w.program_id = p.id) = $11
-        AND (SELECT count(*) FROM program_day d WHERE d.program_id = p.id) = $12
-        AND (SELECT count(*) FROM workout_segment s WHERE s.program_id = p.id) = $13
-        AND (SELECT count(*) FROM program_exercise e WHERE e.program_id = p.id) = $14
-        AND NOT EXISTS (
-          SELECT 1
-          FROM unnest($15::text[]) AS dk(day_key)
-          LEFT JOIN program_day d2
-            ON d2.program_id = p.id
-           AND d2.program_day_key = dk.day_key
-          WHERE d2.id IS NULL
+    let program_id;
+
+    if (existing_program_id) {
+      // Attach mode: program was pre-created by caller. Skip INSERT program.
+      // Idempotency: if weeks already exist this payload was already imported.
+      const weekCheck = await client.query(
+        `SELECT COUNT(*) AS cnt FROM program_week WHERE program_id = $1`,
+        [existing_program_id],
+      );
+      if (parseInt(weekCheck.rows[0].cnt, 10) > 0) {
+        await client.query("COMMIT");
+
+        logEvent("info", "import_emitter.attach_idempotent", {
+          request_id,
+          user_id,
+          program_id: existing_program_id,
+          duration_ms: Date.now() - startedAt,
+        });
+
+        return { program_id: existing_program_id, counts, idempotent: true };
+      }
+
+      program_id = existing_program_id;
+    } else {
+      // Legacy mode: full content-match idempotency check + INSERT program.
+      const idempotentCheck = await client.query(
+        `
+        SELECT p.id
+        FROM program p
+        WHERE p.user_id = $1
+          AND p.program_title = $2
+          AND p.program_summary = $3
+          AND p.weeks_count = $4
+          AND p.days_per_week = $5
+          AND p.program_outline_json = $6::jsonb
+          AND p.start_date = $7::date
+          AND p.start_offset_days = $8
+          AND p.start_weekday = $9
+          AND p.preferred_days_sorted_json = $10::jsonb
+          AND (SELECT count(*) FROM program_week w WHERE w.program_id = p.id) = $11
+          AND (SELECT count(*) FROM program_day d WHERE d.program_id = p.id) = $12
+          AND (SELECT count(*) FROM workout_segment s WHERE s.program_id = p.id) = $13
+          AND (SELECT count(*) FROM program_exercise e WHERE e.program_id = p.id) = $14
+          AND NOT EXISTS (
+            SELECT 1
+            FROM unnest($15::text[]) AS dk(day_key)
+            LEFT JOIN program_day d2
+              ON d2.program_id = p.id
+             AND d2.program_day_key = dk.day_key
+            WHERE d2.id IS NULL
+          )
+        ORDER BY p.created_at DESC
+        LIMIT 1
+        `,
+        [
+          user_id,
+          prg.program_title,
+          prg.program_summary,
+          prg.weeks_count,
+          prg.days_per_week,
+          JSON.stringify(prg.program_outline_json || {}),
+          start_date,
+          prg.start_offset_days,
+          prg.start_weekday,
+          JSON.stringify(prg.preferred_days_sorted_json || []),
+          parsed.weeks.length,
+          parsed.days.length,
+          parsed.segs.length,
+          parsed.exs.length,
+          dayKeys,
+        ],
+      );
+
+      if (idempotentCheck.rowCount > 0) {
+        const existing_id = idempotentCheck.rows[0].id;
+        await client.query("COMMIT");
+
+        logEvent("info", "import_emitter.idempotent_hit", {
+          request_id,
+          user_id,
+          program_id: existing_id,
+          duration_ms: Date.now() - startedAt,
+        });
+
+        return { program_id: existing_id, counts, idempotent: true };
+      }
+
+      const insertProgramSql = `
+        INSERT INTO program (
+          user_id,
+          program_title,
+          program_summary,
+          weeks_count,
+          days_per_week,
+          program_outline_json,
+          start_date,
+          start_offset_days,
+          start_weekday,
+          preferred_days_sorted_json
         )
-      ORDER BY p.created_at DESC
-      LIMIT 1
-      `,
-      [
+        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::date,$8,$9,$10::jsonb)
+        RETURNING id
+      `;
+
+      const programResult = await client.query(insertProgramSql, [
         user_id,
         prg.program_title,
         prg.program_summary,
@@ -466,63 +547,10 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
         prg.start_offset_days,
         prg.start_weekday,
         JSON.stringify(prg.preferred_days_sorted_json || []),
-        parsed.weeks.length,
-        parsed.days.length,
-        parsed.segs.length,
-        parsed.exs.length,
-        dayKeys,
-      ],
-    );
+      ]);
 
-    if (idempotentCheck.rowCount > 0) {
-      const program_id = idempotentCheck.rows[0].id;
-      await client.query("COMMIT");
-
-      logEvent("info", "import_emitter.idempotent_hit", {
-        request_id,
-        user_id,
-        program_id,
-        duration_ms: Date.now() - startedAt,
-      });
-
-      return {
-        program_id,
-        counts,
-        idempotent: true,
-      };
+      program_id = programResult.rows[0].id;
     }
-
-    const insertProgramSql = `
-      INSERT INTO program (
-        user_id,
-        program_title,
-        program_summary,
-        weeks_count,
-        days_per_week,
-        program_outline_json,
-        start_date,
-        start_offset_days,
-        start_weekday,
-        preferred_days_sorted_json
-      )
-      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::date,$8,$9,$10::jsonb)
-      RETURNING id
-    `;
-
-    const programResult = await client.query(insertProgramSql, [
-      user_id,
-      prg.program_title,
-      prg.program_summary,
-      prg.weeks_count,
-      prg.days_per_week,
-      JSON.stringify(prg.program_outline_json || {}),
-      start_date,
-      prg.start_offset_days,
-      prg.start_weekday,
-      JSON.stringify(prg.preferred_days_sorted_json || []),
-    ]);
-
-    const program_id = programResult.rows[0].id;
 
     const weekIdByNumber = new Map();
     for (const w of parsed.weeks) {
@@ -753,11 +781,24 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
       duration_ms: Date.now() - startedAt,
     });
 
-    return {
-      program_id,
-      counts,
-      idempotent: false,
-    };
+    const result = { program_id, counts, idempotent: false };
+
+    if (existing_program_id) {
+      // Return parsed PRG fields so caller can UPDATE the pre-created program row.
+      result.prg_data = {
+        program_title: prg.program_title,
+        program_summary: prg.program_summary,
+        weeks_count: prg.weeks_count,
+        days_per_week: prg.days_per_week,
+        program_outline_json: prg.program_outline_json,
+        start_date,
+        start_offset_days: prg.start_offset_days,
+        start_weekday: prg.start_weekday,
+        preferred_days_sorted_json: prg.preferred_days_sorted_json,
+      };
+    }
+
+    return result;
   } catch (err) {
     try {
       await client.query("ROLLBACK");

@@ -13,9 +13,15 @@ type PresetCardListProps = {
   options: PresetOption[];
   selectedValue: string | null;
   onSelect: (value: string) => void;
+  onHelpPress?: (value: string) => void;
 };
 
-export function PresetCardList({ options, selectedValue, onSelect }: PresetCardListProps): React.JSX.Element {
+export function PresetCardList({
+  options,
+  selectedValue,
+  onSelect,
+  onHelpPress,
+}: PresetCardListProps): React.JSX.Element {
   return (
     <View style={styles.list}>
       {options.map((option) => (
@@ -25,6 +31,7 @@ export function PresetCardList({ options, selectedValue, onSelect }: PresetCardL
           description={option.description}
           selected={selectedValue === option.value}
           onPress={() => onSelect(option.value)}
+          onHelpPress={selectedValue === option.value ? () => onHelpPress?.(option.value) : undefined}
         />
       ))}
     </View>
