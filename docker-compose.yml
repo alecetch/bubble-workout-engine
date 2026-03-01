@@ -38,5 +38,69 @@ services:
       - ./migrations:/flyway/sql
     command: -url=jdbc:postgresql://db:5432/app -user=app -password=app -schemas=public migrate
 
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; do
+        echo 'waiting for minio...';
+        sleep 1;
+      done;
+      mc mb --ignore-existing local/media-assets;
+      mc anonymous set download local/media-assets;
+      echo 'minio bucket init complete';
+      "
+
+  minio-seed:
+    build:
+      context: .
+      dockerfile: docker/minio-seed/Dockerfile
+    depends_on:
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    entrypoint: >
+      /bin/sh -ec "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      MISSING='';
+      for f in \
+        /seed/media-assets/program_day/mixed_full_body.png \
+        /seed/media-assets/program_day/recovery_recovery.png \
+        /seed/media-assets/program_day/conditioning_conditioning.png \
+        /seed/media-assets/program/mixed_full_body.png \
+        /seed/media-assets/program_day/skills_lower_body.png \
+        /seed/media-assets/program_day/hypertrophy_upper_body.png; do
+        if [ ! -f \"$$f\" ]; then
+          MISSING=\"$$MISSING\n$$f\";
+        fi;
+      done;
+      if [ -n \"$$MISSING\" ]; then
+        echo 'ERROR: Missing required media asset files:';
+        printf '%b\n' \"$$MISSING\";
+        echo 'Add them under assets/media-assets/ with the exact relative paths shown above.';
+        exit 1;
+      fi;
+      find /seed/media-assets -type f -name '.gitkeep' -delete || true;
+      mc cp --recursive /seed/media-assets/ local/media-assets/;
+      mc ls --recursive local/media-assets;
+      "
+    restart: "no"
+
 volumes:
   pgdata:
+  minio_data:

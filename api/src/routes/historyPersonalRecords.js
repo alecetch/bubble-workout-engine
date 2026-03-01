@@ -3,36 +3,22 @@ import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
 
 const SQL_PERSONAL_RECORDS = `
-WITH best AS (
-  SELECT
-    pe.exercise_id,
-    MAX(l.weight_kg) AS best_weight
-  FROM segment_exercise_log l
-  JOIN program p ON p.id = l.program_id
-  JOIN program_day pd ON pd.id = l.program_day_id
-  JOIN program_exercise pe ON pe.id = l.program_exercise_id
-  WHERE p.user_id = $1
-    AND pd.is_completed = TRUE
-    AND l.is_draft = FALSE
-    AND l.weight_kg IS NOT NULL
-  GROUP BY pe.exercise_id
-)
 SELECT DISTINCT ON (pe.exercise_id)
   pe.exercise_id,
   COALESCE(ec.name, pe.exercise_name) AS exercise_name,
   l.weight_kg AS value,
   pd.scheduled_date AS date,
   l.program_day_id
-FROM best b
-JOIN segment_exercise_log l ON l.weight_kg = b.best_weight
+FROM segment_exercise_log l
 JOIN program p ON p.id = l.program_id
 JOIN program_day pd ON pd.id = l.program_day_id
-JOIN program_exercise pe ON pe.id = l.program_exercise_id AND pe.exercise_id = b.exercise_id
+JOIN program_exercise pe ON pe.id = l.program_exercise_id
 LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
 WHERE p.user_id = $1
   AND pd.is_completed = TRUE
   AND l.is_draft = FALSE
-ORDER BY pe.exercise_id, pd.scheduled_date DESC
+  AND l.weight_kg IS NOT NULL
+ORDER BY pe.exercise_id, l.weight_kg DESC, pd.scheduled_date DESC
 LIMIT $2;
 `;
 

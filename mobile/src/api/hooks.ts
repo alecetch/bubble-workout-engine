@@ -182,10 +182,13 @@ export function useProgramDayFull(
   });
 }
 
+const HISTORY_STALE_MS = 5 * 60 * 1000; // 5 minutes — history changes only after workout completion
+
 export function useHistoryOverview(): UseQueryResult<HistoryOverviewResponse> {
   return useQuery({
     queryKey: queryKeys.historyOverview,
     queryFn: getHistoryOverview,
+    staleTime: HISTORY_STALE_MS,
   });
 }
 
@@ -193,6 +196,7 @@ export function useHistoryPrograms(limit = 10): UseQueryResult<HistoryProgramIte
   return useQuery({
     queryKey: queryKeys.historyPrograms,
     queryFn: () => getHistoryPrograms(limit),
+    staleTime: HISTORY_STALE_MS,
   });
 }
 
@@ -209,6 +213,7 @@ export function useHistoryTimeline(
         cursorId: pageParam?.cursorId ?? null,
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? null,
+    staleTime: HISTORY_STALE_MS,
   });
 }
 
@@ -216,6 +221,7 @@ export function useHistoryPersonalRecords(limit = 20): UseQueryResult<HistoryPer
   return useQuery({
     queryKey: queryKeys.historyPersonalRecords,
     queryFn: () => getHistoryPersonalRecords(limit),
+    staleTime: HISTORY_STALE_MS,
   });
 }
 
@@ -225,6 +231,7 @@ export function useExerciseSearch(q: string): UseQueryResult<ExerciseSearchItem[
     queryKey: queryKeys.exerciseSearch(term),
     queryFn: () => searchExercises(term),
     enabled: term.length >= 2,
+    staleTime: 30 * 1000, // 30 seconds — search results can change as catalogue grows
   });
 }
 
@@ -233,5 +240,6 @@ export function useExerciseHistory(exerciseId: string | null): UseQueryResult<Ex
     queryKey: queryKeys.exerciseHistory(exerciseId ?? ""),
     queryFn: () => fetchExerciseHistory(exerciseId as string),
     enabled: Boolean(exerciseId),
+    staleTime: HISTORY_STALE_MS,
   });
 }

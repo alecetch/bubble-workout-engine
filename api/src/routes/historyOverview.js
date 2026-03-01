@@ -147,7 +147,7 @@ JOIN program p ON p.id = pd.program_id
 WHERE p.user_id = $1
   AND pd.is_completed = TRUE
 ORDER BY pd.scheduled_date DESC
-LIMIT 60;
+LIMIT 500;
 `;
 
 function toFiniteNumber(value, fallback = 0) {

@@ -186,17 +186,18 @@ export function HistoryScreen(): React.JSX.Element {
   const onRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
+      // Reset the infinite timeline query first so it restarts from page 1,
+      // then refetch the other queries in parallel.
+      await queryClient.resetQueries({ queryKey: queryKeys.historyTimeline, exact: true });
       await Promise.all([
         overviewQuery.refetch(),
         programsQuery.refetch(),
         personalRecordsQuery.refetch(),
-        queryClient.resetQueries({ queryKey: queryKeys.historyTimeline, exact: true }),
-        timelineQuery.refetch(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [overviewQuery, programsQuery, personalRecordsQuery, queryClient, timelineQuery]);
+  }, [overviewQuery, programsQuery, personalRecordsQuery, queryClient]);
 
   const onEndReached = React.useCallback(() => {
     if (!timelineQuery.hasNextPage || timelineQuery.isFetchingNextPage) return;

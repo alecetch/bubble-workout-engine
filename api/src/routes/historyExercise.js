@@ -17,7 +17,8 @@ WHERE p.user_id = $1
   AND l.is_draft = FALSE
   AND pe.exercise_id = $2
 GROUP BY pd.scheduled_date
-ORDER BY pd.scheduled_date ASC;
+ORDER BY pd.scheduled_date DESC
+LIMIT 180;
 `;
 
 const SQL_EXERCISE_SUMMARY = `
@@ -124,7 +125,9 @@ export function createHistoryExerciseHandler(db = pool) {
         db.query(SQL_EXERCISE_NAME, [authUserId, exerciseId]),
       ]);
 
-      const series = (seriesResult.rows ?? []).map(mapSeriesRow);
+      // SQL returns DESC (most-recent first, LIMIT 180). Reverse to restore ASC
+      // for the caller so the sparkline and date list read oldest → newest.
+      const series = (seriesResult.rows ?? []).slice().reverse().map(mapSeriesRow);
       const summary = mapSummaryRow((summaryResult.rows ?? [])[0]);
       const exerciseName = asString((nameResult.rows ?? [])[0]?.exercise_name, exerciseId);
 

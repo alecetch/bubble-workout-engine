@@ -20,6 +20,18 @@ function createMockRes() {
   };
 }
 
+test("calculateCurrentStreakDays counts streaks longer than 60 days", () => {
+  // Build 61 consecutive completed dates ending today (2026-03-01).
+  const dates = [];
+  const base = new Date("2026-03-01T00:00:00Z");
+  for (let i = 0; i < 61; i++) {
+    const d = new Date(base.getTime() - i * 86_400_000);
+    dates.push({ scheduled_date: d.toISOString().slice(0, 10) });
+  }
+  const streak = calculateCurrentStreakDays(dates, "2026-03-01");
+  assert.equal(streak, 61);
+});
+
 test("calculateCurrentStreakDays returns 0 when no completion in last 2 days", () => {
   const streak = calculateCurrentStreakDays(
     [{ scheduled_date: "2026-02-25" }, { scheduled_date: "2026-02-24" }],
