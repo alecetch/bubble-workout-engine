@@ -5,6 +5,7 @@ import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
+import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
 
 export const generateProgramV2Router = express.Router();
 
@@ -413,6 +414,15 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
         created_program_id,
       ],
     );
+
+    // Phase 5b: Fill recovery (rest) days into program_calendar_day.
+    // Must run after the program row has its final start_date + weeks_count
+    // and after importEmitterPayload has committed the training-day rows.
+    await pool.query(
+      `UPDATE generation_run SET last_stage='calendar_coverage', updated_at=now() WHERE id=$1`,
+      [generation_run_id],
+    );
+    await ensureProgramCalendarCoverage(pool, created_program_id);
 
     // Phase 6: Mark generation_run complete
     await pool.query(

@@ -9,6 +9,7 @@ import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstra
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramRouter } from "./src/routes/generateProgram.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
+import { historyProgramsRouter } from "./src/routes/historyPrograms.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
 
@@ -286,6 +287,7 @@ app.use("/api", userBootstrapRouter);
 app.use("/api", clientProfileBootstrapRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", generateProgramRouter);
+app.use(historyProgramsRouter);
 app.use(generateProgramV2Router);
 
 // Generate plan route (uses global JSON parser only).

@@ -7,6 +7,7 @@ import { extractProgramId, generateProgram } from "../../api/program";
 import { getEngineKeyStatus } from "../../api/config";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
+import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -29,6 +30,7 @@ function formatValue(value: string | number | null | undefined): string {
 export function ProgramReviewScreen({ navigation }: Props): React.JSX.Element {
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
   const setIdentity = useOnboardingStore((state) => state.setIdentity);
+  const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
 
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? null;
@@ -82,7 +84,16 @@ export function ProgramReviewScreen({ navigation }: Props): React.JSX.Element {
 
       const programId = extractProgramId(response);
       if (programId) {
-        navigation.navigate("ProgramDashboard", { programId });
+        setActiveProgramId(programId);
+        const parent = navigation.getParent();
+        if (parent) {
+          (parent as any).navigate(
+            "ProgramsTab" as never,
+            { screen: "ProgramDashboard", params: { programId } } as never,
+          );
+        } else {
+          navigation.navigate("ProgramDashboard", { programId });
+        }
         return;
       }
 

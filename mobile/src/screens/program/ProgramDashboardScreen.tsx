@@ -148,7 +148,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
     if (serverDefault && daysInSelectedWeek.some((d) => d.programDayId === serverDefault)) {
       return serverDefault;
     }
-    return daysInSelectedWeek.find((d) => d.programDayId)?.programDayId;
+    return daysInSelectedWeek.find((d) => d.programDayId)?.programDayId ?? undefined;
   }, [userSelectedDayId, daysInSelectedWeek, overview?.selectedDayPreview?.programDayId]);
 
   // Resolved preview: use the per-day fetch result when the user has explicitly
@@ -295,6 +295,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         days={daysInSelectedWeek.map((day, index) => ({
           id: day.id ?? `${day.calendarDate}-${index}`,
           calendarDate: day.calendarDate,
+          scheduledWeekday: day.scheduledWeekday ?? undefined,
           programDayId: day.programDayId ?? undefined,
         }))}
         selectedProgramDayId={selectedProgramDayId}

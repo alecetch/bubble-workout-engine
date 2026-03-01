@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -30,7 +30,7 @@ import { typography } from "../../theme/typography";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDay">;
 
-export function ProgramDayScreen({ route }: Props): React.JSX.Element {
+export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Element {
   const { programDayId } = route.params;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
@@ -41,6 +41,23 @@ export function ProgramDayScreen({ route }: Props): React.JSX.Element {
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      headerTitle: dayLabel,
+      headerLeft: () => (
+        <PressableScale
+          style={styles.headerBackButton}
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Go back"
+        >
+          <Text style={styles.headerBackLabel}>Back</Text>
+        </PressableScale>
+      ),
+    });
+  }, [dayLabel, navigation]);
 
   const orderedSegments = useMemo(() => {
     const segments = dayQuery.data?.segments ?? [];
@@ -228,6 +245,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   retryLabel: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "600",
+  },
+  headerBackButton: {
+    minHeight: 36,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+  },
+  headerBackLabel: {
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",

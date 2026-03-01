@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "import:equipment-items": "tsx scripts/import-equipment-items.ts"
+    "import:equipment-items": "tsx scripts/import-equipment-items.ts",
+    "test": "node --test"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

@@ -4,7 +4,7 @@ import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { AuthNavigator } from "./src/navigation/AuthNavigator";
-import { OnboardingNavigator } from "./src/navigation/OnboardingNavigator";
+import { AppTabs } from "./src/navigation/AppTabs";
 import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 
@@ -37,7 +37,7 @@ export default function App(): React.JSX.Element {
     <QueryClientProvider client={queryClient}>
       <NavigationContainer theme={appTheme}>
         <StatusBar style="light" />
-        {isAuthenticated ? <OnboardingNavigator initialRouteName={entryRoute} /> : <AuthNavigator />}
+        {isAuthenticated ? <AppTabs homeInitialRoute={entryRoute} /> : <AuthNavigator />}
       </NavigationContainer>
     </QueryClientProvider>
   );

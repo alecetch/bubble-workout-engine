@@ -25,9 +25,12 @@ export type ProgramOverviewResponse = {
   calendarDays: Array<{
     id?: string;
     calendarDate: string;
+    scheduledDate?: string;
+    scheduledWeekday?: string | null;
     programDayId?: string | null;
     status?: string | null;
     weekNumber?: number | null;
+    isTrainingDay: boolean;
   }>;
   selectedDayPreview?: {
     programDayId: string;
@@ -107,6 +110,28 @@ function asNullableBoolean(value: unknown): boolean | null | undefined {
   return undefined;
 }
 
+function toIsoDate(value: unknown): string | undefined {
+  const raw = asString(value);
+  if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+  if (raw) {
+    const parsed = new Date(raw);
+    if (Number.isFinite(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+  }
+  return undefined;
+}
+
+function toIsoDateFromMs(value: unknown): string | undefined {
+  const ms = asNumber(value);
+  if (!Number.isFinite(ms)) return undefined;
+  const parsed = new Date(ms as number);
+  if (!Number.isFinite(parsed.getTime())) return undefined;
+  return parsed.toISOString().slice(0, 10);
+}
+
 function buildIdentityQuery(opts: ViewerIdentityOptions): URLSearchParams {
   const params = new URLSearchParams();
   if (opts.bubbleUserId) {
@@ -143,15 +168,21 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
 
   const calendarDays = rawCalendarDays.map((item, index) => {
     const day = asObject(item);
+    const scheduledDate =
+      toIsoDate(day.scheduled_date ?? day.scheduledDate ?? day.calendar_date ?? day.calendarDate) ??
+      toIsoDateFromMs(day.scheduled_date_ms ?? day.scheduledDateMs ?? day.calendar_date_ms ?? day.calendarDateMs) ??
+      toIsoDate(day.date);
+
     return {
       id: asString(day.id),
-      calendarDate:
-        asString(day.calendar_date ?? day.calendarDate) ??
-        asString(day.date) ??
-        `day-${index + 1}`,
+      calendarDate: scheduledDate ?? "",
+      scheduledDate,
+      scheduledWeekday: asNullableString(day.scheduled_weekday ?? day.scheduledWeekday),
       programDayId: asNullableString(day.program_day_id ?? day.programDayId),
       status: asNullableString(day.status),
       weekNumber: asNullableNumber(day.week_number ?? day.weekNumber),
+      // Default true: legacy rows without the field are training days.
+      isTrainingDay: asNullableBoolean(day.is_training_day ?? day.isTrainingDay) ?? true,
     };
   });
 

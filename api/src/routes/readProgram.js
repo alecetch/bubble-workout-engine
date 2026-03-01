@@ -147,23 +147,25 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
         [program_id],
       );
 
-      // 3) Calendar pills (join calendar -> day for label/state)
+      // 3) Calendar pills (left-join calendar -> day; recovery rows have NULL day fields)
       const calR = await client.query(
         `
         SELECT
+          c.id,
           c.program_day_id,
           c.program_day_key,
           c.scheduled_date,
           c.scheduled_weekday,
           c.week_number,
-          d.day_number,
           c.global_day_index,
+          c.is_training_day,
+          d.day_number,
           d.day_label,
           d.session_duration_mins,
           d.is_completed,
           d.has_activity
         FROM program_calendar_day c
-        JOIN program_day d
+        LEFT JOIN program_day d
           ON d.id = c.program_day_id
         WHERE c.program_id = $1
         ORDER BY c.scheduled_date

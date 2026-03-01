@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useContext } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "../interaction/PressableScale";
 import { hapticMedium } from "../interaction/haptics";
@@ -24,6 +25,9 @@ export function StickyNavBar({
   isSaving,
 }: StickyNavBarProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useContext(BottomTabBarHeightContext);
+  const hasTabBar = typeof tabBarHeight === "number" && tabBarHeight > 0;
+  const bottomPadding = hasTabBar ? 0 : Math.max(insets.bottom, spacing.sm);
   const backBlocked = isSaving;
   const nextBlocked = nextDisabled || isSaving;
 
@@ -34,7 +38,7 @@ export function StickyNavBar({
   };
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+    <View style={[styles.wrapper, { paddingBottom: bottomPadding }]}>
       <View style={styles.row}>
         <View style={styles.buttonSlot}>
           <PressableScale

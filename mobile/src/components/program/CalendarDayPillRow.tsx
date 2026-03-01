@@ -8,7 +8,10 @@ import { typography } from "../../theme/typography";
 
 export type CalendarDayPillItem = {
   id: string;
-  calendarDate: string;
+  calendarDate?: string;
+  scheduledDate?: string;
+  scheduledWeekday?: string | null;
+  isTrainingDay?: boolean | null;
   programDayId?: string | null;
 };
 
@@ -21,12 +24,44 @@ type CalendarDayPillRowProps = {
   dayStatusByProgramDayId: Record<string, ProgramDayStatus>;
 };
 
-function formatCalendarLabel(calendarDate: string): string {
-  const parsed = new Date(calendarDate);
-  if (!Number.isFinite(parsed.getTime())) {
-    return calendarDate.slice(-2);
+const UTC_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+function normalizeWeekdayLabel(value: string): string {
+  const short = value.trim().slice(0, 3).toLowerCase();
+  if (!short) return "";
+  return `${short.slice(0, 1).toUpperCase()}${short.slice(1)}`;
+}
+
+function formatCalendarParts(item: CalendarDayPillItem): { weekday: string; dayNum: string } {
+  const scheduledDate = item.scheduledDate ?? item.calendarDate ?? "";
+  let parsed: Date | null = null;
+  let dayNumValue: number | null = null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+    dayNumValue = Number(scheduledDate.slice(8, 10));
+    parsed = new Date(`${scheduledDate}T00:00:00Z`);
+  } else if (scheduledDate) {
+    const candidate = new Date(`${scheduledDate}T00:00:00Z`);
+    if (Number.isFinite(candidate.getTime())) {
+      parsed = candidate;
+      dayNumValue = candidate.getUTCDate();
+    }
   }
-  return String(parsed.getDate());
+
+  const valid = Boolean(parsed && Number.isFinite(parsed.getTime()) && Number.isFinite(dayNumValue));
+
+  if (!valid && __DEV__) {
+    console.warn("[CalendarDayPillRow] Missing or invalid scheduledDate for day pill", item);
+  }
+
+  const weekday = item.scheduledWeekday
+    ? normalizeWeekdayLabel(item.scheduledWeekday)
+    : parsed
+      ? UTC_WEEKDAY_LABELS[parsed.getUTCDay()]
+      : "--";
+  const dayNum = dayNumValue != null ? String(dayNumValue) : "--";
+
+  return { weekday, dayNum };
 }
 
 export function CalendarDayPillRow({
@@ -41,6 +76,8 @@ export function CalendarDayPillRow({
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {days.map((day) => {
           const selected = Boolean(day.programDayId) && day.programDayId === selectedProgramDayId;
+          const isRecoveryDay = !day.programDayId || day.isTrainingDay === false;
+          const { weekday, dayNum } = formatCalendarParts(day);
           const status: ProgramDayStatus = day.programDayId
             ? (dayStatusByProgramDayId[day.programDayId] ?? "scheduled")
             : "none";
@@ -48,12 +85,21 @@ export function CalendarDayPillRow({
           return (
             <View key={day.id} style={styles.item}>
               <PressableScale
-                style={[styles.pill, selected ? styles.pillSelected : styles.pillIdle]}
+                style={[
+                  styles.pill,
+                  selected ? styles.pillSelected : styles.pillIdle,
+                  isRecoveryDay && styles.pillMuted,
+                ]}
                 onPress={() => onSelectProgramDay(day.programDayId ?? undefined)}
               >
-                <Text style={[styles.pillLabel, selected && styles.pillLabelSelected]}>
-                  {formatCalendarLabel(day.calendarDate)}
-                </Text>
+                <View style={styles.labelStack}>
+                  <Text style={[styles.weekday, selected && styles.pillLabelSelected, isRecoveryDay && styles.textMuted]}>
+                    {weekday}
+                  </Text>
+                  <Text style={[styles.dayNum, selected && styles.pillLabelSelected, isRecoveryDay && styles.textMuted]}>
+                    {dayNum}
+                  </Text>
+                </View>
               </PressableScale>
               {status === "none" ? (
                 <View style={styles.programDayDotPlaceholder} />
@@ -102,6 +148,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing.sm,
   },
+  labelStack: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pillIdle: {
     borderColor: colors.border,
     backgroundColor: colors.surface,
@@ -110,13 +160,27 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     backgroundColor: colors.accent,
   },
-  pillLabel: {
+  pillMuted: {
+    opacity: 0.6,
+  },
+  weekday: {
+    color: colors.textSecondary,
+    ...typography.label,
+    textAlign: "center",
+    includeFontPadding: false,
+  },
+  dayNum: {
     color: colors.textSecondary,
     ...typography.body,
     fontWeight: "600",
+    textAlign: "center",
+    includeFontPadding: false,
   },
   pillLabelSelected: {
     color: colors.textPrimary,
+  },
+  textMuted: {
+    opacity: 0.9,
   },
   programDayDot: {
     width: 6,
