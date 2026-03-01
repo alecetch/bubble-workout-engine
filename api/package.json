@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "import:equipment-items": "tsx scripts/import-equipment-items.ts",
-    "test": "node --test"
+    "import:bubble": "node scripts/import_bubble_exports.mjs",
+    "test": "node --test",
+    "qa:history": "node scripts/history_qa_smoke.mjs"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

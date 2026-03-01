@@ -10,6 +10,8 @@ import { applyProgression } from "./steps/03_applyProgression.js";
 import { applyRepRules } from "./steps/04_applyRepRules.js";
 import { applyNarration } from "./steps/05_applyNarration.js";
 import { emitPlanRows } from "./steps/06_emitPlan.js";
+import { fetchActiveRepRules } from "../src/services/repRules.js";
+import { pool } from "../src/db.js";
 
 function pickCatalogBuildV3(inputs) {
   const catalogBuilds = inputs?.configs?.catalogBuilds?.response?.results ?? [];
@@ -17,7 +19,7 @@ function pickCatalogBuildV3(inputs) {
   return v3 || catalogBuilds[0] || null;
 }
 
-export async function runPipeline({ inputs, programType, request }) {
+export async function runPipeline({ inputs, programType, request, db }) {
   if (programType !== "hypertrophy") {
     throw new Error(`Unsupported programType: ${programType}`);
   }
@@ -61,11 +63,35 @@ export async function runPipeline({ inputs, programType, request }) {
   const build = pickCatalogBuildV3(inputs);
   if (!build) throw new Error("No CatalogBuild found (configs.catalogBuilds).");
 
+  let repRules = null;
+  let step4FallbackNote = null;
+  try {
+    repRules = await fetchActiveRepRules(db || pool);
+  } catch (err) {
+    repRules = null;
+    step4FallbackNote = `Falling back to CatalogBuild rep_rules_json (DB fetch failed: ${err?.message || String(err)})`;
+  }
+  if (!Array.isArray(repRules) || repRules.length === 0) {
+    repRules = null;
+    if (!step4FallbackNote) {
+      step4FallbackNote = "Falling back to CatalogBuild rep_rules_json (DB returned no active rules)";
+    }
+  }
+
   const step4 = await applyRepRules({
     program: step3.program,
     catalogJson: build.catalog_json,
+    repRules,
     repRulesJson: build.rep_rules_json,
   });
+  if (step4FallbackNote) {
+    step4.debug = step4.debug || {};
+    step4.debug.notes = Array.isArray(step4.debug.notes) ? step4.debug.notes : [];
+    step4.debug.notes.push(step4FallbackNote);
+    step4.debug.template = step4.debug.template || {};
+    step4.debug.template.notes = Array.isArray(step4.debug.template.notes) ? step4.debug.template.notes : [];
+    step4.debug.template.notes.push(step4FallbackNote);
+  }
 
   // Step 5 (narration)
   // narrationTemplatesJson: CatalogBuild.v3 narration_json (you said stored in CatalogBuild)
