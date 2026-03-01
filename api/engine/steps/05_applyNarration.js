@@ -152,6 +152,7 @@ function normalizeTemplates(raw) {
   const out = [];
   for (let i = 0; i < arr.length; i++) {
     const r = arr[i] || {};
+    // applies_json is intentionally ignored in Step 05 for now; reserved for future rule filtering.
     let pool = safeJsonParse(r.text_pool_json, null);
     if (!Array.isArray(pool)) pool = [];
     out.push({
@@ -766,7 +767,9 @@ function buildProgramNarration(p, templates, cfg, totalWeeks) {
 
 export async function applyNarration({
   program,
+  narrationTemplates,
   narrationTemplatesJson,
+  narrationSource,
   programGenerationConfigJson,
   fitnessRank,
   programLength,
@@ -774,14 +777,38 @@ export async function applyNarration({
   cooldownSeconds, // copy only for future; not used in engine right now
 }) {
   if (!program) throw new Error("applyNarration: missing program");
-  if (!narrationTemplatesJson) throw new Error("applyNarration: missing narrationTemplatesJson");
 
   const p0 = deepClone(program);
 
-  const templatesRaw = safeJsonParse(narrationTemplatesJson, null);
+  let templatesRaw = null;
+  let source = narrationSource || "json";
+  if (Array.isArray(narrationTemplates) && narrationTemplates.length > 0) {
+    templatesRaw = narrationTemplates;
+    if (!narrationSource) source = "db";
+  } else if (narrationTemplatesJson) {
+    templatesRaw = safeJsonParse(narrationTemplatesJson, null);
+    source = narrationSource || "json";
+  } else {
+    return {
+      program: p0,
+      debug: {
+        ok: false,
+        source: narrationSource || "hardcoded",
+        error: "No narration templates available",
+      },
+    };
+  }
+
   const templates = normalizeTemplates(templatesRaw);
   if (!templates.length) {
-    return { program: p0, debug: { ok: false, error: "No templates found in narrationTemplatesJson" } };
+    return {
+      program: p0,
+      debug: {
+        ok: false,
+        source,
+        error: "No templates found in narration template source",
+      },
+    };
   }
 
   const pgc = safeJsonParse(programGenerationConfigJson, null) || {};
@@ -868,6 +895,7 @@ export async function applyNarration({
 
   const debug = {
     ok: true,
+    source,
     templates_in: templates.length,
     cfg: {
       fitness_rank: cfg.fitness_rank,
