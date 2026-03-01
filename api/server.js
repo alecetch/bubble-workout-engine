@@ -10,6 +10,10 @@ import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.
 import { generateProgramRouter } from "./src/routes/generateProgram.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
 import { historyProgramsRouter } from "./src/routes/historyPrograms.js";
+import { historyTimelineRouter } from "./src/routes/historyTimeline.js";
+import { historyOverviewRouter } from "./src/routes/historyOverview.js";
+import { historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
+import { historyExerciseRouter } from "./src/routes/historyExercise.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
 
@@ -288,6 +292,10 @@ app.use("/api", clientProfileBootstrapRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", generateProgramRouter);
 app.use(historyProgramsRouter);
+app.use(historyTimelineRouter);
+app.use(historyOverviewRouter);
+app.use(historyPersonalRecordsRouter);
+app.use(historyExerciseRouter);
 app.use(generateProgramV2Router);
 
 // Generate plan route (uses global JSON parser only).

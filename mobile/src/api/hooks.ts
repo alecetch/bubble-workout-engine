@@ -1,7 +1,10 @@
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
@@ -24,9 +27,24 @@ import {
   type ViewerIdentityOptions,
 } from "./programViewer";
 import { getReferenceData, type ReferenceDataResponse } from "./referenceData";
+import {
+  fetchExerciseHistory,
+  getHistoryOverview,
+  getHistoryPersonalRecords,
+  getHistoryPrograms,
+  getHistoryTimeline,
+  searchExercises,
+  type ExerciseHistoryResponse,
+  type ExerciseSearchItem,
+  type HistoryOverviewResponse,
+  type HistoryPersonalRecordItem,
+  type HistoryProgramItem,
+  type HistoryTimelineCursor,
+  type HistoryTimelineResponse,
+} from "./history";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
-const queryKeys = {
+export const queryKeys = {
   me: ["me"] as const,
   referenceData: ["referenceData"] as const,
   clientProfile: (profileId: string) => ["clientProfile", profileId] as const,
@@ -40,6 +58,12 @@ const queryKeys = {
     ["dayPreview", programId, programDayId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
   programDayFull: (programDayId: string, opts: ViewerIdentityOptions) =>
     ["programDayFull", programDayId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
+  historyOverview: ["historyOverview"] as const,
+  historyPrograms: ["historyPrograms"] as const,
+  historyTimeline: ["historyTimeline"] as const,
+  historyPersonalRecords: ["historyPersonalRecords"] as const,
+  exerciseSearch: (q: string) => ["exerciseSearch", q] as const,
+  exerciseHistory: (exerciseId: string) => ["exerciseHistory", exerciseId] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -155,5 +179,59 @@ export function useProgramDayFull(
     queryKey: queryKeys.programDayFull(programDayId, opts),
     queryFn: () => getProgramDayFull(programDayId, opts),
     enabled: Boolean(programDayId && (opts.bubbleUserId || opts.userId)),
+  });
+}
+
+export function useHistoryOverview(): UseQueryResult<HistoryOverviewResponse> {
+  return useQuery({
+    queryKey: queryKeys.historyOverview,
+    queryFn: getHistoryOverview,
+  });
+}
+
+export function useHistoryPrograms(limit = 10): UseQueryResult<HistoryProgramItem[]> {
+  return useQuery({
+    queryKey: queryKeys.historyPrograms,
+    queryFn: () => getHistoryPrograms(limit),
+  });
+}
+
+export function useHistoryTimeline(
+  limit = 40,
+): UseInfiniteQueryResult<InfiniteData<HistoryTimelineResponse, HistoryTimelineCursor | null>, Error> {
+  return useInfiniteQuery({
+    queryKey: queryKeys.historyTimeline,
+    initialPageParam: null as HistoryTimelineCursor | null,
+    queryFn: ({ pageParam }) =>
+      getHistoryTimeline({
+        limit,
+        cursorDate: pageParam?.cursorDate ?? null,
+        cursorId: pageParam?.cursorId ?? null,
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? null,
+  });
+}
+
+export function useHistoryPersonalRecords(limit = 20): UseQueryResult<HistoryPersonalRecordItem[]> {
+  return useQuery({
+    queryKey: queryKeys.historyPersonalRecords,
+    queryFn: () => getHistoryPersonalRecords(limit),
+  });
+}
+
+export function useExerciseSearch(q: string): UseQueryResult<ExerciseSearchItem[]> {
+  const term = q.trim();
+  return useQuery({
+    queryKey: queryKeys.exerciseSearch(term),
+    queryFn: () => searchExercises(term),
+    enabled: term.length >= 2,
+  });
+}
+
+export function useExerciseHistory(exerciseId: string | null): UseQueryResult<ExerciseHistoryResponse> {
+  return useQuery({
+    queryKey: queryKeys.exerciseHistory(exerciseId ?? ""),
+    queryFn: () => fetchExerciseHistory(exerciseId as string),
+    enabled: Boolean(exerciseId),
   });
 }
