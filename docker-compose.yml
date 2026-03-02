@@ -17,6 +17,7 @@ services:
     working_dir: /app
     volumes:
       - ./api:/app
+      - ./assets:/app/assets
     command: bash -lc "npm install && npm start"
     environment:
       PORT: 3000

@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express from "express";
+import { fileURLToPath } from "url";
+import { join, dirname } from "path";
 import { fetchInputs } from "./bubbleClient.js";
 import { runPipeline } from "./engine/runPipeline.js";
 import { importEmitterRouter } from "./src/routes/importEmitter.js";
@@ -14,8 +16,11 @@ import { historyTimelineRouter } from "./src/routes/historyTimeline.js";
 import { historyOverviewRouter } from "./src/routes/historyOverview.js";
 import { historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
 import { historyExerciseRouter } from "./src/routes/historyExercise.js";
+import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const DEV_USER_ID = "dev-user-1";
@@ -50,13 +55,6 @@ const presetColumnByCode = {
   minimal_equipment: "minimal_equipment",
   no_equipment: "no_equipment",
 };
-
-function buildPublicUrl(imageKey) {
-  const base = (process.env.S3_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
-  const key = String(imageKey ?? "").trim().replace(/^\/+/, "");
-  if (!base || !key) return "";
-  return `${base}/${key}`;
-}
 
 function createDevProfile(id, userId) {
   return {
@@ -146,6 +144,9 @@ const devReferenceData = {
 
 // Assign/echo request_id before any other middleware or route handler.
 app.use(requestId);
+
+// Serve local media assets (dev only — in prod these are served from S3).
+app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(

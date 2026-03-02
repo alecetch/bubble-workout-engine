@@ -1,6 +1,7 @@
 // api/src/routes/readProgram.js
 import express from "express";
 import { pool } from "../db.js";
+import { resolveMediaUrl } from "../utils/mediaUrl.js";
 
 export const readProgramRouter = express.Router();
 
@@ -117,15 +118,21 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
       const prgR = await client.query(
         `
         SELECT
-          id AS program_id,
-          program_title,
-          program_summary,
-          weeks_count,
-          days_per_week,
-          start_date,
-          status
-        FROM program
-        WHERE id = $1 AND user_id = $2
+          p.id            AS program_id,
+          p.program_title,
+          p.program_title  AS title,
+          p.program_summary,
+          p.program_summary AS summary,
+          p.weeks_count,
+          p.days_per_week,
+          p.start_date,
+          p.status,
+          p.hero_media_id,
+          ma.image_key     AS hero_image_key,
+          ma.image_url     AS hero_image_url
+        FROM program p
+        LEFT JOIN media_assets ma ON ma.id = p.hero_media_id
+        WHERE p.id = $1 AND p.user_id = $2
         `,
         [program_id, user_id],
       );
@@ -134,7 +141,16 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
         throw new NotFoundError("Program not found");
       }
 
-      const program = prgR.rows[0];
+      const _prgRow = prgR.rows[0];
+      const program = {
+        ..._prgRow,
+        hero_media: _prgRow.hero_image_key
+          ? resolveMediaUrl({
+              image_key: _prgRow.hero_image_key,
+              image_url: _prgRow.hero_image_url,
+            })
+          : null,
+      };
 
       // 2) Weeks
       const weeksR = await client.query(
@@ -296,10 +312,14 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
           d.block_format_secondary_text,
           d.block_format_finisher_text,
           d.is_completed,
-          d.has_activity
+          d.has_activity,
+          d.hero_media_id,
+          ma.image_key  AS hero_image_key,
+          ma.image_url  AS hero_image_url
         FROM program_day d
         JOIN program p
           ON p.id = d.program_id
+        LEFT JOIN media_assets ma ON ma.id = d.hero_media_id
         WHERE d.id = $1 AND p.user_id = $2
         `,
         [program_day_id, user_id],
@@ -309,7 +329,16 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
         throw new NotFoundError("Day not found");
       }
 
-      const day = dayR.rows[0];
+      const _dayRow = dayR.rows[0];
+      const day = {
+        ..._dayRow,
+        hero_media: _dayRow.hero_image_key
+          ? resolveMediaUrl({
+              image_key: _dayRow.hero_image_key,
+              image_url: _dayRow.hero_image_url,
+            })
+          : null,
+      };
 
       // 2) Segments ordered
       const segR = await client.query(

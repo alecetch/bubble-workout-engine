@@ -10,12 +10,14 @@ import { applyProgression } from "./steps/03_applyProgression.js";
 import { applyRepRules } from "./steps/04_applyRepRules.js";
 import { applyNarration } from "./steps/05_applyNarration.js";
 import { emitPlanRows } from "./steps/06_emitPlan.js";
+import { fetchActiveMediaAssets } from "../src/services/mediaAssets.js";
 import { fetchActiveNarrationTemplates } from "../src/services/narrationTemplates.js";
 import { fetchActiveRepRules } from "../src/services/repRules.js";
 import {
   fetchProgramGenerationConfigByKey,
   fetchProgramGenerationConfigs,
 } from "../src/services/programGenerationConfig.js";
+import { resolveHeroMediaRow, toHeroMediaObject, dayFocusSlug } from "./resolveHeroMedia.js";
 import { pool } from "../src/db.js";
 
 function pickCatalogBuildV3(inputs) {
@@ -110,9 +112,45 @@ export async function runPipeline({ inputs, programType, request, db }) {
   if (programType !== "hypertrophy") {
     throw new Error(`Unsupported programType: ${programType}`);
   }
+  const dbClient = db || pool;
+
+  // ── Media assets (fetched once; no per-day queries) ──────────────────
+  let mediaAssets = [];
+  let mediaAssetsSource = "none";
+  const mediaNotes = [];
+  try {
+    const rows = await fetchActiveMediaAssets(dbClient);
+    if (Array.isArray(rows) && rows.length > 0) {
+      mediaAssets = rows;
+      mediaAssetsSource = "db";
+    } else {
+      mediaNotes.push("fetchActiveMediaAssets returned no rows; hero_media_id will be null");
+    }
+  } catch (err) {
+    mediaNotes.push(
+      `fetchActiveMediaAssets failed: ${err?.message || String(err)}; hero_media_id will be null`,
+    );
+  }
+  if (!process.env.S3_PUBLIC_BASE_URL) {
+    mediaNotes.push("S3_PUBLIC_BASE_URL not set; heroMedia.image_url will be a relative key");
+  }
 
   // Step 1
   const step1 = await buildBasicHypertrophyProgramStep({ inputs, request });
+  step1.debug = step1.debug || {};
+
+  // Attach program hero
+  const programHeroRow = resolveHeroMediaRow(mediaAssets, "program", programType, null);
+  step1.program.hero_media_id = programHeroRow?.id ?? null;
+  step1.program.heroMedia = toHeroMediaObject(programHeroRow);
+  step1.debug.hero_media_source = programHeroRow ? mediaAssetsSource : "none";
+  step1.debug.hero_media_id = step1.program.hero_media_id;
+  if (mediaNotes.length) {
+    step1.debug.notes = Array.isArray(step1.debug.notes)
+      ? step1.debug.notes
+      : [];
+    step1.debug.notes.push(...mediaNotes);
+  }
 
   // Step 2
   const step2 = await segmentHypertrophyProgram({
@@ -137,7 +175,6 @@ export async function runPipeline({ inputs, programType, request, db }) {
 
   const cfgRows = inputs?.configs?.genConfigs?.response?.results ?? [];
   const schemaVersion = 1;
-  const dbClient = db || pool;
 
   let programGenerationConfigs = [];
   let configSource = "hardcoded";
@@ -349,6 +386,22 @@ export async function runPipeline({ inputs, programType, request, db }) {
     step5.debug.notes = Array.isArray(step5.debug.notes) ? step5.debug.notes : [];
     step5.debug.notes.push(...step5Notes);
   }
+  step5.program.hero_media_id = programHeroRow?.id ?? null;
+  step5.program.heroMedia = toHeroMediaObject(programHeroRow);
+
+  // Attach day hero media to template days and all week days
+  function attachDayHeroes(days) {
+    for (const day of days || []) {
+      const focus = dayFocusSlug(day);
+      const row = resolveHeroMediaRow(mediaAssets, "program_day", programType, focus);
+      day.hero_media_id = row?.id ?? null;
+      day.heroMedia = toHeroMediaObject(row);
+      day.day_focus_slug = focus;
+    }
+  }
+  attachDayHeroes(step5.program.days);
+  for (const wk of step5.program.weeks ?? []) attachDayHeroes(wk.days);
+  step5.debug.day_hero_media_source = mediaAssets.length ? mediaAssetsSource : "none";
 
   // Step 6 (emitter rows)
   // Inputs:
@@ -382,6 +435,7 @@ export async function runPipeline({ inputs, programType, request, db }) {
     programType,
 
     // The enriched program (still useful for UI)
+    // Includes hero_media_id / heroMedia fields for persistence in generateProgramV2.
     program: step5.program,
 
     // The emitted rows (what Bubble Emitter produced)

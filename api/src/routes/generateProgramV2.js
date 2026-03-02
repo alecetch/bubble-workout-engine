@@ -338,6 +338,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     const allowed_ids_csv = allowedIds.join(",");
 
     const pipelineOut = await runPipeline({
+      db: pool,
       inputs,
       programType,
       request: {
@@ -396,10 +397,11 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
         start_offset_days = $7,
         start_weekday = $8,
         preferred_days_sorted_json = $9::jsonb,
+        hero_media_id = $10,
         status = 'active',
         is_ready = true,
         updated_at = now()
-      WHERE id = $10
+      WHERE id = $11
       `,
       [
         programTitle,
@@ -411,9 +413,36 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
         prgData.start_offset_days ?? 0,
         prgData.start_weekday ?? "",
         JSON.stringify(prgData.preferred_days_sorted_json ?? []),
+        pipelineOut?.program?.hero_media_id ?? null,
         created_program_id,
       ],
     );
+
+    // Phase 5c: day hero_media_id
+    // Match on (program_id, week_number, day_number) — same keys the emitter wrote.
+    const dayHeroUpdates = [];
+    for (const wk of pipelineOut?.program?.weeks ?? []) {
+      for (const day of wk.days ?? []) {
+        if (day.hero_media_id) {
+          dayHeroUpdates.push([
+            day.hero_media_id,
+            created_program_id,
+            wk.week_index,
+            day.day_index,
+          ]);
+        }
+      }
+    }
+    for (const [heroId, progId, weekNum, dayNum] of dayHeroUpdates) {
+      await pool.query(
+        `UPDATE program_day
+            SET hero_media_id = $1
+          WHERE program_id = $2
+            AND week_number = $3
+            AND day_number  = $4`,
+        [heroId, progId, weekNum, dayNum],
+      );
+    }
 
     // Phase 5b: Fill recovery (rest) days into program_calendar_day.
     // Must run after the program row has its final start_date + weeks_count

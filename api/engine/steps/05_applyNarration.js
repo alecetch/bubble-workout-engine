@@ -848,6 +848,9 @@ export async function applyNarration({
   const progNar = buildProgramNarration(p0, templates, cfg, totalWeeks);
   p0.narration.program = progNar.narration.program;
   p0.narration.weeks = progNar.narration.weeks;
+  // Top-level aliases used by importEmitterService and Screen 4
+  p0.program_title = progNar.narration.program.title || "";
+  p0.program_summary = progNar.narration.program.summary || "";
   adoption.template.week_engine_used = 1;
 
   // 1) Enrich template days
