@@ -208,6 +208,18 @@ function makeMediaRows() {
   ];
 }
 
+function collectAllItems(program) {
+  const items = [];
+  for (const day of program?.days ?? []) {
+    for (const segment of day?.segments ?? []) {
+      for (const item of segment?.items ?? []) {
+        items.push(item);
+      }
+    }
+  }
+  return items;
+}
+
 test("program.hero_media_id is set from DB and step1 source is db", async () => {
   const out = await runPipeline({
     inputs: makeInputs(),
@@ -218,6 +230,11 @@ test("program.hero_media_id is set from DB and step1 source is db", async () => 
 
   assert.equal(out.program.hero_media_id, "program_hero");
   assert.equal(out.debug.step1.hero_media_source, "db");
+  const items = collectAllItems(out.program);
+  assert.ok(items.length > 0, "expected generated exercise items");
+  for (const item of items) {
+    assert.ok(item.exercise_name || item.ex_name, "exercise display name should be populated");
+  }
 });
 
 test("program.hero_media_id is null and step1 source is none when media DB is empty", async () => {

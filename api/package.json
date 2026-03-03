@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "dev:reset-program-data": "node ./scripts/dev_reset_program_data.mjs",
     "import:equipment-items": "tsx scripts/import-equipment-items.ts",
     "import:bubble": "node scripts/import_bubble_exports.mjs",
     "test": "node --test",

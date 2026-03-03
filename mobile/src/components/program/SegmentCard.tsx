@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { PressableScale } from "../interaction/PressableScale";
 import { PremiumTimer } from "../timers/PremiumTimer";
@@ -32,16 +33,6 @@ function isLoggableSegment(segmentName: string): boolean {
   return true;
 }
 
-function formatExerciseMeta(exercise: Segment["exercises"][number]): string {
-  const tokens: string[] = [];
-  if (exercise.sets != null) tokens.push(`${exercise.sets} sets`);
-  if (exercise.reps) tokens.push(`${exercise.reps} reps`);
-  if (exercise.intensity) tokens.push(exercise.intensity);
-  if (exercise.tempo) tokens.push(`Tempo ${exercise.tempo}`);
-  if (exercise.restSeconds != null) tokens.push(`Rest ${exercise.restSeconds}s`);
-  return tokens.join(" • ");
-}
-
 export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProps): React.JSX.Element {
   const loggable = isLoggableSegment(segment.segmentName);
   const initialDurationSeconds =
@@ -68,15 +59,28 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
       <PremiumTimer initialDurationSeconds={initialDurationSeconds} suggestedRestSeconds={suggestedRestSeconds} />
 
       <View style={styles.exerciseList}>
-        {segment.exercises.map((exercise, index) => (
-          <View key={exercise.id ?? `${segment.id}-exercise-${index}`} style={styles.exerciseRow}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
-            {formatExerciseMeta(exercise) ? (
-              <Text style={styles.exerciseMeta}>{formatExerciseMeta(exercise)}</Text>
-            ) : null}
-            {exercise.notes ? <Text style={styles.exerciseNotes}>{exercise.notes}</Text> : null}
-          </View>
-        ))}
+        {segment.exercises.map((exercise, index) => {
+          const line2 = [
+            exercise.sets != null ? `${exercise.sets} set${exercise.sets !== 1 ? "s" : ""}` : null,
+            exercise.reps ? `${exercise.reps} ${exercise.repsUnit ?? "reps"}` : null,
+            exercise.intensity ?? null,
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return (
+            <View key={exercise.id ?? `${segment.id}-exercise-${index}`} style={styles.exerciseRow}>
+              <Text style={styles.exerciseName}>{exercise.name}</Text>
+              {line2 ? <Text style={styles.exerciseMeta}>{line2}</Text> : null}
+              {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
+                <View style={styles.restRow}>
+                  <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+                  <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
       </View>
 
       {loggable ? (
@@ -148,9 +152,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
   },
-  exerciseNotes: {
-    color: colors.textSecondary,
-    ...typography.small,
+  restRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   logButton: {
     alignSelf: "flex-start",

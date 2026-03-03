@@ -38,7 +38,7 @@ export function WeekPillStrip({
               style={[styles.pill, selected ? styles.pillSelected : styles.pillIdle]}
               onPress={() => onSelectWeek(week.weekNumber)}
             >
-              <Text style={[styles.pillLabel, selected && styles.pillLabelSelected]}>{`Week ${week.weekNumber}`}</Text>
+              <Text style={[styles.pillLabel, selected && styles.pillLabelSelected]}>{`Wk ${week.weekNumber}`}</Text>
               {weekStatus === "none" ? null : (
                 <View
                   style={[
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: radii.pill,
     borderWidth: 1,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,

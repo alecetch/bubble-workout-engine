@@ -25,11 +25,25 @@ type CalendarDayPillRowProps = {
 };
 
 const UTC_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAY_TO_PILL_LETTER: Record<string, string> = {
+  mon: "M",
+  tue: "T",
+  wed: "W",
+  thu: "T",
+  fri: "F",
+  sat: "S",
+  sun: "S",
+};
 
-function normalizeWeekdayLabel(value: string): string {
+function normalizeWeekdayKey(value: string): string {
   const short = value.trim().slice(0, 3).toLowerCase();
-  if (!short) return "";
-  return `${short.slice(0, 1).toUpperCase()}${short.slice(1)}`;
+  return short;
+}
+
+function toDayPillWeekday(value: string): string {
+  const key = normalizeWeekdayKey(value);
+  if (!key) return "";
+  return WEEKDAY_TO_PILL_LETTER[key] ?? key.slice(0, 1).toUpperCase();
 }
 
 function formatCalendarParts(item: CalendarDayPillItem): { weekday: string; dayNum: string } {
@@ -55,10 +69,10 @@ function formatCalendarParts(item: CalendarDayPillItem): { weekday: string; dayN
   }
 
   const weekday = item.scheduledWeekday
-    ? normalizeWeekdayLabel(item.scheduledWeekday)
+    ? toDayPillWeekday(item.scheduledWeekday)
     : parsed
-      ? UTC_WEEKDAY_LABELS[parsed.getUTCDay()]
-      : "--";
+      ? toDayPillWeekday(UTC_WEEKDAY_LABELS[parsed.getUTCDay()])
+      : "-";
   const dayNum = dayNumValue != null ? String(dayNumValue) : "--";
 
   return { weekday, dayNum };

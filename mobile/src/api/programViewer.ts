@@ -61,6 +61,7 @@ export type ProgramDayFullResponse = {
       name: string;
       sets?: number | null;
       reps?: string | null;
+      repsUnit?: string | null;
       intensity?: string | null;
       tempo?: string | null;
       restSeconds?: number | null;
@@ -250,7 +251,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
       return {
         id: asString(rawSegment.id) ?? `segment-${segmentIndex + 1}`,
         segmentName:
-          asString(rawSegment.segment_name ?? rawSegment.segmentName) ??
+          asString(rawSegment.segment_title ?? rawSegment.segment_name ?? rawSegment.segmentName) ??
           `Segment ${segmentIndex + 1}`,
         orderInDay:
           asNumber(rawSegment.order_in_day ?? rawSegment.orderInDay) ?? segmentIndex + 1,
@@ -260,7 +261,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
         segmentDurationMmss: asNullableString(
           rawSegment.segment_duration_mmss ?? rawSegment.segmentDurationMmss,
         ),
-        notes: asNullableString(rawSegment.notes),
+        notes: asNullableString(rawSegment.segment_notes ?? rawSegment.notes),
         exercises: rawExercises.map((exercise, exerciseIndex) => {
           const rawExercise = asObject(exercise);
 
@@ -270,9 +271,10 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
               asString(rawExercise.name) ??
               asString(rawExercise.exercise_name ?? rawExercise.exerciseName) ??
               `Exercise ${exerciseIndex + 1}`,
-            sets: asNullableNumber(rawExercise.sets),
-            reps: asNullableString(rawExercise.reps),
-            intensity: asNullableString(rawExercise.intensity),
+            sets: asNullableNumber(rawExercise.sets_prescribed ?? rawExercise.sets),
+            reps: asNullableString(rawExercise.reps_prescribed ?? rawExercise.reps),
+            repsUnit: asNullableString(rawExercise.reps_unit ?? rawExercise.repsUnit) ?? "reps",
+            intensity: asNullableString(rawExercise.intensity_prescription ?? rawExercise.intensity),
             tempo: asNullableString(rawExercise.tempo),
             restSeconds: asNullableNumber(rawExercise.rest_seconds ?? rawExercise.restSeconds),
             notes: asNullableString(rawExercise.notes),

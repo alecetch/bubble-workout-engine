@@ -772,6 +772,22 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
       );
     }
 
+    // Backfill exercise fields from catalogue in one round-trip.
+    await client.query(
+      `
+      UPDATE program_exercise pe
+      SET
+        exercise_name = ec.name,
+        is_loadable = ec.is_loadable,
+        equipment_items_slugs_csv = array_to_string(ec.equipment_items_slugs, ','),
+        notes = ''
+      FROM exercise_catalogue ec
+      WHERE pe.exercise_id = ec.exercise_id
+        AND pe.program_id = $1
+      `,
+      [program_id],
+    );
+
     await client.query("COMMIT");
 
     logEvent("info", "import_emitter.committed", {

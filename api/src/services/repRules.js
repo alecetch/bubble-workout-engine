@@ -14,7 +14,6 @@ export async function fetchActiveRepRules(db) {
       purpose,
       movement_pattern,
       swap_group_id_2,
-      movement_class,
       equipment_slug,
       reps_unit,
       rep_low,
