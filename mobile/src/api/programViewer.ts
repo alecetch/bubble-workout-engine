@@ -51,8 +51,10 @@ export type ProgramDayFullResponse = {
   };
   segments: Array<{
     id: string;
+    segmentType?: string | null;
     segmentName: string;
     orderInDay: number;
+    rounds?: number | null;
     segmentDurationSeconds?: number | null;
     segmentDurationMmss?: string | null;
     notes?: string | null;
@@ -250,11 +252,13 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
 
       return {
         id: asString(rawSegment.id) ?? `segment-${segmentIndex + 1}`,
+        segmentType: asNullableString(rawSegment.segment_type ?? rawSegment.segmentType),
         segmentName:
           asString(rawSegment.segment_title ?? rawSegment.segment_name ?? rawSegment.segmentName) ??
           `Segment ${segmentIndex + 1}`,
         orderInDay:
           asNumber(rawSegment.order_in_day ?? rawSegment.orderInDay) ?? segmentIndex + 1,
+        rounds: asNullableNumber(rawSegment.rounds),
         segmentDurationSeconds: asNullableNumber(
           rawSegment.segment_duration_seconds ?? rawSegment.segmentDurationSeconds,
         ),

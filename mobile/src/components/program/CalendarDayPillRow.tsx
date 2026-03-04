@@ -68,11 +68,10 @@ function formatCalendarParts(item: CalendarDayPillItem): { weekday: string; dayN
     console.warn("[CalendarDayPillRow] Missing or invalid scheduledDate for day pill", item);
   }
 
-  const weekday = item.scheduledWeekday
-    ? toDayPillWeekday(item.scheduledWeekday)
-    : parsed
-      ? toDayPillWeekday(UTC_WEEKDAY_LABELS[parsed.getUTCDay()])
-      : "-";
+  // Always derive weekday from the date, never from scheduledWeekday.
+  // scheduled_weekday in the DB is computed relative to the first preferred training day,
+  // not the anchor date, so it can be offset when the anchor isn't itself a preferred day.
+  const weekday = parsed ? toDayPillWeekday(UTC_WEEKDAY_LABELS[parsed.getUTCDay()]) : "-";
   const dayNum = dayNumValue != null ? String(dayNumValue) : "--";
 
   return { weekday, dayNum };
@@ -154,13 +153,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pill: {
-    minWidth: 48,
+    minWidth: 36,
     minHeight: 44,
     borderRadius: radii.pill,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   labelStack: {
     alignItems: "center",
@@ -185,7 +184,7 @@ const styles = StyleSheet.create({
   },
   dayNum: {
     color: colors.textSecondary,
-    ...typography.body,
+    ...typography.small,
     fontWeight: "600",
     textAlign: "center",
     includeFontPadding: false,

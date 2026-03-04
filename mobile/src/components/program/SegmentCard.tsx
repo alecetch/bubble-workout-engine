@@ -8,6 +8,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { getSegmentPresentation } from "./segmentCardLogic";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 
@@ -26,25 +27,24 @@ function parseMmssToSeconds(value?: string | null): number | null {
   return minutes * 60 + seconds;
 }
 
-function isLoggableSegment(segmentName: string): boolean {
-  const normalized = segmentName.toLowerCase();
-  if (normalized.includes("warm-up") || normalized.includes("warm up")) return false;
-  if (normalized.includes("cool-down") || normalized.includes("cooldown")) return false;
-  return true;
-}
-
 export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProps): React.JSX.Element {
-  const loggable = isLoggableSegment(segment.segmentName);
+  const presentation = getSegmentPresentation({
+    segmentType: segment.segmentType,
+    rounds: segment.rounds,
+    notes: segment.notes,
+    exercises: segment.exercises,
+  });
   const initialDurationSeconds =
     segment.segmentDurationSeconds ?? parseMmssToSeconds(segment.segmentDurationMmss);
+  const exercises = Array.isArray(segment.exercises) ? segment.exercises : [];
 
   const suggestedRestSeconds = useMemo(() => {
-    const withRest = segment.exercises
+    const withRest = exercises
       .map((exercise) => exercise.restSeconds)
       .filter((value): value is number => typeof value === "number");
     if (withRest.length === 0) return null;
     return Math.max(...withRest);
-  }, [segment.exercises]);
+  }, [exercises]);
 
   return (
     <View style={styles.card}>
@@ -58,32 +58,49 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
 
       <PremiumTimer initialDurationSeconds={initialDurationSeconds} suggestedRestSeconds={suggestedRestSeconds} />
 
-      <View style={styles.exerciseList}>
-        {segment.exercises.map((exercise, index) => {
-          const line2 = [
-            exercise.sets != null ? `${exercise.sets} set${exercise.sets !== 1 ? "s" : ""}` : null,
-            exercise.reps ? `${exercise.reps} ${exercise.repsUnit ?? "reps"}` : null,
-            exercise.intensity ?? null,
-          ]
-            .filter(Boolean)
-            .join(" ");
-
-          return (
-            <View key={exercise.id ?? `${segment.id}-exercise-${index}`} style={styles.exerciseRow}>
-              <Text style={styles.exerciseName}>{exercise.name}</Text>
-              {line2 ? <Text style={styles.exerciseMeta}>{line2}</Text> : null}
-              {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
-                <View style={styles.restRow}>
-                  <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
-                  <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
-                </View>
-              ) : null}
+      {presentation.isWarmupOrCooldown ? (
+        <View style={styles.notesContainer} testID="segment-notes-content">
+          <Text style={styles.notesText}>{presentation.notesText}</Text>
+        </View>
+      ) : (
+        <View style={styles.exerciseList} testID="segment-exercise-list">
+          {presentation.showRoundsIndicator ? (
+            <View style={styles.roundsIndicator} testID="segment-rounds-indicator">
+              <Ionicons name="sync-outline" size={14} color={colors.textSecondary} />
+              <Text style={styles.roundsText}>{presentation.roundsValue} rounds</Text>
             </View>
-          );
-        })}
-      </View>
+          ) : null}
 
-      {loggable ? (
+          {presentation.segmentHasExercises ? (
+            exercises.map((exercise, index) => {
+              const line2 = [
+                exercise.sets != null ? `${exercise.sets} set${exercise.sets !== 1 ? "s" : ""}` : null,
+                exercise.reps ? `${exercise.reps} ${exercise.repsUnit ?? "reps"}` : null,
+                exercise.intensity ?? null,
+              ]
+                .filter(Boolean)
+                .join(" ");
+
+              return (
+                <View key={exercise.id ?? `${segment.id}-exercise-${index}`} style={styles.exerciseRow}>
+                  <Text style={styles.exerciseName}>{exercise.name}</Text>
+                  {line2 ? <Text style={styles.exerciseMeta}>{line2}</Text> : null}
+                  {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
+                    <View style={styles.restRow}>
+                      <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+                      <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })
+          ) : (
+            <Text style={styles.exerciseMeta}>No exercises available.</Text>
+          )}
+        </View>
+      )}
+
+      {presentation.showLogButton ? (
         <PressableScale style={styles.logButton} onPress={() => onLogSegment(segment)}>
           <Text style={styles.logButtonLabel}>Log segment</Text>
         </PressableScale>
@@ -134,6 +151,28 @@ const styles = StyleSheet.create({
   },
   exerciseList: {
     gap: spacing.sm,
+  },
+  notesContainer: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+  },
+  notesText: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  roundsIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  roundsText: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
   },
   exerciseRow: {
     borderRadius: radii.card,

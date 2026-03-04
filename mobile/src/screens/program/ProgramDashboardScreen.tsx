@@ -295,7 +295,8 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         days={daysInSelectedWeek.map((day, index) => ({
           id: day.id ?? `${day.calendarDate}-${index}`,
           calendarDate: day.calendarDate,
-          scheduledWeekday: day.scheduledWeekday ?? undefined,
+          scheduledDate: day.scheduledDate ?? day.calendarDate,
+          isTrainingDay: day.isTrainingDay,
           programDayId: day.programDayId ?? undefined,
         }))}
         selectedProgramDayId={selectedProgramDayId}
