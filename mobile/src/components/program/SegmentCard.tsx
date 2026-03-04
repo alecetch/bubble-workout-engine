@@ -56,7 +56,11 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
         {isLogged ? <View style={styles.loggedBadge}><Text style={styles.loggedText}>Logged</Text></View> : null}
       </View>
 
-      <PremiumTimer initialDurationSeconds={initialDurationSeconds} suggestedRestSeconds={suggestedRestSeconds} />
+      <PremiumTimer
+        initialDurationSeconds={initialDurationSeconds}
+        suggestedRestSeconds={suggestedRestSeconds}
+        segmentId={segment.id}
+      />
 
       {presentation.isWarmupOrCooldown ? (
         <View style={styles.notesContainer} testID="segment-notes-content">
