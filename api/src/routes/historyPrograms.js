@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
+import { resolveBubbleUser } from "../middleware/resolveUser.js";
 
 const SQL_HISTORY_PROGRAMS = `
 SELECT
@@ -97,5 +98,6 @@ export const historyProgramsRouter = express.Router();
 historyProgramsRouter.get(
   "/v1/history/programs",
   requireInternalToken,
+  resolveBubbleUser,
   createHistoryProgramsHandler(pool),
 );

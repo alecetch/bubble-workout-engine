@@ -252,13 +252,19 @@ function normalizeExerciseHistory(raw: unknown): ExerciseHistoryResponse {
   };
 }
 
-export async function getHistoryOverview(): Promise<HistoryOverviewResponse> {
-  const raw = await engineFetch<unknown>("/v1/history/overview");
+export async function getHistoryOverview(bubbleUserId?: string): Promise<HistoryOverviewResponse> {
+  const params = new URLSearchParams();
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const qs = params.toString();
+  const raw = await engineFetch<unknown>(`/v1/history/overview${qs ? `?${qs}` : ""}`);
   return normalizeOverview(raw);
 }
 
-export async function getHistoryPrograms(limit = 10): Promise<HistoryProgramItem[]> {
-  const raw = await engineFetch<unknown>(`/v1/history/programs?limit=${encodeURIComponent(String(limit))}`);
+export async function getHistoryPrograms(limit = 10, bubbleUserId?: string): Promise<HistoryProgramItem[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const raw = await engineFetch<unknown>(`/v1/history/programs?${params.toString()}`);
   return normalizePrograms(raw);
 }
 
@@ -266,6 +272,7 @@ export type GetHistoryTimelineOptions = {
   limit?: number;
   cursorDate?: string | null;
   cursorId?: string | null;
+  bubbleUserId?: string;
 };
 
 export async function getHistoryTimeline(options: GetHistoryTimelineOptions = {}): Promise<HistoryTimelineResponse> {
@@ -276,24 +283,34 @@ export async function getHistoryTimeline(options: GetHistoryTimelineOptions = {}
     params.set("cursorDate", options.cursorDate);
     params.set("cursorId", options.cursorId);
   }
+  if (options.bubbleUserId) params.set("bubble_user_id", options.bubbleUserId);
 
   const raw = await engineFetch<unknown>(`/v1/history/timeline?${params.toString()}`);
   return normalizeTimeline(raw);
 }
 
-export async function getHistoryPersonalRecords(limit = 20): Promise<HistoryPersonalRecordItem[]> {
-  const raw = await engineFetch<unknown>(`/v1/history/personal-records?limit=${encodeURIComponent(String(limit))}`);
+export async function getHistoryPersonalRecords(limit = 20, bubbleUserId?: string): Promise<HistoryPersonalRecordItem[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const raw = await engineFetch<unknown>(`/v1/history/personal-records?${params.toString()}`);
   return normalizePersonalRecords(raw);
 }
 
-export async function searchExercises(q: string): Promise<ExerciseSearchItem[]> {
+export async function searchExercises(q: string, bubbleUserId?: string): Promise<ExerciseSearchItem[]> {
   const term = q.trim();
   if (term.length < 2) return [];
-  const raw = await engineFetch<unknown>(`/v1/exercises/search?q=${encodeURIComponent(term)}`);
+  const params = new URLSearchParams();
+  params.set("q", term);
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const raw = await engineFetch<unknown>(`/v1/exercises/search?${params.toString()}`);
   return normalizeExerciseSearch(raw);
 }
 
-export async function fetchExerciseHistory(exerciseId: string): Promise<ExerciseHistoryResponse> {
-  const raw = await engineFetch<unknown>(`/v1/history/exercise/${encodeURIComponent(exerciseId)}`);
+export async function fetchExerciseHistory(exerciseId: string, bubbleUserId?: string): Promise<ExerciseHistoryResponse> {
+  const params = new URLSearchParams();
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const qs = params.toString();
+  const raw = await engineFetch<unknown>(`/v1/history/exercise/${encodeURIComponent(exerciseId)}${qs ? `?${qs}` : ""}`);
   return normalizeExerciseHistory(raw);
 }

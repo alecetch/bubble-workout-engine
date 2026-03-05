@@ -1,14 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
+import { useSegmentExerciseLogs, useSaveSegmentLogs } from "../../api/hooks";
+import type { SaveSegmentLogPayload } from "../../api/segmentLog";
 import { PressableScale } from "../interaction/PressableScale";
-import type { SegmentLogEntry } from "../../utils/localWorkoutLog";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -19,104 +21,242 @@ type Segment = ProgramDayFullResponse["segments"][number];
 type LogSegmentModalProps = {
   visible: boolean;
   segment: Segment | null;
-  initialLog: SegmentLogEntry | null;
+  programDayId: string;
+  programId: string;
+  bubbleUserId?: string;
   onClose: () => void;
-  onSave: (payload: { rounds: number; load?: number; notes?: string }) => void;
+  onSave: () => void;
 };
+
+type InputState = { weight: string; reps: string };
+
+function parseWeightPrefill(intensity: string | null | undefined): string {
+  const v = parseFloat((intensity ?? "").trim());
+  return Number.isFinite(v) && v > 0 ? String(v) : "";
+}
+
+function parseRepsPrefill(reps: string | null | undefined): string {
+  const raw = (reps ?? "").trim();
+  if (/^\d+$/.test(raw)) {
+    const v = parseInt(raw, 10);
+    return v >= 1 ? String(v) : "10";
+  }
+  // Allow whitespace around dash/en-dash, match anywhere in the string
+  const rangeMatch = raw.match(/(\d+)\s*[–\-]\s*(\d+)/);
+  if (rangeMatch) {
+    const lo = parseInt(rangeMatch[1], 10);
+    const hi = parseInt(rangeMatch[2], 10);
+    return String(Math.round((lo + hi) / 2));
+  }
+  return "10";
+}
 
 export function LogSegmentModal({
   visible,
   segment,
-  initialLog,
+  programDayId,
+  programId,
+  bubbleUserId,
   onClose,
   onSave,
 }: LogSegmentModalProps): React.JSX.Element {
-  const [rounds, setRounds] = useState(1);
-  const [loadInput, setLoadInput] = useState("");
-  const [notes, setNotes] = useState("");
+  const [inputMap, setInputMap] = useState<Record<string, InputState>>({});
 
+  const exercises = segment?.exercises ?? [];
+  const loadableExercises = exercises.filter((ex) => ex.isLoadable === true);
+
+  // exercise.id is program_exercise.id — the DB primary key for this exercise row
+  const existingLogsQuery = useSegmentExerciseLogs(
+    segment?.id ?? null,
+    programDayId,
+    { bubbleUserId },
+  );
+
+  const saveMutation = useSaveSegmentLogs();
+
+  // Build prefill map from plan defaults, then overlay existing DB logs
   useEffect(() => {
-    if (!visible) return;
-    setRounds(initialLog?.rounds ?? 1);
-    setLoadInput(initialLog?.load != null ? String(initialLog.load) : "");
-    setNotes(initialLog?.notes ?? "");
-  }, [initialLog?.load, initialLog?.notes, initialLog?.rounds, visible]);
+    if (!visible || !segment) return;
 
-  const showLoadInput = useMemo(() => {
-    if (!segment) return false;
-    return segment.exercises.some((exercise) => exercise.isLoadable === true);
-  }, [segment]);
+    const initial: Record<string, InputState> = {};
+
+    for (const ex of exercises) {
+      if (ex.isLoadable !== true) continue;
+      const key = ex.id ?? "";
+      initial[key] = {
+        weight: parseWeightPrefill(ex.intensity),
+        reps: parseRepsPrefill(ex.reps),
+      };
+    }
+
+    const existingRows = existingLogsQuery.data ?? [];
+    for (const row of existingRows) {
+      const key = row.programExerciseId;
+      if (!initial[key]) continue;
+      if (row.weightKg != null) initial[key].weight = String(row.weightKg);
+      if (row.repsCompleted != null) initial[key].reps = String(row.repsCompleted);
+    }
+
+    setInputMap(initial);
+  }, [visible, segment?.id, existingLogsQuery.data]);
 
   const handleSave = (): void => {
-    const parsedLoad = Number(loadInput);
-    onSave({
-      rounds: Math.max(1, rounds),
-      load: showLoadInput && Number.isFinite(parsedLoad) ? parsedLoad : undefined,
-      notes: notes.trim() ? notes.trim() : undefined,
+    if (!segment) return;
+
+    const rows = exercises.map((ex, index) => {
+      const isLoadable = ex.isLoadable === true;
+      const key = ex.id ?? "";
+      const inputs = inputMap[key] ?? { weight: "", reps: "" };
+      const wRaw = parseFloat(inputs.weight);
+      const rRaw = parseInt(inputs.reps, 10);
+      return {
+        programExerciseId: key,
+        orderIndex: index + 1,
+        weightKg: isLoadable && Number.isFinite(wRaw) && wRaw > 0 ? wRaw : null,
+        repsCompleted: isLoadable && Number.isInteger(rRaw) && rRaw > 0 ? rRaw : null,
+      };
+    });
+
+    const payload: SaveSegmentLogPayload = {
+      bubbleUserId,
+      programId,
+      programDayId,
+      workoutSegmentId: segment.id,
+      rows,
+    };
+
+    saveMutation.mutate(payload, {
+      onSuccess: () => {
+        onSave();
+        onClose();
+      },
+      onError: (err) => {
+        console.error("[LogSegmentModal] save failed", err);
+      },
     });
   };
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Log Segment</Text>
-          <Text style={styles.segmentName}>{segment?.segmentName ?? "Segment"}</Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
 
-          <Text style={styles.sectionLabel}>Planned</Text>
-          <View style={styles.plannedList}>
-            {segment?.exercises.map((exercise, index) => (
-              <Text key={exercise.id ?? `planned-${index}`} style={styles.plannedItem}>{`• ${exercise.name}`}</Text>
-            ))}
-          </View>
+            {/* Header */}
+            <Text style={styles.title}>Log Segment</Text>
+            <Text style={styles.segmentName}>{segment?.segmentName ?? "Segment"}</Text>
 
-          <Text style={styles.sectionLabel}>Rounds</Text>
-          <View style={styles.stepper}>
-            <PressableScale style={styles.stepperButton} onPress={() => setRounds((value) => Math.max(1, value - 1))}>
-              <Text style={styles.stepperButtonLabel}>-</Text>
-            </PressableScale>
-            <Text style={styles.stepperValue}>{rounds}</Text>
-            <PressableScale style={styles.stepperButton} onPress={() => setRounds((value) => value + 1)}>
-              <Text style={styles.stepperButtonLabel}>+</Text>
-            </PressableScale>
-          </View>
-
-          {showLoadInput ? (
-            <View style={styles.inputBlock}>
-              <Text style={styles.sectionLabel}>Load / Weight (optional)</Text>
-              <TextInput
-                value={loadInput}
-                onChangeText={setLoadInput}
-                keyboardType="numeric"
-                placeholder="e.g. 80"
-                placeholderTextColor={colors.textSecondary}
-                style={styles.input}
-              />
+            {/* PLANNED section */}
+            <Text style={styles.sectionLabel}>PLANNED</Text>
+            <View style={styles.plannedList}>
+              {exercises.map((ex, index) => {
+                const metaParts = [
+                  ex.sets != null ? `${ex.sets} sets` : null,
+                  ex.reps ? `× ${ex.reps}` : null,
+                  ex.intensity ? `• ${ex.intensity}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <View key={ex.id ?? `planned-${index}`} style={styles.plannedRow}>
+                    <Text style={styles.plannedName} numberOfLines={2} ellipsizeMode="tail">
+                      {ex.name}
+                    </Text>
+                    {metaParts ? (
+                      <Text style={styles.plannedMeta}>{metaParts}</Text>
+                    ) : null}
+                  </View>
+                );
+              })}
             </View>
-          ) : null}
 
-          <View style={styles.inputBlock}>
-            <Text style={styles.sectionLabel}>Notes</Text>
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={4}
-              placeholder="How did this segment feel?"
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.input, styles.notesInput]}
-            />
-          </View>
+            {/* Divider */}
+            <View style={styles.divider} />
 
-          <View style={styles.actions}>
-            <PressableScale style={styles.secondaryButton} onPress={onClose}>
-              <Text style={styles.secondaryLabel}>Cancel</Text>
-            </PressableScale>
-            <PressableScale style={styles.primaryButton} onPress={handleSave}>
-              <Text style={styles.primaryLabel}>Save</Text>
-            </PressableScale>
+            {/* ACTUAL section — only if loadable exercises exist */}
+            {loadableExercises.length > 0 ? (
+              <>
+                <Text style={styles.sectionLabel}>ACTUAL</Text>
+                {loadableExercises.map((ex) => {
+                  const key = ex.id ?? "";
+                  const inputs = inputMap[key] ?? { weight: "", reps: "" };
+                  return (
+                    <View key={key} style={styles.actualRow}>
+                      <Text style={styles.actualName} numberOfLines={2} ellipsizeMode="tail">
+                        {ex.name}
+                      </Text>
+                      <View style={styles.inputsRow}>
+                        <View style={styles.inputGroup}>
+                          <TextInput
+                            value={inputs.weight}
+                            onChangeText={(v) => {
+                              // Digits + at most one decimal point
+                              const sanitized = v
+                                .replace(/[^0-9.]/g, "")
+                                .replace(/^(\d*\.?\d*).*$/, "$1");
+                              setInputMap((m) => ({
+                                ...m,
+                                [key]: { ...(m[key] ?? { reps: "" }), weight: sanitized },
+                              }));
+                            }}
+                            keyboardType="decimal-pad"
+                            placeholder="kg"
+                            placeholderTextColor={colors.textSecondary}
+                            style={styles.input}
+                            accessibilityLabel={`${ex.name} weight in kg`}
+                          />
+                          <Text style={styles.inputUnit}>kg</Text>
+                        </View>
+                        <View style={styles.inputGroup}>
+                          <TextInput
+                            value={inputs.reps}
+                            onChangeText={(v) => {
+                              // Digits only
+                              const sanitized = v.replace(/[^0-9]/g, "");
+                              setInputMap((m) => ({
+                                ...m,
+                                [key]: { ...(m[key] ?? { weight: "" }), reps: sanitized },
+                              }));
+                            }}
+                            keyboardType="numeric"
+                            placeholder="reps"
+                            placeholderTextColor={colors.textSecondary}
+                            style={styles.input}
+                            accessibilityLabel={`${ex.name} reps completed`}
+                          />
+                          <Text style={styles.inputUnit}>reps</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            ) : null}
+
+            {/* Actions */}
+            {saveMutation.isError ? (
+              <Text style={styles.errorText}>Save failed. Please try again.</Text>
+            ) : null}
+            <View style={styles.actions}>
+              <PressableScale style={styles.secondaryButton} onPress={onClose}>
+                <Text style={styles.secondaryLabel}>Cancel</Text>
+              </PressableScale>
+              <PressableScale
+                style={[styles.primaryButton, saveMutation.isPending && styles.buttonDisabled]}
+                onPress={handleSave}
+                disabled={saveMutation.isPending}
+              >
+                <Text style={styles.primaryLabel}>
+                  {saveMutation.isPending ? "Saving…" : "Save"}
+                </Text>
+              </PressableScale>
+            </View>
+
           </View>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -127,7 +267,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.72)",
     justifyContent: "center",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
   },
   card: {
     borderRadius: radii.card,
@@ -150,41 +295,40 @@ const styles = StyleSheet.create({
     ...typography.label,
   },
   plannedList: {
+    gap: spacing.xs,
+  },
+  plannedRow: {
     gap: 2,
   },
-  plannedItem: {
-    color: colors.textPrimary,
-    ...typography.small,
-  },
-  stepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  stepperButton: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperButtonLabel: {
+  plannedName: {
     color: colors.textPrimary,
     ...typography.body,
-    fontWeight: "700",
-  },
-  stepperValue: {
-    color: colors.textPrimary,
-    ...typography.body,
-    minWidth: 22,
-    textAlign: "center",
     fontWeight: "600",
   },
-  inputBlock: {
+  plannedMeta: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.xs,
+  },
+  actualRow: {
     gap: spacing.xs,
+  },
+  actualName: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "600",
+  },
+  inputsRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  inputGroup: {
+    flex: 1,
+    gap: 2,
   },
   input: {
     minHeight: 44,
@@ -196,11 +340,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     ...typography.body,
   },
-  notesInput: {
-    minHeight: 96,
-    borderRadius: radii.card,
-    paddingTop: spacing.sm,
-    textAlignVertical: "top",
+  inputUnit: {
+    color: colors.textSecondary,
+    ...typography.label,
   },
   actions: {
     flexDirection: "row",
@@ -234,5 +376,13 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "700",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  errorText: {
+    color: colors.error ?? "#ef4444",
+    ...typography.small,
+    textAlign: "center",
   },
 });

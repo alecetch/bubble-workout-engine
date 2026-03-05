@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
+import { resolveBubbleUser } from "../middleware/resolveUser.js";
 
 const SQL_EXERCISE_SERIES = `
 SELECT
@@ -153,5 +154,6 @@ export const historyExerciseRouter = express.Router();
 historyExerciseRouter.get(
   "/v1/history/exercise/:exerciseId",
   requireInternalToken,
+  resolveBubbleUser,
   createHistoryExerciseHandler(pool),
 );

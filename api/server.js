@@ -11,6 +11,7 @@ import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstra
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramRouter } from "./src/routes/generateProgram.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
+import { segmentLogRouter } from "./src/routes/segmentLog.js";
 import { historyProgramsRouter } from "./src/routes/historyPrograms.js";
 import { historyTimelineRouter } from "./src/routes/historyTimeline.js";
 import { historyOverviewRouter } from "./src/routes/historyOverview.js";
@@ -366,6 +367,7 @@ app.patch("/users/me", (req, res) => {
 
 // Mount routers.
 app.use("/api", importEmitterRouter);
+app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
 app.use("/api", userBootstrapRouter);
 app.use("/api", clientProfileBootstrapRouter);

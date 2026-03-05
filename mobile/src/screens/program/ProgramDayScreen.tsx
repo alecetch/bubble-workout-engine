@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useProgramDayFull } from "../../api/hooks";
+import { useProgramDayFull, useMarkDayComplete } from "../../api/hooks";
 import { HeroHeader } from "../../components/program/HeroHeader";
 import { LogSegmentModal } from "../../components/program/LogSegmentModal";
 import { SegmentCard } from "../../components/program/SegmentCard";
@@ -35,8 +35,10 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
   const bubbleUserId = sessionUserId ?? onboardingUserId ?? undefined;
+  const programId = useSessionStore((state) => state.activeProgramId) ?? "";
 
   const dayQuery = useProgramDayFull(programDayId, { bubbleUserId });
+  const markDayComplete = useMarkDayComplete();
   const [segmentLogs, setSegmentLogs] = useState<Record<string, SegmentLogEntry>>({});
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
@@ -98,22 +100,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     [activeSegmentId, orderedSegments],
   );
 
-  const handleSaveLog = async (payload: {
-    rounds: number;
-    load?: number;
-    notes?: string;
-  }): Promise<void> => {
-    if (!activeSegment) return;
-    const saved = await setSegmentLog(programDayId, activeSegment.id, payload);
-    setSegmentLogs((current) => ({ ...current, [activeSegment.id]: saved }));
-    setActiveSegmentId(null);
-    await hapticLight();
-  };
-
   const handleCompleteWorkout = async (): Promise<void> => {
     await setWorkoutComplete(programDayId, true);
     setWorkoutCompleteState(true);
     setConfirmationText("Workout marked complete.");
+    markDayComplete.mutate({ programDayId, isCompleted: true, bubbleUserId });
     await hapticMedium();
   };
 
@@ -121,6 +112,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     await setWorkoutComplete(programDayId, false);
     setWorkoutCompleteState(false);
     setConfirmationText("Workout completion cleared.");
+    markDayComplete.mutate({ programDayId, isCompleted: false, bubbleUserId });
   };
 
   if (dayQuery.isLoading) {
@@ -192,10 +184,19 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       <LogSegmentModal
         visible={Boolean(activeSegment)}
         segment={activeSegment}
-        initialLog={activeSegment ? segmentLogs[activeSegment.id] ?? null : null}
+        programDayId={programDayId}
+        programId={programId}
+        bubbleUserId={bubbleUserId}
         onClose={() => setActiveSegmentId(null)}
-        onSave={(payload) => {
-          void handleSaveLog(payload);
+        onSave={() => {
+          if (activeSegment) {
+            const entry: SegmentLogEntry = { updatedAt: new Date().toISOString() };
+            setSegmentLogs((current) => ({ ...current, [activeSegment.id]: entry }));
+            // Write to AsyncStorage so the isLogged badge persists after app restart.
+            void setSegmentLog(programDayId, activeSegment.id, {});
+          }
+          setActiveSegmentId(null);
+          void hapticLight();
         }}
       />
     </View>

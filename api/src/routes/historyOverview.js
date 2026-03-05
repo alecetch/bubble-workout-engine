@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
+import { resolveBubbleUser } from "../middleware/resolveUser.js";
 
 const SQL_HISTORY_OVERVIEW = `
 WITH user_program_days AS (
@@ -312,6 +313,7 @@ export const historyOverviewRouter = express.Router();
 historyOverviewRouter.get(
   "/v1/history/overview",
   requireInternalToken,
+  resolveBubbleUser,
   createHistoryOverviewHandler(pool),
 );
 

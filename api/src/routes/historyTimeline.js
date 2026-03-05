@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
+import { resolveBubbleUser } from "../middleware/resolveUser.js";
 
 const SQL_HISTORY_TIMELINE = `
 SELECT
@@ -183,6 +184,7 @@ export const historyTimelineRouter = express.Router();
 historyTimelineRouter.get(
   "/v1/history/timeline",
   requireInternalToken,
+  resolveBubbleUser,
   createHistoryTimelineHandler(pool),
 );
 

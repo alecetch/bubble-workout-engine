@@ -1,0 +1,72 @@
+import { apiFetch } from "./client";
+
+export type SegmentLogRow = {
+  id?: string;
+  programExerciseId: string;
+  weightKg: number | null;
+  repsCompleted: number | null;
+  orderIndex: number;
+};
+
+export type SaveSegmentLogPayload = {
+  bubbleUserId?: string;
+  programId: string;
+  programDayId: string;
+  workoutSegmentId: string;
+  rows: Array<{
+    programExerciseId: string;
+    orderIndex: number;
+    weightKg: number | null;
+    repsCompleted: number | null;
+  }>;
+};
+
+export async function getSegmentExerciseLogs(params: {
+  bubbleUserId?: string;
+  workoutSegmentId: string;
+  programDayId: string;
+}): Promise<SegmentLogRow[]> {
+  try {
+    const query = new URLSearchParams();
+    if (params.bubbleUserId) query.set("bubble_user_id", params.bubbleUserId);
+    query.set("workout_segment_id", params.workoutSegmentId);
+    query.set("program_day_id", params.programDayId);
+
+    const response = await apiFetch<{ rows: unknown[] }>(`/api/segment-log?${query.toString()}`);
+    const rows = Array.isArray(response?.rows) ? response.rows : [];
+
+    return rows.map((raw) => {
+      const row = raw as Record<string, unknown>;
+      return {
+        id: row.id != null ? String(row.id) : undefined,
+        programExerciseId: String(row.program_exercise_id ?? ""),
+        weightKg: row.weight_kg != null ? Number(row.weight_kg) : null,
+        repsCompleted: row.reps_completed != null ? Number(row.reps_completed) : null,
+        orderIndex: Number(row.order_index ?? 0),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function saveSegmentExerciseLogs(
+  payload: SaveSegmentLogPayload,
+): Promise<void> {
+  await apiFetch<unknown>("/api/segment-log", {
+    method: "POST",
+    body: {
+      bubble_user_id: payload.bubbleUserId,
+      program_id: payload.programId,
+      program_day_id: payload.programDayId,
+      workout_segment_id: payload.workoutSegmentId,
+      rows: payload.rows.map((r) => ({
+        program_exercise_id: r.programExerciseId,
+        order_index: r.orderIndex,
+        weight_kg: r.weightKg,
+        reps_completed: r.repsCompleted,
+      })),
+    },
+  });
+}
+

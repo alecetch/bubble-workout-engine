@@ -21,11 +21,18 @@ import { getMe, linkClientProfileToMe, type MeResponse } from "./me";
 import {
   getProgramDayFull,
   getProgramOverview,
+  markProgramDayComplete,
   type ProgramDayFullResponse,
   type ProgramOverviewOptions,
   type ProgramOverviewResponse,
   type ViewerIdentityOptions,
 } from "./programViewer";
+import {
+  getSegmentExerciseLogs,
+  saveSegmentExerciseLogs,
+  type SegmentLogRow,
+  type SaveSegmentLogPayload,
+} from "./segmentLog";
 import { getReferenceData, type ReferenceDataResponse } from "./referenceData";
 import {
   fetchExerciseHistory,
@@ -64,6 +71,8 @@ export const queryKeys = {
   historyPersonalRecords: ["historyPersonalRecords"] as const,
   exerciseSearch: (q: string) => ["exerciseSearch", q] as const,
   exerciseHistory: (exerciseId: string) => ["exerciseHistory", exerciseId] as const,
+  segmentExerciseLogs: (workoutSegmentId: string, programDayId: string) =>
+    ["segmentExerciseLogs", workoutSegmentId, programDayId] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -184,62 +193,119 @@ export function useProgramDayFull(
 
 const HISTORY_STALE_MS = 5 * 60 * 1000; // 5 minutes — history changes only after workout completion
 
-export function useHistoryOverview(): UseQueryResult<HistoryOverviewResponse> {
+export function useHistoryOverview(bubbleUserId?: string): UseQueryResult<HistoryOverviewResponse> {
   return useQuery({
-    queryKey: queryKeys.historyOverview,
-    queryFn: getHistoryOverview,
+    queryKey: [...queryKeys.historyOverview, bubbleUserId ?? null],
+    queryFn: () => getHistoryOverview(bubbleUserId),
+    enabled: Boolean(bubbleUserId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useHistoryPrograms(limit = 10): UseQueryResult<HistoryProgramItem[]> {
+export function useHistoryPrograms(limit = 10, bubbleUserId?: string): UseQueryResult<HistoryProgramItem[]> {
   return useQuery({
-    queryKey: queryKeys.historyPrograms,
-    queryFn: () => getHistoryPrograms(limit),
+    queryKey: [...queryKeys.historyPrograms, bubbleUserId ?? null],
+    queryFn: () => getHistoryPrograms(limit, bubbleUserId),
+    enabled: Boolean(bubbleUserId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
 export function useHistoryTimeline(
   limit = 40,
+  bubbleUserId?: string,
 ): UseInfiniteQueryResult<InfiniteData<HistoryTimelineResponse, HistoryTimelineCursor | null>, Error> {
   return useInfiniteQuery({
-    queryKey: queryKeys.historyTimeline,
+    queryKey: [...queryKeys.historyTimeline, bubbleUserId ?? null],
     initialPageParam: null as HistoryTimelineCursor | null,
     queryFn: ({ pageParam }) =>
       getHistoryTimeline({
         limit,
         cursorDate: pageParam?.cursorDate ?? null,
         cursorId: pageParam?.cursorId ?? null,
+        bubbleUserId,
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? null,
+    enabled: Boolean(bubbleUserId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useHistoryPersonalRecords(limit = 20): UseQueryResult<HistoryPersonalRecordItem[]> {
+export function useHistoryPersonalRecords(limit = 20, bubbleUserId?: string): UseQueryResult<HistoryPersonalRecordItem[]> {
   return useQuery({
-    queryKey: queryKeys.historyPersonalRecords,
-    queryFn: () => getHistoryPersonalRecords(limit),
+    queryKey: [...queryKeys.historyPersonalRecords, bubbleUserId ?? null],
+    queryFn: () => getHistoryPersonalRecords(limit, bubbleUserId),
+    enabled: Boolean(bubbleUserId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useExerciseSearch(q: string): UseQueryResult<ExerciseSearchItem[]> {
+export function useExerciseSearch(q: string, bubbleUserId?: string): UseQueryResult<ExerciseSearchItem[]> {
   const term = q.trim();
   return useQuery({
-    queryKey: queryKeys.exerciseSearch(term),
-    queryFn: () => searchExercises(term),
+    queryKey: [...queryKeys.exerciseSearch(term), bubbleUserId ?? null],
+    queryFn: () => searchExercises(term, bubbleUserId),
     enabled: term.length >= 2,
-    staleTime: 30 * 1000, // 30 seconds — search results can change as catalogue grows
+    staleTime: 30 * 1000,
   });
 }
 
-export function useExerciseHistory(exerciseId: string | null): UseQueryResult<ExerciseHistoryResponse> {
+export function useExerciseHistory(exerciseId: string | null, bubbleUserId?: string): UseQueryResult<ExerciseHistoryResponse> {
   return useQuery({
-    queryKey: queryKeys.exerciseHistory(exerciseId ?? ""),
-    queryFn: () => fetchExerciseHistory(exerciseId as string),
+    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), bubbleUserId ?? null],
+    queryFn: () => fetchExerciseHistory(exerciseId as string, bubbleUserId),
     enabled: Boolean(exerciseId),
     staleTime: HISTORY_STALE_MS,
+  });
+}
+
+export function useMarkDayComplete(): UseMutationResult<
+  void,
+  Error,
+  { programDayId: string; isCompleted: boolean; bubbleUserId?: string }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ programDayId, isCompleted, bubbleUserId }) =>
+      markProgramDayComplete(programDayId, isCompleted, { bubbleUserId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.historyOverview });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.historyPrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.historyPersonalRecords });
+    },
+  });
+}
+
+export function useSegmentExerciseLogs(
+  workoutSegmentId: string | null | undefined,
+  programDayId: string,
+  opts: { bubbleUserId?: string },
+): UseQueryResult<SegmentLogRow[]> {
+  return useQuery({
+    queryKey: queryKeys.segmentExerciseLogs(workoutSegmentId ?? "", programDayId),
+    queryFn: () =>
+      getSegmentExerciseLogs({
+        bubbleUserId: opts.bubbleUserId,
+        workoutSegmentId: workoutSegmentId as string,
+        programDayId,
+      }),
+    enabled: Boolean(workoutSegmentId && programDayId),
+    staleTime: 0,
+  });
+}
+
+export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegmentLogPayload> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: saveSegmentExerciseLogs,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.segmentExerciseLogs(
+          variables.workoutSegmentId,
+          variables.programDayId,
+        ),
+      });
+    },
   });
 }

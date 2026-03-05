@@ -25,6 +25,8 @@ import {
 } from "../../api/hooks";
 import type { ExerciseSearchItem, HistoryTimelineItem } from "../../api/history";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
+import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -149,10 +151,14 @@ function ExerciseResultRow({
 
 export function HistoryScreen(): React.JSX.Element {
   const queryClient = useQueryClient();
-  const overviewQuery = useHistoryOverview();
-  const programsQuery = useHistoryPrograms(10);
-  const personalRecordsQuery = useHistoryPersonalRecords(20);
-  const timelineQuery = useHistoryTimeline(40);
+  const onboardingUserId = useOnboardingStore((state) => state.userId);
+  const sessionUserId = useSessionStore((state) => state.userId);
+  const bubbleUserId = sessionUserId ?? onboardingUserId ?? undefined;
+
+  const overviewQuery = useHistoryOverview(bubbleUserId);
+  const programsQuery = useHistoryPrograms(10, bubbleUserId);
+  const personalRecordsQuery = useHistoryPersonalRecords(20, bubbleUserId);
+  const timelineQuery = useHistoryTimeline(40, bubbleUserId);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
@@ -165,8 +171,8 @@ export function HistoryScreen(): React.JSX.Element {
     return () => clearTimeout(timeout);
   }, [searchTerm]);
 
-  const exerciseSearchQuery = useExerciseSearch(debouncedSearchTerm);
-  const exerciseHistoryQuery = useExerciseHistory(selectedExercise?.exerciseId ?? null);
+  const exerciseSearchQuery = useExerciseSearch(debouncedSearchTerm, bubbleUserId);
+  const exerciseHistoryQuery = useExerciseHistory(selectedExercise?.exerciseId ?? null, bubbleUserId);
 
   const overview = overviewQuery.data;
   const programs = programsQuery.data ?? [];

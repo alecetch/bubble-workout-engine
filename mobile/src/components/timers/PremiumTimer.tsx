@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../interaction/PressableScale";
 import { RingTimer } from "./RingTimer";
 import { useSegmentTimer } from "./useSegmentTimer";
@@ -12,11 +13,14 @@ export type PremiumTimerProps = {
   initialDurationSeconds?: number | null;
   suggestedRestSeconds?: number | null;
   segmentId?: string;
+  compact?: boolean;
 };
 
 const RING_SIZE = 200;
 const STROKE_WIDTH = 8;
 const TRACK_COLOR = "rgba(148, 163, 184, 0.12)";
+const COMPACT_RING_SIZE = 96;
+const COMPACT_STROKE_WIDTH = 6;
 
 function formatTimer(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -27,12 +31,17 @@ export function PremiumTimer({
   initialDurationSeconds = null,
   suggestedRestSeconds = null,
   segmentId,
+  compact = false,
 }: PremiumTimerProps): React.JSX.Element {
+  const [resetHighlighted, setResetHighlighted] = useState(false);
+  const resetHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resolvedSegmentId = segmentId ?? "__transient__";
   const restTotal = suggestedRestSeconds != null && suggestedRestSeconds > 0
     ? suggestedRestSeconds
     : 60;
   const hasRestProp = suggestedRestSeconds != null && suggestedRestSeconds > 0;
+  const ringSize = compact ? COMPACT_RING_SIZE : RING_SIZE;
+  const strokeWidth = compact ? COMPACT_STROKE_WIDTH : STROKE_WIDTH;
 
   const {
     activeMode,
@@ -53,7 +62,6 @@ export function PremiumTimer({
     restTotal,
   });
 
-  const startPauseLabel = isRunning ? "Pause" : (segmentFinished && activeMode === "segment" ? "Done" : "Start");
   const modeBadgeLabel = activeMode === "segment"
     ? (initialDurationSeconds == null ? "STOPWATCH" : "SEGMENT")
     : "REST";
@@ -64,12 +72,31 @@ export function PremiumTimer({
 
   const modeChipDisabled = !hasRestProp || !hasRest || (activeMode === "segment" && !canSwitchToRest);
 
+  useEffect(() => {
+    return () => {
+      if (resetHighlightTimeoutRef.current) {
+        clearTimeout(resetHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleResetPress = (): void => {
+    onReset();
+    setResetHighlighted(true);
+    if (resetHighlightTimeoutRef.current) {
+      clearTimeout(resetHighlightTimeoutRef.current);
+    }
+    resetHighlightTimeoutRef.current = setTimeout(() => {
+      setResetHighlighted(false);
+    }, 1000);
+  };
+
   return (
-    <View style={styles.card}>
-      <View style={styles.ringContainer}>
+    <View style={[styles.card, compact && styles.cardCompact]}>
+      <View style={compact ? styles.ringContainerCompact : styles.ringContainer}>
         <RingTimer
-          size={RING_SIZE}
-          strokeWidth={STROKE_WIDTH}
+          size={ringSize}
+          strokeWidth={strokeWidth}
           progress={progress}
           trackColor={TRACK_COLOR}
           progressColor={ringColor}
@@ -85,32 +112,34 @@ export function PremiumTimer({
                   styles.modeChip,
                   activeMode === "rest" && styles.modeChipRest,
                   modeChipDisabled && styles.modeChipDisabled,
+                  compact && styles.modeChipCompact,
                 ]}
               >
-                <Text style={styles.modeChipLabel}>{modeChipLabel}</Text>
+                <Text style={[styles.modeChipLabel, compact && styles.modeChipLabelCompact]}>{modeChipLabel}</Text>
               </PressableScale>
             ) : (
-              <View style={styles.modeChipSpacer} />
+              <View style={[styles.modeChipSpacer, compact && styles.modeChipSpacerCompact]} />
             )}
 
-            <Text style={styles.timeDisplay} accessibilityLabel={`${modeBadgeLabel} ${formatTimer(displaySeconds)} remaining`}>
+            <Text style={[styles.timeDisplay, compact && styles.timeDisplayCompact]} accessibilityLabel={`${modeBadgeLabel} ${formatTimer(displaySeconds)} remaining`}>
               {formatTimer(displaySeconds)}
             </Text>
 
             {stateHint ? (
               <Text style={styles.stateHint}>{stateHint}</Text>
             ) : (
-              <View style={styles.modeChipSpacer} />
+              <View style={[styles.modeChipSpacer, compact && styles.modeChipSpacerCompact]} />
             )}
           </View>
         </RingTimer>
       </View>
 
-      <View style={styles.controlsRow}>
+      <View style={[styles.controlsRow, compact && styles.controlsRowCompact]}>
         <PressableScale
           style={[
             styles.button,
             styles.buttonPrimary,
+            compact && styles.buttonCompact,
             (segmentFinished && activeMode === "segment" && !hasRestProp) && styles.buttonDisabled,
           ]}
           onPress={onStartPause}
@@ -119,15 +148,28 @@ export function PremiumTimer({
             ? (activeMode === "segment" ? "Pause segment timer" : "Pause rest timer")
             : (activeMode === "segment" ? "Start segment timer" : "Start rest timer")}
         >
-          <Text style={styles.buttonLabel}>{startPauseLabel}</Text>
+          <Ionicons
+            name={isRunning ? "pause" : "play"}
+            size={compact ? 20 : 26}
+            color={colors.textPrimary}
+          />
         </PressableScale>
 
         <PressableScale
-          style={[styles.button, styles.buttonSecondary]}
-          onPress={onReset}
+          style={[
+            styles.button,
+            styles.buttonSecondary,
+            compact && styles.buttonCompact,
+            resetHighlighted && styles.resetButtonHighlighted,
+          ]}
+          onPress={handleResetPress}
           accessibilityLabel={activeMode === "segment" ? "Reset segment timer" : "Reset rest timer"}
         >
-          <Text style={styles.buttonLabel}>Reset</Text>
+          <Ionicons
+            name="refresh-outline"
+            size={compact ? 16 : 22}
+            color={colors.textSecondary}
+          />
         </PressableScale>
       </View>
     </View>
@@ -193,13 +235,13 @@ const styles = StyleSheet.create({
   },
   controlsRow: {
     flexDirection: "row",
-    gap: spacing.sm,
-    width: "100%",
+    justifyContent: "center",
+    gap: spacing.md,
   },
   button: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: radii.pill,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -211,12 +253,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  resetButtonHighlighted: {
+    borderColor: colors.accent,
+    borderWidth: 2,
+  },
   buttonDisabled: {
     opacity: 0.4,
   },
-  buttonLabel: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontWeight: "600",
+  cardCompact: {
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    padding: 0,
+    gap: spacing.xs,
+  },
+  ringContainerCompact: {
+    width: COMPACT_RING_SIZE,
+    height: COMPACT_RING_SIZE,
+  },
+  modeChipCompact: {
+    minHeight: 20,
+    paddingHorizontal: spacing.xs,
+  },
+  modeChipLabelCompact: {
+    fontSize: 10,
+  },
+  modeChipSpacerCompact: {
+    height: 20,
+  },
+  timeDisplayCompact: {
+    fontSize: 22,
+  },
+  controlsRowCompact: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  buttonCompact: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
 });

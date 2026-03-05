@@ -251,13 +251,13 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
       const rawExercises = asArray(rawSegment.items ?? rawSegment.exercises);
 
       return {
-        id: asString(rawSegment.id) ?? `segment-${segmentIndex + 1}`,
+        id: asString(rawSegment.workout_segment_id ?? rawSegment.id) ?? `segment-${segmentIndex + 1}`,
         segmentType: asNullableString(rawSegment.segment_type ?? rawSegment.segmentType),
         segmentName:
           asString(rawSegment.segment_title ?? rawSegment.segment_name ?? rawSegment.segmentName) ??
           `Segment ${segmentIndex + 1}`,
         orderInDay:
-          asNumber(rawSegment.order_in_day ?? rawSegment.orderInDay) ?? segmentIndex + 1,
+          asNumber(rawSegment.order_in_day ?? rawSegment.orderInDay ?? rawSegment.block_order) ?? segmentIndex + 1,
         rounds: asNullableNumber(rawSegment.rounds),
         segmentDurationSeconds: asNullableNumber(
           rawSegment.segment_duration_seconds ?? rawSegment.segmentDurationSeconds,
@@ -270,7 +270,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
           const rawExercise = asObject(exercise);
 
           return {
-            id: asString(rawExercise.id),
+            id: asString(rawExercise.program_exercise_id ?? rawExercise.id),
             name:
               asString(rawExercise.name) ??
               asString(rawExercise.exercise_name ?? rawExercise.exerciseName) ??
@@ -310,6 +310,21 @@ export async function getProgramOverview(
   const path = `/api/program/${encodeURIComponent(programId)}/overview${queryString ? `?${queryString}` : ""}`;
   const response = await apiFetch<unknown>(path);
   return normalizeProgramOverview(response);
+}
+
+export async function markProgramDayComplete(
+  programDayId: string,
+  isCompleted: boolean,
+  opts: ViewerIdentityOptions,
+): Promise<void> {
+  await apiFetch<unknown>(`/api/day/${encodeURIComponent(programDayId)}/complete`, {
+    method: "PATCH",
+    body: {
+      is_completed: isCompleted,
+      ...(opts.bubbleUserId ? { bubble_user_id: opts.bubbleUserId } : {}),
+      ...(opts.userId ? { user_id: opts.userId } : {}),
+    },
+  });
 }
 
 export async function getProgramDayFull(

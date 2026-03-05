@@ -387,7 +387,8 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
           intensity_prescription,
           tempo,
           rest_seconds,
-          notes
+          notes,
+          is_loadable
         FROM program_exercise
         WHERE program_day_id = $1
         ORDER BY order_in_day
@@ -439,6 +440,50 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
         day,
         segments,
       });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    const mapped = mapError(err);
+    return res.status(mapped.status).json({
+      ok: false,
+      request_id,
+      code: mapped.code,
+      error: mapped.message,
+      details: mapped.details,
+    });
+  }
+});
+
+// ---- PATCH /api/day/:program_day_id/complete ----
+// Marks (or unmarks) a program day as completed.
+readProgramRouter.patch("/day/:program_day_id/complete", async (req, res) => {
+  const { request_id } = req;
+  const program_day_id = s(req.params.program_day_id);
+  const is_completed = req.body?.is_completed !== false; // default true
+
+  try {
+    if (!isUuid(program_day_id)) throw new ValidationError("Invalid program_day_id");
+
+    const client = await pool.connect();
+    try {
+      // Accept identity from body (PATCH) or query (fallback).
+      const user_id = await resolveUserId(client, { ...req.query, ...req.body });
+
+      const r = await client.query(
+        `UPDATE program_day pd
+         SET is_completed = $3
+         FROM program p
+         WHERE pd.id = $1
+           AND p.id = pd.program_id
+           AND p.user_id = $2
+         RETURNING pd.id`,
+        [program_day_id, user_id, Boolean(is_completed)],
+      );
+
+      if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
+
+      return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
     } finally {
       client.release();
     }
