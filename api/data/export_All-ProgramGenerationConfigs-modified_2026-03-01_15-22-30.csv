@@ -1,0 +1,66 @@
+"config_key","is_active","notes","program_generation_config_json","program_type","progression_by_rank_json","schema_version","total_weeks_default","week_phase_config_json","Creation Date","Modified Date","Slug","Creator","unique id"
+"hypertrophy_default_v1","yes","Initial deterministic hypertrophy config v1","{
+  ""config_key"": ""hypertrophy_default_v1"",
+  ""program_type"": ""hypertrophy"",
+  ""schema_version"": 1,
+  ""is_active"": ""yes"",
+  ""total_weeks_default"": 4,
+  ""progression_by_rank_json"": {
+    ""beginner"": {
+      ""weekly_set_step"": 0,
+      ""max_extra_sets"": 0
+    },
+    ""intermediate"": {
+      ""weekly_set_step"": 1,
+      ""max_extra_sets"": 2
+    },
+    ""advanced"": {
+      ""weekly_set_step"": 1,
+      ""max_extra_sets"": 3
+    },
+    ""elite"": {
+      ""weekly_set_step"": 1,
+      ""max_extra_sets"": 4
+    }
+  },
+  ""week_phase_config_json"": {
+    ""engine_version"": ""1.0"",
+    ""last_week_mode"": ""consolidate"",
+    ""default_phase_sequence"": [""BASELINE"", ""BUILD"", ""BUILD"", ""CONSOLIDATE""],
+    ""phase_labels"": {
+      ""BASELINE"": ""Baseline"",
+      ""BUILD"": ""Build"",
+      ""PEAK"": ""Peak Volume"",
+      ""CONSOLIDATE"": ""Consolidation"",
+      ""DELOAD"": ""Deload"",
+      ""REPEAT"": ""Repeat""
+    },
+    ""copy"": {
+      ""BASELINE"": {
+        ""focus"": ""Establish baseline loads"",
+        ""notes"": ""Choose repeatable loads. Stay ~2 RIR and keep tempo consistent.""
+      },
+      ""BUILD"": {
+        ""focus"": ""Progressive overload"",
+        ""notes"": ""Add sets as prescribed. Keep technique stable.""
+      },
+      ""PEAK"": {
+        ""focus"": ""Highest workload week"",
+        ""notes"": ""Manage fatigue. Avoid grinders.""
+      },
+      ""CONSOLIDATE"": {
+        ""focus"": ""Consolidate gains"",
+        ""notes"": ""Slight reduction in workload. Maintain intensity.""
+      },
+      ""DELOAD"": {
+        ""focus"": ""Recovery emphasis"",
+        ""notes"": ""Reduce volume significantly. Move well.""
+      },
+      ""REPEAT"": {
+        ""focus"": ""Refine execution"",
+        ""notes"": ""Repeat structure. Add reps before load.""
+      }
+    }
+  },
+  ""notes"": ""Initial deterministic hypertrophy config v1""
+}","hypertrophy","{""beginner"": {""weekly_set_step"": 1, ""max_extra_sets"": 1}, ""intermediate"": {""weekly_set_step"": 1, ""max_extra_sets"": 2}, ""advanced"": {""weekly_set_step"": 1, ""max_extra_sets"": 3}, ""elite"": {""weekly_set_step"": 1, ""max_extra_sets"": 4}}","1","4","{""engine_version"": ""1.0"", ""last_week_mode"": ""consolidate"", ""default_phase_sequence"": [""BASELINE"", ""BUILD"", ""BUILD"", ""CONSOLIDATE""], ""phase_labels"": {""BASELINE"": ""Baseline"", ""BUILD"": ""Build"", ""PEAK"": ""Peak Volume"", ""CONSOLIDATE"": ""Consolidation"", ""DELOAD"": ""Deload"", ""REPEAT"": ""Repeat""}, ""copy"": {""BASELINE"": {""focus"": ""Establish baseline loads"", ""notes"": ""Choose repeatable loads. Stay ~2 RIR and keep tempo consistent.""}, ""BUILD"": {""focus"": ""Progressive overload"", ""notes"": ""Add sets as prescribed. Keep technique stable.""}, ""PEAK"": {""focus"": ""Highest workload week"", ""notes"": ""Manage fatigue. Avoid grinders.""}, ""CONSOLIDATE"": {""focus"": ""Consolidate gains"", ""notes"": ""Slight reduction in workload. Maintain intensity.""}, ""DELOAD"": {""focus"": ""Recovery emphasis"", ""notes"": ""Reduce volume significantly. Move well.""}, ""REPEAT"": {""focus"": ""Refine execution"", ""notes"": ""Repeat structure. Add reps before load.""}}}","Feb 18, 2026 8:09 am","Feb 22, 2026 3:35 pm","","(App admin)","1771402183219x958261747454302700"

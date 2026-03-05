@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express from "express";
+import { fileURLToPath } from "url";
+import { join, dirname } from "path";
 import { fetchInputs } from "./bubbleClient.js";
 import { runPipeline } from "./engine/runPipeline.js";
 import { importEmitterRouter } from "./src/routes/importEmitter.js";
@@ -8,8 +10,18 @@ import { userBootstrapRouter } from "./src/routes/userBootstrap.js";
 import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstrap.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramRouter } from "./src/routes/generateProgram.js";
+import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
+import { segmentLogRouter } from "./src/routes/segmentLog.js";
+import { historyProgramsRouter } from "./src/routes/historyPrograms.js";
+import { historyTimelineRouter } from "./src/routes/historyTimeline.js";
+import { historyOverviewRouter } from "./src/routes/historyOverview.js";
+import { historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
+import { historyExerciseRouter } from "./src/routes/historyExercise.js";
+import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const DEV_USER_ID = "dev-user-1";
@@ -17,6 +29,7 @@ const DEV_USER_ID = "dev-user-1";
 // TODO: Dev-only in-memory store. Replace with Postgres-backed persistence.
 const profilesById = new Map();
 const userToProfileId = new Map();
+app.locals.profilesById = profilesById;
 
 const profilePatchKeys = [
   "goals",
@@ -133,6 +146,9 @@ const devReferenceData = {
 // Assign/echo request_id before any other middleware or route handler.
 app.use(requestId);
 
+// Serve local media assets (dev only — in prod these are served from S3).
+app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
+
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
   express.json({
@@ -172,6 +188,78 @@ app.get("/health", async (req, res) => {
 
 app.get("/reference-data", (req, res) => {
   return res.status(200).json(devReferenceData);
+});
+
+// Verify:
+// curl "http://localhost:3000/media-assets?usage_scope=program_day"
+app.get("/media-assets", async (req, res) => {
+  const usageScope = typeof req.query.usage_scope === "string" ? req.query.usage_scope.trim() : "";
+  const dayType = typeof req.query.day_type === "string" ? req.query.day_type.trim() : "";
+  const focusType = typeof req.query.focus_type === "string" ? req.query.focus_type.trim() : "";
+  const activeRaw = typeof req.query.active === "string" ? req.query.active.trim().toLowerCase() : "";
+  const includeInactive = activeRaw === "false";
+
+  const where = [];
+  const params = [];
+
+  if (!includeInactive) {
+    params.push(true);
+    where.push(`is_active = $${params.length}`);
+  }
+
+  if (usageScope) {
+    params.push(usageScope);
+    where.push(`usage_scope = $${params.length}`);
+  }
+
+  if (dayType) {
+    params.push(dayType);
+    where.push(`day_type = $${params.length}`);
+  }
+
+  if (focusType) {
+    params.push(focusType);
+    where.push(`focus_type = $${params.length}`);
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const sql = `
+    SELECT
+      id,
+      usage_scope,
+      day_type,
+      focus_type,
+      label,
+      sort_order,
+      is_active,
+      image_key,
+      image_url
+    FROM public.media_assets
+    ${whereClause}
+    ORDER BY sort_order NULLS LAST, label ASC, id ASC
+  `;
+
+  try {
+    const result = await pool.query(sql, params);
+    return res.status(200).json({
+      items: (result.rows ?? []).map((row) => ({
+        id: row.id,
+        usageScope: row.usage_scope,
+        dayType: row.day_type,
+        focusType: row.focus_type,
+        label: row.label,
+        sortOrder: row.sort_order,
+        isActive: row.is_active,
+        imageKey: row.image_key,
+        imageUrl: typeof row.image_url === "string" && row.image_url.trim()
+          ? row.image_url
+          : buildPublicUrl(row.image_key),
+      })),
+    });
+  } catch (err) {
+    console.error("media-assets error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // Verify:
@@ -279,11 +367,18 @@ app.patch("/users/me", (req, res) => {
 
 // Mount routers.
 app.use("/api", importEmitterRouter);
+app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
 app.use("/api", userBootstrapRouter);
 app.use("/api", clientProfileBootstrapRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", generateProgramRouter);
+app.use(historyProgramsRouter);
+app.use(historyTimelineRouter);
+app.use(historyOverviewRouter);
+app.use(historyPersonalRecordsRouter);
+app.use(historyExerciseRouter);
+app.use(generateProgramV2Router);
 
 // Generate plan route (uses global JSON parser only).
 app.post("/generate-plan", async (req, res) => {

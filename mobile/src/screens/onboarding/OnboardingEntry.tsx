@@ -26,6 +26,7 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
 
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
   const setDraft = useOnboardingStore((state) => state.setDraft);
+  const setIdentity = useOnboardingStore((state) => state.setIdentity);
 
   const meQuery = useMe();
   const referenceDataQuery = useReferenceData();
@@ -107,6 +108,14 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
       bootstrappingRef.current = false;
     }
   }, [createClientProfileMutation, linkClientProfileMutation, meQuery]);
+
+  useEffect(() => {
+    if (!meQuery.data?.id) return;
+    setIdentity({
+      userId: meQuery.data.id,
+      clientProfileId: meQuery.data.clientProfileId ?? null,
+    });
+  }, [meQuery.data?.clientProfileId, meQuery.data?.id, setIdentity]);
 
   useEffect(() => {
     // DEBUG: remove once boot hang is resolved

@@ -104,6 +104,7 @@ export async function applyProgression({
   programLength = null,
   programGenerationConfigs = [], // rows from Bubble table
   schemaVersion = 1,
+  configSource = "unknown",
 }) {
   if (!program || !Array.isArray(program.days)) {
     throw new Error("applyProgression: invalid program (missing days)");
@@ -149,6 +150,7 @@ export async function applyProgression({
 
   const dbg = {
     ok: true,
+    source: configSource,
     program_type: programType,
     schema_version: schemaVersion,
     config_key: s(cfgRow.config_key),

@@ -73,6 +73,10 @@ const styles = StyleSheet.create({
   label: {
     ...typography.body,
     fontWeight: "500",
+    width: "100%",
+    textAlign: "center",
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
   disabled: {
     opacity: 0.5,

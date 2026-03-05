@@ -19,11 +19,12 @@ type PresetCardProps = {
   description?: string;
   selected: boolean;
   onPress: () => void;
+  onHelpPress?: () => void;
 };
 
 const DURATION_MS = 180;
 
-export function PresetCard({ title, description, selected, onPress }: PresetCardProps): React.JSX.Element {
+export function PresetCard({ title, description, selected, onPress, onHelpPress }: PresetCardProps): React.JSX.Element {
   const progress = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
@@ -54,7 +55,11 @@ export function PresetCard({ title, description, selected, onPress }: PresetCard
       <View style={styles.content}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{title}</Text>
-          {selected ? <Text style={styles.check}>?</Text> : null}
+          {selected ? (
+            <PressableScale style={styles.helpButton} onPress={onHelpPress}>
+              <Text style={styles.check}>?</Text>
+            </PressableScale>
+          ) : null}
         </View>
         {description ? <Text style={styles.description}>{description}</Text> : null}
       </View>
@@ -98,6 +103,16 @@ const styles = StyleSheet.create({
   check: {
     color: colors.accent,
     ...typography.h3,
+  },
+  helpButton: {
+    minWidth: 28,
+    minHeight: 28,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
   },
   description: {
     marginTop: spacing.xs,

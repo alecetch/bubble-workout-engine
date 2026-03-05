@@ -28,10 +28,15 @@ function safeTokenCompare(a, b) {
  */
 export function requireInternalToken(req, res, next) {
   const { request_id } = req;
-  const token = (req.headers["x-internal-token"] || "").toString();
-  const expected = (process.env.INTERNAL_API_TOKEN || "").toString();
+  const internalToken = (req.headers["x-internal-token"] || "").toString();
+  const engineKey = (req.headers["x-engine-key"] || "").toString();
+  const expectedInternal = (process.env.INTERNAL_API_TOKEN || "").toString();
+  const expectedEngine = (process.env.ENGINE_KEY || "").toString();
 
-  if (!expected) {
+  const internalConfigured = Boolean(expectedInternal);
+  const engineConfigured = Boolean(expectedEngine);
+
+  if (!internalConfigured && !engineConfigured) {
     return res.status(401).json({
       ok: false,
       request_id,
@@ -40,12 +45,15 @@ export function requireInternalToken(req, res, next) {
     });
   }
 
-  if (!safeTokenCompare(token, expected)) {
+  const internalOk = internalConfigured && safeTokenCompare(internalToken, expectedInternal);
+  const engineOk = engineConfigured && safeTokenCompare(engineKey, expectedEngine);
+
+  if (!internalOk && !engineOk) {
     return res.status(401).json({
       ok: false,
       request_id,
       code: "unauthorized",
-      error: "Invalid or missing X-Internal-Token",
+      error: "Invalid or missing X-Internal-Token / X-Engine-Key",
     });
   }
 

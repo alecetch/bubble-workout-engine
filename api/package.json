@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "import:equipment-items": "tsx scripts/import-equipment-items.ts"
+    "dev:reset-program-data": "node ./scripts/dev_reset_program_data.mjs",
+    "import:equipment-items": "tsx scripts/import-equipment-items.ts",
+    "import:bubble": "node scripts/import_bubble_exports.mjs",
+    "test": "node --test",
+    "qa:history": "node scripts/history_qa_smoke.mjs"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

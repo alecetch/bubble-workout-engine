@@ -1,4 +1,5 @@
 import React from "react";
+import type { RefObject } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -6,7 +7,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type RefObject,
 } from "react-native";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";

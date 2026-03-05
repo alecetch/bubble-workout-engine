@@ -25,12 +25,15 @@ import {
 } from "./types";
 
 type OnboardingState = {
+  userId: string | null;
+  clientProfileId: string | null;
   draft: OnboardingDraft;
   currentStep: OnboardingStep;
   attempted: StepAttemptedState;
   touched: Record<string, boolean>;
   fieldErrors: FieldErrors;
   isSaving: boolean;
+  setIdentity: (payload: { userId: string; clientProfileId: string | null }) => void;
   setDraft: (partial: Partial<OnboardingDraft>) => void;
   setTouched: (fieldKey: string) => void;
   setAttempted: (step: OnboardingStep) => void;
@@ -153,6 +156,8 @@ function fromProfile(profileLike: ProfileLike): OnboardingDraft {
 }
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
+  userId: null,
+  clientProfileId: null,
   draft: DEFAULT_ONBOARDING_DRAFT,
   currentStep: 1,
   attempted: {
@@ -163,6 +168,9 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   touched: {},
   fieldErrors: {},
   isSaving: false,
+  setIdentity: ({ userId, clientProfileId }) => {
+    set({ userId, clientProfileId });
+  },
   setDraft: (partial) => {
     set((state) => {
       const merged = { ...state.draft, ...partial };
