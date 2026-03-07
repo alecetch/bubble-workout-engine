@@ -55,6 +55,7 @@ else
 fi
 
 docker run --rm \
+  --network host \
   -v "$(pwd)/migrations:/flyway/sql:ro" \
   flyway/flyway:12 \
   -url="${JDBC_URL}" \
