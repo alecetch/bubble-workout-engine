@@ -1,4 +1,4 @@
-import { engineFetch } from "./client";
+import { apiFetch, engineFetch } from "./client";
 
 export type HistoryOverviewResponse = {
   sessionsCompleted: number;
@@ -313,4 +313,208 @@ export async function fetchExerciseHistory(exerciseId: string, bubbleUserId?: st
   const qs = params.toString();
   const raw = await engineFetch<unknown>(`/v1/history/exercise/${encodeURIComponent(exerciseId)}${qs ? `?${qs}` : ""}`);
   return normalizeExerciseHistory(raw);
+}
+
+export type SessionHistoryStrengthRegion = {
+  exerciseName: string;
+  bestE1rmKg: number;
+  trendPct: number | null;
+};
+
+export type SessionHistoryMetrics = {
+  dayStreak: number;
+  consistency28d: {
+    completed: number;
+    scheduled: number;
+    rate: number;
+  };
+  volume28d: number;
+  strengthUpper28d: SessionHistoryStrengthRegion | null;
+  strengthLower28d: SessionHistoryStrengthRegion | null;
+  sessionsCount: number;
+  programmesCompleted: number;
+};
+
+export type HeaviestLift = {
+  exerciseName: string;
+  weightKg: number;
+  repsCompleted: number;
+  estimatedE1rmKg: number | null;
+  date: string;
+};
+
+export type PrsFeedRow = {
+  exerciseId: string;
+  exerciseName: string;
+  weightKg: number;
+  repsCompleted: number;
+  estimatedE1rmKg: number | null;
+  date: string;
+  region: string;
+};
+
+export type PrsFeedResponse = {
+  mode: "prs_28d" | "prs_90d" | "heaviest_28d";
+  rows: PrsFeedRow[];
+  heaviest: {
+    upper: HeaviestLift | null;
+    lower: HeaviestLift | null;
+  } | null;
+};
+
+export type LoggedExerciseItem = {
+  exerciseId: string;
+  exerciseName: string;
+};
+
+export type ExerciseSummaryLift = {
+  weightKg: number;
+  repsCompleted: number;
+  estimatedE1rmKg: number | null;
+  date: string;
+};
+
+export type ExerciseSummaryResponse = {
+  exerciseId: string;
+  exerciseName: string;
+  bestEver: ExerciseSummaryLift | null;
+  best28d: ExerciseSummaryLift | null;
+};
+
+function normalizeSessionHistoryStrengthRegion(raw: unknown): SessionHistoryStrengthRegion | null {
+  if (raw == null) return null;
+  const row = asObject(raw);
+  return {
+    exerciseName: asString(row.exerciseName),
+    bestE1rmKg: asNumber(row.bestE1rmKg, 0),
+    trendPct: asNullableNumber(row.trendPct),
+  };
+}
+
+function normalizeSessionHistoryMetrics(raw: unknown): SessionHistoryMetrics {
+  const root = asObject(raw);
+  const consistency28d = asObject(root.consistency28d);
+  return {
+    dayStreak: asNumber(root.dayStreak, 0),
+    consistency28d: {
+      completed: asNumber(consistency28d.completed, 0),
+      scheduled: asNumber(consistency28d.scheduled, 0),
+      rate: asNumber(consistency28d.rate, 0),
+    },
+    volume28d: asNumber(root.volume28d, 0),
+    strengthUpper28d: normalizeSessionHistoryStrengthRegion(root.strengthUpper28d),
+    strengthLower28d: normalizeSessionHistoryStrengthRegion(root.strengthLower28d),
+    sessionsCount: asNumber(root.sessionsCount, 0),
+    programmesCompleted: asNumber(root.programmesCompleted, 0),
+  };
+}
+
+function normalizeHeaviestLift(raw: unknown): HeaviestLift | null {
+  if (raw == null) return null;
+  const row = asObject(raw);
+  return {
+    exerciseName: asString(row.exerciseName),
+    weightKg: asNumber(row.weightKg, 0),
+    repsCompleted: asNumber(row.repsCompleted, 0),
+    estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg),
+    date: toDateOnly(row.date),
+  };
+}
+
+function normalizePrsFeed(raw: unknown): PrsFeedResponse {
+  const root = asObject(raw);
+  const modeRaw = asString(root.mode);
+  const mode: PrsFeedResponse["mode"] =
+    modeRaw === "prs_28d" || modeRaw === "prs_90d" || modeRaw === "heaviest_28d" ? modeRaw : "heaviest_28d";
+
+  const rows = asArray(root.rows).map((item) => {
+    const row = asObject(item);
+    return {
+      exerciseId: asString(row.exerciseId),
+      exerciseName: asString(row.exerciseName),
+      weightKg: asNumber(row.weightKg, 0),
+      repsCompleted: asNumber(row.repsCompleted, 0),
+      estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg),
+      date: toDateOnly(row.date),
+      region: asString(row.region),
+    };
+  });
+
+  const heaviestRaw = root.heaviest == null ? null : asObject(root.heaviest);
+  const heaviest =
+    heaviestRaw == null
+      ? null
+      : {
+          upper: normalizeHeaviestLift(heaviestRaw.upper),
+          lower: normalizeHeaviestLift(heaviestRaw.lower),
+        };
+
+  return { mode, rows, heaviest };
+}
+
+function normalizeLoggedExercises(raw: unknown): LoggedExerciseItem[] {
+  const root = asObject(raw);
+  return asArray(root.exercises).map((item) => {
+    const row = asObject(item);
+    return {
+      exerciseId: asString(row.exerciseId),
+      exerciseName: asString(row.exerciseName),
+    };
+  });
+}
+
+function normalizeExerciseSummaryLift(raw: unknown): ExerciseSummaryLift | null {
+  if (raw == null) return null;
+  const row = asObject(raw);
+  return {
+    weightKg: asNumber(row.weightKg, 0),
+    repsCompleted: asNumber(row.repsCompleted, 0),
+    estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg),
+    date: toDateOnly(row.date),
+  };
+}
+
+function normalizeExerciseSummary(raw: unknown): ExerciseSummaryResponse {
+  const root = asObject(raw);
+  return {
+    exerciseId: asString(root.exerciseId),
+    exerciseName: asString(root.exerciseName),
+    bestEver: normalizeExerciseSummaryLift(root.bestEver),
+    best28d: normalizeExerciseSummaryLift(root.best28d),
+  };
+}
+
+export async function getSessionHistoryMetrics(bubbleUserId?: string): Promise<SessionHistoryMetrics> {
+  const params = new URLSearchParams();
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const qs = params.toString();
+  const raw = await apiFetch<unknown>(`/api/session-history-metrics${qs ? `?${qs}` : ""}`);
+  return normalizeSessionHistoryMetrics(raw);
+}
+
+export async function getPrsFeed(bubbleUserId?: string): Promise<PrsFeedResponse> {
+  const params = new URLSearchParams();
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const qs = params.toString();
+  const raw = await apiFetch<unknown>(`/api/prs-feed${qs ? `?${qs}` : ""}`);
+  return normalizePrsFeed(raw);
+}
+
+export async function searchLoggedExercises(q: string, bubbleUserId?: string): Promise<LoggedExerciseItem[]> {
+  const term = q.trim();
+  if (term.length < 2) return [];
+
+  const params = new URLSearchParams();
+  params.set("q", term);
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const raw = await apiFetch<unknown>(`/api/logged-exercises/search?${params.toString()}`);
+  return normalizeLoggedExercises(raw);
+}
+
+export async function getExerciseSummary(exerciseId: string, bubbleUserId?: string): Promise<ExerciseSummaryResponse> {
+  const params = new URLSearchParams();
+  params.set("exercise_id", exerciseId);
+  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  const raw = await apiFetch<unknown>(`/api/exercise-summary?${params.toString()}`);
+  return normalizeExerciseSummary(raw);
 }

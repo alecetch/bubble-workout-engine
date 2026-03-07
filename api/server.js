@@ -17,6 +17,9 @@ import { historyTimelineRouter } from "./src/routes/historyTimeline.js";
 import { historyOverviewRouter } from "./src/routes/historyOverview.js";
 import { historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
 import { historyExerciseRouter } from "./src/routes/historyExercise.js";
+import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.js";
+import { prsFeedRouter } from "./src/routes/prsFeed.js";
+import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
@@ -378,6 +381,9 @@ app.use(historyTimelineRouter);
 app.use(historyOverviewRouter);
 app.use(historyPersonalRecordsRouter);
 app.use(historyExerciseRouter);
+app.use("/api", sessionHistoryMetricsRouter);
+app.use("/api", prsFeedRouter);
+app.use("/api", loggedExercisesRouter);
 app.use(generateProgramV2Router);
 
 // Generate plan route (uses global JSON parser only).

@@ -4,10 +4,7 @@ import {
   FlatList,
   Image,
   Keyboard,
-  Modal,
-  Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,14 +13,14 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   queryKeys,
-  useExerciseHistory,
-  useExerciseSearch,
-  useHistoryOverview,
-  useHistoryPersonalRecords,
+  useExerciseSummary,
   useHistoryPrograms,
   useHistoryTimeline,
+  useLoggedExercisesSearch,
+  usePrsFeed,
+  useSessionHistoryMetrics,
 } from "../../api/hooks";
-import type { ExerciseSearchItem, HistoryTimelineItem } from "../../api/history";
+import type { HistoryTimelineItem, LoggedExerciseItem } from "../../api/history";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -37,26 +34,6 @@ function formatDateLabel(isoDate: string): string {
   const parsed = new Date(`${isoDate}T00:00:00Z`);
   if (!Number.isFinite(parsed.getTime())) return isoDate;
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-function formatSignedPercent(value: number | null | undefined): string {
-  if (!Number.isFinite(value)) return "n/a";
-  const numberValue = value as number;
-  const sign = numberValue > 0 ? "+" : "";
-  return `${sign}${(numberValue * 100).toFixed(1)}%`;
-}
-
-function formatSignedNumber(value: number | null | undefined, unit = ""): string {
-  if (!Number.isFinite(value)) return "n/a";
-  const numberValue = value as number;
-  const sign = numberValue > 0 ? "+" : "";
-  return `${sign}${numberValue.toFixed(1)}${unit}`;
-}
-
-function formatHours(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  if (value >= 10) return value.toFixed(0);
-  return value.toFixed(1);
 }
 
 function formatKg(value: number | null | undefined): string {
@@ -86,37 +63,6 @@ function HeroMediaThumb({
   return <Image source={{ uri }} style={thumbStyle} />;
 }
 
-function Sparkline({ points }: { points: Array<number | null> }): React.JSX.Element | null {
-  const values = points.filter((value): value is number => Number.isFinite(value));
-  if (values.length < 2) return null;
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(1, max - min);
-
-  return (
-    <View style={styles.sparklineWrap}>
-      {points.map((value, index) => {
-        const heightPercent = Number.isFinite(value)
-          ? 20 + (((value as number) - min) / range) * 80
-          : 10;
-        return (
-          <View
-            key={`spark-${index}`}
-            style={[
-              styles.sparkBar,
-              {
-                height: `${Math.round(heightPercent)}%`,
-                opacity: Number.isFinite(value) ? 1 : 0.35,
-              },
-            ]}
-          />
-        );
-      })}
-    </View>
-  );
-}
-
 function TimelineRow({ item }: { item: HistoryTimelineItem }): React.JSX.Element {
   return (
     <View style={styles.timelineCard}>
@@ -139,12 +85,12 @@ function ExerciseResultRow({
   item,
   onPress,
 }: {
-  item: ExerciseSearchItem;
-  onPress: (item: ExerciseSearchItem) => void;
+  item: LoggedExerciseItem;
+  onPress: (item: LoggedExerciseItem) => void;
 }): React.JSX.Element {
   return (
     <PressableScale style={styles.exerciseResultRow} onPress={() => onPress(item)}>
-      <Text style={styles.exerciseResultName}>{item.name}</Text>
+      <Text style={styles.exerciseResultName}>{item.exerciseName}</Text>
     </PressableScale>
   );
 }
@@ -155,14 +101,14 @@ export function HistoryScreen(): React.JSX.Element {
   const sessionUserId = useSessionStore((state) => state.userId);
   const bubbleUserId = sessionUserId ?? onboardingUserId ?? undefined;
 
-  const overviewQuery = useHistoryOverview(bubbleUserId);
+  const metricsQuery = useSessionHistoryMetrics(bubbleUserId);
+  const prsFeedQuery = usePrsFeed(bubbleUserId);
   const programsQuery = useHistoryPrograms(10, bubbleUserId);
-  const personalRecordsQuery = useHistoryPersonalRecords(20, bubbleUserId);
   const timelineQuery = useHistoryTimeline(40, bubbleUserId);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
-  const [selectedExercise, setSelectedExercise] = React.useState<ExerciseSearchItem | null>(null);
+  const [selectedExercise, setSelectedExercise] = React.useState<LoggedExerciseItem | null>(null);
 
   React.useEffect(() => {
     const timeout = setTimeout(() => {
@@ -171,12 +117,12 @@ export function HistoryScreen(): React.JSX.Element {
     return () => clearTimeout(timeout);
   }, [searchTerm]);
 
-  const exerciseSearchQuery = useExerciseSearch(debouncedSearchTerm, bubbleUserId);
-  const exerciseHistoryQuery = useExerciseHistory(selectedExercise?.exerciseId ?? null, bubbleUserId);
+  const exerciseSearchQuery = useLoggedExercisesSearch(debouncedSearchTerm, bubbleUserId);
+  const exerciseSummaryQuery = useExerciseSummary(selectedExercise?.exerciseId ?? null, bubbleUserId);
 
-  const overview = overviewQuery.data;
+  const metrics = metricsQuery.data;
+  const prsFeed = prsFeedQuery.data;
   const programs = programsQuery.data ?? [];
-  const personalRecords = personalRecordsQuery.data ?? [];
   const exerciseSearchResults = (exerciseSearchQuery.data ?? []).slice(0, 20);
 
   const timelineItems = React.useMemo(() => {
@@ -194,16 +140,16 @@ export function HistoryScreen(): React.JSX.Element {
     try {
       // Reset the infinite timeline query first so it restarts from page 1,
       // then refetch the other queries in parallel.
-      await queryClient.resetQueries({ queryKey: queryKeys.historyTimeline, exact: true });
+      await queryClient.resetQueries({ queryKey: queryKeys.historyTimeline });
       await Promise.all([
-        overviewQuery.refetch(),
+        metricsQuery.refetch(),
         programsQuery.refetch(),
-        personalRecordsQuery.refetch(),
+        prsFeedQuery.refetch(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [overviewQuery, programsQuery, personalRecordsQuery, queryClient]);
+  }, [metricsQuery, programsQuery, prsFeedQuery, queryClient]);
 
   const onEndReached = React.useCallback(() => {
     if (!timelineQuery.hasNextPage || timelineQuery.isFetchingNextPage) return;
@@ -211,35 +157,20 @@ export function HistoryScreen(): React.JSX.Element {
   }, [timelineQuery]);
 
   const isInitialLoading =
-    (overviewQuery.isLoading && !overview) ||
-    (programsQuery.isLoading && programs.length === 0) ||
+    (metricsQuery.isLoading && !metrics) ||
     (timelineQuery.isLoading && timelineItems.length === 0);
 
   const hasError =
-    overviewQuery.isError || programsQuery.isError || timelineQuery.isError || personalRecordsQuery.isError;
+    metricsQuery.isError || timelineQuery.isError || prsFeedQuery.isError;
 
-  const metricCards = [
-    {
-      label: "Strength 28d",
-      value: formatSignedPercent(overview?.strengthTrend28d.value),
-      delta: formatSignedNumber(overview?.strengthTrend28d.delta, "kg"),
-    },
-    {
-      label: "Volume 28d",
-      value: formatSignedPercent(overview?.volumeTrend28d.value),
-      delta: formatSignedNumber(overview?.volumeTrend28d.delta, "kg"),
-    },
-    {
-      label: "Consistency 30d",
-      value: formatSignedPercent(overview?.consistency30d.value),
-      delta: formatSignedPercent(overview?.consistency30d.delta),
-    },
-    {
-      label: "Weekly Change",
-      value: formatSignedPercent(overview?.consistency30d.delta),
-      delta: "vs prior window",
-    },
-  ];
+  const prsTitle =
+    prsFeed?.mode === "prs_28d"
+      ? "Personal Records - last 28 days"
+      : prsFeed?.mode === "prs_90d"
+        ? "Personal Records - last 90 days"
+        : prsFeed?.mode === "heaviest_28d"
+          ? "Heaviest Lifts - last 28 days"
+          : "Personal Records";
 
   const listHeader = (
     <View style={styles.listHeader}>
@@ -247,34 +178,72 @@ export function HistoryScreen(): React.JSX.Element {
 
       <View style={styles.heroCard}>
         <View style={styles.heroStatBlock}>
-          <Text style={styles.heroStatValue}>{overview?.sessionsCompleted ?? 0}</Text>
+          <Text style={styles.heroStatValue}>{metrics?.sessionsCount ?? 0}</Text>
           <Text style={styles.heroStatLabel}>Sessions Completed</Text>
         </View>
         <View style={styles.heroStatRow}>
           <View style={styles.heroStatMini}>
-            <Text style={styles.heroStatMiniValue}>{formatHours(overview?.trainingHoursCompleted ?? 0)}</Text>
-            <Text style={styles.heroStatMiniLabel}>Training Hours</Text>
+            <Text style={styles.heroStatMiniValue}>{metrics?.dayStreak ?? 0}</Text>
+            <Text style={styles.heroStatMiniLabel}>Day Streak</Text>
           </View>
           <View style={styles.heroStatMini}>
-            <Text style={styles.heroStatMiniValue}>{overview?.currentStreakDays ?? 0}</Text>
-            <Text style={styles.heroStatMiniLabel}>Current Streak</Text>
-          </View>
-          <View style={styles.heroStatMini}>
-            <Text style={styles.heroStatMiniValue}>{overview?.programsCompleted ?? 0}</Text>
-            <Text style={styles.heroStatMiniLabel}>Programs Done</Text>
+            <Text style={styles.heroStatMiniValue}>{metrics?.programmesCompleted ?? 0}</Text>
+            <Text style={styles.heroStatMiniLabel}>Programmes Completed</Text>
           </View>
         </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.metricsStrip}>
-        {metricCards.map((metric) => (
-          <View key={metric.label} style={styles.metricCard}>
-            <Text style={styles.metricLabel}>{metric.label}</Text>
-            <Text style={styles.metricValue}>{metric.value}</Text>
-            <Text style={styles.metricDelta}>{metric.delta}</Text>
-          </View>
-        ))}
-      </ScrollView>
+      <View style={styles.metricsGrid}>
+        <View style={styles.metricsGridCard}>
+          <Text style={styles.metricsGridLabel}>Consistency 28d</Text>
+          <Text style={styles.metricsGridValue}>
+            {metrics?.consistency28d
+              ? `${metrics.consistency28d.completed}/${metrics.consistency28d.scheduled}`
+              : "-"}
+          </Text>
+          <Text style={styles.metricsGridSub}>
+            {`${Math.round((metrics?.consistency28d?.rate ?? 0) * 100)}% completion`}
+          </Text>
+        </View>
+
+        <View style={styles.metricsGridCard}>
+          <Text style={styles.metricsGridLabel}>Volume 28d</Text>
+          <Text style={styles.metricsGridValue}>
+            {metrics?.volume28d != null ? `${Math.round(metrics.volume28d)} kg` : "-"}
+          </Text>
+          <Text style={styles.metricsGridSub}>total volume</Text>
+        </View>
+
+        <View style={styles.metricsGridCard}>
+          <Text style={styles.metricsGridLabel}>Strength Upper 28d</Text>
+          <Text style={styles.metricsGridValue}>
+            {metrics?.strengthUpper28d?.bestE1rmKg != null
+              ? `${metrics.strengthUpper28d.bestE1rmKg.toFixed(1)} kg`
+              : "-"}
+          </Text>
+          <Text style={styles.metricsGridSub}>{metrics?.strengthUpper28d?.exerciseName ?? "No upper data"}</Text>
+          <Text style={styles.metricsGridTrend}>
+            {metrics?.strengthUpper28d?.trendPct != null
+              ? `${metrics.strengthUpper28d.trendPct >= 0 ? "+" : ""}${(metrics.strengthUpper28d.trendPct * 100).toFixed(1)}%`
+              : "-"}
+          </Text>
+        </View>
+
+        <View style={styles.metricsGridCard}>
+          <Text style={styles.metricsGridLabel}>Strength Lower 28d</Text>
+          <Text style={styles.metricsGridValue}>
+            {metrics?.strengthLower28d?.bestE1rmKg != null
+              ? `${metrics.strengthLower28d.bestE1rmKg.toFixed(1)} kg`
+              : "-"}
+          </Text>
+          <Text style={styles.metricsGridSub}>{metrics?.strengthLower28d?.exerciseName ?? "No lower data"}</Text>
+          <Text style={styles.metricsGridTrend}>
+            {metrics?.strengthLower28d?.trendPct != null
+              ? `${metrics.strengthLower28d.trendPct >= 0 ? "+" : ""}${(metrics.strengthLower28d.trendPct * 100).toFixed(1)}%`
+              : "-"}
+          </Text>
+        </View>
+      </View>
 
       <View style={styles.sectionHeaderWrap}>
         <Text style={styles.sectionTitle}>Programs</Text>
@@ -312,23 +281,63 @@ export function HistoryScreen(): React.JSX.Element {
   const listFooter = (
     <View style={styles.listFooter}>
       <View style={styles.sectionHeaderWrap}>
-        <Text style={styles.sectionTitle}>Personal Records</Text>
+        <Text style={styles.sectionTitle}>{prsTitle}</Text>
       </View>
-      {personalRecords.length > 0 ? (
-        <View style={styles.personalRecordsWrap}>
-          {personalRecords.map((record) => (
-            <View key={`${record.exerciseId}:${record.programDayId}`} style={styles.personalRecordRow}>
+      {prsFeed?.mode === "heaviest_28d" ? (
+        prsFeed.heaviest?.upper || prsFeed.heaviest?.lower ? (
+          <View style={styles.personalRecordsWrap}>
+            <View style={styles.prsFeedRow}>
               <View style={styles.personalRecordMain}>
-                <Text style={styles.personalRecordName}>{record.exerciseName}</Text>
-                <Text style={styles.personalRecordDate}>{formatDateLabel(record.date)}</Text>
+                <Text style={styles.prsFeedName}>{prsFeed.heaviest?.upper?.exerciseName ?? "No upper data"}</Text>
+                {prsFeed.heaviest?.upper ? (
+                  <Text style={styles.prsFeedStats}>
+                    {formatKg(prsFeed.heaviest.upper.weightKg)} x {prsFeed.heaviest.upper.repsCompleted} reps
+                    {prsFeed.heaviest.upper.estimatedE1rmKg != null
+                      ? ` | e1RM ${formatKg(prsFeed.heaviest.upper.estimatedE1rmKg)}`
+                      : ""}
+                  </Text>
+                ) : null}
               </View>
-              <Text style={styles.personalRecordValue}>{record.value} kg</Text>
+              <Text style={styles.prsFeedDate}>Upper</Text>
+            </View>
+            <View style={styles.prsFeedRow}>
+              <View style={styles.personalRecordMain}>
+                <Text style={styles.prsFeedName}>{prsFeed.heaviest?.lower?.exerciseName ?? "No lower data"}</Text>
+                {prsFeed.heaviest?.lower ? (
+                  <Text style={styles.prsFeedStats}>
+                    {formatKg(prsFeed.heaviest.lower.weightKg)} x {prsFeed.heaviest.lower.repsCompleted} reps
+                    {prsFeed.heaviest.lower.estimatedE1rmKg != null
+                      ? ` | e1RM ${formatKg(prsFeed.heaviest.lower.estimatedE1rmKg)}`
+                      : ""}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.prsFeedDate}>Lower</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyCardText}>Complete workouts with logged weight to see records.</Text>
+          </View>
+        )
+      ) : prsFeed?.rows && prsFeed.rows.length > 0 ? (
+        <View style={styles.personalRecordsWrap}>
+          {prsFeed.rows.map((row) => (
+            <View key={`${row.exerciseId}:${row.date}`} style={styles.prsFeedRow}>
+              <View style={styles.personalRecordMain}>
+                <Text style={styles.prsFeedName}>{row.exerciseName}</Text>
+                <Text style={styles.prsFeedStats}>
+                  {formatKg(row.weightKg)} x {row.repsCompleted} reps
+                  {row.estimatedE1rmKg != null ? ` | e1RM ${formatKg(row.estimatedE1rmKg)}` : ""}
+                </Text>
+              </View>
+              <Text style={styles.prsFeedDate}>{formatDateLabel(row.date)}</Text>
             </View>
           ))}
         </View>
       ) : (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyCardText}>No personal records yet.</Text>
+          <Text style={styles.emptyCardText}>Complete workouts with logged weight to see records.</Text>
         </View>
       )}
 
@@ -364,11 +373,97 @@ export function HistoryScreen(): React.JSX.Element {
                 onPress={(selected) => {
                   Keyboard.dismiss();
                   setSelectedExercise(selected);
+                  setSearchTerm("");
                 }}
               />
             ))}
           </View>
         )}
+
+        {selectedExercise ? (
+          <View style={styles.exerciseSummaryCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.exerciseSummaryTitle}>{selectedExercise.exerciseName}</Text>
+              <PressableScale style={styles.modalCloseButton} onPress={() => setSelectedExercise(null)}>
+                <Text style={styles.modalCloseLabel}>Clear</Text>
+              </PressableScale>
+            </View>
+
+            {exerciseSummaryQuery.isLoading ? (
+              <View style={styles.exerciseSearchLoading}>
+                <ActivityIndicator color={colors.accent} size="small" />
+              </View>
+            ) : !exerciseSummaryQuery.data?.bestEver && !exerciseSummaryQuery.data?.best28d ? (
+              <Text style={styles.exerciseExplorerHint}>No logged data for this exercise.</Text>
+            ) : (
+              <View style={styles.exerciseSummaryGrid}>
+                <View style={styles.exerciseSummarySubCard}>
+                  <Text style={styles.exerciseSummaryStatLabel}>Best Ever</Text>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>Weight</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.bestEver ? formatKg(exerciseSummaryQuery.data.bestEver.weightKg) : "n/a"}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>Reps</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.bestEver?.repsCompleted ?? "n/a"}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>e1RM</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.bestEver?.estimatedE1rmKg != null
+                        ? formatKg(exerciseSummaryQuery.data.bestEver.estimatedE1rmKg)
+                        : "n/a"}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>Date</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.bestEver?.date
+                        ? formatDateLabel(exerciseSummaryQuery.data.bestEver.date)
+                        : "n/a"}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.exerciseSummarySubCard}>
+                  <Text style={styles.exerciseSummaryStatLabel}>Best 28d</Text>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>Weight</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.best28d ? formatKg(exerciseSummaryQuery.data.best28d.weightKg) : "n/a"}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>Reps</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.best28d?.repsCompleted ?? "n/a"}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>e1RM</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.best28d?.estimatedE1rmKg != null
+                        ? formatKg(exerciseSummaryQuery.data.best28d.estimatedE1rmKg)
+                        : "n/a"}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseSummaryStatRow}>
+                    <Text style={styles.exerciseSummaryStatLabel}>Date</Text>
+                    <Text style={styles.exerciseSummaryStatValue}>
+                      {exerciseSummaryQuery.data?.best28d?.date
+                        ? formatDateLabel(exerciseSummaryQuery.data.best28d.date)
+                        : "n/a"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -382,7 +477,7 @@ export function HistoryScreen(): React.JSX.Element {
     );
   }
 
-  if (hasError && !overview && timelineItems.length === 0) {
+  if (hasError && !metrics && timelineItems.length === 0) {
     return (
       <View style={styles.centered}>
         <Text style={styles.title}>Unable to load history</Text>
@@ -391,90 +486,25 @@ export function HistoryScreen(): React.JSX.Element {
     );
   }
 
-  const closeExplorer = (): void => {
-    setSelectedExercise(null);
-  };
-
-  const historySeries = exerciseHistoryQuery.data?.series ?? [];
-  const historySummary = exerciseHistoryQuery.data?.summary;
-
   return (
-    <>
-      <FlatList
-        style={styles.root}
-        contentContainerStyle={styles.content}
-        data={timelineItems}
-        keyExtractor={(item) => item.programDayId}
-        renderItem={({ item }) => <TimelineRow item={item} />}
-        ListHeaderComponent={listHeader}
-        ListFooterComponent={listFooter}
-        ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyCardText}>No completed sessions yet.</Text>
-          </View>
-        }
-        onEndReached={onEndReached}
-        onEndReachedThreshold={0.5}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => void onRefresh()} tintColor={colors.accent} />}
-        ListFooterComponentStyle={styles.footerSpacing}
-      />
-
-      <Modal transparent animationType="fade" visible={Boolean(selectedExercise)} onRequestClose={closeExplorer}>
-        <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={closeExplorer} />
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>{selectedExercise?.name ?? "Exercise"}</Text>
-              <PressableScale style={styles.modalCloseButton} onPress={closeExplorer}>
-                <Text style={styles.modalCloseLabel}>Close</Text>
-              </PressableScale>
-            </View>
-
-            {exerciseHistoryQuery.isLoading ? (
-              <View style={styles.modalLoadingWrap}>
-                <ActivityIndicator color={colors.accent} size="small" />
-              </View>
-            ) : exerciseHistoryQuery.isError ? (
-              <Text style={styles.modalHintText}>Unable to load exercise history.</Text>
-            ) : historySeries.length === 0 ? (
-              <Text style={styles.modalHintText}>No history yet for this exercise</Text>
-            ) : (
-              <View style={styles.modalBody}>
-                <View style={styles.exerciseSummaryGrid}>
-                  <View style={styles.exerciseSummaryStat}>
-                    <Text style={styles.exerciseSummaryValue}>{formatKg(historySummary?.bestWeightKg)}</Text>
-                    <Text style={styles.exerciseSummaryLabel}>Best Weight</Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStat}>
-                    <Text style={styles.exerciseSummaryValue}>
-                      {historySummary?.lastPerformed ? formatDateLabel(historySummary.lastPerformed) : "n/a"}
-                    </Text>
-                    <Text style={styles.exerciseSummaryLabel}>Last Performed</Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStat}>
-                    <Text style={styles.exerciseSummaryValue}>{historySummary?.sessionsCount ?? 0}</Text>
-                    <Text style={styles.exerciseSummaryLabel}>Sessions</Text>
-                  </View>
-                </View>
-
-                <Sparkline points={historySeries.map((point) => point.topWeightKg)} />
-
-                <View style={styles.exerciseSeriesList}>
-                  {historySeries.map((point) => (
-                    <View key={point.date} style={styles.exerciseSeriesRow}>
-                      <Text style={styles.exerciseSeriesDate}>{formatDateLabel(point.date)}</Text>
-                      <Text style={styles.exerciseSeriesValue}>
-                        {point.topWeightKg == null ? "n/a" : formatKg(point.topWeightKg)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
+    <FlatList
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      data={timelineItems}
+      keyExtractor={(item) => item.programDayId}
+      renderItem={({ item }) => <TimelineRow item={item} />}
+      ListHeaderComponent={listHeader}
+      ListFooterComponent={listFooter}
+      ListEmptyComponent={
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyCardText}>No completed sessions yet.</Text>
         </View>
-      </Modal>
-    </>
+      }
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.5}
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => void onRefresh()} tintColor={colors.accent} />}
+      ListFooterComponentStyle={styles.footerSpacing}
+    />
   );
 }
 
@@ -546,11 +576,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.label,
   },
-  metricsStrip: {
+  metricsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
   },
-  metricCard: {
-    width: 150,
+  metricsGridCard: {
+    width: "48%",
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
@@ -558,15 +590,19 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: spacing.xs,
   },
-  metricLabel: {
+  metricsGridLabel: {
     color: colors.textSecondary,
     ...typography.label,
   },
-  metricValue: {
+  metricsGridValue: {
     color: colors.textPrimary,
     ...typography.h3,
   },
-  metricDelta: {
+  metricsGridSub: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  metricsGridTrend: {
     color: colors.textSecondary,
     ...typography.small,
   },
@@ -696,19 +732,27 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingRight: spacing.sm,
   },
-  personalRecordName: {
+  prsFeedName: {
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",
   },
-  personalRecordDate: {
+  prsFeedStats: {
     color: colors.textSecondary,
     ...typography.small,
   },
-  personalRecordValue: {
-    color: colors.textPrimary,
-    ...typography.body,
-    fontWeight: "600",
+  prsFeedDate: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  prsFeedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   exerciseExplorerCard: {
     borderRadius: radii.card,
@@ -754,20 +798,13 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
   },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(15,23,42,0.72)",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-  },
-  modalCard: {
+  exerciseSummaryCard: {
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
     gap: spacing.sm,
-    maxHeight: "78%",
   },
   modalHeaderRow: {
     flexDirection: "row",
@@ -775,7 +812,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.sm,
   },
-  modalTitle: {
+  exerciseSummaryTitle: {
     color: colors.textPrimary,
     ...typography.h3,
     flex: 1,
@@ -795,78 +832,32 @@ const styles = StyleSheet.create({
     ...typography.small,
     fontWeight: "600",
   },
-  modalLoadingWrap: {
-    minHeight: 84,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalHintText: {
-    color: colors.textSecondary,
-    ...typography.body,
-  },
-  modalBody: {
-    gap: spacing.sm,
-  },
   exerciseSummaryGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
   },
-  exerciseSummaryStat: {
+  exerciseSummarySubCard: {
     flex: 1,
+    minWidth: "48%",
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     padding: spacing.sm,
     gap: spacing.xs,
   },
-  exerciseSummaryValue: {
-    color: colors.textPrimary,
-    ...typography.body,
-    fontWeight: "700",
-  },
-  exerciseSummaryLabel: {
-    color: colors.textSecondary,
-    ...typography.label,
-  },
-  sparklineWrap: {
-    height: 46,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 3,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  sparkBar: {
-    flex: 1,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-  },
-  exerciseSeriesList: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.card,
-    overflow: "hidden",
-  },
-  exerciseSeriesRow: {
-    minHeight: 38,
+  exerciseSummaryStatRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    gap: spacing.sm,
   },
-  exerciseSeriesDate: {
+  exerciseSummaryStatLabel: {
     color: colors.textSecondary,
-    ...typography.small,
+    ...typography.label,
   },
-  exerciseSeriesValue: {
+  exerciseSummaryStatValue: {
     color: colors.textPrimary,
     ...typography.small,
     fontWeight: "600",

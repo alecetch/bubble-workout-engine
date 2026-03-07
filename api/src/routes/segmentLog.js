@@ -141,17 +141,53 @@ segmentLogRouter.post("/segment-log", async (req, res) => {
       const user_id = await resolveUserId(client, req.body);
       await client.query("BEGIN");
 
+      const programExerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
+      const regionResult = await client.query(
+        `
+        SELECT pe.id AS program_exercise_id, ec.strength_primary_region
+        FROM program_exercise pe
+        LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
+        WHERE pe.id = ANY($1::uuid[])
+        `,
+        [programExerciseIds],
+      );
+      const regionByProgramExerciseId = new Map(
+        regionResult.rows.map((r) => [r.program_exercise_id, r.strength_primary_region]),
+      );
+
       for (const row of rows) {
+        const region = regionByProgramExerciseId.get(row.program_exercise_id) ?? null;
+        const weightKg = Number(row.weight_kg);
+        const repsCompleted = Number(row.reps_completed);
+
+        let estimated1rmKg = null;
+        if (
+          Number.isFinite(weightKg) &&
+          Number.isFinite(repsCompleted) &&
+          weightKg > 0 &&
+          repsCompleted >= 1
+        ) {
+          const epley = weightKg * (1 + repsCompleted / 30);
+          if (region === "lower" && repsCompleted < 37) {
+            estimated1rmKg = (weightKg * 36) / (37 - repsCompleted);
+          } else {
+            // Fallback for upper/unknown regions and any invalid Brzycki denominator.
+            estimated1rmKg = epley;
+          }
+          estimated1rmKg = Number(estimated1rmKg.toFixed(2));
+        }
+
         await client.query(
           `
           INSERT INTO segment_exercise_log
             (user_id, program_id, program_day_id, workout_segment_id,
-             program_exercise_id, order_index, weight_kg, reps_completed, is_draft)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)
+             program_exercise_id, order_index, weight_kg, reps_completed, estimated_1rm_kg, is_draft)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false)
           ON CONFLICT ON CONSTRAINT uq_sel_user_segment_exercise
           DO UPDATE SET
             weight_kg      = EXCLUDED.weight_kg,
             reps_completed = EXCLUDED.reps_completed,
+            estimated_1rm_kg = EXCLUDED.estimated_1rm_kg,
             order_index    = EXCLUDED.order_index,
             is_draft       = false
           `,
@@ -164,6 +200,7 @@ segmentLogRouter.post("/segment-log", async (req, res) => {
             row.order_index,
             row.weight_kg,
             row.reps_completed,
+            estimated1rmKg,
           ],
         );
       }

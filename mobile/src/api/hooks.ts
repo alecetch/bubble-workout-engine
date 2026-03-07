@@ -36,18 +36,26 @@ import {
 import { getReferenceData, type ReferenceDataResponse } from "./referenceData";
 import {
   fetchExerciseHistory,
+  getExerciseSummary,
   getHistoryOverview,
   getHistoryPersonalRecords,
   getHistoryPrograms,
   getHistoryTimeline,
+  getPrsFeed,
+  getSessionHistoryMetrics,
+  searchLoggedExercises,
   searchExercises,
+  type ExerciseSummaryResponse,
   type ExerciseHistoryResponse,
   type ExerciseSearchItem,
+  type LoggedExerciseItem,
   type HistoryOverviewResponse,
   type HistoryPersonalRecordItem,
   type HistoryProgramItem,
   type HistoryTimelineCursor,
   type HistoryTimelineResponse,
+  type PrsFeedResponse,
+  type SessionHistoryMetrics,
 } from "./history";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
@@ -240,6 +248,46 @@ export function useHistoryPersonalRecords(limit = 20, bubbleUserId?: string): Us
   });
 }
 
+export function useSessionHistoryMetrics(bubbleUserId?: string): UseQueryResult<SessionHistoryMetrics> {
+  return useQuery({
+    queryKey: ["sessionHistoryMetrics", bubbleUserId ?? null],
+    queryFn: () => getSessionHistoryMetrics(bubbleUserId),
+    enabled: Boolean(bubbleUserId),
+    staleTime: HISTORY_STALE_MS,
+  });
+}
+
+export function usePrsFeed(bubbleUserId?: string): UseQueryResult<PrsFeedResponse> {
+  return useQuery({
+    queryKey: ["prsFeed", bubbleUserId ?? null],
+    queryFn: () => getPrsFeed(bubbleUserId),
+    enabled: Boolean(bubbleUserId),
+    staleTime: HISTORY_STALE_MS,
+  });
+}
+
+export function useLoggedExercisesSearch(q: string, bubbleUserId?: string): UseQueryResult<LoggedExerciseItem[]> {
+  const term = q.trim();
+  return useQuery({
+    queryKey: ["loggedExercisesSearch", term, bubbleUserId ?? null],
+    queryFn: () => searchLoggedExercises(term, bubbleUserId),
+    enabled: term.length >= 2,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useExerciseSummary(
+  exerciseId: string | null,
+  bubbleUserId?: string,
+): UseQueryResult<ExerciseSummaryResponse> {
+  return useQuery({
+    queryKey: ["exerciseSummary", exerciseId ?? "", bubbleUserId ?? null],
+    queryFn: () => getExerciseSummary(exerciseId as string, bubbleUserId),
+    enabled: Boolean(exerciseId),
+    staleTime: HISTORY_STALE_MS,
+  });
+}
+
 export function useExerciseSearch(q: string, bubbleUserId?: string): UseQueryResult<ExerciseSearchItem[]> {
   const term = q.trim();
   return useQuery({
@@ -273,6 +321,8 @@ export function useMarkDayComplete(): UseMutationResult<
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPrograms });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPersonalRecords });
+      void queryClient.invalidateQueries({ queryKey: ["sessionHistoryMetrics"] });
+      void queryClient.invalidateQueries({ queryKey: ["prsFeed"] });
     },
   });
 }
