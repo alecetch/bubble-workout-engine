@@ -520,6 +520,14 @@ function allocateSegmentSecondsFullDay(baseDay, dayTotalSec, cfg) {
   return out;
 }
 
+/* ------------------ helpers (exported for tests) ------------------ */
+
+export function roundSegmentDurationSeconds(rawSec) {
+  const t = typeof rawSec === "number" && Number.isFinite(rawSec) ? rawSec : 0;
+  if (t < 0) return 0;
+  return Math.round(t / 60) * 60;
+}
+
 /* ------------------ exporter ------------------ */
 
 export async function emitPlanRows({
