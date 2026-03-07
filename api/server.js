@@ -2,14 +2,11 @@ import "dotenv/config";
 import express from "express";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
-import { fetchInputs } from "./bubbleClient.js";
-import { runPipeline } from "./engine/runPipeline.js";
 import { importEmitterRouter } from "./src/routes/importEmitter.js";
 import { readProgramRouter } from "./src/routes/readProgram.js";
 import { userBootstrapRouter } from "./src/routes/userBootstrap.js";
 import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstrap.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
-import { generateProgramRouter } from "./src/routes/generateProgram.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
 import { segmentLogRouter } from "./src/routes/segmentLog.js";
 import { historyProgramsRouter } from "./src/routes/historyPrograms.js";
@@ -160,28 +157,6 @@ app.use(
     },
   }),
 );
-
-// Debug logger (targeted): only for POST /api/program/generate.
-app.use((req, res, next) => {
-  if (req.method === "POST" && req.path === "/api/program/generate") {
-    const bodyIsObject = !!req.body && typeof req.body === "object" && !Array.isArray(req.body);
-    const bodyKeysPreview = bodyIsObject ? Object.keys(req.body).slice(0, 20) : [];
-
-    console.info(
-      JSON.stringify({
-        event: "program_generate_request",
-        method: req.method,
-        path: req.path,
-        content_type: req.headers["content-type"] || "",
-        content_length: req.headers["content-length"] || "",
-        raw_body_length: typeof req.rawBody === "string" ? req.rawBody.length : 0,
-        body_is_object: bodyIsObject,
-        body_keys_preview: bodyKeysPreview,
-      }),
-    );
-  }
-  next();
-});
 
 // Health route.
 app.get("/health", async (req, res) => {
@@ -375,7 +350,6 @@ app.use("/api", readProgramRouter);
 app.use("/api", userBootstrapRouter);
 app.use("/api", clientProfileBootstrapRouter);
 app.use("/api", debugAllowedExercisesRouter);
-app.use("/api", generateProgramRouter);
 app.use(historyProgramsRouter);
 app.use(historyTimelineRouter);
 app.use(historyOverviewRouter);
@@ -385,39 +359,6 @@ app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
 app.use(generateProgramV2Router);
-
-// Generate plan route (uses global JSON parser only).
-app.post("/generate-plan", async (req, res) => {
-  console.info(JSON.stringify({
-    ts: new Date().toISOString(),
-    event: "generate_plan.request",
-    content_type: req.headers["content-type"] || "",
-  }));
-
-  // Auth
-  if (req.headers["x-engine-key"] !== process.env.ENGINE_KEY) {
-    return res.status(401).json({ ok: false, error: "Unauthorized" });
-  }
-
-  try {
-    const { clientProfileId, programType = "hypertrophy" } = req.body ?? {};
-
-    const inputs = await fetchInputs({ clientProfileId });
-
-    const plan = await runPipeline({
-      inputs,
-      programType,
-      request: req.body,
-    });
-
-    return res.json({ ok: true, plan });
-  } catch (err) {
-    console.error("generate-plan error:", err);
-    return res
-      .status(500)
-      .json({ ok: false, error: String(err?.message ?? err) });
-  }
-});
 
 // JSON parse error handler (ONLY for invalid JSON payloads).
 app.use((err, req, res, next) => {
