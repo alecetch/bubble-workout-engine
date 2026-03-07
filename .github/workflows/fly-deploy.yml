@@ -23,12 +23,29 @@ jobs:
       - name: Setup Flyctl
         uses: superfly/flyctl-actions/setup-flyctl@v1
 
+      - name: Start Fly MPG proxy
+        run: |
+          flyctl mpg proxy "${{ vars.FLY_MPG_NAME }}" --port 15432 &
+          for i in $(seq 1 15); do
+            nc -z 127.0.0.1 15432 2>/dev/null && echo "Proxy ready after ${i}s" && break
+            echo "Waiting for proxy... (${i}s)"
+            sleep 1
+          done
+          nc -z 127.0.0.1 15432 2>/dev/null || { echo "ERROR: MPG proxy did not start within 15s"; exit 1; }
+
       - name: Run Flyway migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           chmod +x scripts/migrate.sh
-          ./scripts/migrate.sh
+          PROXY_URL=$(node -e '
+            const u = new URL(process.env.DATABASE_URL);
+            u.hostname = "127.0.0.1";
+            u.port = "15432";
+            u.searchParams.set("sslmode", "disable");
+            process.stdout.write(u.toString());
+          ')
+          DATABASE_URL="$PROXY_URL" ./scripts/migrate.sh
 
       - name: Deploy API to Fly
         working-directory: api
