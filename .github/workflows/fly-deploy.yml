@@ -1,0 +1,35 @@
+name: fly-deploy-api
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "api/**"
+      - "migrations/**"
+      - "scripts/migrate.sh"
+      - ".github/workflows/fly-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Run Flyway migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          chmod +x scripts/migrate.sh
+          ./scripts/migrate.sh
+
+      - name: Deploy API to Fly
+        working-directory: api
+        run: flyctl deploy --config fly.toml --remote-only
