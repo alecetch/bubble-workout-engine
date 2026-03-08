@@ -1,0 +1,42 @@
+name: Sync Media Assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - assets/media-assets/**
+      - .github/workflows/sync-media-assets.yml
+  workflow_dispatch:
+
+jobs:
+  sync-media-assets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS CLI credentials for R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "Missing required secrets: R2_ACCESS_KEY_ID and/or R2_SECRET_ACCESS_KEY"
+            exit 1
+          fi
+          echo "AWS credentials found"
+
+      - name: Ensure sync script is executable
+        run: chmod +x scripts/sync-media-assets.sh
+
+      - name: Sync assets/media-assets to Cloudflare R2
+        env:
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID != '' && vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET != '' && vars.R2_BUCKET || 'media-assets' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: scripts/sync-media-assets.sh

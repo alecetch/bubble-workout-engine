@@ -1,29 +1,57 @@
--- Seed: baseline equipment_items reference rows used by equipment preset filtering.
+-- Seed: equipment items baseline sourced from api/data/export_EquipmentItem-2026-03-08.csv
 -- Idempotent via ON CONFLICT (bubble_id) DO UPDATE.
 
 WITH seed_rows AS (
   SELECT *
   FROM (
     VALUES
-      ('seed_eq_bodyweight', 'Bodyweight / no gear', 'bodyweight', 'bodyweight', true,  true,  true,  true,  true),
-      ('seed_eq_barbell',   'Free weights',         'barbell and plates', 'barbell', true,  true,  true,  false, false),
-      ('seed_eq_bench',     'Free weights',         'bench', 'bench', true,  true,  true,  false, false),
-      ('seed_eq_dumbbells', 'Free weights',         'dumbbells', 'dumbbells', true,  true,  true,  false, false),
-      ('seed_eq_kettlebells','Free weights',        'kettlebells', 'kettlebells', true, true,  true,  false, false),
-      ('seed_eq_pullup_bar','Racks / rigs',         'pull-up bar', 'pull_up_bar', true,  true,  true,  false, false),
-      ('seed_eq_treadmill', 'Cardio machine',       'treadmill', 'treadmill', true,  false, false, false, false),
-      ('seed_eq_row_erg',   'Cardio machine',       'rowing machine', 'row_erg', true,  true,  false, false, false),
-      ('seed_eq_bike_erg',  'Cardio machine',       'bikeerg', 'bike_erg', true,  true,  false, false, false)
+      ('1771082757446x136367148753498320', 'Bodyweight / no gear', 'bodyweight', 'bodyweight', NULL, '(App admin)', 'True', 'True', 'True', 'True', 'True', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "bodyweight", "slug": "", "creator": "(App admin)", "category": "Bodyweight / no gear", "unique_id": "1771082757446x136367148753498320", "no_equipment": "yes", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "bodyweight", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "yes", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757453x845043260719341800', 'Cardio machine', 'assault/air bike', 'assault_bike', NULL, '(App admin)', 'False', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "assault/air bike", "slug": "", "creator": "(App admin)", "category": "Cardio machine", "unique_id": "1771082757453x845043260719341800", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "assault_bike", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757462x687034445455885800', 'Cardio machine', 'bikeerg', 'bike_erg', NULL, '(App admin)', 'True', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "bikeerg", "slug": "", "creator": "(App admin)", "category": "Cardio machine", "unique_id": "1771082757462x687034445455885800", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "bike_erg", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757469x297467191610326850', 'Cardio machine', 'rowing machine', 'row_erg', NULL, '(App admin)', 'True', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "rowing machine", "slug": "", "creator": "(App admin)", "category": "Cardio machine", "unique_id": "1771082757469x297467191610326850", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "row_erg", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757480x205296166867753540', 'Cardio machine', 'skierg', 'ski_erg', NULL, '(App admin)', 'False', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "skierg", "slug": "", "creator": "(App admin)", "category": "Cardio machine", "unique_id": "1771082757480x205296166867753540", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "ski_erg", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757486x560148933020963460', 'Cardio machine', 'treadmill', 'treadmill', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "treadmill", "slug": "", "creator": "(App admin)", "category": "Cardio machine", "unique_id": "1771082757486x560148933020963460", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "treadmill", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757493x404328210472058240', 'Conditioning tools', 'medicine ball', 'med_ball', NULL, '(App admin)', 'True', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "medicine ball", "slug": "", "creator": "(App admin)", "category": "Conditioning tools", "unique_id": "1771082757493x404328210472058240", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "med_ball", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757500x522969296680021900', 'Conditioning tools', 'jump rope', 'jump_rope', NULL, '(App admin)', 'False', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "jump rope", "slug": "", "creator": "(App admin)", "category": "Conditioning tools", "unique_id": "1771082757500x522969296680021900", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "jump_rope", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757506x197317697515741570', 'Conditioning tools', 'batte rope', 'battle_rope', NULL, '(App admin)', 'True', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "batte rope", "slug": "", "creator": "(App admin)", "category": "Conditioning tools", "unique_id": "1771082757506x197317697515741570", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "battle_rope", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757512x228000229800015870', 'Free weights', 'barbell and plates', 'barbell', NULL, '(App admin)', 'True', 'True', 'True', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "barbell and plates", "slug": "", "creator": "(App admin)", "category": "Free weights", "unique_id": "1771082757512x228000229800015870", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "barbell", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757520x138613093469280860', 'Free weights', 'bench', 'bench', NULL, '(App admin)', 'True', 'True', 'True', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "bench", "slug": "", "creator": "(App admin)", "category": "Free weights", "unique_id": "1771082757520x138613093469280860", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "bench", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757528x219817784816571420', 'Free weights', 'dumbbells', 'dumbbells', NULL, '(App admin)', 'True', 'True', 'True', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "dumbbells", "slug": "", "creator": "(App admin)", "category": "Free weights", "unique_id": "1771082757528x219817784816571420", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "dumbbells", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757535x876552579626930400', 'Free weights', 'kettlebells', 'kettlebells', NULL, '(App admin)', 'True', 'True', 'True', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "kettlebells", "slug": "", "creator": "(App admin)", "category": "Free weights", "unique_id": "1771082757535x876552579626930400", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "kettlebells", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757541x434620138399638200', 'Free weights', 'trap bar', 'trap_bar', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "trap bar", "slug": "", "creator": "(App admin)", "category": "Free weights", "unique_id": "1771082757541x434620138399638200", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "trap_bar", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757547x637197952514780400', 'Functional / plyo', 'box', 'box', NULL, '(App admin)', 'True', 'True', 'True', 'True', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "box", "slug": "", "creator": "(App admin)", "category": "Functional / plyo", "unique_id": "1771082757547x637197952514780400", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "box", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "yes", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757553x262138194999801400', 'Functional / strongman', 'd-ball', 'd-ball', NULL, '(App admin)', 'False', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "d-ball", "slug": "", "creator": "(App admin)", "category": "Functional / strongman", "unique_id": "1771082757553x262138194999801400", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "d-ball", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757560x284695942372763520', 'Functional / strongman', 'sandbag', 'sandbag', NULL, '(App admin)', 'False', 'True', 'True', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "sandbag", "slug": "", "creator": "(App admin)", "category": "Functional / strongman", "unique_id": "1771082757560x284695942372763520", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "sandbag", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "yes", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757566x945084143529917300', 'Gymnastics / rig', 'pull-up bar', 'pullup_bar', NULL, '(App admin)', 'True', 'True', 'True', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "pull-up bar", "slug": "", "creator": "(App admin)", "category": "Gymnastics / rig", "unique_id": "1771082757566x945084143529917300", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "pullup_bar", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757573x627944382464131760', 'Gymnastics / rig', 'rings', 'rings', NULL, '(App admin)', 'False', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "rings", "slug": "", "creator": "(App admin)", "category": "Gymnastics / rig", "unique_id": "1771082757573x627944382464131760", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "rings", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757579x923243789917044700', 'Running', 'track/treadmill', 'treadmill', NULL, '(App admin)', 'True', 'True', 'True', 'True', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "track/treadmill", "slug": "", "creator": "(App admin)", "category": "Running", "unique_id": "1771082757579x923243789917044700", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "treadmill", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "yes", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757589x926227836403144000', 'Sled / Hyrox-specific', 'sled', 'sled', NULL, '(App admin)', 'False', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "sled", "slug": "", "creator": "(App admin)", "category": "Sled / Hyrox-specific", "unique_id": "1771082757589x926227836403144000", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "sled", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757597x810736407551822800', 'Sled / Hyrox-specific', 'wall ball', 'wall_ball', NULL, '(App admin)', 'False', 'True', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "wall ball", "slug": "", "creator": "(App admin)", "category": "Sled / Hyrox-specific", "unique_id": "1771082757597x810736407551822800", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "wall_ball", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "no", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "yes"}'),
+      ('1771082757604x181203354817088830', 'Strength machine', 'cable machine', 'cable', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "cable machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757604x181203354817088830", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "cable", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757612x448117197273443260', 'Strength machine', 'calf raise machine', 'calf_machine', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "calf raise machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757612x448117197273443260", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "calf_machine", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757618x974313939167615500', 'Strength machine', 'chest press machine', 'chest_press', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "chest press machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757618x974313939167615500", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "chest_press", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757625x872159162825447700', 'Strength machine', 'pec deck', 'pec_deck', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "pec deck", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757625x872159162825447700", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "pec_deck", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757632x640436115607357000', 'Strength machine', 'leg curl machine', 'leg_curl', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "leg curl machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757632x640436115607357000", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "leg_curl", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757640x191630518865631550', 'Strength machine', 'leg press machine', 'leg_press', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "leg press machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757640x191630518865631550", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "leg_press", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757647x864989675382407200', 'Strength machine', 'quad extension machine', 'leg_extension', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "quad extension machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757647x864989675382407200", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "leg_extension", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757654x425859392337180500', 'Strength machine', 'lat pulldown', 'lat_pulldown', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "lat pulldown", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757654x425859392337180500", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "lat_pulldown", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757661x347316869190645200', 'Strength machine', 'shoulder press machine', 'shoulder_press', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "shoulder press machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757661x347316869190645200", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "shoulder_press", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('1771082757668x328813685294877950', 'Strength machine', 'hack squat machine', 'hack_squat', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "hack squat machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757668x328813685294877950", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "hack_squat", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}')
   ) AS t(
     bubble_id,
     category,
     name,
     exercise_slug,
+    slug,
+    creator,
     commercial_gym,
     crossfit_hyrox_gym,
     decent_home_gym,
     minimal_equipment,
-    no_equipment
+    no_equipment,
+    created_at,
+    updated_at,
+    raw_json
   )
 )
 INSERT INTO public.equipment_items (
@@ -31,6 +59,8 @@ INSERT INTO public.equipment_items (
   category,
   name,
   exercise_slug,
+  slug,
+  creator,
   commercial_gym,
   crossfit_hyrox_gym,
   decent_home_gym,
@@ -41,32 +71,33 @@ INSERT INTO public.equipment_items (
   raw_json
 )
 SELECT
-  s.bubble_id,
-  s.category,
-  s.name,
-  s.exercise_slug,
-  s.commercial_gym,
-  s.crossfit_hyrox_gym,
-  s.decent_home_gym,
-  s.minimal_equipment,
-  s.no_equipment,
-  now(),
-  now(),
-  jsonb_build_object(
-    'seed_source', 'R__seed_equipment_items',
-    'bubble_id', s.bubble_id,
-    'exercise_slug', s.exercise_slug
-  )
-FROM seed_rows s
+  bubble_id,
+  category,
+  name,
+  exercise_slug,
+  slug,
+  creator,
+  commercial_gym::boolean,
+  crossfit_hyrox_gym::boolean,
+  decent_home_gym::boolean,
+  minimal_equipment::boolean,
+  no_equipment::boolean,
+  created_at::timestamptz,
+  updated_at::timestamptz,
+  raw_json::jsonb
+FROM seed_rows
 ON CONFLICT (bubble_id)
 DO UPDATE SET
   category = EXCLUDED.category,
   name = EXCLUDED.name,
   exercise_slug = EXCLUDED.exercise_slug,
+  slug = EXCLUDED.slug,
+  creator = EXCLUDED.creator,
   commercial_gym = EXCLUDED.commercial_gym,
   crossfit_hyrox_gym = EXCLUDED.crossfit_hyrox_gym,
   decent_home_gym = EXCLUDED.decent_home_gym,
   minimal_equipment = EXCLUDED.minimal_equipment,
   no_equipment = EXCLUDED.no_equipment,
-  updated_at = now(),
+  created_at = EXCLUDED.created_at,
+  updated_at = EXCLUDED.updated_at,
   raw_json = EXCLUDED.raw_json;
