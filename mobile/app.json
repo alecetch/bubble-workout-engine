@@ -3,15 +3,23 @@
     "name": "Bubble Workout Mobile",
     "slug": "bubble-workout-mobile",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bubbleworkout.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "com.bubbleworkout.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#0F172A"
       }
@@ -21,6 +29,12 @@
     },
     "plugins": [
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "720b39f5-a083-4b4f-8546-bff9cd9ffe12"
+      }
+    },
+    "owner": "alecetch"
   }
 }

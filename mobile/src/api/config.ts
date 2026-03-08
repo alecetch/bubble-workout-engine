@@ -1,16 +1,17 @@
 type EnvShape = {
-  process?: {
-    env?: Record<string, string | undefined>;
-  };
   require?: (moduleName: string) => unknown;
 };
 
-const env = (globalThis as EnvShape).process?.env;
+// Read EXPO_PUBLIC_* vars via direct process.env references so Metro inlines
+// them at bundle time. Indirect access (e.g. through a stored reference to
+// process.env) is not transformed by Metro and produces undefined in builds.
+const BAKED_API_BASE_URL: string = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+const BAKED_ENGINE_KEY: string = process.env.EXPO_PUBLIC_ENGINE_KEY ?? "";
+
 const requireFn = (globalThis as EnvShape).require;
 
 type EngineKeySource =
   | "EXPO_PUBLIC_ENGINE_KEY"
-  | "ENGINE_KEY"
   | "react-native-config"
   | "none";
 
@@ -27,14 +28,8 @@ function readEngineKeyFromReactNativeConfig(): string {
 }
 
 function resolveEngineKey(): { key: string; source: EngineKeySource } {
-  const expoPublicEngineKey = (env?.EXPO_PUBLIC_ENGINE_KEY ?? "").trim();
-  if (expoPublicEngineKey) {
-    return { key: expoPublicEngineKey, source: "EXPO_PUBLIC_ENGINE_KEY" };
-  }
-
-  const engineKey = (env?.ENGINE_KEY ?? "").trim();
-  if (engineKey) {
-    return { key: engineKey, source: "ENGINE_KEY" };
+  if (BAKED_ENGINE_KEY) {
+    return { key: BAKED_ENGINE_KEY, source: "EXPO_PUBLIC_ENGINE_KEY" };
   }
 
   const rnConfigKey = readEngineKeyFromReactNativeConfig();
@@ -45,7 +40,7 @@ function resolveEngineKey(): { key: string; source: EngineKeySource } {
   return { key: "", source: "none" };
 }
 
-export const API_BASE_URL = (env?.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+export const API_BASE_URL = (BAKED_API_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const ENGINE_KEY_RESOLUTION = resolveEngineKey();
 export const ENGINE_KEY = ENGINE_KEY_RESOLUTION.key;
 

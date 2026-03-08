@@ -46,7 +46,7 @@ jobs:
           done
           nc -z 127.0.0.1 15432 2>/dev/null || { echo "ERROR: MPG proxy did not start within 15s"; cat /tmp/fly-mpg-proxy.log; exit 1; }
 
-      - name: Run Flyway migrations
+      - name: Run Flyway migrations and verify seeds
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
@@ -59,6 +59,7 @@ jobs:
             process.stdout.write(u.toString());
           ')
           DATABASE_URL="$PROXY_URL" ./scripts/migrate.sh
+          DATABASE_URL="$PROXY_URL" npm --prefix api run qa:seeds
 
       - name: Deploy API to Fly
         working-directory: api
