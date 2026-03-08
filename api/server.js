@@ -164,8 +164,23 @@ app.get("/health", async (req, res) => {
   res.json({ ok: true, dbTime: r.rows[0].now });
 });
 
-app.get("/reference-data", (req, res) => {
-  return res.status(200).json(devReferenceData);
+app.get("/reference-data", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT exercise_slug AS code, name AS label, category
+      FROM equipment_items
+      ORDER BY category NULLS LAST, name ASC
+    `);
+    const equipmentItems = result.rows.map((row) => ({
+      code: row.code,
+      label: row.label,
+      category: row.category ?? null,
+    }));
+    return res.status(200).json({ ...devReferenceData, equipmentItems });
+  } catch (err) {
+    console.error("reference-data equipment_items error:", err);
+    return res.status(200).json(devReferenceData);
+  }
 });
 
 // Verify:
