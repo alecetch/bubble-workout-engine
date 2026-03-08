@@ -183,10 +183,30 @@ SELECT
   bubble_modified_date::timestamptz,
   slug,
   creator,
-  bubble_unique_id,
+  CASE
+    WHEN exercise_id IN (
+      'barbell_back_squat',
+      'barbell_deadlift',
+      'bench_press',
+      'barbell_row',
+      'ohp',
+      'pull_up',
+      'bulgarian_split_squat',
+      'bb_curl',
+      'barbell_standing_calf_raise',
+      'assault_bike'
+    ) THEN 'seed_ex_' || exercise_id
+    ELSE bubble_unique_id
+  END,
   COALESCE(created_at::timestamptz, now()),
   COALESCE(updated_at::timestamptz, now()),
   CASE
+    WHEN exercise_id = 'barbell_back_squat' THEN 'lower'
+    WHEN exercise_id = 'barbell_deadlift' THEN 'lower'
+    WHEN exercise_id = 'bench_press' THEN 'upper'
+    WHEN exercise_id = 'barbell_row' THEN 'upper'
+    WHEN exercise_id = 'ohp' THEN 'upper'
+    WHEN exercise_id = 'pull_up' THEN 'upper'
     WHEN strength_primary_region IN ('upper', 'lower') THEN strength_primary_region
     ELSE NULL
   END
