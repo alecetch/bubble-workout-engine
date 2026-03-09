@@ -308,10 +308,11 @@ Processing summary:
 1. Resolve `app_user` from `bubble_user_id`
 2. Resolve `client_profile` (must belong to user)
 3. Compute allowed exercise ids from Postgres catalog
-4. Fetch Bubble inputs via `fetchInputs`
+4. Assemble pipeline inputs via `buildInputsFromDevProfile` (reads exercise catalogue, config rows, and client profile from Postgres — no external API calls)
 5. Inject `allowed_exercise_ids`, `pg_user_id`, `pg_client_profile_id`
 6. Run pipeline (`runPipeline`) to produce emitter rows
 7. Import rows transactionally via `importEmitterPayload`
+8. Ensure calendar coverage via `ensureProgramCalendarCoverage`
 
 Success response:
 ```json
@@ -563,7 +564,7 @@ For malformed JSON requests parsed by global middleware:
 
 2. Path inconsistency
 - Two generation endpoints exist with different semantics:
-  - `/generate-plan` (legacy, Bubble fetch + pipeline, no Postgres import)
+  - `/generate-plan` (legacy stub — no longer the primary path; no Postgres import)
   - `/api/program/generate` (new path, resolves IDs, computes allowed list, persists via importer)
 
 3. Auth inconsistency

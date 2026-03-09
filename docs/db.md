@@ -13,7 +13,7 @@ This document reflects the current Postgres schema defined in `migrations/` and 
 ## Tables and Purpose
 
 ### 1) `app_user`
-Purpose: maps Bubble user IDs (text) to internal Postgres UUIDs.
+Purpose: maps external client-supplied user IDs (text) to internal Postgres UUIDs. The column is named `bubble_user_id` for historical reasons — it is now an opaque external identifier.
 
 - Key columns:
   - `id uuid pk default gen_random_uuid()`
@@ -35,21 +35,21 @@ Purpose: source-of-truth profile inputs (fitness/equipment/injury/preferences) t
   - `fitness_level_slug text`, `fitness_rank int check (fitness_rank >= 0)`
   - `equipment_items_slugs text[]`, `injury_flags text[]`, `preferred_days text[]`, `main_goals_slugs text[]`
   - profile metadata fields (`minutes_per_session`, `height_cm`, `weight_kg`, etc.)
-  - archival/audit: `is_archived`, Bubble timestamps/raw fields, `created_at`, `updated_at`
+  - archival/audit: `is_archived`, legacy timestamp/raw fields from original CSV import, `created_at`, `updated_at`
 - Used by:
   - bootstrap upsert endpoint
   - generation route (`bubble_client_profile_id + user_id` lookup)
   - debug allowed-exercise endpoint
 
 ### 3) `exercise_catalogue`
-Purpose: normalized exercise library imported from Bubble CSV and used for filtering allowed exercises.
+Purpose: normalised exercise library seeded via Flyway repeatable migration and used for filtering allowed exercises at generation time.
 
 - Key columns:
   - `exercise_id text pk`
   - gating fields: `is_archived`, `min_fitness_rank`, `contraindications_slugs text[]`, `equipment_items_slugs text[]`
   - option-like metadata: `movement_class`, `movement_pattern_primary`, swap groups, role/class fields
   - JSONB arrays/objects: `contraindications_json`, `equipment_json`, `preferred_in_json`, `target_regions_json`, `warmup_hooks`
-  - audit fields + Bubble IDs
+  - audit fields: `bubble_unique_id` (legacy external ID from original CSV import), `bubble_creation_date`, `bubble_modified_date`, `slug`, `creator`
 - Used by:
   - `engine/getAllowedExercises.js` query (rank, contraindication overlap, equipment containment)
 

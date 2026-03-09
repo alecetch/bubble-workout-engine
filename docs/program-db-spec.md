@@ -1,12 +1,12 @@
 # Program DB Spec (Postgres)
 
-This document defines the Postgres data model for storing generated training programs emitted by the **Emitter v8.1** (rows: `PRG`, `WEEK`, `DAY`, `SEG`, `EX`) and for supporting the Bubble UI (program overview, weekly plan, calendar view, workout screen) with **offline-ish** speed.
+This document defines the Postgres data model for storing generated training programs emitted by the **Emitter v8.1** (rows: `PRG`, `WEEK`, `DAY`, `SEG`, `EX`) and for supporting the React Native mobile app (program overview, weekly plan, calendar view, workout screen) with **offline-ish** speed.
 
 Scope:
 - ✅ Store *generated plan data* (program header, weeks, scheduled days, segments, prescribed exercises)
-- ✅ Support re-generation of days/weeks via OpenAI without rewriting historical logs
+- ✅ Support re-generation of days/weeks without rewriting historical logs
 - ✅ Fast reads for calendar + day detail
-- ⚠️ Logging (weights/reps) may stay in Bubble short-term, but this spec includes a Postgres logging option
+- ✅ Workout logging (weights/reps/sets) stored in Postgres via `segment_exercise_log`
 
 ---
 
@@ -22,10 +22,8 @@ This means:
 - Program structure (days/segments/exercises) is *effectively immutable* once created.
 - If you regenerate a day/week, we create a new revision and switch the “active” reference, or we replace only unstarted instances—see §7.
 
-### 1.3 Bubble UI compatibility
-Even if Bubble is the UI, Bubble should **read** from Postgres via API (fast, simple), not write large batches.
-- Writes happen server-side in bulk (COPY / batched inserts / transactions)
-- Bubble writes only logs (or calls an API to write logs)
+### 1.3 Mobile app read pattern
+The React Native app reads all program data from Postgres via the API. All writes happen server-side in bulk (batched inserts / transactions). Workout logs are written to Postgres via `POST /api/segment-log`.
 
 ---
 
@@ -170,7 +168,7 @@ create table if not exists program_day (
   scheduled_weekday text not null default '',
   scheduled_date date not null,
 
-  -- generation state (mirrors Bubble flags)
+  -- generation state
   day_inputs_status text not null default 'not_started',  -- not_started | building | ready | error
   day_inputs_ready boolean not null default false,
   build_status text not null default 'not_started',       -- not_started | built | error
@@ -534,7 +532,7 @@ Cons:
 
 careful with race conditions
 
-8) Read Patterns (Bubble UI)
+8) Read Patterns (Mobile App)
 8.1 Program list
 
 Query:
@@ -555,9 +553,9 @@ order segments by (block_order, segment_order_in_block)
 
 order exercises by (order_in_day) or (segment_key, order_in_block)
 
-9) Optional: Logging in Postgres (SegmentExerciseLog)
+9) Logging in Postgres (SegmentExerciseLog)
 
-If/when logs move out of Bubble, use:
+Workout logs are stored in Postgres via the `segment_exercise_log` table. The schema is:
 
 create table if not exists segment_exercise_log (
   id uuid primary key default gen_random_uuid(),
@@ -589,25 +587,12 @@ create table if not exists segment_exercise_log (
 create index if not exists idx_log_day on segment_exercise_log(user_id, program_day_id);
 create index if not exists idx_log_ex on segment_exercise_log(user_id, program_exercise_id);
 
-If logs remain in Bubble initially:
+10) Resolved Design Decisions
 
-keep Bubble tables as-is
-
-Bubble reads plan from Postgres + writes logs to Bubble
-
-later migrate logs to Postgres without changing plan tables
-
-10) Open Questions / Decisions (Codex TODOs)
-
-Codex should confirm these during implementation:
-
-Canonical ownership key: user_id vs client_profile_id vs both
-
-Whether to materialize program_calendar_day or compute from program_day
-
-Regeneration policy: revision-based (preferred) vs in-place replace for unstarted days
-
-Exercise catalog location (Bubble vs Postgres) for exercise_name/is_loadable/equipment_csv
+- **Canonical ownership key:** `user_id` (FK to `app_user`) is used on `program`, `program_day`, and `segment_exercise_log`.
+- **Calendar materialisation:** `program_calendar` rows are materialised by `ensureProgramCalendarCoverage` after generation.
+- **Regeneration policy:** In-place replace for unstarted days; historical logs are preserved by the cascade/set-null FK structure.
+- **Exercise catalogue:** Stored entirely in Postgres (`exercise_catalogue` table), seeded via Flyway repeatable migration.
 
 11) Implementation Notes (Codex Guidance)
 
