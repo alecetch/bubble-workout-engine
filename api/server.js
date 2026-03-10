@@ -2,10 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
-import { importEmitterRouter } from "./src/routes/importEmitter.js";
 import { readProgramRouter } from "./src/routes/readProgram.js";
-import { userBootstrapRouter } from "./src/routes/userBootstrap.js";
-import { clientProfileBootstrapRouter } from "./src/routes/clientProfileBootstrap.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
 import { segmentLogRouter } from "./src/routes/segmentLog.js";
@@ -17,6 +14,8 @@ import { historyExerciseRouter } from "./src/routes/historyExercise.js";
 import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.js";
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
+import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
+import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
@@ -47,6 +46,7 @@ const profilePatchKeys = [
   "ageRange",
   "onboardingStepCompleted",
   "onboardingCompletedAt",
+  "programType",
 ];
 
 const presetColumnByCode = {
@@ -76,6 +76,7 @@ function createDevProfile(id, userId) {
     ageRange: null,
     onboardingStepCompleted: 0,
     onboardingCompletedAt: null,
+    programType: null,
   };
 }
 
@@ -88,7 +89,7 @@ const devReferenceData = {
     { code: "hypertrophy", label: "Hypertrophy" },
     { code: "hyrox_competition", label: "HYROX Competition" },
     { code: "turf_games_competition", label: "Turf Games Competition" },
-    { code: "endurance", label: "Endurance" },
+    { code: "conditioning", label: "Conditioning" },
     { code: "rehab_return_from_injury", label: "Rehab / Return From Injury" },
   ],
   equipmentPresets: [
@@ -148,6 +149,8 @@ app.use(requestId);
 
 // Serve local media assets (dev only — in prod these are served from S3).
 app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
+app.use("/admin-ui", express.static(join(__dirname, "admin")));
+app.get("/admin/coverage", (_req, res) => res.sendFile(join(__dirname, "admin/coverage.html")));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -359,11 +362,8 @@ app.patch("/users/me", (req, res) => {
 });
 
 // Mount routers.
-app.use("/api", importEmitterRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
-app.use("/api", userBootstrapRouter);
-app.use("/api", clientProfileBootstrapRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use(historyProgramsRouter);
 app.use(historyTimelineRouter);
@@ -373,6 +373,8 @@ app.use(historyExerciseRouter);
 app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
+app.use("/api/admin", adminCoverageRouter);
+app.use("/admin", adminConfigsRouter);
 app.use(generateProgramV2Router);
 
 // JSON parse error handler (ONLY for invalid JSON payloads).

@@ -83,3 +83,191 @@ DO UPDATE SET
   text_pool_json = EXCLUDED.text_pool_json,
   is_active = EXCLUDED.is_active,
   updated_at = now();
+
+-- Seed: minimal strength phase narration templates.
+INSERT INTO public.narration_template (
+  applies_json,
+  field,
+  priority,
+  purpose,
+  scope,
+  segment_type,
+  template_id,
+  text_pool_json,
+  created_at,
+  updated_at,
+  is_active
+)
+VALUES (
+  '{"program_type":"strength","phase":"BASELINE"}'::jsonb,
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  'program',
+  NULL,
+  'strength_phase_baseline_v1',
+  '["Baseline phase: establish consistent setup, bar path, and repeatable working loads.", "Baseline week: prioritize clean reps and stable technique before adding load."]'::jsonb,
+  now(),
+  now(),
+  true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json,
+  field,
+  priority,
+  purpose,
+  scope,
+  segment_type,
+  template_id,
+  text_pool_json,
+  created_at,
+  updated_at,
+  is_active
+)
+VALUES (
+  '{"program_type":"strength","phase":"BUILD"}'::jsonb,
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  'program',
+  NULL,
+  'strength_phase_build_v1',
+  '["Build phase: add small load increments while keeping every rep technically sound.", "Build week: progress gradually and keep 1-2 reps in reserve on your heaviest sets."]'::jsonb,
+  now(),
+  now(),
+  true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json,
+  field,
+  priority,
+  purpose,
+  scope,
+  segment_type,
+  template_id,
+  text_pool_json,
+  created_at,
+  updated_at,
+  is_active
+)
+VALUES (
+  '{"program_type":"strength","phase":"CONSOLIDATE"}'::jsonb,
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  'program',
+  NULL,
+  'strength_phase_consolidate_v1',
+  '["Consolidate phase: reduce fatigue, keep bar speed crisp, and finish the block strong.", "Consolidate week: trim effort slightly and lock in movement quality under load."]'::jsonb,
+  now(),
+  now(),
+  true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+-- Seed: minimal conditioning phase narration templates.
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning","phase":"BASELINE"}'::jsonb,
+  'PROGRESSION_BLURB',
+  1, NULL, 'program', NULL,
+  'cond_phase_baseline_v1',
+  '["Baseline phase: settle into your pacing, get comfortable with the formats, and build the aerobic base.", "Baseline week: effort is moderate — prioritise consistency and movement quality over intensity."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning","phase":"BUILD"}'::jsonb,
+  'PROGRESSION_BLURB',
+  1, NULL, 'program', NULL,
+  'cond_phase_build_v1',
+  '["Build phase: push the pace a little harder each session and add output where prescribed.", "Build week: increase intensity or volume slightly — you should finish feeling challenged."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning","phase":"CONSOLIDATE"}'::jsonb,
+  'PROGRESSION_BLURB',
+  1, NULL, 'program', NULL,
+  'cond_phase_consolidate_v1',
+  '["Consolidate phase: reduce effort slightly and lock in your aerobic gains before the next block.", "Consolidate week: back off the intensity, keep the movement quality high, and finish strong."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();

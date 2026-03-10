@@ -4,8 +4,8 @@
 // Steps:
 // 01 build -> 02 segment -> 03 progression -> 04 rep rules -> 05 narration -> 06 emitter (rows)
 
-import { buildBasicHypertrophyProgramStep } from "./steps/01_buildBasicHypertrophyProgram.js";
-import { segmentHypertrophyProgram } from "./steps/02_segmentHypertrophy.js";
+import { buildProgramFromDefinition } from "./steps/01_buildProgramFromDefinition.js";
+import { segmentProgram } from "./steps/02_segmentProgram.js";
 import { applyProgression } from "./steps/03_applyProgression.js";
 import { applyRepRules } from "./steps/04_applyRepRules.js";
 import { applyNarration } from "./steps/05_applyNarration.js";
@@ -13,11 +13,9 @@ import { emitPlanRows } from "./steps/06_emitPlan.js";
 import { fetchActiveMediaAssets } from "../src/services/mediaAssets.js";
 import { fetchActiveNarrationTemplates } from "../src/services/narrationTemplates.js";
 import { fetchActiveRepRules } from "../src/services/repRules.js";
-import {
-  fetchProgramGenerationConfigByKey,
-  fetchProgramGenerationConfigs,
-} from "../src/services/programGenerationConfig.js";
 import { resolveHeroMediaRow, toHeroMediaObject, dayFocusSlug } from "./resolveHeroMedia.js";
+import { resolveCompiledConfig } from "./resolveCompiledConfig.js";
+import { validateCompiledConfig } from "./configValidation.js";
 import { pool } from "../src/db.js";
 
 function pickCatalogBuildV3(inputs) {
@@ -45,32 +43,6 @@ function normalizeNarrationTemplateRows(raw) {
     if (Array.isArray(raw.data)) return raw.data;
   }
   return [];
-}
-
-function pickPreferredConfigRow(rows, schemaVersion) {
-  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
-  if (!list.length) return null;
-  const targetSchema = Number.parseInt(String(schemaVersion), 10);
-  const toSchema = (v) =>
-    v === null || v === undefined || String(v).trim() === ""
-      ? null
-      : Number.parseInt(String(v), 10);
-
-  const score = (row) => {
-    const sv = toSchema(row?.schema_version);
-    if (sv !== null && sv === targetSchema) return 0;
-    if (sv === null) return 1;
-    return 2;
-  };
-
-  return list
-    .slice()
-    .sort((a, b) => {
-      const sA = score(a);
-      const sB = score(b);
-      if (sA !== sB) return sA - sB;
-      return String(a?.config_key ?? "").localeCompare(String(b?.config_key ?? ""));
-    })[0];
 }
 
 function hardcodedProgramGenerationConfigRow(programType, schemaVersion) {
@@ -109,10 +81,10 @@ function hardcodedProgramGenerationConfigRow(programType, schemaVersion) {
 }
 
 export async function runPipeline({ inputs, programType, request, db }) {
-  if (programType !== "hypertrophy") {
-    throw new Error(`Unsupported programType: ${programType}`);
-  }
   const dbClient = db || pool;
+  const schemaVersion = 1;
+  const compiledConfig = await resolveCompiledConfig(dbClient, { programType, schemaVersion, request });
+  validateCompiledConfig(compiledConfig);
 
   // ── Media assets (fetched once; no per-day queries) ──────────────────
   let mediaAssets = [];
@@ -136,7 +108,7 @@ export async function runPipeline({ inputs, programType, request, db }) {
   }
 
   // Step 1
-  const step1 = await buildBasicHypertrophyProgramStep({ inputs, request });
+  const step1 = await buildProgramFromDefinition({ inputs, request, compiledConfig });
   step1.debug = step1.debug || {};
 
   // Attach program hero
@@ -153,12 +125,7 @@ export async function runPipeline({ inputs, programType, request, db }) {
   }
 
   // Step 2
-  const step2 = await segmentHypertrophyProgram({
-    program: step1.program,
-    default_single_rounds: request?.default_single_rounds ?? 1,
-    default_superset_rounds: request?.default_superset_rounds ?? 1,
-    default_giant_rounds: request?.default_giant_rounds ?? 1,
-  });
+  const step2 = await segmentProgram({ program: step1.program, compiledConfig });
 
   // Step 3
   const clientProfile = inputs?.clientProfile?.response ?? {};
@@ -173,90 +140,19 @@ export async function runPipeline({ inputs, programType, request, db }) {
     clientProfile.program_length ??
     null;
 
-  const cfgRows = inputs?.configs?.genConfigs?.response?.results ?? [];
-  const schemaVersion = 1;
-
-  let programGenerationConfigs = [];
-  let configSource = "hardcoded";
-  let pgcSelectedRow = null;
+  let configSource = compiledConfig.source;
   const step3Notes = [];
-
-  const requestPgcJsonRaw = request?.program_generation_config_json;
-  if (requestPgcJsonRaw) {
-    const parsedRequestPgc = safeJsonParseMaybe(requestPgcJsonRaw, null);
-    if (!parsedRequestPgc || typeof parsedRequestPgc !== "object") {
-      throw new Error("Invalid request.program_generation_config_json (must be valid JSON object)");
-    }
-    const requestProgressionByRank = safeJsonParseMaybe(request?.progression_by_rank_json, null);
-    const nestedProgressionByRank = safeJsonParseMaybe(parsedRequestPgc?.progression_by_rank_json, null);
-    let progressionByRankForStep3 = {};
-    if (requestProgressionByRank && typeof requestProgressionByRank === "object") {
-      progressionByRankForStep3 = requestProgressionByRank;
-    } else if (nestedProgressionByRank && typeof nestedProgressionByRank === "object") {
-      progressionByRankForStep3 = nestedProgressionByRank;
-    } else {
-      step3Notes.push(
-        "Request override missing progression_by_rank_json (request + nested); using empty progression defaults",
-      );
-    }
-
-    const requestCfgRow = {
-      ...parsedRequestPgc,
-      config_key: parsedRequestPgc.config_key ?? `request_${programType}_v${schemaVersion}`,
-      is_active: true,
-      program_type: parsedRequestPgc.program_type ?? programType,
-      schema_version:
-        parsedRequestPgc.schema_version === null || parsedRequestPgc.schema_version === undefined
-          ? schemaVersion
-          : parsedRequestPgc.schema_version,
-      total_weeks_default: parsedRequestPgc.total_weeks_default,
-      progression_by_rank_json: progressionByRankForStep3,
-      program_generation_config_json: parsedRequestPgc,
-    };
-
-    programGenerationConfigs = [requestCfgRow];
-    configSource = "request";
-    pgcSelectedRow = requestCfgRow;
-  } else if (request?.config_key) {
-    const byKey = await fetchProgramGenerationConfigByKey(dbClient, request.config_key);
-    if (!byKey) {
-      throw new Error(`No active ProgramGenerationConfig found for config_key=${request.config_key}`);
-    }
-    programGenerationConfigs = [byKey];
-    configSource = "db";
-    pgcSelectedRow = byKey;
-  } else {
-    let dbRows = [];
-    try {
-      dbRows = await fetchProgramGenerationConfigs(dbClient, programType, schemaVersion);
-    } catch (err) {
-      dbRows = [];
-      step3Notes.push(
-        `Falling back to Bubble program_generation_config rows (DB fetch failed: ${err?.message || String(err)})`,
-      );
-    }
-
-    if (Array.isArray(dbRows) && dbRows.length > 0) {
-      programGenerationConfigs = dbRows;
-      configSource = "db";
-      pgcSelectedRow = pickPreferredConfigRow(dbRows, schemaVersion);
-    } else if (Array.isArray(cfgRows) && cfgRows.length > 0) {
-      programGenerationConfigs = cfgRows;
-      configSource = "bubble";
-      pgcSelectedRow = pickPreferredConfigRow(cfgRows, schemaVersion) || cfgRows[0];
-      step3Notes.push("Falling back to Bubble program_generation_config rows (DB returned no active rows)");
-    } else {
-      const hardcoded = hardcodedProgramGenerationConfigRow(programType, schemaVersion);
-      programGenerationConfigs = [hardcoded];
-      configSource = "hardcoded";
-      pgcSelectedRow = hardcoded;
-      step3Notes.push("Using hardcoded progression defaults (DB and Bubble config rows unavailable)");
-    }
+  const pgcSelectedRow =
+    compiledConfig.raw.programGenerationConfigRow ??
+    hardcodedProgramGenerationConfigRow(programType, schemaVersion);
+  const programGenerationConfigs = [pgcSelectedRow];
+  if (configSource === "hardcoded") {
+    step3Notes.push("Using hardcoded progression defaults (DB and request config unavailable)");
   }
 
   const step3 = await applyProgression({
     program: step2.program,
-    programType: "hypertrophy",
+    programType,
     fitnessRank,
     programLength,
     programGenerationConfigs,

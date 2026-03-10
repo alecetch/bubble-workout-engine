@@ -6,6 +6,243 @@ The design rationale is in `docs/pipeline-multi-type-design.md`.
 
 ---
 
+## Prompt 6 — Config Management Admin Panel
+
+### Context
+
+You are working in the `bubble-workout-engine` Node/Express API codebase.
+The codebase uses ESM (`import`/`export`) throughout. No CommonJS.
+The database is Postgres, accessed via a shared `pg.Pool` exported from `api/src/db.js`.
+
+You are building a **laptop-only admin panel** for editing `program_generation_config` rows without touching SQL. The full design spec is in `docs/architecture.md §9`.
+
+The admin panel has two parts:
+1. **Five new API routes** mounted at `/admin/*` in `api/server.js`, guarded by the existing `requireInternalToken` middleware from `api/src/middleware/auth.js`.
+2. **A single-page frontend** at `admin/index.html` (a plain HTML + vanilla JS file in the repo root's `admin/` directory). It runs in a browser pointed at `http://localhost:3000` and calls the API routes via `fetch`.
+
+---
+
+### Files to read before writing anything
+
+- `api/server.js` — understand how routers are imported and mounted; note the pattern for `app.use("/api", someRouter)`.
+- `api/src/middleware/auth.js` — understand `requireInternalToken`; it checks the `x-internal-token` or `x-engine-key` header.
+- `api/src/routes/importEmitter.js` — use this as the canonical example for creating a new route file (imports, router export, error handling pattern).
+- `api/src/db.js` — understand the shared pool export.
+- `migrations/R__seed_program_generation_config.sql` — understand the exact column names and the shape of `program_generation_config_json` JSONB.
+
+---
+
+### Part 1 — API routes
+
+**Create `api/src/routes/adminConfigs.js`**
+
+Export `adminConfigsRouter` from this file. All routes are guarded by `requireInternalToken`.
+
+Implement these five routes:
+
+**`GET /admin/configs`**
+Query:
+```sql
+SELECT id, config_key, program_type, schema_version, is_active, updated_at
+FROM public.program_generation_config
+ORDER BY program_type ASC, config_key ASC
+```
+Return `{ configs: rows }`.
+
+**`GET /admin/configs/:key`**
+Query:
+```sql
+SELECT id, config_key, program_type, schema_version, is_active,
+       total_weeks_default, notes,
+       program_generation_config_json,
+       progression_by_rank_json,
+       week_phase_config_json,
+       updated_at
+FROM public.program_generation_config
+WHERE config_key = $1
+```
+Return `{ config: row }`. 404 if not found.
+
+**`PUT /admin/configs/:key`**
+Body: `{ program_generation_config_json, progression_by_rank_json?, week_phase_config_json?, total_weeks_default?, notes?, is_active? }`
+
+Validate that `program_generation_config_json` is a non-null object (not a string, not an array). Return 400 with `{ error: "program_generation_config_json must be a non-null object" }` if invalid.
+
+Run a single UPDATE:
+```sql
+UPDATE public.program_generation_config
+SET
+  program_generation_config_json = $1,
+  progression_by_rank_json       = COALESCE($2, progression_by_rank_json),
+  week_phase_config_json         = COALESCE($3, week_phase_config_json),
+  total_weeks_default            = COALESCE($4, total_weeks_default),
+  notes                          = COALESCE($5, notes),
+  is_active                      = COALESCE($6, is_active),
+  updated_at                     = now()
+WHERE config_key = $7
+RETURNING id, config_key, program_type, is_active, updated_at
+```
+Return `{ ok: true, config: returning_row }`. 404 if no row was updated.
+
+**`POST /admin/configs`**
+Body: `{ source_key, new_key }` — duplicate an existing row under a new key.
+
+Validate: `source_key` and `new_key` must be non-empty strings. Return 400 if either is missing. Return 409 if `new_key` already exists.
+
+```sql
+INSERT INTO public.program_generation_config
+  (config_key, program_type, schema_version, is_active, notes,
+   program_generation_config_json, progression_by_rank_json,
+   week_phase_config_json, total_weeks_default, updated_at)
+SELECT
+  $2, program_type, schema_version, false,
+  'Duplicated from ' || config_key,
+  program_generation_config_json, progression_by_rank_json,
+  week_phase_config_json, total_weeks_default, now()
+FROM public.program_generation_config
+WHERE config_key = $1
+RETURNING id, config_key, program_type, is_active
+```
+Return `{ ok: true, config: returning_row }`. 404 if `source_key` not found.
+
+**`PATCH /admin/configs/:key/activate`**
+Body: `{ is_active: boolean }` — toggle active flag.
+
+```sql
+UPDATE public.program_generation_config
+SET is_active = $1, updated_at = now()
+WHERE config_key = $2
+RETURNING id, config_key, program_type, is_active, updated_at
+```
+Return `{ ok: true, config: returning_row }`. 404 if not found.
+
+All routes must return JSON. All DB errors must be caught and returned as `{ ok: false, error: err.message }` with status 500.
+
+---
+
+**Modify `api/server.js`**
+
+Add the import and mount — in the same style as all other route mounts:
+```js
+import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
+// ...
+app.use("/admin", adminConfigsRouter);
+```
+Place the `app.use` line with the other route mounts (before the error handlers).
+
+Also add a line to serve the admin frontend as a static directory:
+```js
+app.use("/admin-ui", express.static(join(__dirname, "../admin")));
+```
+Place this immediately after the existing `/assets/media-assets` static serve line.
+
+---
+
+### Part 2 — Frontend
+
+**Create `admin/index.html`**
+
+A single HTML file. No build step, no npm dependencies. Uses vanilla JS (ES modules via `<script type="module">`) and inline `<style>`. Must work when opened at `http://localhost:3000/admin-ui/index.html`.
+
+The `INTERNAL_API_TOKEN` value is read from a `<input id="token-input">` field that the user fills in once on load. All API calls include the header `x-internal-token: <value from that field>`. Store the token in `sessionStorage` so it persists across refreshes but not across browser sessions.
+
+#### Layout
+
+Two-column layout: narrow left sidebar (config list) + wide right editor panel.
+
+**Left sidebar:**
+- Heading: "Config Admin"
+- List of config rows showing `config_key`, `program_type`, and a green dot (●) or grey dot (○) for `is_active`.
+- Clicking a row loads it into the editor.
+- A "+ New (duplicate)" button at the bottom of the list — prompts for `source_key` and `new_key` using `window.prompt`, then calls `POST /admin/configs`.
+
+**Right editor panel — five collapsible sections:**
+
+Each section is a `<details><summary>` element so it collapses natively.
+
+**Header (always visible, above sections):**
+- Config key (read-only text)
+- Program type (read-only text)
+- Active status toggle: checkbox labelled "Active"
+
+**Section 1 — Builder: sets & budget**
+
+A 5-row × 4-column table:
+- Column headers: blank, "40 min", "50 min", "60 min"
+- Rows: "Block A sets", "Block B sets", "Block C sets", "Block D sets", "Block budget"
+- Each cell (except the label column) is a `<input type="number" min="0" max="20">`.
+- Values read from / write to `config.builder.sets_by_duration` and `config.builder.block_budget`.
+
+**Section 2 — Builder: day templates**
+
+A tab strip. Each tab represents one day template from `config.builder.day_templates`. Tabs show `day_key`. A "+ Add day" button appends a new empty day.
+
+Within each tab:
+- "Day key" text input (editable)
+- "Focus" text input (editable)
+- A slot table with columns: #, Slot, sw2, sw, mp, requirePref (select), Loadable (checkbox), Fallback slot, and action buttons [↑] [↓] [✕].
+- Each table row is one entry from `ordered_slots`. All fields are editable inputs/selects.
+- "requirePref" is a `<select>` with options: `(none)`, `strength_main`, `hypertrophy_secondary`.
+- Loadable is a checkbox for `preferLoadable`.
+- [↑] / [↓] buttons move the row up/down in the array.
+- [✕] removes the row.
+- An "+ Add slot" button appends a new empty slot row.
+
+**Section 3 — Segmentation**
+
+A table of block letter rows (A, B, C, D — and any others present in the data). Columns: Block letter, Segment type (select: single/superset/giant_set), Purpose (select: main/secondary/accessory).
+A "+ Add block" button appends a new row with an editable block letter input.
+
+**Section 4 — Progression**
+
+A table of fitness rank rows (beginner, intermediate, advanced, elite). Columns: Rank, Weekly set step (number input), Max extra sets (number input).
+
+Below the table: "Apply progression to" — three checkboxes labelled "main", "secondary", "accessory". Values read from / write to `config.progression.apply_to_purposes`.
+
+**Section 5 — Raw JSON** (collapsed by default)
+
+A `<textarea>` showing the full `program_generation_config_json` as pretty-printed JSON. Editing this textarea and saving uses the raw value, overriding the structured sections. Include a "Format JSON" button that pretty-prints the current textarea content.
+
+**Save / Discard buttons** (sticky at the bottom of the editor panel, always visible):
+- **Save**: reads all structured section values plus the raw JSON textarea (if it has been edited), merges them into a single `program_generation_config_json` object, and calls `PUT /admin/configs/:key`. Also sends updated `progression_by_rank_json` and any `is_active` change in the same PUT body. On success, shows a brief "Saved ✓" indicator and refreshes the config list. On failure, shows the error message in red.
+- **Discard**: reloads the current config from the API, discarding all unsaved changes.
+
+#### Merging structured sections back to JSON on Save
+
+When Save is clicked, build the final `program_generation_config_json` by:
+1. Start from the current raw JSON (in case the user edited the raw textarea).
+2. Overwrite `builder.sets_by_duration` from Section 1 inputs.
+3. Overwrite `builder.block_budget` from Section 1 inputs.
+4. Overwrite `builder.day_templates` from Section 2 (all day tabs, their focus, and their ordered_slots arrays).
+5. Overwrite `segmentation.block_semantics` from Section 3.
+6. Overwrite `progression.apply_to_purposes` from Section 4 checkboxes.
+7. Build the `progression_by_rank_json` object separately (outside the main JSONB) from Section 4 rank rows and include it as a top-level PUT body field.
+
+The raw textarea reflects the current in-memory JSON and is updated whenever a structured field changes (live sync). This means the raw textarea always shows what will be saved.
+
+---
+
+### Constraints
+
+- All new API code must be ESM (`import`/`export`). No CommonJS.
+- `admin/index.html` must be self-contained — no separate `.js` or `.css` files. All JS in `<script type="module">`, all styles in `<style>`.
+- Do not modify any existing route files other than `api/server.js`.
+- Do not modify any existing tests.
+- Do not add npm dependencies to `api/package.json`.
+- The frontend does not need to work without a running API — it is a developer tool.
+- Keep the frontend functional over decorative. Clean, readable layout is sufficient.
+
+---
+
+### Deliver
+
+1. Full content of `api/src/routes/adminConfigs.js`.
+2. The exact diff for `api/server.js` (two lines added: one import, two `app.use` lines).
+3. Full content of `admin/index.html`.
+4. Brief description of any decisions made where the spec was ambiguous.
+
+---
+
 ## Prompt 1 — Phase 0: Plumbing Only
 
 ### Context
@@ -152,6 +389,35 @@ The output contract of the new Step 01 must be identical to the old Step 01 — 
 - `api/engine/steps/01_buildBasicHypertrophyProgram.js` — read it in full. Every helper function matters.
 - `api/engine/runPipeline.js` — understand how `inputs` is structured; how `allowed_exercise_ids` is provided; how the catalog is available.
 - `api/engine/resolveCompiledConfig.js` — the `compiledConfig.builder` shape you'll consume.
+
+### Prerequisite fix — update `api/engine/resolveCompiledConfig.js`
+
+The Phase 0 implementation hardcodes `dayTemplates: null`, `setsByDuration: null`, `blockBudget: null` in the `builder` section instead of reading from the parsed JSONB. Fix this now so that when Prompt 3 populates the seed, the values flow through automatically without a second change to this file.
+
+Replace the `builder` section of the returned object:
+```js
+// WAS (hardcoded nulls):
+builder: {
+  dayTemplates:           null,
+  setsByDuration:         null,
+  blockBudget:            null,
+  slotDefaults:           {},
+  excludeMovementClasses: pgcJson?.builder?.exclude_movement_classes ?? ["cardio", "conditioning", "locomotion"],
+},
+
+// NOW (reads from pgcJson, falls back to null if key absent):
+builder: {
+  dayTemplates:           pgcJson?.builder?.day_templates    ?? null,
+  setsByDuration:         pgcJson?.builder?.sets_by_duration ?? null,
+  blockBudget:            pgcJson?.builder?.block_budget     ?? null,
+  slotDefaults:           pgcJson?.builder?.slot_defaults    ?? {},
+  excludeMovementClasses: pgcJson?.builder?.exclude_movement_classes ?? ["cardio", "conditioning", "locomotion"],
+},
+```
+
+All values will still be `null` until the seed is updated in Prompt 3. This change has no effect on current behaviour.
+
+---
 
 ### Important details from reading Step 01
 
@@ -385,6 +651,70 @@ After this prompt, the full hypertrophy path runs on the new architecture end-to
 - `migrations/R__seed_program_generation_config.sql` — understand the existing seed structure before modifying it.
 - `api/engine/configValidation.js` — review the Phase 0 validation rules you need to tighten.
 - `api/engine/resolveCompiledConfig.js` — confirm how `segmentation.blockSemantics` is populated from the parsed JSON.
+- `api/engine/steps/01_buildProgramFromDefinition.js` — three bugs found during Prompt 2 review must be fixed before adding seed data.
+
+### Prerequisite fixes (apply before any other changes)
+
+Three bugs were identified in the Prompt 2 output. Apply them first.
+
+---
+
+**Fix 1 — Showstopper: `extractSlotsFromTemplate` reads wrong key**
+
+In `api/engine/steps/01_buildProgramFromDefinition.js`, the function reads `template.slots` but the seed config uses `ordered_slots`. This means every day returns zero slots and zero blocks once the seed is populated.
+
+```js
+// WRONG (current code):
+function extractSlotsFromTemplate(template) {
+  if (Array.isArray(template)) return template;
+  if (!template || typeof template !== "object") return [];
+  if (Array.isArray(template.slots)) return template.slots;
+  return [];
+}
+
+// CORRECT:
+function extractSlotsFromTemplate(template) {
+  if (Array.isArray(template)) return template;
+  if (!template || typeof template !== "object") return [];
+  if (Array.isArray(template.ordered_slots)) return template.ordered_slots;
+  return [];
+}
+```
+
+---
+
+**Fix 2 — Hardcoded `"hypertrophy_secondary"` in slot loop**
+
+In `api/engine/steps/01_buildProgramFromDefinition.js`, the slot processing loop contains a hardcoded override that sets `requirePref = "hypertrophy_secondary"` for all C and D blocks. This overrides the `applySlotDefaults` result and breaks program types (e.g. strength) that define different `requirePref` values in their `slot_defaults` config.
+
+Remove these lines entirely — the `slot_defaults` config (applied via `applySlotDefaults`) already handles this for hypertrophy:
+
+```js
+// REMOVE these lines:
+if ((blockLetter === "C" || blockLetter === "D") && !slotDef.requirePref) {
+  slotDef.requirePref = "hypertrophy_secondary";
+}
+```
+
+---
+
+**Fix 3 — `resolveCompiledConfig.js` hardcodes `blockSemantics: null`**
+
+In `api/engine/resolveCompiledConfig.js`, the `segmentation` section of the returned object hardcodes `blockSemantics: null` instead of reading from the parsed JSONB. Once the seed is populated the value will never flow through.
+
+```js
+// WRONG (current code):
+segmentation: {
+  blockSemantics: null,
+},
+
+// CORRECT:
+segmentation: {
+  blockSemantics: pgcJson?.segmentation?.block_semantics ?? null,
+},
+```
+
+---
 
 ### Files to modify
 
@@ -489,6 +819,30 @@ Upgrade from Phase 0 lenient rules to full validation. Replace the Phase 0 "null
 - `config.builder.blockBudget` must be non-null non-empty object.
 - `config.segmentation.blockSemantics` must be non-null non-empty object. **Required, not optional.**
 - Each `blockSemantics` entry must have `preferred_segment_type` in `["single", "superset", "giant_set"]` and non-empty `purpose`.
+
+**Bug fix required:** The Phase 0 implementation validates `blockSemantics` as an array (`!Array.isArray(...)`), but `blockSemantics` is an object keyed by block letter (`{ "A": {...}, "B": {...} }`). The array check will throw the wrong error when the seed is populated. Fix the validation to treat `blockSemantics` as a plain object and iterate its entries with `Object.entries()`:
+
+```js
+// WRONG (Phase 0 code):
+if (!Array.isArray(config.segmentation.blockSemantics)) {
+  details.push("segmentation.blockSemantics must be an array when provided");
+} else {
+  for (let i = 0; i < config.segmentation.blockSemantics.length; i++) { ... }
+}
+
+// CORRECT:
+if (typeof config.segmentation.blockSemantics !== "object" || Array.isArray(config.segmentation.blockSemantics)) {
+  details.push("segmentation.blockSemantics must be a non-empty object");
+} else if (Object.keys(config.segmentation.blockSemantics).length === 0) {
+  details.push("segmentation.blockSemantics must be a non-empty object");
+} else {
+  for (const [letter, sem] of Object.entries(config.segmentation.blockSemantics)) {
+    if (!sem?.purpose) details.push(`blockSemantics["${letter}"].purpose must be a non-empty string`);
+    if (!["single", "superset", "giant_set"].includes(sem?.preferred_segment_type))
+      details.push(`blockSemantics["${letter}"].preferred_segment_type must be one of single|superset|giant_set`);
+  }
+}
+```
 
 Keep collecting all errors before throwing.
 
@@ -628,26 +982,36 @@ Your task is to:
 
 Test `validateCompiledConfig` directly. Pass in hand-constructed `compiledConfig` objects.
 
-Required test cases:
+**Important — fixture format for `blockSemantics`**: The Prompt 3 implementation treats `blockSemantics` as a plain object keyed by block letter (not an array). Build fixtures like:
+```js
+blockSemantics: {
+  A: { preferred_segment_type: "single",    purpose: "main" },
+  B: { preferred_segment_type: "superset",  purpose: "secondary" },
+  C: { preferred_segment_type: "giant_set", purpose: "accessory" },
+  D: { preferred_segment_type: "single",    purpose: "accessory" },
+}
+```
 
-| Description | Input | Expected |
+**Important — error message substrings**: Match against these actual strings produced by the Prompt 3 `configValidation.js` implementation (use substring/`includes` checks, not exact equality):
+
+| Description | Input | Expected substring in `details[]` |
 |---|---|---|
 | Valid hypertrophy config | Full valid config | Does not throw |
-| Missing `programType` | `programType: ""` | Throws with `"programType is required"` in details |
-| `builder` is null | `builder: null` | Throws with `"builder is required"` |
-| `dayTemplates` is empty | `builder.dayTemplates: []` | Throws with `"non-empty array"` |
-| Slot block letter not in blockSemantics | Slot `"E:test"` with no `"E"` in semantics | Throws with `"block letter"` |
-| Unknown `selector_strategy` | `selector_strategy: "wizard_mode"` | Throws with `"Unknown selector_strategy"` |
-| `blockSemantics` has bad `preferred_segment_type` | `preferred_segment_type: "tabata"` | Throws with `"must be one of"` |
-| Multiple errors at once | Two bad fields | Throws with both errors in `details[]` |
+| Missing `programType` | `programType: ""` | `"programType must be a non-empty string"` |
+| `builder` is null | `builder: null` | `"builder must be a non-null object"` |
+| `dayTemplates` is empty | `builder.dayTemplates: []` | `"non-empty array"` |
+| Slot block letter not in blockSemantics | Slot `"E:test"` with no `"E"` in semantics | `"missing in segmentation.blockSemantics"` |
+| Unknown `selector_strategy` | `selector_strategy: "wizard_mode"` | `"selector_strategy must be one of"` |
+| `blockSemantics` has bad `preferred_segment_type` | `{ A: { preferred_segment_type: "tabata", purpose: "main" } }` | `"must be one of single\|superset\|giant_set"` |
+| Multiple errors at once | Two bad fields | Both error substrings present in `details[]` |
 
 **`api/engine/__tests__/hypertrophyParity.test.js`**
 
-Test that the new `buildProgramFromDefinition` produces equivalent output to `buildBasicHypertrophyProgramStep`.
+Test that `buildProgramFromDefinition` produces structurally correct output. The old `buildBasicHypertrophyProgramStep` is NOT imported or compared against — the two steps use different slot definitions (string templates vs rich objects) so exercise picks will differ. "Parity" here means the output shape and structural invariants are preserved.
 
 Setup: build a representative `inputs` object using a subset of exercise catalogue rows (at minimum 20 exercises covering squat_compound, hinge_compound, push_horizontal_compound, pull_horizontal_compound, quad_iso, hamstring_iso, glute_iso, arms swap groups, shoulder_iso, calf_iso). These can be hardcoded test fixtures — no DB connection required.
 
-Build a representative `compiledConfig` with the full hypertrophy builder config (matching the seed values from Prompt 3).
+Build a representative `compiledConfig` with the full hypertrophy builder config (matching the seed values from Prompt 3). Construct this inline — do not import it from anywhere.
 
 Tests:
 - Output has `program.program_type === "hypertrophy"`
@@ -661,12 +1025,18 @@ Tests:
 
 **`api/engine/__tests__/strengthGeneration.test.js`** (depends on Part B completing first)
 
+**Do not call `runPipeline` in these tests** — `runPipeline` requires mocking 5+ DB services (media assets, rep rules, narration templates, program generation config, DB pool). Instead, test `buildProgramFromDefinition` and `segmentProgram` directly with an inline `compiledConfig` built from the strength seed values.
+
+Setup: build a strength `compiledConfig` inline with all required fields (matching the `strength_default_v1` seed added in Part B). Use the same exercise fixture pool as `hypertrophyParity.test.js` — or a subset of it.
+
 Tests:
-- `runPipeline` does not throw the old hypertrophy guard when called with `programType: "strength"`
+- `buildProgramFromDefinition` does not throw when called with `programType: "strength"` compiledConfig
 - Output has `program.program_type === "strength"`
-- All segments have `segment_type === "single"` (all-single block semantics for strength)
+- Output has `program.schema === "program_strength_v1"`
 - `program.days.length` equals the configured `days_per_week`
-- Each day has at least one segment
+- Each day has at least one block with a real `ex_id`
+- After passing output through `segmentProgram`, all segments have `segment_type === "single"` (strength block semantics are all `"single"`)
+- Each day has at least one segment after segmentation
 
 ---
 
@@ -748,3 +1118,69 @@ Then run tests.
 2. Test run output showing all tests passing.
 3. Confirmation that `POST /api/program/generate` with `programType: "strength"` succeeds.
 4. A list of any TODOs deferred to future prompts (e.g. conditioning, Hyrox, missing rep rules file).
+
+---
+
+## Prompt 5 — Tidy Up: Fix Failing Legacy Tests + Audit Unsolicited resolveCompiledConfig Change
+
+### Context
+
+Prompts 1–4 are complete. All new tests pass. However two issues were flagged in the Prompt 4 delivery:
+
+1. **Legacy integration tests are failing.** The strict `validateCompiledConfig` introduced in Prompt 3 changed the behaviour of the no-DB-row path. Existing tests that mock the DB to return empty PGC results (or pass no config_key) are now throwing `ConfigValidationError` where they previously succeeded. These tests were not modified in Prompt 4.
+
+2. **`api/engine/resolveCompiledConfig.js` was modified without being in the spec.** Codex added "hardcoded fallback config JSON (builder/segmentation/progression) so strict validation can still pass in no-row fallback flows." This change was not requested and may be incorrect: if it injects hardcoded hypertrophy day templates as the fallback for ALL program types, a `programType: "strength"` request with no DB row would silently generate a hypertrophy-shaped program instead of failing with a clear error.
+
+Your task is to fix both issues.
+
+### Files you must read before writing anything
+
+- `api/engine/resolveCompiledConfig.js` — read the full current file to understand exactly what was added in Prompt 4.
+- Every test file that is currently failing — read each one in full before proposing fixes.
+- `api/engine/configValidation.js` — understand what throws and when.
+
+### Fix 1 — Audit and correct `resolveCompiledConfig.js`
+
+Read the current file. Identify what was added to the hardcoded fallback path.
+
+**Expected correct behaviour for the `source = "hardcoded"` path:**
+
+When no DB PGC row is found (and no request override), the `compiledConfig` object should still be returned with `source: "hardcoded"`, but `builder` and `segmentation` fields should remain `null` / empty (as per the original design). `validateCompiledConfig` will then throw a `ConfigValidationError` with a clear message. This is the correct behaviour — fail fast with an explicit error rather than silently producing output using the wrong program type's templates.
+
+**If Codex added a hardcoded hypertrophy builder block to the fallback:**
+
+Remove it. The correct resolution is: if no PGC row is found, `resolveCompiledConfig` returns `source: "hardcoded"` with `builder.dayTemplates: null` and `segmentation.blockSemantics: null`, and `validateCompiledConfig` throws with:
+> `"builder.dayTemplates must be a non-empty array"` and `"segmentation.blockSemantics must be a non-empty object"`
+
+This gives the caller a clear signal to seed the DB with a config row for this program type.
+
+**If the added code is scoped to hypertrophy only** (e.g. `if (programType === "hypertrophy") { ... }`), it is still wrong — the DB seed is the correct place for program-type-specific config, not `resolveCompiledConfig.js`. Remove it.
+
+After the fix, verify the change does not break any currently-passing tests.
+
+---
+
+### Fix 2 — Fix failing legacy integration tests
+
+Read every failing test in full. For each failing test, identify the root cause. There are two likely patterns:
+
+**Pattern A — Test mocks DB to return no PGC rows, then calls the pipeline expecting it to work.** These tests were relying on the old silent fallback behaviour. Fix: provide an inline `request.program_generation_config_json` or `request.config_key` override so the test does not depend on the DB returning a PGC row. Use the full hypertrophy config JSON (matching the seed from Prompt 3) as the inline value. Do not change what the test is actually testing — just supply the config it needs.
+
+**Pattern B — Test mocks or stubs `resolveCompiledConfig` / `validateCompiledConfig` and the mock is now stale.** Fix: update the mock to match the current return shape.
+
+**Do not change test assertions** unless they are asserting something that the refactor intentionally changed (document any such cases). The goal is passing tests with minimal diff.
+
+---
+
+### Constraints
+
+- Do not modify any currently-passing test.
+- Do not add new test cases in this prompt — only fix failing ones.
+- Do not introduce any new shared utilities or abstractions.
+- All ESM.
+
+### Deliver
+
+1. The exact diff / full content of every file changed.
+2. Full test run output showing zero failures.
+3. A description of what was in the unsolicited `resolveCompiledConfig.js` change and what you did with it.

@@ -152,13 +152,50 @@ function makeDb({
 }
 
 function makeBaseRequest(overrides = {}) {
-  return {
-    program_generation_config_json: JSON.stringify({
-      total_weeks_default: 4,
-      progression_by_rank_json: {
-        beginner: { weekly_set_step: 0, max_extra_sets: 0 },
+  const fullPgcJson = {
+    total_weeks_default: 4,
+    progression_by_rank_json: {
+      beginner: { weekly_set_step: 0, max_extra_sets: 0 },
+    },
+    builder: {
+      day_templates: [
+        {
+          day_key: "day1",
+          focus: "lower",
+          ordered_slots: [{ slot: "A:squat", sw2: "squat_compound", requirePref: "strength_main" }],
+        },
+        {
+          day_key: "day2",
+          focus: "upper",
+          ordered_slots: [{ slot: "A:push_horizontal", sw2: "push_horizontal_compound", requirePref: "strength_main" }],
+        },
+      ],
+      sets_by_duration: {
+        "40": { A: 3, B: 3, C: 2, D: 2 },
+        "50": { A: 4, B: 3, C: 3, D: 2 },
+        "60": { A: 5, B: 4, C: 3, D: 3 },
       },
-    }),
+      block_budget: { "40": 4, "50": 5, "60": 6 },
+      slot_defaults: {
+        C: { requirePref: "hypertrophy_secondary" },
+        D: { requirePref: "hypertrophy_secondary" },
+      },
+      exclude_movement_classes: ["cardio", "conditioning", "locomotion"],
+    },
+    segmentation: {
+      block_semantics: {
+        A: { preferred_segment_type: "single", purpose: "main" },
+        B: { preferred_segment_type: "superset", purpose: "secondary" },
+        C: { preferred_segment_type: "giant_set", purpose: "accessory" },
+        D: { preferred_segment_type: "single", purpose: "accessory" },
+      },
+    },
+    progression: {
+      apply_to_purposes: ["main", "secondary", "accessory"],
+    },
+  };
+  return {
+    program_generation_config_json: JSON.stringify(fullPgcJson),
     ...overrides,
   };
 }
