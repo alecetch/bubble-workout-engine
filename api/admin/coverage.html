@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coverage Report</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Segoe UI, Arial, sans-serif;
+      }
+      .page {
+        padding: 14px;
+      }
+      .header {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+      }
+      .top-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .title {
+        margin: 0;
+        font-size: 22px;
+      }
+      .nav {
+        display: flex;
+        gap: 10px;
+      }
+      .nav a {
+        color: #1d4ed8;
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .nav a:hover {
+        text-decoration: underline;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: 280px 240px 1fr auto;
+        gap: 10px;
+        align-items: center;
+      }
+      .control {
+        display: grid;
+        gap: 4px;
+      }
+      .control label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      input,
+      select,
+      button {
+        font: inherit;
+      }
+      input,
+      select {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 7px 9px;
+        background: #fff;
+      }
+      .preset-boxes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .preset-boxes label {
+        font-size: 12px;
+        color: var(--text);
+      }
+      button {
+        width: auto;
+        border: 1px solid var(--primary);
+        border-radius: 6px;
+        background: var(--primary);
+        color: #fff;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .status {
+        margin-top: 8px;
+        font-size: 13px;
+      }
+      .status.ok {
+        color: #0f766e;
+      }
+      .status.err {
+        color: #b42318;
+      }
+      .summary {
+        margin: 12px 0 8px 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .table-wrap {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1400px;
+      }
+      th,
+      td {
+        border: 1px solid #ecf0f4;
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: top;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      th {
+        background: #f9fbfd;
+      }
+      th.group {
+        text-align: center;
+        font-size: 11px;
+      }
+      td.count {
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+      td.c0 {
+        background: #fde8e8;
+        color: #b42318;
+        font-weight: 700;
+      }
+      td.c1 {
+        background: #fef3c7;
+        color: #92400e;
+        font-weight: 700;
+      }
+      td.c2 {
+        background: #d1fae5;
+      }
+      .constraints-empty {
+        color: var(--muted);
+        font-style: italic;
+      }
+      .focus-empty {
+        color: var(--muted);
+      }
+      @media (max-width: 1100px) {
+        .controls {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">Coverage Report</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/coverage">Coverage Report</a>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <div class="control">
+            <label for="config-filter">Config</label>
+            <select id="config-filter"></select>
+          </div>
+          <div class="control">
+            <label>Presets</label>
+            <div id="preset-boxes" class="preset-boxes"></div>
+          </div>
+          <div class="control">
+            <label for="show-filter">Show</label>
+            <select id="show-filter">
+              <option value="all">All slots</option>
+              <option value="gaps">Gaps only</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top: 10px">
+          <button id="load-btn" type="button">Load Report</button>
+        </div>
+        <div id="status" class="status"></div>
+      </section>
+
+      <div id="summary" class="summary"></div>
+
+      <div class="table-wrap">
+        <table id="report-table">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_internal_api_token";
+      const RANKS_ORDER = [0, 1, 2, 3];
+      const RANK_SHORT = { 0: "B", 1: "I", 2: "A", 3: "E" };
+      const PRESET_SHORT = {
+        no_equipment: "NE",
+        minimal_equipment: "ME",
+        decent_home_gym: "HG",
+        commercial_gym: "CG",
+        crossfit_hyrox_gym: "CF",
+      };
+
+      const state = {
+        presets: [],
+        rows: [],
+        selectedConfig: "all",
+        selectedShow: "all",
+        visiblePresets: new Set(),
+      };
+
+      const tokenInput = document.getElementById("token-input");
+      const loadBtn = document.getElementById("load-btn");
+      const statusEl = document.getElementById("status");
+      const configFilterEl = document.getElementById("config-filter");
+      const showFilterEl = document.getElementById("show-filter");
+      const presetBoxesEl = document.getElementById("preset-boxes");
+      const summaryEl = document.getElementById("summary");
+      const tableHeadEl = document.getElementById("table-head");
+      const tableBodyEl = document.getElementById("table-body");
+
+      function escapeHtml(v) {
+        return String(v ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function getToken() {
+        return tokenInput.value.trim();
+      }
+
+      function setStatus(msg, kind = "") {
+        statusEl.textContent = msg;
+        statusEl.className = `status ${kind}`.trim();
+      }
+
+      function getConstraintText(row) {
+        const parts = [];
+        if (row.sw) parts.push(`sw:${row.sw}`);
+        if (row.sw2) parts.push(`sw2:${row.sw2}`);
+        if (Array.isArray(row.swAny) && row.swAny.length) parts.push(`swAny:[${row.swAny.join(",")}]`);
+        if (row.mp) parts.push(`mp:${row.mp}`);
+        if (row.requirePref) parts.push(`pref:${row.requirePref}`);
+        return parts.length ? parts.join(" · ") : "";
+      }
+
+      function hasGap(row, visiblePresetCodes) {
+        for (const code of visiblePresetCodes) {
+          for (const rank of RANKS_ORDER) {
+            const key = `${code}_${rank}`;
+            const count = Number(row.counts?.[key] ?? 0);
+            if (count <= 1) return true;
+          }
+        }
+        return false;
+      }
+
+      function filteredRows() {
+        const presetCodes = state.presets
+          .map((p) => p.code)
+          .filter((code) => state.visiblePresets.has(code));
+        return state.rows.filter((row) => {
+          if (state.selectedConfig !== "all" && row.config_key !== state.selectedConfig) return false;
+          if (state.selectedShow === "gaps" && !hasGap(row, presetCodes)) return false;
+          return true;
+        });
+      }
+
+      function renderFilters() {
+        const configKeys = Array.from(new Set(state.rows.map((r) => r.config_key))).sort();
+        configFilterEl.innerHTML = [
+          `<option value="all"${state.selectedConfig === "all" ? " selected" : ""}>All configs</option>`,
+          ...configKeys.map(
+            (k) => `<option value="${escapeHtml(k)}"${state.selectedConfig === k ? " selected" : ""}>${escapeHtml(k)}</option>`,
+          ),
+        ].join("");
+
+        presetBoxesEl.innerHTML = state.presets
+          .map((preset) => {
+            const checked = state.visiblePresets.has(preset.code) ? "checked" : "";
+            return `
+              <label>
+                <input type="checkbox" data-preset-code="${escapeHtml(preset.code)}" ${checked} />
+                ${escapeHtml(preset.label)}
+              </label>
+            `;
+          })
+          .join("");
+
+        presetBoxesEl.querySelectorAll("input[data-preset-code]").forEach((el) => {
+          el.addEventListener("change", () => {
+            const code = el.dataset.presetCode;
+            if (el.checked) state.visiblePresets.add(code);
+            else state.visiblePresets.delete(code);
+            renderTable();
+          });
+        });
+
+        configFilterEl.addEventListener("change", () => {
+          state.selectedConfig = configFilterEl.value || "all";
+          renderTable();
+        });
+
+        showFilterEl.addEventListener("change", () => {
+          state.selectedShow = showFilterEl.value || "all";
+          renderTable();
+        });
+      }
+
+      function renderTable() {
+        const visiblePresets = state.presets.filter((p) => state.visiblePresets.has(p.code));
+        const allRows = state.rows;
+        const rows = filteredRows();
+        const gapsTotal = allRows.filter((row) =>
+          hasGap(
+            row,
+            state.presets.map((p) => p.code),
+          ),
+        ).length;
+
+        summaryEl.textContent = `Showing ${rows.length} of ${allRows.length} slots (${gapsTotal} with gaps).`;
+
+        const fixedHeaders = `
+          <tr>
+            <th rowspan="2">Config</th>
+            <th rowspan="2">Day</th>
+            <th rowspan="2">Focus</th>
+            <th rowspan="2">Slot</th>
+            <th rowspan="2">Constraints</th>
+            ${visiblePresets.map((p) => `<th class="group" colspan="4">${PRESET_SHORT[p.code] || p.code}</th>`).join("")}
+          </tr>
+          <tr>
+            ${visiblePresets
+              .map(() =>
+                RANKS_ORDER.map((rank) => `<th>${RANK_SHORT[rank]}</th>`).join(""),
+              )
+              .join("")}
+          </tr>
+        `;
+        tableHeadEl.innerHTML = fixedHeaders;
+
+        tableBodyEl.innerHTML = rows
+          .map((row) => {
+            const constraintText = getConstraintText(row);
+            const countCells = visiblePresets
+              .map((preset) =>
+                RANKS_ORDER.map((rank) => {
+                  const key = `${preset.code}_${rank}`;
+                  const count = Number(row.counts?.[key] ?? 0);
+                  const cls = count === 0 ? "c0" : count === 1 ? "c1" : count === 2 ? "c2" : "";
+                  return `<td class="count ${cls}">${count}</td>`;
+                }).join(""),
+              )
+              .join("");
+            return `
+              <tr>
+                <td>${escapeHtml(row.config_key)}</td>
+                <td>${row.day_index} · ${escapeHtml(row.day_key)}</td>
+                <td class="${row.day_focus ? "" : "focus-empty"}">${row.day_focus ? escapeHtml(row.day_focus) : "—"}</td>
+                <td>${escapeHtml(row.slot)}</td>
+                <td class="${constraintText ? "" : "constraints-empty"}">${constraintText || "(unconstrained)"}</td>
+                ${countCells}
+              </tr>
+            `;
+          })
+          .join("");
+      }
+
+      async function loadReport() {
+        try {
+          const token = getToken();
+          if (!token) {
+            setStatus("Missing token. Fill Internal API Token first.", "err");
+            return;
+          }
+          sessionStorage.setItem(STORAGE_KEY, token);
+          setStatus("Loading...", "");
+
+          const res = await fetch("/api/admin/coverage-report", {
+            headers: {
+              "x-internal-token": token,
+            },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+          state.presets = Array.isArray(data.presets) ? data.presets : [];
+          state.rows = Array.isArray(data.rows) ? data.rows : [];
+          if (state.visiblePresets.size === 0) {
+            for (const preset of state.presets) state.visiblePresets.add(preset.code);
+          }
+
+          renderFilters();
+          renderTable();
+          setStatus(`Loaded ${state.rows.length} slot rows.`, "ok");
+        } catch (err) {
+          setStatus(err.message || "Failed to load report", "err");
+        }
+      }
+
+      function init() {
+        const savedToken = sessionStorage.getItem(STORAGE_KEY);
+        if (savedToken) tokenInput.value = savedToken;
+        loadBtn.addEventListener("click", loadReport);
+      }
+
+      init();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1003 @@
+﻿
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Config Admin</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --success: #198754;
+        --danger: #dc3545;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Segoe UI, Arial, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      .page {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        height: 100vh;
+      }
+      .sidebar,
+      .editor {
+        overflow: auto;
+      }
+      .sidebar {
+        border-right: 1px solid var(--border);
+        background: var(--panel);
+        display: flex;
+        flex-direction: column;
+      }
+      .sidebar-header {
+        padding: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .sidebar-title {
+        margin: 0 0 8px 0;
+        font-size: 20px;
+      }
+      .token-row {
+        display: grid;
+        gap: 6px;
+      }
+      .token-row input {
+        width: 100%;
+      }
+      .list-wrap {
+        flex: 1;
+        overflow: auto;
+      }
+      .config-item {
+        padding: 10px 12px;
+        border-bottom: 1px solid #eef2f6;
+        cursor: pointer;
+      }
+      .config-item.active {
+        background: #edf4ff;
+      }
+      .config-key {
+        font-weight: 600;
+      }
+      .config-meta {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .dot-on {
+        color: var(--success);
+      }
+      .dot-off {
+        color: #98a2b3;
+      }
+      .sidebar-footer {
+        border-top: 1px solid var(--border);
+        padding: 12px;
+      }
+      .editor {
+        padding: 16px 18px 96px 18px;
+      }
+      .editor-empty {
+        color: var(--muted);
+        margin-top: 20px;
+      }
+      .header-card,
+      details {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      .header-card {
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+      .header-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 12px;
+        align-items: center;
+      }
+      details {
+        margin-bottom: 12px;
+      }
+      summary {
+        font-weight: 600;
+        padding: 12px;
+        cursor: pointer;
+      }
+      .section-body {
+        padding: 12px;
+        border-top: 1px solid #eff2f6;
+      }
+      label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      input,
+      select,
+      textarea,
+      button {
+        font: inherit;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+      }
+      textarea {
+        min-height: 300px;
+        resize: vertical;
+        font-family: Consolas, monospace;
+        font-size: 12px;
+      }
+      .table-wrap {
+        overflow: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        border: 1px solid #ebeff5;
+        padding: 6px;
+        vertical-align: middle;
+        text-align: left;
+      }
+      th {
+        background: #f9fbfd;
+      }
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .tab-btn {
+        width: auto;
+        border: 1px solid var(--border);
+        background: #fff;
+        border-radius: 999px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .tab-btn.selected {
+        background: #eef4ff;
+        border-color: #b9d2ff;
+        color: #1d4ed8;
+      }
+      .inline-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .btn-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 8px;
+      }
+      button {
+        width: auto;
+        border: 1px solid var(--border);
+        background: #fff;
+        border-radius: 6px;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      button.danger {
+        border-color: #f0b7bf;
+        color: #b42318;
+      }
+      .sticky-actions {
+        position: fixed;
+        left: 320px;
+        right: 0;
+        bottom: 0;
+        background: #fff;
+        border-top: 1px solid var(--border);
+        padding: 10px 18px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .status {
+        font-size: 13px;
+      }
+      .status.ok {
+        color: var(--success);
+      }
+      .status.err {
+        color: var(--danger);
+      }
+      @media (max-width: 980px) {
+        .page {
+          grid-template-columns: 1fr;
+          grid-template-rows: 40vh 1fr;
+          height: auto;
+          min-height: 100vh;
+        }
+        .sticky-actions {
+          left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1 class="sidebar-title">Config Admin</h1>
+          <div class="token-row">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+            <button id="load-btn">Load Configs</button>
+          </div>
+        </div>
+        <div id="config-list" class="list-wrap"></div>
+        <div class="sidebar-footer">
+          <button id="duplicate-btn">+ New (duplicate)</button>
+        </div>
+      </aside>
+
+      <main class="editor">
+        <div id="editor-root"></div>
+      </main>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_internal_api_token";
+      const DURATIONS = ["40", "50", "60"];
+      const BLOCKS = ["A", "B", "C", "D"];
+      const REQUIRE_PREF_OPTIONS = ["", "strength_main", "hypertrophy_secondary"];
+      const SEGMENT_TYPES = ["single", "superset", "giant_set"];
+      const PURPOSE_TYPES = ["main", "secondary", "accessory"];
+      const RANKS = ["beginner", "intermediate", "advanced", "elite"];
+
+      const state = {
+        configs: [],
+        selectedKey: null,
+        configRow: null,
+        jsonObj: {},
+        rawText: "",
+        dayTab: 0,
+        rawEdited: false,
+        status: "",
+        statusKind: "",
+      };
+
+      const tokenInput = document.getElementById("token-input");
+      const loadBtn = document.getElementById("load-btn");
+      const duplicateBtn = document.getElementById("duplicate-btn");
+      const configListEl = document.getElementById("config-list");
+      const editorRoot = document.getElementById("editor-root");
+
+      function deepClone(x) {
+        return JSON.parse(JSON.stringify(x ?? {}));
+      }
+      function getToken() {
+        return tokenInput.value.trim();
+      }
+      function escapeHtml(v) {
+        return String(v ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+      function toInt(value, fallback = 0) {
+        const n = Number(value);
+        return Number.isFinite(n) ? Math.round(n) : fallback;
+      }
+
+      function setStatus(message, kind = "") {
+        state.status = message;
+        state.statusKind = kind;
+        renderStickyStatus();
+      }
+
+      async function apiFetch(path, init = {}) {
+        const token = getToken();
+        if (!token) throw new Error("Missing token. Fill Internal API Token first.");
+        sessionStorage.setItem(STORAGE_KEY, token);
+
+        const headers = {
+          "Content-Type": "application/json",
+          "x-internal-token": token,
+          ...(init.headers || {}),
+        };
+
+        const res = await fetch(path, { ...init, headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+      function ensureBuilderAndSegmentation() {
+        const root = state.jsonObj;
+        if (!root.builder || typeof root.builder !== "object" || Array.isArray(root.builder)) {
+          root.builder = {};
+        }
+        if (
+          !root.builder.sets_by_duration ||
+          typeof root.builder.sets_by_duration !== "object" ||
+          Array.isArray(root.builder.sets_by_duration)
+        ) {
+          root.builder.sets_by_duration = {};
+        }
+        if (
+          !root.builder.block_budget ||
+          typeof root.builder.block_budget !== "object" ||
+          Array.isArray(root.builder.block_budget)
+        ) {
+          root.builder.block_budget = {};
+        }
+        if (!Array.isArray(root.builder.day_templates)) root.builder.day_templates = [];
+        if (
+          !root.segmentation ||
+          typeof root.segmentation !== "object" ||
+          Array.isArray(root.segmentation)
+        ) {
+          root.segmentation = {};
+        }
+        if (
+          !root.segmentation.block_semantics ||
+          typeof root.segmentation.block_semantics !== "object" ||
+          Array.isArray(root.segmentation.block_semantics)
+        ) {
+          root.segmentation.block_semantics = {};
+        }
+        if (
+          !root.progression ||
+          typeof root.progression !== "object" ||
+          Array.isArray(root.progression)
+        ) {
+          root.progression = {};
+        }
+        if (!Array.isArray(root.progression.apply_to_purposes)) {
+          root.progression.apply_to_purposes = [];
+        }
+      }
+
+      function syncRaw() {
+        state.rawText = JSON.stringify(state.jsonObj, null, 2);
+        const rawEl = document.getElementById("raw-json");
+        if (rawEl) rawEl.value = state.rawText;
+      }
+
+      function renderConfigList() {
+        if (!state.configs.length) {
+          configListEl.innerHTML =
+            '<div class="config-item"><span class="config-meta">No configs loaded yet.</span></div>';
+          return;
+        }
+
+        configListEl.innerHTML = state.configs
+          .map((cfg) => {
+            const selected = cfg.config_key === state.selectedKey ? "active" : "";
+            const dot = cfg.is_active
+              ? '<span class="dot-on">&#9679;</span>'
+              : '<span class="dot-off">&#9675;</span>';
+            return `
+              <div class="config-item ${selected}" data-key="${escapeHtml(cfg.config_key)}">
+                <div class="config-key">${dot} ${escapeHtml(cfg.config_key)}</div>
+                <div class="config-meta">${escapeHtml(cfg.program_type)} · schema ${escapeHtml(cfg.schema_version ?? "?")}</div>
+              </div>
+            `;
+          })
+          .join("");
+
+        configListEl.querySelectorAll(".config-item[data-key]").forEach((el) => {
+          el.addEventListener("click", () => loadConfig(el.dataset.key));
+        });
+      }
+
+      function renderStickyStatus() {
+        const statusEl = document.getElementById("save-status");
+        if (!statusEl) return;
+        statusEl.textContent = state.status || "";
+        statusEl.className = `status ${state.statusKind || ""}`;
+      }
+
+      function getRankConfig() {
+        const ranks = state.configRow?.progression_by_rank_json;
+        if (ranks && typeof ranks === "object" && !Array.isArray(ranks)) return deepClone(ranks);
+        return {};
+      }
+      function renderEditor() {
+        if (!state.configRow) {
+          editorRoot.innerHTML =
+            '<div class="editor-empty">Load a config from the left panel to start editing.</div>';
+          return;
+        }
+
+        ensureBuilderAndSegmentation();
+        const root = state.jsonObj;
+        const dayTemplates = root.builder.day_templates;
+        if (state.dayTab >= dayTemplates.length) state.dayTab = Math.max(0, dayTemplates.length - 1);
+        if (state.dayTab < 0) state.dayTab = 0;
+
+        const selectedDay = dayTemplates[state.dayTab] || null;
+        const semantics = root.segmentation.block_semantics || {};
+        const semKeys = Array.from(new Set([...BLOCKS, ...Object.keys(semantics)]));
+        const rankJson = getRankConfig();
+        const activeChecked = state.configRow.is_active ? "checked" : "";
+
+        const setsRows = [
+          { label: "Block A sets", block: "A" },
+          { label: "Block B sets", block: "B" },
+          { label: "Block C sets", block: "C" },
+          { label: "Block D sets", block: "D" },
+        ];
+
+        const dayTabsHtml = dayTemplates
+          .map(
+            (d, i) =>
+              `<button class="tab-btn ${i === state.dayTab ? "selected" : ""}" data-day-tab="${i}">${escapeHtml(d?.day_key || `day${i + 1}`)}</button>`,
+          )
+          .join("");
+
+        const slotRowsHtml = (selectedDay?.ordered_slots || [])
+          .map((slot, idx) => {
+            const reqPref = slot.requirePref ?? "";
+            const reqPrefOptions = REQUIRE_PREF_OPTIONS.map((v) => {
+              const selected = v === reqPref ? "selected" : "";
+              const label = v === "" ? "(none)" : v;
+              return `<option value="${escapeHtml(v)}" ${selected}>${escapeHtml(label)}</option>`;
+            }).join("");
+            return `
+              <tr data-slot-index="${idx}">
+                <td>${idx + 1}</td>
+                <td><input data-slot-field="slot" value="${escapeHtml(slot.slot || "")}" /></td>
+                <td><input data-slot-field="sw2" value="${escapeHtml(slot.sw2 || "")}" /></td>
+                <td><input data-slot-field="sw" value="${escapeHtml(slot.sw || "")}" /></td>
+                <td><input data-slot-field="mp" value="${escapeHtml(slot.mp || "")}" /></td>
+                <td><select data-slot-field="requirePref">${reqPrefOptions}</select></td>
+                <td><input type="checkbox" data-slot-field="preferLoadable" ${slot.preferLoadable ? "checked" : ""} /></td>
+                <td><input data-slot-field="fill_fallback_slot" value="${escapeHtml(slot.fill_fallback_slot || "")}" /></td>
+                <td>
+                  <button type="button" data-slot-act="up">↑</button>
+                  <button type="button" data-slot-act="down">↓</button>
+                  <button type="button" class="danger" data-slot-act="remove">✕</button>
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+
+        const semanticsRows = semKeys
+          .map((letter) => {
+            const sem = semantics[letter] || {};
+            const segmentOptions = SEGMENT_TYPES.map((t) => {
+              const selected = sem.preferred_segment_type === t ? "selected" : "";
+              return `<option value="${t}" ${selected}>${t}</option>`;
+            }).join("");
+            const purposeOptions = PURPOSE_TYPES.map((p) => {
+              const selected = sem.purpose === p ? "selected" : "";
+              return `<option value="${p}" ${selected}>${p}</option>`;
+            }).join("");
+            return `
+              <tr data-sem-letter="${escapeHtml(letter)}">
+                <td><input data-sem-field="letter" value="${escapeHtml(letter)}" ${BLOCKS.includes(letter) ? "readonly" : ""} /></td>
+                <td><select data-sem-field="preferred_segment_type">${segmentOptions}</select></td>
+                <td><select data-sem-field="purpose">${purposeOptions}</select></td>
+              </tr>
+            `;
+          })
+          .join("");
+
+        const progressionRows = RANKS.map((rank) => {
+          const row = rankJson[rank] || {};
+          return `
+            <tr data-rank="${rank}">
+              <td>${rank}</td>
+              <td><input type="number" min="0" max="20" data-rank-field="weekly_set_step" value="${escapeHtml(row.weekly_set_step ?? 0)}" /></td>
+              <td><input type="number" min="0" max="20" data-rank-field="max_extra_sets" value="${escapeHtml(row.max_extra_sets ?? 0)}" /></td>
+            </tr>
+          `;
+        }).join("");
+
+        const applyTo = new Set(root.progression.apply_to_purposes || []);
+
+        editorRoot.innerHTML = `
+          <section class="header-card">
+            <div class="header-grid">
+              <div>
+                <label>Config key</label>
+                <div><strong>${escapeHtml(state.configRow.config_key)}</strong></div>
+              </div>
+              <div>
+                <label>Program type</label>
+                <div><strong>${escapeHtml(state.configRow.program_type)}</strong></div>
+              </div>
+              <label>
+                <input id="active-toggle" type="checkbox" ${activeChecked} />
+                Active
+              </label>
+            </div>
+          </section>
+
+          <details open>
+            <summary>Builder: sets & budget</summary>
+            <div class="section-body">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th></th><th>40 min</th><th>50 min</th><th>60 min</th></tr>
+                  </thead>
+                  <tbody>
+                    ${setsRows
+                      .map(
+                        (row) => `
+                        <tr>
+                          <td>${row.label}</td>
+                          ${DURATIONS.map(
+                            (d) =>
+                              `<td><input type="number" min="0" max="20" data-sets-block="${row.block}" data-sets-duration="${d}" value="${escapeHtml(root.builder.sets_by_duration?.[d]?.[row.block] ?? 0)}" /></td>`,
+                          ).join("")}
+                        </tr>
+                      `,
+                      )
+                      .join("")}
+                    <tr>
+                      <td>Block budget</td>
+                      ${DURATIONS.map(
+                        (d) =>
+                          `<td><input type="number" min="0" max="20" data-budget-duration="${d}" value="${escapeHtml(root.builder.block_budget?.[d] ?? 0)}" /></td>`,
+                      ).join("")}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+
+          <details open>
+            <summary>Builder: day templates</summary>
+            <div class="section-body">
+              <div class="tabs">
+                ${dayTabsHtml}
+                <button id="add-day-btn" type="button">+ Add day</button>
+              </div>
+              ${
+                selectedDay
+                  ? `
+                    <div class="inline-grid">
+                      <div>
+                        <label>Day key</label>
+                        <input id="day-key-input" value="${escapeHtml(selectedDay.day_key || "")}" />
+                      </div>
+                      <div>
+                        <label>Focus</label>
+                        <input id="day-focus-input" value="${escapeHtml(selectedDay.focus || "")}" />
+                      </div>
+                    </div>
+                    <div class="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>#</th><th>Slot</th><th>sw2</th><th>sw</th><th>mp</th><th>requirePref</th><th>Loadable</th><th>Fallback slot</th><th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="slots-tbody">${slotRowsHtml}</tbody>
+                      </table>
+                    </div>
+                    <div class="btn-row">
+                      <button id="add-slot-btn" type="button">+ Add slot</button>
+                    </div>
+                  `
+                  : `<div class="editor-empty">No day templates. Add one.</div>`
+              }
+            </div>
+          </details>
+
+          <details open>
+            <summary>Segmentation</summary>
+            <div class="section-body">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Block letter</th><th>Segment type</th><th>Purpose</th></tr></thead>
+                  <tbody id="semantics-tbody">${semanticsRows}</tbody>
+                </table>
+              </div>
+              <div class="btn-row">
+                <button id="add-block-btn" type="button">+ Add block</button>
+              </div>
+            </div>
+          </details>
+
+          <details open>
+            <summary>Progression</summary>
+            <div class="section-body">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Rank</th><th>Weekly set step</th><th>Max extra sets</th></tr></thead>
+                  <tbody id="progression-ranks-tbody">${progressionRows}</tbody>
+                </table>
+              </div>
+              <div class="btn-row">
+                <label><input type="checkbox" data-apply-purpose="main" ${applyTo.has("main") ? "checked" : ""} /> main</label>
+                <label><input type="checkbox" data-apply-purpose="secondary" ${applyTo.has("secondary") ? "checked" : ""} /> secondary</label>
+                <label><input type="checkbox" data-apply-purpose="accessory" ${applyTo.has("accessory") ? "checked" : ""} /> accessory</label>
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>Raw JSON</summary>
+            <div class="section-body">
+              <textarea id="raw-json">${escapeHtml(state.rawText)}</textarea>
+              <div class="btn-row">
+                <button id="format-json-btn" type="button">Format JSON</button>
+              </div>
+            </div>
+          </details>
+
+          <div class="sticky-actions">
+            <button id="save-btn" class="primary" type="button">Save</button>
+            <button id="discard-btn" type="button">Discard</button>
+            <span id="save-status" class="status"></span>
+          </div>
+        `;
+
+        wireEditorEvents();
+        renderStickyStatus();
+      }
+
+      function updateFromStructuredInputs() {
+        ensureBuilderAndSegmentation();
+        const root = state.jsonObj;
+
+        DURATIONS.forEach((d) => {
+          if (!root.builder.sets_by_duration[d] || typeof root.builder.sets_by_duration[d] !== "object") {
+            root.builder.sets_by_duration[d] = {};
+          }
+          BLOCKS.forEach((b) => {
+            const input = document.querySelector(`[data-sets-block="${b}"][data-sets-duration="${d}"]`);
+            root.builder.sets_by_duration[d][b] = toInt(input?.value, 0);
+          });
+          const budgetInput = document.querySelector(`[data-budget-duration="${d}"]`);
+          root.builder.block_budget[d] = toInt(budgetInput?.value, 0);
+        });
+
+        const templates = root.builder.day_templates;
+        if (templates[state.dayTab]) {
+          const template = templates[state.dayTab];
+          template.day_key = (document.getElementById("day-key-input")?.value || "").trim();
+          template.focus = (document.getElementById("day-focus-input")?.value || "").trim();
+          const slotRows = Array.from(document.querySelectorAll("#slots-tbody tr[data-slot-index]"));
+          template.ordered_slots = slotRows.map((row) => {
+            const slot = (row.querySelector('[data-slot-field="slot"]')?.value || "").trim();
+            const sw2 = (row.querySelector('[data-slot-field="sw2"]')?.value || "").trim();
+            const sw = (row.querySelector('[data-slot-field="sw"]')?.value || "").trim();
+            const mp = (row.querySelector('[data-slot-field="mp"]')?.value || "").trim();
+            const requirePref = row.querySelector('[data-slot-field="requirePref"]')?.value || "";
+            const preferLoadable = !!row.querySelector('[data-slot-field="preferLoadable"]')?.checked;
+            const fillFallback = (row.querySelector('[data-slot-field="fill_fallback_slot"]')?.value || "").trim();
+            return {
+              slot,
+              sw2: sw2 || undefined,
+              sw: sw || undefined,
+              mp: mp || undefined,
+              requirePref: requirePref || undefined,
+              preferLoadable: preferLoadable || undefined,
+              fill_fallback_slot: fillFallback || undefined,
+            };
+          });
+        }
+
+        const semRows = Array.from(document.querySelectorAll("#semantics-tbody tr[data-sem-letter]"));
+        const nextSem = {};
+        semRows.forEach((row) => {
+          const letter = (row.querySelector('[data-sem-field="letter"]')?.value || "").trim().toUpperCase();
+          if (!letter) return;
+          const preferred = row.querySelector('[data-sem-field="preferred_segment_type"]')?.value || "single";
+          const purpose = row.querySelector('[data-sem-field="purpose"]')?.value || "accessory";
+          nextSem[letter] = {
+            preferred_segment_type: preferred,
+            purpose,
+          };
+        });
+        root.segmentation.block_semantics = nextSem;
+
+        const applyTo = [];
+        document.querySelectorAll('input[data-apply-purpose]').forEach((el) => {
+          if (el.checked) applyTo.push(el.dataset.applyPurpose);
+        });
+        root.progression.apply_to_purposes = applyTo;
+      }
+
+      function updateRankJsonFromInputs() {
+        const rankRows = Array.from(document.querySelectorAll("#progression-ranks-tbody tr[data-rank]"));
+        const out = {};
+        rankRows.forEach((row) => {
+          const rank = row.dataset.rank;
+          out[rank] = {
+            weekly_set_step: toInt(
+              row.querySelector('[data-rank-field="weekly_set_step"]')?.value,
+              0,
+            ),
+            max_extra_sets: toInt(
+              row.querySelector('[data-rank-field="max_extra_sets"]')?.value,
+              0,
+            ),
+          };
+        });
+        return out;
+      }
+
+      function onStructuredChanged() {
+        state.rawEdited = false;
+        updateFromStructuredInputs();
+        syncRaw();
+      }
+
+      function moveSlot(index, direction) {
+        const template = state.jsonObj.builder.day_templates[state.dayTab];
+        if (!template || !Array.isArray(template.ordered_slots)) return;
+        const next = index + direction;
+        if (next < 0 || next >= template.ordered_slots.length) return;
+        const tmp = template.ordered_slots[index];
+        template.ordered_slots[index] = template.ordered_slots[next];
+        template.ordered_slots[next] = tmp;
+        renderEditor();
+      }
+      function wireEditorEvents() {
+        document.querySelectorAll("[data-day-tab]").forEach((el) => {
+          el.addEventListener("click", () => {
+            onStructuredChanged();
+            state.dayTab = Number(el.dataset.dayTab) || 0;
+            renderEditor();
+          });
+        });
+
+        const activeToggle = document.getElementById("active-toggle");
+        if (activeToggle) {
+          activeToggle.addEventListener("change", () => {
+            state.configRow.is_active = !!activeToggle.checked;
+          });
+        }
+
+        document.querySelectorAll("input, select").forEach((el) => {
+          if (el.id === "token-input") return;
+          if (el.id === "active-toggle") return;
+          if (el.id === "raw-json") return;
+          el.addEventListener("change", onStructuredChanged);
+          el.addEventListener("input", onStructuredChanged);
+        });
+
+        const addDayBtn = document.getElementById("add-day-btn");
+        if (addDayBtn) {
+          addDayBtn.addEventListener("click", () => {
+            onStructuredChanged();
+            state.jsonObj.builder.day_templates.push({
+              day_key: `day${state.jsonObj.builder.day_templates.length + 1}`,
+              focus: "",
+              ordered_slots: [],
+            });
+            state.dayTab = state.jsonObj.builder.day_templates.length - 1;
+            renderEditor();
+          });
+        }
+
+        const addSlotBtn = document.getElementById("add-slot-btn");
+        if (addSlotBtn) {
+          addSlotBtn.addEventListener("click", () => {
+            onStructuredChanged();
+            const template = state.jsonObj.builder.day_templates[state.dayTab];
+            if (!template) return;
+            template.ordered_slots.push({
+              slot: "",
+              sw2: "",
+              sw: "",
+              mp: "",
+              requirePref: "",
+              preferLoadable: false,
+              fill_fallback_slot: "",
+            });
+            renderEditor();
+          });
+        }
+
+        document.querySelectorAll("#slots-tbody tr[data-slot-index]").forEach((row) => {
+          row.querySelectorAll("button[data-slot-act]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              onStructuredChanged();
+              const index = Number(row.dataset.slotIndex);
+              const template = state.jsonObj.builder.day_templates[state.dayTab];
+              if (!template) return;
+              const act = btn.dataset.slotAct;
+              if (act === "up") moveSlot(index, -1);
+              if (act === "down") moveSlot(index, 1);
+              if (act === "remove") {
+                template.ordered_slots.splice(index, 1);
+                renderEditor();
+              }
+            });
+          });
+        });
+
+        const addBlockBtn = document.getElementById("add-block-btn");
+        if (addBlockBtn) {
+          addBlockBtn.addEventListener("click", () => {
+            onStructuredChanged();
+            const nextLetter =
+              prompt("Enter block letter (e.g. E):", "E")?.trim().toUpperCase() || "";
+            if (!nextLetter) return;
+            if (!state.jsonObj.segmentation.block_semantics[nextLetter]) {
+              state.jsonObj.segmentation.block_semantics[nextLetter] = {
+                preferred_segment_type: "single",
+                purpose: "accessory",
+              };
+            }
+            renderEditor();
+          });
+        }
+
+        const rawJsonEl = document.getElementById("raw-json");
+        if (rawJsonEl) {
+          rawJsonEl.addEventListener("input", () => {
+            state.rawEdited = true;
+            state.rawText = rawJsonEl.value;
+          });
+        }
+
+        const formatBtn = document.getElementById("format-json-btn");
+        if (formatBtn) {
+          formatBtn.addEventListener("click", () => {
+            const raw = document.getElementById("raw-json");
+            try {
+              const parsed = JSON.parse(raw.value || "{}");
+              raw.value = JSON.stringify(parsed, null, 2);
+              state.rawText = raw.value;
+              state.rawEdited = true;
+              setStatus("JSON formatted", "ok");
+            } catch {
+              setStatus("Invalid JSON in raw editor", "err");
+            }
+          });
+        }
+
+        const saveBtn = document.getElementById("save-btn");
+        if (saveBtn) {
+          saveBtn.addEventListener("click", onSave);
+        }
+
+        const discardBtn = document.getElementById("discard-btn");
+        if (discardBtn) {
+          discardBtn.addEventListener("click", async () => {
+            if (!state.selectedKey) return;
+            await loadConfig(state.selectedKey);
+            setStatus("Discarded unsaved changes", "ok");
+          });
+        }
+      }
+
+      async function onSave() {
+        try {
+          let baseJson = {};
+          const rawEl = document.getElementById("raw-json");
+          if (state.rawEdited) {
+            baseJson = JSON.parse(rawEl?.value || "{}");
+          } else {
+            baseJson = deepClone(state.jsonObj);
+          }
+          state.jsonObj = baseJson;
+          ensureBuilderAndSegmentation();
+          updateFromStructuredInputs();
+          syncRaw();
+
+          const progressionByRank = updateRankJsonFromInputs();
+
+          const payload = {
+            program_generation_config_json: state.jsonObj,
+            progression_by_rank_json: progressionByRank,
+            is_active: !!state.configRow.is_active,
+          };
+
+          const data = await apiFetch(`/admin/configs/${encodeURIComponent(state.selectedKey)}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+
+          state.rawEdited = false;
+          setStatus("Saved ✓", "ok");
+          if (data?.config) {
+            state.configRow = { ...state.configRow, ...data.config };
+          }
+          await loadConfigs(false);
+          await loadConfig(state.selectedKey);
+        } catch (err) {
+          setStatus(err.message || "Save failed", "err");
+        }
+      }
+
+      async function loadConfigs(autoSelect = true) {
+        try {
+          const data = await apiFetch("/admin/configs");
+          state.configs = data.configs || [];
+          renderConfigList();
+          if (autoSelect && !state.selectedKey && state.configs.length) {
+            await loadConfig(state.configs[0].config_key);
+          }
+          setStatus(`Loaded ${state.configs.length} configs`, "ok");
+        } catch (err) {
+          setStatus(err.message || "Failed to load configs", "err");
+        }
+      }
+
+      async function loadConfig(key) {
+        try {
+          const data = await apiFetch(`/admin/configs/${encodeURIComponent(key)}`);
+          state.selectedKey = key;
+          state.configRow = data.config;
+          state.jsonObj = deepClone(data.config?.program_generation_config_json || {});
+          state.dayTab = 0;
+          state.rawEdited = false;
+          ensureBuilderAndSegmentation();
+          syncRaw();
+          renderConfigList();
+          renderEditor();
+          setStatus(`Loaded ${key}`, "ok");
+        } catch (err) {
+          setStatus(err.message || "Failed to load config", "err");
+        }
+      }
+
+      async function duplicateConfig() {
+        try {
+          const source_key = prompt("Source key to duplicate from:", state.selectedKey || "");
+          if (!source_key) return;
+          const new_key = prompt("New config key:", `${source_key}_copy`);
+          if (!new_key) return;
+
+          const data = await apiFetch("/admin/configs", {
+            method: "POST",
+            body: JSON.stringify({ source_key, new_key }),
+          });
+
+          setStatus(`Duplicated to ${data?.config?.config_key || new_key}`, "ok");
+          await loadConfigs(false);
+          await loadConfig(data?.config?.config_key || new_key);
+        } catch (err) {
+          setStatus(err.message || "Duplicate failed", "err");
+        }
+      }
+
+      function init() {
+        const savedToken = sessionStorage.getItem(STORAGE_KEY);
+        if (savedToken) tokenInput.value = savedToken;
+
+        loadBtn.addEventListener("click", () => loadConfigs(true));
+        duplicateBtn.addEventListener("click", duplicateConfig);
+
+        renderConfigList();
+        renderEditor();
+      }
+
+      init();
+    </script>
+  </body>
+</html>

@@ -144,9 +144,11 @@ Before invoking steps, `runPipeline.js`:
 inputs (assembled from DB client_profile + seeded config via buildInputsFromDevProfile)
   │
   ▼
-Step 01 — buildBasicHypertrophyProgram     [api/engine/steps/01_buildBasicHypertrophyProgram.js]
+Step 01 — buildProgramFromDefinition       [api/engine/steps/01_buildProgramFromDefinition.js]
   │
-  │  Inputs:  catalog_json (exercise index with movement metadata, swap groups, warmup hooks)
+  │  Inputs:  compiledConfig.builder (day_templates, sets_by_duration, block_budget,
+  │                                   slot_defaults, exclude_movement_classes)
+  │           catalog_json (exercise index with movement metadata, swap groups, warmup hooks)
   │           allowed_exercise_ids (pre-filtered list from getAllowedExercises)
   │           client_profile (equipment slugs, fitness rank, injury flags, preferred days)
   │
@@ -155,20 +157,20 @@ Step 01 — buildBasicHypertrophyProgram     [api/engine/steps/01_buildBasicHype
   │           movement class, movement pattern, density, and swap group metadata.
   │           Also: program.days_per_week, program.program_type, program.title
   │
-  │  Note:    This step contains the hypertrophy-specific logic for how training days
-  │           are structured, which exercise slots are created, and how the exercise
-  │           catalogue is queried. It is the primary candidate for extension when
-  │           supporting additional program types.
+  │  Note:    Fully generic — day structure and exercise slot definitions are driven
+  │           entirely by compiledConfig.builder. No program-type-specific logic here.
   │
   ▼
-Step 02 — segmentHypertrophy               [api/engine/steps/02_segmentHypertrophy.js]
+Step 02 — segmentProgram                   [api/engine/steps/02_segmentProgram.js]
   │
   │  Inputs:  program.days[].blocks[]
+  │           compiledConfig.segmentation.blockSemantics
   │
   │  Output:  program.days[].segments[] — blocks grouped into workout segments.
-  │           Block letter (A, B, C…) determines grouping: same letter = superset/giant set,
-  │           different letter = separate segment. FILL/MISSING placeholders resolved here.
-  │           Each segment has: type (single/superset/giant), items[], rounds.
+  │           Block letter (A, B, C…) determines grouping type via blockSemantics:
+  │           "single" = each exercise its own segment; "superset" = first two paired;
+  │           "giant_set" = first three grouped. FILL/MISSING placeholders resolved here.
+  │           Each segment has: type (single/superset/giant_set), items[], rounds.
   │
   ▼
 Step 03 — applyProgression                 [api/engine/steps/03_applyProgression.js]
@@ -224,15 +226,58 @@ Step 06 — emitPlan                         [api/engine/steps/06_emitPlan.js]
            Segment durations computed from rep/set/tempo math + warmup/cooldown allocations.
 ```
 
-### Current constraint: hypertrophy only
+### Config-driven multi-type support
 
-Step 01 and the `runPipeline` program-type routing currently only support `programType = "hypertrophy"`. The remaining steps are largely generic — program structure, exercise selection logic, and block patterns are concentrated in step 01 and the seeded `program_generation_config` rows.
+Steps 01 and 02 are now **fully generic** — all program-type-specific logic has been extracted into the `program_generation_config` table. Adding a new program type (conditioning, Hyrox, etc.) requires only a new seed row; no code changes.
 
-Extensibility to additional program types (strength, conditioning, Hyrox, etc.) will require:
-- Step 01 variants (or a configurable step 01 driven by a program-type config schema)
-- Additional `program_generation_config` seed rows per program type
-- Possibly separate segmentation logic in step 02 for non-hypertrophy block structures
-- Potentially new `rep_rules` and `narration_templates` rows per program type
+The `compiledConfig` object is assembled once per generation request inside `runPipeline.js` and threaded through Steps 01 and 02. It has three top-level sections:
+
+```
+compiledConfig
+├── builder            — Controls Step 01 (exercise selection & day structure)
+│   ├── day_templates[]       Day blueprint array (one entry per training day template)
+│   │   ├── day_key           Unique identifier (e.g. "day1")
+│   │   ├── focus             Semantic focus label (e.g. "lower", "upper_strength")
+│   │   └── ordered_slots[]   Ordered exercise slots; each slot has:
+│   │       ├── slot          "<block_letter>:<slot_name>"  (e.g. "A:squat", "C:arms")
+│   │       ├── sw / sw2      Swap-group keys (exercise catalogue lookup)
+│   │       ├── mp            Movement pattern filter
+│   │       ├── requirePref   Preference tier ("strength_main" | "hypertrophy_secondary")
+│   │       ├── preferLoadable  Favour barbell/dumbbell exercises in this slot
+│   │       └── fill_fallback_slot  Fallback slot key if this slot cannot be filled
+│   ├── sets_by_duration      Sets per block letter keyed by session length (40/50/60 min)
+│   │                         e.g. { "50": { "A": 4, "B": 3, "C": 3, "D": 2 } }
+│   ├── block_budget          Max blocks per session keyed by session length
+│   ├── slot_defaults         Default requirePref by block letter (applied to all slots in that block)
+│   └── exclude_movement_classes  Movement classes never selected (e.g. "cardio")
+│
+├── segmentation       — Controls Step 02 (how blocks are grouped into segments)
+│   └── block_semantics       Object keyed by block letter (A / B / C / D):
+│       ├── preferred_segment_type   "single" | "superset" | "giant_set"
+│       └── purpose                  "main" | "secondary" | "accessory"
+│
+└── progression        — Controls Step 03 (which segments receive weekly set increments)
+    └── apply_to_purposes     Array of purposes that receive progression
+                              e.g. ["main", "secondary", "accessory"]
+```
+
+The top-level `progression_by_rank_json` and `week_phase_config_json` columns on the config row control the numeric set-increment schedule and phase sequence respectively (see §3 Step 03).
+
+### Where to tune program behaviour
+
+| What you want to change | Where to change it |
+|---|---|
+| Add/remove an exercise slot in a day | `builder.day_templates[n].ordered_slots` |
+| Change which exercises are selected (swap groups) | `sw` / `sw2` / `mp` fields on the relevant slot |
+| Change preference tier (strength vs hypertrophy selection) | `requirePref` on the slot, or `slot_defaults` for the whole block letter |
+| Change set counts by session duration | `builder.sets_by_duration` |
+| Cap the number of blocks in a session | `builder.block_budget` |
+| Change whether a block is singles, supersets, or giant sets | `segmentation.block_semantics.<letter>.preferred_segment_type` |
+| Add a new program type | New seed row in `R__seed_program_generation_config.sql` |
+| Change weekly set progression steps | `progression_by_rank_json` (per fitness rank) |
+| Change phase sequence or labels | `week_phase_config_json.default_phase_sequence` |
+
+All changes to the seed file are picked up automatically the next time Flyway runs (the file is a repeatable migration — `R__*.sql` — and re-executes whenever its checksum changes).
 
 ### Supporting engine files
 
@@ -314,7 +359,7 @@ Seed data, re-applied whenever the file checksum changes:
 | `R__seed_exercise_catalogue.sql` | Full exercise catalogue (83 exercises) |
 | `R__seed_equipment_items.sql` | Equipment lookup rows |
 | `R__seed_media_assets.sql` | Hero image asset rows |
-| `R__seed_program_generation_config.sql` | Progression config for hypertrophy (phases, set increments) |
+| `R__seed_program_generation_config.sql` | Full `compiledConfig` JSONB for each program type (`hypertrophy_default_v1`, `strength_default_v1`): builder (day templates, sets, block budget), segmentation (block semantics), and progression config |
 | `R__seed_program_rep_rules.sql` | Rep range / tempo / RIR rules |
 | `R__seed_narration_template.sql` | Week narration text templates |
 
@@ -368,10 +413,190 @@ Each step is a pure function (`program in → enriched program out`). Steps are 
 ### 5. Emitter row format
 Step 06 emits pipe-delimited strings (`PRG|WEEK|DAY|SEG|EX`) that are parsed and persisted by `importEmitterService`. This format provides a stable, inspectable wire format between the engine and the persistence layer.
 
-### 6. Pipeline currently hypertrophy-only
-Step 01 and the program-type routing in `runPipeline` are written for hypertrophy. The architecture is structured to support additional program types (strength, conditioning, Hyrox) by introducing step 01 variants and additional seeded config rows. See §3 for extensibility notes.
+### 6. Config-driven multi-type pipeline
+Steps 01 and 02 are fully generic. Program-type behaviour (day templates, exercise slot definitions, block grouping semantics, set counts, progression) is driven entirely by the `program_generation_config_json` JSONB column. Adding a new program type requires only a new seed row — no code changes. The `compiledConfig` object is assembled and validated once in `runPipeline.js`, then threaded through all dependent steps. See §3 for the full config schema.
 
 ### 7. Known technical debt
 - `bubble_*` column names are legacy; could be renamed to `external_user_id` etc. in a future migration.
 - Some routes mount route-level `express.json()` middleware despite a global parser already being present.
 - No centralised observability stack — logs are console JSON/text.
+
+---
+
+## 8) Local Dev vs TestFlight — Keeping Configs Separate
+
+The mobile app reads its API URL and engine key from Expo environment files at **build time**:
+
+| File | Used by | Contents |
+|---|---|---|
+| `mobile/.env` | EAS / TestFlight builds | Production `fly.dev` URL + production `ENGINE_KEY` |
+| `mobile/.env.local` | Local Expo dev server only | LAN IP URL + local `ENGINE_KEY` + `REACT_NATIVE_PACKAGER_HOSTNAME` |
+
+Both files are gitignored. `.env.local` takes precedence over `.env` when running `expo start` locally.
+When EAS builds for TestFlight it does **not** pick up `.env.local` — only `.env` (and any EAS secrets configured in `eas.json`) are used. **Local config is never promoted to TestFlight.**
+
+To switch between local and production during development:
+- Local: `cd mobile && npx expo start` — `.env.local` is active automatically.
+- TestFlight: push to `main`, trigger EAS build — `.env` (or EAS secrets) are used.
+
+---
+
+## 9) Config Management UI (Admin Panel)
+
+A lightweight laptop-only admin panel for editing `program_generation_config` rows without touching SQL or running Flyway migrations.
+
+### Design Goals
+- Read and write `program_generation_config` rows directly via the API.
+- Structured editing (not raw JSON) for all commonly tuned fields, including day templates and slot definitions.
+- Raw JSON fallback editor for edge cases and bulk edits.
+- Never accessible from the mobile app (separate port / localhost only).
+- No authentication beyond the existing `INTERNAL_API_TOKEN` header.
+
+### Recommended Stack
+
+| Layer | Choice | Rationale |
+|---|---|---|
+| Frontend | Vite + React (plain JS, no TypeScript needed) | Fast local start, no build config overhead |
+| Styling | Tailwind CSS (CDN) or plain CSS | No install required for a laptop-only tool |
+| State | React `useState` / `useEffect` | No external lib needed for a CRUD panel |
+| HTTP | `fetch` | Built-in, no dep needed |
+| Server | Existing Express API (`api/`) | Reuse the Postgres pool; add `/admin/*` routes |
+
+The panel runs as a **static HTML file** (`admin/index.html`) served by the existing API on a separate `/admin` prefix, or opened as a `file://` page that calls the API on `localhost:3000`.
+
+### API Endpoints Required (new, guarded by `INTERNAL_API_TOKEN`)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/admin/configs` | List all `program_generation_config` rows (id, config_key, program_type, is_active, updated_at) |
+| `GET` | `/admin/configs/:key` | Full row including `program_generation_config_json` |
+| `PUT` | `/admin/configs/:key` | Replace `program_generation_config_json` for the given key |
+| `POST` | `/admin/configs` | Insert a new config row (duplicate from existing) |
+| `PATCH` | `/admin/configs/:key/activate` | Toggle `is_active` |
+
+### UI Layout
+
+The editor panel is divided into four collapsible sections. Each section is independently editable; the final Save merges all sections back into a single `program_generation_config_json` object and writes it to the DB.
+
+#### Overall panel structure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Workout Engine — Config Admin                               │
+├──────────────┬──────────────────────────────────────────────┤
+│  Config list │  Editor                                       │
+│              │                                               │
+│ ● hypertrophy│  Config key:   hypertrophy_default_v1        │
+│   _default_v1│  Program type: hypertrophy                    │
+│ ● strength   │  Active: ✓          [Duplicate]              │
+│   _default_v1│                                               │
+│  [+ New]     │  ▼ Builder — sets & budget                   │
+│              │  ▼ Builder — day templates                    │
+│              │  ▼ Segmentation                               │
+│              │  ▼ Progression                                │
+│              │  ▶ Raw JSON  (collapsed by default)           │
+│              │                                               │
+│              │              [ Save ]  [ Discard ]            │
+└──────────────┴──────────────────────────────────────────────┘
+```
+
+#### Section 1 — Builder: sets & budget
+
+```
+── Builder — sets & budget ─────────────────────────────────
+  Session length:      40 min    50 min    60 min
+  Block A sets:        [ 3 ]     [ 4 ]     [ 5 ]
+  Block B sets:        [ 3 ]     [ 3 ]     [ 4 ]
+  Block C sets:        [ 2 ]     [ 3 ]     [ 3 ]
+  Block D sets:        [ 2 ]     [ 2 ]     [ 3 ]
+  Block budget:        [ 4 ]     [ 5 ]     [ 6 ]
+```
+
+#### Section 2 — Builder: day templates
+
+This is the key addition. A tab strip switches between day templates; within each day, slots are shown as an editable table with one row per slot.
+
+```
+── Builder — day templates ─────────────────────────────────
+
+  [ Day 1: lower ] [ Day 2: upper ] [ Day 3: posterior ] [+ Add day]
+
+  Day 1 — focus: [ lower              ]
+
+  #  │ Slot             │ sw2 (primary swap)     │ sw (secondary swap)   │ mp (mvt pattern) │ requirePref       │ Load │ Fallback slot  │
+  ───┼──────────────────┼────────────────────────┼───────────────────────┼──────────────────┼───────────────────┼──────┼────────────────┼────
+  1  │ [A:squat       ] │ [squat_compound      ] │ [                   ] │ [              ] │ [strength_main  ▼] │ [ ] │ [             ] │ [↑][↓][✕]
+  2  │ [B:lunge       ] │ [                    ] │ [quad_iso_unilateral] │ [lunge         ] │ [               ▼] │ [ ] │ [             ] │ [↑][↓][✕]
+  3  │ [C:quad        ] │ [                    ] │ [quad_iso_unilateral] │ [              ] │ [hypertrophy_sec▼] │ [ ] │ [A:squat      ] │ [↑][↓][✕]
+  4  │ [C:calves      ] │ [                    ] │ [calf_iso           ] │ [              ] │ [hypertrophy_sec▼] │ [✓] │ [B:lunge      ] │ [↑][↓][✕]
+  5  │ [D:core        ] │ [                    ] │ [core               ] │ [anti_extension] │ [               ▼] │ [ ] │ [B:lunge      ] │ [↑][↓][✕]
+  6  │ [C:hinge_acc.. ] │ [hinge_compound      ] │ [hamstring_iso      ] │ [              ] │ [hypertrophy_sec▼] │ [ ] │ [A:squat      ] │ [↑][↓][✕]
+
+  [+ Add slot]
+```
+
+Column notes:
+- **Slot** — free text, format `<block_letter>:<label>`. The block letter prefix determines which block budget and set count apply, and which `block_semantics` entry governs grouping.
+- **sw2 / sw** — exercise swap-group keys. The engine tries `sw2` first (strict match), then `sw` (relaxed). Leave blank if not applicable.
+- **mp** — movement pattern override. Used when swap-group matching is insufficient.
+- **requirePref** — dropdown with values: `(none)` / `strength_main` / `hypertrophy_secondary`.
+- **Load** — checkbox for `preferLoadable` (favours barbell/dumbbell exercises).
+- **Fallback slot** — if this slot cannot be filled, the engine adds a set to the named slot instead. Free text, must match a `slot` value in the same day.
+- **[↑][↓]** — reorder slot within the day (order matters — `ordered_slots` is positional).
+- **[✕]** — remove slot.
+
+#### Section 3 — Segmentation
+
+```
+── Segmentation ────────────────────────────────────────────
+  Block  │ Segment type          │ Purpose
+  ───────┼───────────────────────┼───────────────
+  A      │ [single       ▼]      │ [main       ▼]
+  B      │ [superset     ▼]      │ [secondary  ▼]
+  C      │ [giant_set    ▼]      │ [accessory  ▼]
+  D      │ [single       ▼]      │ [accessory  ▼]
+  [+ Add block letter]
+```
+
+Segment type options: `single` / `superset` / `giant_set`.
+Purpose options: `main` / `secondary` / `accessory`.
+
+#### Section 4 — Progression
+
+```
+── Progression ─────────────────────────────────────────────
+  Rank           │ Weekly set step │ Max extra sets
+  ───────────────┼─────────────────┼────────────────
+  beginner       │ [ 0 ]           │ [ 0 ]
+  intermediate   │ [ 1 ]           │ [ 1 ]
+  advanced       │ [ 1 ]           │ [ 2 ]
+  elite          │ [ 1 ]           │ [ 3 ]
+
+  Apply progression to: [✓] main  [✓] secondary  [✓] accessory
+```
+
+#### Section 5 — Raw JSON (collapsed by default)
+
+Full `program_generation_config_json` in a read/write textarea. Expanding it shows the entire JSONB. Editing here and saving overwrites the structured sections. Use this only for fields not covered above (e.g. `week_phase_config_json` copy text, `swAny` arrays on individual slots).
+
+### Structured fields vs raw JSON
+
+All fields that are commonly tuned during program design now have structured inputs:
+
+| Field | Section |
+|---|---|
+| `builder.sets_by_duration` | Section 1 |
+| `builder.block_budget` | Section 1 |
+| `builder.day_templates` (focus, ordered_slots, all slot properties) | Section 2 |
+| `segmentation.block_semantics` | Section 3 |
+| `progression_by_rank_json` (step, max_extra per rank) | Section 4 |
+| `progression.apply_to_purposes` | Section 4 |
+
+The raw JSON textarea (Section 5) remains available for `week_phase_config_json`, `slot_defaults`, `exclude_movement_classes`, `swAny` arrays, and any future fields not yet represented in the structured UI.
+
+### Safety
+
+- Save writes to the DB immediately. There is no "staging" layer.
+- A **duplicate** button creates a new row with `_v2` suffix and `is_active: false` — safe sandbox for experimenting before activating.
+- Only one row per `program_type` should have `is_active: true` (enforced by convention; a DB unique partial index would harden this).
+- The panel is served only from `localhost` — it is not reachable from the phone or any deployed environment.

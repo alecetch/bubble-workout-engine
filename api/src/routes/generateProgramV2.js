@@ -102,8 +102,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
   const request_id = req.request_id;
   const dev_user_id = s(req.body?.dev_user_id);
   const dev_client_profile_id = s(req.body?.dev_client_profile_id);
-  const programTypeRaw = s(req.body?.programType) || "default";
-  const programType = programTypeRaw === "default" ? "hypertrophy" : programTypeRaw;
+  const programTypeInput = s(req.body?.programType);
   const anchorInput = req.body?.anchor_date_ms;
   const anchor_date_ms = anchorInput == null ? Date.now() : Number(anchorInput);
 
@@ -122,6 +121,13 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
   if (!devProfile) {
     return res.status(404).json({ ok: false, code: "not_found", error: "Dev client profile not found" });
   }
+
+  const GOAL_TO_PROGRAM_TYPE = { strength: "strength", hypertrophy: "hypertrophy", conditioning: "conditioning", endurance: "conditioning" };
+  const goalDerivedType = ensureArray(devProfile.goals, toSlug)
+    .map((g) => GOAL_TO_PROGRAM_TYPE[g])
+    .find(Boolean) ?? null;
+  const explicitType = programTypeInput && programTypeInput !== "default" ? programTypeInput : null;
+  const programType = explicitType || s(devProfile.programType) || goalDerivedType || "hypertrophy";
 
   const mappedFitnessRank = mapFitnessRank(devProfile.fitnessLevel);
   const mappedEquipmentSlugs = ensureArray(devProfile.equipmentItemCodes, toSlug);
@@ -472,6 +478,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       ok: true,
       program_id: created_program_id,
       generation_run_id,
+      program_type: programType,
       counts: importResult.counts,
       idempotent: importResult.idempotent,
     });

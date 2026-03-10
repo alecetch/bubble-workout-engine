@@ -3,7 +3,12 @@
     "allow": [
       "Bash(git -C \"c:/Users/alecp/bubble-workout-engine\" status)",
       "Bash(cmd.exe /c \"cd /d c:/Users/alecp/bubble-workout-engine/api && node --check server.js && node --check src/routes/generateProgram.js && node --check src/routes/readProgram.js && echo ALL OK\")",
-      "Bash(git -C \"c:/Users/alecp/bubble-workout-engine\" diff)"
+      "Bash(git -C \"c:/Users/alecp/bubble-workout-engine\" diff)",
+      "Bash(docker compose run --rm flyway migrate)",
+      "Bash(docker compose run --rm flyway info)",
+      "Bash(docker compose --profile tools run --rm flyway migrate)",
+      "Bash(docker compose --profile tools run --rm flyway -url=jdbc:postgresql://db:5432/app -user=app -password=app migrate)",
+      "Bash(docker compose up -d --force-recreate api)"
     ]
   }
 }
