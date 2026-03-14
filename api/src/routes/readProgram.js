@@ -37,6 +37,20 @@ function uniq(arr) {
   return Array.from(new Set(arr));
 }
 
+const SEGMENT_TYPE_LABELS = {
+  single: "Single",
+  superset: "Superset",
+  giant_set: "Giant Set",
+  amrap: "AMRAP",
+  emom: "EMOM",
+  warmup: "Warm-up",
+  cooldown: "Cool-down",
+};
+
+function segmentTypeLabel(segment_type) {
+  return SEGMENT_TYPE_LABELS[s(segment_type)] ?? s(segment_type);
+}
+
 function parseEquipmentSlugs(rows) {
   // equipment_items_slugs_csv is a text column (default ''), comma-separated.
   const slugs = [];
@@ -360,7 +374,8 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
           secondary_score_label,
           segment_scheme_json,
           segment_duration_seconds,
-          segment_duration_mmss
+          segment_duration_mmss,
+          post_segment_rest_sec
         FROM workout_segment
         WHERE program_day_id = $1
         ORDER BY block_order, segment_order_in_block
@@ -407,6 +422,7 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
 
       const segments = segR.rows.map((seg) => ({
         ...seg,
+        segment_type_label: segmentTypeLabel(seg.segment_type),
         items: itemsBySegmentId.get(seg.workout_segment_id) || [],
       }));
 
@@ -420,6 +436,7 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
           block_order: 999,
           segment_order_in_block: 1,
           segment_type: "single",
+          segment_type_label: "Single",
           purpose: "accessory",
           purpose_label: "Accessory",
           segment_title: "Unassigned Exercises",

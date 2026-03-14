@@ -270,6 +270,8 @@
           <div class="nav-row">
             <a href="/admin-ui/index.html">Config Editor</a>
             <a href="/admin/coverage">Coverage Report</a>
+            <a href="/admin/exercises">Exercise Catalogue</a>
+            <a href="/admin/narration">Narration Templates</a>
           </div>
         </div>
         <div id="config-list" class="list-wrap"></div>
@@ -288,7 +290,7 @@
       const DURATIONS = ["40", "50", "60"];
       const BLOCKS = ["A", "B", "C", "D"];
       const REQUIRE_PREF_OPTIONS = ["", "strength_main", "hypertrophy_secondary"];
-      const SEGMENT_TYPES = ["single", "superset", "giant_set"];
+      const SEGMENT_TYPES = ["single", "superset", "giant_set", "amrap", "emom"];
       const PURPOSE_TYPES = ["main", "secondary", "accessory"];
       const RANKS = ["beginner", "intermediate", "advanced", "elite"];
 
@@ -300,6 +302,7 @@
         rawText: "",
         dayTab: 0,
         rawEdited: false,
+        isDirty: false,
         status: "",
         statusKind: "",
       };
@@ -461,6 +464,7 @@
         const semKeys = Array.from(new Set([...BLOCKS, ...Object.keys(semantics)]));
         const rankJson = getRankConfig();
         const activeChecked = state.configRow.is_active ? "checked" : "";
+        const dirtyBadge = state.isDirty ? ' <span style="color:#b45309;font-size:12px;font-weight:normal;">(unsaved changes)</span>' : "";
 
         const setsRows = [
           { label: "Block A sets", block: "A" },
@@ -543,16 +547,19 @@
             <div class="header-grid">
               <div>
                 <label>Config key</label>
-                <div><strong>${escapeHtml(state.configRow.config_key)}</strong></div>
+                <div><strong>${escapeHtml(state.configRow.config_key)}</strong>${dirtyBadge}</div>
               </div>
               <div>
                 <label>Program type</label>
                 <div><strong>${escapeHtml(state.configRow.program_type)}</strong></div>
               </div>
-              <label>
-                <input id="active-toggle" type="checkbox" ${activeChecked} />
-                Active
-              </label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <label>
+                  <input id="active-toggle" type="checkbox" ${activeChecked} />
+                  Active
+                </label>
+                <button id="save-btn-top" class="primary" type="button">Save</button>
+              </div>
             </div>
           </section>
 
@@ -767,6 +774,7 @@
 
       function onStructuredChanged() {
         state.rawEdited = false;
+        state.isDirty = true;
         updateFromStructuredInputs();
         syncRaw();
       }
@@ -902,6 +910,11 @@
           saveBtn.addEventListener("click", onSave);
         }
 
+        const saveBtnTop = document.getElementById("save-btn-top");
+        if (saveBtnTop) {
+          saveBtnTop.addEventListener("click", onSave);
+        }
+
         const discardBtn = document.getElementById("discard-btn");
         if (discardBtn) {
           discardBtn.addEventListener("click", async () => {
@@ -940,6 +953,7 @@
           });
 
           state.rawEdited = false;
+          state.isDirty = false;
           setStatus("Saved ✓", "ok");
           if (data?.config) {
             state.configRow = { ...state.configRow, ...data.config };
@@ -1009,6 +1023,13 @@
 
         loadBtn.addEventListener("click", () => loadConfigs(true));
         duplicateBtn.addEventListener("click", duplicateConfig);
+
+        window.addEventListener("beforeunload", (e) => {
+          if (state.isDirty) {
+            e.preventDefault();
+            e.returnValue = "";
+          }
+        });
 
         renderConfigList();
         renderEditor();

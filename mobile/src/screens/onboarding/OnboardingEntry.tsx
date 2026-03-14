@@ -146,10 +146,6 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
     console.log("[boot:hydrate-effect] ALL CONDITIONS MET — hydrating");
     resetFromProfile(profileQuery.data);
 
-    if (!profileQuery.data.injuryFlags || profileQuery.data.injuryFlags.length === 0) {
-      setDraft({ injuryFlags: ["No known issues"] });
-    }
-
     const hydratedDraft = getOnboardingDraft();
     const resumeStep = getResumeStep(hydratedDraft);
 

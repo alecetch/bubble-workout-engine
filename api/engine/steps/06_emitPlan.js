@@ -378,6 +378,10 @@ function estimateSegmentRawSeconds(seg, cfg) {
     return 0; // handled as fixed allocations
   }
 
+  if (seg.time_cap_sec != null) {
+    return toInt(seg.time_cap_sec, 0);
+  }
+
   const rounds = clampInt(seg.rounds, 1, 20);
   const items = Array.isArray(seg.items) ? seg.items : [];
   if (!items.length) return 0;
@@ -723,6 +727,7 @@ export async function emitPlanRows({
           s(purpose ? (purpose.charAt(0).toUpperCase() + purpose.slice(1)) : ""),
           "",                       // col 18 (leave empty)
           s(pdKey),
+          n(seg.post_segment_rest_sec ?? 0), // col 19
         ].join("|"));
 
         const items = Array.isArray(seg.items) ? seg.items : [];

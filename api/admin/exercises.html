@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exercise Catalogue</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --panel: #fff; --border: #d8dee6;
+      --text: #1f2937; --muted: #6b7280; --primary: #0f62fe;
+      --danger: #b42318; --success: #0f766e; --warn: #b45309;
+      --drawer-w: 560px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; font-size: 13px; padding-bottom: 64px; }
+    .page { padding: 12px; }
+    h1 { margin: 0; font-size: 20px; }
+    h3 { margin: 0 0 10px; font-size: 14px; }
+    input, select, textarea, button { font: inherit; }
+    input, select, textarea { border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; background: #fff; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+    button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 6px 13px; cursor: pointer; white-space: nowrap; }
+    button:hover { filter: brightness(.9); }
+    button.secondary { background: #fff; color: var(--primary); }
+    button.danger { background: var(--danger); border-color: var(--danger); }
+    button.ghost { background: transparent; border-color: var(--border); color: var(--text); padding: 3px 9px; font-size: 12px; }
+    button.ghost:hover { background: var(--bg); }
+    button.sm { padding: 3px 9px; font-size: 12px; }
+
+    /* Header */
+    .header { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .nav { display: flex; gap: 10px; }
+    .nav a { color: #1d4ed8; text-decoration: none; font-size: 12px; }
+    .nav a:hover { text-decoration: underline; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+    .ctrl { display: grid; gap: 3px; }
+    .ctrl label { font-size: 11px; color: var(--muted); }
+    #status { margin-top: 6px; font-size: 12px; }
+    .ok { color: var(--success); } .err { color: var(--danger); } .warn { color: var(--warn); }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 2px solid var(--border); }
+    .tab { padding: 7px 16px; cursor: pointer; border: none; background: transparent; color: var(--muted); font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -2px; border-radius: 6px 6px 0 0; }
+    .tab:hover { background: #edf2f7; color: var(--text); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Table */
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th, td { border-bottom: 1px solid #ecf0f4; padding: 5px 8px; text-align: left; vertical-align: middle; white-space: nowrap; }
+    th { background: #f9fbfd; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    tbody tr:hover { background: #f4f8ff; cursor: pointer; }
+    tbody tr.archived td { opacity: .5; }
+    td.wide { white-space: normal; max-width: 200px; }
+    td.eq { white-space: normal; max-width: 160px; color: var(--muted); font-size: 11px; }
+    .badge { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #e0e7ff; color: #3730a3; }
+    .badge.archived { background: #fee2e2; color: #b42318; }
+    .badge.yes { background: #d1fae5; color: #065f46; }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+
+    /* Coverage mini-bar */
+    .cov-bar { display: flex; gap: 2px; align-items: center; }
+    .cov-seg { height: 8px; width: 8px; border-radius: 2px; background: #e5e7eb; }
+    .cov-seg.zero { background: #ef4444; }
+    .cov-seg.low { background: #f59e0b; }
+    .cov-seg.ok { background: #10b981; }
+    .cov-count { font-size: 10px; color: var(--muted); margin-left: 4px; }
+
+    /* Drawer */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 100; }
+    .overlay.open { display: block; }
+    .drawer { position: fixed; top: 0; right: 0; width: var(--drawer-w); height: 100%; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -4px 0 24px rgba(0,0,0,.1); display: flex; flex-direction: column; z-index: 101; transform: translateX(100%); transition: transform .2s ease; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .drawer-title { margin: 0; font-size: 15px; }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 14px; display: grid; gap: 12px; }
+    .drawer-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0; align-items: center; }
+    .spacer { flex: 1; }
+    .fg { display: grid; gap: 8px; border: none; padding: 0; margin: 0; }
+    .fg legend { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .f { display: grid; gap: 3px; }
+    .f label { font-size: 11px; color: var(--muted); }
+    .f input, .f select, .f textarea { width: 100%; }
+    .f textarea { resize: vertical; min-height: 52px; font-size: 12px; }
+    .check-row { display: flex; align-items: center; gap: 8px; padding-top: 4px; flex-wrap: wrap; }
+    .err-msg { font-size: 12px; color: var(--danger); }
+
+    /* Impact panel inside drawer */
+    #impact-panel { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px; font-size: 12px; }
+    #impact-panel h4 { margin: 0 0 6px; font-size: 12px; color: #0369a1; }
+    .impact-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .impact-label { color: var(--muted); }
+    .impact-val { font-weight: 600; }
+    .impact-val.pos { color: var(--success); }
+    .impact-val.neg { color: var(--danger); }
+
+    /* Modal */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; align-items: center; justify-content: center; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--panel); border-radius: 10px; padding: 20px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border); }
+    .modal h3 { margin-top: 0; }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+    /* Session bar */
+    #session-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #1e3a5f; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; z-index: 300; font-size: 13px; }
+    #session-bar.hidden { display: none !important; }
+    #session-count { font-weight: 700; }
+    #session-bar .bar-spacer { flex: 1; }
+
+    /* Health & Recommendations cards */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .card h4 { margin: 0 0 6px; font-size: 13px; }
+    .card p { margin: 0; font-size: 12px; color: var(--muted); }
+    .card-list { margin: 8px 0 0; padding: 0; list-style: none; }
+    .card-list li { padding: 4px 0; border-top: 1px solid #f0f0f0; font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .card-list li:first-child { border-top: none; }
+
+    /* Reco card */
+    .reco-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+    .reco-card h4 { margin: 0 0 4px; }
+    .reco-meta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .reco-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .reco-sql { background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 8px; font-size: 11px; font-family: monospace; white-space: pre-wrap; margin-top: 8px; display: none; }
+
+    /* Migration preview */
+    #migration-sql { background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 12px; font-size: 11px; font-family: monospace; white-space: pre-wrap; min-height: 200px; }
+    .mig-toolbar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+
+    /* Summary bar */
+    .summary { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <h1>Exercise Catalogue</h1>
+      <nav class="nav">
+        <a href="/admin-ui/index.html">Config Editor</a>
+        <a href="/admin/coverage">Coverage Report</a>
+        <a href="/admin/exercises">Exercise Catalogue</a>
+      </nav>
+    </div>
+    <div class="controls">
+      <div class="ctrl">
+        <label for="token-input">Internal API Token</label>
+        <input id="token-input" type="password" style="width:220px" placeholder="x-internal-token" />
+      </div>
+      <div class="ctrl">
+        <label for="search-input">Search</label>
+        <input id="search-input" type="search" style="width:180px" placeholder="Name or ID…" />
+      </div>
+      <div class="ctrl">
+        <label for="class-filter">Class</label>
+        <select id="class-filter" style="width:130px">
+          <option value="">All classes</option>
+          <option>compound</option><option>isolation</option><option>engine</option>
+          <option>core</option><option>carry</option><option>cardio</option>
+          <option>conditioning</option><option>locomotion</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label for="archived-filter">Status</label>
+        <select id="archived-filter" style="width:110px">
+          <option value="">Active only</option>
+          <option value="true">Archived only</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+      <button id="load-btn">Load</button>
+      <button id="new-btn" class="secondary">+ New</button>
+      <button id="csv-btn" class="secondary">CSV ▾</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="browse">Browse &amp; Edit</button>
+    <button class="tab" data-tab="health">Catalogue Health</button>
+    <button class="tab" data-tab="recos">Recommendations</button>
+    <button class="tab" data-tab="migration">Migration Preview</button>
+  </div>
+
+  <!-- Browse tab -->
+  <div id="tab-browse" class="tab-panel active">
+    <div class="summary" id="browse-summary"></div>
+    <div class="panel">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Class</th><th>Pattern</th>
+            <th>Rank</th><th>Loadable</th><th>Equipment</th>
+            <th>Region</th><th>Coverage</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Health tab -->
+  <div id="tab-health" class="tab-panel">
+    <button id="health-load-btn" style="margin-bottom:10px">Load Health Report</button>
+    <div id="health-content">
+      <div style="color:var(--muted);font-size:13px">Click "Load Health Report" to analyse the catalogue.</div>
+    </div>
+  </div>
+
+  <!-- Recommendations tab -->
+  <div id="tab-recos" class="tab-panel">
+    <button id="recos-load-btn" style="margin-bottom:10px">Load Recommendations</button>
+    <div id="recos-content">
+      <div style="color:var(--muted);font-size:13px">Click "Load Recommendations" to compute coverage gaps.</div>
+    </div>
+  </div>
+
+  <!-- Migration Preview tab -->
+  <div id="tab-migration" class="tab-panel">
+    <div class="mig-toolbar">
+      <button id="mig-generate-btn">Generate Migration File on Server</button>
+      <button id="mig-copy-btn" class="secondary">Copy SQL</button>
+      <button id="mig-download-btn" class="secondary">Download .sql</button>
+      <span id="mig-status" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <pre id="migration-sql">-- Queue changes in Browse tab, then review SQL here.</pre>
+  </div>
+
+</div><!-- .page -->
+
+<!-- Session bar -->
+<div id="session-bar" class="hidden">
+  <span>Pending changes: <span id="session-count">0</span></span>
+  <span id="session-bar-spacer" class="bar-spacer"></span>
+  <button id="session-view-btn" class="secondary sm">View SQL</button>
+  <button id="session-clear-btn" class="danger sm">Clear Queue</button>
+</div>
+
+<!-- Overlay + Edit Drawer -->
+<div id="overlay" class="overlay"></div>
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true">
+  <div class="drawer-header">
+    <h2 id="drawer-title" class="drawer-title">Exercise</h2>
+    <div style="display:flex;gap:6px">
+      <button class="ghost sm" id="clone-btn" style="display:none">Clone</button>
+      <button class="ghost" id="drawer-close">✕</button>
+    </div>
+  </div>
+  <div class="drawer-body">
+
+    <!-- Identity -->
+    <fieldset class="fg">
+      <legend>Identity</legend>
+      <div class="row2">
+        <div class="f">
+          <label for="f-exercise_id">Exercise ID *</label>
+          <input id="f-exercise_id" type="text" placeholder="e.g. barbell_squat" />
+        </div>
+        <div class="f">
+          <label for="f-name">Name *</label>
+          <input id="f-name" type="text" />
+        </div>
+      </div>
+      <div class="row2">
+        <div class="f"><label for="f-slug">Slug</label><input id="f-slug" type="text" /></div>
+        <div class="f"><label for="f-creator">Creator</label><input id="f-creator" type="text" /></div>
+      </div>
+    </fieldset>
+
+    <!-- Classification -->
+    <fieldset class="fg">
+      <legend>Classification</legend>
+      <div class="row2">
+        <div class="f">
+          <label for="f-movement_class">Movement Class *</label>
+          <select id="f-movement_class">
+            <option value="">— select —</option>
+            <option>compound</option><option>isolation</option><option>engine</option>
+            <option>core</option><option>carry</option><option>cardio</option>
+            <option>conditioning</option><option>locomotion</option>
+          </select>
+        </div>
+        <div class="f">
+          <label for="f-movement_pattern_primary">Movement Pattern *</label>
+          <input id="f-movement_pattern_primary" type="text" placeholder="e.g. squat" />
+        </div>
+      </div>
+      <div class="row2">
+        <div class="f"><label for="f-lift_class">Lift Class</label><input id="f-lift_class" type="text" /></div>
+        <div class="f"><label for="f-engine_role">Engine Role</label><input id="f-engine_role" type="text" /></div>
+      </div>
+      <div class="row2">
+        <div class="f">
+          <label for="f-strength_primary_region">Strength Region</label>
+          <select id="f-strength_primary_region">
+            <option value="">—</option>
+            <option>upper</option><option>lower</option>
+          </select>
+        </div>
+        <div class="f"><label for="f-swap_group_id_1">Swap Group 1</label><input id="f-swap_group_id_1" type="text" /></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label for="f-swap_group_id_2">Swap Group 2</label><input id="f-swap_group_id_2" type="text" /></div>
+        <div class="f"><label for="f-min_fitness_rank">Min Fitness Rank</label><input id="f-min_fitness_rank" type="number" min="0" max="3" step="1" /></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label for="f-complexity_rank">Complexity Rank</label><input id="f-complexity_rank" type="number" min="0" max="5" /></div>
+        <div class="f"><label for="f-density_rating">Density Rating</label><input id="f-density_rating" type="number" /></div>
+      </div>
+      <div class="f">
+        <label>Flags</label>
+        <div class="check-row">
+          <input id="f-is_loadable" type="checkbox" /><label for="f-is_loadable">Loadable</label>
+          <input id="f-engine_anchor" type="checkbox" /><label for="f-engine_anchor">Engine Anchor</label>
+          <input id="f-is_archived" type="checkbox" /><label for="f-is_archived">Archived</label>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Equipment -->
+    <fieldset class="fg">
+      <legend>Equipment</legend>
+      <div class="f">
+        <label for="f-equipment_items_slugs">Equipment Slugs (comma-separated)</label>
+        <input id="f-equipment_items_slugs" type="text" placeholder="e.g. barbell, bench" />
+      </div>
+      <div class="f">
+        <label for="f-equipment_json">Equipment JSON</label>
+        <textarea id="f-equipment_json"></textarea>
+      </div>
+    </fieldset>
+
+    <!-- Regions, hooks -->
+    <fieldset class="fg">
+      <legend>Regions, Hooks &amp; Placements</legend>
+      <div class="f"><label for="f-target_regions_json">Target Regions JSON</label><textarea id="f-target_regions_json"></textarea></div>
+      <div class="f"><label for="f-warmup_hooks">Warmup Hooks JSON</label><textarea id="f-warmup_hooks"></textarea></div>
+      <div class="f"><label for="f-preferred_in_json">Preferred In JSON</label><textarea id="f-preferred_in_json"></textarea></div>
+      <div class="f"><label for="f-contraindications_slugs">Contraindication Slugs (comma-separated)</label><input id="f-contraindications_slugs" type="text" /></div>
+      <div class="f"><label for="f-contraindications_json">Contraindications JSON</label><textarea id="f-contraindications_json"></textarea></div>
+    </fieldset>
+
+    <!-- Notes -->
+    <fieldset class="fg">
+      <legend>Notes</legend>
+      <div class="f"><label for="f-form_cues">Form Cues</label><textarea id="f-form_cues" rows="3"></textarea></div>
+    </fieldset>
+
+    <!-- Impact preview -->
+    <div id="impact-panel" style="display:none">
+      <h4>Coverage Impact Preview</h4>
+      <div id="impact-body">Loading…</div>
+    </div>
+
+    <div id="drawer-err" class="err-msg"></div>
+  </div>
+  <div class="drawer-footer">
+    <button id="drawer-queue-btn">Queue Change</button>
+    <span class="spacer"></span>
+    <button id="drawer-cancel-btn" class="secondary">Cancel</button>
+  </div>
+</aside>
+
+<!-- Clone Modal -->
+<div id="clone-modal" class="modal-bg">
+  <div class="modal">
+    <h3>Clone Exercise</h3>
+    <div class="f" style="margin-bottom:10px">
+      <label for="clone-name">New Name *</label>
+      <input id="clone-name" type="text" style="width:100%" />
+    </div>
+    <div class="f" style="margin-bottom:10px">
+      <label for="clone-id">New Exercise ID (auto-generated, editable)</label>
+      <input id="clone-id" type="text" style="width:100%" />
+    </div>
+    <div id="clone-inferred" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+    <div id="clone-err" class="err-msg" style="margin-bottom:6px"></div>
+    <div class="modal-footer">
+      <button id="clone-cancel-btn" class="secondary">Cancel</button>
+      <button id="clone-queue-btn">Queue Clone</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV Modal -->
+<div id="csv-modal" class="modal-bg">
+  <div class="modal">
+    <h3>CSV Import / Export</h3>
+    <div style="margin-bottom:12px">
+      <button id="csv-export-btn">Export CSV</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0" />
+    <h4 style="margin:0 0 8px;font-size:13px">Import (dry run)</h4>
+    <div class="f" style="margin-bottom:10px">
+      <label for="csv-file">Select CSV file</label>
+      <input id="csv-file" type="file" accept=".csv,text/csv" />
+    </div>
+    <button id="csv-dry-run-btn">Dry-Run Import</button>
+    <div id="csv-result" style="margin-top:10px;font-size:12px;max-height:200px;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button id="csv-close-btn" class="secondary">Close</button>
+      <button id="csv-apply-btn" style="display:none">Queue All Valid Rows</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const STORAGE_KEY = "admin_internal_api_token";
+const BASE = "/admin/exercise-catalogue";
+
+// ── State ──────────────────────────────────────────────────────────────────
+let exercises = [];   // from full-state
+let gaps = [];        // coverage gaps from full-state
+let equipmentSlugs = [];
+let drawerMode = null; // 'new' | 'edit'
+let editingId = null;
+let impactTimer = null;
+let csvDryRunRows = [];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(v) {
+  return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
+function getToken() { return document.getElementById("token-input").value.trim(); }
+function authH() { return { "x-internal-token": getToken(), "Content-Type": "application/json" }; }
+function setStatus(msg, cls = "") {
+  const el = document.getElementById("status");
+  el.textContent = msg; el.className = cls;
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(path, { headers: authH(), ...opts });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+  });
+});
+
+// ── Load ───────────────────────────────────────────────────────────────────
+document.getElementById("load-btn").addEventListener("click", loadState);
+document.getElementById("search-input").addEventListener("keydown", e => { if (e.key === "Enter") renderTable(); });
+document.getElementById("search-input").addEventListener("input", renderTable);
+document.getElementById("class-filter").addEventListener("change", renderTable);
+document.getElementById("archived-filter").addEventListener("change", renderTable);
+document.getElementById("new-btn").addEventListener("click", openNewDrawer);
+
+async function loadState() {
+  const token = getToken();
+  if (!token) { setStatus("Fill in the token first.", "err"); return; }
+  sessionStorage.setItem(STORAGE_KEY, token);
+  setStatus("Loading…");
+  try {
+    const data = await apiFetch(`${BASE}/full-state`);
+    exercises = data.exercises ?? [];
+    gaps = data.coverage_gaps ?? [];
+    equipmentSlugs = data.equipment_slugs ?? [];
+    renderTable();
+    setStatus(`Loaded ${exercises.length} exercises, ${gaps.length} coverage gap slots.`, "ok");
+    await refreshSessionBar();
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────
+function renderTable() {
+  const q = document.getElementById("search-input").value.toLowerCase();
+  const cls = document.getElementById("class-filter").value;
+  const arch = document.getElementById("archived-filter").value;
+
+  let rows = exercises.filter(ex => {
+    if (q && !ex.exercise_id.includes(q) && !(ex.name ?? "").toLowerCase().includes(q)) return false;
+    if (cls && ex.movement_class !== cls) return false;
+    if (arch === "" && ex.is_archived) return false;
+    if (arch === "true" && !ex.is_archived) return false;
+    return true;
+  });
+
+  document.getElementById("browse-summary").textContent = `${rows.length} of ${exercises.length} exercises`;
+
+  document.getElementById("table-body").innerHTML = rows.map(ex => {
+    const eq = (ex.equipment_items_slugs ?? []).join(", ") || "—";
+    const gapCount = gaps.filter(g => g.exercise_id === ex.exercise_id).length; // zero-coverage slots this fixes
+    const covClass = gapCount === 0 ? "ok" : gapCount <= 2 ? "low" : "zero";
+    const covBar = `<div class="cov-bar"><div class="cov-seg ${covClass}" title="${gapCount} gap slots covered"></div><span class="cov-count">${gapCount > 0 ? '+'+gapCount : '—'}</span></div>`;
+    return `<tr class="${ex.is_archived ? "archived" : ""}" data-id="${esc(ex.exercise_id)}">
+      <td><code style="font-size:10px">${esc(ex.exercise_id)}</code></td>
+      <td class="wide">${esc(ex.name)}</td>
+      <td><span class="badge">${esc(ex.movement_class)}</span></td>
+      <td>${esc(ex.movement_pattern_primary)}</td>
+      <td style="text-align:center">${ex.min_fitness_rank ?? 0}</td>
+      <td style="text-align:center">${ex.is_loadable ? '<span class="badge yes">✓</span>' : "—"}</td>
+      <td class="eq">${esc(eq)}</td>
+      <td>${esc(ex.strength_primary_region ?? "—")}</td>
+      <td>${covBar}</td>
+      <td>${ex.is_archived ? '<span class="badge archived">Archived</span>' : '<span class="badge yes">Active</span>'}</td>
+      <td><button class="ghost edit-btn" data-id="${esc(ex.exercise_id)}">Edit</button></td>
+    </tr>`;
+  }).join("");
+
+  document.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.addEventListener("click", e => { e.stopPropagation(); openEditDrawer(btn.dataset.id); });
+  });
+  document.querySelectorAll("#table-body tr[data-id]").forEach(row => {
+    row.addEventListener("click", () => openEditDrawer(row.dataset.id));
+  });
+}
+
+// ── Drawer ─────────────────────────────────────────────────────────────────
+const overlay = document.getElementById("overlay");
+const drawer = document.getElementById("drawer");
+
+function openDrawer() {
+  overlay.classList.add("open"); drawer.classList.add("open");
+  document.getElementById("drawer-err").textContent = "";
+}
+function closeDrawer() {
+  overlay.classList.remove("open"); drawer.classList.remove("open");
+  drawerMode = null; editingId = null; clearImpactPanel();
+}
+overlay.addEventListener("click", closeDrawer);
+document.getElementById("drawer-close").addEventListener("click", closeDrawer);
+document.getElementById("drawer-cancel-btn").addEventListener("click", closeDrawer);
+document.getElementById("drawer-queue-btn").addEventListener("click", queueChange);
+document.getElementById("clone-btn").addEventListener("click", openCloneModal);
+
+const FIELDS = [
+  "exercise_id","name","slug","creator",
+  "movement_class","movement_pattern_primary","lift_class","engine_role",
+  "strength_primary_region","swap_group_id_1","swap_group_id_2",
+  "min_fitness_rank","complexity_rank","density_rating",
+  "is_loadable","engine_anchor","is_archived",
+  "equipment_items_slugs","equipment_json",
+  "target_regions_json","warmup_hooks","preferred_in_json",
+  "contraindications_slugs","contraindications_json","form_cues",
+];
+
+function fEl(id) { return document.getElementById(`f-${id}`); }
+function setFV(id, value) {
+  const el = fEl(id); if (!el) return;
+  if (el.type === "checkbox") { el.checked = Boolean(value); }
+  else if (Array.isArray(value)) { el.value = value.join(", "); }
+  else if (value !== null && typeof value === "object") { el.value = JSON.stringify(value, null, 2); }
+  else { el.value = value ?? ""; }
+}
+function getFV(id) {
+  const el = fEl(id); if (!el) return undefined;
+  return el.type === "checkbox" ? el.checked : el.value;
+}
+function clearForm() {
+  FIELDS.forEach(id => {
+    const el = fEl(id); if (!el) return;
+    if (el.type === "checkbox") el.checked = false; else el.value = "";
+  });
+  fEl("min_fitness_rank").value = "0";
+}
+
+function openNewDrawer() {
+  drawerMode = "new"; editingId = null;
+  document.getElementById("drawer-title").textContent = "New Exercise";
+  document.getElementById("clone-btn").style.display = "none";
+  fEl("exercise_id").readOnly = false;
+  clearForm();
+  openDrawer();
+  fEl("exercise_id").focus();
+  // auto-generate ID from name
+  fEl("name").addEventListener("input", onNameInput);
+}
+
+async function onNameInput() {
+  const name = fEl("name").value;
+  if (!name || drawerMode !== "new") return;
+  try {
+    const d = await apiFetch(`${BASE}/generate-id`, { method: "POST", body: JSON.stringify({ name }) });
+    if (d.exercise_id) fEl("exercise_id").value = d.exercise_id;
+  } catch {}
+}
+
+function openEditDrawer(id) {
+  const ex = exercises.find(e => e.exercise_id === id);
+  if (!ex) return;
+  drawerMode = "edit"; editingId = id;
+  document.getElementById("drawer-title").textContent = ex.name;
+  document.getElementById("clone-btn").style.display = "";
+  fEl("exercise_id").readOnly = true;
+  FIELDS.forEach(key => setFV(key, ex[key] ?? null));
+  setFV("equipment_items_slugs", (ex.equipment_items_slugs ?? []).join(", "));
+  setFV("contraindications_slugs", (ex.contraindications_slugs ?? []).join(", "));
+  openDrawer();
+  scheduleImpactPreview();
+}
+
+// Wire all fields to trigger impact preview on change
+FIELDS.filter(id => !["exercise_id"].includes(id)).forEach(id => {
+  const el = fEl(id);
+  if (!el) return;
+  el.addEventListener("change", scheduleImpactPreview);
+  if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+    el.addEventListener("input", scheduleImpactPreview);
+  }
+});
+
+function scheduleImpactPreview() {
+  if (drawerMode !== "edit") return;
+  clearTimeout(impactTimer);
+  impactTimer = setTimeout(fetchImpactPreview, 400);
+}
+
+async function fetchImpactPreview() {
+  const payload = collectPayload();
+  const panel = document.getElementById("impact-panel");
+  panel.style.display = "block";
+  document.getElementById("impact-body").textContent = "Computing…";
+  try {
+    const d = await apiFetch(`${BASE}/preview-change`, { method: "POST", body: JSON.stringify({ exercise_id: editingId, patch: payload }) });
+    renderImpact(d);
+  } catch (e) {
+    document.getElementById("impact-body").textContent = "Preview unavailable: " + e.message;
+  }
+}
+
+function renderImpact(d) {
+  const zeroBefore = d.zero_gaps_before ?? 0;
+  const zeroAfter = d.zero_gaps_after ?? 0;
+  const lowBefore = d.low_gaps_before ?? 0;
+  const lowAfter = d.low_gaps_after ?? 0;
+  const delta0 = zeroBefore - zeroAfter;
+  const deltaL = lowBefore - lowAfter;
+
+  function row(label, delta, before, after) {
+    const cls = delta > 0 ? "pos" : delta < 0 ? "neg" : "";
+    const sign = delta > 0 ? "−" : delta < 0 ? "+" : "±";
+    return `<div class="impact-row"><span class="impact-label">${label}</span><span class="impact-val ${cls}">${before}→${after} (${sign}${Math.abs(delta)})</span></div>`;
+  }
+  document.getElementById("impact-body").innerHTML =
+    row("Zero-coverage gaps fixed", delta0, zeroBefore, zeroAfter) +
+    row("Low-coverage gaps improved", deltaL, lowBefore, lowAfter);
+}
+
+function clearImpactPanel() {
+  document.getElementById("impact-panel").style.display = "none";
+  document.getElementById("impact-body").textContent = "";
+}
+
+function collectPayload() {
+  const toArr = v => String(v ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  const toJson = v => { const s = String(v ?? "").trim(); if (!s) return []; try { return JSON.parse(s); } catch { return []; } };
+  const toInt = v => { const n = parseInt(v, 10); return isNaN(n) ? null : n; };
+  return {
+    exercise_id: getFV("exercise_id"),
+    name: getFV("name"),
+    movement_class: getFV("movement_class"),
+    movement_pattern_primary: getFV("movement_pattern_primary"),
+    min_fitness_rank: toInt(getFV("min_fitness_rank")) ?? 0,
+    is_archived: getFV("is_archived"),
+    is_loadable: getFV("is_loadable"),
+    engine_anchor: getFV("engine_anchor"),
+    complexity_rank: toInt(getFV("complexity_rank")),
+    density_rating: toInt(getFV("density_rating")),
+    engine_role: getFV("engine_role") || null,
+    lift_class: getFV("lift_class") || null,
+    slug: getFV("slug") || null,
+    creator: getFV("creator") || null,
+    strength_primary_region: getFV("strength_primary_region") || null,
+    swap_group_id_1: getFV("swap_group_id_1") || null,
+    swap_group_id_2: getFV("swap_group_id_2") || null,
+    form_cues: getFV("form_cues") || null,
+    equipment_items_slugs: toArr(getFV("equipment_items_slugs")),
+    contraindications_slugs: toArr(getFV("contraindications_slugs")),
+    equipment_json: toJson(getFV("equipment_json")),
+    contraindications_json: toJson(getFV("contraindications_json")),
+    preferred_in_json: toJson(getFV("preferred_in_json")),
+    target_regions_json: toJson(getFV("target_regions_json")),
+    warmup_hooks: toJson(getFV("warmup_hooks")),
+  };
+}
+
+async function queueChange() {
+  document.getElementById("drawer-err").textContent = "";
+  const payload = collectPayload();
+  if (!payload.exercise_id) { document.getElementById("drawer-err").textContent = "Exercise ID required."; return; }
+  if (!payload.name) { document.getElementById("drawer-err").textContent = "Name required."; return; }
+  if (!payload.movement_class) { document.getElementById("drawer-err").textContent = "Movement Class required."; return; }
+  if (!payload.movement_pattern_primary) { document.getElementById("drawer-err").textContent = "Movement Pattern required."; return; }
+
+  try {
+    await apiFetch(`${BASE}/session/queue-change`, {
+      method: "POST",
+      body: JSON.stringify({ mode: drawerMode, exercise_id: editingId, patch: payload }),
+    });
+    closeDrawer();
+    await refreshSessionBar();
+    await refreshMigrationTab();
+  } catch (e) {
+    document.getElementById("drawer-err").textContent = e.message;
+  }
+}
+
+// ── Session bar ────────────────────────────────────────────────────────────
+async function refreshSessionBar() {
+  try {
+    const d = await apiFetch(`${BASE}/session/pending`);
+    const count = (d.pending ?? []).length;
+    const bar = document.getElementById("session-bar");
+    document.getElementById("session-count").textContent = count;
+    bar.classList.toggle("hidden", count === 0);
+  } catch {}
+}
+
+document.getElementById("session-view-btn").addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.querySelector('.tab[data-tab="migration"]').classList.add("active");
+  document.getElementById("tab-migration").classList.add("active");
+  refreshMigrationTab();
+});
+
+document.getElementById("session-clear-btn").addEventListener("click", async () => {
+  if (!confirm("Clear all queued changes?")) return;
+  try {
+    await apiFetch(`${BASE}/session/clear`, { method: "POST" });
+    document.getElementById("migration-sql").textContent = "-- Queue cleared.";
+    document.getElementById("session-bar").classList.add("hidden");
+  } catch (e) { setStatus(e.message, "err"); }
+});
+
+// ── Migration tab ──────────────────────────────────────────────────────────
+async function refreshMigrationTab() {
+  try {
+    const d = await apiFetch(`${BASE}/session/pending`);
+    const pending = d.pending ?? [];
+    if (pending.length === 0) {
+      document.getElementById("migration-sql").textContent = "-- No pending changes.";
+      return;
+    }
+    // Show the SQL blocks
+    const sql = pending.map(p => p.sql || `-- [${p.mode}] ${p.exercise_id}`).join("\n\n");
+    document.getElementById("migration-sql").textContent = sql;
+  } catch {}
+}
+
+document.getElementById("mig-generate-btn").addEventListener("click", async () => {
+  const el = document.getElementById("mig-status");
+  el.textContent = "Generating…";
+  try {
+    const d = await apiFetch(`${BASE}/session/generate-migration`, { method: "POST" });
+    el.textContent = d.message ?? "Done";
+    el.className = "ok";
+  } catch (e) { el.textContent = e.message; el.className = "err"; }
+});
+
+document.getElementById("mig-copy-btn").addEventListener("click", () => {
+  const sql = document.getElementById("migration-sql").textContent;
+  navigator.clipboard.writeText(sql).then(() => {
+    const el = document.getElementById("mig-status");
+    el.textContent = "Copied!"; el.className = "ok";
+    setTimeout(() => { el.textContent = ""; }, 2000);
+  });
+});
+
+document.getElementById("mig-download-btn").addEventListener("click", () => {
+  const sql = document.getElementById("migration-sql").textContent;
+  const blob = new Blob([sql], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "R__exercise_catalogue_edits.sql";
+  a.click();
+});
+
+// ── Clone modal ────────────────────────────────────────────────────────────
+const cloneModal = document.getElementById("clone-modal");
+document.getElementById("clone-cancel-btn").addEventListener("click", () => cloneModal.classList.remove("open"));
+
+function openCloneModal() {
+  if (!editingId) return;
+  const ex = exercises.find(e => e.exercise_id === editingId);
+  document.getElementById("clone-name").value = ex ? `${ex.name} (Copy)` : "";
+  document.getElementById("clone-id").value = "";
+  document.getElementById("clone-err").textContent = "";
+  document.getElementById("clone-inferred").textContent = "";
+  cloneModal.classList.add("open");
+  document.getElementById("clone-name").focus();
+}
+
+document.getElementById("clone-name").addEventListener("input", async () => {
+  const name = document.getElementById("clone-name").value;
+  if (!name) return;
+  try {
+    const d = await apiFetch(`${BASE}/clone-preview`, { method: "POST", body: JSON.stringify({ source_id: editingId, new_name: name }) });
+    document.getElementById("clone-id").value = d.exercise_id ?? "";
+    document.getElementById("clone-inferred").textContent = d.inferred_equipment?.length
+      ? `Inferred equipment: ${d.inferred_equipment.join(", ")}`
+      : "";
+  } catch {}
+});
+
+document.getElementById("clone-queue-btn").addEventListener("click", async () => {
+  document.getElementById("clone-err").textContent = "";
+  const name = document.getElementById("clone-name").value.trim();
+  const newId = document.getElementById("clone-id").value.trim();
+  if (!name || !newId) { document.getElementById("clone-err").textContent = "Name and ID are required."; return; }
+
+  const source = exercises.find(e => e.exercise_id === editingId);
+  if (!source) return;
+
+  const patch = { ...source, exercise_id: newId, name };
+  try {
+    await apiFetch(`${BASE}/session/queue-change`, {
+      method: "POST",
+      body: JSON.stringify({ mode: "new", exercise_id: newId, patch }),
+    });
+    cloneModal.classList.remove("open");
+    closeDrawer();
+    await refreshSessionBar();
+    await refreshMigrationTab();
+  } catch (e) { document.getElementById("clone-err").textContent = e.message; }
+});
+
+// ── CSV modal ──────────────────────────────────────────────────────────────
+const csvModal = document.getElementById("csv-modal");
+document.getElementById("csv-btn").addEventListener("click", () => csvModal.classList.add("open"));
+document.getElementById("csv-close-btn").addEventListener("click", () => csvModal.classList.remove("open"));
+
+document.getElementById("csv-export-btn").addEventListener("click", async () => {
+  if (!exercises.length) { alert("Load exercises first."); return; }
+  const cols = ["exercise_id","name","movement_class","movement_pattern_primary","min_fitness_rank",
+    "is_loadable","engine_anchor","is_archived","lift_class","engine_role","strength_primary_region",
+    "swap_group_id_1","swap_group_id_2","complexity_rank","density_rating","equipment_items_slugs","contraindications_slugs"];
+  const lines = [cols.join(",")];
+  exercises.forEach(ex => {
+    lines.push(cols.map(c => {
+      const v = ex[c];
+      if (Array.isArray(v)) return `"${v.join("|")}"`;
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replaceAll('"','""')}"` : s;
+    }).join(","));
+  });
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "exercise_catalogue.csv"; a.click();
+});
+
+document.getElementById("csv-dry-run-btn").addEventListener("click", async () => {
+  const file = document.getElementById("csv-file").files[0];
+  if (!file) { alert("Select a CSV file first."); return; }
+  const text = await file.text();
+  const resultEl = document.getElementById("csv-result");
+  resultEl.textContent = "Running dry-run…";
+  document.getElementById("csv-apply-btn").style.display = "none";
+  csvDryRunRows = [];
+  try {
+    const d = await fetch(`${BASE}/csv-import-dry-run`, {
+      method: "POST",
+      headers: { "x-internal-token": getToken(), "Content-Type": "text/plain" },
+      body: text,
+    }).then(r => r.json());
+    if (d.error) throw new Error(d.error);
+    csvDryRunRows = d.rows ?? [];
+    const valid = csvDryRunRows.filter(r => !r.error);
+    const invalid = csvDryRunRows.filter(r => r.error);
+    let html = `<strong>${valid.length} valid rows</strong>, ${invalid.length} errors.<br>`;
+    if (invalid.length) {
+      html += "<ul>" + invalid.slice(0, 10).map(r => `<li>Row ${r.row}: ${esc(r.error)}</li>`).join("") + "</ul>";
+    }
+    resultEl.innerHTML = html;
+    if (valid.length) document.getElementById("csv-apply-btn").style.display = "";
+  } catch (e) {
+    resultEl.textContent = "Error: " + e.message;
+  }
+});
+
+document.getElementById("csv-apply-btn").addEventListener("click", async () => {
+  const valid = csvDryRunRows.filter(r => !r.error);
+  let ok = 0, fail = 0;
+  for (const row of valid) {
+    try {
+      await apiFetch(`${BASE}/session/queue-change`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "upsert", exercise_id: row.exercise_id, patch: row }),
+      });
+      ok++;
+    } catch { fail++; }
+  }
+  document.getElementById("csv-result").textContent = `Queued ${ok} rows. ${fail} failed.`;
+  document.getElementById("csv-apply-btn").style.display = "none";
+  await refreshSessionBar();
+  await refreshMigrationTab();
+});
+
+// ── Health tab ─────────────────────────────────────────────────────────────
+document.getElementById("health-load-btn").addEventListener("click", async () => {
+  document.getElementById("health-content").innerHTML = "<div style='color:var(--muted)'>Loading…</div>";
+  try {
+    const d = await apiFetch(`${BASE}/catalogue-health`);
+    renderHealth(d);
+  } catch (e) {
+    document.getElementById("health-content").textContent = "Error: " + e.message;
+  }
+});
+
+function renderHealth(d) {
+  const neverUsed = d.never_used ?? [];
+  const lowUtility = d.low_utility ?? [];
+  const oversupplied = d.oversupplied ?? [];
+
+  function table(items, columns, renderRow) {
+    if (!items.length) return "<p style='color:var(--muted);font-size:12px'>None found.</p>";
+    return `<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>${columns.map(c => `<th style="text-align:left;padding:4px 8px;background:#f9fbfd;border-bottom:1px solid #ecf0f4;font-size:11px;text-transform:uppercase;color:var(--muted)">${c}</th>`).join("")}</tr></thead>
+      <tbody>${items.map(renderRow).join("")}</tbody>
+    </table>`;
+  }
+
+  document.getElementById("health-content").innerHTML = `
+    <div class="card-grid">
+      <div class="card">
+        <h4>Never Used (${neverUsed.length})</h4>
+        <p>Exercises that appear in 0 eligible slots across all configurations.</p>
+        <div style="margin-top:8px;max-height:200px;overflow-y:auto">
+          ${table(neverUsed, ["ID","Name"], r => `<tr>
+            <td style="padding:4px 8px"><code style="font-size:10px">${esc(r.exercise_id)}</code></td>
+            <td style="padding:4px 8px">${esc(r.name)}</td>
+          </tr>`)}
+        </div>
+      </div>
+      <div class="card">
+        <h4>Low Utility — ≤4 slots (${lowUtility.length})</h4>
+        <p>Exercises eligible in very few slots; consider broadening or archiving.</p>
+        <div style="margin-top:8px;max-height:200px;overflow-y:auto">
+          ${table(lowUtility, ["ID","Name","Slots"], r => `<tr>
+            <td style="padding:4px 8px"><code style="font-size:10px">${esc(r.exercise_id)}</code></td>
+            <td style="padding:4px 8px">${esc(r.name)}</td>
+            <td style="padding:4px 8px;text-align:right">${r.slot_count ?? "?"}</td>
+          </tr>`)}
+        </div>
+      </div>
+      <div class="card">
+        <h4>Oversupplied Clusters — ≥5 exercises (${oversupplied.length})</h4>
+        <p>Slot clusters with many eligible exercises; no action needed but flagged for awareness.</p>
+        <div style="margin-top:8px;max-height:200px;overflow-y:auto">
+          ${table(oversupplied, ["Slot","Config","Count"], r => `<tr>
+            <td style="padding:4px 8px">${esc(r.slot)}</td>
+            <td style="padding:4px 8px;font-size:11px;color:var(--muted)">${esc(r.config_key)}</td>
+            <td style="padding:4px 8px;text-align:right">${r.count ?? "?"}</td>
+          </tr>`)}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Recommendations tab ────────────────────────────────────────────────────
+document.getElementById("recos-load-btn").addEventListener("click", async () => {
+  document.getElementById("recos-content").innerHTML = "<div style='color:var(--muted)'>Computing…</div>";
+  try {
+    const d = await apiFetch(`${BASE}/recommendations`);
+    renderRecos(d.recommendations ?? []);
+  } catch (e) {
+    document.getElementById("recos-content").textContent = "Error: " + e.message;
+  }
+});
+
+function renderRecos(recos) {
+  if (!recos.length) {
+    document.getElementById("recos-content").innerHTML = "<div style='color:var(--success)'>No coverage gaps detected — catalogue looks healthy.</div>";
+    return;
+  }
+  document.getElementById("recos-content").innerHTML = recos.map((r, i) => `
+    <div class="reco-card" id="reco-${i}">
+      <h4>${esc(r.exercise_name ?? r.exercise_id)} — ${esc(r.action)}</h4>
+      <div class="reco-meta">
+        Score: ${r.score ?? "?"} &nbsp;|&nbsp; Gaps fixed: ${r.zero_gaps_fixed ?? 0} zero, ${r.low_gaps_improved ?? 0} low
+        &nbsp;|&nbsp; Fields changed: ${r.fields_changed ?? 0}
+      </div>
+      <div class="reco-actions">
+        <button class="ghost sm" onclick="window.applyReco(${i})">Apply to Drawer</button>
+        <button class="ghost sm" onclick="window.toggleRecoSql(${i})">Show SQL</button>
+      </div>
+      <pre class="reco-sql" id="reco-sql-${i}">${esc(r.sql ?? "-- No SQL generated")}</pre>
+    </div>
+  `).join("");
+
+  window._recos = recos;
+}
+
+window.applyReco = function(i) {
+  const r = window._recos?.[i];
+  if (!r) return;
+  const ex = exercises.find(e => e.exercise_id === r.exercise_id);
+  if (!ex) { alert("Exercise not loaded — reload browse tab first."); return; }
+  openEditDrawer(r.exercise_id);
+  // Apply recommended patches
+  if (r.patch) {
+    Object.entries(r.patch).forEach(([k, v]) => setFV(k, v));
+  }
+  // Switch to browse tab
+  document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.querySelector('.tab[data-tab="browse"]').classList.add("active");
+  document.getElementById("tab-browse").classList.add("active");
+};
+
+window.toggleRecoSql = function(i) {
+  const el = document.getElementById(`reco-sql-${i}`);
+  el.style.display = el.style.display === "none" || !el.style.display ? "block" : "none";
+};
+
+// ── Init ───────────────────────────────────────────────────────────────────
+const savedToken = sessionStorage.getItem(STORAGE_KEY);
+if (savedToken) {
+  document.getElementById("token-input").value = savedToken;
+}
+</script>
+</body>
+</html>

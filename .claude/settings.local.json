@@ -8,7 +8,8 @@
       "Bash(docker compose run --rm flyway info)",
       "Bash(docker compose --profile tools run --rm flyway migrate)",
       "Bash(docker compose --profile tools run --rm flyway -url=jdbc:postgresql://db:5432/app -user=app -password=app migrate)",
-      "Bash(docker compose up -d --force-recreate api)"
+      "Bash(docker compose up -d --force-recreate api)",
+      "Bash(docker compose:*)"
     ]
   }
 }

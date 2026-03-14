@@ -11,7 +11,6 @@ import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffo
 import { SectionCard } from "../../components/onboarding/SectionCard";
 import { useErrorPulse } from "../../components/onboarding/useErrorPulse";
 import { PillGrid } from "../../components/onboarding/PillGrid";
-import { MultilineField } from "../../components/onboarding/MultilineField";
 import { hapticHeavy } from "../../components/interaction/haptics";
 import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -31,9 +30,9 @@ import { toggleInjuryFlag } from "./toggleInjuryFlag";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Step1Goals">;
 
-type SectionKey = "goals" | "fitnessLevel" | "injuryFlags" | "goalNotes";
+type SectionKey = "goals" | "fitnessLevel" | "injuryFlags";
 
-const SECTION_ORDER: SectionKey[] = ["goals", "fitnessLevel", "injuryFlags", "goalNotes"];
+const SECTION_ORDER: SectionKey[] = ["goals", "fitnessLevel", "injuryFlags"];
 
 export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
   const scrollRef = useRef<ScrollView | null>(null);
@@ -41,13 +40,11 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
     goals: 0,
     fitnessLevel: 0,
     injuryFlags: 0,
-    goalNotes: 0,
   });
 
   const goalsPulse = useErrorPulse();
   const fitnessPulse = useErrorPulse();
   const injuryPulse = useErrorPulse();
-  const notesPulse = useErrorPulse();
 
   const meQuery = useMe();
   const referenceDataQuery = useReferenceData();
@@ -130,10 +127,6 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
     setFieldErrors(validation.fieldErrors);
   };
 
-  const handleNotesChange = (goalNotes: string): void => {
-    updateDraftWithValidation({ goalNotes });
-  };
-
   const recordSectionLayout = (section: SectionKey) => (event: LayoutChangeEvent): void => {
     sectionOffsetsRef.current[section] = event.nativeEvent.layout.y;
   };
@@ -147,11 +140,7 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
       fitnessPulse.pulse();
       return;
     }
-    if (section === "injuryFlags") {
-      injuryPulse.pulse();
-      return;
-    }
-    notesPulse.pulse();
+    injuryPulse.pulse();
   };
 
   const scrollToSection = (section: SectionKey): void => {
@@ -202,7 +191,6 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
         goals: draft.goals,
         fitnessLevel: draft.fitnessLevel,
         injuryFlags: draft.injuryFlags,
-        goalNotes: draft.goalNotes,
         onboardingStepCompleted: draft.onboardingStepCompleted < 1 ? 1 : draft.onboardingStepCompleted,
       });
       navigation.replace("Step2Equipment");
@@ -262,18 +250,6 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
             onToggle={(value) => toggleInjury(value)}
           />
           {fieldErrors.injuryFlags ? <Text style={styles.errorText}>{fieldErrors.injuryFlags}</Text> : null}
-        </SectionCard>
-      </Animated.View>
-
-      <Animated.View onLayout={recordSectionLayout("goalNotes")} style={notesPulse.animatedStyle}>
-        <SectionCard title="Goal notes" subtitle="Optional context for your coach.">
-          <MultilineField
-            label="Notes"
-            value={draft.goalNotes}
-            onChangeText={handleNotesChange}
-            placeholder="Anything specific we should account for?"
-            error={fieldErrors.goalNotes}
-          />
         </SectionCard>
       </Animated.View>
     </OnboardingScaffold>

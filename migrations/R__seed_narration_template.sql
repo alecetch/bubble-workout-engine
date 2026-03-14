@@ -229,6 +229,822 @@ INSERT INTO public.narration_template (
   template_id, text_pool_json, created_at, updated_at, is_active
 )
 VALUES (
+  NULL,
+  'SEGMENT_EXECUTION',
+  8, NULL, 'segment', 'amrap',
+  'seg_exec_amrap_v1',
+  '["Complete as many rounds as possible in the time cap. Log total rounds completed.", "Start conservatively — the goal is consistent pace through the full time cap."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+-- Hyrox narration templates
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'PROGRAM_TITLE',
+  10,
+  NULL,
+  'program',
+  NULL,
+  'hyrx_program_title',
+  jsonb_build_array('Hyrox Prep - {DAYS_PER_WEEK}-Day ({DURATION_MINS} min)'),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_program_title');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'PROGRAM_SUMMARY',
+  10,
+  NULL,
+  'program',
+  NULL,
+  'hyrx_program_summary',
+  jsonb_build_array(
+    'Three day types, one goal: the run-station rhythm of a Hyrox race. Engine days build aerobic capacity through 8-minute blocks that open with a run every time. Power days put strength first - squat, press, sled - then drive it through AMRAP circuits. Endurance days deliver 10-minute blocks, all four starting with a run, at a threshold pace you can hold. Every session is race prep.',
+    'Hyrox is a pacing problem, not a fitness problem. This program uses three session types to teach you to run, arrive at a station under control, work efficiently, and leave. Engine day: run-station rhythm. Power day: force production and station durability. Endurance day: sustained aerobic output.',
+    'Eight weeks of run-station training. Engine sessions pair runs with wallballs, sleds, carries, and ergs - just like a race. Power sessions anchor on squat and press, then build to sled and carry AMRAPs. Endurance sessions use longer 10-minute blocks for threshold engine work. Train to pace. Race to perform.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_program_summary');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'PROGRESSION_BLURB',
+  10,
+  NULL,
+  'program',
+  NULL,
+  'hyrx_progression_blurb',
+  jsonb_build_array(
+    'Each week raises the target round count by one. Chase the numbers - but hold your pace. A slower round completed is better than a fast round abandoned.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_progression_blurb');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'phase', 'BASELINE'),
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  'week',
+  NULL,
+  'hyrx_week_baseline',
+  jsonb_build_array(
+    'Learn the movements. Build pacing discipline before you chase rounds.',
+    'Baseline week: sub-maximal effort. Get comfortable with the block format and each station.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_baseline');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'phase', 'BUILD'),
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  'week',
+  NULL,
+  'hyrx_week_build',
+  jsonb_build_array(
+    'Push the blocks. Add a round where you can sustain form and pace.',
+    'Build phase: increase effort gradually. A negative split - getting stronger through the block - is the target.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_build');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'phase', 'CONSOLIDATE'),
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  'week',
+  NULL,
+  'hyrx_week_consolidate',
+  jsonb_build_array(
+    'Hold quality. Reduce volume. Arrive fresh.',
+    'Consolidate phase: do not add rounds. Sharpen movement efficiency and transitions.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_consolidate');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'phase', 'PEAK'),
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  'week',
+  NULL,
+  'hyrx_week_peak',
+  jsonb_build_array(
+    'Race-intensity effort. Treat every block like a race station. Arrive at each run ready to push.',
+    'Peak week: near-maximal output. Minimal rest transitions. Simulate the conditions of race day.',
+    'This is what you have been building toward. Race-effort blocks, race-pace runs, race-level discipline.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_peak');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'engine'),
+  'DAY_TITLE',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_engine_title',
+  jsonb_build_array('Engine Day'),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_engine_title');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'power'),
+  'DAY_TITLE',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_power_title',
+  jsonb_build_array('Power Day'),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_power_title');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'engine'),
+  'DAY_GOAL',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_engine_goal',
+  jsonb_build_array(
+    'Four 8-minute blocks. Start each run at a pace you can hold through the station. Do not sprint the buy-in.',
+    'Focus on the run-station rhythm today. Consistent pacing across all four blocks beats a fast first block followed by collapse.',
+    'Engine work. Your aerobic system is the engine that keeps your stations clean in a race. Train it today.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_engine_goal');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'power'),
+  'DAY_GOAL',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_power_goal',
+  jsonb_build_array(
+    'Strength foundation first, then three AMRAP blocks. The squat and press sets build the capacity to hold sled and carry form when you are deeply fatigued.',
+    'Power day: heavy work, then hard blocks. Block A is real strength - use it. Block B is sled and carry - the stations that decide race splits. Block C is the run-wallball transfer. Treat it like race day.',
+    'Build the engine chassis today. Squat, press, sled, carry, wallball. Every exercise earns its place by making you more durable in a Hyrox race.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_power_goal');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
+  'DAY_TITLE',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_endurance_title',
+  jsonb_build_array('Endurance Day'),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_endurance_title');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
+  'DAY_GOAL',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_endurance_goal',
+  jsonb_build_array(
+    'Four 10-minute blocks. Every block starts with a run. Your only job today is to arrive at each station under control and hold your pace through all four blocks.',
+    'Threshold work. Every block opens with a run buy-in - just like the race. If your pace in block 4 is significantly faster than block 1, you went out too easy. If it is slower, you went out too hard. Find the line.',
+    'Aerobic engine day. Longer blocks, all four starting with a run, station pairs that match the race. The goal is sustained output - not max effort, not easy effort. Find race pace and hold it.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_endurance_goal');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'SEGMENT_TITLE',
+  10,
+  NULL,
+  'segment',
+  'amrap',
+  'hyrx_seg_amrap_title',
+  jsonb_build_array('Block {SEGMENT_INDEX} - AMRAP'),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_title');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'SEGMENT_EXECUTION',
+  10,
+  NULL,
+  'segment',
+  'amrap',
+  'hyrx_seg_amrap_execution',
+  jsonb_build_array(
+    '8-minute AMRAP. Complete as many rounds as possible. Rest 60 seconds before the next block.',
+    'As Many Rounds As Possible in 8 minutes. Keep a consistent pace - do not go out too hot. Rest 60 seconds after the clock stops.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_execution');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'SEGMENT_INTENT',
+  10,
+  NULL,
+  'segment',
+  'amrap',
+  'hyrx_seg_amrap_intent',
+  jsonb_build_array(
+    'Target: {ROUNDS} rounds. Start conservative - your pace in round 1 should be the same in round {ROUNDS}.',
+    'Settle into a rhythm you can hold for all 8 minutes. Negative split is the goal.',
+    'Race discipline: pick a pace from the first rep and hold it. Do not accelerate until the last 90 seconds.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_intent');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
+  'SEGMENT_EXECUTION',
+  5,
+  NULL,
+  'segment',
+  'amrap',
+  'hyrx_seg_amrap_endurance_execution',
+  jsonb_build_array(
+    '10-minute AMRAP. This is a threshold block - find a pace you can sustain for the full 10 minutes. Rest 90 seconds before the next block.',
+    'As Many Rounds As Possible in 10 minutes. Negative split is the goal: aim to be moving as well in minute 9 as in minute 1. Rest 90 seconds after the clock stops.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_endurance_execution');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
+  'SEGMENT_INTENT',
+  5,
+  NULL,
+  'segment',
+  'amrap',
+  'hyrx_seg_amrap_endurance_intent',
+  jsonb_build_array(
+    'Threshold pace. Not a sprint, not a jog. The pace you could hold for 20 minutes if you had to.',
+    'Target: {ROUNDS} rounds at a pace that feels controlled. If you need to stop within a round, you are going too hard.',
+    'Race discipline: pick an effort level from the first rep and commit to it. Consistency across 10 minutes is the training adaptation you are after.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_endurance_intent');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'SEGMENT_TITLE',
+  10,
+  'main',
+  'segment',
+  'single',
+  'hyrx_seg_strength_title',
+  jsonb_build_array('Strength Foundation'),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_strength_title');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+SELECT
+  jsonb_build_object('program_type', 'hyrox'),
+  'SEGMENT_EXECUTION',
+  10,
+  'main',
+  'segment',
+  'single',
+  'hyrx_seg_strength_execution',
+  jsonb_build_array(
+    '{SETS} sets x {REP_RANGE}. Rest {REST_SEC}s between sets. This is your only strength block - execute it with precision.'
+  ),
+  now(),
+  now(),
+  true
+WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_strength_execution');
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  NULL,
+  'SEGMENT_TITLE',
+  8, NULL, 'segment', 'amrap',
+  'seg_title_amrap_v1',
+  '["AMRAP", "As Many Rounds As Possible", "Max Effort Block"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  NULL,
+  'SEGMENT_EXECUTION',
+  8, NULL, 'segment', 'emom',
+  'seg_exec_emom_v1',
+  '["Every minute on the minute: complete your reps, then rest for the remainder of the minute.", "Start each minute on the clock. Rest is whatever time remains after your reps."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  NULL,
+  'SEGMENT_TITLE',
+  8, NULL, 'segment', 'emom',
+  'seg_title_emom_v1',
+  '["EMOM", "Every Minute On the Minute", "Interval Block"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'PROGRAM_TITLE',
+  10, NULL, 'program', NULL,
+  'cond_prog_title_v1',
+  '["Conditioning Programme", "Engine & Capacity", "Conditioning & Fitness"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'PROGRAM_SUMMARY',
+  10, NULL, 'program', NULL,
+  'cond_prog_summary_v1',
+  '["A structured conditioning programme built around engine work, carries, and mixed modal efforts. Each session targets a different energy system."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'PROGRESSION_BLURB',
+  10, NULL, 'program', NULL,
+  'cond_prog_progression_v1',
+  '["Progress by increasing effort or output each week — not by adding weight. The goal is to handle more work at the same or higher intensity."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning","day_focus":"engine_power"}'::jsonb,
+  'DAY_TITLE',
+  10, NULL, 'day', NULL,
+  'cond_day_title_engine_v1',
+  '["Engine Day", "Power & Conditioning", "High-Output Session"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning","day_focus":"mixed_modal"}'::jsonb,
+  'DAY_TITLE',
+  10, NULL, 'day', NULL,
+  'cond_day_title_modal_v1',
+  '["Mixed Modal Day", "Capacity & Ballistics", "Mixed Conditioning"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning","day_focus":"aerobic_base"}'::jsonb,
+  'DAY_TITLE',
+  10, NULL, 'day', NULL,
+  'cond_day_title_aerobic_v1',
+  '["Aerobic Base Day", "Steady State & Chassis", "Endurance Session"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'DAY_GOAL',
+  10, NULL, 'day', NULL,
+  'cond_day_goal_v1',
+  '["Focus on consistent output — not maximum effort on every set.", "Move well, breathe, and maintain pace across the session.", "Quality of effort matters more than speed today."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'SEGMENT_EXECUTION',
+  10, NULL, 'segment', 'superset',
+  'cond_seg_exec_superset_v1',
+  '["Move directly from exercise to exercise. Rest fully between rounds.", "Minimise transition time. The rest comes after the round, not between exercises."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'SEGMENT_EXECUTION',
+  10, NULL, 'segment', 'giant_set',
+  'cond_seg_exec_giant_v1',
+  '["Move continuously through all exercises. Rest only after completing the full circuit.", "Keep transitions short. Your rest is earned — take it between rounds only."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'SEGMENT_TITLE',
+  10, 'main', 'segment', NULL,
+  'cond_seg_title_main_v1',
+  '["Primary Effort", "Main Engine Work", "Primary Block"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'SEGMENT_TITLE',
+  10, 'secondary', 'segment', NULL,
+  'cond_seg_title_secondary_v1',
+  '["Capacity Block", "Circuit Work", "Secondary Effort"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'SEGMENT_TITLE',
+  10, 'accessory', 'segment', NULL,
+  'cond_seg_title_accessory_v1',
+  '["Metabolic Finisher", "Accessory Circuit", "Conditioning Accessory"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  '{"program_type":"conditioning"}'::jsonb,
+  'CUE_LINE',
+  10, NULL, 'exercise', NULL,
+  'cond_ex_cue_v1',
+  '["Control your breathing. Steady output beats one big burst.", "Pace yourself — the goal is consistent effort, not going all-out.", "Focus on mechanics under fatigue."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
   '{"program_type":"conditioning","phase":"BUILD"}'::jsonb,
   'PROGRESSION_BLURB',
   1, NULL, 'program', NULL,

@@ -33,6 +33,12 @@ function asText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function asTextArray(value) {
+  return asArray(value)
+    .map((item) => asText(item))
+    .filter(Boolean);
+}
+
 function asJsonObject(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) return value;
   if (typeof value !== "string") return {};
@@ -67,7 +73,7 @@ function buildPresetValuesSql(presets, startParam = 1) {
   };
 }
 
-async function fetchSlotCounts(client, presets, slot) {
+async function fetchSlotCounts(client, presets, slot, excludedClasses) {
   const sw = asText(slot.sw) || null;
   const sw2 = asText(slot.sw2) || null;
   const swAny = asArray(slot.swAny)
@@ -76,6 +82,7 @@ async function fetchSlotCounts(client, presets, slot) {
   const mp = asText(slot.mp) || null;
   const requirePref = asText(slot.requirePref) || null;
   const unconstrained = !sw && !sw2 && swAny.length === 0 && !mp;
+  const excluded = asTextArray(excludedClasses);
 
   const presetValues = buildPresetValuesSql(presets, 1);
   const swParam = presetValues.nextParam;
@@ -84,6 +91,7 @@ async function fetchSlotCounts(client, presets, slot) {
   const mpParam = swParam + 3;
   const requirePrefParam = swParam + 4;
   const unconstrainedParam = swParam + 5;
+  const excludedClassesParam = swParam + 6;
 
   const sql = `
     WITH preset_values(preset_code, preset_slugs) AS (
@@ -105,7 +113,11 @@ async function fetchSlotCounts(client, presets, slot) {
     LEFT JOIN exercise_catalogue ec
       ON ec.is_archived = false
       AND COALESCE(ec.min_fitness_rank, 0) <= c.rank_value
-      AND (ec.movement_class IS NULL OR ec.movement_class NOT IN ('cardio','conditioning','locomotion'))
+      AND (
+        cardinality($${excludedClassesParam}::text[]) = 0
+        OR ec.movement_class IS NULL
+        OR ec.movement_class NOT IN (SELECT unnest($${excludedClassesParam}::text[]))
+      )
       AND COALESCE(ec.equipment_items_slugs, '{}'::text[]) <@ c.preset_slugs
       AND (
         $${unconstrainedParam}::boolean = true
@@ -136,6 +148,7 @@ async function fetchSlotCounts(client, presets, slot) {
     mp,
     requirePref,
     unconstrained,
+    excluded,
   ];
 
   const result = await client.query(sql, params);
@@ -151,7 +164,7 @@ async function fetchSlotCounts(client, presets, slot) {
   return counts;
 }
 
-adminCoverageRouter.get("/coverage-report", async (_req, res) => {
+adminCoverageRouter.get("/coverage-report", async (req, res) => {
   try {
     const equipmentRows = await pool.query(`
       SELECT
@@ -181,26 +194,45 @@ adminCoverageRouter.get("/coverage-report", async (_req, res) => {
       equipment_slugs: Array.from(new Set(presetSlugsByCode.get(p.code) ?? [])).sort(),
     }));
 
-    const cfgResult = await pool.query(`
+    const requestedConfigKey = asText(req.query?.config_key);
+    const requestedProgramType = asText(req.query?.program_type);
+    const cfgFilters = ["is_active = true"];
+    const cfgParams = [];
+
+    if (requestedConfigKey) {
+      cfgParams.push(requestedConfigKey);
+      cfgFilters.push(`config_key = $${cfgParams.length}`);
+    } else if (requestedProgramType) {
+      cfgParams.push(requestedProgramType);
+      cfgFilters.push(`program_type = $${cfgParams.length}`);
+    }
+
+    const cfgResult = await pool.query(
+      `
       SELECT
         config_key,
         program_type,
         program_generation_config_json
       FROM public.program_generation_config
-      WHERE is_active = true
+      WHERE ${cfgFilters.join(" AND ")}
       ORDER BY program_type ASC, config_key ASC
-    `);
+    `,
+      cfgParams,
+    );
 
     const rows = [];
     for (const cfg of cfgResult.rows ?? []) {
       const configJson = asJsonObject(cfg.program_generation_config_json);
       const dayTemplates = asArray(configJson?.builder?.day_templates);
+      const excludedClasses = asTextArray(configJson?.builder?.exclude_movement_classes);
+      const effectiveExcludedClasses =
+        excludedClasses.length > 0 ? excludedClasses : (configJson?.builder?.exclude_movement_classes ? [] : ["cardio", "conditioning", "locomotion"]);
       for (let i = 0; i < dayTemplates.length; i++) {
         const day = asObject(dayTemplates[i]);
         const orderedSlots = asArray(day.ordered_slots);
         for (const rawSlot of orderedSlots) {
           const slot = asObject(rawSlot);
-          const counts = await fetchSlotCounts(pool, presets, slot);
+          const counts = await fetchSlotCounts(pool, presets, slot, effectiveExcludedClasses);
           rows.push({
             config_key: cfg.config_key,
             program_type: cfg.program_type,

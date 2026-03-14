@@ -16,6 +16,8 @@ import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
+import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
+import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { pool } from "./src/db.js";
 import { requestId } from "./src/middleware/requestId.js";
@@ -151,6 +153,8 @@ app.use(requestId);
 app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
 app.use("/admin-ui", express.static(join(__dirname, "admin")));
 app.get("/admin/coverage", (_req, res) => res.sendFile(join(__dirname, "admin/coverage.html")));
+app.get("/admin/exercises", (_req, res) => res.sendFile(join(__dirname, "admin/exercises.html")));
+app.get("/admin/narration", (_req, res) => res.sendFile(join(__dirname, "admin/narration.html")));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -336,11 +340,13 @@ app.patch("/client-profiles/:id", (req, res) => {
   }
 
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  console.log("[profile-patch]", req.params.id, JSON.stringify(patch));
   for (const key of profilePatchKeys) {
     if (Object.prototype.hasOwnProperty.call(patch, key)) {
       profile[key] = patch[key];
     }
   }
+  console.log("[profile-patch] goals after patch:", profile.goals);
 
   profilesById.set(profile.id, profile);
   return res.status(200).json(profile);
@@ -375,6 +381,8 @@ app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
 app.use("/api/admin", adminCoverageRouter);
 app.use("/admin", adminConfigsRouter);
+app.use("/admin", adminExerciseCatalogueRouter);
+app.use("/admin", adminNarrationRouter);
 app.use(generateProgramV2Router);
 
 // JSON parse error handler (ONLY for invalid JSON payloads).

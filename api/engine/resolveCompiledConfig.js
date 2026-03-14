@@ -118,6 +118,7 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     },
     segmentation: {
       blockSemantics: pgcJson?.segmentation?.block_semantics ?? null,
+      blockSemanticsByFocus: pgcJson?.segmentation?.block_semantics_by_focus ?? {},
     },
     progression: {
       progressionByRank: pgcRow?.progression_by_rank_json ?? {},

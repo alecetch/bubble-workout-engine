@@ -1,3 +1,5 @@
+import { scoreConditioningSequence } from "./conditioningScoring.js";
+
 function toStr(v) {
   return v === null || v === undefined ? "" : String(v);
 }
@@ -43,6 +45,8 @@ export function buildIndex(cat) {
       eq: raw.eq || [],
       den: raw.den || 0,
       cx: raw.cx || 0,
+      impact_level: raw.impact_level || 0,
+      engine_role: raw.engine_role || "",
       load: raw.load,
 
       mc: mc,
@@ -194,6 +198,16 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
 
     if (ex.den === 1) score += 0.2;
     if (ex.cx === 1) score += 0.05;
+
+    // Conditioning sequence scoring (no-op for non-conditioning programs)
+    if (sel.programType === "conditioning" && sel.condState) {
+      score += scoreConditioningSequence(
+        ex,
+        sel.condState,
+        sel.rankValue ?? 0,
+        sel.condThresholds ?? {},
+      );
+    }
 
     if (!best || score > best.score) best = { ex: ex, score: score };
   }
@@ -461,6 +475,8 @@ export function buildCatalogJsonFromBubble(exercises) {
 
     const den = Number(r.density_rating ?? r.den ?? 0);
     const cx = Number(r.complexity_rank ?? r.cx ?? 0);
+    const impact_level = Number(r.impact_level ?? 0);
+    const engine_role = toStr(r.engine_role || "").trim();
 
     const load =
       typeof r.is_loadable === "boolean" ? r.is_loadable : toStr(r.is_loadable).toLowerCase() === "true";
@@ -480,6 +496,8 @@ export function buildCatalogJsonFromBubble(exercises) {
       pref,
       den,
       cx,
+      impact_level,
+      engine_role,
       load,
       mc,
       tr,

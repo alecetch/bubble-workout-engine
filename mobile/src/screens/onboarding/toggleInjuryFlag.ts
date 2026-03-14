@@ -5,7 +5,7 @@ export function toggleInjuryFlag(current: string[], clicked: string, noneSlug: s
   const isNone = clicked === noneSlug;
 
   if (isNone) {
-    return [noneSlug];
+    return uniqueCurrent.includes(noneSlug) ? [] : [noneSlug];
   }
 
   const withoutNone = uniqueCurrent.filter((value) => value !== noneSlug);

@@ -510,11 +510,36 @@ Success response:
     {
       "workout_segment_id": "<uuid>",
       "segment_key": "B1_S1",
+      "block_key": "B",
+      "block_order": 1,
+      "segment_order_in_block": 1,
+      "segment_type": "superset",
+      "segment_type_label": "Superset",
+      "purpose": "secondary",
+      "purpose_label": "Secondary",
+      "segment_title": "Secondary Superset",
+      "segment_notes": "...",
+      "rounds": 3,
+      "score_type": "none",
+      "primary_score_label": "",
+      "secondary_score_label": "",
+      "segment_scheme_json": {},
+      "segment_duration_seconds": 0,
+      "segment_duration_mmss": "",
       "items": [
         {
           "program_exercise_id": "<uuid>",
           "exercise_id": "ex_001",
-          "order_in_day": 1
+          "exercise_name": "Dumbbell Row",
+          "order_in_day": 1,
+          "sets_prescribed": 3,
+          "reps_prescribed": "10-12",
+          "reps_unit": "reps",
+          "intensity_prescription": "RIR 2",
+          "tempo": null,
+          "rest_seconds": 60,
+          "notes": null,
+          "is_loadable": true
         }
       ]
     }
