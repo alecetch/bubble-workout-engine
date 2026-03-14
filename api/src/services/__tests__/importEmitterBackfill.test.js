@@ -42,6 +42,7 @@ function makeRows({ withExercise = true } = {}) {
       "Main",
       "",
       "d1",
+      "0",
     ].join("|"),
   ];
 
