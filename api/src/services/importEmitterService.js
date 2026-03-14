@@ -6,7 +6,7 @@ const EXPECTED_COLS = {
   PRG: 9,
   WEEK: 4,
   DAY: 14,
-  SEG: 19,
+  SEG: 20,
   EX: 26,
 };
 
@@ -174,6 +174,7 @@ function parseEmitterRows(rows) {
         purpose: s(cols[15]),
         purpose_label: s(cols[16]),
         program_day_key: s(cols[18]),
+        post_segment_rest_sec: toInt(cols[19], 0),
       });
       continue;
     }
@@ -679,9 +680,10 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
           secondary_score_label,
           segment_scheme_json,
           segment_duration_seconds,
-          segment_duration_mmss
+          segment_duration_mmss,
+          post_segment_rest_sec
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20)
         RETURNING id
         `,
         [
@@ -704,6 +706,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
           JSON.stringify(seg.segment_scheme_json || {}),
           seg.segment_duration_seconds,
           seg.segment_duration_mmss,
+          seg.post_segment_rest_sec,
         ],
       );
 

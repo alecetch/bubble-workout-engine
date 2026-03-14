@@ -116,6 +116,7 @@ function defaultRestForSegType(segType, cfg) {
 
 // Build a stable “day focus” label from main lift slot
 function dayFocusFromDay(day) {
+  if (day && day.day_focus) return day.day_focus;
   const segs = day && day.segments ? day.segments : [];
   let main = null;
   for (let i = 0; i < segs.length; i++) {
@@ -152,7 +153,7 @@ function normalizeTemplates(raw) {
   const out = [];
   for (let i = 0; i < arr.length; i++) {
     const r = arr[i] || {};
-    // applies_json is intentionally ignored in Step 05 for now; reserved for future rule filtering.
+    const applies = safeJsonParse(r.applies_json, null);
     let pool = safeJsonParse(r.text_pool_json, null);
     if (!Array.isArray(pool)) pool = [];
     out.push({
@@ -161,6 +162,9 @@ function normalizeTemplates(raw) {
       field: s(r.field),
       purpose: s(r.purpose),
       segment_type: s(r.segment_type),
+      applies_program_type: isObj(applies) ? s(applies.program_type) : "",
+      applies_day_focus: isObj(applies) ? s(applies.day_focus) : "",
+      applies_phase: isObj(applies) ? s(applies.phase) : "",
       // Note: Bubble uses "lower number is higher priority" in tie-breaking. Keep that.
       priority: toInt(r.priority, 1),
       pool,
@@ -170,11 +174,14 @@ function normalizeTemplates(raw) {
 }
 
 // Select templates by (scope, field, purpose?, segment_type?) with fallback.
-function findTemplatePool(templates, scope, field, purpose, segment_type) {
+function findTemplatePool(templates, scope, field, purpose, segment_type, matchCtx) {
   scope = s(scope);
   field = s(field);
   purpose = s(purpose);
   segment_type = s(segment_type);
+  const programType = s(matchCtx?.program_type);
+  const dayFocus = s(matchCtx?.day_focus);
+  const phase = s(matchCtx?.phase);
   let best = null;
 
   function consider(t, score) {
@@ -191,6 +198,13 @@ function findTemplatePool(templates, scope, field, purpose, segment_type) {
     if (t.scope !== scope) continue;
     if (t.field !== field) continue;
 
+    const hasProgramType = !!t.applies_program_type;
+    const hasDayFocus = !!t.applies_day_focus;
+    const hasPhase = !!t.applies_phase;
+    if (hasProgramType && t.applies_program_type !== programType) continue;
+    if (hasDayFocus && t.applies_day_focus !== dayFocus) continue;
+    if (hasPhase && t.applies_phase !== phase) continue;
+
     let score = 1;
     const hasP = !!t.purpose;
     const hasS = !!t.segment_type;
@@ -202,6 +216,9 @@ function findTemplatePool(templates, scope, field, purpose, segment_type) {
     else if (hasS) score -= 1;
 
     if (purpose && segment_type && t.purpose === purpose && t.segment_type === segment_type) score += 10;
+    if (hasProgramType) score += 3;
+    if (hasDayFocus) score += 3;
+    if (hasPhase) score += 3;
 
     consider(t, score);
   }
@@ -431,6 +448,7 @@ function addCounters(a, b) {
 function enrichDays(days, templates, cfg, catalogById, context) {
   const duration = toInt(context.duration_mins, 0) || 0;
   const dpw = toInt(context.days_per_week, days.length) || days.length || 0;
+  const matchBase = { program_type: s(context.program_type) };
 
   const debugCounters = context.debugCounters;
 
@@ -456,18 +474,6 @@ function enrichDays(days, templates, cfg, catalogById, context) {
   };
 
   // Day templates pools (pulled once; deterministic pickFromPool handles variation)
-  const dayTitlePool = findTemplatePool(templates, "day", "DAY_TITLE", "", "");
-  const dayGoalPool = findTemplatePool(templates, "day", "DAY_GOAL", "", "");
-  const timeHintPool = findTemplatePool(templates, "day", "TIME_BUDGET_HINT", "", "");
-  const warmTitlePool = findTemplatePool(templates, "day", "WARMUP_TITLE", "", "");
-  const warmHeatPool = findTemplatePool(templates, "day", "WARMUP_GENERAL_HEAT", "", "");
-  const warmRampPool = findTemplatePool(templates, "day", "RAMP_SETS_TEXT", "", "");
-
-  // Exercise pools
-  const cuePool = findTemplatePool(templates, "exercise", "CUE_LINE", "", "");
-  const loadPool = findTemplatePool(templates, "exercise", "LOAD_HINT", "", "");
-  const logPool = findTemplatePool(templates, "exercise", "LOGGING_PROMPT", "", "");
-
   for (let d = 0; d < days.length; d++) {
     const day = days[d];
     if (!day) continue;
@@ -492,16 +498,27 @@ function enrichDays(days, templates, cfg, catalogById, context) {
     }
 
     const dayFocus = dayFocusFromDay(day);
+    const matchCtx = { ...matchBase, day_focus: dayFocus };
 
     const dayTokens = {
       ...baseTokens,
       DAY_INDEX: dayIdx,
       DAY_FOCUS: dayFocus,
+      PROGRAM_TYPE: s(context.program_type),
       MAIN_LIFT_NAME: mainName,
       SECONDARY_LIFT_NAME: secondaryName,
     };
 
     const dayKey = `day|${dayIdx}|${dayFocus}|${duration}|${context.totalWeeks}|${rankKey}`;
+    const dayTitlePool = findTemplatePool(templates, "day", "DAY_TITLE", "", "", matchCtx);
+    const dayGoalPool = findTemplatePool(templates, "day", "DAY_GOAL", "", "", matchCtx);
+    const timeHintPool = findTemplatePool(templates, "day", "TIME_BUDGET_HINT", "", "", matchCtx);
+    const warmTitlePool = findTemplatePool(templates, "day", "WARMUP_TITLE", "", "", matchCtx);
+    const warmHeatPool = findTemplatePool(templates, "day", "WARMUP_GENERAL_HEAT", "", "", matchCtx);
+    const warmRampPool = findTemplatePool(templates, "day", "RAMP_SETS_TEXT", "", "", matchCtx);
+    const cuePool = findTemplatePool(templates, "exercise", "CUE_LINE", "", "", matchCtx);
+    const loadPool = findTemplatePool(templates, "exercise", "LOAD_HINT", "", "", matchCtx);
+    const logPool = findTemplatePool(templates, "exercise", "LOGGING_PROMPT", "", "", matchCtx);
 
     day.narration = day.narration || {};
     day.narration.day_title = applyTokens(pickFromPool(dayTitlePool, `${dayKey}|title`), dayTokens);
@@ -546,18 +563,18 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       const segTokens = { PURPOSE: purpose, SEGMENT_TYPE: segType, ROUNDS: rounds, REST_SEC: restSec };
       const segKey = `seg|${dayIdx}|${purpose}|${segType}|${sidx}`;
 
-      const segTitlePool = findTemplatePool(templates, "segment", "SEGMENT_TITLE", purpose, segType);
-      const segExecPool = findTemplatePool(templates, "segment", "SEGMENT_EXECUTION", "", segType);
-      const segIntentPool = findTemplatePool(templates, "segment", "SEGMENT_INTENT", purpose, "");
+      const segTitlePool = findTemplatePool(templates, "segment", "SEGMENT_TITLE", purpose, segType, matchCtx);
+      const segExecPool = findTemplatePool(templates, "segment", "SEGMENT_EXECUTION", "", segType, matchCtx);
+      const segIntentPool = findTemplatePool(templates, "segment", "SEGMENT_INTENT", purpose, "", matchCtx);
 
       seg2.narration = seg2.narration || {};
       seg2.narration.title = applyTokens(pickFromPool(segTitlePool, `${segKey}|title`), segTokens);
       seg2.narration.execution = applyTokens(pickFromPool(segExecPool, `${segKey}|exec`), segTokens);
       seg2.narration.intent = applyTokens(pickFromPool(segIntentPool, `${segKey}|intent`), segTokens);
 
-      const setupPool = findTemplatePool(templates, "transition", "SETUP_NOTE", "", segType);
-      const transPool = findTemplatePool(templates, "transition", "TRANSITION_NOTE", "", segType);
-      const pacePool = findTemplatePool(templates, "transition", "PACE_NOTE", "", "");
+      const setupPool = findTemplatePool(templates, "transition", "SETUP_NOTE", "", segType, matchCtx);
+      const transPool = findTemplatePool(templates, "transition", "TRANSITION_NOTE", "", segType, matchCtx);
+      const pacePool = findTemplatePool(templates, "transition", "PACE_NOTE", "", "", matchCtx);
 
       seg2.narration.setup_note = applyTokens(pickFromPool(setupPool, `${segKey}|setup`), segTokens);
       seg2.narration.transition_note = applyTokens(pickFromPool(transPool, `${segKey}|transition`), segTokens);
@@ -598,7 +615,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
 
         const exKey = `ex|${dayIdx}|${purpose}|${segType}|${exName}|${ii}`;
 
-        const exLinePool = findTemplatePool(templates, "exercise", "EXERCISE_LINE", purpose, "");
+        const exLinePool = findTemplatePool(templates, "exercise", "EXERCISE_LINE", purpose, "", matchCtx);
         it.narration = it.narration || {};
         it.narration.line = applyTokens(pickFromPool(exLinePool, `${exKey}|line`), exTokens);
         it.narration.cues = applyTokens(pickFromPool(cuePool, `${exKey}|cues`), exTokens);
@@ -690,11 +707,12 @@ function buildProgramNarration(p, templates, cfg, totalWeeks) {
     WEEKLY_SET_STEP: progRule.weekly_set_step,
     MAX_EXTRA_SETS: progRule.max_extra_sets,
   };
+  const baseMatchCtx = { program_type: s(cfg.program_type) };
 
-  const progTitlePool = findTemplatePool(templates, "program", "PROGRAM_TITLE", "", "");
-  const progSummaryPool = findTemplatePool(templates, "program", "PROGRAM_SUMMARY", "", "");
-  const progProgPool = findTemplatePool(templates, "program", "PROGRESSION_BLURB", "", "");
-  const progSafetyPool = findTemplatePool(templates, "program", "SAFETY_BLURB", "", "");
+  const progTitlePool = findTemplatePool(templates, "program", "PROGRAM_TITLE", "", "", baseMatchCtx);
+  const progSummaryPool = findTemplatePool(templates, "program", "PROGRAM_SUMMARY", "", "", baseMatchCtx);
+  const progProgPool = findTemplatePool(templates, "program", "PROGRESSION_BLURB", "", "", baseMatchCtx);
+  const progSafetyPool = findTemplatePool(templates, "program", "SAFETY_BLURB", "", "", baseMatchCtx);
 
   const programKey = `program|${dpw}|${duration}|${totalWeeks}|${rankKey}`;
 
@@ -708,10 +726,6 @@ function buildProgramNarration(p, templates, cfg, totalWeeks) {
   const safety_blurb = applyTokens(pickFromPool(progSafetyPool, `${programKey}|safety`), baseTokens);
 
   // Weeks narration
-  const weekTitlePool = findTemplatePool(templates, "week", "WEEK_TITLE", "", "");
-  const weekFocusPool = findTemplatePool(templates, "week", "WEEK_FOCUS", "", "");
-  const weekNotesPool = findTemplatePool(templates, "week", "WEEK_NOTES", "", "");
-
   const weeksOut = [];
   for (let w = 1; w <= totalWeeks; w++) {
     const phase = s(phaseSeq[w - 1] || "");
@@ -731,10 +745,15 @@ function buildProgramNarration(p, templates, cfg, totalWeeks) {
     };
 
     const wkKey = `week|${w}|${phase}|${rankKey}|${totalWeeks}`;
+    const weekMatchCtx = { ...baseMatchCtx, phase };
 
-    let wkTitle = applyTokens(pickFromPool(weekTitlePool, `${wkKey}|title`), weekTokens);
-    let wkFocus = applyTokens(pickFromPool(weekFocusPool, `${wkKey}|focus`), weekTokens);
-    let wkNotes = applyTokens(pickFromPool(weekNotesPool, `${wkKey}|notes`), weekTokens);
+    const weekTitlePoolForPhase = findTemplatePool(templates, "week", "WEEK_TITLE", "", "", weekMatchCtx);
+    const weekFocusPoolForPhase = findTemplatePool(templates, "week", "WEEK_FOCUS", "", "", weekMatchCtx);
+    const weekNotesPoolForPhase = findTemplatePool(templates, "week", "WEEK_NOTES", "", "", weekMatchCtx);
+
+    let wkTitle = applyTokens(pickFromPool(weekTitlePoolForPhase, `${wkKey}|title`), weekTokens);
+    let wkFocus = applyTokens(pickFromPool(weekFocusPoolForPhase, `${wkKey}|focus`), weekTokens);
+    let wkNotes = applyTokens(pickFromPool(weekNotesPoolForPhase, `${wkKey}|notes`), weekTokens);
 
     if (!wkTitle && label) wkTitle = `Week ${w}: ${label}`;
     if (!wkFocus) wkFocus = cpy.focus;
@@ -816,6 +835,7 @@ export async function applyNarration({
   const weekPhaseCfg = pgc.week_phase_config_json || pgc.week_phase_config || {};
 
   const cfg = {
+    program_type: s(pgc.program_type || p0.program_type),
     default_rir: "2",
     default_tempo: "2-0-2-0",
     default_rest_sec_single: 90,
@@ -858,6 +878,7 @@ export async function applyNarration({
     enrichDays(p0.days, templates, cfg, catalogById, {
       duration_mins: p0.duration_mins,
       days_per_week: p0.days_per_week,
+      program_type: cfg.program_type,
       totalWeeks,
       debugCounters: adoption.template,
     });
@@ -877,6 +898,7 @@ export async function applyNarration({
       enrichDays(wk.days, templates, cfg, catalogById, {
         duration_mins: p0.duration_mins,
         days_per_week: p0.days_per_week,
+        program_type: cfg.program_type,
         totalWeeks,
         debugCounters: wkCounters,
       });

@@ -43,9 +43,9 @@ export function validateCompiledConfig(config) {
       if (!sem?.purpose || typeof sem.purpose !== "string" || !sem.purpose.trim()) {
         details.push(`blockSemantics["${letter}"].purpose must be a non-empty string`);
       }
-      if (!["single", "superset", "giant_set"].includes(sem?.preferred_segment_type)) {
+      if (!["single", "superset", "giant_set", "amrap", "emom"].includes(sem?.preferred_segment_type)) {
         details.push(
-          `blockSemantics["${letter}"].preferred_segment_type must be one of single|superset|giant_set`,
+          `blockSemantics["${letter}"].preferred_segment_type must be one of single|superset|giant_set|amrap|emom`,
         );
       }
     }

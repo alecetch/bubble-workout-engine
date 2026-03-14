@@ -320,35 +320,32 @@ SELECT
       'day_templates', jsonb_build_array(
         jsonb_build_object(
           'day_key', 'day1',
-          'focus', 'conditioning_engine',
+          'focus', 'engine_power',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:engine', 'mp', 'conditioning', 'requirePref', 'conditioning_main'),
+            jsonb_build_object('slot', 'A:engine', 'mp', 'cyclical_engine', 'requirePref', 'conditioning_main'),
             jsonb_build_object('slot', 'B:locomotion', 'mp', 'locomotion', 'requirePref', 'conditioning_main'),
-            jsonb_build_object('slot', 'C:hinge', 'mp', 'hinge'),
-            jsonb_build_object('slot', 'C:carry', 'mp', 'carry'),
-            jsonb_build_object('slot', 'D:core', 'sw', 'core')
+            jsonb_build_object('slot', 'C:carry', 'mp', 'carry', 'fill_fallback_slot', 'A:engine'),
+            jsonb_build_object('slot', 'D:finisher', 'mp', 'locomotion', 'requirePref', 'finisher', 'fill_fallback_slot', 'B:locomotion')
           )
         ),
         jsonb_build_object(
           'day_key', 'day2',
-          'focus', 'conditioning_locomotion',
+          'focus', 'mixed_modal',
           'ordered_slots', jsonb_build_array(
             jsonb_build_object('slot', 'A:locomotion', 'mp', 'locomotion', 'requirePref', 'conditioning_main'),
-            jsonb_build_object('slot', 'B:engine', 'mp', 'conditioning'),
-            jsonb_build_object('slot', 'C:carry', 'mp', 'carry'),
-            jsonb_build_object('slot', 'C:hinge', 'mp', 'hinge'),
-            jsonb_build_object('slot', 'D:core', 'sw', 'core')
+            jsonb_build_object('slot', 'B:engine', 'mp', 'cyclical_engine', 'requirePref', 'conditioning_main'),
+            jsonb_build_object('slot', 'C:carry', 'mp', 'carry', 'fill_fallback_slot', 'A:locomotion'),
+            jsonb_build_object('slot', 'D:finisher', 'mp', 'locomotion', 'requirePref', 'finisher', 'fill_fallback_slot', 'B:engine')
           )
         ),
         jsonb_build_object(
           'day_key', 'day3',
-          'focus', 'conditioning_mixed',
+          'focus', 'aerobic_base',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:mixed_a', 'requirePref', 'conditioning_main'),
-            jsonb_build_object('slot', 'B:mixed_b', 'requirePref', 'conditioning_main'),
-            jsonb_build_object('slot', 'C:hinge', 'mp', 'hinge'),
-            jsonb_build_object('slot', 'C:push', 'mp', 'push_horizontal'),
-            jsonb_build_object('slot', 'D:core', 'sw', 'core')
+            jsonb_build_object('slot', 'A:engine', 'mp', 'cyclical_engine', 'requirePref', 'conditioning_main'),
+            jsonb_build_object('slot', 'B:carry', 'mp', 'carry', 'fill_fallback_slot', 'A:engine'),
+            jsonb_build_object('slot', 'C:locomotion', 'mp', 'locomotion', 'requirePref', 'conditioning_main', 'fill_fallback_slot', 'A:engine'),
+            jsonb_build_object('slot', 'D:finisher', 'mp', 'locomotion', 'requirePref', 'finisher', 'fill_fallback_slot', 'C:locomotion')
           )
         )
       ),
@@ -362,14 +359,185 @@ SELECT
         'C', jsonb_build_object(),
         'D', jsonb_build_object()
       ),
+      'conditioning_thresholds', jsonb_build_object(
+        'high_impact_threshold', 2,
+        'high_density_threshold', 2,
+        'high_complexity_threshold', 2,
+        'impact_adjacency_penalty', jsonb_build_array(-3.0, -2.0, -1.0, -0.5),
+        'density_adjacency_penalty', jsonb_build_array(-2.0, -1.5, -0.5, 0.0),
+        'density_complexity_penalty', jsonb_build_array(-2.0, -1.5, -0.5, 0.0),
+        'impact_daily_cap', jsonb_build_array(2, 3, 4, 5),
+        'impact_over_cap_penalty', jsonb_build_array(-3.0, -2.0, -1.0, -0.5),
+        'density_daily_cap', jsonb_build_array(3, 4, 5, 6),
+        'density_over_cap_penalty', jsonb_build_array(-2.0, -1.5, -0.5, -0.2),
+        'complexity_daily_cap', jsonb_build_array(2, 3, 4, 5),
+        'complexity_over_cap_penalty', jsonb_build_array(-2.0, -1.5, -0.5, -0.2),
+        'density_bonus_multiplier', jsonb_build_array(0.5, 0.8, 1.2, 1.5)
+      ),
       'exclude_movement_classes', jsonb_build_array()
     ),
     'segmentation', jsonb_build_object(
       'block_semantics', jsonb_build_object(
-        'A', jsonb_build_object('preferred_segment_type', 'single', 'purpose', 'main'),
-        'B', jsonb_build_object('preferred_segment_type', 'single', 'purpose', 'secondary'),
-        'C', jsonb_build_object('preferred_segment_type', 'single', 'purpose', 'accessory'),
+        'A', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'main'),
+        'B', jsonb_build_object('preferred_segment_type', 'emom', 'purpose', 'secondary'),
+        'C', jsonb_build_object('preferred_segment_type', 'giant_set', 'purpose', 'accessory'),
         'D', jsonb_build_object('preferred_segment_type', 'single', 'purpose', 'accessory')
+      )
+    ),
+    'progression', jsonb_build_object(
+      'apply_to_purposes', jsonb_build_array('main', 'secondary', 'accessory')
+    )
+  ) AS program_generation_config_json,
+  s.program_type,
+  s.progression_by_rank_json,
+  s.schema_version,
+  s.total_weeks_default,
+  s.week_phase_config_json,
+  now()
+FROM seed_rows s
+ON CONFLICT (config_key)
+DO UPDATE SET
+  is_active = EXCLUDED.is_active,
+  notes = EXCLUDED.notes,
+  program_generation_config_json = EXCLUDED.program_generation_config_json,
+  program_type = EXCLUDED.program_type,
+  progression_by_rank_json = EXCLUDED.progression_by_rank_json,
+  schema_version = EXCLUDED.schema_version,
+  total_weeks_default = EXCLUDED.total_weeks_default,
+  week_phase_config_json = EXCLUDED.week_phase_config_json,
+  updated_at = now();
+
+
+-- Hyrox
+WITH seed_rows AS (
+  SELECT
+    'hyrox_default_v1'::text AS config_key,
+    true AS is_active,
+    'Baseline Hyrox race-prep program config (engine, power, endurance days).'::text AS notes,
+    'hyrox'::text AS program_type,
+    1::int AS schema_version,
+    8::int AS total_weeks_default,
+    jsonb_build_object(
+      'beginner', jsonb_build_object('weekly_set_step', 0, 'max_extra_sets', 0),
+      'intermediate', jsonb_build_object('weekly_set_step', 1, 'max_extra_sets', 2),
+      'advanced', jsonb_build_object('weekly_set_step', 1, 'max_extra_sets', 3),
+      'elite', jsonb_build_object('weekly_set_step', 1, 'max_extra_sets', 4)
+    ) AS progression_by_rank_json,
+    jsonb_build_object(
+      'default_phase_sequence', jsonb_build_array('BASELINE', 'BASELINE', 'BUILD', 'BUILD', 'BUILD', 'PEAK', 'PEAK', 'CONSOLIDATE'),
+      'last_week_mode', 'consolidate',
+      'phase_labels', jsonb_build_object(
+        'BASELINE', 'Baseline',
+        'BUILD', 'Build',
+        'PEAK', 'Peak',
+        'CONSOLIDATE', 'Consolidate'
+      ),
+      'copy', jsonb_build_object(
+        'BASELINE', jsonb_build_object('focus', 'Learn race rhythm, sub-maximal effort.', 'notes', 'Keep pace sustainable. Focus on buy-in execution.'),
+        'BUILD', jsonb_build_object('focus', 'Add round targets, increase station intensity.', 'notes', 'Push harder through stations while maintaining run pacing.'),
+        'PEAK', jsonb_build_object('focus', 'Near race-intensity across all blocks.', 'notes', 'Aim for race-realistic effort. Simulate the fatigue curve.'),
+        'CONSOLIDATE', jsonb_build_object('focus', 'Reduce volume, sharpen transitions.', 'notes', 'Arrive race day fresh and confident.')
+      )
+    ) AS week_phase_config_json
+)
+INSERT INTO public.program_generation_config (
+  config_key,
+  is_active,
+  notes,
+  program_generation_config_json,
+  program_type,
+  progression_by_rank_json,
+  schema_version,
+  total_weeks_default,
+  week_phase_config_json,
+  updated_at
+)
+SELECT
+  s.config_key,
+  s.is_active,
+  s.notes,
+  jsonb_build_object(
+    'config_key', s.config_key,
+    'program_type', s.program_type,
+    'schema_version', s.schema_version,
+    'is_active', s.is_active,
+    'total_weeks_default', s.total_weeks_default,
+    'progression_by_rank_json', s.progression_by_rank_json,
+    'week_phase_config_json', s.week_phase_config_json,
+    'builder', jsonb_build_object(
+      'day_templates', jsonb_build_array(
+        jsonb_build_object(
+          'day_key', 'engine_day',
+          'focus', 'engine',
+          'ordered_slots', jsonb_build_array(
+            jsonb_build_object('slot', 'A:run_buy_in', 'block', 'A', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'A:station_wall', 'block', 'A', 'sw', 'wallball', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'A:run_buy_in'),
+            jsonb_build_object('slot', 'B:run_buy_in', 'block', 'B', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'B:station_erg', 'block', 'B', 'mp', 'cyclical_engine', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'B:run_buy_in'),
+            jsonb_build_object('slot', 'C:station_carry', 'block', 'C', 'mp', 'carry', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'C:station_lunge', 'block', 'C', 'sw', 'sandbag_lunge', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'C:station_carry'),
+            jsonb_build_object('slot', 'D:run_buy_in', 'block', 'D', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'D:station_burst', 'block', 'D', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'A:station_wall')
+          )
+        ),
+        jsonb_build_object(
+          'day_key', 'power_day',
+          'focus', 'power',
+          'ordered_slots', jsonb_build_array(
+            jsonb_build_object('slot', 'A:strength_lower', 'block', 'A', 'mp', 'squat', 'sw2', 'squat_compound', 'requirePref', 'hyrox_power'),
+            jsonb_build_object('slot', 'A:strength_press', 'block', 'A', 'mp', 'push_vertical', 'requirePref', 'hyrox_power'),
+            jsonb_build_object('slot', 'B:sled_push', 'block', 'B', 'sw', 'sled_push', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'B:sled_pull', 'block', 'B', 'sw', 'sled_pull', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'B:sled_push'),
+            jsonb_build_object('slot', 'B:wallball', 'block', 'B', 'sw', 'wallball', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'B:sled_push'),
+            jsonb_build_object('slot', 'C:run_buy_in', 'block', 'C', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'C:carry', 'block', 'C', 'mp', 'carry', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'D:station_erg', 'block', 'D', 'mp', 'cyclical_engine', 'requirePref', 'hyrox_station')
+          )
+        ),
+        jsonb_build_object(
+          'day_key', 'endurance_day',
+          'focus', 'endurance',
+          'ordered_slots', jsonb_build_array(
+            jsonb_build_object('slot', 'A:run_buy_in', 'block', 'A', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'A:station_erg', 'block', 'A', 'mp', 'cyclical_engine', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'A:run_buy_in'),
+            jsonb_build_object('slot', 'B:run_buy_in', 'block', 'B', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'B:station_wall', 'block', 'B', 'sw', 'wallball', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'B:run_buy_in'),
+            jsonb_build_object('slot', 'C:run_buy_in', 'block', 'C', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'C:carry', 'block', 'C', 'mp', 'carry', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'D:run_buy_in', 'block', 'D', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'D:station_lunge', 'block', 'D', 'sw', 'sandbag_lunge', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'D:run_buy_in')
+          )
+        )
+      ),
+      'sets_by_duration', jsonb_build_object(
+        '40', jsonb_build_object('A', 3, 'B', 3, 'C', 3, 'D', 3),
+        '50', jsonb_build_object('A', 4, 'B', 3, 'C', 3, 'D', 3),
+        '60', jsonb_build_object('A', 4, 'B', 4, 'C', 3, 'D', 3)
+      ),
+      'block_budget', jsonb_build_object('40', 8, '50', 8, '60', 8),
+      'slot_defaults', jsonb_build_object(),
+      'exclude_movement_classes', jsonb_build_array()
+    ),
+    'segmentation', jsonb_build_object(
+      'block_semantics', jsonb_build_object(
+        'A', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'main', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+        'B', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'secondary', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+        'C', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+        'D', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 0)
+      ),
+      'block_semantics_by_focus', jsonb_build_object(
+        'power', jsonb_build_object(
+          'A', jsonb_build_object('preferred_segment_type', 'single', 'purpose', 'main', 'post_segment_rest_sec', 120),
+          'B', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'secondary', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+          'C', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+          'D', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 0)
+        ),
+        'endurance', jsonb_build_object(
+          'A', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'main', 'time_cap_sec', 600, 'post_segment_rest_sec', 90),
+          'B', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'secondary', 'time_cap_sec', 600, 'post_segment_rest_sec', 90),
+          'C', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 600, 'post_segment_rest_sec', 90),
+          'D', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 600, 'post_segment_rest_sec', 0)
+        )
       )
     ),
     'progression', jsonb_build_object(

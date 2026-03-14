@@ -150,6 +150,7 @@ function segmentDayFromBlocks(day, blockSemantics, dbg) {
       ex_name: b.ex_name,
       slot: b.slot,
       sets: toInt(b.sets, 0),
+      is_buy_in: b.is_buy_in === true,
     }));
 
   for (const letter of orderedLetters) {
@@ -157,6 +158,9 @@ function segmentDayFromBlocks(day, blockSemantics, dbg) {
     const sem = blockSemantics?.[letter] || {};
     const preferredType = toStr(sem.preferred_segment_type) || "single";
     const preferredPurpose = toStr(sem.purpose) || "accessory";
+    const timeCap = sem.time_cap_sec ?? null;
+    const postRest = sem.post_segment_rest_sec ?? 0;
+    const segStart = segments.length;
 
     if (preferredType === "single") {
       for (const item of group) {
@@ -168,10 +172,7 @@ function segmentDayFromBlocks(day, blockSemantics, dbg) {
           items: mkItems([item]),
         });
       }
-      continue;
-    }
-
-    if (preferredType === "superset") {
+    } else if (preferredType === "superset") {
       if (group.length === 1) {
         const item = group[0];
         segments.push({
@@ -202,10 +203,7 @@ function segmentDayFromBlocks(day, blockSemantics, dbg) {
           });
         }
       }
-      continue;
-    }
-
-    if (preferredType === "giant_set") {
+    } else if (preferredType === "giant_set") {
       if (group.length === 1) {
         const item = group[0];
         segments.push({
@@ -237,7 +235,73 @@ function segmentDayFromBlocks(day, blockSemantics, dbg) {
           });
         }
       }
-      continue;
+    } else if (preferredType === "amrap") {
+      if (group.length === 1) {
+        segments.push({
+          segment_index: segIndex++,
+          segment_type: "amrap",
+          purpose: preferredPurpose,
+          rounds: toInt(group[0].sets, 1) || 1,
+          items: mkItems([group[0]]),
+        });
+      } else if (group.length >= 2) {
+        const take = Math.min(4, group.length);
+        const amrapItems = mkItems(group.slice(0, take));
+        const rounds = deriveRoundsAndNormalizeItems(amrapItems, 1);
+        dbg.circuit_rounds_promoted += 1;
+        segments.push({
+          segment_index: segIndex++,
+          segment_type: "amrap",
+          purpose: preferredPurpose,
+          rounds,
+          items: amrapItems,
+        });
+        for (let i = take; i < group.length; i++) {
+          segments.push({
+            segment_index: segIndex++,
+            segment_type: "single",
+            purpose: "accessory",
+            rounds: 1,
+            items: mkItems([group[i]]),
+          });
+        }
+      }
+    } else if (preferredType === "emom") {
+      if (group.length === 1) {
+        segments.push({
+          segment_index: segIndex++,
+          segment_type: "emom",
+          purpose: preferredPurpose,
+          rounds: toInt(group[0].sets, 1) || 1,
+          items: mkItems([group[0]]),
+        });
+      } else if (group.length >= 2) {
+        const take = Math.min(4, group.length);
+        const emomItems = mkItems(group.slice(0, take));
+        const rounds = deriveRoundsAndNormalizeItems(emomItems, 1);
+        dbg.circuit_rounds_promoted += 1;
+        segments.push({
+          segment_index: segIndex++,
+          segment_type: "emom",
+          purpose: preferredPurpose,
+          rounds,
+          items: emomItems,
+        });
+        for (let i = take; i < group.length; i++) {
+          segments.push({
+            segment_index: segIndex++,
+            segment_type: "single",
+            purpose: "accessory",
+            rounds: 1,
+            items: mkItems([group[i]]),
+          });
+        }
+      }
+    }
+
+    for (let si = segStart; si < segments.length; si++) {
+      segments[si].time_cap_sec = timeCap;
+      segments[si].post_segment_rest_sec = postRest;
     }
   }
 
@@ -253,6 +317,7 @@ export async function segmentProgram({ program, compiledConfig }) {
   if (!blockSemantics || typeof blockSemantics !== "object") {
     throw new Error("segmentProgram: missing compiledConfig.segmentation.blockSemantics");
   }
+  const blockSemanticsByFocus = compiledConfig?.segmentation?.blockSemanticsByFocus ?? {};
 
   const resolved = resolveFillsAndMissing(program);
   const programType = toStr(program.program_type) || toStr(compiledConfig?.programType) || "unknown";
@@ -276,10 +341,16 @@ export async function segmentProgram({ program, compiledConfig }) {
   for (let d = 0; d < (resolved.programResolved.days || []).length; d++) {
     const day = resolved.programResolved.days[d];
     if (!day) continue;
-    const segments = segmentDayFromBlocks(day, blockSemantics, dbg);
+    const dayFocus = toStr(day.day_focus) || null;
+    const focusOverride = dayFocus ? (blockSemanticsByFocus[dayFocus] ?? null) : null;
+    const effectiveSemantics = focusOverride
+      ? { ...blockSemantics, ...focusOverride }
+      : blockSemantics;
+    const segments = segmentDayFromBlocks(day, effectiveSemantics, dbg);
     out.days.push({
       day_index: toInt(day.day_index, d + 1),
       day_type: toStr(day.day_type) || toStr(compiledConfig?.programType) || "unknown",
+      day_focus: dayFocus,
       duration_mins: toInt(day.duration_mins, out.duration_mins),
       segments,
     });

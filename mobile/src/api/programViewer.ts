@@ -52,12 +52,14 @@ export type ProgramDayFullResponse = {
   segments: Array<{
     id: string;
     segmentType?: string | null;
+    segmentTypeLabel?: string | null;
     segmentName: string;
     orderInDay: number;
     rounds?: number | null;
     segmentDurationSeconds?: number | null;
     segmentDurationMmss?: string | null;
     notes?: string | null;
+    postSegmentRestSec?: number;
     exercises: Array<{
       id?: string;
       name: string;
@@ -253,6 +255,9 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
       return {
         id: asString(rawSegment.workout_segment_id ?? rawSegment.id) ?? `segment-${segmentIndex + 1}`,
         segmentType: asNullableString(rawSegment.segment_type ?? rawSegment.segmentType),
+        segmentTypeLabel: asNullableString(
+          rawSegment.segment_type_label ?? rawSegment.segmentTypeLabel,
+        ),
         segmentName:
           asString(rawSegment.segment_title ?? rawSegment.segment_name ?? rawSegment.segmentName) ??
           `Segment ${segmentIndex + 1}`,
@@ -266,6 +271,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
           rawSegment.segment_duration_mmss ?? rawSegment.segmentDurationMmss,
         ),
         notes: asNullableString(rawSegment.segment_notes ?? rawSegment.notes),
+        postSegmentRestSec: asNumber(rawSegment.post_segment_rest_sec ?? rawSegment.postSegmentRestSec) ?? 0,
         exercises: rawExercises.map((exercise, exerciseIndex) => {
           const rawExercise = asObject(exercise);
 

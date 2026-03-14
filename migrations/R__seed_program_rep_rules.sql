@@ -418,3 +418,598 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_accessory_single_v1'
 );
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_global_fallback_v1', true, 'conditioning', 1, 1,
+  NULL, NULL, NULL, NULL, NULL, NULL,
+  10, 15, 'reps',
+  NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL,
+  60, NULL,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_global_fallback_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_main_engine_sustained_v1', true, 'conditioning', 1, 12,
+  NULL, 'main', 'single', 'cyclical_engine', NULL, NULL,
+  600, NULL, 'seconds',
+  NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL,
+  0, NULL,
+  NULL, 'time_based'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_main_engine_sustained_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_main_locomotion_v1', true, 'conditioning', 1, 12,
+  NULL, 'main', 'single', 'locomotion', NULL, NULL,
+  6, 10, 'reps',
+  NULL, NULL, 0,
+  NULL, NULL, NULL, NULL,
+  90, NULL,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_main_locomotion_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_main_hinge_ballistic_v1', true, 'conditioning', 1, 12,
+  NULL, 'main', 'single', 'hinge', NULL, NULL,
+  10, 15, 'reps',
+  NULL, NULL, 1,
+  NULL, NULL, NULL, NULL,
+  75, NULL,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_main_hinge_ballistic_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_carry_v1', true, 'conditioning', 1, 11,
+  NULL, NULL, NULL, 'carry', NULL, NULL,
+  20, 40, 'seconds',
+  NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL,
+  45, NULL,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_carry_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_secondary_superset_v1', true, 'conditioning', 1, 10,
+  NULL, 'secondary', 'superset', NULL, NULL, NULL,
+  8, 12, 'reps',
+  NULL, NULL, 1,
+  NULL, NULL, NULL, NULL,
+  0, 60,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_secondary_superset_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_accessory_giant_set_v1', true, 'conditioning', 1, 10,
+  NULL, 'accessory', 'giant_set', NULL, NULL, NULL,
+  10, 15, 'reps',
+  NULL, NULL, 0,
+  NULL, NULL, NULL, NULL,
+  0, 45,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_accessory_giant_set_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_accessory_core_v1', true, 'conditioning', 1, 10,
+  NULL, 'accessory', 'single', 'anti_extension', NULL, NULL,
+  20, 30, 'seconds',
+  NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL,
+  30, NULL,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_accessory_core_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_finisher_single_v1', true, 'conditioning', 1, 9,
+  NULL, 'accessory', 'single', 'locomotion', NULL, NULL,
+  10, 20, 'reps',
+  NULL, NULL, 0,
+  NULL, NULL, NULL, NULL,
+  30, NULL,
+  NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_finisher_single_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_main_amrap_v1', true, 'conditioning', 1, 15,
+  NULL, 'main', 'amrap', NULL, NULL, NULL,
+  5, 8, 'reps',
+  NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL,
+  0, 0,
+  NULL, 'rounds_based'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_main_amrap_v1'
+);
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'cond_secondary_emom_v1', true, 'conditioning', 1, 15,
+  NULL, 'secondary', 'emom', NULL, NULL, NULL,
+  5, 8, 'reps',
+  NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL,
+  0, 0,
+  NULL, 'emom_based'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'cond_secondary_emom_v1'
+);
+
+-- Hyrox rep rules
+-- AMRAP item rules: no rest, no tempo, no RIR - pure distance or rep prescriptions.
+-- Single (power) rules: tempo + rest + RIR for strength quality.
+
+-- Global fallback (matches any hyrox exercise not matched by a specific rule)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_global_fallback', true, 'hyrox', 1, 1,
+  NULL, NULL, NULL, NULL, NULL, NULL,
+  10, 15, 'reps',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_global_fallback');
+
+-- Run buy-in (adjusted to use equipment_slug=treadmill so it does not collide with burpee broad jump)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_run_buy_in', true, 'hyrox', 1, 50,
+  NULL, NULL, 'amrap', 'locomotion', 'locomotion_compound', 'treadmill',
+  400, 400, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_run_buy_in');
+
+-- Wallball station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_wallball', true, 'hyrox', 1, 50,
+  NULL, NULL, 'amrap', 'push_ballistic', 'push_ballistic_compound', NULL,
+  15, 20, 'reps',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_wallball');
+
+-- Ski erg station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_ski_erg', true, 'hyrox', 1, 55,
+  NULL, NULL, 'amrap', 'cyclical_engine', 'cyclical_compound', 'ski_erg',
+  250, 300, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_ski_erg');
+
+-- Row erg station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_row_erg', true, 'hyrox', 1, 55,
+  NULL, NULL, 'amrap', 'cyclical_engine', 'cyclical_compound', 'row_erg',
+  250, 300, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_row_erg');
+
+-- Sled push station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_sled_push', true, 'hyrox', 1, 55,
+  NULL, NULL, 'amrap', 'sled_push', 'sled_compound', NULL,
+  20, 20, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_sled_push');
+
+-- Sled pull station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_sled_pull', true, 'hyrox', 1, 55,
+  NULL, NULL, 'amrap', 'sled_pull', 'sled_compound', NULL,
+  20, 20, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_sled_pull');
+
+-- Farmer carry station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_farmer_carry', true, 'hyrox', 1, 55,
+  NULL, NULL, 'amrap', 'carry', 'carry_compound', NULL,
+  50, 50, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_farmer_carry');
+
+-- Sandbag lunge station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_sandbag_lunge', true, 'hyrox', 1, 55,
+  NULL, NULL, 'amrap', 'lunge', 'lunge_compound', NULL,
+  20, 24, 'reps',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_sandbag_lunge');
+
+-- Burpee broad jump station
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_burpee', true, 'hyrox', 1, 50,
+  NULL, NULL, 'amrap', 'locomotion', 'locomotion_compound', NULL,
+  8, 10, 'reps',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_burpee');
+
+-- Generic carry fallback (any carry not matched above)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_carry_generic', true, 'hyrox', 1, 30,
+  NULL, NULL, 'amrap', 'carry', NULL, NULL,
+  40, 50, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_carry_generic');
+
+-- Generic cyclical engine fallback
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_cyclical_generic', true, 'hyrox', 1, 30,
+  NULL, NULL, 'amrap', 'cyclical_engine', NULL, NULL,
+  200, 300, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_cyclical_generic');
+
+-- Generic locomotion fallback
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_locomotion_generic', true, 'hyrox', 1, 30,
+  NULL, NULL, 'amrap', 'locomotion', NULL, NULL,
+  300, 400, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_locomotion_generic');
+
+-- Power day - strength main (squat, purpose=main, segment=single)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_power_main_squat', true, 'hyrox', 1, 80,
+  NULL, 'main', 'single', 'squat', 'squat_compound', NULL,
+  3, 5, 'reps',
+  1, 3, 2,
+  3, 0, 1, 0,
+  180, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_power_main_squat');
+
+-- Power day - strength main (hinge, purpose=main, segment=single)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_power_main_hinge', true, 'hyrox', 1, 80,
+  NULL, 'main', 'single', 'hinge', 'hinge_compound', NULL,
+  3, 5, 'reps',
+  1, 3, 2,
+  3, 1, 1, 0,
+  180, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_power_main_hinge');
+
+-- Power day - pull strength
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_power_pull', true, 'hyrox', 1, 70,
+  NULL, 'main', 'single', 'pull_horizontal', 'pull_horizontal_compound', NULL,
+  5, 8, 'reps',
+  1, 3, 2,
+  2, 0, 1, 0,
+  120, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_power_pull');
+
+-- Power day - push vertical
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_power_push_vertical', true, 'hyrox', 1, 60,
+  NULL, NULL, 'single', 'push_vertical', NULL, NULL,
+  5, 8, 'reps',
+  1, 3, 2,
+  2, 0, 1, 0,
+  90, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_power_push_vertical');
+
+-- Single segment fallback (power day any single not matched above)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_power_single_fallback', true, 'hyrox', 1, 10,
+  NULL, NULL, 'single', NULL, NULL, NULL,
+  6, 10, 'reps',
+  1, 3, 2,
+  2, 0, 1, 0,
+  90, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_power_single_fallback');

@@ -1,0 +1,1340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Narration Templates</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #fff;
+      --border: #d8dee6;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #0f62fe;
+      --danger: #b42318;
+      --success: #0f766e;
+      --warn: #b45309;
+      --drawer-w: 620px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Segoe UI, Arial, sans-serif;
+      font-size: 13px;
+    }
+    input, select, button, textarea { font: inherit; }
+    input, select, textarea {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 9px;
+      background: #fff;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid var(--primary);
+      outline-offset: -1px;
+    }
+    button {
+      border: 1px solid var(--primary);
+      border-radius: 6px;
+      background: var(--primary);
+      color: #fff;
+      padding: 6px 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:hover { filter: brightness(.95); }
+    button.secondary { background: #fff; color: var(--primary); }
+    button.ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    button.danger { background: var(--danger); border-color: var(--danger); }
+    button.sm { padding: 4px 10px; font-size: 12px; }
+    .page { padding: 12px; display: grid; gap: 10px; }
+    .header, .filters, .panel, details.coverage {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .header { padding: 10px 12px; }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    h1 { margin: 0; font-size: 20px; }
+    .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+    .nav a {
+      color: #1d4ed8;
+      text-decoration: none;
+      font-size: 12px;
+    }
+    .nav a:hover { text-decoration: underline; }
+    .controls, .filter-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .ctrl, .f { display: grid; gap: 3px; }
+    .ctrl label, .f label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .filters { padding: 10px 12px; display: grid; gap: 8px; }
+    .summary { font-size: 12px; color: var(--muted); }
+    #status { margin-top: 6px; font-size: 12px; }
+    .ok { color: var(--success); }
+    .err { color: var(--danger); }
+    .warn { color: var(--warn); }
+    details.coverage summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      font-weight: 600;
+      list-style: none;
+    }
+    details.coverage summary::-webkit-details-marker { display: none; }
+    .coverage-body {
+      padding: 0 12px 12px;
+      font-size: 12px;
+    }
+    .coverage-status { padding: 8px 0; color: var(--muted); }
+    .coverage-summary-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 4px 0 10px;
+      flex-wrap: wrap;
+    }
+    .cov-badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .cov-badge.specific { background: #d1fae5; color: #065f46; }
+    .cov-badge.generic { background: #fef3c7; color: #92400e; }
+    .cov-badge.missing { background: #fee2e2; color: #991b1b; }
+    .coverage-table { min-width: 0; }
+    tr.cov-specific td:first-child { border-left: 4px solid #34d399; }
+    tr.cov-generic td:first-child { border-left: 4px solid #fbbf24; }
+    tr.cov-missing td:first-child { border-left: 4px solid #f87171; }
+    tr.cov-missing { background: #fff8f8; }
+    .panel { overflow: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1180px;
+    }
+    th, td {
+      border-bottom: 1px solid #ecf0f4;
+      padding: 7px 8px;
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    th {
+      background: #f9fbfd;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+    }
+    tbody tr:hover { background: #f4f8ff; }
+    tbody tr.program-specific td:first-child { border-left: 4px solid #f59e0b; }
+    tbody tr.inactive {
+      color: var(--muted);
+      background: #fafafa;
+    }
+    tbody tr.inactive:hover { background: #f4f4f4; }
+    tbody tr.inactive td { opacity: .75; }
+    td.template-id { font-weight: 600; }
+    tbody tr.inactive td.template-id { text-decoration: line-through; }
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #eef2ff;
+      color: #3730a3;
+    }
+    .badge.program { background: #fff7ed; color: #9a3412; }
+    .badge.inactive { background: #f3f4f6; color: #6b7280; }
+    .badge.active { background: #d1fae5; color: #065f46; }
+    .actions { display: flex; gap: 6px; }
+    .state {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .state strong {
+      color: var(--text);
+      display: block;
+      margin-bottom: 4px;
+    }
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .25);
+      z-index: 100;
+    }
+    .overlay.open { display: block; }
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: var(--drawer-w);
+      height: 100%;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      box-shadow: -4px 0 24px rgba(0, 0, 0, .1);
+      display: flex;
+      flex-direction: column;
+      z-index: 101;
+      transform: translateX(100%);
+      transition: transform .2s ease;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .drawer-title { margin: 0; font-size: 15px; }
+    .drawer-body {
+      padding: 14px;
+      overflow-y: auto;
+      display: grid;
+      gap: 12px;
+      flex: 1;
+    }
+    .drawer-footer {
+      border-top: 1px solid var(--border);
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .drawer-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-left: auto;
+    }
+    .fg {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      margin: 0;
+      background: #fcfcfd;
+    }
+    .fg legend {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      font-weight: 600;
+      padding: 0 4px;
+    }
+    .row2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .check-row input { width: auto; }
+    .hint { font-size: 11px; color: var(--muted); }
+    .tokens {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .token-chip {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: #334155;
+    }
+    .text-pool-list {
+      display: grid;
+      gap: 8px;
+    }
+    .text-pool-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: start;
+    }
+    .preview-grid { display: grid; gap: 10px; }
+    .preview-result {
+      border: 1px solid #dbeafe;
+      background: #f0f9ff;
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .preview-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .preview-win { color: var(--success); font-weight: 700; }
+    .preview-lose { color: var(--danger); font-weight: 700; }
+    .drawer-error {
+      font-size: 12px;
+      color: var(--danger);
+      min-height: 16px;
+    }
+    .drawer-ok { font-size: 12px; color: var(--success); }
+    @media (max-width: 860px) {
+      .header-top {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .drawer { width: min(100vw, var(--drawer-w)); }
+      .row2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div class="header-top">
+        <div>
+          <h1>Narration Templates</h1>
+        </div>
+        <nav class="nav">
+          <a href="/admin-ui/index.html">Config Editor</a>
+          <a href="/admin/coverage">Coverage Report</a>
+          <a href="/admin/exercises">Exercise Catalogue</a>
+          <a href="/admin/narration">Narration Templates</a>
+        </nav>
+      </div>
+      <div class="controls">
+        <div class="ctrl">
+          <label for="token-input">Internal API Token</label>
+          <input id="token-input" type="password" style="width:220px" placeholder="x-internal-token" />
+        </div>
+        <button id="load-btn">Load</button>
+        <button id="new-btn" class="secondary">+ New</button>
+      </div>
+      <div id="status"></div>
+    </div>
+
+    <div class="filters">
+      <div class="filter-grid">
+        <div class="ctrl">
+          <label for="program-type-filter">Program type</label>
+          <select id="program-type-filter" style="width:150px"><option value="">All</option></select>
+        </div>
+        <div class="ctrl">
+          <label for="scope-filter">Scope</label>
+          <select id="scope-filter" style="width:140px"><option value="">All</option></select>
+        </div>
+        <div class="ctrl">
+          <label for="field-filter">Field</label>
+          <select id="field-filter" style="width:180px"><option value="">All</option></select>
+        </div>
+        <div class="ctrl">
+          <label for="purpose-filter">Purpose</label>
+          <select id="purpose-filter" style="width:140px"><option value="">All</option></select>
+        </div>
+        <div class="ctrl">
+          <label for="segment-type-filter">Segment type</label>
+          <select id="segment-type-filter" style="width:140px"><option value="">All</option></select>
+        </div>
+        <div class="ctrl">
+          <label for="active-filter">Show</label>
+          <select id="active-filter" style="width:140px">
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label for="search-input">Search</label>
+          <input id="search-input" type="search" style="width:220px" placeholder="template_id or text" />
+        </div>
+      </div>
+      <div class="summary" id="summary">Load templates to browse narration coverage.</div>
+    </div>
+
+    <details class="coverage" open>
+      <summary>Coverage Panel</summary>
+      <div class="coverage-body" id="coverage-panel">
+        <div id="coverage-status" class="coverage-status">Select a specific program_type filter above to see coverage diagnostics for that program type.</div>
+        <div id="coverage-summary-bar" class="coverage-summary-bar" style="display:none"></div>
+        <div id="coverage-table-wrap" style="overflow-x:auto; display:none">
+          <table class="coverage-table">
+            <thead>
+              <tr>
+                <th>Scope</th>
+                <th>Field</th>
+                <th>Purpose</th>
+                <th>Segment type</th>
+                <th>Coverage</th>
+                <th>Winning template</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="coverage-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+
+    <div class="panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Template ID</th>
+            <th>Scope</th>
+            <th>Field</th>
+            <th>Purpose</th>
+            <th>Segment type</th>
+            <th>Program type</th>
+            <th>Priority</th>
+            <th>Strings</th>
+            <th>Active</th>
+            <th>Edit</th>
+            <th>Clone</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr>
+            <td colspan="11" class="state">
+              <strong>No templates loaded</strong>
+              Enter a token and click Load.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <datalist id="field-options"></datalist>
+  <datalist id="program-type-options"></datalist>
+  <datalist id="day-focus-options">
+    <option value="Lower (Squat)"></option>
+    <option value="Lower (Hinge)"></option>
+    <option value="Upper (Push)"></option>
+    <option value="Upper (Pull)"></option>
+    <option value="Upper (Press)"></option>
+    <option value="Hypertrophy"></option>
+  </datalist>
+
+  <div id="overlay" class="overlay"></div>
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer-header">
+      <h2 id="drawer-title" class="drawer-title">Template</h2>
+      <button id="drawer-close" class="ghost" type="button">Close</button>
+    </div>
+    <div class="drawer-body">
+      <fieldset class="fg">
+        <legend>Identity</legend>
+        <div class="row2">
+          <div class="f">
+            <label for="drawer-template-id">Template ID</label>
+            <input id="drawer-template-id" type="text" />
+          </div>
+          <div class="f">
+            <label>&nbsp;</label>
+            <div class="check-row">
+              <input id="drawer-is-active" type="checkbox" />
+              <label for="drawer-is-active">Active</label>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="fg">
+        <legend>Targeting</legend>
+        <div class="row2">
+          <div class="f">
+            <label for="drawer-scope">Scope</label>
+            <select id="drawer-scope"></select>
+          </div>
+          <div class="f">
+            <label for="drawer-field">Field</label>
+            <input id="drawer-field" type="text" list="field-options" placeholder="Select or type a field" />
+          </div>
+        </div>
+        <div class="row2">
+          <div class="f">
+            <label for="drawer-purpose">Purpose</label>
+            <select id="drawer-purpose"></select>
+          </div>
+          <div class="f">
+            <label for="drawer-segment-type">Segment type</label>
+            <select id="drawer-segment-type"></select>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="f">
+            <label for="drawer-priority">Priority</label>
+            <input id="drawer-priority" type="number" min="1" step="1" />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="fg">
+        <legend>Applies</legend>
+        <div class="row2">
+          <div class="f">
+            <label for="drawer-program-type">Program type</label>
+            <input id="drawer-program-type" type="text" list="program-type-options" />
+          </div>
+          <div class="f">
+            <label for="drawer-day-focus">Day focus</label>
+            <input id="drawer-day-focus" type="text" list="day-focus-options" />
+          </div>
+        </div>
+        <div class="hint">`day_focus` values are derived from slot names at runtime - see docs.</div>
+      </fieldset>
+
+      <fieldset class="fg">
+        <legend>Text Pool</legend>
+        <div id="text-pool-list" class="text-pool-list"></div>
+        <div>
+          <button id="add-variant-btn" class="secondary sm" type="button">+ Add variant</button>
+        </div>
+        <div class="hint">Tokens available in text variants:</div>
+        <div class="tokens" id="token-hints"></div>
+      </fieldset>
+
+      <details class="fg" open>
+        <summary>Match Preview</summary>
+        <div class="preview-grid">
+          <div class="row2">
+            <div class="f">
+              <label for="preview-program-type">Preview program_type</label>
+              <input id="preview-program-type" type="text" list="program-type-options" />
+            </div>
+            <div class="f">
+              <label for="preview-day-focus">Preview day_focus</label>
+              <input id="preview-day-focus" type="text" list="day-focus-options" />
+            </div>
+          </div>
+          <div class="row2">
+            <div class="f">
+              <label for="preview-purpose">Preview purpose</label>
+              <select id="preview-purpose"></select>
+            </div>
+            <div class="f">
+              <label for="preview-segment-type">Preview segment_type</label>
+              <select id="preview-segment-type"></select>
+            </div>
+          </div>
+          <div id="preview-result" class="preview-result"></div>
+        </div>
+      </details>
+
+      <div id="drawer-error" class="drawer-error"></div>
+      <div id="drawer-ok" class="drawer-ok"></div>
+    </div>
+    <div class="drawer-footer">
+      <button id="drawer-deactivate" class="danger" type="button">Deactivate</button>
+      <div class="drawer-actions">
+        <button id="drawer-cancel" class="secondary" type="button">Cancel</button>
+        <button id="drawer-save" type="button">Save</button>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+    const STORAGE_KEY = "narration_admin_internal_token";
+    const FIELD_OPTIONS = {
+      program: ["PROGRAM_TITLE", "PROGRAM_SUMMARY", "PROGRESSION_BLURB", "SAFETY_BLURB"],
+      week: ["WEEK_TITLE", "WEEK_FOCUS", "WEEK_NOTES"],
+      day: ["DAY_TITLE", "DAY_GOAL", "TIME_BUDGET_HINT", "WARMUP_TITLE", "WARMUP_GENERAL_HEAT", "RAMP_SETS_TEXT"],
+      segment: ["SEGMENT_TITLE", "SEGMENT_EXECUTION", "SEGMENT_INTENT"],
+      transition: ["SETUP_NOTE", "TRANSITION_NOTE", "PACE_NOTE"],
+      exercise: ["EXERCISE_LINE", "CUE_LINE", "LOAD_HINT", "LOGGING_PROMPT"],
+    };
+    const SCOPES = ["program", "week", "day", "segment", "transition", "exercise"];
+    const PURPOSES = ["", "main", "secondary", "accessory", "warmup", "cooldown"];
+    const SEGMENT_TYPES = ["", "single", "superset", "giant_set", "amrap", "emom"];
+    const TOKEN_HINTS = ["{EX_NAME}", "{SETS}", "{REP_RANGE}", "{RIR}", "{REST_SEC}", "{ROUNDS}", "{PURPOSE}", "{SEGMENT_TYPE}", "{DAYS_PER_WEEK}", "{DURATION_MINS}", "{DAY_INDEX}", "{DAY_FOCUS}", "{PROGRAM_TYPE}", "{MAIN_LIFT_NAME}", "{SECONDARY_LIFT_NAME}", "{TEMPO}", "{TOTAL_WEEKS}"];
+
+    const state = {
+      loaded: false,
+      loading: false,
+      templates: [],
+      filtered: [],
+      drawerMode: null,
+      editingTemplateId: null,
+      saving: false,
+    };
+
+    const els = {
+      tokenInput: document.getElementById("token-input"),
+      loadBtn: document.getElementById("load-btn"),
+      newBtn: document.getElementById("new-btn"),
+      status: document.getElementById("status"),
+      summary: document.getElementById("summary"),
+      tableBody: document.getElementById("table-body"),
+      programTypeFilter: document.getElementById("program-type-filter"),
+      scopeFilter: document.getElementById("scope-filter"),
+      fieldFilter: document.getElementById("field-filter"),
+      purposeFilter: document.getElementById("purpose-filter"),
+      segmentTypeFilter: document.getElementById("segment-type-filter"),
+      activeFilter: document.getElementById("active-filter"),
+      searchInput: document.getElementById("search-input"),
+      fieldOptions: document.getElementById("field-options"),
+      programTypeOptions: document.getElementById("program-type-options"),
+      overlay: document.getElementById("overlay"),
+      drawer: document.getElementById("drawer"),
+      drawerTitle: document.getElementById("drawer-title"),
+      drawerClose: document.getElementById("drawer-close"),
+      drawerCancel: document.getElementById("drawer-cancel"),
+      drawerSave: document.getElementById("drawer-save"),
+      drawerDeactivate: document.getElementById("drawer-deactivate"),
+      drawerTemplateId: document.getElementById("drawer-template-id"),
+      drawerIsActive: document.getElementById("drawer-is-active"),
+      drawerScope: document.getElementById("drawer-scope"),
+      drawerField: document.getElementById("drawer-field"),
+      drawerPurpose: document.getElementById("drawer-purpose"),
+      drawerSegmentType: document.getElementById("drawer-segment-type"),
+      drawerPriority: document.getElementById("drawer-priority"),
+      drawerProgramType: document.getElementById("drawer-program-type"),
+      drawerDayFocus: document.getElementById("drawer-day-focus"),
+      textPoolList: document.getElementById("text-pool-list"),
+      addVariantBtn: document.getElementById("add-variant-btn"),
+      tokenHints: document.getElementById("token-hints"),
+      drawerError: document.getElementById("drawer-error"),
+      drawerOk: document.getElementById("drawer-ok"),
+      previewProgramType: document.getElementById("preview-program-type"),
+      previewDayFocus: document.getElementById("preview-day-focus"),
+      previewPurpose: document.getElementById("preview-purpose"),
+      previewSegmentType: document.getElementById("preview-segment-type"),
+      previewResult: document.getElementById("preview-result"),
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setStatus(message, kind) {
+      els.status.className = kind || "";
+      els.status.textContent = message || "";
+    }
+
+    function token() {
+      return (els.tokenInput.value || "").trim();
+    }
+
+    function readProgramType(template) {
+      return template && template.applies_json && typeof template.applies_json === "object"
+        ? String(template.applies_json.program_type || "").trim()
+        : "";
+    }
+
+    function readDayFocus(template) {
+      return template && template.applies_json && typeof template.applies_json === "object"
+        ? String(template.applies_json.day_focus || "").trim()
+        : "";
+    }
+
+    function normalizeTemplate(row) {
+      const textPool = Array.isArray(row.text_pool_json) ? row.text_pool_json : [];
+      return {
+        template_id: String(row.template_id || "").trim(),
+        scope: String(row.scope || "").trim(),
+        field: String(row.field || "").trim(),
+        purpose: String(row.purpose || "").trim(),
+        segment_type: String(row.segment_type || "").trim(),
+        priority: row.priority == null ? "" : Number(row.priority),
+        text_pool_json: textPool.map((item) => String(item || "")),
+        applies_json: row.applies_json && typeof row.applies_json === "object" ? row.applies_json : {},
+        is_active: row.is_active !== false,
+        created_at: row.created_at || "",
+        updated_at: row.updated_at || "",
+      };
+    }
+
+    function uniqueSorted(values) {
+      return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    }
+
+    function fillSelect(selectEl, values, allLabel) {
+      const current = selectEl.value;
+      const options = [`<option value="">${escapeHtml(allLabel || "All")}</option>`]
+        .concat(values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`));
+      selectEl.innerHTML = options.join("");
+      if (values.includes(current)) selectEl.value = current;
+      else selectEl.value = "";
+    }
+
+    function fillFixedSelect(selectEl, values, noneLabel) {
+      selectEl.innerHTML = values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value || noneLabel || "(none)")}</option>`).join("");
+    }
+
+    function populateStaticDrawerOptions() {
+      els.drawerScope.innerHTML = SCOPES.map((scope) => `<option value="${scope}">${scope}</option>`).join("");
+      fillFixedSelect(els.drawerPurpose, PURPOSES, "(none)");
+      fillFixedSelect(els.drawerSegmentType, SEGMENT_TYPES, "(none)");
+      fillFixedSelect(els.previewPurpose, PURPOSES, "(none)");
+      fillFixedSelect(els.previewSegmentType, SEGMENT_TYPES, "(none)");
+      els.tokenHints.innerHTML = TOKEN_HINTS.map((tokenText) => `<span class="token-chip">${escapeHtml(tokenText)}</span>`).join("");
+    }
+
+    function populateDynamicOptions() {
+      fillSelect(els.programTypeFilter, uniqueSorted(state.templates.map(readProgramType)), "All");
+      fillSelect(els.scopeFilter, uniqueSorted(state.templates.map((item) => item.scope)), "All");
+      fillSelect(els.fieldFilter, uniqueSorted(state.templates.map((item) => item.field)), "All");
+      fillSelect(els.purposeFilter, uniqueSorted(state.templates.map((item) => item.purpose)), "All");
+      fillSelect(els.segmentTypeFilter, uniqueSorted(state.templates.map((item) => item.segment_type)), "All");
+      els.programTypeOptions.innerHTML = uniqueSorted(state.templates.map(readProgramType))
+        .map((value) => `<option value="${escapeHtml(value)}"></option>`)
+        .join("");
+    }
+
+    function currentFieldOptions(scope) {
+      return FIELD_OPTIONS[scope] || [];
+    }
+
+    function syncFieldDatalist() {
+      const options = currentFieldOptions(els.drawerScope.value);
+      els.fieldOptions.innerHTML = options.map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+    }
+
+    function matchesFilters(template) {
+      const programType = readProgramType(template);
+      const q = (els.searchInput.value || "").trim().toLowerCase();
+      const haystack = [
+        template.template_id,
+        template.scope,
+        template.field,
+        template.purpose,
+        template.segment_type,
+        programType,
+        (template.text_pool_json || []).join(" "),
+      ].join(" ").toLowerCase();
+
+      if (els.programTypeFilter.value && programType !== els.programTypeFilter.value) return false;
+      if (els.scopeFilter.value && template.scope !== els.scopeFilter.value) return false;
+      if (els.fieldFilter.value && template.field !== els.fieldFilter.value) return false;
+      if (els.purposeFilter.value && template.purpose !== els.purposeFilter.value) return false;
+      if (els.segmentTypeFilter.value && template.segment_type !== els.segmentTypeFilter.value) return false;
+      if (els.activeFilter.value === "active" && !template.is_active) return false;
+      if (els.activeFilter.value === "inactive" && template.is_active) return false;
+      if (q && !haystack.includes(q)) return false;
+      return true;
+    }
+
+    function renderTable() {
+      if (state.loading) {
+        els.tableBody.innerHTML = `
+          <tr>
+            <td colspan="11" class="state">
+              <strong>Loading templates...</strong>
+              Fetching narration rows from the API.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      if (!state.loaded) {
+        els.tableBody.innerHTML = `
+          <tr>
+            <td colspan="11" class="state">
+              <strong>No templates loaded</strong>
+              Enter a token and click Load.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      if (state.filtered.length === 0) {
+        els.tableBody.innerHTML = `
+          <tr>
+            <td colspan="11" class="state">
+              <strong>No templates match the current filters</strong>
+              Adjust the filter bar or clear the search query.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      els.tableBody.innerHTML = state.filtered.map((template) => {
+        const programType = readProgramType(template);
+        const rowClasses = [programType ? "program-specific" : "", template.is_active ? "" : "inactive"]
+          .filter(Boolean)
+          .join(" ");
+
+        return `
+          <tr class="${rowClasses}">
+            <td class="template-id">${escapeHtml(template.template_id)}</td>
+            <td>${escapeHtml(template.scope || "-")}</td>
+            <td>${escapeHtml(template.field || "-")}</td>
+            <td>${escapeHtml(template.purpose || "-")}</td>
+            <td>${escapeHtml(template.segment_type || "-")}</td>
+            <td>${programType ? `<span class="badge program">${escapeHtml(programType)}</span>` : "-"}</td>
+            <td>${escapeHtml(template.priority || "-")}</td>
+            <td>${escapeHtml((template.text_pool_json || []).length)}</td>
+            <td><span class="badge ${template.is_active ? "active" : "inactive"}">${template.is_active ? "Active" : "Inactive"}</span></td>
+            <td><div class="actions"><button class="ghost edit-btn" type="button" data-template-id="${escapeHtml(template.template_id)}">Edit</button></div></td>
+            <td><div class="actions"><button class="ghost clone-btn" type="button" data-template-id="${escapeHtml(template.template_id)}">Clone</button></div></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderSummary() {
+      if (!state.loaded) {
+        els.summary.textContent = "Load templates to browse narration coverage.";
+        return;
+      }
+      const total = state.templates.length;
+      const shown = state.filtered.length;
+      const specific = state.templates.filter((item) => readProgramType(item)).length;
+      const inactive = state.templates.filter((item) => !item.is_active).length;
+      els.summary.textContent = `${shown} of ${total} templates shown. ${specific} program-specific. ${inactive} inactive.`;
+    }
+
+    function applyFilters() {
+      state.filtered = state.templates.filter(matchesFilters);
+      renderSummary();
+      renderTable();
+    }
+
+    function templateById(templateId) {
+      return state.templates.find((item) => item.template_id === templateId) || null;
+    }
+
+    function blankTemplate() {
+      return {
+        template_id: "",
+        scope: "program",
+        field: "PROGRAM_TITLE",
+        purpose: "",
+        segment_type: "",
+        priority: 10,
+        text_pool_json: [""],
+        applies_json: {},
+        is_active: true,
+      };
+    }
+
+    function cloneTemplate(template) {
+      const copy = JSON.parse(JSON.stringify(template));
+      copy.template_id = `${template.template_id}_copy`;
+      copy.is_active = true;
+      return copy;
+    }
+
+    function renderTextPool(values) {
+      const rows = values.length ? values : [""];
+      els.textPoolList.innerHTML = rows.map((value, index) => `
+        <div class="text-pool-row">
+          <input type="text" data-pool-index="${index}" value="${escapeHtml(value)}" placeholder="Template variant ${index + 1}" />
+          <button class="ghost remove-variant-btn" type="button" data-pool-index="${index}">Remove</button>
+        </div>
+      `).join("");
+    }
+
+    function getTextPoolValues() {
+      return Array.from(els.textPoolList.querySelectorAll("input[data-pool-index]")).map((input) => input.value);
+    }
+
+    function drawerDraft() {
+      const applies = {};
+      const programType = els.drawerProgramType.value.trim();
+      const dayFocus = els.drawerDayFocus.value.trim();
+      if (programType) applies.program_type = programType;
+      if (dayFocus) applies.day_focus = dayFocus;
+      return {
+        template_id: els.drawerTemplateId.value.trim(),
+        scope: els.drawerScope.value.trim(),
+        field: els.drawerField.value.trim(),
+        purpose: els.drawerPurpose.value.trim(),
+        segment_type: els.drawerSegmentType.value.trim(),
+        priority: Number(els.drawerPriority.value),
+        text_pool_json: getTextPoolValues(),
+        applies_json: applies,
+        is_active: els.drawerIsActive.checked,
+      };
+    }
+
+    function previewContext() {
+      return {
+        program_type: els.previewProgramType.value.trim(),
+        day_focus: els.previewDayFocus.value.trim(),
+        purpose: els.previewPurpose.value.trim(),
+        segment_type: els.previewSegmentType.value.trim(),
+      };
+    }
+
+    function scoreTemplateMatch(template, scope, field, purpose, segmentType, matchCtx) {
+      if (!template) return null;
+      if ((template.scope || "") !== (scope || "")) return null;
+      if ((template.field || "") !== (field || "")) return null;
+
+      const templateProgramType = readProgramType(template);
+      const templateDayFocus = readDayFocus(template);
+      const matchProgramType = String(matchCtx.program_type || "");
+      const matchDayFocus = String(matchCtx.day_focus || "");
+
+      if (templateProgramType && templateProgramType !== matchProgramType) return null;
+      if (templateDayFocus && templateDayFocus !== matchDayFocus) return null;
+
+      let score = 1;
+      const templatePurpose = String(template.purpose || "");
+      const templateSegmentType = String(template.segment_type || "");
+
+      if (purpose && templatePurpose && templatePurpose === purpose) score += 4;
+      else if (templatePurpose) score -= 1;
+
+      if (segmentType && templateSegmentType && templateSegmentType === segmentType) score += 4;
+      else if (templateSegmentType) score -= 1;
+
+      if (purpose && segmentType && templatePurpose === purpose && templateSegmentType === segmentType) score += 10;
+      if (templateProgramType) score += 3;
+      if (templateDayFocus) score += 3;
+      return score;
+    }
+
+    function computePreview() {
+      const draft = drawerDraft();
+      const ctx = previewContext();
+      const draftScore = scoreTemplateMatch(draft, draft.scope, draft.field, ctx.purpose, ctx.segment_type, ctx);
+      const baselineCandidates = state.templates
+        .filter((item) => item.template_id !== state.editingTemplateId)
+        .filter((item) => !readProgramType(item) && !readDayFocus(item));
+
+      let bestBaseline = null;
+      for (const candidate of baselineCandidates) {
+        const score = scoreTemplateMatch(candidate, draft.scope, draft.field, ctx.purpose, ctx.segment_type, ctx);
+        if (score == null) continue;
+        if (!bestBaseline || score > bestBaseline.score || (score === bestBaseline.score && Number(candidate.priority || 9999) < Number(bestBaseline.template.priority || 9999))) {
+          bestBaseline = { template: candidate, score };
+        }
+      }
+
+      let verdict = "This template does not match the current preview context.";
+      let verdictClass = "preview-lose";
+      if (draftScore != null) {
+        if (!bestBaseline) {
+          verdict = "This template wins by default because no generic baseline matches.";
+          verdictClass = "preview-win";
+        } else {
+          const draftPriority = Number(draft.priority || 9999);
+          const baselinePriority = Number(bestBaseline.template.priority || 9999);
+          const draftWins = draftScore > bestBaseline.score || (draftScore === bestBaseline.score && draftPriority < baselinePriority);
+          verdict = draftWins
+            ? `This template would beat generic baseline ${bestBaseline.template.template_id}.`
+            : `Generic baseline ${bestBaseline.template.template_id} would still win.`;
+          verdictClass = draftWins ? "preview-win" : "preview-lose";
+        }
+      }
+
+      els.previewResult.innerHTML = `
+        <div class="preview-line"><span>Draft score</span><strong>${draftScore == null ? "No match" : draftScore}</strong></div>
+        <div class="preview-line"><span>Generic baseline</span><strong>${bestBaseline ? `${escapeHtml(bestBaseline.template.template_id)} (${bestBaseline.score})` : "None"}</strong></div>
+        <div class="preview-line"><span>Context</span><strong>${escapeHtml([ctx.program_type || "-", ctx.day_focus || "-", ctx.purpose || "-", ctx.segment_type || "-"].join(" | "))}</strong></div>
+        <div class="${verdictClass}">${escapeHtml(verdict)}</div>
+      `;
+    }
+
+    function renderDrawer(template, mode) {
+      state.drawerMode = mode;
+      state.editingTemplateId = mode === "edit" ? template.template_id : null;
+      els.drawerTitle.textContent = mode === "clone"
+        ? `Clone: ${template.template_id.replace(/_copy$/, "")}`
+        : mode === "new"
+          ? "New Template"
+          : `Edit: ${template.template_id}`;
+      els.drawerTemplateId.value = template.template_id || "";
+      els.drawerTemplateId.readOnly = mode === "edit";
+      els.drawerIsActive.checked = template.is_active !== false;
+      els.drawerScope.value = template.scope || "program";
+      syncFieldDatalist();
+      els.drawerField.value = template.field || "";
+      els.drawerPurpose.value = template.purpose || "";
+      els.drawerSegmentType.value = template.segment_type || "";
+      els.drawerPriority.value = template.priority || 10;
+      els.drawerProgramType.value = readProgramType(template);
+      els.drawerDayFocus.value = readDayFocus(template);
+      renderTextPool(template.text_pool_json || [""]);
+      els.previewProgramType.value = readProgramType(template);
+      els.previewDayFocus.value = readDayFocus(template);
+      els.previewPurpose.value = template.purpose || "";
+      els.previewSegmentType.value = template.segment_type || "";
+      els.drawerError.textContent = "";
+      els.drawerOk.textContent = "";
+      els.drawerDeactivate.style.display = mode === "edit" ? "" : "none";
+      computePreview();
+      els.overlay.classList.add("open");
+      els.drawer.classList.add("open");
+    }
+
+    function closeDrawer() {
+      els.overlay.classList.remove("open");
+      els.drawer.classList.remove("open");
+      state.drawerMode = null;
+      state.editingTemplateId = null;
+      els.drawerError.textContent = "";
+      els.drawerOk.textContent = "";
+    }
+
+    function validateDraft(draft) {
+      if (!draft.template_id) return "template_id is required.";
+      if (/\s/.test(draft.template_id)) return "template_id must not contain whitespace.";
+      if (!draft.scope) return "scope is required.";
+      if (!draft.field) return "field is required.";
+      if (!Number.isInteger(draft.priority) || draft.priority < 1) return "priority must be an integer >= 1.";
+      const pool = draft.text_pool_json.map((item) => String(item || "").trim()).filter(Boolean);
+      if (pool.length === 0) return "text_pool_json must contain at least one non-empty string.";
+      return "";
+    }
+
+    async function apiFetchJson(path, options) {
+      const apiToken = token();
+      if (!apiToken) throw new Error("Internal API token is required.");
+      localStorage.setItem(STORAGE_KEY, apiToken);
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          "content-type": "application/json",
+          "x-internal-token": apiToken,
+          ...(options && options.headers ? options.headers : {}),
+        },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data && data.error ? data.error : `Request failed (${response.status})`);
+      return data;
+    }
+
+    async function loadTemplates() {
+      const apiToken = token();
+      if (!apiToken) {
+        setStatus("Internal API token is required.", "err");
+        return;
+      }
+
+      state.loading = true;
+      renderTable();
+      setStatus("Loading narration templates...", "warn");
+
+      try {
+        localStorage.setItem(STORAGE_KEY, apiToken);
+        const response = await fetch("/admin/narration/templates", {
+          headers: {
+            "x-internal-token": apiToken,
+          },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data && data.error ? data.error : `Request failed (${response.status})`);
+        }
+
+        state.templates = Array.isArray(data.templates) ? data.templates.map(normalizeTemplate) : [];
+        state.loaded = true;
+        populateDynamicOptions();
+        applyFilters();
+        setStatus(`Loaded ${state.templates.length} narration templates.`, "ok");
+      } catch (err) {
+        state.loaded = false;
+        state.templates = [];
+        state.filtered = [];
+        renderSummary();
+        renderTable();
+        setStatus(err && err.message ? err.message : "Failed to load narration templates.", "err");
+      } finally {
+        state.loading = false;
+        renderTable();
+      }
+    }
+
+    async function saveDrawer() {
+      if (state.saving) return;
+      const draft = drawerDraft();
+      draft.text_pool_json = draft.text_pool_json.map((item) => String(item || "").trim());
+
+      const validationError = validateDraft(draft);
+      if (validationError) {
+        els.drawerError.textContent = validationError;
+        els.drawerOk.textContent = "";
+        return;
+      }
+
+      const payload = {
+        template_id: draft.template_id,
+        scope: draft.scope,
+        field: draft.field,
+        purpose: draft.purpose || null,
+        segment_type: draft.segment_type || null,
+        priority: draft.priority,
+        text_pool_json: draft.text_pool_json.filter(Boolean),
+        applies_json: Object.keys(draft.applies_json).length ? draft.applies_json : null,
+        is_active: draft.is_active,
+      };
+
+      state.saving = true;
+      els.drawerError.textContent = "";
+      els.drawerOk.textContent = "";
+
+      try {
+        if (state.drawerMode === "edit") {
+          await apiFetchJson(`/admin/narration/templates/${encodeURIComponent(state.editingTemplateId)}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+          await loadTemplates();
+          closeDrawer();
+          setStatus(`Updated ${payload.template_id}.`, "ok");
+        } else {
+          await apiFetchJson("/admin/narration/templates", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          await loadTemplates();
+          closeDrawer();
+          setStatus(`Created ${payload.template_id}.`, "ok");
+        }
+      } catch (err) {
+        els.drawerError.textContent = err && err.message ? err.message : "Failed to save template.";
+      } finally {
+        state.saving = false;
+      }
+    }
+
+    async function deactivateTemplate() {
+      if (state.drawerMode !== "edit" || !state.editingTemplateId || state.saving) return;
+      state.saving = true;
+      els.drawerError.textContent = "";
+      try {
+        await apiFetchJson(`/admin/narration/templates/${encodeURIComponent(state.editingTemplateId)}`, {
+          method: "DELETE",
+        });
+        await loadTemplates();
+        closeDrawer();
+        setStatus(`Deactivated ${state.editingTemplateId}.`, "ok");
+      } catch (err) {
+        els.drawerError.textContent = err && err.message ? err.message : "Failed to deactivate template.";
+      } finally {
+        state.saving = false;
+      }
+    }
+
+    function onTableClick(event) {
+      const editBtn = event.target.closest(".edit-btn");
+      const cloneBtn = event.target.closest(".clone-btn");
+      if (!editBtn && !cloneBtn) return;
+      const templateId = (editBtn || cloneBtn).getAttribute("data-template-id");
+      const template = templateById(templateId);
+      if (!template) return;
+      renderDrawer(cloneBtn ? cloneTemplate(template) : JSON.parse(JSON.stringify(template)), cloneBtn ? "clone" : "edit");
+    }
+
+    function addVariant(value) {
+      const values = getTextPoolValues();
+      values.push(value || "");
+      renderTextPool(values);
+    }
+
+    function removeVariant(index) {
+      const values = getTextPoolValues();
+      values.splice(index, 1);
+      renderTextPool(values.length ? values : [""]);
+      computePreview();
+    }
+
+    const coverageState = { loading: false, data: null, programType: "" };
+
+    function setCoverageStatus(html, showTable, showSummary) {
+      document.getElementById("coverage-status").innerHTML = html || "";
+      document.getElementById("coverage-summary-bar").style.display = showSummary ? "" : "none";
+      document.getElementById("coverage-table-wrap").style.display = showTable ? "" : "none";
+    }
+
+    async function loadCoverage(programType) {
+      if (!programType) {
+        coverageState.data = null;
+        coverageState.programType = "";
+        setCoverageStatus("Select a specific program_type filter above to see coverage diagnostics for that program type.", false, false);
+        return;
+      }
+
+      const apiToken = token();
+      if (!apiToken) {
+        setCoverageStatus('<span class="err">Internal API token is required — enter token and click Load first.</span>', false, false);
+        return;
+      }
+
+      coverageState.loading = true;
+      coverageState.programType = programType;
+      setCoverageStatus("Loading coverage data...", false, false);
+
+      try {
+        const data = await apiFetchJson(`/admin/narration/coverage?program_type=${encodeURIComponent(programType)}`);
+        coverageState.data = data;
+        renderCoverage();
+      } catch (err) {
+        coverageState.data = null;
+        setCoverageStatus(`<span class="err">${escapeHtml(err && err.message ? err.message : "Failed to load coverage data.")}</span>`, false, false);
+      } finally {
+        coverageState.loading = false;
+      }
+    }
+
+    function renderCoverage() {
+      const data = coverageState.data;
+      if (!data) return;
+      const { expected, summary, program_type, config_key } = data;
+
+      setCoverageStatus(
+        `Coverage for <strong>${escapeHtml(program_type)}</strong> &middot; config: <code>${escapeHtml(config_key)}</code> &middot; ${expected.length} expected combos`,
+        true,
+        true,
+      );
+
+      document.getElementById("coverage-summary-bar").innerHTML = `
+        <span class="cov-badge specific">${summary.specific} specific</span>
+        <span class="cov-badge generic">${summary.generic_fallback} generic fallback</span>
+        <span class="cov-badge missing">${summary.missing} missing</span>
+      `;
+
+      document.getElementById("coverage-table-body").innerHTML = expected.map((row) => {
+        const trClass = row.coverage === "specific" ? "cov-specific" : row.coverage === "generic_fallback" ? "cov-generic" : "cov-missing";
+        const badgeClass = row.coverage === "specific" ? "specific" : row.coverage === "generic_fallback" ? "generic" : "missing";
+        const badgeLabel = row.coverage === "specific" ? "Specific" : row.coverage === "generic_fallback" ? "Generic fallback" : "Missing";
+        const createBtn = row.coverage === "missing"
+          ? `<button class="ghost sm cov-create-btn" type="button"
+              data-scope="${escapeHtml(row.scope)}"
+              data-field="${escapeHtml(row.field)}"
+              data-purpose="${escapeHtml(row.purpose || "")}"
+              data-segment-type="${escapeHtml(row.segment_type || "")}"
+              data-program-type="${escapeHtml(program_type)}">Create</button>`
+          : "";
+        return `
+          <tr class="${trClass}">
+            <td>${escapeHtml(row.scope)}</td>
+            <td>${escapeHtml(row.field)}</td>
+            <td>${escapeHtml(row.purpose || "-")}</td>
+            <td>${escapeHtml(row.segment_type || "-")}</td>
+            <td><span class="cov-badge ${badgeClass}">${badgeLabel}</span></td>
+            <td>${row.winning_template_id ? escapeHtml(row.winning_template_id) : "-"}</td>
+            <td>${createBtn}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function init() {
+      populateStaticDrawerOptions();
+      els.tokenInput.value = localStorage.getItem(STORAGE_KEY) || "";
+      els.loadBtn.addEventListener("click", loadTemplates);
+      els.newBtn.addEventListener("click", () => renderDrawer(blankTemplate(), "new"));
+      els.tableBody.addEventListener("click", onTableClick);
+      document.getElementById("coverage-table-body").addEventListener("click", (event) => {
+        const createBtn = event.target.closest(".cov-create-btn");
+        if (!createBtn) return;
+        const prefill = {
+          ...blankTemplate(),
+          scope: createBtn.getAttribute("data-scope") || "segment",
+          field: createBtn.getAttribute("data-field") || "",
+          purpose: createBtn.getAttribute("data-purpose") || "",
+          segment_type: createBtn.getAttribute("data-segment-type") || "",
+          applies_json: createBtn.getAttribute("data-program-type")
+            ? { program_type: createBtn.getAttribute("data-program-type") }
+            : {},
+        };
+        renderDrawer(prefill, "new");
+      });
+      els.programTypeFilter.addEventListener("change", () => {
+        applyFilters();
+        loadCoverage(els.programTypeFilter.value);
+      });
+      els.scopeFilter.addEventListener("change", applyFilters);
+      els.fieldFilter.addEventListener("change", applyFilters);
+      els.purposeFilter.addEventListener("change", applyFilters);
+      els.segmentTypeFilter.addEventListener("change", applyFilters);
+      els.activeFilter.addEventListener("change", applyFilters);
+      els.searchInput.addEventListener("input", applyFilters);
+      els.overlay.addEventListener("click", closeDrawer);
+      els.drawerClose.addEventListener("click", closeDrawer);
+      els.drawerCancel.addEventListener("click", closeDrawer);
+      els.drawerSave.addEventListener("click", saveDrawer);
+      els.drawerDeactivate.addEventListener("click", deactivateTemplate);
+      els.drawerScope.addEventListener("change", () => {
+        syncFieldDatalist();
+        computePreview();
+      });
+      els.drawerField.addEventListener("input", computePreview);
+      els.drawerPurpose.addEventListener("change", () => {
+        els.previewPurpose.value = els.drawerPurpose.value;
+        computePreview();
+      });
+      els.drawerSegmentType.addEventListener("change", () => {
+        els.previewSegmentType.value = els.drawerSegmentType.value;
+        computePreview();
+      });
+      els.drawerPriority.addEventListener("input", computePreview);
+      els.drawerProgramType.addEventListener("input", () => {
+        els.previewProgramType.value = els.drawerProgramType.value;
+        computePreview();
+      });
+      els.drawerDayFocus.addEventListener("input", () => {
+        els.previewDayFocus.value = els.drawerDayFocus.value;
+        computePreview();
+      });
+      els.previewProgramType.addEventListener("input", computePreview);
+      els.previewDayFocus.addEventListener("input", computePreview);
+      els.previewPurpose.addEventListener("change", computePreview);
+      els.previewSegmentType.addEventListener("change", computePreview);
+      els.addVariantBtn.addEventListener("click", () => addVariant(""));
+      els.textPoolList.addEventListener("click", (event) => {
+        const removeBtn = event.target.closest(".remove-variant-btn");
+        if (!removeBtn) return;
+        removeVariant(Number(removeBtn.getAttribute("data-pool-index")));
+      });
+      els.textPoolList.addEventListener("input", computePreview);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeDrawer();
+      });
+      renderSummary();
+      renderTable();
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -18,6 +18,8 @@ type SegmentCardProps = {
   onLogSegment: (segment: Segment) => void;
 };
 
+const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
+
 function parseMmssToSeconds(value?: string | null): number | null {
   if (!value) return null;
   const [mm, ss] = value.split(":");
@@ -46,6 +48,13 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
     segment.segmentDurationSeconds ?? parseMmssToSeconds(segment.segmentDurationMmss),
   );
   const exercises = Array.isArray(segment.exercises) ? segment.exercises : [];
+  const segmentTypeBadgeLabel =
+    segment.segmentType &&
+    BADGE_SEGMENT_TYPES.has(segment.segmentType) &&
+    typeof segment.segmentTypeLabel === "string" &&
+    segment.segmentTypeLabel.trim()
+      ? segment.segmentTypeLabel
+      : null;
 
   const suggestedRestSeconds = useMemo(() => {
     const withRest = exercises
@@ -60,6 +69,11 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
       <View style={styles.headerRow}>
         <View style={styles.headerCopy}>
           <Text style={styles.segmentName}>{segment.segmentName}</Text>
+          {segmentTypeBadgeLabel ? (
+            <View style={styles.segmentTypeBadge}>
+              <Text style={styles.segmentTypeBadgeText}>{segmentTypeBadgeLabel}</Text>
+            </View>
+          ) : null}
           {!presentation.isWarmupOrCooldown && presentation.segmentHasExercises && String(segment.notes ?? "").trim() ? (
             <Text style={styles.segmentMeta} numberOfLines={3} ellipsizeMode="tail">
               {String(segment.notes).trim()}
@@ -136,6 +150,15 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
         </View>
       </View>
 
+      {(segment.postSegmentRestSec ?? 0) > 0 ? (
+        <View style={styles.segmentRestRow}>
+          <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+          <Text style={styles.segmentRestLabel}>
+            Rest {segment.postSegmentRestSec}s before next block
+          </Text>
+        </View>
+      ) : null}
+
       {presentation.showLogButton ? (
         <PressableScale style={styles.logButton} onPress={() => onLogSegment(segment)}>
           <Text style={styles.logButtonLabel}>Log segment</Text>
@@ -171,6 +194,20 @@ const styles = StyleSheet.create({
   segmentMeta: {
     color: colors.textSecondary,
     ...typography.small,
+  },
+  segmentTypeBadge: {
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  segmentTypeBadgeText: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
   },
   loggedBadge: {
     borderRadius: radii.pill,
@@ -248,6 +285,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+  },
+  segmentRestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  segmentRestLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
   },
   logButton: {
     alignSelf: "flex-start",

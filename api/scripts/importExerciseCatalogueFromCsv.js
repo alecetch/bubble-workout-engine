@@ -173,11 +173,8 @@ function mapRow(row) {
     swap_group_id_2: toNullableText(firstNonEmpty(row, ["swap_group_id_2"])),
     target_regions_json: parseJsonArray(firstNonEmpty(row, ["target_regions_json"])),
     warmup_hooks: parseJsonArray(firstNonEmpty(row, ["warmup_hooks"])),
-    bubble_creation_date: parseNullableTimestamp(firstNonEmpty(row, ["creation_date"])),
-    bubble_modified_date: parseNullableTimestamp(firstNonEmpty(row, ["modified_date"])),
     slug: toNullableText(firstNonEmpty(row, ["slug"])),
     creator: toNullableText(firstNonEmpty(row, ["creator"])),
-    bubble_unique_id: toNullableText(firstNonEmpty(row, ["unique_id", "unique id"])),
   };
 }
 
@@ -206,15 +203,12 @@ INSERT INTO exercise_catalogue (
   swap_group_id_2,
   target_regions_json,
   warmup_hooks,
-  bubble_creation_date,
-  bubble_modified_date,
   slug,
   creator,
-  bubble_unique_id,
   updated_at
 )
 VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::text[],$11,$12,$13,$14::text[],$15::jsonb,$16,$17,$18,$19::jsonb,$20,$21,$22::jsonb,$23::jsonb,$24::timestamptz,$25::timestamptz,$26,$27,$28,now()
+  $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::text[],$11,$12,$13,$14::text[],$15::jsonb,$16,$17,$18,$19::jsonb,$20,$21,$22::jsonb,$23::jsonb,$24,$25,now()
 )
 ON CONFLICT (exercise_id)
 DO UPDATE SET
@@ -240,11 +234,8 @@ DO UPDATE SET
   swap_group_id_2 = EXCLUDED.swap_group_id_2,
   target_regions_json = EXCLUDED.target_regions_json,
   warmup_hooks = EXCLUDED.warmup_hooks,
-  bubble_creation_date = EXCLUDED.bubble_creation_date,
-  bubble_modified_date = EXCLUDED.bubble_modified_date,
   slug = EXCLUDED.slug,
   creator = EXCLUDED.creator,
-  bubble_unique_id = EXCLUDED.bubble_unique_id,
   updated_at = now()
 RETURNING (xmax = 0) AS inserted;
 `;
@@ -292,11 +283,8 @@ async function run() {
         r.swap_group_id_2,
         JSON.stringify(r.target_regions_json),
         JSON.stringify(r.warmup_hooks),
-        r.bubble_creation_date,
-        r.bubble_modified_date,
         r.slug,
         r.creator,
-        r.bubble_unique_id,
       ];
 
       const result = await client.query(UPSERT_SQL, params);

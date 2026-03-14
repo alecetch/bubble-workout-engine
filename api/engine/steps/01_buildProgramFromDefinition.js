@@ -186,6 +186,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
 
   const duration = clampInt(duration_mins, 40, 60, 50);
   const dperweek = clampInt(days_per_week, 1, 6, 3);
+  const rankValue = Number(clientProfile?.fitness_rank);
 
   const catalog_json = buildCatalogJsonFromBubble(exercises);
   const cat = safeJsonParse(catalog_json, null);
@@ -264,11 +265,32 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     const blocks = [];
 
     const builderState = {
+      compiledConfig,
+      rankValue: Number.isFinite(Number(rankValue)) ? Number(rankValue) : 0,
+      conditioning: {
+        lastImpactLevel: 0,
+        lastDensityRating: 0,
+        lastComplexityRank: 0,
+        lastEngineRole: null,
+        highImpactCountToday: 0,
+        highDensityCountToday: 0,
+        highComplexityCountToday: 0,
+      },
       usedIdsWeek,
       usedSw2Today: new Set(),
       usedRegionsToday: new Set(),
       stats,
     };
+
+    if (builderState.conditioning) {
+      builderState.conditioning.lastImpactLevel = 0;
+      builderState.conditioning.lastDensityRating = 0;
+      builderState.conditioning.lastComplexityRank = 0;
+      builderState.conditioning.lastEngineRole = null;
+      builderState.conditioning.highImpactCountToday = 0;
+      builderState.conditioning.highDensityCountToday = 0;
+      builderState.conditioning.highComplexityCountToday = 0;
+    }
 
     for (let i = 0; i < take; i++) {
       const normalized = normalizeSlotDefinition(slots[i]);
@@ -299,6 +321,25 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           const rr = toStr(r).trim();
           if (rr) builderState.usedRegionsToday.add(rr);
         }
+        if (builderState.conditioning && ex) {
+          const c = builderState.conditioning;
+          const impact = ex.impact_level ?? 0;
+          const density = ex.den ?? 0;
+          const complexity = ex.cx ?? 0;
+          const HIGH_IMPACT = compiledConfig?.builder?.conditioningThresholds?.high_impact_threshold ?? 2;
+          const HIGH_DENSITY = compiledConfig?.builder?.conditioningThresholds?.high_density_threshold ?? 2;
+          const HIGH_COMPLEXITY =
+            compiledConfig?.builder?.conditioningThresholds?.high_complexity_threshold ?? 2;
+
+          c.lastImpactLevel = impact;
+          c.lastDensityRating = density;
+          c.lastComplexityRank = complexity;
+          c.lastEngineRole = ex.engine_role ?? null;
+
+          if (impact >= HIGH_IMPACT) c.highImpactCountToday++;
+          if (density >= HIGH_DENSITY) c.highDensityCountToday++;
+          if (complexity >= HIGH_COMPLEXITY) c.highComplexityCountToday++;
+        }
 
         const sets = setsMap[blockLetter] || 2;
         blocks.push({
@@ -309,6 +350,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           sets,
           ex_sw: ex.sw || "",
           ex_sw2: ex.sw2 || "",
+          is_buy_in: slotDef.is_buy_in === true,
         });
         continue;
       }
@@ -337,6 +379,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     days.push({
       day_index: day,
       day_type: compiledConfig.programType,
+      day_focus: toStr(template.focus) || null,
       duration_mins: duration,
       blocks,
     });

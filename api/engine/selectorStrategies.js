@@ -1,6 +1,8 @@
 import { pickWithFallback } from "./exerciseSelector.js";
 
 function bestMatchByMovement(slotDef, catalogIndex, state) {
+  const compiledConfig = state?.compiledConfig ?? null;
+  const isConditioning = compiledConfig?.programType === "conditioning";
   const sel = {
     mp: slotDef.mp || null,
     sw: slotDef.sw || null,
@@ -8,8 +10,12 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     sw2: slotDef.sw2 || null,
     requirePref: slotDef.requirePref || null,
     preferLoadable: !!slotDef.preferLoadable,
-    preferIsolation: slotDef.slot?.[0] === "C",
-    preferCompound: slotDef.slot?.[0] === "A",
+    preferIsolation: !isConditioning && slotDef.slot?.[0] === "C",
+    preferCompound: !isConditioning && slotDef.slot?.[0] === "A",
+    programType: compiledConfig?.programType ?? null,
+    rankValue: state?.rankValue ?? 0,
+    condState: state?.conditioning ?? null,
+    condThresholds: compiledConfig?.builder?.conditioningThresholds ?? {},
   };
 
   return pickWithFallback(
