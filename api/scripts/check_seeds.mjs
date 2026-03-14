@@ -40,23 +40,29 @@ WITH checks AS (
   SELECT
     'equipment_seed_rows_present'::text AS check_name,
     (SELECT COUNT(*) FROM public.equipment_items
-      WHERE bubble_id LIKE 'seed_eq_%')::int AS actual,
+      WHERE exercise_slug IN (
+        'bodyweight','barbell','dumbbells','kettlebells','pullup_bar',
+        'row_erg','assault_bike','ski_erg','bike_erg'
+      ))::int AS actual,
     9::int AS expected_min
 
   UNION ALL SELECT
     'exercise_seed_rows_present',
     (SELECT COUNT(*) FROM public.exercise_catalogue
-      WHERE bubble_unique_id LIKE 'seed_ex_%')::int,
+      WHERE exercise_id IN (
+        'barbell_back_squat','barbell_deadlift','bench_press','ohp',
+        'pull_up','barbell_row','row_erg','ski_erg','assault_bike','burpee'
+      ))::int,
     10
 
   UNION ALL SELECT
     'narration_templates_present',
     (SELECT COUNT(*) FROM public.narration_template WHERE template_id IN (
       'prog_title_1','prog_summary_1','prog_progression_1','prog_safety_1',
-      'day_title_1','day_goal_1','warmup_title_1','warmup_heat_1','warmup_ramp_1',
-      'seg_title_main','seg_title_secondary','seg_title_accessory',
-      'seg_exec_single','seg_exec_superset','seg_exec_giant',
-      'exercise_line_1','exercise_cue_1','exercise_log_1'
+      'day_title_1','warmup_title_1','warmup_heat_1','warmup_ramp_1',
+      'hyrx_program_title','hyrx_program_summary','hyrx_progression_blurb',
+      'hyrx_week_baseline','hyrx_week_build','hyrx_week_consolidate','hyrx_week_peak',
+      'hyrx_day_engine_title','hyrx_day_power_title','hyrx_day_endurance_title'
     ))::int,
     18
 
