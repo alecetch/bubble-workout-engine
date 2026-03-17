@@ -20,7 +20,7 @@ The React Native mobile app lives in a separate repository and integrates entire
 ```text
 +-------------------------------+
 | React Native App (ext repo)   |
-| - profile setup               |
+| - onboarding / profile setup  |
 | - program view / workout log  |
 +---------------+---------------+
                 |
@@ -32,6 +32,7 @@ The React Native mobile app lives in a separate repository and integrates entire
 |  Core routes                                                  |
 |  - POST /api/user/bootstrap                                   |
 |  - POST /api/client_profile/bootstrap                         |
+|  - PATCH /api/client_profile/:id                              |
 |  - POST /api/program/generate                                 |
 |  - POST /api/import/emitter                                   |
 |  - GET  /api/program/:id/overview                             |
@@ -40,6 +41,14 @@ The React Native mobile app lives in a separate repository and integrates entire
 |  - POST /api/segment-log  (workout logging)                   |
 |  - GET  /api/history/*    (programs, timeline, PRs, exercises)|
 |  - GET  /reference-data   (equipment catalogue + config)      |
+|                                                               |
+|  Admin panel (internal token guarded)                         |
+|  - GET/PUT /admin/configs/:key  (program generation config)   |
+|  - GET /admin/exercise-catalogue/full-state                   |
+|  - GET /admin/exercise-catalogue/recommendations              |
+|  - GET /admin/exercise-catalogue/catalogue-health             |
+|  - POST /admin/exercise-catalogue/preview-change              |
+|  - POST /admin/exercise-catalogue/session/*                   |
 |                                                               |
 |  Engine                                                       |
 |  - runPipeline -> steps 01..06 -> emitted rows               |
@@ -57,11 +66,13 @@ The React Native mobile app lives in a separate repository and integrates entire
 | Postgres (db container / Fly managed Postgres)   |
 | - app_user, client_profile                       |
 | - program, program_week, program_day             |
-| - workout_segment, program_exercise              |
-| - exercise_catalogue, equipment_items            |
+| - workout_segment (+ post_segment_rest_sec)      |
+| - program_exercise                               |
+| - exercise_catalogue (+ hyrox_role, hyrox_station_index) |
+| - equipment_items                                |
 | - media_assets                                   |
 | - program_generation_config                      |
-| - rep_rules, narration_templates                 |
+| - program_rep_rule, narration_template           |
 | - segment_exercise_log, estimated_1rm            |
 +--------------------------+-----------------------+
                            ^
@@ -96,7 +107,7 @@ URL assembled at read time: image_key + S3_PUBLIC_BASE_URL
 | File | Route(s) | Purpose |
 |---|---|---|
 | `userBootstrap.js` | `POST /api/user/bootstrap` | Upserts `app_user` by external user ID |
-| `clientProfileBootstrap.js` | `POST /api/client_profile/bootstrap` | Upserts `client_profile` and links to user |
+| `clientProfileBootstrap.js` | `POST /api/client_profile/bootstrap`, `PATCH /api/client_profile/:id` | Upserts/patches `client_profile` and links to user |
 | `generateProgramV2.js` | `POST /api/program/generate` | Full generation + persist flow (see §4) |
 | `importEmitter.js` | `POST /api/import/emitter` | Raw emitter row ingest (for external callers) |
 | `readProgram.js` | `GET /api/program/:id/overview`, `GET /api/day/:id/full` | Program + day read views |
@@ -110,6 +121,7 @@ URL assembled at read time: image_key + S3_PUBLIC_BASE_URL
 | `historyExercise.js` | `GET /api/history/exercise/:id` | Per-exercise history |
 | `sessionHistoryMetrics.js` | `GET /api/session-history-metrics` | Session-level metrics |
 | `prsFeed.js` | `GET /api/prs-feed` | Recent PR feed |
+| `adminExerciseCatalogue.js` | `GET|POST /admin/exercise-catalogue/*` | Exercise catalogue admin (see §9) |
 
 ### Service layer (`api/src/services/`)
 
@@ -118,8 +130,8 @@ URL assembled at read time: image_key + S3_PUBLIC_BASE_URL
 | `buildInputsFromDevProfile.js` | Assembles the pipeline `inputs` object from Postgres `client_profile`, exercise catalogue, and seeded DB config rows. **Primary source for all pipeline inputs — no external API calls.** |
 | `importEmitterService.js` | Transactional ingest of PRG/WEEK/DAY/SEG/EX rows with advisory lock + payload hash idempotency. |
 | `programGenerationConfig.js` | Fetches active `program_generation_config` rows (progression parameters, week phase sequences). |
-| `repRules.js` | Fetches active `rep_rules` rows (rep range, tempo, RIR rules keyed by movement/class). |
-| `narrationTemplates.js` | Fetches active `narration_templates` rows (per-week programme text templates). |
+| `repRules.js` | Fetches active `program_rep_rule` rows (rep range, tempo, RIR rules keyed by movement/class). |
+| `narrationTemplates.js` | Fetches active `narration_template` rows (per-week programme text templates). |
 | `mediaAssets.js` | Fetches active `media_assets` rows (hero images for programs and days). |
 | `calendarCoverage.js` | Ensures `program_calendar` rows cover all scheduled days after generation. |
 
@@ -170,7 +182,8 @@ Step 02 — segmentProgram                   [api/engine/steps/02_segmentProgram
   │           Block letter (A, B, C…) determines grouping type via blockSemantics:
   │           "single" = each exercise its own segment; "superset" = first two paired;
   │           "giant_set" = first three grouped. FILL/MISSING placeholders resolved here.
-  │           Each segment has: type (single/superset/giant_set), items[], rounds.
+  │           Each segment has: type (single/superset/giant_set), items[], rounds,
+  │           and post_segment_rest_sec (inter-block rest, used by Hyrox programs).
   │
   ▼
 Step 03 — applyProgression                 [api/engine/steps/03_applyProgression.js]
@@ -186,7 +199,7 @@ Step 03 — applyProgression                 [api/engine/steps/03_applyProgressi
   ▼
 Step 04 — applyRepRules                    [api/engine/steps/04_applyRepRules.js]
   │
-  │  Inputs:  rep_rules rows (from DB, keyed by movement_class, movement_pattern,
+  │  Inputs:  program_rep_rule rows (from DB, keyed by movement_class, movement_pattern,
   │           lift_class, complexity_rank, is_loadable, program phase).
   │           Falls back to catalog_json.rep_rules_json if DB unavailable.
   │
@@ -199,7 +212,7 @@ Step 04 — applyRepRules                    [api/engine/steps/04_applyRepRules.
   ▼
 Step 05 — applyNarration                   [api/engine/steps/05_applyNarration.js]
   │
-  │  Inputs:  narration_templates rows (from DB, per-week phase text templates).
+  │  Inputs:  narration_template rows (from DB, per-week phase text templates).
   │           program_generation_config (week phase labels), fitness_rank, program_length.
   │           Falls back to catalog_json.narration_json if DB unavailable.
   │
@@ -216,11 +229,11 @@ Step 06 — emitPlan                         [api/engine/steps/06_emitPlan.js]
            anchor_day_ms, preferred_days_json, timing knobs (all optional).
 
   Output:  rows[] — pipe-delimited strings in the emitter format:
-           PRG|…   (1 row)   — program header
-           WEEK|…  (n rows)  — one per week
-           DAY|…   (n rows)  — one per training day
-           SEG|…   (n rows)  — one per workout segment
-           EX|…    (n rows)  — one per exercise in a segment
+           PRG|…   (1 row,  9 cols)  — program header
+           WEEK|…  (n rows, 4 cols)  — one per week
+           DAY|…   (n rows, 14 cols) — one per training day
+           SEG|…   (n rows, 20 cols) — one per workout segment (col 19 = post_segment_rest_sec)
+           EX|…    (n rows, 26 cols) — one per exercise in a segment
 
            Scheduled dates derived from preferred_days_json + anchor_day_ms.
            Segment durations computed from rep/set/tempo math + warmup/cooldown allocations.
@@ -228,7 +241,16 @@ Step 06 — emitPlan                         [api/engine/steps/06_emitPlan.js]
 
 ### Config-driven multi-type support
 
-Steps 01 and 02 are now **fully generic** — all program-type-specific logic has been extracted into the `program_generation_config` table. Adding a new program type (conditioning, Hyrox, etc.) requires only a new seed row; no code changes.
+Steps 01 and 02 are **fully generic** — all program-type-specific logic has been extracted into the `program_generation_config` table. Adding a new program type requires only a new seed row; no code changes.
+
+Four program types are currently seeded:
+
+| Config key | Program type | Description |
+|---|---|---|
+| `hypertrophy_default_v1` | `hypertrophy` | Hypertrophy-focused 3-day split |
+| `strength_default_v1` | `strength` | Strength-focused compound-heavy split |
+| `conditioning_default_v1` | `conditioning` | Metabolic conditioning programme |
+| `hyrox_default_v1` | `hyrox` | Hyrox race-specific training programme |
 
 The `compiledConfig` object is assembled once per generation request inside `runPipeline.js` and threaded through Steps 01 and 02. It has three top-level sections:
 
@@ -241,6 +263,7 @@ compiledConfig
 │   │   └── ordered_slots[]   Ordered exercise slots; each slot has:
 │   │       ├── slot          "<block_letter>:<slot_name>"  (e.g. "A:squat", "C:arms")
 │   │       ├── sw / sw2      Swap-group keys (exercise catalogue lookup)
+│   │       ├── swAny         Array of swap-group keys (match any one)
 │   │       ├── mp            Movement pattern filter
 │   │       ├── requirePref   Preference tier ("strength_main" | "hypertrophy_secondary")
 │   │       ├── preferLoadable  Favour barbell/dumbbell exercises in this slot
@@ -254,7 +277,8 @@ compiledConfig
 ├── segmentation       — Controls Step 02 (how blocks are grouped into segments)
 │   └── block_semantics       Object keyed by block letter (A / B / C / D):
 │       ├── preferred_segment_type   "single" | "superset" | "giant_set"
-│       └── purpose                  "main" | "secondary" | "accessory"
+│       ├── purpose                  "main" | "secondary" | "accessory"
+│       └── post_segment_rest_sec    Optional inter-block rest (seconds); used by Hyrox
 │
 └── progression        — Controls Step 03 (which segments receive weekly set increments)
     └── apply_to_purposes     Array of purposes that receive progression
@@ -268,16 +292,17 @@ The top-level `progression_by_rank_json` and `week_phase_config_json` columns on
 | What you want to change | Where to change it |
 |---|---|
 | Add/remove an exercise slot in a day | `builder.day_templates[n].ordered_slots` |
-| Change which exercises are selected (swap groups) | `sw` / `sw2` / `mp` fields on the relevant slot |
+| Change which exercises are selected (swap groups) | `sw` / `sw2` / `swAny` / `mp` fields on the relevant slot |
 | Change preference tier (strength vs hypertrophy selection) | `requirePref` on the slot, or `slot_defaults` for the whole block letter |
 | Change set counts by session duration | `builder.sets_by_duration` |
 | Cap the number of blocks in a session | `builder.block_budget` |
 | Change whether a block is singles, supersets, or giant sets | `segmentation.block_semantics.<letter>.preferred_segment_type` |
+| Add inter-block rest (e.g. Hyrox station rest) | `segmentation.block_semantics.<letter>.post_segment_rest_sec` |
 | Add a new program type | New seed row in `R__seed_program_generation_config.sql` |
 | Change weekly set progression steps | `progression_by_rank_json` (per fitness rank) |
 | Change phase sequence or labels | `week_phase_config_json.default_phase_sequence` |
 
-All changes to the seed file are picked up automatically the next time Flyway runs (the file is a repeatable migration — `R__*.sql` — and re-executes whenever its checksum changes).
+All changes to a seed file are picked up automatically the next time Flyway runs (repeatable migrations — `R__*.sql` — re-execute whenever their checksum changes).
 
 ### Supporting engine files
 
@@ -288,27 +313,155 @@ All changes to the seed file are picked up automatically the next time Flyway ru
 
 ---
 
-## 4) Request / Data Flow
+## 4) Exercise Selection — How It Works
+
+Exercise selection happens in two distinct phases: a **SQL pre-filter** that runs once per generation request, and a **per-slot selection loop** that runs inside Step 01 for every slot in every day template.
+
+### Phase 1 — SQL Pre-filter (`getAllowedExercises.js`)
+
+Before the pipeline starts, a single SQL query computes the allowed exercise set for this specific user:
+
+```sql
+SELECT exercise_id
+FROM exercise_catalogue
+WHERE is_archived = false
+  AND min_fitness_rank <= $rank
+  AND NOT (contraindications_slugs && $injury_flags)
+  AND equipment_items_slugs <@ $user_equipment
+```
+
+The four gates are:
+
+| Gate | Logic | Example |
+|---|---|---|
+| Active | `is_archived = false` | Skips archived exercises |
+| Rank | `min_fitness_rank <= user_rank` | `rank=0` (beginner) only sees exercises with `min_fitness_rank=0` |
+| Injury | `contraindications_slugs` does NOT overlap `injury_flags` | User with `lower_back` flag never sees deadlifts marked as contraindicated |
+| Equipment | `exercise.equipment_items_slugs` is a subset of `user_equipment` | A barbell squat requires `barbell`; a user with only `bodyweight` cannot be assigned it |
+
+The result is a flat list of `exercise_id` values — the "allowed pool" for this user. All subsequent selection logic only operates within this pool.
+
+> **Equipment gate detail:** The operator `<@` means "is contained by" — every slug the exercise requires must be present in the user's equipment list. An exercise requiring both `barbell` and `bench` is blocked if the user has `barbell` but not `bench`.
+
+### Phase 2 — In-memory preparation (Step 01 setup)
+
+The allowed pool is further trimmed **at build time** (before any slot iteration) by removing exercises whose `movement_class` is in the config's `excludeMovementClasses` list. For hypertrophy and strength this excludes `cardio`, `conditioning`, and `locomotion`. This trim produces the final `allowedSet` — a `Set<exercise_id>` that is constant throughout the day-building loop.
+
+The exercise catalogue rows are simultaneously compiled into a compact in-memory index (`byId`) keyed by `exercise_id`, holding only the fields the selector needs: `sw`, `sw2`, `mp`, `pref`, `den`, `cx`, `load`, `mc`, `tr`.
+
+### Phase 3 — Per-slot selection (`fillSlot` → `pickWithFallback`)
+
+For each slot in the day template the engine runs `pickWithFallback`. This is an ordered fallback chain — it tries progressively looser criteria until it finds a match or gives up:
+
+```
+Step 0 — Avoid repeat sw2
+  If sw2 was already used today, try sw/swAny/mp without sw2 (avoids duplicate compound movement)
+
+Step 1 — sw2 + requirePref          [strict match + preference tag]
+Step 2 — sw (or swAny[]) + requirePref
+Step 3 — mp + requirePref
+
+  (if requirePref is set and steps 1-3 failed, drop the pref requirement and retry:)
+
+Step 4 — sw2 only
+Step 5 — sw (or swAny[]) only
+Step 6 — mp only
+
+  (if all unique-exercise attempts failed, allow duplicates:)
+
+Step 7 — sw2 / sw / swAny / mp, allowing already-used exercises
+```
+
+If every step returns null, a last-resort `pickSeedExerciseForSlot` runs — this tries sw2, then sw/swAny, then mp, then literally the first available non-conditioning exercise in the pool. If even that returns null, the slot becomes a **FILL block** (adds 1 extra set to the nearest existing slot instead of placing a new exercise).
+
+### Scoring within each step (`pickBest`)
+
+Each "attempt" above calls `pickBest`, which iterates the `allowedSet` and scores every candidate:
+
+| Condition | Score delta |
+|---|---|
+| Matches `sw2` | +12 |
+| Matches `sw` | +10 |
+| Matches `mp` | +4 |
+| Score = 0 (no match at all) | **rejected — not considered** |
+| `preferIsolation` (C-block) and exercise is isolation class | +1.5 |
+| `preferCompound` (A-block) and exercise is compound class | +1.5 |
+| `preferLoadable` and exercise is loadable | +1.0 |
+| `preferLoadable` and exercise is not loadable | -0.1 |
+| Target region overlaps with already-used regions (1 region) | -0.3 |
+| Target region overlaps with already-used regions (2+ regions) | -1.5 |
+| Low density (den=1) | +0.2 |
+| Low complexity (cx=1) | +0.05 |
+
+> **Important:** `requirePref` is a **hard gate**, not a score bonus. If `requirePref: "strength_main"` is set on a slot, any exercise without `"strength_main"` in its `preferred_in_json` is skipped via `continue` before scoring even starts. This is the single most common cause of slot gaps for narrow equipment presets.
+
+The highest-scoring candidate wins.
+
+### Why gaps occur
+
+A slot produces a FILL block (no exercise placed) when both of these are true simultaneously:
+
+1. The `allowedSet` is **small** — because the user has minimal equipment (e.g. bodyweight only, or kettlebells only) which eliminates most barbell/dumbbell exercises from the pool.
+2. The slot definition is **specific** — e.g. `sw2: "squat_compound"` which mainly maps to barbell back squat, front squat etc. If none of those are in the allowed pool, no exercise scores > 0, and all fallback steps fail.
+
+`requirePref` compounds this: if the slot also has `requirePref: "hypertrophy_secondary"`, the already-small pool is filtered further before the score is even computed.
+
+### Complexity assessment
+
+The selection system has two layers of complexity with different origins:
+
+**Accidental complexity (legacy from Bubble.io origin):**
+- The double-representation of exercise data: DB rows → `buildCatalogJsonFromBubble` → JSON string → `buildIndex` → `byId` object. This was a translation layer for a previous Bubble API format and is no longer needed — the DB rows could be indexed directly.
+- Short property names (`sw`, `sw2`, `mp`, `pref`, `den`, `cx`) in the in-memory index, mirroring the old Bubble schema.
+
+**Intentional complexity (does real work):**
+- The 7-step fallback chain is necessary to handle the full matrix of: {has sw2, sw, swAny, mp} × {has requirePref} × {unique or allow duplicates}. It could be expressed more compactly but the logic is sound.
+- `requirePref` as a hard gate is intentional — it ensures "strength_main" slots only pick exercises genuinely suited to that context. But it is the leading cause of FILL blocks when the allowed pool is small.
+
+**The root cause of coverage gaps is not algorithm complexity — it is catalogue data.** The fix for a gap like "Hyrox / beginner / minimal equipment" is almost always one of:
+- Add more exercises to the catalogue that work with minimal equipment AND match the slot's `sw`/`sw2`/`mp` values.
+- Loosen a slot definition (remove `requirePref` from a slot that doesn't need strict preference gating, or add `swAny` alternatives).
+- Change `requirePref` from a hard gate to a score bonus (+N points instead of `continue`).
+
+The Recommendations tab in the admin panel (`/admin/exercises`) identifies exactly which catalogue entries are near-misses — one field change away from filling a gap.
+
+---
+
+## 5) Request / Data Flow  <!-- was §4 -->
 
 ### Identity bootstrap
 1. Mobile app calls `POST /api/user/bootstrap` with an external `bubble_user_id`.
 2. API upserts `app_user` and returns the internal `user_id` (UUID).
 
 ### Profile bootstrap
-1. Mobile app calls `POST /api/client_profile/bootstrap` with profile fields.
+1. Mobile app calls `POST /api/client_profile/bootstrap` with profile fields (equipment, fitness rank, injury flags, goals).
 2. API normalises option slugs and upserts `client_profile` linked to `app_user`.
-3. Profile becomes canonical in Postgres — it is the sole input source for generation.
+3. Profile can be updated via `PATCH /api/client_profile/:id` (e.g. after onboarding step changes).
+4. Profile becomes canonical in Postgres — it is the sole input source for generation.
+
+### Program type resolution
+`generateProgramV2.js` resolves `programType` in priority order:
+
+1. **Explicit body field** — `req.body.programType` if present and not `"default"`.
+2. **Goal-derived type** — profile `goals[]` are slugified and looked up in `GOAL_TO_PROGRAM_TYPE`:
+   - `"Strength"` → `strength`
+   - `"Hypertrophy"` → `hypertrophy`
+   - `"Conditioning"` → `conditioning`
+   - `"HYROX Workout"` → `hyrox` (slug: `hyrox_workout`)
+3. **Profile programType** — `client_profile.programType` field if set.
+4. **Fallback** — `"hypertrophy"`.
 
 ### Program generation + persist
 1. Mobile app calls `POST /api/program/generate`.
 2. `generateProgramV2.js` resolves `app_user` and `client_profile` from Postgres.
-3. Calls `getAllowedExerciseIds` to compute the exercise filter from the catalogue.
-4. Calls `buildInputsFromDevProfile` to assemble the full pipeline `inputs` object.
-5. Calls `runPipeline({ inputs, programType, request, db })`.
-6. `runPipeline` fetches DB config, runs steps 01→06, returns `{ program, rows }`.
-7. Calls `importEmitterPayload(rows)` to persist all data in a single DB transaction.
-8. Calls `ensureProgramCalendarCoverage` to fill calendar rows for the mobile calendar view.
-9. Returns `{ program_id, counts, idempotent, allowed_count }`.
+3. Resolves `programType` via the priority chain above.
+4. Calls `getAllowedExerciseIds` to compute the exercise filter from the catalogue.
+5. Calls `buildInputsFromDevProfile` to assemble the full pipeline `inputs` object.
+6. Calls `runPipeline({ inputs, programType, request, db })`.
+7. `runPipeline` fetches DB config, runs steps 01→06, returns `{ program, rows }`.
+8. Calls `importEmitterPayload(rows)` to persist all data in a single DB transaction.
+9. Calls `ensureProgramCalendarCoverage` to fill calendar rows for the mobile calendar view.
+10. Returns `{ program_id, counts, idempotent, allowed_count }`.
 
 ### Workout logging
 1. Mobile app calls `POST /api/segment-log` during a session.
@@ -325,7 +478,7 @@ All changes to the seed file are picked up automatically the next time Flyway ru
 
 ---
 
-## 5) Data Model
+## 6) Data Model
 
 Migrations in `migrations/` define schema evolution via Flyway.
 
@@ -345,23 +498,27 @@ Migrations in `migrations/` define schema evolution via Flyway.
 | V10 | Nullable calendar FK + recovery day support |
 | V11–V12 | Additional indexes for cursor/history queries |
 | V13 | `media_assets` table |
-| V14 | `program_generation_config`, `rep_rules`, `narration_templates` tables |
-| V15 | `is_active` flag on `narration_templates` |
+| V14 | `program_generation_config`, `program_rep_rule`, `narration_template` tables |
+| V15 | `is_active` flag on `narration_template` |
 | V16 | Unique constraint on `segment_exercise_log` |
 | V17 | `strength_primary_region` on `exercise_catalogue` |
 | V18 | `estimated_1rm_kg` on program exercise / log tables |
+| V19 | Fix bodyweight exercise equipment slugs (removes incorrect `bodyweight` equipment requirement) |
+| V20 | Drop legacy Bubble.io import columns from `exercise_catalogue` (`bubble_unique_id`, `bubble_creation_date`, `bubble_modified_date`) |
+| V21 | Add Hyrox metadata to `exercise_catalogue`: `hyrox_role` (`race_station` \| `carry` \| `run_buy_in` \| `accessory`), `hyrox_station_index` (1–8) |
+| V22 | Add `post_segment_rest_sec INTEGER DEFAULT 0` to `workout_segment` (inter-block rest for Hyrox programs) |
 
 ### Repeatable migrations (`R__*.sql`)
 Seed data, re-applied whenever the file checksum changes:
 
 | File | Contents |
 |---|---|
-| `R__seed_exercise_catalogue.sql` | Full exercise catalogue (83 exercises) |
+| `R__seed_exercise_catalogue.sql` | Full exercise catalogue (83 exercises, including Hyrox-specific entries with `hyrox_role` and `hyrox_station_index`) |
 | `R__seed_equipment_items.sql` | Equipment lookup rows |
 | `R__seed_media_assets.sql` | Hero image asset rows |
-| `R__seed_program_generation_config.sql` | Full `compiledConfig` JSONB for each program type (`hypertrophy_default_v1`, `strength_default_v1`): builder (day templates, sets, block budget), segmentation (block semantics), and progression config |
+| `R__seed_program_generation_config.sql` | Full `compiledConfig` JSONB for all four program types: `hypertrophy_default_v1`, `strength_default_v1`, `conditioning_default_v1`, `hyrox_default_v1` |
 | `R__seed_program_rep_rules.sql` | Rep range / tempo / RIR rules |
-| `R__seed_narration_template.sql` | Week narration text templates |
+| `R__seed_narration_template.sql` | Narration text templates (generic `prog_*`/`warmup_*` templates + Hyrox-specific `hyrx_*` templates) |
 
 ### Core ownership model
 - `app_user.bubble_user_id` — external identifier supplied by the mobile client (legacy name; treated as an opaque string)
@@ -370,7 +527,7 @@ Seed data, re-applied whenever the file checksum changes:
 
 ---
 
-## 6) Environment & Deployment
+## 7) Environment & Deployment
 
 ### Docker Compose (local dev)
 - `db`: Postgres 16
@@ -382,6 +539,7 @@ Seed data, re-applied whenever the file checksum changes:
 - Deployed to [Fly.io](https://fly.io) (`api/fly.toml`).
 - Postgres: Fly managed Postgres.
 - Media assets: served from `/app/assets/media-assets` (volume-mounted).
+- CI/CD: GitHub Actions (`fly-deploy-api` workflow) — runs tests, Flyway migrations + `qa:seeds` smoke check, then deploys to Fly on every push to `main`.
 
 ### Key environment variables
 
@@ -391,12 +549,12 @@ Seed data, re-applied whenever the file checksum changes:
 | `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | Postgres connection |
 | `PGPOOL_MAX` | pg pool size (optional) |
 | `ENGINE_KEY` | Auth header `x-engine-key` for the legacy `/generate-plan` route |
-| `INTERNAL_API_TOKEN` | Auth header `X-Internal-Token` for guarded write routes |
+| `INTERNAL_API_TOKEN` | Auth header `X-Internal-Token` for guarded write routes and admin panel |
 | `S3_PUBLIC_BASE_URL` | Base URL prepended to `image_key` when constructing media asset URLs. Must use LAN IP (not `localhost`) for on-device mobile dev. |
 
 ---
 
-## 7) Key Architectural Decisions
+## 8) Key Architectural Decisions
 
 ### 1. Self-contained — no external platform dependency
 All pipeline inputs (exercise catalogue, config, client profile) are sourced from Postgres. There are no runtime calls to any external API. The `bubble_*` naming in the schema is a legacy artefact; those fields are external-ID fields supplied by the mobile client.
@@ -411,7 +569,7 @@ Rep rules, narration templates, program generation config (progression schedules
 Each step is a pure function (`program in → enriched program out`). Steps are independently testable. The orchestrator (`runPipeline.js`) owns all DB fetches and fallback resolution; steps themselves do not query the DB.
 
 ### 5. Emitter row format
-Step 06 emits pipe-delimited strings (`PRG|WEEK|DAY|SEG|EX`) that are parsed and persisted by `importEmitterService`. This format provides a stable, inspectable wire format between the engine and the persistence layer.
+Step 06 emits pipe-delimited strings (`PRG|WEEK|DAY|SEG|EX`) that are parsed and persisted by `importEmitterService`. This format provides a stable, inspectable wire format between the engine and the persistence layer. Column counts are validated on ingest: PRG=9, WEEK=4, DAY=14, SEG=20, EX=26.
 
 ### 6. Config-driven multi-type pipeline
 Steps 01 and 02 are fully generic. Program-type behaviour (day templates, exercise slot definitions, block grouping semantics, set counts, progression) is driven entirely by the `program_generation_config_json` JSONB column. Adding a new program type requires only a new seed row — no code changes. The `compiledConfig` object is assembled and validated once in `runPipeline.js`, then threaded through all dependent steps. See §3 for the full config schema.
@@ -423,7 +581,7 @@ Steps 01 and 02 are fully generic. Program-type behaviour (day templates, exerci
 
 ---
 
-## 8) Local Dev vs TestFlight — Keeping Configs Separate
+## 9) Local Dev vs TestFlight — Keeping Configs Separate
 
 The mobile app reads its API URL and engine key from Expo environment files at **build time**:
 
@@ -441,162 +599,59 @@ To switch between local and production during development:
 
 ---
 
-## 9) Config Management UI (Admin Panel)
+## 10) Admin Panel (`/admin`)
 
-A lightweight laptop-only admin panel for editing `program_generation_config` rows without touching SQL or running Flyway migrations.
+A laptop-only admin panel served by the existing API at `/admin/*`, guarded by `INTERNAL_API_TOKEN`. Not reachable from the mobile app or any deployed environment.
 
-### Design Goals
-- Read and write `program_generation_config` rows directly via the API.
-- Structured editing (not raw JSON) for all commonly tuned fields, including day templates and slot definitions.
-- Raw JSON fallback editor for edge cases and bulk edits.
-- Never accessible from the mobile app (separate port / localhost only).
-- No authentication beyond the existing `INTERNAL_API_TOKEN` header.
+### Exercise Catalogue (`/admin/exercises`)
 
-### Recommended Stack
+A full CRUD interface for `exercise_catalogue` served from `api/admin/exercises.html`.
 
-| Layer | Choice | Rationale |
+**Tabs:**
+
+| Tab | Purpose |
+|---|---|
+| Browse & Edit | Filterable, sortable table of all exercises. Click a row or Edit to open the edit drawer. |
+| Catalogue Health | On-demand analysis: never-used exercises, low-utility exercises (≤4 eligible slots), oversupplied clusters (≥5 eligible per slot). |
+| Recommendations | Ranked list of single-field edits that would fix the most coverage gaps. Each recommendation shows the field change as an amber pill, an explanation of impact, and a Show SQL button. |
+| Migration Preview | Accumulated SQL for all queued changes; copyable and downloadable as a `.sql` file. |
+
+**Filters (Browse tab):**
+
+| Filter | Type | Description |
 |---|---|---|
-| Frontend | Vite + React (plain JS, no TypeScript needed) | Fast local start, no build config overhead |
-| Styling | Tailwind CSS (CDN) or plain CSS | No install required for a laptop-only tool |
-| State | React `useState` / `useEffect` | No external lib needed for a CRUD panel |
-| HTTP | `fetch` | Built-in, no dep needed |
-| Server | Existing Express API (`api/`) | Reuse the Postgres pool; add `/admin/*` routes |
+| Search | Text | Matches exercise ID or name |
+| Class | Dropdown | `compound`, `isolation`, `engine`, etc. |
+| Status | Dropdown | Active only / Archived only / All |
+| Equipment Preset | Dropdown | `no_equipment`, `minimal_equipment`, `decent_home_gym`, `commercial_gym`, `crossfit_hyrox_gym` — shows only exercises whose equipment requirements are fully satisfied by the selected preset |
+| Pattern | Text | Filters on `movement_pattern_primary` |
+| Min Rank ≤ | Dropdown | 0–3; excludes exercises with a higher minimum fitness rank |
+| Loadable | Dropdown | Yes / No |
+| Region | Dropdown | `upper` / `lower` / `none` |
 
-The panel runs as a **static HTML file** (`admin/index.html`) served by the existing API on a separate `/admin` prefix, or opened as a `file://` page that calls the API on `localhost:3000`.
+All column headers (ID, Name, Class, Pattern, Rank, Loadable, Region, Coverage, Status) are sortable — click to sort ascending, click again to sort descending.
 
-### API Endpoints Required (new, guarded by `INTERNAL_API_TOKEN`)
+**Edit flow:**
+1. Click a row to open the edit drawer.
+2. Make changes; a live impact preview shows how zero/low-coverage gaps change.
+3. "Queue Change" adds the edit to the session queue (no immediate DB write).
+4. Review accumulated SQL in the Migration Preview tab.
+5. Copy/download the SQL and run it via Flyway (`R__seed_exercise_catalogue.sql`) or direct DB.
+
+**Admin API endpoints (all guarded by `INTERNAL_API_TOKEN`):**
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/admin/configs` | List all `program_generation_config` rows (id, config_key, program_type, is_active, updated_at) |
-| `GET` | `/admin/configs/:key` | Full row including `program_generation_config_json` |
-| `PUT` | `/admin/configs/:key` | Replace `program_generation_config_json` for the given key |
-| `POST` | `/admin/configs` | Insert a new config row (duplicate from existing) |
-| `PATCH` | `/admin/configs/:key/activate` | Toggle `is_active` |
+| `GET` | `/admin/exercise-catalogue/full-state` | All exercises, coverage gaps, equipment slugs, presets |
+| `POST` | `/admin/exercise-catalogue/preview-change` | Live impact preview for a proposed edit |
+| `POST` | `/admin/exercise-catalogue/clone-preview` | Generate a new ID for a cloned exercise |
+| `POST` | `/admin/exercise-catalogue/session/queue-change` | Add an edit to the in-memory session queue |
+| `GET` | `/admin/exercise-catalogue/session/pending` | List queued changes |
+| `POST` | `/admin/exercise-catalogue/session/clear` | Clear the queue |
+| `POST` | `/admin/exercise-catalogue/session/generate-migration` | Render queued changes as SQL |
+| `GET` | `/admin/exercise-catalogue/recommendations` | Compute and return ranked fix recommendations |
+| `GET` | `/admin/exercise-catalogue/catalogue-health` | Return never-used, low-utility, and oversupplied analyses |
 
-### UI Layout
+### Config Editor (`/admin-ui/index.html`)
 
-The editor panel is divided into four collapsible sections. Each section is independently editable; the final Save merges all sections back into a single `program_generation_config_json` object and writes it to the DB.
-
-#### Overall panel structure
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Workout Engine — Config Admin                               │
-├──────────────┬──────────────────────────────────────────────┤
-│  Config list │  Editor                                       │
-│              │                                               │
-│ ● hypertrophy│  Config key:   hypertrophy_default_v1        │
-│   _default_v1│  Program type: hypertrophy                    │
-│ ● strength   │  Active: ✓          [Duplicate]              │
-│   _default_v1│                                               │
-│  [+ New]     │  ▼ Builder — sets & budget                   │
-│              │  ▼ Builder — day templates                    │
-│              │  ▼ Segmentation                               │
-│              │  ▼ Progression                                │
-│              │  ▶ Raw JSON  (collapsed by default)           │
-│              │                                               │
-│              │              [ Save ]  [ Discard ]            │
-└──────────────┴──────────────────────────────────────────────┘
-```
-
-#### Section 1 — Builder: sets & budget
-
-```
-── Builder — sets & budget ─────────────────────────────────
-  Session length:      40 min    50 min    60 min
-  Block A sets:        [ 3 ]     [ 4 ]     [ 5 ]
-  Block B sets:        [ 3 ]     [ 3 ]     [ 4 ]
-  Block C sets:        [ 2 ]     [ 3 ]     [ 3 ]
-  Block D sets:        [ 2 ]     [ 2 ]     [ 3 ]
-  Block budget:        [ 4 ]     [ 5 ]     [ 6 ]
-```
-
-#### Section 2 — Builder: day templates
-
-This is the key addition. A tab strip switches between day templates; within each day, slots are shown as an editable table with one row per slot.
-
-```
-── Builder — day templates ─────────────────────────────────
-
-  [ Day 1: lower ] [ Day 2: upper ] [ Day 3: posterior ] [+ Add day]
-
-  Day 1 — focus: [ lower              ]
-
-  #  │ Slot             │ sw2 (primary swap)     │ sw (secondary swap)   │ mp (mvt pattern) │ requirePref       │ Load │ Fallback slot  │
-  ───┼──────────────────┼────────────────────────┼───────────────────────┼──────────────────┼───────────────────┼──────┼────────────────┼────
-  1  │ [A:squat       ] │ [squat_compound      ] │ [                   ] │ [              ] │ [strength_main  ▼] │ [ ] │ [             ] │ [↑][↓][✕]
-  2  │ [B:lunge       ] │ [                    ] │ [quad_iso_unilateral] │ [lunge         ] │ [               ▼] │ [ ] │ [             ] │ [↑][↓][✕]
-  3  │ [C:quad        ] │ [                    ] │ [quad_iso_unilateral] │ [              ] │ [hypertrophy_sec▼] │ [ ] │ [A:squat      ] │ [↑][↓][✕]
-  4  │ [C:calves      ] │ [                    ] │ [calf_iso           ] │ [              ] │ [hypertrophy_sec▼] │ [✓] │ [B:lunge      ] │ [↑][↓][✕]
-  5  │ [D:core        ] │ [                    ] │ [core               ] │ [anti_extension] │ [               ▼] │ [ ] │ [B:lunge      ] │ [↑][↓][✕]
-  6  │ [C:hinge_acc.. ] │ [hinge_compound      ] │ [hamstring_iso      ] │ [              ] │ [hypertrophy_sec▼] │ [ ] │ [A:squat      ] │ [↑][↓][✕]
-
-  [+ Add slot]
-```
-
-Column notes:
-- **Slot** — free text, format `<block_letter>:<label>`. The block letter prefix determines which block budget and set count apply, and which `block_semantics` entry governs grouping.
-- **sw2 / sw** — exercise swap-group keys. The engine tries `sw2` first (strict match), then `sw` (relaxed). Leave blank if not applicable.
-- **mp** — movement pattern override. Used when swap-group matching is insufficient.
-- **requirePref** — dropdown with values: `(none)` / `strength_main` / `hypertrophy_secondary`.
-- **Load** — checkbox for `preferLoadable` (favours barbell/dumbbell exercises).
-- **Fallback slot** — if this slot cannot be filled, the engine adds a set to the named slot instead. Free text, must match a `slot` value in the same day.
-- **[↑][↓]** — reorder slot within the day (order matters — `ordered_slots` is positional).
-- **[✕]** — remove slot.
-
-#### Section 3 — Segmentation
-
-```
-── Segmentation ────────────────────────────────────────────
-  Block  │ Segment type          │ Purpose
-  ───────┼───────────────────────┼───────────────
-  A      │ [single       ▼]      │ [main       ▼]
-  B      │ [superset     ▼]      │ [secondary  ▼]
-  C      │ [giant_set    ▼]      │ [accessory  ▼]
-  D      │ [single       ▼]      │ [accessory  ▼]
-  [+ Add block letter]
-```
-
-Segment type options: `single` / `superset` / `giant_set`.
-Purpose options: `main` / `secondary` / `accessory`.
-
-#### Section 4 — Progression
-
-```
-── Progression ─────────────────────────────────────────────
-  Rank           │ Weekly set step │ Max extra sets
-  ───────────────┼─────────────────┼────────────────
-  beginner       │ [ 0 ]           │ [ 0 ]
-  intermediate   │ [ 1 ]           │ [ 1 ]
-  advanced       │ [ 1 ]           │ [ 2 ]
-  elite          │ [ 1 ]           │ [ 3 ]
-
-  Apply progression to: [✓] main  [✓] secondary  [✓] accessory
-```
-
-#### Section 5 — Raw JSON (collapsed by default)
-
-Full `program_generation_config_json` in a read/write textarea. Expanding it shows the entire JSONB. Editing here and saving overwrites the structured sections. Use this only for fields not covered above (e.g. `week_phase_config_json` copy text, `swAny` arrays on individual slots).
-
-### Structured fields vs raw JSON
-
-All fields that are commonly tuned during program design now have structured inputs:
-
-| Field | Section |
-|---|---|
-| `builder.sets_by_duration` | Section 1 |
-| `builder.block_budget` | Section 1 |
-| `builder.day_templates` (focus, ordered_slots, all slot properties) | Section 2 |
-| `segmentation.block_semantics` | Section 3 |
-| `progression_by_rank_json` (step, max_extra per rank) | Section 4 |
-| `progression.apply_to_purposes` | Section 4 |
-
-The raw JSON textarea (Section 5) remains available for `week_phase_config_json`, `slot_defaults`, `exclude_movement_classes`, `swAny` arrays, and any future fields not yet represented in the structured UI.
-
-### Safety
-
-- Save writes to the DB immediately. There is no "staging" layer.
-- A **duplicate** button creates a new row with `_v2` suffix and `is_active: false` — safe sandbox for experimenting before activating.
-- Only one row per `program_type` should have `is_active: true` (enforced by convention; a DB unique partial index would harden this).
-- The panel is served only from `localhost` — it is not reachable from the phone or any deployed environment.
+Structured editor for `program_generation_config` rows (builder, segmentation, progression). Allows editing day templates, slot definitions, set budgets, phase sequences, and block semantics without touching SQL.

@@ -123,7 +123,12 @@
     /* Reco card */
     .reco-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
     .reco-card h4 { margin: 0 0 4px; }
-    .reco-meta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .reco-meta { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .reco-explanation { font-size: 12px; color: var(--text); margin-bottom: 6px; }
+    .reco-changes { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+    .reco-change-pill { background: #fff8e1; border: 1px solid #f9a825; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-family: monospace; color: #5d4037; }
+    .reco-change-pill .pill-field { font-weight: 600; }
+    .reco-change-pill .pill-arrow { color: #9e9e9e; margin: 0 3px; }
     .reco-actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .reco-sql { background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 8px; font-size: 11px; font-family: monospace; white-space: pre-wrap; margin-top: 8px; display: none; }
 
@@ -133,6 +138,16 @@
 
     /* Summary bar */
     .summary { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
+    /* Sortable column headers */
+    th[data-sort] { cursor: pointer; user-select: none; }
+    th[data-sort]:hover { color: var(--text); background: #edf2f7; }
+    th[data-sort] .sort-icon { margin-left: 4px; opacity: .35; font-size: 10px; }
+    th[data-sort].sort-asc .sort-icon,
+    th[data-sort].sort-desc .sort-icon { opacity: 1; color: var(--primary); }
+
+    /* Extra filter row */
+    .controls-row2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -178,6 +193,51 @@
       <button id="new-btn" class="secondary">+ New</button>
       <button id="csv-btn" class="secondary">CSV ▾</button>
     </div>
+    <div class="controls-row2">
+      <div class="ctrl">
+        <label for="preset-filter">Equipment Preset</label>
+        <select id="preset-filter" style="width:170px">
+          <option value="">All presets</option>
+          <option value="no_equipment">No Equipment</option>
+          <option value="minimal_equipment">Minimal Equipment</option>
+          <option value="decent_home_gym">Decent Home Gym</option>
+          <option value="commercial_gym">Commercial Gym</option>
+          <option value="crossfit_hyrox_gym">CrossFit / HYROX Gym</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label for="pattern-filter">Pattern</label>
+        <input id="pattern-filter" type="search" style="width:130px" placeholder="e.g. squat" />
+      </div>
+      <div class="ctrl">
+        <label for="rank-filter">Min Rank ≤</label>
+        <select id="rank-filter" style="width:90px">
+          <option value="">Any</option>
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label for="loadable-filter">Loadable</label>
+        <select id="loadable-filter" style="width:90px">
+          <option value="">Any</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label for="region-filter">Region</label>
+        <select id="region-filter" style="width:90px">
+          <option value="">Any</option>
+          <option value="upper">Upper</option>
+          <option value="lower">Lower</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+      <button id="clear-filters-btn" class="secondary sm" style="align-self:flex-end">Clear filters</button>
+    </div>
     <div id="status"></div>
   </div>
 
@@ -196,9 +256,17 @@
       <table>
         <thead>
           <tr>
-            <th>ID</th><th>Name</th><th>Class</th><th>Pattern</th>
-            <th>Rank</th><th>Loadable</th><th>Equipment</th>
-            <th>Region</th><th>Coverage</th><th>Status</th><th></th>
+            <th data-sort="exercise_id">ID<span class="sort-icon">↕</span></th>
+            <th data-sort="name">Name<span class="sort-icon">↕</span></th>
+            <th data-sort="movement_class">Class<span class="sort-icon">↕</span></th>
+            <th data-sort="movement_pattern_primary">Pattern<span class="sort-icon">↕</span></th>
+            <th data-sort="min_fitness_rank" style="text-align:center">Rank<span class="sort-icon">↕</span></th>
+            <th data-sort="is_loadable" style="text-align:center">Loadable<span class="sort-icon">↕</span></th>
+            <th>Equipment</th>
+            <th data-sort="strength_primary_region">Region<span class="sort-icon">↕</span></th>
+            <th data-sort="_gap_count">Coverage<span class="sort-icon">↕</span></th>
+            <th data-sort="is_archived">Status<span class="sort-icon">↕</span></th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="table-body"></tbody>
@@ -419,10 +487,13 @@ const BASE = "/admin/exercise-catalogue";
 let exercises = [];   // from full-state
 let gaps = [];        // coverage gaps from full-state
 let equipmentSlugs = [];
+let presets = [];     // preset definitions with equipment_slugs
 let drawerMode = null; // 'new' | 'edit'
 let editingId = null;
 let impactTimer = null;
 let csvDryRunRows = [];
+let sortCol = "name";
+let sortDir = "asc";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function esc(v) {
@@ -458,7 +529,33 @@ document.getElementById("search-input").addEventListener("keydown", e => { if (e
 document.getElementById("search-input").addEventListener("input", renderTable);
 document.getElementById("class-filter").addEventListener("change", renderTable);
 document.getElementById("archived-filter").addEventListener("change", renderTable);
+document.getElementById("preset-filter").addEventListener("change", renderTable);
+document.getElementById("pattern-filter").addEventListener("input", renderTable);
+document.getElementById("rank-filter").addEventListener("change", renderTable);
+document.getElementById("loadable-filter").addEventListener("change", renderTable);
+document.getElementById("region-filter").addEventListener("change", renderTable);
 document.getElementById("new-btn").addEventListener("click", openNewDrawer);
+
+document.getElementById("clear-filters-btn").addEventListener("click", () => {
+  ["search-input","pattern-filter"].forEach(id => document.getElementById(id).value = "");
+  ["class-filter","archived-filter","preset-filter","rank-filter","loadable-filter","region-filter"]
+    .forEach(id => document.getElementById(id).value = "");
+  renderTable();
+});
+
+// Column sort
+document.querySelectorAll("th[data-sort]").forEach(th => {
+  th.addEventListener("click", () => {
+    const col = th.dataset.sort;
+    if (sortCol === col) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortCol = col;
+      sortDir = "asc";
+    }
+    renderTable();
+  });
+});
 
 async function loadState() {
   const token = getToken();
@@ -470,6 +567,7 @@ async function loadState() {
     exercises = data.exercises ?? [];
     gaps = data.coverage_gaps ?? [];
     equipmentSlugs = data.equipment_slugs ?? [];
+    presets = data.presets ?? [];
     renderTable();
     setStatus(`Loaded ${exercises.length} exercises, ${gaps.length} coverage gap slots.`, "ok");
     await refreshSessionBar();
@@ -480,23 +578,84 @@ async function loadState() {
 
 // ── Table ──────────────────────────────────────────────────────────────────
 function renderTable() {
-  const q = document.getElementById("search-input").value.toLowerCase();
-  const cls = document.getElementById("class-filter").value;
-  const arch = document.getElementById("archived-filter").value;
+  const q       = document.getElementById("search-input").value.toLowerCase();
+  const cls     = document.getElementById("class-filter").value;
+  const arch    = document.getElementById("archived-filter").value;
+  const preset  = document.getElementById("preset-filter").value;
+  const pattern = document.getElementById("pattern-filter").value.toLowerCase();
+  const rankMax = document.getElementById("rank-filter").value;
+  const loadable= document.getElementById("loadable-filter").value;
+  const region  = document.getElementById("region-filter").value;
+
+  // Build preset slug set for filtering
+  const presetSlugSet = preset
+    ? new Set((presets.find(p => p.code === preset)?.equipment_slugs) ?? [])
+    : null;
 
   let rows = exercises.filter(ex => {
     if (q && !ex.exercise_id.includes(q) && !(ex.name ?? "").toLowerCase().includes(q)) return false;
     if (cls && ex.movement_class !== cls) return false;
     if (arch === "" && ex.is_archived) return false;
     if (arch === "true" && !ex.is_archived) return false;
+    if (pattern && !(ex.movement_pattern_primary ?? "").toLowerCase().includes(pattern)) return false;
+    if (rankMax !== "" && (ex.min_fitness_rank ?? 0) > parseInt(rankMax, 10)) return false;
+    if (loadable === "yes" && !ex.is_loadable) return false;
+    if (loadable === "no" && ex.is_loadable) return false;
+    if (region === "upper" && ex.strength_primary_region !== "upper") return false;
+    if (region === "lower" && ex.strength_primary_region !== "lower") return false;
+    if (region === "none" && ex.strength_primary_region) return false;
+    if (presetSlugSet) {
+      const exSlugs = ex.equipment_items_slugs ?? [];
+      // Exercise is eligible if all its required slugs are available in the preset
+      if (!exSlugs.every(s => presetSlugSet.has(s))) return false;
+    }
     return true;
+  });
+
+  // Build gap count map once
+  const gapCounts = new Map();
+  for (const g of gaps) {
+    gapCounts.set(g.exercise_id, (gapCounts.get(g.exercise_id) ?? 0) + 1);
+  }
+
+  // Sort
+  rows = [...rows].sort((a, b) => {
+    let av, bv;
+    if (sortCol === "_gap_count") {
+      av = gapCounts.get(a.exercise_id) ?? 0;
+      bv = gapCounts.get(b.exercise_id) ?? 0;
+    } else if (sortCol === "is_archived" || sortCol === "is_loadable") {
+      av = a[sortCol] ? 1 : 0;
+      bv = b[sortCol] ? 1 : 0;
+    } else if (sortCol === "min_fitness_rank") {
+      av = a.min_fitness_rank ?? 0;
+      bv = b.min_fitness_rank ?? 0;
+    } else {
+      av = (a[sortCol] ?? "").toString().toLowerCase();
+      bv = (b[sortCol] ?? "").toString().toLowerCase();
+    }
+    if (av < bv) return sortDir === "asc" ? -1 : 1;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  // Update sort indicators on headers
+  document.querySelectorAll("th[data-sort]").forEach(th => {
+    th.classList.remove("sort-asc", "sort-desc");
+    const icon = th.querySelector(".sort-icon");
+    if (th.dataset.sort === sortCol) {
+      th.classList.add(sortDir === "asc" ? "sort-asc" : "sort-desc");
+      if (icon) icon.textContent = sortDir === "asc" ? "↑" : "↓";
+    } else {
+      if (icon) icon.textContent = "↕";
+    }
   });
 
   document.getElementById("browse-summary").textContent = `${rows.length} of ${exercises.length} exercises`;
 
   document.getElementById("table-body").innerHTML = rows.map(ex => {
     const eq = (ex.equipment_items_slugs ?? []).join(", ") || "—";
-    const gapCount = gaps.filter(g => g.exercise_id === ex.exercise_id).length; // zero-coverage slots this fixes
+    const gapCount = gapCounts.get(ex.exercise_id) ?? 0;
     const covClass = gapCount === 0 ? "ok" : gapCount <= 2 ? "low" : "zero";
     const covBar = `<div class="cov-bar"><div class="cov-seg ${covClass}" title="${gapCount} gap slots covered"></div><span class="cov-count">${gapCount > 0 ? '+'+gapCount : '—'}</span></div>`;
     return `<tr class="${ex.is_archived ? "archived" : ""}" data-id="${esc(ex.exercise_id)}">
@@ -981,20 +1140,34 @@ function renderRecos(recos) {
     document.getElementById("recos-content").innerHTML = "<div style='color:var(--success)'>No coverage gaps detected — catalogue looks healthy.</div>";
     return;
   }
-  document.getElementById("recos-content").innerHTML = recos.map((r, i) => `
+
+  function renderChangePills(changes) {
+    if (!changes || !Object.keys(changes).length) return "";
+    return Object.entries(changes).map(([field, val]) => {
+      const display = Array.isArray(val) ? JSON.stringify(val) : String(val);
+      return `<span class="reco-change-pill"><span class="pill-field">${esc(field)}</span><span class="pill-arrow">→</span>${esc(display)}</span>`;
+    }).join("");
+  }
+
+  document.getElementById("recos-content").innerHTML = recos.map((r, i) => {
+    const zeroFixed = r.impact?.net_zero_gaps_fixed ?? r.zero_gaps_fixed ?? 0;
+    const lowFixed  = r.impact?.net_low_gaps_improved ?? r.low_gaps_improved ?? 0;
+    return `
     <div class="reco-card" id="reco-${i}">
-      <h4>${esc(r.exercise_name ?? r.exercise_id)} — ${esc(r.action)}</h4>
+      <h4>#${r.rank ?? i + 1} &nbsp;${esc(r.exercise_name ?? r.exercise_id)} <span style="font-weight:400;color:var(--muted)">— ${esc(r.action)}</span></h4>
       <div class="reco-meta">
-        Score: ${r.score ?? "?"} &nbsp;|&nbsp; Gaps fixed: ${r.zero_gaps_fixed ?? 0} zero, ${r.low_gaps_improved ?? 0} low
-        &nbsp;|&nbsp; Fields changed: ${r.fields_changed ?? 0}
+        Score: <strong>${r.score ?? "?"}</strong> &nbsp;|&nbsp; Gaps fixed: <strong>${zeroFixed}</strong> zero, <strong>${lowFixed}</strong> low &nbsp;|&nbsp; Fields changed: <strong>${r.fields_changed ?? 0}</strong>
       </div>
+      <div class="reco-changes">${renderChangePills(r.changes)}</div>
+      ${r.explanation ? `<div class="reco-explanation">${esc(r.explanation)}</div>` : ""}
       <div class="reco-actions">
         <button class="ghost sm" onclick="window.applyReco(${i})">Apply to Drawer</button>
         <button class="ghost sm" onclick="window.toggleRecoSql(${i})">Show SQL</button>
       </div>
-      <pre class="reco-sql" id="reco-sql-${i}">${esc(r.sql ?? "-- No SQL generated")}</pre>
+      <pre class="reco-sql" id="reco-sql-${i}">${esc(r.sql_preview ?? r.sql ?? "-- No SQL generated")}</pre>
     </div>
-  `).join("");
+  `;
+  }).join("");
 
   window._recos = recos;
 }
