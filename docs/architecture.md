@@ -262,12 +262,22 @@ compiledConfig
 │   │   ├── focus             Semantic focus label (e.g. "lower", "upper_strength")
 │   │   └── ordered_slots[]   Ordered exercise slots; each slot has:
 │   │       ├── slot          "<block_letter>:<slot_name>"  (e.g. "A:squat", "C:arms")
-│   │       ├── sw / sw2      Swap-group keys (exercise catalogue lookup)
-│   │       ├── swAny         Array of swap-group keys (match any one)
-│   │       ├── mp            Movement pattern filter
+│   │       ├── sw            Single sw (swap_group_id_1) value to match
+│   │       ├── sw2           Single sw2 (swap_group_id_2) value to match
+│   │       ├── swAny         Array of sw values — candidate scores +10 if its sw matches any element
+│   │       ├── sw2Any        Array of sw2 values — candidate scores +12 if its sw2 matches any element
+│   │       ├── mp            Movement pattern filter (+4 if matched)
 │   │       ├── requirePref   Preference tier ("strength_main" | "hypertrophy_secondary")
+│   │       ├── pref_mode     "strict" (default) | "soft" — whether requirePref is a hard gate or a score bonus
+│   │       ├── pref_bonus    Score bonus for soft pref match (default 4, only used when pref_mode = "soft")
 │   │       ├── preferLoadable  Favour barbell/dumbbell exercises in this slot
-│   │       └── fill_fallback_slot  Fallback slot key if this slot cannot be filled
+│   │       ├── strength_equivalent_bonus  true → +3 bonus for exercises tagged strength_equivalent
+│   │       ├── fill_fallback_slot  Fallback slot key if this slot cannot be filled
+│   │       └── variants      Optional array of equipment-profile-conditional overrides:
+│   │           └── { when: { equipment_profile: "full"|"minimal"|"bodyweight" },
+│   │                 ...any slot fields above }
+│   │             The builder merges the matching variant over the base slot at generation time.
+│   │             Slots without variants behave exactly as before (full backward compatibility).
 │   ├── sets_by_duration      Sets per block letter keyed by session length (40/50/60 min)
 │   │                         e.g. { "50": { "A": 4, "B": 3, "C": 3, "D": 2 } }
 │   ├── block_budget          Max blocks per session keyed by session length
@@ -292,8 +302,11 @@ The top-level `progression_by_rank_json` and `week_phase_config_json` columns on
 | What you want to change | Where to change it |
 |---|---|
 | Add/remove an exercise slot in a day | `builder.day_templates[n].ordered_slots` |
-| Change which exercises are selected (swap groups) | `sw` / `sw2` / `swAny` / `mp` fields on the relevant slot |
+| Change which exercises are selected (swap groups) | `sw` / `sw2` / `swAny` / `sw2Any` / `mp` fields on the relevant slot (or variant) |
 | Change preference tier (strength vs hypertrophy selection) | `requirePref` on the slot, or `slot_defaults` for the whole block letter |
+| Soften a preference requirement (score bonus instead of hard gate) | `pref_mode: "soft"` on the slot or variant; optionally set `pref_bonus` (default 4) |
+| Boost strength-oriented exercises when pref is soft | `strength_equivalent_bonus: true` on the slot; `strength_equivalent = true` on qualifying exercises in the catalogue |
+| Change exercise selection for low-equipment users | Add a `variants` array to the slot; the builder resolves the matching variant from `"full"` / `"minimal"` / `"bodyweight"` derived from the user's equipment slugs |
 | Change set counts by session duration | `builder.sets_by_duration` |
 | Cap the number of blocks in a session | `builder.block_budget` |
 | Change whether a block is singles, supersets, or giant sets | `segmentation.block_semantics.<letter>.preferred_segment_type` |
@@ -315,7 +328,7 @@ All changes to a seed file are picked up automatically the next time Flyway runs
 
 ## 4) Exercise Selection — How It Works
 
-Exercise selection happens in two distinct phases: a **SQL pre-filter** that runs once per generation request, and a **per-slot selection loop** that runs inside Step 01 for every slot in every day template.
+Exercise selection runs in four phases: a SQL pre-filter, an equipment profile derivation, an in-memory preparation, and a per-slot selection loop.
 
 ### Phase 1 — SQL Pre-filter (`getAllowedExercises.js`)
 
@@ -330,100 +343,126 @@ WHERE is_archived = false
   AND equipment_items_slugs <@ $user_equipment
 ```
 
-The four gates are:
-
 | Gate | Logic | Example |
 |---|---|---|
 | Active | `is_archived = false` | Skips archived exercises |
-| Rank | `min_fitness_rank <= user_rank` | `rank=0` (beginner) only sees exercises with `min_fitness_rank=0` |
-| Injury | `contraindications_slugs` does NOT overlap `injury_flags` | User with `lower_back` flag never sees deadlifts marked as contraindicated |
-| Equipment | `exercise.equipment_items_slugs` is a subset of `user_equipment` | A barbell squat requires `barbell`; a user with only `bodyweight` cannot be assigned it |
+| Rank | `min_fitness_rank <= user_rank` | Rank 0 (beginner) only sees exercises with `min_fitness_rank = 0` |
+| Injury | `contraindications_slugs` does NOT overlap `injury_flags` | User with `lower_back` flag never sees exercises marked as contraindicated |
+| Equipment | `exercise.equipment_items_slugs` is a subset of `user_equipment` (`<@`) | A barbell squat requires `barbell`; a user with only `bodyweight` cannot be assigned it |
 
-The result is a flat list of `exercise_id` values — the "allowed pool" for this user. All subsequent selection logic only operates within this pool.
+The result is a flat `exercise_id[]` — the **allowed pool** for this user. All subsequent selection logic operates only within this pool.
 
-> **Equipment gate detail:** The operator `<@` means "is contained by" — every slug the exercise requires must be present in the user's equipment list. An exercise requiring both `barbell` and `bench` is blocked if the user has `barbell` but not `bench`.
+### Phase 2 — Equipment profile derivation (`deriveEquipmentProfile`)
 
-### Phase 2 — In-memory preparation (Step 01 setup)
+At the start of Step 01, the builder coerces the user's full equipment slug list into one of three coarse profiles:
 
-The allowed pool is further trimmed **at build time** (before any slot iteration) by removing exercises whose `movement_class` is in the config's `excludeMovementClasses` list. For hypertrophy and strength this excludes `cardio`, `conditioning`, and `locomotion`. This trim produces the final `allowedSet` — a `Set<exercise_id>` that is constant throughout the day-building loop.
+```
+deriveEquipmentProfile(equipment_items_slugs):
+  if slugs contains any of {barbell, trap_bar, hack_squat, leg_press, cable} → "full"
+  if slugs contains any of {dumbbells, kettlebells, sandbag, rings}          → "minimal"
+  otherwise                                                                   → "bodyweight"
+```
 
-The exercise catalogue rows are simultaneously compiled into a compact in-memory index (`byId`) keyed by `exercise_id`, holding only the fields the selector needs: `sw`, `sw2`, `mp`, `pref`, `den`, `cx`, `load`, `mc`, `tr`.
+This profile is stored in `builderState.equipmentProfile` and is used to resolve slot variants (Phase 3). It is also emitted as `debug.equipment_profile` in the generation output.
 
-### Phase 3 — Per-slot selection (`fillSlot` → `pickWithFallback`)
+### Phase 3 — In-memory preparation and slot variant resolution (Step 01 setup)
 
-For each slot in the day template the engine runs `pickWithFallback`. This is an ordered fallback chain — it tries progressively looser criteria until it finds a match or gives up:
+**Index construction:** The allowed pool is trimmed by removing exercises whose `movement_class` is in the config's `excludeMovementClasses` list (for strength/hypertrophy: `cardio`, `conditioning`, `locomotion`). The trimmed pool becomes the `allowedSet` — a `Set<exercise_id>` constant for the entire day loop. Catalogue rows are simultaneously compiled into a compact `byId` index holding: `sw`, `sw2`, `mp`, `pref`, `den`, `cx`, `load`, `mc`, `tr`, `strength_equivalent`.
+
+**Slot variant resolution (`resolveSlotVariant`):** Before each slot is filled, the builder checks whether the slot has a `variants` array. If it does, it selects the first variant whose `when.equipment_profile` matches the derived profile, and merges that variant's fields over the base slot. Fields not present in the variant are inherited from the base. If no variant matches (or `variants` is absent), the base slot is used unchanged — full backward compatibility.
+
+```
+resolveSlotVariant(slotDef, equipmentProfile):
+  match = slotDef.variants?.find(v => v.when.equipment_profile === equipmentProfile)
+  if no match → return slotDef (base slot, unchanged)
+  return merge(slotDef, match)  // variant fields overwrite base; "slot" name always from base
+```
+
+A `slot_resolved` debug event is emitted per slot showing which profile was active, whether a variant matched, and the resolved `sw2`, `swAny`, `sw2Any`, and `pref_mode`.
+
+### Phase 4 — Per-slot selection (`fillSlot` → `pickWithFallback`)
+
+For each resolved slot the engine runs `pickWithFallback` — an ordered fallback chain that tries progressively looser criteria until it finds a match or gives up:
 
 ```
 Step 0 — Avoid repeat sw2
-  If sw2 was already used today, try sw/swAny/mp without sw2 (avoids duplicate compound movement)
+  If sw2 was already used today, try sw/swAny/mp without sw2 (avoids repeated compound movement)
 
-Step 1 — sw2 + requirePref          [strict match + preference tag]
-Step 2 — sw (or swAny[]) + requirePref
+Step 1 — sw2/sw2Any + requirePref          [strict match + preference gate]
+Step 2 — sw/swAny + requirePref
 Step 3 — mp + requirePref
 
-  (if requirePref is set and steps 1-3 failed, drop the pref requirement and retry:)
+  (if requirePref is set and pref_mode is "strict" and steps 1–3 all failed, drop pref and retry:)
 
-Step 4 — sw2 only
-Step 5 — sw (or swAny[]) only
+Step 4 — sw2/sw2Any only
+Step 5 — sw/swAny only
 Step 6 — mp only
 
-  (if all unique-exercise attempts failed, allow duplicates:)
+  (if all unique-exercise attempts failed, allow already-used exercises:)
 
-Step 7 — sw2 / sw / swAny / mp, allowing already-used exercises
+Step 7 — sw2/sw2Any / sw/swAny / mp, ignoring usedWeek
 ```
 
-If every step returns null, a last-resort `pickSeedExerciseForSlot` runs — this tries sw2, then sw/swAny, then mp, then literally the first available non-conditioning exercise in the pool. If even that returns null, the slot becomes a **FILL block** (adds 1 extra set to the nearest existing slot instead of placing a new exercise).
+When `pref_mode: "soft"` is set on the resolved slot, Steps 1–3 do **not** hard-reject exercises missing the pref tag — instead the pref presence becomes a score bonus (see scoring table below). This means Steps 4–6 rarely fire for soft-pref slots, eliminating the common silent-fallthrough problem.
+
+If every step returns null, a last-resort `pickSeedExerciseForSlot` runs — tries sw2/sw2Any, then sw/swAny, then mp, then the first available non-conditioning exercise in the pool. If even that returns null, the slot becomes a **FILL block** (adds 1 extra set to the nearest existing slot).
 
 ### Scoring within each step (`pickBest`)
 
-Each "attempt" above calls `pickBest`, which iterates the `allowedSet` and scores every candidate:
+Each attempt calls `pickBest`, which iterates `allowedSet` and scores every candidate. All structural terms are cumulative — an exercise can score on multiple terms simultaneously (e.g. sw2Any match +12 and mp match +4 = 16). A candidate must reach a structural score > 0 or it is rejected before any bonuses apply.
 
-| Condition | Score delta |
-|---|---|
-| Matches `sw2` | +12 |
-| Matches `sw` | +10 |
-| Matches `mp` | +4 |
-| Score = 0 (no match at all) | **rejected — not considered** |
-| `preferIsolation` (C-block) and exercise is isolation class | +1.5 |
-| `preferCompound` (A-block) and exercise is compound class | +1.5 |
-| `preferLoadable` and exercise is loadable | +1.0 |
-| `preferLoadable` and exercise is not loadable | -0.1 |
-| Target region overlaps with already-used regions (1 region) | -0.3 |
-| Target region overlaps with already-used regions (2+ regions) | -1.5 |
-| Low density (den=1) | +0.2 |
-| Low complexity (cx=1) | +0.05 |
-
-> **Important:** `requirePref` is a **hard gate**, not a score bonus. If `requirePref: "strength_main"` is set on a slot, any exercise without `"strength_main"` in its `preferred_in_json` is skipped via `continue` before scoring even starts. This is the single most common cause of slot gaps for narrow equipment presets.
+| Condition | Score delta | Notes |
+|---|---|---|
+| `sw2` exact match OR `sw2Any` array contains `ex.sw2` | +12 | At most one sw2/sw2Any term fires per candidate |
+| `sw` exact match OR `swAny` array contains `ex.sw` | +10 | At most one sw/swAny term fires per candidate |
+| `mp` match | +4 | Stacks with sw2/sw matches |
+| Structural score = 0 (no sw2/sw/mp match) | **rejected** | No bonuses can rescue a zero-score candidate |
+| `requirePref` set, `pref_mode: "strict"`, exercise lacks pref | **rejected** | Hard gate — runs after structural scoring |
+| `requirePref` set, `pref_mode: "soft"`, exercise has pref | +`pref_bonus` (default 4) | Soft preference bonus |
+| `strength_equivalent_bonus: true` on slot, `ex.strength_equivalent = true` | +3 | Catalogue boolean field; never a hard filter |
+| `preferIsolation` (C-block) + exercise is isolation class | +1.5 | |
+| `preferCompound` (A-block) + exercise is compound class | +1.5 | |
+| `preferLoadable` + exercise is loadable | +1.0 | |
+| `preferLoadable` + exercise is not loadable | -0.1 | |
+| Target region overlaps already-used regions (1 region) | -0.3 | |
+| Target region overlaps already-used regions (2+ regions) | -1.5 | |
+| Low density (`den = 1`) | +0.2 | |
+| Low complexity (`cx = 1`) | +0.05 | |
 
 The highest-scoring candidate wins.
 
-### Why gaps occur
+### Equipment-aware swap group vocabulary
 
-A slot produces a FILL block (no exercise placed) when both of these are true simultaneously:
+Two parallel sets of swap group values exist in the catalogue:
 
-1. The `allowedSet` is **small** — because the user has minimal equipment (e.g. bodyweight only, or kettlebells only) which eliminates most barbell/dumbbell exercises from the pool.
-2. The slot definition is **specific** — e.g. `sw2: "squat_compound"` which mainly maps to barbell back squat, front squat etc. If none of those are in the allowed pool, no exercise scores > 0, and all fallback steps fail.
+| Type | Column | Examples | Used by |
+|---|---|---|---|
+| Compound rollup groups | `swap_group_id_2` (sw2) | `squat_compound`, `hinge_compound`, `push_horizontal_compound` | Full-equipment slot variants (`sw2: "squat_compound"`) |
+| Pattern groups | `swap_group_id_1` (sw) | `squat_pattern`, `hinge_pattern`, `push_horizontal_pattern` | Minimal/bodyweight slot variants (`swAny: ["squat_pattern"]`) |
 
-`requirePref` compounds this: if the slot also has `requirePref: "hypertrophy_secondary"`, the already-small pool is filtered further before the score is even computed.
+Both columns are single-value strings — an exercise carries exactly one `sw` and one `sw2`. Broader matching across multiple groups uses the slot-side `swAny` (for sw values) or `sw2Any` (for sw2 values) arrays. These must never be mixed: `squat_compound` is an sw2 value and must not appear inside `swAny`.
+
+The `strength_equivalent` boolean (default `false`) marks exercises that produce a meaningful strength stimulus despite not being classic barbell compounds (e.g. goblet squat, inverted row, KB deadlift). It is set in the catalogue seed and read by `pickBest` when a slot activates `strength_equivalent_bonus: true`.
+
+### A/B slot coverage — current state
+
+After V23 (equipment-aware variants), **A and B slots have zero coverage gaps** for both `strength_default_v1` and `hypertrophy_default_v1` across all equipment presets and fitness ranks. The fix involved three coordinated changes:
+
+1. **New catalogue exercises** — 13 new exercises (`pistol_squat`, `inverted_row`, `kb_deadlift`, `feet_elevated_inverted_row`, etc.) tagged with pattern-group `sw`/`sw2` values and `strength_equivalent = true` where appropriate.
+2. **Reclassification UPDATEs** — existing exercises (`double_db_front_squat`, `kb_rdl`, `ring_row`, etc.) had their `sw`/`sw2` overwritten to the new pattern group values.
+3. **Slot variants** — A and B slots in both strength and hypertrophy configs were given three-variant arrays (`full`/`minimal`/`bodyweight`), each with appropriate `swAny`, `pref_mode`, and `strength_equivalent_bonus` settings.
 
 ### Complexity assessment
 
-The selection system has two layers of complexity with different origins:
-
 **Accidental complexity (legacy from Bubble.io origin):**
-- The double-representation of exercise data: DB rows → `buildCatalogJsonFromBubble` → JSON string → `buildIndex` → `byId` object. This was a translation layer for a previous Bubble API format and is no longer needed — the DB rows could be indexed directly.
+- Double-representation of exercise data: DB rows → `buildCatalogJsonFromBubble` → JSON string → `buildIndex` → `byId` object. This was a translation layer for an old Bubble API format and could be collapsed to direct DB-row indexing.
 - Short property names (`sw`, `sw2`, `mp`, `pref`, `den`, `cx`) in the in-memory index, mirroring the old Bubble schema.
 
 **Intentional complexity (does real work):**
-- The 7-step fallback chain is necessary to handle the full matrix of: {has sw2, sw, swAny, mp} × {has requirePref} × {unique or allow duplicates}. It could be expressed more compactly but the logic is sound.
-- `requirePref` as a hard gate is intentional — it ensures "strength_main" slots only pick exercises genuinely suited to that context. But it is the leading cause of FILL blocks when the allowed pool is small.
+- The 7-step fallback chain handles the full matrix of {sw2/sw2Any, sw/swAny, mp} × {requirePref strict/soft} × {unique/allow-dup}. With `pref_mode: "soft"`, Steps 4–6 are rarely reached, making the chain effectively 3 steps in normal use.
+- Equipment profile derivation and variant resolution add one function call per slot but keep all equipment-awareness in config rather than in code — adding a new equipment tier requires only a new variant in the seed.
 
-**The root cause of coverage gaps is not algorithm complexity — it is catalogue data.** The fix for a gap like "Hyrox / beginner / minimal equipment" is almost always one of:
-- Add more exercises to the catalogue that work with minimal equipment AND match the slot's `sw`/`sw2`/`mp` values.
-- Loosen a slot definition (remove `requirePref` from a slot that doesn't need strict preference gating, or add `swAny` alternatives).
-- Change `requirePref` from a hard gate to a score bonus (+N points instead of `continue`).
-
-The Recommendations tab in the admin panel (`/admin/exercises`) identifies exactly which catalogue entries are near-misses — one field change away from filling a gap.
+**The root cause of historical coverage gaps was catalogue data, not algorithm complexity.** The Recommendations tab in the admin panel (`/admin/exercises`) identifies exercises that are one field-change away from filling a gap.
 
 ---
 

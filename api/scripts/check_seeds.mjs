@@ -56,6 +56,23 @@ WITH checks AS (
     10
 
   UNION ALL SELECT
+    'equipment_aware_seed_rows_present',
+    (SELECT COUNT(*) FROM public.exercise_catalogue
+      WHERE exercise_id IN (
+        'assisted_pistol_squat','kb_deadlift','weighted_pushup','inverted_row'
+      ))::int,
+    4
+
+  UNION ALL SELECT
+    'strength_equivalent_seeded',
+    (SELECT COUNT(*) FROM public.exercise_catalogue
+      WHERE exercise_id IN (
+        'double_db_front_squat','goblet_squat','kb_deadlift','weighted_pushup','inverted_row'
+      )
+      AND strength_equivalent = true)::int,
+    5
+
+  UNION ALL SELECT
     'narration_templates_present',
     (SELECT COUNT(*) FROM public.narration_template WHERE template_id IN (
       'prog_title_1','prog_summary_1','prog_progression_1','prog_safety_1',

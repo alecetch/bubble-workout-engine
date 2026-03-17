@@ -60,7 +60,15 @@ SELECT
           'day_key', 'day1',
           'focus', 'lower',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:squat', 'sw2', 'squat_compound', 'requirePref', 'strength_main'),
+            jsonb_build_object(
+              'slot', 'A:squat',
+              'preferLoadable', true,
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'squat_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('squat_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('squat_pattern'), 'mp', 'squat', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
             jsonb_build_object('slot', 'B:lunge', 'mp', 'lunge', 'sw', 'quad_iso_unilateral'),
             jsonb_build_object('slot', 'C:quad', 'swAny', jsonb_build_array('quad_iso_unilateral', 'quad_iso_squat'), 'requirePref', 'hypertrophy_secondary', 'fill_fallback_slot', 'A:squat'),
             jsonb_build_object('slot', 'C:calves', 'sw', 'calf_iso', 'requirePref', 'hypertrophy_secondary', 'preferLoadable', true, 'fill_fallback_slot', 'B:lunge'),
@@ -72,8 +80,22 @@ SELECT
           'day_key', 'day2',
           'focus', 'upper',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:push_horizontal', 'sw2', 'push_horizontal_compound', 'requirePref', 'strength_main'),
-            jsonb_build_object('slot', 'B:pull_horizontal', 'sw2', 'pull_horizontal_compound', 'requirePref', 'hypertrophy_secondary'),
+            jsonb_build_object(
+              'slot', 'A:push_horizontal',
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'push_horizontal_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('push_horizontal_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('push_horizontal_pattern'), 'mp', 'push_horizontal', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
+            jsonb_build_object(
+              'slot', 'B:pull_horizontal',
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'pull_horizontal_compound', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('pull_horizontal_pattern'), 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('pull_horizontal_pattern'), 'mp', 'pull_horizontal', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
             jsonb_build_object('slot', 'B:secondary_press', 'sw', 'push_horizontal_db', 'sw2', 'push_horizontal_compound', 'requirePref', 'hypertrophy_secondary', 'fill_fallback_slot', 'B:pull_horizontal'),
             jsonb_build_object('slot', 'C:arms', 'sw', 'arms', 'requirePref', 'hypertrophy_secondary', 'fill_fallback_slot', 'B:secondary_press'),
             jsonb_build_object('slot', 'C:rear_delt', 'sw', 'shoulder_iso', 'requirePref', 'hypertrophy_secondary', 'fill_fallback_slot', 'B:pull_horizontal'),
@@ -84,8 +106,23 @@ SELECT
           'day_key', 'day3',
           'focus', 'posterior',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:hinge', 'sw2', 'hinge_compound', 'requirePref', 'strength_main'),
-            jsonb_build_object('slot', 'B:secondary_lower', 'sw2', 'squat_compound', 'requirePref', 'hypertrophy_secondary'),
+            jsonb_build_object(
+              'slot', 'A:hinge',
+              'preferLoadable', true,
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'hinge_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('hinge_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('hinge_pattern'), 'mp', 'hinge', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
+            jsonb_build_object(
+              'slot', 'B:secondary_lower',
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'squat_compound', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('squat_pattern'), 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('squat_pattern'), 'mp', 'squat', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
             jsonb_build_object('slot', 'C:hamstring_iso', 'sw', 'hamstring_iso', 'requirePref', 'hypertrophy_secondary', 'fill_fallback_slot', 'A:hinge'),
             jsonb_build_object('slot', 'C:glute', 'sw', 'glute_iso', 'requirePref', 'hypertrophy_secondary', 'fill_fallback_slot', 'A:hinge'),
             jsonb_build_object('slot', 'D:core', 'mp', 'anti_extension', 'sw', 'core', 'fill_fallback_slot', 'B:secondary_lower'),
@@ -195,8 +232,24 @@ SELECT
           'day_key', 'day1',
           'focus', 'lower_strength',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:squat_strength', 'sw2', 'squat_compound', 'requirePref', 'strength_main'),
-            jsonb_build_object('slot', 'B:hinge_strength', 'sw2', 'hinge_compound', 'requirePref', 'strength_main'),
+            jsonb_build_object(
+              'slot', 'A:squat_strength',
+              'preferLoadable', true,
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'squat_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('squat_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('squat_pattern'), 'mp', 'squat', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
+            jsonb_build_object(
+              'slot', 'B:hinge_strength',
+              'preferLoadable', true,
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'hinge_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('hinge_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('hinge_pattern'), 'mp', 'hinge', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
             jsonb_build_object('slot', 'C:lunge_strength', 'mp', 'lunge', 'sw', 'quad_iso_unilateral'),
             jsonb_build_object('slot', 'C:hamstring_iso_strength', 'sw', 'hamstring_iso'),
             jsonb_build_object('slot', 'D:core_strength', 'mp', 'anti_extension', 'sw', 'core')
@@ -206,8 +259,22 @@ SELECT
           'day_key', 'day2',
           'focus', 'upper_strength',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:push_horizontal_strength', 'sw2', 'push_horizontal_compound', 'requirePref', 'strength_main'),
-            jsonb_build_object('slot', 'B:pull_horizontal_strength', 'sw2', 'pull_horizontal_compound', 'requirePref', 'strength_main'),
+            jsonb_build_object(
+              'slot', 'A:push_horizontal_strength',
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'push_horizontal_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('push_horizontal_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('push_horizontal_pattern'), 'mp', 'push_horizontal', 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
+            jsonb_build_object(
+              'slot', 'B:pull_horizontal_strength',
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'pull_horizontal_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('pull_horizontal_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('pull_horizontal_pattern'), 'mp', 'pull_horizontal', 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
             jsonb_build_object('slot', 'C:push_vertical_strength', 'mp', 'push_vertical', 'sw', 'push_vertical', 'requirePref', 'strength_main'),
             jsonb_build_object('slot', 'C:pull_vertical_strength', 'mp', 'pull_vertical', 'sw', 'pull_vertical'),
             jsonb_build_object('slot', 'D:core_upper_strength', 'mp', 'anti_extension', 'sw', 'core')
@@ -217,8 +284,24 @@ SELECT
           'day_key', 'day3',
           'focus', 'posterior_strength',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:hinge_posterior_strength', 'sw2', 'hinge_compound', 'requirePref', 'strength_main'),
-            jsonb_build_object('slot', 'B:squat_posterior_strength', 'sw2', 'squat_compound', 'requirePref', 'strength_main'),
+            jsonb_build_object(
+              'slot', 'A:hinge_posterior_strength',
+              'preferLoadable', true,
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'hinge_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('hinge_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('hinge_pattern'), 'mp', 'hinge', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
+            jsonb_build_object(
+              'slot', 'B:squat_posterior_strength',
+              'preferLoadable', true,
+              'variants', jsonb_build_array(
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'full'), 'sw2', 'squat_compound', 'requirePref', 'strength_main', 'pref_mode', 'strict'),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'minimal'), 'swAny', jsonb_build_array('squat_pattern'), 'requirePref', 'strength_main', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true),
+                jsonb_build_object('when', jsonb_build_object('equipment_profile', 'bodyweight'), 'swAny', jsonb_build_array('squat_pattern'), 'mp', 'squat', 'requirePref', 'hypertrophy_secondary', 'pref_mode', 'soft', 'pref_bonus', 4, 'strength_equivalent_bonus', true)
+              )
+            ),
             jsonb_build_object('slot', 'C:glute_strength', 'sw', 'glute_iso'),
             jsonb_build_object('slot', 'C:calves_strength', 'sw', 'calf_iso', 'preferLoadable', true),
             jsonb_build_object('slot', 'D:core_posterior_strength', 'mp', 'anti_extension', 'sw', 'core')

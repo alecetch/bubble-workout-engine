@@ -48,6 +48,7 @@ export function buildIndex(cat) {
       impact_level: raw.impact_level || 0,
       engine_role: raw.engine_role || "",
       load: raw.load,
+      strength_equivalent: raw.strength_equivalent === true,
 
       mc: mc,
       tr: tr,
@@ -140,11 +141,16 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
   let best = null;
   const mp = sel ? sel.mp : null;
   const sw = sel ? sel.sw : null;
+  const swAny = Array.isArray(sel?.swAny) ? sel.swAny : null;
   const sw2 = sel ? sel.sw2 : null;
+  const sw2Any = Array.isArray(sel?.sw2Any) ? sel.sw2Any : null;
 
   const requirePref = sel ? sel.requirePref : null;
+  const prefMode = sel?.prefMode === "soft" ? "soft" : "strict";
+  const prefBonus = Number.isFinite(Number(sel?.prefBonus)) ? Number(sel.prefBonus) : 4;
   const avoidSw2 = sel ? sel.avoidSw2 : null;
   const preferLoadable = sel ? !!sel.preferLoadable : false;
+  const strengthEquivalentBonus = sel ? !!sel.strengthEquivalentBonus : false;
 
   const preferIsolation = sel ? !!sel.preferIsolation : false;
   const preferCompound = sel ? !!sel.preferCompound : false;
@@ -153,18 +159,36 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
     const ex = byId[id];
     if (!ex) continue;
     if (usedSet && usedSet.has(id)) continue;
-    if (requirePref && !hasPref(ex, requirePref)) continue;
 
     const exMp = toStr(ex.mp);
     const exSw = toStr(ex.sw);
     const exSw2 = toStr(ex.sw2);
+    const hasPrefMatch = requirePref ? hasPref(ex, requirePref) : true;
 
     if (avoidSw2 && exSw2 && exSw2 === avoidSw2) continue;
 
     let score = 0;
 
+    if (sw2Any) {
+      for (const candidateSw2 of sw2Any) {
+        if (exSw2 === candidateSw2) {
+          score += 12;
+          break;
+        }
+      }
+    }
+
     if (sw2) {
       if (exSw2 === sw2) score += 12;
+    }
+
+    if (swAny) {
+      for (const candidateSw of swAny) {
+        if (exSw === candidateSw) {
+          score += 10;
+          break;
+        }
+      }
     }
 
     if (sw) {
@@ -176,6 +200,15 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
     }
 
     if (score <= 0) continue;
+    if (requirePref && prefMode === "strict" && !hasPrefMatch) continue;
+
+    if (requirePref && prefMode === "soft" && hasPrefMatch) {
+      score += prefBonus;
+    }
+
+    if (strengthEquivalentBonus && ex.strength_equivalent === true) {
+      score += 3;
+    }
 
     if (preferIsolation && ex.mc === "isolation") score += 1.5;
     if (preferCompound && ex.mc === "compound") score += 1.5;
@@ -216,11 +249,11 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
 }
 
 export function pickSeedExerciseForSlot(allowedSet, byId, sel) {
-  if (sel.sw2) {
+  if (sel.sw2 || (sel.sw2Any && sel.sw2Any.length > 0)) {
     const ex1 = pickBest(
       allowedSet,
       byId,
-      { mp: null, sw: null, sw2: sel.sw2, requirePref: null },
+      { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: null },
       null,
       null,
     );
@@ -279,10 +312,13 @@ function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, used
         sw: sw,
         sw2: null,
         requirePref: sel.requirePref,
+        prefMode: sel.prefMode,
+        prefBonus: sel.prefBonus,
         avoidSw2: sel.sw2,
         preferLoadable: sel.preferLoadable,
         preferIsolation: sel.preferIsolation,
         preferCompound: sel.preferCompound,
+        strengthEquivalentBonus: sel.strengthEquivalentBonus,
       },
       usedWeek,
       usedRegionsSet,
@@ -302,10 +338,13 @@ function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, used
         sw: null,
         sw2: null,
         requirePref: sel.requirePref,
+        prefMode: sel.prefMode,
+        prefBonus: sel.prefBonus,
         avoidSw2: sel.sw2,
         preferLoadable: sel.preferLoadable,
         preferIsolation: sel.preferIsolation,
         preferCompound: sel.preferCompound,
+        strengthEquivalentBonus: sel.strengthEquivalentBonus,
       },
       usedWeek,
       usedRegionsSet,
@@ -319,7 +358,7 @@ function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, used
 }
 
 export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2Set, usedRegionsSet) {
-  function attempt(mp, sw, sw2, requirePref) {
+  function attempt(mp, sw, sw2, sw2Any, requirePref) {
     return pickBest(
       allowedSet,
       byId,
@@ -327,10 +366,14 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
         mp: mp,
         sw: sw,
         sw2: sw2,
+        sw2Any: sw2Any,
         requirePref: requirePref,
+        prefMode: sel.prefMode,
+        prefBonus: sel.prefBonus,
         preferLoadable: sel.preferLoadable,
         preferIsolation: sel.preferIsolation,
         preferCompound: sel.preferCompound,
+        strengthEquivalentBonus: sel.strengthEquivalentBonus,
       },
       usedWeek,
       usedRegionsSet,
@@ -340,7 +383,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   let ex = attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, usedRegionsSet, stats);
   if (ex) return ex;
 
-  ex = attempt(null, null, sel.sw2, sel.requirePref);
+  ex = attempt(null, null, sel.sw2, sel.sw2Any || null, sel.requirePref);
   if (ex) {
     stats.picked_sw2_pref++;
     return ex;
@@ -349,7 +392,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   const swList = (sel.swAny && sel.swAny.length > 0) ? sel.swAny : (sel.sw ? [sel.sw] : null);
   if (swList) {
     for (const sw of swList) {
-      ex = attempt(null, sw, null, sel.requirePref);
+      ex = attempt(null, sw, null, null, sel.requirePref);
       if (ex) {
         stats.picked_sw_pref++;
         return ex;
@@ -357,14 +400,14 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
     }
   }
 
-  ex = attempt(sel.mp, null, null, sel.requirePref);
+  ex = attempt(sel.mp, null, null, null, sel.requirePref);
   if (ex) {
     stats.picked_mp_pref++;
     return ex;
   }
 
   if (sel.requirePref) {
-    ex = attempt(null, null, sel.sw2, null);
+    ex = attempt(null, null, sel.sw2, sel.sw2Any || null, null);
     if (ex) {
       stats.picked_sw2_relaxed++;
       return ex;
@@ -373,7 +416,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
 
   if (sel.requirePref && swList) {
     for (const sw of swList) {
-      ex = attempt(null, sw, null, null);
+      ex = attempt(null, sw, null, null, null);
       if (ex) {
         stats.picked_sw_relaxed++;
         return ex;
@@ -382,7 +425,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   }
 
   if (sel.requirePref) {
-    ex = attempt(sel.mp, null, null, null);
+    ex = attempt(sel.mp, null, null, null, null);
     if (ex) {
       stats.picked_mp_relaxed++;
       return ex;
@@ -393,7 +436,16 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
     pickBest(
       allowedSet,
       byId,
-      { mp: null, sw: null, sw2: sel.sw2, requirePref: sel.requirePref },
+      {
+        mp: null,
+        sw: null,
+        sw2: sel.sw2,
+        sw2Any: sel.sw2Any || null,
+        requirePref: sel.requirePref,
+        prefMode: sel.prefMode,
+        prefBonus: sel.prefBonus,
+        strengthEquivalentBonus: sel.strengthEquivalentBonus,
+      },
       null,
       usedRegionsSet,
     ) ||
@@ -403,7 +455,15 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
             const e = pickBest(
               allowedSet,
               byId,
-              { mp: null, sw: sw, sw2: null, requirePref: sel.requirePref },
+              {
+                mp: null,
+                sw: sw,
+                sw2: null,
+                requirePref: sel.requirePref,
+                prefMode: sel.prefMode,
+                prefBonus: sel.prefBonus,
+                strengthEquivalentBonus: sel.strengthEquivalentBonus,
+              },
               null,
               usedRegionsSet,
             );
@@ -415,18 +475,49 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
     pickBest(
       allowedSet,
       byId,
-      { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref },
+      {
+        mp: sel.mp,
+        sw: null,
+        sw2: null,
+        requirePref: sel.requirePref,
+        prefMode: sel.prefMode,
+        prefBonus: sel.prefBonus,
+        strengthEquivalentBonus: sel.strengthEquivalentBonus,
+      },
       null,
       usedRegionsSet,
     ) ||
-    pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, requirePref: null }, null, usedRegionsSet) ||
+    pickBest(
+      allowedSet,
+      byId,
+      {
+        mp: null,
+        sw: null,
+        sw2: sel.sw2,
+        sw2Any: sel.sw2Any || null,
+        requirePref: null,
+        prefMode: sel.prefMode,
+        prefBonus: sel.prefBonus,
+        strengthEquivalentBonus: sel.strengthEquivalentBonus,
+      },
+      null,
+      usedRegionsSet,
+    ) ||
     (swList
       ? (() => {
           for (const sw of swList) {
             const e = pickBest(
               allowedSet,
               byId,
-              { mp: null, sw: sw, sw2: null, requirePref: null },
+              {
+                mp: null,
+                sw: sw,
+                sw2: null,
+                requirePref: null,
+                prefMode: sel.prefMode,
+                prefBonus: sel.prefBonus,
+                strengthEquivalentBonus: sel.strengthEquivalentBonus,
+              },
               null,
               usedRegionsSet,
             );
@@ -435,7 +526,21 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
           return null;
         })()
       : null) ||
-    pickBest(allowedSet, byId, { mp: sel.mp, sw: null, sw2: null, requirePref: null }, null, usedRegionsSet);
+    pickBest(
+      allowedSet,
+      byId,
+      {
+        mp: sel.mp,
+        sw: null,
+        sw2: null,
+        requirePref: null,
+        prefMode: sel.prefMode,
+        prefBonus: sel.prefBonus,
+        strengthEquivalentBonus: sel.strengthEquivalentBonus,
+      },
+      null,
+      usedRegionsSet,
+    );
 
   if (exDup) {
     stats.picked_allow_dup++;
@@ -480,6 +585,10 @@ export function buildCatalogJsonFromBubble(exercises) {
 
     const load =
       typeof r.is_loadable === "boolean" ? r.is_loadable : toStr(r.is_loadable).toLowerCase() === "true";
+    const strength_equivalent =
+      typeof r.strength_equivalent === "boolean"
+        ? r.strength_equivalent
+        : toStr(r.strength_equivalent).toLowerCase() === "true";
 
     const mc = toStr(r.movement_class || r.mc || "").trim();
 
@@ -499,6 +608,7 @@ export function buildCatalogJsonFromBubble(exercises) {
       impact_level,
       engine_role,
       load,
+      strength_equivalent,
       mc,
       tr,
       wh,

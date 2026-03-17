@@ -61,6 +61,11 @@
     .badge.yes { background: #d1fae5; color: #065f46; }
     .badge.warn { background: #fef3c7; color: #92400e; }
 
+    /* Selector gap indicators */
+    .gap-cell { background: #fff7ed; }
+    .gap-dash { color: #ef4444; font-weight: 700; }
+    .pref-tag { display: inline-block; background: #ede9fe; color: #5b21b6; border-radius: 4px; padding: 1px 5px; font-size: 10px; white-space: nowrap; margin: 1px; }
+
     /* Coverage mini-bar */
     .cov-bar { display: flex; gap: 2px; align-items: center; }
     .cov-seg { height: 8px; width: 8px; border-radius: 2px; background: #e5e7eb; }
@@ -236,6 +241,16 @@
           <option value="none">None</option>
         </select>
       </div>
+      <div class="ctrl">
+        <label for="gaps-filter">Selector gaps</label>
+        <select id="gaps-filter" style="width:145px">
+          <option value="">Any</option>
+          <option value="no_sw">Missing sw</option>
+          <option value="no_sw2">Missing sw2</option>
+          <option value="no_pref">Missing pref tags</option>
+          <option value="no_se">strength_equivalent = false</option>
+        </select>
+      </div>
       <button id="clear-filters-btn" class="secondary sm" style="align-self:flex-end">Clear filters</button>
     </div>
     <div id="status"></div>
@@ -264,6 +279,10 @@
             <th data-sort="is_loadable" style="text-align:center">Loadable<span class="sort-icon">↕</span></th>
             <th>Equipment</th>
             <th data-sort="strength_primary_region">Region<span class="sort-icon">↕</span></th>
+            <th data-sort="swap_group_id_1" title="swap_group_id_1 — used for swAny matching">sw<span class="sort-icon">↕</span></th>
+            <th data-sort="swap_group_id_2" title="swap_group_id_2 — used for sw2Any matching">sw2<span class="sort-icon">↕</span></th>
+            <th title="preferred_in_json tags — used for requirePref gate">Pref tags</th>
+            <th data-sort="strength_equivalent" style="text-align:center" title="strength_equivalent — opt-in +3 bonus">SE<span class="sort-icon">↕</span></th>
             <th data-sort="_gap_count">Coverage<span class="sort-icon">↕</span></th>
             <th data-sort="is_archived">Status<span class="sort-icon">↕</span></th>
             <th></th>
@@ -387,6 +406,7 @@
         <div class="check-row">
           <input id="f-is_loadable" type="checkbox" /><label for="f-is_loadable">Loadable</label>
           <input id="f-engine_anchor" type="checkbox" /><label for="f-engine_anchor">Engine Anchor</label>
+          <input id="f-strength_equivalent" type="checkbox" /><label for="f-strength_equivalent">Strength Equivalent</label>
           <input id="f-is_archived" type="checkbox" /><label for="f-is_archived">Archived</label>
         </div>
       </div>
@@ -534,11 +554,12 @@ document.getElementById("pattern-filter").addEventListener("input", renderTable)
 document.getElementById("rank-filter").addEventListener("change", renderTable);
 document.getElementById("loadable-filter").addEventListener("change", renderTable);
 document.getElementById("region-filter").addEventListener("change", renderTable);
+document.getElementById("gaps-filter").addEventListener("change", renderTable);
 document.getElementById("new-btn").addEventListener("click", openNewDrawer);
 
 document.getElementById("clear-filters-btn").addEventListener("click", () => {
   ["search-input","pattern-filter"].forEach(id => document.getElementById(id).value = "");
-  ["class-filter","archived-filter","preset-filter","rank-filter","loadable-filter","region-filter"]
+  ["class-filter","archived-filter","preset-filter","rank-filter","loadable-filter","region-filter","gaps-filter"]
     .forEach(id => document.getElementById(id).value = "");
   renderTable();
 });
@@ -576,6 +597,15 @@ async function loadState() {
   }
 }
 
+// ── Selector helpers ───────────────────────────────────────────────────────
+function prefTagsHtml(json) {
+  const tags = Array.isArray(json) ? json.map(t => typeof t === "string" ? t : t?.tag).filter(Boolean)
+    : (json && typeof json === "object" && !Array.isArray(json)) ? Object.keys(json)
+    : [];
+  if (!tags.length) return '<span class="gap-dash">—</span>';
+  return tags.map(t => `<span class="pref-tag">${esc(t)}</span>`).join(" ");
+}
+
 // ── Table ──────────────────────────────────────────────────────────────────
 function renderTable() {
   const q       = document.getElementById("search-input").value.toLowerCase();
@@ -586,6 +616,7 @@ function renderTable() {
   const rankMax = document.getElementById("rank-filter").value;
   const loadable= document.getElementById("loadable-filter").value;
   const region  = document.getElementById("region-filter").value;
+  const gapsF   = document.getElementById("gaps-filter").value;
 
   // Build preset slug set for filtering
   const presetSlugSet = preset
@@ -604,6 +635,14 @@ function renderTable() {
     if (region === "upper" && ex.strength_primary_region !== "upper") return false;
     if (region === "lower" && ex.strength_primary_region !== "lower") return false;
     if (region === "none" && ex.strength_primary_region) return false;
+    if (gapsF === "no_sw" && ex.swap_group_id_1) return false;
+    if (gapsF === "no_sw2" && ex.swap_group_id_2) return false;
+    if (gapsF === "no_pref") {
+      const pj = ex.preferred_in_json;
+      const hasPref = Array.isArray(pj) ? pj.length > 0 : (pj && typeof pj === "object" ? Object.keys(pj).length > 0 : false);
+      if (hasPref) return false;
+    }
+    if (gapsF === "no_se" && ex.strength_equivalent) return false;
     if (presetSlugSet) {
       const exSlugs = ex.equipment_items_slugs ?? [];
       // Exercise is eligible if all its required slugs are available in the preset
@@ -624,7 +663,7 @@ function renderTable() {
     if (sortCol === "_gap_count") {
       av = gapCounts.get(a.exercise_id) ?? 0;
       bv = gapCounts.get(b.exercise_id) ?? 0;
-    } else if (sortCol === "is_archived" || sortCol === "is_loadable") {
+    } else if (sortCol === "is_archived" || sortCol === "is_loadable" || sortCol === "strength_equivalent") {
       av = a[sortCol] ? 1 : 0;
       bv = b[sortCol] ? 1 : 0;
     } else if (sortCol === "min_fitness_rank") {
@@ -667,6 +706,10 @@ function renderTable() {
       <td style="text-align:center">${ex.is_loadable ? '<span class="badge yes">✓</span>' : "—"}</td>
       <td class="eq">${esc(eq)}</td>
       <td>${esc(ex.strength_primary_region ?? "—")}</td>
+      <td class="${ex.swap_group_id_1 ? '' : 'gap-cell'}">${ex.swap_group_id_1 ? `<code style="font-size:10px">${esc(ex.swap_group_id_1)}</code>` : '<span class="gap-dash">—</span>'}</td>
+      <td class="${ex.swap_group_id_2 ? '' : 'gap-cell'}">${ex.swap_group_id_2 ? `<code style="font-size:10px">${esc(ex.swap_group_id_2)}</code>` : '<span class="gap-dash">—</span>'}</td>
+      <td>${prefTagsHtml(ex.preferred_in_json)}</td>
+      <td style="text-align:center">${ex.strength_equivalent ? '<span class="badge yes" title="strength_equivalent = true">SE</span>' : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${covBar}</td>
       <td>${ex.is_archived ? '<span class="badge archived">Archived</span>' : '<span class="badge yes">Active</span>'}</td>
       <td><button class="ghost edit-btn" data-id="${esc(ex.exercise_id)}">Edit</button></td>
@@ -704,7 +747,7 @@ const FIELDS = [
   "movement_class","movement_pattern_primary","lift_class","engine_role",
   "strength_primary_region","swap_group_id_1","swap_group_id_2",
   "min_fitness_rank","complexity_rank","density_rating",
-  "is_loadable","engine_anchor","is_archived",
+  "is_loadable","engine_anchor","strength_equivalent","is_archived",
   "equipment_items_slugs","equipment_json",
   "target_regions_json","warmup_hooks","preferred_in_json",
   "contraindications_slugs","contraindications_json","form_cues",
@@ -787,7 +830,7 @@ async function fetchImpactPreview() {
   panel.style.display = "block";
   document.getElementById("impact-body").textContent = "Computing…";
   try {
-    const d = await apiFetch(`${BASE}/preview-change`, { method: "POST", body: JSON.stringify({ exercise_id: editingId, patch: payload }) });
+    const d = await apiFetch(`${BASE}/preview-change`, { method: "POST", body: JSON.stringify({ action: "edit", exercise_id: editingId, changes: payload }) });
     renderImpact(d);
   } catch (e) {
     document.getElementById("impact-body").textContent = "Preview unavailable: " + e.message;
@@ -795,21 +838,22 @@ async function fetchImpactPreview() {
 }
 
 function renderImpact(d) {
-  const zeroBefore = d.zero_gaps_before ?? 0;
-  const zeroAfter = d.zero_gaps_after ?? 0;
-  const lowBefore = d.low_gaps_before ?? 0;
-  const lowAfter = d.low_gaps_after ?? 0;
-  const delta0 = zeroBefore - zeroAfter;
-  const deltaL = lowBefore - lowAfter;
+  const imp = d.impact ?? d;
+  const filled   = imp.net_zero_gaps_fixed    ?? 0;
+  const improved = imp.net_low_gaps_improved  ?? 0;
+  const lost     = imp.net_coverage_lost      ?? 0;
 
-  function row(label, delta, before, after) {
-    const cls = delta > 0 ? "pos" : delta < 0 ? "neg" : "";
-    const sign = delta > 0 ? "−" : delta < 0 ? "+" : "±";
-    return `<div class="impact-row"><span class="impact-label">${label}</span><span class="impact-val ${cls}">${before}→${after} (${sign}${Math.abs(delta)})</span></div>`;
+  function row(label, n, positive) {
+    const isGood = positive ? n > 0 : n < 0;
+    const isBad  = positive ? n < 0 : n > 0;
+    const cls    = isGood ? "pos" : isBad ? "neg" : "";
+    const sign   = n > 0 ? "+" : "";
+    return `<div class="impact-row"><span class="impact-label">${label}</span><span class="impact-val ${cls}">${sign}${n}</span></div>`;
   }
   document.getElementById("impact-body").innerHTML =
-    row("Zero-coverage gaps fixed", delta0, zeroBefore, zeroAfter) +
-    row("Low-coverage gaps improved", deltaL, lowBefore, lowAfter);
+    row("Zero-coverage gaps filled", filled, true) +
+    row("Thin slots improved", improved, true) +
+    row("Slots degraded", lost, false);
 }
 
 function clearImpactPanel() {
@@ -839,6 +883,7 @@ function collectPayload() {
     strength_primary_region: getFV("strength_primary_region") || null,
     swap_group_id_1: getFV("swap_group_id_1") || null,
     swap_group_id_2: getFV("swap_group_id_2") || null,
+    strength_equivalent: getFV("strength_equivalent"),
     form_cues: getFV("form_cues") || null,
     equipment_items_slugs: toArr(getFV("equipment_items_slugs")),
     contraindications_slugs: toArr(getFV("contraindications_slugs")),
@@ -861,7 +906,7 @@ async function queueChange() {
   try {
     await apiFetch(`${BASE}/session/queue-change`, {
       method: "POST",
-      body: JSON.stringify({ mode: drawerMode, exercise_id: editingId, patch: payload }),
+      body: JSON.stringify({ action: drawerMode, exercise_id: payload.exercise_id, changes: payload }),
     });
     closeDrawer();
     await refreshSessionBar();
@@ -875,7 +920,7 @@ async function queueChange() {
 async function refreshSessionBar() {
   try {
     const d = await apiFetch(`${BASE}/session/pending`);
-    const count = (d.pending ?? []).length;
+    const count = d.pending_count ?? (d.items ?? []).length;
     const bar = document.getElementById("session-bar");
     document.getElementById("session-count").textContent = count;
     bar.classList.toggle("hidden", count === 0);
@@ -903,14 +948,12 @@ document.getElementById("session-clear-btn").addEventListener("click", async () 
 async function refreshMigrationTab() {
   try {
     const d = await apiFetch(`${BASE}/session/pending`);
-    const pending = d.pending ?? [];
-    if (pending.length === 0) {
+    const count = d.pending_count ?? (d.items ?? []).length;
+    if (count === 0) {
       document.getElementById("migration-sql").textContent = "-- No pending changes.";
       return;
     }
-    // Show the SQL blocks
-    const sql = pending.map(p => p.sql || `-- [${p.mode}] ${p.exercise_id}`).join("\n\n");
-    document.getElementById("migration-sql").textContent = sql;
+    document.getElementById("migration-sql").textContent = d.session_sql || (d.items ?? []).map(p => p.sql || `-- ${p.action}: ${p.exercise_id}`).join("\n\n");
   } catch {}
 }
 
@@ -961,10 +1004,14 @@ document.getElementById("clone-name").addEventListener("input", async () => {
   const name = document.getElementById("clone-name").value;
   if (!name) return;
   try {
-    const d = await apiFetch(`${BASE}/clone-preview`, { method: "POST", body: JSON.stringify({ source_id: editingId, new_name: name }) });
-    document.getElementById("clone-id").value = d.exercise_id ?? "";
-    document.getElementById("clone-inferred").textContent = d.inferred_equipment?.length
-      ? `Inferred equipment: ${d.inferred_equipment.join(", ")}`
+    const [idRes, prevRes] = await Promise.all([
+      apiFetch(`${BASE}/generate-id`, { method: "POST", body: JSON.stringify({ name }) }),
+      apiFetch(`${BASE}/clone-preview`, { method: "POST", body: JSON.stringify({ source_exercise_id: editingId, new_exercise: { name } }) }).catch(() => null),
+    ]);
+    if (idRes.exercise_id) document.getElementById("clone-id").value = idRes.exercise_id;
+    const inf = prevRes?.equipment_inference;
+    document.getElementById("clone-inferred").textContent = inf?.suggested_slugs?.length
+      ? `Inferred equipment: ${inf.suggested_slugs.join(", ")}`
       : "";
   } catch {}
 });
@@ -982,7 +1029,7 @@ document.getElementById("clone-queue-btn").addEventListener("click", async () =>
   try {
     await apiFetch(`${BASE}/session/queue-change`, {
       method: "POST",
-      body: JSON.stringify({ mode: "new", exercise_id: newId, patch }),
+      body: JSON.stringify({ action: "clone", exercise_id: newId, changes: patch }),
     });
     cloneModal.classList.remove("open");
     closeDrawer();
@@ -999,7 +1046,7 @@ document.getElementById("csv-close-btn").addEventListener("click", () => csvModa
 document.getElementById("csv-export-btn").addEventListener("click", async () => {
   if (!exercises.length) { alert("Load exercises first."); return; }
   const cols = ["exercise_id","name","movement_class","movement_pattern_primary","min_fitness_rank",
-    "is_loadable","engine_anchor","is_archived","lift_class","engine_role","strength_primary_region",
+    "is_loadable","engine_anchor","strength_equivalent","is_archived","lift_class","engine_role","strength_primary_region",
     "swap_group_id_1","swap_group_id_2","complexity_rank","density_rating","equipment_items_slugs","contraindications_slugs"];
   const lines = [cols.join(",")];
   exercises.forEach(ex => {
@@ -1052,7 +1099,7 @@ document.getElementById("csv-apply-btn").addEventListener("click", async () => {
     try {
       await apiFetch(`${BASE}/session/queue-change`, {
         method: "POST",
-        body: JSON.stringify({ mode: "upsert", exercise_id: row.exercise_id, patch: row }),
+        body: JSON.stringify({ action: "new", exercise_id: row.exercise_id, changes: row }),
       });
       ok++;
     } catch { fail++; }

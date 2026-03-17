@@ -23,6 +23,7 @@ services:
     volumes:
       - ./api:/app
       - ./assets:/app/assets
+      - ./migrations:/app/migrations
       - api_node_modules:/app/node_modules
     command: sh -lc "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ]; then npm ci; fi; npm start"
     environment:

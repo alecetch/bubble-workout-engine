@@ -109,9 +109,14 @@ function normalizeSlotDefinition(rawSlot) {
       sw: null,
       swAny: null,
       sw2: null,
+      sw2Any: null,
       requirePref: null,
+      pref_mode: "strict",
+      pref_bonus: 4,
       preferLoadable: false,
+      strength_equivalent_bonus: false,
       fill_fallback_slot: null,
+      variants: null,
       selector_strategy: "best_match_by_movement",
     };
   }
@@ -124,6 +129,10 @@ function normalizeSlotDefinition(rawSlot) {
       block: rawSlot.block ?? (block || ""),
       key: rawSlot.key ?? (key || ""),
       swAny: rawSlot.swAny != null ? normalizeArr(rawSlot.swAny) : null,
+      sw2Any: rawSlot.sw2Any != null ? normalizeArr(rawSlot.sw2Any) : null,
+      pref_mode: rawSlot.pref_mode || (rawSlot.allowPrefFallback ? "soft" : "strict"),
+      pref_bonus: rawSlot.pref_bonus ?? 4,
+      strength_equivalent_bonus: rawSlot.strength_equivalent_bonus === true,
       selector_strategy: rawSlot.selector_strategy || "best_match_by_movement",
     };
   }
@@ -135,11 +144,40 @@ function normalizeSlotDefinition(rawSlot) {
     sw: null,
     swAny: null,
     sw2: null,
+    sw2Any: null,
     requirePref: null,
+    pref_mode: "strict",
+    pref_bonus: 4,
     preferLoadable: false,
+    strength_equivalent_bonus: false,
     fill_fallback_slot: null,
+    variants: null,
     selector_strategy: "best_match_by_movement",
   };
+}
+
+export function deriveEquipmentProfile(slugs) {
+  const set = new Set(normalizeArr(slugs).map((slug) => toStr(slug).trim()).filter(Boolean));
+  const fullMarkers = ["barbell", "trap_bar", "hack_squat", "leg_press", "cable"];
+  const minimalMarkers = ["dumbbells", "kettlebells", "sandbag", "rings"];
+  if (fullMarkers.some((marker) => set.has(marker))) return "full";
+  if (minimalMarkers.some((marker) => set.has(marker))) return "minimal";
+  return "bodyweight";
+}
+
+export function resolveSlotVariant(slotDef, equipmentProfile) {
+  const variants = Array.isArray(slotDef?.variants) ? slotDef.variants : [];
+  if (!variants.length) return slotDef;
+  const match = variants.find((variant) => variant?.when?.equipment_profile === equipmentProfile);
+  if (!match) return slotDef;
+  const { when, ...variantFields } = match;
+  return { ...slotDef, ...variantFields, slot: slotDef.slot };
+}
+
+function logBuilderEvent(stats, payload) {
+  if (Array.isArray(stats?.notes)) {
+    stats.notes.push(payload);
+  }
 }
 
 function isExcludedExercise(ex, excludeMovementClassesSet) {
@@ -169,6 +207,7 @@ function resolveAllowedExerciseIds(inputs, exercises) {
 export async function buildProgramFromDefinition({ inputs, request, compiledConfig }) {
   const clientProfile = inputs?.clientProfile?.response ?? {};
   const exercises = inputs?.exercises?.response?.results ?? [];
+  const equipmentProfile = deriveEquipmentProfile(clientProfile?.equipment_items_slugs ?? []);
 
   const duration_mins =
     request?.duration_mins ??
@@ -251,6 +290,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
 
     source: compiledConfig?.source,
     config_key: compiledConfig?.configKey,
+    equipment_profile: equipmentProfile,
     notes: [],
   };
 
@@ -280,6 +320,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       usedSw2Today: new Set(),
       usedRegionsToday: new Set(),
       stats,
+      equipmentProfile,
     };
 
     if (builderState.conditioning) {
@@ -295,19 +336,31 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     for (let i = 0; i < take; i++) {
       const normalized = normalizeSlotDefinition(slots[i]);
       const slotDef = applySlotDefaults(normalized, slotDefaults);
+      const resolvedSlot = resolveSlotVariant(slotDef, equipmentProfile);
       const slotName = slotDef.slot;
       if (!slotName) continue;
+
+      logBuilderEvent(stats, {
+        event: "slot_resolved",
+        slot: slotName,
+        equipment_profile: equipmentProfile,
+        variant_matched: resolvedSlot !== slotDef,
+        resolved_sw2: resolvedSlot.sw2 ?? null,
+        resolved_swAny: resolvedSlot.swAny ?? null,
+        resolved_sw2Any: resolvedSlot.sw2Any ?? null,
+        resolved_pref_mode: resolvedSlot.pref_mode ?? "strict",
+      });
 
       const [blockLetter] = slotName.split(":");
 
       const catalogIndex = { byId, allowedSet };
-      let ex = fillSlot(slotDef, catalogIndex, builderState);
+      let ex = fillSlot(resolvedSlot, catalogIndex, builderState);
       if (ex && isExcludedExercise(ex, excludeMovementClassesSet)) {
         ex = null;
       }
 
       if (!ex && !dayHasRealExercise(blocks)) {
-        const seeded = pickSeedExerciseForSlot(allowedSet, byId, slotDef);
+        const seeded = pickSeedExerciseForSlot(allowedSet, byId, resolvedSlot);
         if (seeded && !isExcludedExercise(seeded, excludeMovementClassesSet)) {
           stats.picked_seed_slot_aware++;
           ex = seeded;
@@ -350,12 +403,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           sets,
           ex_sw: ex.sw || "",
           ex_sw2: ex.sw2 || "",
-          is_buy_in: slotDef.is_buy_in === true,
+          is_buy_in: resolvedSlot.is_buy_in === true,
         });
         continue;
       }
 
-      const targetSlot = slotDef.fill_fallback_slot || findFirstRealSlot(blocks) || "A:squat";
+      const targetSlot = resolvedSlot.fill_fallback_slot || findFirstRealSlot(blocks) || "A:squat";
       const addSets = 1;
 
       blocks.push({

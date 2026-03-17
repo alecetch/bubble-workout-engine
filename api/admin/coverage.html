@@ -165,7 +165,109 @@
       .focus-empty {
         color: var(--muted);
       }
+      /* ── Score panel ─────────────────────────────────────────────────── */
+      .score-panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin: 12px 0 8px 0;
+        display: none;
+      }
+      .score-panel.visible {
+        display: block;
+      }
+      .score-top {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 14px;
+      }
+      .score-headline {
+        display: flex;
+        flex-direction: column;
+        min-width: 110px;
+      }
+      .score-headline .score-label {
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-bottom: 2px;
+      }
+      .score-headline .score-value {
+        font-size: 40px;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .score-value.grade-a { color: #059669; }
+      .score-value.grade-b { color: #0f766e; }
+      .score-value.grade-c { color: #92400e; }
+      .score-value.grade-d { color: #b42318; }
+      .score-badges {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .badge {
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .badge-red   { background: #fde8e8; color: #b42318; }
+      .badge-amber { background: #fef3c7; color: #92400e; }
+      .badge-green { background: #d1fae5; color: #065f46; }
+      .score-breakdowns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 24px;
+      }
+      .breakdown-section h4 {
+        margin: 0 0 6px 0;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--muted);
+      }
+      .bar-row {
+        display: grid;
+        grid-template-columns: 160px 1fr 36px;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 5px;
+      }
+      .bar-row .bar-label {
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bar-track {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .bar-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width .3s;
+      }
+      .bar-fill.grade-a { background: #059669; }
+      .bar-fill.grade-b { background: #0f766e; }
+      .bar-fill.grade-c { background: #d97706; }
+      .bar-fill.grade-d { background: #ef4444; }
+      .bar-pct {
+        font-size: 11px;
+        color: var(--muted);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
       @media (max-width: 1100px) {
+        .score-breakdowns { grid-template-columns: 1fr; }
+      }
         .controls {
           grid-template-columns: 1fr;
         }
@@ -208,6 +310,30 @@
         </div>
         <div id="status" class="status"></div>
       </section>
+
+      <div id="score-panel" class="score-panel">
+        <div class="score-top">
+          <div class="score-headline">
+            <span class="score-label">Coverage score</span>
+            <span id="score-value" class="score-value">—</span>
+          </div>
+          <div class="score-badges">
+            <span id="badge-zero" class="badge badge-red">— zero gaps</span>
+            <span id="badge-thin" class="badge badge-amber">— thin (1 option)</span>
+            <span id="badge-ok"   class="badge badge-green">— covered (2+)</span>
+          </div>
+        </div>
+        <div class="score-breakdowns">
+          <div class="breakdown-section">
+            <h4>By config</h4>
+            <div id="breakdown-config"></div>
+          </div>
+          <div class="breakdown-section">
+            <h4>By preset</h4>
+            <div id="breakdown-preset"></div>
+          </div>
+        </div>
+      </div>
 
       <div id="summary" class="summary"></div>
 
@@ -267,14 +393,126 @@
         statusEl.className = `status ${kind}`.trim();
       }
 
-      function getConstraintText(row) {
+      function describeResolvedConstraint(resolved) {
         const parts = [];
-        if (row.sw) parts.push(`sw:${row.sw}`);
-        if (row.sw2) parts.push(`sw2:${row.sw2}`);
-        if (Array.isArray(row.swAny) && row.swAny.length) parts.push(`swAny:[${row.swAny.join(",")}]`);
-        if (row.mp) parts.push(`mp:${row.mp}`);
-        if (row.requirePref) parts.push(`pref:${row.requirePref}`);
+        if (!resolved || typeof resolved !== "object") return "";
+        if (resolved.sw) parts.push(`sw:${resolved.sw}`);
+        if (resolved.sw2) parts.push(`sw2:${resolved.sw2}`);
+        if (Array.isArray(resolved.swAny) && resolved.swAny.length) parts.push(`swAny:[${resolved.swAny.join(",")}]`);
+        if (Array.isArray(resolved.sw2Any) && resolved.sw2Any.length) parts.push(`sw2Any:[${resolved.sw2Any.join(",")}]`);
+        if (resolved.mp) parts.push(`mp:${resolved.mp}`);
+        if (resolved.requirePref) {
+          const mode = resolved.pref_mode === "soft" ? "soft" : "strict";
+          const bonus = mode === "soft" && Number.isFinite(Number(resolved.pref_bonus))
+            ? `+${Number(resolved.pref_bonus)}`
+            : "";
+          parts.push(`pref:${resolved.requirePref} (${mode}${bonus ? ` ${bonus}` : ""})`);
+        } else if (resolved.pref_mode === "soft") {
+          parts.push("prefMode:soft");
+        }
+        if (resolved.strength_equivalent_bonus) parts.push("strengthEq:+3");
         return parts.length ? parts.join(" · ") : "";
+      }
+
+      function getConstraintText(row, visiblePresets) {
+        const resolvedByPreset = row.resolved_by_preset || {};
+        const byPreset = visiblePresets
+          .map((preset) => {
+            const resolved = resolvedByPreset[preset.code];
+            const text = describeResolvedConstraint(resolved);
+            if (!text) return "";
+            return `${PRESET_SHORT[preset.code] || preset.code}: ${text}`;
+          })
+          .filter(Boolean);
+        if (byPreset.length > 0) return byPreset.join(" | ");
+        return describeResolvedConstraint(row);
+      }
+
+      // ── Coverage score ────────────────────────────────────────────────
+      // Each (slot × preset × rank) cell scores: 0=0, 1=0.5, 2+=1.0
+      // Overall score = sum / total * 100
+
+      function cellScore(count) {
+        if (count === 0) return 0;
+        if (count === 1) return 0.5;
+        return 1;
+      }
+
+      function gradeClass(pct) {
+        if (pct >= 80) return "grade-a";
+        if (pct >= 60) return "grade-b";
+        if (pct >= 40) return "grade-c";
+        return "grade-d";
+      }
+
+      function computeScoreForRows(rows, presetCodes) {
+        let total = 0, points = 0, zeros = 0, thins = 0, covered = 0;
+        for (const row of rows) {
+          for (const code of presetCodes) {
+            for (const rank of RANKS_ORDER) {
+              const count = Number(row.counts?.[`${code}_${rank}`] ?? 0);
+              points += cellScore(count);
+              total += 1;
+              if (count === 0) zeros++;
+              else if (count === 1) thins++;
+              else covered++;
+            }
+          }
+        }
+        const pct = total === 0 ? 0 : Math.round((points / total) * 100);
+        return { pct, zeros, thins, covered, total };
+      }
+
+      function renderBar(label, pct) {
+        const grade = gradeClass(pct);
+        return `
+          <div class="bar-row">
+            <span class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+            <div class="bar-track">
+              <div class="bar-fill ${grade}" style="width:${pct}%"></div>
+            </div>
+            <span class="bar-pct">${pct}%</span>
+          </div>`;
+      }
+
+      function renderScorePanel(rows, visiblePresets) {
+        const visiblePresetCodes = visiblePresets.map((p) => p.code);
+        const overall = computeScoreForRows(rows, visiblePresetCodes);
+
+        const scorePanelEl = document.getElementById("score-panel");
+        const scoreValueEl = document.getElementById("score-value");
+        const badgeZeroEl  = document.getElementById("badge-zero");
+        const badgeThinEl  = document.getElementById("badge-thin");
+        const badgeOkEl    = document.getElementById("badge-ok");
+        const breakdownCfgEl    = document.getElementById("breakdown-config");
+        const breakdownPresetEl = document.getElementById("breakdown-preset");
+
+        scorePanelEl.classList.add("visible");
+        scoreValueEl.textContent = `${overall.pct}%`;
+        scoreValueEl.className = `score-value ${gradeClass(overall.pct)}`;
+
+        badgeZeroEl.textContent = `${overall.zeros} zero gaps`;
+        badgeThinEl.textContent = `${overall.thins} thin (1 option)`;
+        badgeOkEl.textContent   = `${overall.covered} covered (2+)`;
+
+        // By config
+        const configKeys = Array.from(new Set(rows.map((r) => r.config_key))).sort();
+        breakdownCfgEl.innerHTML = configKeys
+          .map((key) => {
+            const cfgRows = rows.filter((r) => r.config_key === key);
+            const { pct } = computeScoreForRows(cfgRows, visiblePresetCodes);
+            const shortKey = key.replace(/_default_v\d+$/, "").replace(/_/g, " ");
+            return renderBar(shortKey, pct);
+          })
+          .join("");
+
+        // By preset
+        breakdownPresetEl.innerHTML = visiblePresets
+          .map((preset) => {
+            const { pct } = computeScoreForRows(rows, [preset.code]);
+            return renderBar(preset.label, pct);
+          })
+          .join("");
       }
 
       function hasGap(row, visiblePresetCodes) {
@@ -341,9 +579,12 @@
       }
 
       function renderTable() {
+        const scorePanelEl = document.getElementById("score-panel");
         const visiblePresets = state.presets.filter((p) => state.visiblePresets.has(p.code));
         const allRows = state.rows;
         const rows = filteredRows();
+        if (rows.length > 0 && visiblePresets.length > 0) renderScorePanel(rows, visiblePresets);
+        else scorePanelEl.classList.remove("visible");
         const gapsTotal = allRows.filter((row) =>
           hasGap(
             row,
@@ -374,7 +615,7 @@
 
         tableBodyEl.innerHTML = rows
           .map((row) => {
-            const constraintText = getConstraintText(row);
+            const constraintText = getConstraintText(row, visiblePresets);
             const countCells = visiblePresets
               .map((preset) =>
                 RANKS_ORDER.map((rank) => {
