@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Three levels up from api/src/routes/ → repo root → migrations/
-const MIGRATIONS_DIR = join(__dirname, "../../../migrations");
+const MIGRATIONS_DIR = join(__dirname, "../../migrations");
 const MIGRATION_FILE = "R__exercise_catalogue_edits.sql";
 
 export const adminExerciseCatalogueRouter = express.Router();
@@ -100,7 +100,7 @@ function buildInsertSql(exercise) {
     "engine_anchor", "engine_role", "equipment_items_slugs", "equipment_json",
     "form_cues", "impact_level", "lift_class", "preferred_in_json",
     "swap_group_id_1", "swap_group_id_2", "target_regions_json", "warmup_hooks",
-    "slug", "creator", "strength_primary_region",
+    "slug", "creator", "strength_primary_region", "strength_equivalent",
   ];
   const vals = COLS.map(k => {
     const v = exercise[k];
@@ -895,10 +895,18 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
 // POST /admin/exercise-catalogue/session/queue-change
 adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", (req, res) => {
   try {
-    const { action, exercise_id, changes = {}, sql } = req.body ?? {};
-    if (!action || !exercise_id || !sql) {
-      return res.status(400).json({ ok: false, error: "action, exercise_id, and sql are required" });
+    const { action, exercise_id, changes = {}, sql: sqlOverride } = req.body ?? {};
+    if (!action || !exercise_id) {
+      return res.status(400).json({ ok: false, error: "action and exercise_id are required" });
     }
+    // Generate SQL server-side if not provided by caller
+    const sql = sqlOverride || (
+      action === "new" || action === "clone"
+        ? buildInsertSql(changes)
+        : action === "archive"
+          ? buildEditSql(exercise_id, { is_archived: true })
+          : buildEditSql(exercise_id, changes)
+    );
     _pending.push({ action, exercise_id, changes, sql, queued_at: new Date().toISOString() });
 
     const sessionSql = _pending.map((p, i) => `-- [${i + 1}] ${p.action}: ${p.exercise_id}\n${p.sql}`).join("\n\n");

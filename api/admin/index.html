@@ -244,6 +244,32 @@
       .status.err {
         color: var(--danger);
       }
+      .chip-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        margin-top: 3px;
+      }
+      .chip {
+        display: inline-block;
+        background: #e0eaff;
+        color: #1d4ed8;
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .variant-badge {
+        display: inline-block;
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
       @media (max-width: 980px) {
         .page {
           grid-template-columns: 1fr;
@@ -290,6 +316,7 @@
       const DURATIONS = ["40", "50", "60"];
       const BLOCKS = ["A", "B", "C", "D"];
       const REQUIRE_PREF_OPTIONS = ["", "strength_main", "hypertrophy_secondary"];
+      const PREF_MODE_OPTIONS = ["", "strict", "soft"];
       const SEGMENT_TYPES = ["single", "superset", "giant_set", "amrap", "emom"];
       const PURPOSE_TYPES = ["main", "secondary", "accessory"];
       const RANKS = ["beginner", "intermediate", "advanced", "elite"];
@@ -488,15 +515,33 @@
               const label = v === "" ? "(none)" : v;
               return `<option value="${escapeHtml(v)}" ${selected}>${escapeHtml(label)}</option>`;
             }).join("");
+            const prefMode = slot.pref_mode ?? "";
+            const prefModeOptions = PREF_MODE_OPTIONS.map((v) => {
+              const selected = v === prefMode ? "selected" : "";
+              const label = v === "" ? "strict" : v;
+              return `<option value="${escapeHtml(v)}" ${selected}>${escapeHtml(label)}</option>`;
+            }).join("");
+            const sw2AnyChips = Array.isArray(slot.sw2Any) && slot.sw2Any.length
+              ? `<div class="chip-list">${slot.sw2Any.map((v) => `<span class="chip">${escapeHtml(v)}</span>`).join("")}</div>`
+              : "";
+            const swAnyChips = Array.isArray(slot.swAny) && slot.swAny.length
+              ? `<div class="chip-list">${slot.swAny.map((v) => `<span class="chip">${escapeHtml(v)}</span>`).join("")}</div>`
+              : "";
+            const variantCount = Array.isArray(slot.variants) ? slot.variants.length : 0;
+            const variantCell = variantCount
+              ? `<span class="variant-badge" title="${variantCount} variant(s) — edit via Raw JSON">${variantCount}v</span>`
+              : `<span style="color:#9ca3af">–</span>`;
             return `
               <tr data-slot-index="${idx}">
                 <td>${idx + 1}</td>
                 <td><input data-slot-field="slot" value="${escapeHtml(slot.slot || "")}" /></td>
-                <td><input data-slot-field="sw2" value="${escapeHtml(slot.sw2 || "")}" /></td>
-                <td><input data-slot-field="sw" value="${escapeHtml(slot.sw || "")}" /></td>
+                <td><input data-slot-field="sw2" value="${escapeHtml(slot.sw2 || "")}" />${sw2AnyChips}</td>
+                <td><input data-slot-field="sw" value="${escapeHtml(slot.sw || "")}" />${swAnyChips}</td>
                 <td><input data-slot-field="mp" value="${escapeHtml(slot.mp || "")}" /></td>
                 <td><select data-slot-field="requirePref">${reqPrefOptions}</select></td>
+                <td><select data-slot-field="pref_mode">${prefModeOptions}</select></td>
                 <td><input type="checkbox" data-slot-field="preferLoadable" ${slot.preferLoadable ? "checked" : ""} /></td>
+                <td>${variantCell}</td>
                 <td><input data-slot-field="fill_fallback_slot" value="${escapeHtml(slot.fill_fallback_slot || "")}" /></td>
                 <td>
                   <button type="button" data-slot-act="up">↑</button>
@@ -622,7 +667,7 @@
                       <table>
                         <thead>
                           <tr>
-                            <th>#</th><th>Slot</th><th>sw2</th><th>sw</th><th>mp</th><th>requirePref</th><th>Loadable</th><th>Fallback slot</th><th>Actions</th>
+                            <th>#</th><th>Slot</th><th>sw2 / sw2Any</th><th>sw / swAny</th><th>mp</th><th>requirePref</th><th>pref_mode</th><th>Loadable</th><th>Variants</th><th>Fallback slot</th><th>Actions</th>
                           </tr>
                         </thead>
                         <tbody id="slots-tbody">${slotRowsHtml}</tbody>
@@ -712,23 +757,37 @@
           template.day_key = (document.getElementById("day-key-input")?.value || "").trim();
           template.focus = (document.getElementById("day-focus-input")?.value || "").trim();
           const slotRows = Array.from(document.querySelectorAll("#slots-tbody tr[data-slot-index]"));
+          const existingSlots = template.ordered_slots || [];
           template.ordered_slots = slotRows.map((row) => {
+            const existing = existingSlots[Number(row.dataset.slotIndex)] || {};
             const slot = (row.querySelector('[data-slot-field="slot"]')?.value || "").trim();
             const sw2 = (row.querySelector('[data-slot-field="sw2"]')?.value || "").trim();
             const sw = (row.querySelector('[data-slot-field="sw"]')?.value || "").trim();
             const mp = (row.querySelector('[data-slot-field="mp"]')?.value || "").trim();
             const requirePref = row.querySelector('[data-slot-field="requirePref"]')?.value || "";
+            const prefMode = row.querySelector('[data-slot-field="pref_mode"]')?.value || "";
             const preferLoadable = !!row.querySelector('[data-slot-field="preferLoadable"]')?.checked;
             const fillFallback = (row.querySelector('[data-slot-field="fill_fallback_slot"]')?.value || "").trim();
-            return {
-              slot,
-              sw2: sw2 || undefined,
-              sw: sw || undefined,
-              mp: mp || undefined,
-              requirePref: requirePref || undefined,
-              preferLoadable: preferLoadable || undefined,
-              fill_fallback_slot: fillFallback || undefined,
+            // Start with the existing slot to preserve fields not shown in the table
+            // (variants, swAny, sw2Any, pref_bonus, strength_equivalent_bonus, etc.)
+            const rebuilt = {
+              ...(existing.swAny ? { swAny: existing.swAny } : {}),
+              ...(existing.sw2Any ? { sw2Any: existing.sw2Any } : {}),
+              ...(existing.variants ? { variants: existing.variants } : {}),
+              ...(existing.pref_bonus != null ? { pref_bonus: existing.pref_bonus } : {}),
+              ...(existing.strength_equivalent_bonus != null ? { strength_equivalent_bonus: existing.strength_equivalent_bonus } : {}),
+              ...(existing.selector_strategy ? { selector_strategy: existing.selector_strategy } : {}),
+              ...(existing.is_buy_in != null ? { is_buy_in: existing.is_buy_in } : {}),
             };
+            rebuilt.slot = slot;
+            if (sw2) rebuilt.sw2 = sw2; else delete rebuilt.sw2;
+            if (sw) rebuilt.sw = sw; else delete rebuilt.sw;
+            if (mp) rebuilt.mp = mp; else delete rebuilt.mp;
+            if (requirePref) rebuilt.requirePref = requirePref; else delete rebuilt.requirePref;
+            if (preferLoadable) rebuilt.preferLoadable = true; else delete rebuilt.preferLoadable;
+            if (fillFallback) rebuilt.fill_fallback_slot = fillFallback; else delete rebuilt.fill_fallback_slot;
+            if (prefMode) rebuilt.pref_mode = prefMode; else delete rebuilt.pref_mode;
+            return rebuilt;
           });
         }
 
