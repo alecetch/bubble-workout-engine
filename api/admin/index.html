@@ -228,6 +228,7 @@
         left: 320px;
         right: 0;
         bottom: 0;
+        z-index: 400;
         background: #fff;
         border-top: 1px solid var(--border);
         padding: 10px 18px;
@@ -270,6 +271,33 @@
         font-weight: 600;
         white-space: nowrap;
       }
+      .mp-combo-wrap { position: relative; }
+      .mp-combo-dd { position: absolute; top: calc(100% + 2px); left: 0; min-width: 200px; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 200px; overflow-y: auto; z-index: 300; list-style: none; margin: 0; padding: 2px 0; }
+      .mp-combo-dd li { padding: 6px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+      .mp-combo-dd li:hover, .mp-combo-dd li.mp-active { background: #ede9fe; color: #5b21b6; }
+      .mp-combo-dd li.mp-new { color: #d97706; }
+      .mp-new-warn { display: block; font-size: 11px; color: #d97706; margin-top: 2px; }
+      .sw-combo-wrap { position: relative; }
+      .sw-combo-dd { position: absolute; top: calc(100% + 2px); left: 0; min-width: 200px; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 200px; overflow-y: auto; z-index: 300; list-style: none; margin: 0; padding: 2px 0; }
+      .sw-combo-dd li { padding: 6px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+      .sw-combo-dd li:hover, .sw-combo-dd li.sw-active { background: #e0eaff; color: #1d4ed8; }
+      .sw-any-wrap { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; align-items: center; position: relative; }
+      .sw-chip { display: inline-flex; align-items: center; gap: 2px; background: #e0eaff; color: #1d4ed8; border-radius: 4px; padding: 1px 4px; font-size: 11px; white-space: nowrap; }
+      .sw-chip .chip-del { background: none; border: none; color: #1d4ed8; cursor: pointer; padding: 0; font-size: 12px; line-height: 1; opacity: 0.6; }
+      .sw-chip .chip-del:hover { opacity: 1; }
+      .sw-any-add-btn { background: none; border: 1px dashed #9ca3af; border-radius: 4px; color: #6b7280; cursor: pointer; font-size: 12px; padding: 1px 6px; line-height: 1.4; }
+      .sw-any-add-btn:hover { border-color: #1d4ed8; color: #1d4ed8; }
+      .sw-any-dd { position: absolute; top: calc(100% + 2px); left: 0; min-width: 180px; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 200px; overflow-y: auto; z-index: 301; list-style: none; margin: 0; padding: 2px 0; }
+      .sw-any-dd li { padding: 6px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+      .sw-any-dd li:hover { background: #e0eaff; color: #1d4ed8; }
+      .variant-toggle-btn { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; width: auto; }
+      .variant-toggle-btn:hover { background: #fde68a; }
+      .variant-expand-row > td { background: #fffbeb; padding: 8px 10px; border-top: none; }
+      .variant-section { border: 1px solid #fde68a; border-radius: 6px; padding: 8px; background: #fffdf5; }
+      .variant-table { margin-bottom: 6px; font-size: 12px; }
+      .variant-table th { background: #fef9e7; font-size: 11px; padding: 4px 6px; }
+      .variant-table td { vertical-align: top; padding: 4px 6px; }
+      .add-variant-btn { font-size: 12px; padding: 4px 8px; }
       @media (max-width: 980px) {
         .page {
           grid-template-columns: 1fr;
@@ -298,6 +326,7 @@
             <a href="/admin/coverage">Coverage Report</a>
             <a href="/admin/exercises">Exercise Catalogue</a>
             <a href="/admin/narration">Narration Templates</a>
+            <a href="/admin/observability">Observability</a>
           </div>
         </div>
         <div id="config-list" class="list-wrap"></div>
@@ -313,6 +342,9 @@
 
     <script type="module">
       const STORAGE_KEY = "admin_internal_api_token";
+      const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+      const LAST_ACTIVE_KEY = `${STORAGE_KEY}:last_active`;
+      const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
       const DURATIONS = ["40", "50", "60"];
       const BLOCKS = ["A", "B", "C", "D"];
       const REQUIRE_PREF_OPTIONS = ["", "strength_main", "hypertrophy_secondary"];
@@ -332,6 +364,7 @@
         isDirty: false,
         status: "",
         statusKind: "",
+        expandedVariantSlots: new Set(),
       };
 
       const tokenInput = document.getElementById("token-input");
@@ -345,6 +378,58 @@
       }
       function getToken() {
         return tokenInput.value.trim();
+      }
+      function saveToken(token) {
+        const value = String(token || "").trim();
+        if (!value) {
+          clearStoredToken();
+          return "";
+        }
+        sessionStorage.setItem(STORAGE_KEY, value);
+        sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+        return value;
+      }
+      function clearStoredToken() {
+        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(LAST_ACTIVE_KEY);
+      }
+      function clearAdminSession(expired = false) {
+        clearStoredToken();
+        tokenInput.value = "";
+        if (expired) {
+          window.alert("Admin session expired after 30 minutes of inactivity. Please enter the token again.");
+        }
+      }
+      function hasExpiredSession() {
+        const token = sessionStorage.getItem(STORAGE_KEY);
+        if (!token) return false;
+        const lastActive = Number(sessionStorage.getItem(LAST_ACTIVE_KEY) || 0);
+        return !lastActive || Date.now() - lastActive > ADMIN_IDLE_TIMEOUT_MS;
+      }
+      function ensureActiveAdminSession({ reloadOnExpire = false } = {}) {
+        if (!hasExpiredSession()) return true;
+        clearAdminSession(true);
+        if (reloadOnExpire) window.location.reload();
+        return false;
+      }
+      function touchAdminSession() {
+        if (sessionStorage.getItem(STORAGE_KEY)) {
+          sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+        }
+      }
+      function installAdminIdleTimeout() {
+        const onActivity = () => touchAdminSession();
+        for (const eventName of ACTIVITY_EVENTS) {
+          window.addEventListener(eventName, onActivity, { passive: true });
+        }
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState !== "visible") return;
+          if (!ensureActiveAdminSession({ reloadOnExpire: true })) return;
+          touchAdminSession();
+        });
+        window.setInterval(() => {
+          ensureActiveAdminSession({ reloadOnExpire: true });
+        }, 60 * 1000);
       }
       function escapeHtml(v) {
         return String(v ?? "")
@@ -366,9 +451,11 @@
       }
 
       async function apiFetch(path, init = {}) {
-        const token = getToken();
+        if (!ensureActiveAdminSession({ reloadOnExpire: true })) {
+          throw new Error("Admin session expired. Reload and enter the token again.");
+        }
+        const token = saveToken(getToken());
         if (!token) throw new Error("Missing token. Fill Internal API Token first.");
-        sessionStorage.setItem(STORAGE_KEY, token);
 
         const headers = {
           "Content-Type": "application/json",
@@ -521,23 +608,45 @@
               const label = v === "" ? "strict" : v;
               return `<option value="${escapeHtml(v)}" ${selected}>${escapeHtml(label)}</option>`;
             }).join("");
-            const sw2AnyChips = Array.isArray(slot.sw2Any) && slot.sw2Any.length
-              ? `<div class="chip-list">${slot.sw2Any.map((v) => `<span class="chip">${escapeHtml(v)}</span>`).join("")}</div>`
-              : "";
-            const swAnyChips = Array.isArray(slot.swAny) && slot.swAny.length
-              ? `<div class="chip-list">${slot.swAny.map((v) => `<span class="chip">${escapeHtml(v)}</span>`).join("")}</div>`
-              : "";
+            const sw2AnyChipHtml = (Array.isArray(slot.sw2Any) ? slot.sw2Any : []).map(v =>
+              `<span class="chip sw-chip" data-chip-val="${escapeHtml(v)}">${escapeHtml(v)}<button type="button" class="chip-del">×</button></span>`
+            ).join("");
+            const swAnyChipHtml = (Array.isArray(slot.swAny) ? slot.swAny : []).map(v =>
+              `<span class="chip sw-chip" data-chip-val="${escapeHtml(v)}">${escapeHtml(v)}<button type="button" class="chip-del">×</button></span>`
+            ).join("");
             const variantCount = Array.isArray(slot.variants) ? slot.variants.length : 0;
-            const variantCell = variantCount
-              ? `<span class="variant-badge" title="${variantCount} variant(s) — edit via Raw JSON">${variantCount}v</span>`
-              : `<span style="color:#9ca3af">–</span>`;
+            const isExpanded = state.expandedVariantSlots.has(idx);
+            const variantCell = `<button type="button" class="variant-toggle-btn" data-variant-toggle="${idx}">${variantCount}v ${isExpanded ? "▴" : "▾"}</button>`;
+            const variantsList = Array.isArray(slot.variants) ? slot.variants : [];
+            const variantRowsHtml = variantsList.map((v, vi) => `<tr data-variant-index="${vi}">${renderVariantRowHtml(v)}</tr>`).join("");
+            const expandRow = `
+              <tr class="variant-expand-row" data-variant-for="${idx}"${isExpanded ? "" : " hidden"}>
+                <td colspan="11">
+                  <div class="variant-section">
+                    <table class="variant-table">
+                      <thead>
+                        <tr><th>Equipment</th><th>sw2 / sw2Any</th><th>sw / swAny</th><th>mp</th><th>requirePref</th><th>pref_mode</th><th>pref_bonus</th><th>SE</th><th></th></tr>
+                      </thead>
+                      <tbody data-variant-tbody="${idx}">${variantRowsHtml}</tbody>
+                    </table>
+                    <button type="button" class="add-variant-btn" data-add-variant-for="${idx}">+ Add variant</button>
+                  </div>
+                </td>
+              </tr>
+            `;
             return `
               <tr data-slot-index="${idx}">
                 <td>${idx + 1}</td>
                 <td><input data-slot-field="slot" value="${escapeHtml(slot.slot || "")}" /></td>
-                <td><input data-slot-field="sw2" value="${escapeHtml(slot.sw2 || "")}" />${sw2AnyChips}</td>
-                <td><input data-slot-field="sw" value="${escapeHtml(slot.sw || "")}" />${swAnyChips}</td>
-                <td><input data-slot-field="mp" value="${escapeHtml(slot.mp || "")}" /></td>
+                <td>
+                  <div class="sw-combo-wrap"><input data-slot-field="sw2" value="${escapeHtml(slot.sw2 || "")}" autocomplete="off" /><ul class="sw-combo-dd" hidden></ul></div>
+                  <div class="sw-any-wrap" data-any-for="sw2Any">${sw2AnyChipHtml}<button type="button" class="sw-any-add-btn" title="Add sw2Any value">+</button><ul class="sw-any-dd" hidden></ul></div>
+                </td>
+                <td>
+                  <div class="sw-combo-wrap"><input data-slot-field="sw" value="${escapeHtml(slot.sw || "")}" autocomplete="off" /><ul class="sw-combo-dd" hidden></ul></div>
+                  <div class="sw-any-wrap" data-any-for="swAny">${swAnyChipHtml}<button type="button" class="sw-any-add-btn" title="Add swAny value">+</button><ul class="sw-any-dd" hidden></ul></div>
+                </td>
+                <td><div class="mp-combo-wrap"><input data-slot-field="mp" value="${escapeHtml(slot.mp || "")}" autocomplete="off" /><ul class="mp-combo-dd" hidden></ul></div></td>
                 <td><select data-slot-field="requirePref">${reqPrefOptions}</select></td>
                 <td><select data-slot-field="pref_mode">${prefModeOptions}</select></td>
                 <td><input type="checkbox" data-slot-field="preferLoadable" ${slot.preferLoadable ? "checked" : ""} /></td>
@@ -548,7 +657,7 @@
                   <button type="button" data-slot-act="down">↓</button>
                   <button type="button" class="danger" data-slot-act="remove">✕</button>
                 </td>
-              </tr>
+              </tr>${expandRow}
             `;
           })
           .join("");
@@ -759,7 +868,8 @@
           const slotRows = Array.from(document.querySelectorAll("#slots-tbody tr[data-slot-index]"));
           const existingSlots = template.ordered_slots || [];
           template.ordered_slots = slotRows.map((row) => {
-            const existing = existingSlots[Number(row.dataset.slotIndex)] || {};
+            const slotIdx = Number(row.dataset.slotIndex);
+            const existing = existingSlots[slotIdx] || {};
             const slot = (row.querySelector('[data-slot-field="slot"]')?.value || "").trim();
             const sw2 = (row.querySelector('[data-slot-field="sw2"]')?.value || "").trim();
             const sw = (row.querySelector('[data-slot-field="sw"]')?.value || "").trim();
@@ -768,12 +878,42 @@
             const prefMode = row.querySelector('[data-slot-field="pref_mode"]')?.value || "";
             const preferLoadable = !!row.querySelector('[data-slot-field="preferLoadable"]')?.checked;
             const fillFallback = (row.querySelector('[data-slot-field="fill_fallback_slot"]')?.value || "").trim();
+            // Read swAny/sw2Any from DOM chip elements
+            const swAnyVals = [...row.querySelectorAll('[data-any-for="swAny"] [data-chip-val]')].map(el => el.dataset.chipVal).filter(Boolean);
+            const sw2AnyVals = [...row.querySelectorAll('[data-any-for="sw2Any"] [data-chip-val]')].map(el => el.dataset.chipVal).filter(Boolean);
+            // Read variants from DOM (variant rows are always present in HTML, just hidden/shown)
+            const variantDomRows = Array.from(document.querySelectorAll(`[data-variant-tbody="${slotIdx}"] tr[data-variant-index]`));
+            const domVariants = variantDomRows.map(vr => {
+              const equipProf = vr.querySelector('[data-variant-field="equipment_profile"]')?.value || "";
+              const vSw2 = (vr.querySelector('[data-variant-field="sw2"]')?.value || "").trim();
+              const vSw = (vr.querySelector('[data-variant-field="sw"]')?.value || "").trim();
+              const vMp = (vr.querySelector('[data-variant-field="mp"]')?.value || "").trim();
+              const vReqPref = vr.querySelector('[data-variant-field="requirePref"]')?.value || "";
+              const vPrefMode = vr.querySelector('[data-variant-field="pref_mode"]')?.value || "";
+              const vPrefBonusRaw = vr.querySelector('[data-variant-field="pref_bonus"]')?.value;
+              const vSeBonus = !!vr.querySelector('[data-variant-field="strength_equivalent_bonus"]')?.checked;
+              const vSwAny = [...vr.querySelectorAll('[data-variant-any-for="swAny"] [data-chip-val]')].map(el => el.dataset.chipVal).filter(Boolean);
+              const vSw2Any = [...vr.querySelectorAll('[data-variant-any-for="sw2Any"] [data-chip-val]')].map(el => el.dataset.chipVal).filter(Boolean);
+              const variant = {};
+              if (equipProf) variant.when = { equipment_profile: equipProf };
+              if (vSw2) variant.sw2 = vSw2;
+              if (vSw) variant.sw = vSw;
+              if (vSw2Any.length) variant.sw2Any = vSw2Any;
+              if (vSwAny.length) variant.swAny = vSwAny;
+              if (vMp) variant.mp = vMp;
+              if (vReqPref) variant.requirePref = vReqPref;
+              if (vPrefMode) variant.pref_mode = vPrefMode;
+              const vPrefBonus = vPrefBonusRaw !== "" && vPrefBonusRaw != null ? Number(vPrefBonusRaw) : NaN;
+              if (Number.isFinite(vPrefBonus)) variant.pref_bonus = vPrefBonus;
+              if (vSeBonus) variant.strength_equivalent_bonus = true;
+              return variant;
+            });
             // Start with the existing slot to preserve fields not shown in the table
-            // (variants, swAny, sw2Any, pref_bonus, strength_equivalent_bonus, etc.)
+            // (pref_bonus at root level, selector_strategy, is_buy_in, etc.)
             const rebuilt = {
-              ...(existing.swAny ? { swAny: existing.swAny } : {}),
-              ...(existing.sw2Any ? { sw2Any: existing.sw2Any } : {}),
-              ...(existing.variants ? { variants: existing.variants } : {}),
+              ...(swAnyVals.length ? { swAny: swAnyVals } : {}),
+              ...(sw2AnyVals.length ? { sw2Any: sw2AnyVals } : {}),
+              ...(domVariants.length ? { variants: domVariants } : {}),
               ...(existing.pref_bonus != null ? { pref_bonus: existing.pref_bonus } : {}),
               ...(existing.strength_equivalent_bonus != null ? { strength_equivalent_bonus: existing.strength_equivalent_bonus } : {}),
               ...(existing.selector_strategy ? { selector_strategy: existing.selector_strategy } : {}),
@@ -846,12 +986,276 @@
         const tmp = template.ordered_slots[index];
         template.ordered_slots[index] = template.ordered_slots[next];
         template.ordered_slots[next] = tmp;
+        state.expandedVariantSlots = new Set();
         renderEditor();
       }
+      function renderVariantRowHtml(v) {
+        const eqProf = v?.when?.equipment_profile ?? "";
+        const eqOpts = ["", "full", "minimal", "bodyweight"].map(o =>
+          `<option value="${escapeHtml(o)}" ${eqProf === o ? "selected" : ""}>${o || "(none)"}</option>`
+        ).join("");
+        const reqPref = v?.requirePref ?? "";
+        const reqPrefOpts = REQUIRE_PREF_OPTIONS.map(o =>
+          `<option value="${escapeHtml(o)}" ${reqPref === o ? "selected" : ""}>${o || "(none)"}</option>`
+        ).join("");
+        const prefMode = v?.pref_mode ?? "";
+        const prefModeOpts = PREF_MODE_OPTIONS.map(o =>
+          `<option value="${escapeHtml(o)}" ${prefMode === o ? "selected" : ""}>${o || "strict"}</option>`
+        ).join("");
+        const sw2AnyChips = (Array.isArray(v?.sw2Any) ? v.sw2Any : []).map(val =>
+          `<span class="chip sw-chip" data-chip-val="${escapeHtml(val)}">${escapeHtml(val)}<button type="button" class="chip-del">×</button></span>`
+        ).join("");
+        const swAnyChips = (Array.isArray(v?.swAny) ? v.swAny : []).map(val =>
+          `<span class="chip sw-chip" data-chip-val="${escapeHtml(val)}">${escapeHtml(val)}<button type="button" class="chip-del">×</button></span>`
+        ).join("");
+        return `
+          <td><select data-variant-field="equipment_profile">${eqOpts}</select></td>
+          <td>
+            <div class="sw-combo-wrap"><input data-variant-field="sw2" value="${escapeHtml(v?.sw2 || "")}" autocomplete="off" /><ul class="sw-combo-dd" hidden></ul></div>
+            <div class="sw-any-wrap" data-variant-any-for="sw2Any">${sw2AnyChips}<button type="button" class="sw-any-add-btn" title="Add sw2Any value">+</button><ul class="sw-any-dd" hidden></ul></div>
+          </td>
+          <td>
+            <div class="sw-combo-wrap"><input data-variant-field="sw" value="${escapeHtml(v?.sw || "")}" autocomplete="off" /><ul class="sw-combo-dd" hidden></ul></div>
+            <div class="sw-any-wrap" data-variant-any-for="swAny">${swAnyChips}<button type="button" class="sw-any-add-btn" title="Add swAny value">+</button><ul class="sw-any-dd" hidden></ul></div>
+          </td>
+          <td><div class="mp-combo-wrap"><input data-variant-field="mp" value="${escapeHtml(v?.mp || "")}" autocomplete="off" /><ul class="mp-combo-dd" hidden></ul></div></td>
+          <td><select data-variant-field="requirePref">${reqPrefOpts}</select></td>
+          <td><select data-variant-field="pref_mode">${prefModeOpts}</select></td>
+          <td><input type="number" data-variant-field="pref_bonus" value="${escapeHtml(v?.pref_bonus ?? "")}" style="width:52px" min="0" max="20" /></td>
+          <td style="text-align:center"><input type="checkbox" data-variant-field="strength_equivalent_bonus" ${v?.strength_equivalent_bonus ? "checked" : ""} /></td>
+          <td><button type="button" class="danger" data-variant-act="remove">✕</button></td>
+        `;
+      }
+
+      function updateVariantToggleBtn(slotIdx) {
+        const btn = document.querySelector(`[data-variant-toggle="${slotIdx}"]`);
+        if (!btn) return;
+        const tbody = document.querySelector(`[data-variant-tbody="${slotIdx}"]`);
+        const count = tbody ? tbody.querySelectorAll("tr[data-variant-index]").length : 0;
+        const expanded = state.expandedVariantSlots.has(slotIdx);
+        btn.textContent = `${count}v ${expanded ? "▴" : "▾"}`;
+      }
+
+      // ── Movement pattern combobox ─────────────────────────────────────────
+      let _swCaches = null;
+      async function getSwCaches() {
+        if (_swCaches) return _swCaches;
+        try {
+          const state = await apiFetch("/admin/exercise-catalogue/full-state");
+          _swCaches = {
+            sw:  [...new Set((state.exercises || []).map(e => e.swap_group_id_1).filter(Boolean))].sort(),
+            sw2: [...new Set((state.exercises || []).map(e => e.swap_group_id_2).filter(Boolean))].sort(),
+          };
+        } catch { _swCaches = { sw: [], sw2: [] }; }
+        return _swCaches;
+      }
+
+      function attachSwCombobox(inp, field) {
+        const wrap = inp.closest(".sw-combo-wrap");
+        if (!wrap || wrap.dataset.swInit) return;
+        wrap.dataset.swInit = field;
+        const ddEl = wrap.querySelector(".sw-combo-dd");
+        if (!ddEl) return;
+
+        let _active = -1;
+        const its = () => ddEl.querySelectorAll("li");
+
+        async function openDd(query) {
+          const caches = await getSwCaches();
+          const vals = caches[field];
+          const q = query.trim().toLowerCase();
+          const matches = vals.filter(v => v.toLowerCase().includes(q));
+          if (!matches.length) { closeDd(); return; }
+          ddEl.innerHTML = matches.map(v => `<li data-val="${escapeHtml(v)}">${escapeHtml(v)}</li>`).join("");
+          ddEl.querySelectorAll("li").forEach(li =>
+            li.addEventListener("mousedown", e => { e.preventDefault(); selectVal(li.dataset.val); })
+          );
+          _active = -1;
+          ddEl.hidden = false;
+        }
+
+        function closeDd() { ddEl.hidden = true; _active = -1; }
+
+        function highlight(idx) {
+          const list = its();
+          list.forEach(li => li.classList.remove("sw-active"));
+          if (idx >= 0 && idx < list.length) { list[idx].classList.add("sw-active"); list[idx].scrollIntoView({ block: "nearest" }); }
+          _active = idx;
+        }
+
+        function selectVal(val) {
+          inp.value = val;
+          closeDd();
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
+          inp.focus();
+        }
+
+        inp.addEventListener("focus", () => openDd(inp.value || ""));
+        inp.addEventListener("input", () => openDd(inp.value));
+        inp.addEventListener("keydown", e => {
+          const list = its();
+          if (e.key === "ArrowDown") { e.preventDefault(); highlight(Math.min(_active + 1, list.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); highlight(Math.max(_active - 1, 0)); }
+          else if (e.key === "Enter" && !ddEl.hidden) {
+            e.preventDefault();
+            if (_active >= 0 && list[_active]) selectVal(list[_active].dataset.val);
+            else if (list.length === 1) selectVal(list[0].dataset.val);
+          } else if (e.key === "Escape") closeDd();
+        });
+        inp.addEventListener("blur", () => setTimeout(() => closeDd(), 150));
+      }
+
+      function initSwComboboxes() {
+        for (const field of ["sw", "sw2"]) {
+          document.querySelectorAll(`[data-slot-field="${field}"], [data-variant-field="${field}"]`).forEach(inp => {
+            attachSwCombobox(inp, field);
+          });
+        }
+      }
+
+      function attachSwAnyWrap(wrap, sourceField) {
+        if (wrap.dataset.swAnyInit) return;
+        wrap.dataset.swAnyInit = "1";
+        const ddEl = wrap.querySelector(".sw-any-dd");
+        const addBtn = wrap.querySelector(".sw-any-add-btn");
+        if (!ddEl || !addBtn) return;
+
+        wrap.addEventListener("click", e => {
+          if (e.target.classList.contains("chip-del")) {
+            e.target.closest(".sw-chip").remove();
+            onStructuredChanged();
+          }
+        });
+
+        addBtn.addEventListener("click", async e => {
+          e.stopPropagation();
+          if (!ddEl.hidden) { ddEl.hidden = true; return; }
+          const caches = await getSwCaches();
+          const vals = caches[sourceField];
+          const existing = new Set([...wrap.querySelectorAll("[data-chip-val]")].map(el => el.dataset.chipVal));
+          const rows = vals.filter(v => !existing.has(v)).map(v => `<li data-val="${escapeHtml(v)}">${escapeHtml(v)}</li>`);
+          if (!rows.length) return;
+          ddEl.innerHTML = rows.join("");
+          ddEl.querySelectorAll("li").forEach(li => {
+            li.addEventListener("mousedown", ev => {
+              ev.preventDefault();
+              const chip = document.createElement("span");
+              chip.className = "chip sw-chip";
+              chip.dataset.chipVal = li.dataset.val;
+              chip.innerHTML = `${escapeHtml(li.dataset.val)}<button type="button" class="chip-del">×</button>`;
+              wrap.insertBefore(chip, addBtn);
+              ddEl.hidden = true;
+              onStructuredChanged();
+            });
+          });
+          ddEl.hidden = false;
+        });
+
+        document.addEventListener("click", e => { if (!wrap.contains(e.target)) ddEl.hidden = true; });
+      }
+
+      function initSwAnyChips() {
+        for (const anyFor of ["swAny", "sw2Any"]) {
+          const sourceField = anyFor === "swAny" ? "sw" : "sw2";
+          document.querySelectorAll(`[data-any-for="${anyFor}"]`).forEach(wrap => attachSwAnyWrap(wrap, sourceField));
+          document.querySelectorAll(`[data-variant-any-for="${anyFor}"]`).forEach(wrap => attachSwAnyWrap(wrap, sourceField));
+        }
+      }
+
+      let _mpPatternCache = null;
+
+      async function getMpPatterns() {
+        if (_mpPatternCache) return _mpPatternCache;
+        try {
+          const data = await apiFetch("/admin/exercise-catalogue/full-state");
+          const exercises = data.exercises ?? [];
+          _mpPatternCache = [...new Set(exercises.map(e => e.movement_pattern_primary).filter(Boolean))].sort();
+        } catch (_) {
+          _mpPatternCache = [];
+        }
+        return _mpPatternCache;
+      }
+
+      function attachMpCombobox(inp) {
+        const wrap = inp.closest(".mp-combo-wrap");
+        if (!wrap || wrap.dataset.mpInit) return;
+        wrap.dataset.mpInit = "1";
+        const ddEl = wrap.querySelector(".mp-combo-dd");
+        if (!ddEl) return;
+
+        let _active = -1;
+        const its = () => ddEl.querySelectorAll("li");
+
+        function updateWarn() {
+          const v = inp.value.trim();
+          let warn = wrap.nextElementSibling;
+          if (!warn?.classList.contains("mp-new-warn")) warn = null;
+          if (v && _mpPatternCache && !_mpPatternCache.includes(v)) {
+            if (!warn) { warn = document.createElement("span"); warn.className = "mp-new-warn"; wrap.after(warn); }
+            warn.textContent = "New pattern — not in existing catalogue";
+          } else {
+            warn?.remove();
+          }
+        }
+
+        async function openDd(query) {
+          const patterns = await getMpPatterns();
+          const q = query.trim().toLowerCase();
+          const matches = patterns.filter(p => p.includes(q));
+          const rows = matches.map(p => `<li data-val="${escapeHtml(p)}">${escapeHtml(p)}</li>`);
+          if (q && !patterns.includes(q)) {
+            rows.push(`<li class="mp-new" data-val="${escapeHtml(q.replace(/\s+/g, "_"))}" data-new="1">Add new: "${escapeHtml(q)}"</li>`);
+          }
+          if (!rows.length) { closeDd(); return; }
+          ddEl.innerHTML = rows.join("");
+          ddEl.querySelectorAll("li").forEach(li =>
+            li.addEventListener("mousedown", e => { e.preventDefault(); selectVal(li.dataset.val); })
+          );
+          _active = -1;
+          ddEl.hidden = false;
+        }
+
+        function closeDd() { ddEl.hidden = true; _active = -1; }
+
+        function highlight(idx) {
+          const list = its();
+          list.forEach(li => li.classList.remove("mp-active"));
+          if (idx >= 0 && idx < list.length) { list[idx].classList.add("mp-active"); list[idx].scrollIntoView({ block: "nearest" }); }
+          _active = idx;
+        }
+
+        function selectVal(val) {
+          inp.value = val;
+          closeDd();
+          updateWarn();
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
+          inp.focus();
+        }
+
+        inp.addEventListener("focus", () => openDd(inp.value || ""));
+        inp.addEventListener("input", () => { openDd(inp.value); updateWarn(); });
+        inp.addEventListener("keydown", e => {
+          const list = its();
+          if (e.key === "ArrowDown") { e.preventDefault(); highlight(Math.min(_active + 1, list.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); highlight(Math.max(_active - 1, 0)); }
+          else if (e.key === "Enter" && !ddEl.hidden) {
+            e.preventDefault();
+            if (_active >= 0 && list[_active]) selectVal(list[_active].dataset.val);
+            else if (list.length === 1) selectVal(list[0].dataset.val);
+          } else if (e.key === "Escape") closeDd();
+        });
+        inp.addEventListener("blur", () => setTimeout(() => { closeDd(); updateWarn(); }, 150));
+      }
+
+      function initMpComboboxes() {
+        document.querySelectorAll('[data-slot-field="mp"], [data-variant-field="mp"]').forEach(inp => attachMpCombobox(inp));
+      }
+
       function wireEditorEvents() {
         document.querySelectorAll("[data-day-tab]").forEach((el) => {
           el.addEventListener("click", () => {
-            onStructuredChanged();
+            updateFromStructuredInputs();
+            syncRaw();
             state.dayTab = Number(el.dataset.dayTab) || 0;
             renderEditor();
           });
@@ -917,6 +1321,7 @@
               if (act === "down") moveSlot(index, 1);
               if (act === "remove") {
                 template.ordered_slots.splice(index, 1);
+                state.expandedVariantSlots = new Set();
                 renderEditor();
               }
             });
@@ -982,6 +1387,66 @@
             setStatus("Discarded unsaved changes", "ok");
           });
         }
+
+        initSwComboboxes();
+        initMpComboboxes();
+        initSwAnyChips();
+
+        // Variant toggle expand/collapse
+        document.querySelectorAll("[data-variant-toggle]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const idx = Number(btn.dataset.variantToggle);
+            const expandRow = document.querySelector(`[data-variant-for="${idx}"]`);
+            if (!expandRow) return;
+            const nowHidden = expandRow.hidden;
+            if (nowHidden) {
+              state.expandedVariantSlots.add(idx);
+              expandRow.hidden = false;
+            } else {
+              state.expandedVariantSlots.delete(idx);
+              expandRow.hidden = true;
+            }
+            updateVariantToggleBtn(idx);
+          });
+        });
+
+        // Add variant row
+        document.querySelectorAll(".add-variant-btn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const slotIdx = Number(btn.dataset.addVariantFor);
+            const tbody = document.querySelector(`[data-variant-tbody="${slotIdx}"]`);
+            if (!tbody) return;
+            const newIdx = tbody.querySelectorAll("tr[data-variant-index]").length;
+            const tr = document.createElement("tr");
+            tr.dataset.variantIndex = String(newIdx);
+            tr.innerHTML = renderVariantRowHtml({});
+            tbody.appendChild(tr);
+            tr.querySelectorAll("input, select").forEach(el => {
+              el.addEventListener("change", onStructuredChanged);
+              el.addEventListener("input", onStructuredChanged);
+            });
+            initSwComboboxes();
+            initMpComboboxes();
+            initSwAnyChips();
+            updateVariantToggleBtn(slotIdx);
+            onStructuredChanged();
+          });
+        });
+
+        // Remove variant row (delegated)
+        document.querySelectorAll("[data-variant-tbody]").forEach(tbody => {
+          tbody.addEventListener("click", e => {
+            const btn = e.target.closest("[data-variant-act='remove']");
+            if (!btn) return;
+            const row = btn.closest("tr[data-variant-index]");
+            if (!row) return;
+            const slotIdx = Number(tbody.dataset.variantTbody);
+            row.remove();
+            tbody.querySelectorAll("tr[data-variant-index]").forEach((r, i) => { r.dataset.variantIndex = String(i); });
+            updateVariantToggleBtn(slotIdx);
+            onStructuredChanged();
+          });
+        });
       }
 
       async function onSave() {
@@ -1018,7 +1483,7 @@
             state.configRow = { ...state.configRow, ...data.config };
           }
           await loadConfigs(false);
-          await loadConfig(state.selectedKey);
+          await loadConfig(state.selectedKey, { preserveDayTab: true });
         } catch (err) {
           setStatus(err.message || "Save failed", "err");
         }
@@ -1038,14 +1503,16 @@
         }
       }
 
-      async function loadConfig(key) {
+      async function loadConfig(key, { preserveDayTab = false } = {}) {
         try {
           const data = await apiFetch(`/admin/configs/${encodeURIComponent(key)}`);
           state.selectedKey = key;
           state.configRow = data.config;
           state.jsonObj = deepClone(data.config?.program_generation_config_json || {});
-          state.dayTab = 0;
+          if (!preserveDayTab) state.dayTab = 0;
+          state.expandedVariantSlots = new Set();
           state.rawEdited = false;
+          state.isDirty = false;
           ensureBuilderAndSegmentation();
           syncRaw();
           renderConfigList();
@@ -1077,8 +1544,13 @@
       }
 
       function init() {
+        if (!ensureActiveAdminSession()) return;
         const savedToken = sessionStorage.getItem(STORAGE_KEY);
-        if (savedToken) tokenInput.value = savedToken;
+        if (savedToken) {
+          tokenInput.value = savedToken;
+          touchAdminSession();
+        }
+        installAdminIdleTimeout();
 
         loadBtn.addEventListener("click", () => loadConfigs(true));
         duplicateBtn.addEventListener("click", duplicateConfig);

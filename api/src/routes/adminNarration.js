@@ -1,10 +1,12 @@
 import express from "express";
 import { pool } from "../db.js";
-import { requireInternalToken } from "../middleware/auth.js";
+import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
+import { publicInternalError } from "../utils/publicError.js";
+import { auditLog } from "../utils/auditLog.js";
 
 export const adminNarrationRouter = express.Router();
 
-adminNarrationRouter.use(requireInternalToken);
+adminNarrationRouter.use(requireInternalToken, requireTrustedAdminOrigin);
 
 const VALID_SCOPES = new Set(["program", "week", "day", "segment", "transition", "exercise"]);
 
@@ -301,7 +303,7 @@ adminNarrationRouter.get("/narration/templates", async (req, res) => {
 
     return res.json({ templates: result.rows ?? [] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -313,7 +315,7 @@ adminNarrationRouter.get("/narration/templates/:template_id", async (req, res) =
     }
     return res.json({ template });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -370,9 +372,22 @@ adminNarrationRouter.post("/narration/templates", async (req, res) => {
       ],
     );
 
+    await auditLog(req, {
+      action: "create",
+      entity: "narration_template",
+      entityId: result.rows[0].template_id,
+      detail: {
+        scope: result.rows[0].scope,
+        field: result.rows[0].field,
+        purpose: result.rows[0].purpose,
+        segment_type: result.rows[0].segment_type,
+        is_active: result.rows[0].is_active,
+      },
+    });
+
     return res.json({ ok: true, template: result.rows[0] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -436,9 +451,22 @@ adminNarrationRouter.put("/narration/templates/:template_id", async (req, res) =
       return res.status(404).json({ ok: false, error: "Template not found" });
     }
 
+    await auditLog(req, {
+      action: "update",
+      entity: "narration_template",
+      entityId: result.rows[0].template_id,
+      detail: {
+        scope: result.rows[0].scope,
+        field: result.rows[0].field,
+        purpose: result.rows[0].purpose,
+        segment_type: result.rows[0].segment_type,
+        is_active: result.rows[0].is_active,
+      },
+    });
+
     return res.json({ ok: true, template: result.rows[0] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -458,9 +486,16 @@ adminNarrationRouter.delete("/narration/templates/:template_id", async (req, res
       return res.status(404).json({ ok: false, error: "Template not found" });
     }
 
+    await auditLog(req, {
+      action: "deactivate",
+      entity: "narration_template",
+      entityId: result.rows[0].template_id,
+      detail: { is_active: false },
+    });
+
     return res.json({ ok: true });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -548,6 +583,6 @@ adminNarrationRouter.get("/narration/coverage", async (req, res) => {
       summary,
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });

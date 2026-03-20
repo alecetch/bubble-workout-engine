@@ -49,6 +49,7 @@ export function buildIndex(cat) {
       engine_role: raw.engine_role || "",
       load: raw.load,
       strength_equivalent: raw.strength_equivalent === true,
+      rank: Number(raw.rank ?? 0),
 
       mc: mc,
       tr: tr,
@@ -146,7 +147,7 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
   const sw2Any = Array.isArray(sel?.sw2Any) ? sel.sw2Any : null;
 
   const requirePref = sel ? sel.requirePref : null;
-  const prefMode = sel?.prefMode === "soft" ? "soft" : "strict";
+  const prefMode = sel?.prefMode === "strict" ? "strict" : "soft";
   const prefBonus = Number.isFinite(Number(sel?.prefBonus)) ? Number(sel.prefBonus) : 4;
   const avoidSw2 = sel ? sel.avoidSw2 : null;
   const preferLoadable = sel ? !!sel.preferLoadable : false;
@@ -231,6 +232,12 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
 
     if (ex.den === 1) score += 0.2;
     if (ex.cx === 1) score += 0.05;
+
+    // Prefer exercises that match the athlete's fitness level:
+    // higher min_fitness_rank = more challenging = preferred by advanced athletes
+    if (sel.rankValue > 0) {
+      score += Math.min(ex.rank ?? 0, sel.rankValue) * 0.5;
+    }
 
     // Conditioning sequence scoring (no-op for non-conditioning programs)
     if (sel.programType === "conditioning" && sel.condState) {
@@ -591,6 +598,7 @@ export function buildCatalogJsonFromBubble(exercises) {
         : toStr(r.strength_equivalent).toLowerCase() === "true";
 
     const mc = toStr(r.movement_class || r.mc || "").trim();
+    const rank = Number(r.min_fitness_rank ?? r.rank ?? 0);
 
     const tr = normalizeArr(r.target_regions_json || r.tr || []);
     const wh = normalizeArr(r.warmup_hooks || r.wh || []);
@@ -609,6 +617,7 @@ export function buildCatalogJsonFromBubble(exercises) {
       engine_role,
       load,
       strength_equivalent,
+      rank,
       mc,
       tr,
       wh,

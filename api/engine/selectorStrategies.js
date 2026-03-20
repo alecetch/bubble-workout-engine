@@ -10,7 +10,7 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     sw2: slotDef.sw2 || null,
     sw2Any: slotDef.sw2Any || null,
     requirePref: slotDef.requirePref || null,
-    prefMode: slotDef.pref_mode || (slotDef.allowPrefFallback ? "soft" : "strict"),
+    prefMode: slotDef.pref_mode === "strict" ? "strict" : "soft",
     prefBonus: slotDef.pref_bonus ?? 4,
     strengthEquivalentBonus: slotDef.strength_equivalent_bonus === true,
     preferLoadable: !!slotDef.preferLoadable,

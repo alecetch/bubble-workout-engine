@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
 import { readProgramRouter } from "./src/routes/readProgram.js";
@@ -16,16 +17,104 @@ import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
+import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
+import { publicInternalError } from "./src/utils/publicError.js";
 import { pool } from "./src/db.js";
+import { adminOnly } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
+import {
+  adminRateLimiter,
+  generationRateLimiter,
+  globalRateLimiter,
+  healthRateLimiter,
+} from "./src/middleware/rateLimits.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const WEAK_SECRET_VALUES = new Set(["change-me", "secret", "password", "app", "minioadmin"]);
+
+function isWeakSecret(value, minLength = 12) {
+  const text = (value || "").toString().trim();
+  if (!text) return true;
+  return text.length < minLength || WEAK_SECRET_VALUES.has(text.toLowerCase());
+}
+
+function failStartup(message) {
+  console.error(`[startup] ${message}`);
+  process.exit(1);
+}
+
+function validateStartupEnv() {
+  const engineKey = (process.env.ENGINE_KEY || "").trim();
+  const internalApiToken = (process.env.INTERNAL_API_TOKEN || "").trim();
+  const databaseUrl = (process.env.DATABASE_URL || "").trim();
+  const pgHost = (process.env.PGHOST || "").trim();
+  const pgUser = (process.env.PGUSER || "").trim();
+  const pgPassword = (process.env.PGPASSWORD || "").trim();
+  const pgDatabase = (process.env.PGDATABASE || "").trim();
+
+  if (isWeakSecret(engineKey, 16)) {
+    failStartup("ENGINE_KEY is missing, too short, or uses a weak default.");
+  }
+  if (isWeakSecret(internalApiToken, 16)) {
+    failStartup("INTERNAL_API_TOKEN is missing, too short, or uses a weak default.");
+  }
+
+  if (databaseUrl) {
+    let parsed;
+    try {
+      parsed = new URL(databaseUrl);
+    } catch {
+      failStartup("DATABASE_URL is present but is not a valid URL.");
+    }
+    if (!(parsed.protocol === "postgres:" || parsed.protocol === "postgresql:")) {
+      failStartup("DATABASE_URL must use postgres:// or postgresql://.");
+    }
+    if (!parsed.hostname || !parsed.pathname || parsed.pathname === "/") {
+      failStartup("DATABASE_URL must include host and database name.");
+    }
+    if (isWeakSecret(parsed.password, 8)) {
+      failStartup("DATABASE_URL contains a missing, too short, or weak database password.");
+    }
+    return;
+  }
+
+  if (!pgHost || !pgUser || !pgPassword || !pgDatabase) {
+    failStartup("Database configuration is missing. Set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE.");
+  }
+  if (isWeakSecret(pgPassword, 8)) {
+    failStartup("PGPASSWORD is too short or uses a weak default.");
+  }
+}
+
+validateStartupEnv();
 
 const app = express();
+// Trust the single Fly.io load-balancer hop so req.ip is the real client IP
+// (not the proxy IP) and x-forwarded-for is correctly resolved by Express.
+app.set("trust proxy", 1);
 const DEV_USER_ID = "dev-user-1";
+const adminCspMiddleware = helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    imgSrc: ["'self'", "data:", "http:", "https:"],
+    connectSrc: ["'self'"],
+    fontSrc: ["'self'", "data:"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    frameAncestors: ["'none'"],
+  },
+});
+
+function sendAdminPage(res, fileName) {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.set("Pragma", "no-cache");
+  return res.sendFile(join(__dirname, `admin/${fileName}`));
+}
 
 // TODO: Dev-only in-memory store. Replace with Postgres-backed persistence.
 const profilesById = new Map();
@@ -148,13 +237,25 @@ const devReferenceData = {
 
 // Assign/echo request_id before any other middleware or route handler.
 app.use(requestId);
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+app.use(globalRateLimiter);
+app.use("/admin", adminRateLimiter);
+app.use("/api/admin", adminRateLimiter);
+app.use("/admin-ui", adminRateLimiter);
+app.use("/generate-plan-v2", generationRateLimiter);
 
 // Serve local media assets (dev only — in prod these are served from S3).
 app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
-app.use("/admin-ui", express.static(join(__dirname, "admin")));
-app.get("/admin/coverage", (_req, res) => res.sendFile(join(__dirname, "admin/coverage.html")));
-app.get("/admin/exercises", (_req, res) => res.sendFile(join(__dirname, "admin/exercises.html")));
-app.get("/admin/narration", (_req, res) => res.sendFile(join(__dirname, "admin/narration.html")));
+app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));
+app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coverage.html"));
+app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
+app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res, "narration.html"));
+app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -166,9 +267,19 @@ app.use(
 );
 
 // Health route.
-app.get("/health", async (req, res) => {
-  const r = await pool.query("select now() as now");
-  res.json({ ok: true, dbTime: r.rows[0].now });
+app.get("/health", healthRateLimiter, async (req, res) => {
+  try {
+    const r = await pool.query("select now() as now");
+    res.json({ ok: true, dbTime: r.rows[0].now });
+  } catch (err) {
+    console.error("health error:", err?.stack || err);
+    return res.status(500).json({
+      ok: false,
+      request_id: req.request_id,
+      code: "internal_error",
+      error: publicInternalError(err),
+    });
+  }
 });
 
 app.get("/reference-data", async (_req, res) => {
@@ -379,10 +490,11 @@ app.use(historyExerciseRouter);
 app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
-app.use("/api/admin", adminCoverageRouter);
-app.use("/admin", adminConfigsRouter);
-app.use("/admin", adminExerciseCatalogueRouter);
-app.use("/admin", adminNarrationRouter);
+app.use("/api/admin", ...adminOnly, adminCoverageRouter);
+app.use("/admin/api/observability", ...adminOnly, adminObservabilityRouter);
+app.use("/admin", ...adminOnly, adminConfigsRouter);
+app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
+app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use(generateProgramV2Router);
 
 // JSON parse error handler (ONLY for invalid JSON payloads).
@@ -417,7 +529,7 @@ app.use((err, req, res, next) => {
     ok: false,
     request_id: req.request_id,
     code: "internal_error",
-    error: err?.message || "Internal server error",
+    error: publicInternalError(err),
   });
 });
 

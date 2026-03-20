@@ -6,6 +6,7 @@ import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
+import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
 
@@ -329,7 +330,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       ok: false,
       request_id,
       code: "internal_error",
-      error: err?.message || "Internal server error",
+      error: publicInternalError(err),
     });
   } finally {
     setupClient.release();
@@ -382,6 +383,38 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
 
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error("Pipeline did not produce emitter rows");
+    }
+
+    // Phase 3b: Persist pipeline debug to generation_run (best-effort — never throws).
+    try {
+      const step1Debug = pipelineOut?.debug?.step1 ?? pipelineOut?.plan?.debug?.step1 ?? {};
+      const step5Debug = pipelineOut?.debug?.step5 ?? pipelineOut?.plan?.debug?.step5 ?? {};
+      const step6Debug = pipelineOut?.debug?.step6 ?? pipelineOut?.plan?.debug?.step6 ?? {};
+      const step1Json = JSON.stringify(step1Debug);
+      const step5Json = JSON.stringify(step5Debug);
+      const step6Json = JSON.stringify(step6Debug);
+      await pool.query(
+        `UPDATE generation_run SET
+           config_key       = $1,
+           fitness_rank     = $2,
+           duration_mins    = $3,
+           step1_stats_json = $4::jsonb,
+           step5_debug_json = $5::jsonb,
+           step6_debug_json = $6::jsonb,
+           updated_at       = now()
+         WHERE id = $7`,
+        [
+          step1Debug.config_key ?? null,
+          mappedFitnessRank ?? null,
+          step1Debug.duration_mins ?? null,
+          step1Json.length > 65536 ? null : step1Json,
+          step5Json.length > 65536 ? null : step5Json,
+          step6Json.length > 65536 ? null : step6Json,
+          generation_run_id,
+        ],
+      );
+    } catch (debugErr) {
+      console.error("generation_run debug persist failed (non-fatal):", debugErr?.message);
     }
 
     // Phase 4: Import child rows into the pre-created program
@@ -506,7 +539,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       ok: false,
       request_id,
       code: "internal_error",
-      error: err?.message || "Internal server error",
+      error: publicInternalError(err),
       program_id: created_program_id,
       generation_run_id,
     });
