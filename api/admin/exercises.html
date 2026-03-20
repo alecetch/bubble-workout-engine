@@ -24,6 +24,7 @@
     button.secondary { background: #fff; color: var(--primary); }
     button.danger { background: var(--danger); border-color: var(--danger); }
     button.ghost { background: transparent; border-color: var(--border); color: var(--text); padding: 3px 9px; font-size: 12px; }
+    button.snapshot { background: #0f766e; border-color: #0f766e; }
     button.ghost:hover { background: var(--bg); }
     button.sm { padding: 3px 9px; font-size: 12px; }
 
@@ -345,6 +346,11 @@
       <span id="mig-status" style="font-size:12px;color:var(--muted)"></span>
     </div>
     <pre id="migration-sql">-- Queue changes in Browse tab, then review SQL here.</pre>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">
+      <button id="mig-snapshot-btn" class="snapshot">Export Full Snapshot</button>
+      <span style="font-size:12px;color:var(--muted)">Overwrites <code>R__exercise_catalogue_edits.sql</code> with a complete snapshot of the current catalogue. Run Flyway to apply to prod.</span>
+      <span id="snapshot-status" style="font-size:12px;margin-left:auto"></span>
+    </div>
   </div>
 
 </div><!-- .page -->
@@ -1402,6 +1408,21 @@ document.getElementById("mig-download-btn").addEventListener("click", () => {
   a.href = URL.createObjectURL(blob);
   a.download = "R__exercise_catalogue_edits.sql";
   a.click();
+});
+
+document.getElementById("mig-snapshot-btn").addEventListener("click", async () => {
+  if (!confirm("This will overwrite R__exercise_catalogue_edits.sql with a full snapshot of all current exercises.\n\nContinue?")) return;
+  const el = document.getElementById("snapshot-status");
+  el.textContent = "Exporting…";
+  el.style.color = "var(--muted)";
+  try {
+    const d = await apiFetch(`${BASE}/session/export-snapshot`, { method: "POST" });
+    el.textContent = d.message ?? "Done";
+    el.style.color = d.ok ? "var(--success)" : "var(--danger)";
+  } catch (e) {
+    el.textContent = e.message;
+    el.style.color = "var(--danger)";
+  }
 });
 
 // ── Clone modal ────────────────────────────────────────────────────────────
