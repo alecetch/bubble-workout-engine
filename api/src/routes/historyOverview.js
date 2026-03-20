@@ -297,7 +297,7 @@ export function createHistoryOverviewHandler(db = pool, nowProvider = () => new 
         volumeTrend28d,
       });
     } catch (error) {
-      console.error("history-overview error:", error);
+      req.log.error({ event: "history.overview.error", err: error?.message }, "history-overview query failed");
       return res.status(500).json({
         ok: false,
         code: "internal_error",

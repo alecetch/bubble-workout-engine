@@ -22,9 +22,11 @@ import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogu
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
+import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { adminOnly } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
+import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -42,7 +44,7 @@ function isWeakSecret(value, minLength = 12) {
 }
 
 function failStartup(message) {
-  console.error(`[startup] ${message}`);
+  logger.fatal({ event: "server.startup.fatal", message }, "Startup validation failed");
   process.exit(1);
 }
 
@@ -237,6 +239,7 @@ const devReferenceData = {
 
 // Assign/echo request_id before any other middleware or route handler.
 app.use(requestId);
+app.use(requestLogger);
 app.use(
   helmet({
     contentSecurityPolicy: false,
@@ -272,7 +275,7 @@ app.get("/health", healthRateLimiter, async (req, res) => {
     const r = await pool.query("select now() as now");
     res.json({ ok: true, dbTime: r.rows[0].now });
   } catch (err) {
-    console.error("health error:", err?.stack || err);
+    req.log.error({ event: "http.health.error", err: err?.message }, "Health check failed");
     return res.status(500).json({
       ok: false,
       request_id: req.request_id,
@@ -282,7 +285,7 @@ app.get("/health", healthRateLimiter, async (req, res) => {
   }
 });
 
-app.get("/reference-data", async (_req, res) => {
+app.get("/reference-data", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT exercise_slug AS code, name AS label, category
@@ -296,7 +299,7 @@ app.get("/reference-data", async (_req, res) => {
     }));
     return res.status(200).json({ ...devReferenceData, equipmentItems });
   } catch (err) {
-    console.error("reference-data equipment_items error:", err);
+    req.log.error({ event: "http.reference_data.error", err: err?.message }, "reference-data error");
     return res.status(200).json(devReferenceData);
   }
 });
@@ -368,7 +371,7 @@ app.get("/media-assets", async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error("media-assets error:", err);
+    req.log.error({ event: "http.media_assets.error", err: err?.message }, "media-assets error");
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -404,7 +407,7 @@ app.get("/equipment-items", async (req, res) => {
 
     return res.status(200).json({ preset, items });
   } catch (err) {
-    console.error("equipment-items error:", err);
+    req.log.error({ event: "http.equipment_items.error", err: err?.message }, "equipment-items error");
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -451,13 +454,12 @@ app.patch("/client-profiles/:id", (req, res) => {
   }
 
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-  console.log("[profile-patch]", req.params.id, JSON.stringify(patch));
+  req.log.debug({ event: "dev.profile_patch", id: req.params.id, patch }, "profile patch applied");
   for (const key of profilePatchKeys) {
     if (Object.prototype.hasOwnProperty.call(patch, key)) {
       profile[key] = patch[key];
     }
   }
-  console.log("[profile-patch] goals after patch:", profile.goals);
 
   profilesById.set(profile.id, profile);
   return res.status(200).json(profile);
@@ -501,15 +503,12 @@ app.use(generateProgramV2Router);
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.type === "entity.parse.failed") {
     const raw = typeof req.rawBody === "string" ? req.rawBody : "";
-    console.error(
-      JSON.stringify({
-        event: "invalid_json",
-        message: err.message,
-        content_type: req.headers["content-type"] || "",
-        raw_body_length: raw.length,
-        raw_body_preview: raw.slice(0, 200),
-      }),
-    );
+    req.log.warn({
+      event: "http.invalid_json",
+      content_type: req.headers["content-type"] || "",
+      raw_body_length: raw.length,
+      raw_body_preview: raw.slice(0, 200),
+    }, "Invalid JSON body");
 
     return res.status(400).json({
       ok: false,
@@ -524,7 +523,11 @@ app.use((err, req, res, next) => {
 
 // Final generic error handler.
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err?.stack || err);
+  (req.log || logger).error({
+    event: "http.unhandled_error",
+    err: err?.message,
+    stack: err?.stack,
+  }, "Unhandled error");
   return res.status(500).json({
     ok: false,
     request_id: req.request_id,
@@ -534,4 +537,4 @@ app.use((err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, "0.0.0.0", () => console.log(`API listening on :${port}`));
+app.listen(port, "0.0.0.0", () => logger.info({ event: "server.listening", port }, `API listening on :${port}`));

@@ -168,7 +168,7 @@ export function createHistoryTimelineHandler(db = pool) {
         nextCursor: buildNextCursor(items, limit),
       });
     } catch (error) {
-      console.error("history-timeline error:", error);
+      req.log.error({ event: "history.timeline.error", err: error?.message }, "history-timeline query failed");
       return res.status(500).json({
         ok: false,
         code: "internal_error",

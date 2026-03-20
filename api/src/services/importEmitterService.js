@@ -1,5 +1,6 @@
 // api/src/services/importEmitterService.js
 import { createHash } from "node:crypto";
+import logger from "../utils/logger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EXPECTED_COLS = {
@@ -63,25 +64,6 @@ function isPlainObject(v) {
 
 function hashImportPayload(payload) {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-}
-
-function logEvent(level, event, payload) {
-  const entry = {
-    ts: new Date().toISOString(),
-    level,
-    event,
-    ...payload,
-  };
-  const msg = JSON.stringify(entry);
-  if (level === "error") {
-    console.error(msg);
-    return;
-  }
-  if (level === "warn") {
-    console.warn(msg);
-    return;
-  }
-  console.info(msg);
 }
 
 function parseEmitterRows(rows) {
@@ -419,7 +401,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
   }
 
   try {
-    logEvent("info", "import_emitter.started", {
+    logger.info({ event: "import_emitter.started",
       request_id,
       user_id,
       rows_count: rows.length,
@@ -445,7 +427,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
       if (parseInt(weekCheck.rows[0].cnt, 10) > 0) {
         await client.query("COMMIT");
 
-        logEvent("info", "import_emitter.attach_idempotent", {
+        logger.info({ event: "import_emitter.attach_idempotent",
           request_id,
           user_id,
           program_id: existing_program_id,
@@ -510,7 +492,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
         const existing_id = idempotentCheck.rows[0].id;
         await client.query("COMMIT");
 
-        logEvent("info", "import_emitter.idempotent_hit", {
+        logger.info({ event: "import_emitter.idempotent_hit",
           request_id,
           user_id,
           program_id: existing_id,
@@ -793,7 +775,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
 
     await client.query("COMMIT");
 
-    logEvent("info", "import_emitter.committed", {
+    logger.info({ event: "import_emitter.committed",
       request_id,
       user_id,
       program_id,
@@ -822,7 +804,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
     try {
       await client.query("ROLLBACK");
     } catch (rollbackErr) {
-      logEvent("error", "import_emitter.rollback_failed", {
+      logger.error({ event: "import_emitter.rollback_failed",
         request_id,
         user_id,
         error: rollbackErr.message,

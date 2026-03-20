@@ -138,7 +138,7 @@ export function createHistoryExerciseHandler(db = pool) {
         summary,
       });
     } catch (error) {
-      console.error("history-exercise error:", error);
+      req.log.error({ event: "history.exercise.error", err: error?.message }, "history-exercise query failed");
       return res.status(500).json({
         ok: false,
         code: "internal_error",

@@ -82,7 +82,7 @@ export function createHistoryPersonalRecordsHandler(db = pool) {
       const result = await db.query(SQL_PERSONAL_RECORDS, [authUserId, limit]);
       return res.status(200).json((result.rows ?? []).map(mapPersonalRecordRow));
     } catch (error) {
-      console.error("history-personal-records error:", error);
+      req.log.error({ event: "history.personal_records.error", err: error?.message }, "history-personal-records query failed");
       return res.status(500).json({
         ok: false,
         code: "internal_error",

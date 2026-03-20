@@ -38,7 +38,7 @@ export async function resolveBubbleUser(req, res, next) {
     req.auth = { ...(req.auth ?? {}), user_id: result.rows[0].id };
     return next();
   } catch (err) {
-    console.error("resolveBubbleUser error:", err);
+    req.log.error({ event: "auth.resolve_user.error", err: err?.message }, "resolveBubbleUser DB error");
     return res.status(500).json({
       ok: false,
       code: "internal_error",

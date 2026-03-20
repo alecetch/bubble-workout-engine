@@ -138,14 +138,14 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
   const explicitType = programTypeInput && programTypeInput !== "default" ? programTypeInput : null;
   const programType = explicitType || goalDerivedType || s(devProfile.programType) || "hypertrophy";
 
-  console.log("[generateProgramV2] program-type resolution", {
+  req.log.debug({ event: "pipeline.type_resolution",
     rawGoals: devProfile.goals,
     goalSlugs,
     goalDerivedType,
     explicitType,
     profileProgramType: devProfile.programType,
     resolvedProgramType: programType,
-  });
+  }, "program-type resolution");
 
   const mappedFitnessRank = mapFitnessRank(devProfile.fitnessLevel);
   const mappedEquipmentSlugs = ensureArray(devProfile.equipmentItemCodes, toSlug);
@@ -325,7 +325,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     await setupClient.query("COMMIT");
   } catch (err) {
     try { await setupClient.query("ROLLBACK"); } catch (_) { /* ignore */ }
-    console.error("generate-plan-v2 setup error:", err);
+    req.log.error({ event: "pipeline.setup.error", err: err?.message, stack: err?.stack }, "generate-plan-v2 setup error");
     return res.status(500).json({
       ok: false,
       request_id,
@@ -345,10 +345,10 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
         `UPDATE generation_run SET status='failed', last_stage='error', failed_at=now(), error_message=$1, updated_at=now() WHERE id=$2`,
         [message, generation_run_id],
       )
-      .catch((e) => console.error("markFailed gen_run error:", e));
+      .catch((e) => req.log.error({ event: "pipeline.mark_failed.error", err: e?.message }, "markFailed gen_run error"));
     await pool
       .query(`UPDATE program SET status='failed', updated_at=now() WHERE id=$1`, [created_program_id])
-      .catch((e) => console.error("markFailed program error:", e));
+      .catch((e) => req.log.error({ event: "pipeline.mark_failed.error", err: e?.message }, "markFailed program error"));
   }
 
   try {
@@ -360,6 +360,16 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
 
     const inputs = buildInputsFromDevProfile(devProfile, exerciseRows);
     const allowed_ids_csv = allowedIds.join(",");
+
+    req.log.info({
+      event: "pipeline.run.start",
+      program_type: programType,
+      days_per_week: daysPerWeek,
+      duration_mins: mappedMinutesPerSession ?? 50,
+      fitness_rank: mappedFitnessRank,
+      allowed_exercise_count: allowedIds.length,
+      generation_run_id,
+    }, "Pipeline starting");
 
     const pipelineOut = await runPipeline({
       db: pool,
@@ -384,6 +394,16 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error("Pipeline did not produce emitter rows");
     }
+
+    req.log.info({
+      event: "pipeline.run.finish",
+      program_type: programType,
+      config_key: pipelineOut?.debug?.step1?.config_key ?? pipelineOut?.plan?.debug?.step1?.config_key ?? null,
+      equipment_profile: pipelineOut?.debug?.step1?.equipment_profile ?? pipelineOut?.plan?.debug?.step1?.equipment_profile ?? null,
+      fill_failed: pipelineOut?.debug?.step1?.fill_failed ?? pipelineOut?.plan?.debug?.step1?.fill_failed ?? null,
+      emitter_rows: rows.length,
+      generation_run_id,
+    }, "Pipeline completed");
 
     // Phase 3b: Persist pipeline debug to generation_run (best-effort — never throws).
     try {
@@ -414,7 +434,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
         ],
       );
     } catch (debugErr) {
-      console.error("generation_run debug persist failed (non-fatal):", debugErr?.message);
+      req.log.warn({ event: "pipeline.debug_persist.error", err: debugErr?.message }, "generation_run debug persist failed (non-fatal)");
     }
 
     // Phase 4: Import child rows into the pre-created program
@@ -533,7 +553,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       idempotent: importResult.idempotent,
     });
   } catch (err) {
-    console.error("generate-plan-v2 pipeline/import error:", err);
+    req.log.error({ event: "pipeline.error", err: err?.message, stack: err?.stack }, "generate-plan-v2 pipeline/import error");
     await markFailed(err?.message || "unknown error");
     return res.status(500).json({
       ok: false,
