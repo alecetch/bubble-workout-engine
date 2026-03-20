@@ -111,7 +111,7 @@ function normalizeSlotDefinition(rawSlot) {
       sw2: null,
       sw2Any: null,
       requirePref: null,
-      pref_mode: "strict",
+      pref_mode: "soft",
       pref_bonus: 4,
       preferLoadable: false,
       strength_equivalent_bonus: false,
@@ -130,7 +130,7 @@ function normalizeSlotDefinition(rawSlot) {
       key: rawSlot.key ?? (key || ""),
       swAny: rawSlot.swAny != null ? normalizeArr(rawSlot.swAny) : null,
       sw2Any: rawSlot.sw2Any != null ? normalizeArr(rawSlot.sw2Any) : null,
-      pref_mode: rawSlot.pref_mode || (rawSlot.allowPrefFallback ? "soft" : "strict"),
+      pref_mode: rawSlot.pref_mode === "strict" ? "strict" : "soft",
       pref_bonus: rawSlot.pref_bonus ?? 4,
       strength_equivalent_bonus: rawSlot.strength_equivalent_bonus === true,
       selector_strategy: rawSlot.selector_strategy || "best_match_by_movement",
@@ -146,7 +146,7 @@ function normalizeSlotDefinition(rawSlot) {
     sw2: null,
     sw2Any: null,
     requirePref: null,
-    pref_mode: "strict",
+    pref_mode: "soft",
     pref_bonus: 4,
     preferLoadable: false,
     strength_equivalent_bonus: false,
@@ -348,7 +348,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         resolved_sw2: resolvedSlot.sw2 ?? null,
         resolved_swAny: resolvedSlot.swAny ?? null,
         resolved_sw2Any: resolvedSlot.sw2Any ?? null,
-        resolved_pref_mode: resolvedSlot.pref_mode ?? "strict",
+        resolved_pref_mode: resolvedSlot.pref_mode ?? "soft",
       });
 
       const [blockLetter] = slotName.split(":");

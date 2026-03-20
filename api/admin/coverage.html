@@ -56,7 +56,7 @@
       }
       .controls {
         display: grid;
-        grid-template-columns: 280px 240px 1fr auto;
+        grid-template-columns: 280px 200px 200px 160px auto;
         gap: 10px;
         align-items: center;
       }
@@ -81,15 +81,14 @@
         padding: 7px 9px;
         background: #fff;
       }
-      .preset-boxes {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
+      td.constraints-cell {
+        white-space: normal;
+        min-width: 160px;
+        max-width: 260px;
+        word-break: break-word;
       }
-      .preset-boxes label {
-        font-size: 12px;
-        color: var(--text);
-      }
+      .constraint-line { display: block; line-height: 1.5; }
+      .constraint-preset-code { font-weight: 600; color: var(--muted); margin-right: 3px; }
       button {
         width: auto;
         border: 1px solid var(--primary);
@@ -123,7 +122,7 @@
       table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 1400px;
+        min-width: 700px;
       }
       th,
       td {
@@ -265,12 +264,26 @@
         text-align: right;
         font-variant-numeric: tabular-nums;
       }
+      td.count.cell-click { cursor: pointer; }
+      td.count.cell-click:hover { filter: brightness(0.88); }
+      .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 500; display: flex; align-items: center; justify-content: center; }
+      .modal-overlay[hidden] { display: none; }
+      .modal-panel { background: #fff; border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.2); width: min(520px, 95vw); max-height: 80vh; display: flex; flex-direction: column; }
+      .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+      .modal-header h3 { margin: 0; font-size: 14px; line-height: 1.4; }
+      .modal-close { border: none; background: none; cursor: pointer; font-size: 18px; color: var(--muted); padding: 0; line-height: 1; flex-shrink: 0; }
+      .modal-body { overflow-y: auto; padding: 10px 16px 16px; }
+      .match-list { list-style: none; margin: 0; padding: 0; }
+      .match-item { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f0f2f4; font-size: 13px; }
+      .match-item:last-child { border-bottom: none; }
+      .match-score { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--primary); font-size: 12px; }
+      .match-name { flex: 1; }
+      .match-reasons { font-size: 11px; color: var(--muted); white-space: nowrap; }
+      .match-empty { color: var(--muted); font-style: italic; font-size: 13px; padding: 8px 0; }
+      .modal-loading { color: var(--muted); font-size: 13px; padding: 12px 0; }
       @media (max-width: 1100px) {
         .score-breakdowns { grid-template-columns: 1fr; }
-      }
-        .controls {
-          grid-template-columns: 1fr;
-        }
+        .controls { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -282,6 +295,7 @@
           <div class="nav">
             <a href="/admin-ui/index.html">Config Editor</a>
             <a href="/admin/coverage">Coverage Report</a>
+            <a href="/admin/observability">Observability</a>
           </div>
         </div>
         <div class="controls">
@@ -294,8 +308,8 @@
             <select id="config-filter"></select>
           </div>
           <div class="control">
-            <label>Presets</label>
-            <div id="preset-boxes" class="preset-boxes"></div>
+            <label for="preset-filter">Preset</label>
+            <select id="preset-filter"></select>
           </div>
           <div class="control">
             <label for="show-filter">Show</label>
@@ -345,6 +359,16 @@
       </div>
     </div>
 
+    <div id="match-modal" class="modal-overlay" hidden>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h3 id="modal-title"></h3>
+          <button class="modal-close" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
     <script type="module">
       const STORAGE_KEY = "admin_internal_api_token";
       const RANKS_ORDER = [0, 1, 2, 3];
@@ -362,15 +386,116 @@
         rows: [],
         selectedConfig: "all",
         selectedShow: "all",
+        selectedPreset: "all",
         visiblePresets: new Set(),
       };
+
+      // ── Exercise cache & matching ─────────────────────────────────────────
+      const EXCLUDED_MC = new Set(["cardio", "conditioning", "locomotion"]);
+      let _exerciseCache = null;
+
+      async function getExercises() {
+        if (_exerciseCache) return _exerciseCache;
+        const res = await fetch("/admin/exercise-catalogue/full-state", {
+          headers: { "x-internal-token": getToken() },
+        });
+        if (!res.ok) throw new Error(`Exercise catalogue fetch failed: HTTP ${res.status}`);
+        const data = await res.json();
+        if (!Array.isArray(data.exercises)) throw new Error(data.error || "Invalid exercise catalogue response");
+        _exerciseCache = data.exercises;
+        return _exerciseCache;
+      }
+
+      function scoreExercise(ex, slot, presetEquipSet, rank) {
+        if (ex.is_archived) return null;
+        if ((ex.min_fitness_rank ?? 0) > rank) return null;
+        if (EXCLUDED_MC.has(ex.movement_class)) return null;
+        const eqSlugs = ex.equipment_items_slugs ?? [];
+        if (!eqSlugs.every(s => presetEquipSet.has(s))) return null;
+
+        const { sw, sw2, swAny = [], sw2Any = [], mp } = slot;
+        const unconstrained = !sw && !sw2 && !swAny.length && !sw2Any.length && !mp;
+        if (!unconstrained) {
+          const matches =
+            (sw && ex.swap_group_id_1 === sw) ||
+            (sw2 && ex.swap_group_id_2 === sw2) ||
+            (swAny.length && swAny.includes(ex.swap_group_id_1)) ||
+            (sw2Any.length && sw2Any.includes(ex.swap_group_id_2)) ||
+            (mp && ex.movement_pattern_primary === mp);
+          if (!matches) return null;
+        }
+
+        let score = 0;
+        const reasons = [];
+        if (sw && ex.swap_group_id_1 === sw)               { score += 10; reasons.push(`sw+10`); }
+        if (sw2 && ex.swap_group_id_2 === sw2)             { score += 12; reasons.push(`sw2+12`); }
+        if (swAny.length && swAny.includes(ex.swap_group_id_1))   { score += 10; reasons.push(`swAny+10`); }
+        if (sw2Any.length && sw2Any.includes(ex.swap_group_id_2)) { score += 12; reasons.push(`sw2Any+12`); }
+        if (mp && ex.movement_pattern_primary === mp)       { score += 4;  reasons.push(`mp+4`); }
+        const prefTags = Array.isArray(ex.preferred_in_json) ? ex.preferred_in_json : [];
+        if (slot.requirePref) {
+          const hasPref = prefTags.includes(slot.requirePref);
+          if (slot.pref_mode !== "soft" && !hasPref) return null; // strict hard gate (matches SQL)
+          if (hasPref) {
+            const bonus = slot.pref_bonus ?? 4;
+            score += bonus;
+            reasons.push(`pref+${bonus}`);
+          }
+        }
+        if (ex.strength_equivalent) { score += 3; reasons.push(`SE+3`); }
+        if (rank > 0) {
+          const exRank = ex.min_fitness_rank ?? 0;
+          const rankBonus = Math.min(exRank, rank) * 0.5;
+          if (rankBonus > 0) { score += rankBonus; reasons.push(`rank+${rankBonus}`); }
+        }
+        return { score, reasons };
+      }
+
+      // ── Modal ─────────────────────────────────────────────────────────────
+      const modalEl    = document.getElementById("match-modal");
+      const modalTitle = document.getElementById("modal-title");
+      const modalBody  = document.getElementById("modal-body");
+      document.getElementById("modal-close").addEventListener("click", () => modalEl.hidden = true);
+      modalEl.addEventListener("click", e => { if (e.target === modalEl) modalEl.hidden = true; });
+
+      async function showMatchModal(row, presetCode, rank) {
+        const preset = state.presets.find(p => p.code === presetCode);
+        const rankLabel = { 0: "Beginner", 1: "Intermediate", 2: "Advanced", 3: "Elite" }[rank] ?? `Rank ${rank}`;
+        modalTitle.textContent = `${row.slot} · ${preset?.label ?? presetCode} · ${rankLabel}`;
+        modalBody.innerHTML = `<div class="modal-loading">Loading exercises…</div>`;
+        modalEl.hidden = false;
+
+        let exercises;
+        try { exercises = await getExercises(); }
+        catch (e) { modalBody.innerHTML = `<div class="match-empty">Failed to load exercises: ${escapeHtml(e.message)}</div>`; return; }
+
+        const slot = row.resolved_by_preset?.[presetCode] ?? row;
+        const presetEquipSet = new Set(preset?.equipment_slugs ?? []);
+
+        const scored = exercises
+          .map(ex => { const r = scoreExercise(ex, slot, presetEquipSet, rank); return r ? { ex, ...r } : null; })
+          .filter(Boolean)
+          .sort((a, b) => b.score - a.score);
+
+        if (!scored.length) {
+          modalBody.innerHTML = `<div class="match-empty">No matching exercises for this cell.</div>`;
+          return;
+        }
+        modalBody.innerHTML = `<ul class="match-list">${scored.map(({ ex, score, reasons }) =>
+          `<li class="match-item">
+            <span class="match-score">${score}</span>
+            <span class="match-name">${escapeHtml(ex.name)}</span>
+            <span class="match-reasons">${escapeHtml(reasons.join(" · "))}</span>
+          </li>`
+        ).join("")}</ul>`;
+      }
 
       const tokenInput = document.getElementById("token-input");
       const loadBtn = document.getElementById("load-btn");
       const statusEl = document.getElementById("status");
       const configFilterEl = document.getElementById("config-filter");
       const showFilterEl = document.getElementById("show-filter");
-      const presetBoxesEl = document.getElementById("preset-boxes");
+      const presetFilterEl = document.getElementById("preset-filter");
       const summaryEl = document.getElementById("summary");
       const tableHeadEl = document.getElementById("table-head");
       const tableBodyEl = document.getElementById("table-body");
@@ -421,11 +546,13 @@
             const resolved = resolvedByPreset[preset.code];
             const text = describeResolvedConstraint(resolved);
             if (!text) return "";
-            return `${PRESET_SHORT[preset.code] || preset.code}: ${text}`;
+            const code = PRESET_SHORT[preset.code] || preset.code;
+            return `<span class="constraint-line"><span class="constraint-preset-code">${code}:</span>${escapeHtml(text)}</span>`;
           })
           .filter(Boolean);
-        if (byPreset.length > 0) return byPreset.join(" | ");
-        return describeResolvedConstraint(row);
+        if (byPreset.length > 0) return byPreset.join("");
+        const fallback = describeResolvedConstraint(row);
+        return fallback ? escapeHtml(fallback) : "";
       }
 
       // ── Coverage score ────────────────────────────────────────────────
@@ -546,29 +673,27 @@
           ),
         ].join("");
 
-        presetBoxesEl.innerHTML = state.presets
-          .map((preset) => {
-            const checked = state.visiblePresets.has(preset.code) ? "checked" : "";
-            return `
-              <label>
-                <input type="checkbox" data-preset-code="${escapeHtml(preset.code)}" ${checked} />
-                ${escapeHtml(preset.label)}
-              </label>
-            `;
-          })
-          .join("");
-
-        presetBoxesEl.querySelectorAll("input[data-preset-code]").forEach((el) => {
-          el.addEventListener("change", () => {
-            const code = el.dataset.presetCode;
-            if (el.checked) state.visiblePresets.add(code);
-            else state.visiblePresets.delete(code);
-            renderTable();
-          });
-        });
+        const selectedPreset = state.selectedPreset || "all";
+        presetFilterEl.innerHTML = [
+          `<option value="all"${selectedPreset === "all" ? " selected" : ""}>All presets</option>`,
+          ...state.presets.map(
+            (p) => `<option value="${escapeHtml(p.code)}"${selectedPreset === p.code ? " selected" : ""}>${escapeHtml(p.label)}</option>`,
+          ),
+        ].join("");
 
         configFilterEl.addEventListener("change", () => {
           state.selectedConfig = configFilterEl.value || "all";
+          renderTable();
+        });
+
+        presetFilterEl.addEventListener("change", () => {
+          state.selectedPreset = presetFilterEl.value || "all";
+          if (state.selectedPreset === "all") {
+            for (const p of state.presets) state.visiblePresets.add(p.code);
+          } else {
+            state.visiblePresets.clear();
+            state.visiblePresets.add(state.selectedPreset);
+          }
           renderTable();
         });
 
@@ -615,6 +740,7 @@
 
         tableBodyEl.innerHTML = rows
           .map((row) => {
+            const ridx = state.rows.indexOf(row);
             const constraintText = getConstraintText(row, visiblePresets);
             const countCells = visiblePresets
               .map((preset) =>
@@ -622,7 +748,7 @@
                   const key = `${preset.code}_${rank}`;
                   const count = Number(row.counts?.[key] ?? 0);
                   const cls = count === 0 ? "c0" : count === 1 ? "c1" : count === 2 ? "c2" : "";
-                  return `<td class="count ${cls}">${count}</td>`;
+                  return `<td class="count ${cls} cell-click" data-ridx="${ridx}" data-preset="${escapeHtml(preset.code)}" data-rank="${rank}" title="Click to see matching exercises">${count}</td>`;
                 }).join(""),
               )
               .join("");
@@ -632,7 +758,7 @@
                 <td>${row.day_index} · ${escapeHtml(row.day_key)}</td>
                 <td class="${row.day_focus ? "" : "focus-empty"}">${row.day_focus ? escapeHtml(row.day_focus) : "—"}</td>
                 <td>${escapeHtml(row.slot)}</td>
-                <td class="${constraintText ? "" : "constraints-empty"}">${constraintText || "(unconstrained)"}</td>
+                <td class="constraints-cell ${constraintText ? "" : "constraints-empty"}">${constraintText || "(unconstrained)"}</td>
                 ${countCells}
               </tr>
             `;
@@ -641,6 +767,7 @@
       }
 
       async function loadReport() {
+        _exerciseCache = null; // Invalidate on each report load so modal reflects fresh DB state
         try {
           const token = getToken();
           if (!token) {
@@ -676,6 +803,14 @@
         const savedToken = sessionStorage.getItem(STORAGE_KEY);
         if (savedToken) tokenInput.value = savedToken;
         loadBtn.addEventListener("click", loadReport);
+
+        tableBodyEl.addEventListener("click", e => {
+          const td = e.target.closest("td.cell-click");
+          if (!td) return;
+          const row = state.rows[Number(td.dataset.ridx)];
+          if (!row) return;
+          showMatchModal(row, td.dataset.preset, Number(td.dataset.rank));
+        });
       }
 
       init();

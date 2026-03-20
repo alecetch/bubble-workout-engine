@@ -1,0 +1,952 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Observability - Workout Engine Admin</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Segoe UI, Arial, sans-serif;
+      }
+      .page { padding: 14px; }
+      .header, .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      .header {
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+      .panel {
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .top-row, .page-header, .controls, .page-actions, .nav, .tab-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .top-row, .page-header {
+        align-items: center;
+        justify-content: space-between;
+      }
+      .top-row { margin-bottom: 10px; }
+      .title, .page-title-wrap h1 { margin: 0; }
+      .title { font-size: 22px; }
+      .page-title-wrap h1 { font-size: 24px; }
+      .page-title-wrap p {
+        margin: 4px 0 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .nav a {
+        color: #1d4ed8;
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .nav a:hover { text-decoration: underline; }
+      .nav a.active { font-weight: 700; }
+      .controls, .page-actions { align-items: end; }
+      .control { display: grid; gap: 4px; }
+      .control label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      input, select, button { font: inherit; }
+      input, select {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 7px 9px;
+        background: #fff;
+      }
+      button {
+        width: auto;
+        border: 1px solid var(--primary);
+        border-radius: 6px;
+        background: var(--primary);
+        color: #fff;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      button:hover { filter: brightness(0.95); }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: #0f766e; }
+      .status.err { color: #b42318; }
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .kpi-card {
+        background: #1e1e2e;
+        border-radius: 8px;
+        padding: 16px;
+        color: #fff;
+      }
+      .kpi-label {
+        font-size: 11px;
+        color: #a8b0c3;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        margin-top: 4px;
+      }
+      .kpi-note {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #c9d0df;
+      }
+      .badge-green { color: #22c55e; }
+      .badge-amber { color: #f59e0b; }
+      .badge-red { color: #ef4444; }
+      .tab-btn {
+        padding: 6px 14px;
+        border-radius: 6px;
+        border: 1px solid #333;
+        background: transparent;
+        color: #333;
+        cursor: pointer;
+      }
+      .tab-btn.active {
+        background: #3b82f6;
+        border-color: #3b82f6;
+        color: #fff;
+      }
+      .anomaly-badge {
+        display: inline-block;
+        background: #f59e0b;
+        color: #000;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        margin-left: 6px;
+        vertical-align: middle;
+      }
+      .tab-panel.hidden { display: none; }
+      .grid-2, .split-panels, .meta-grid, .kv-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .grid-2 { grid-template-columns: 1.1fr 0.9fr; }
+      .split-panels { grid-template-columns: 1fr 1fr; }
+      .meta-grid { grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+      .kv-grid { grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+      .table-wrap { overflow: auto; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 700px;
+      }
+      th, td {
+        border: 1px solid #ecf0f4;
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      th {
+        background: #f9fbfd;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: 11px;
+      }
+      td.wrap, th.wrap { white-space: normal; }
+      tbody tr.clickable { cursor: pointer; }
+      tbody tr.clickable:hover { background: #f4f8ff; }
+      .row-warn td:first-child { border-left: 3px solid #f59e0b; }
+      .status-pill {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .status-complete { background: #dcfce7; color: #166534; }
+      .status-failed { background: #fee2e2; color: #991b1b; }
+      .status-other { background: #fef3c7; color: #92400e; }
+      .metric-good { color: #166534; font-weight: 700; }
+      .metric-warn { color: #92400e; font-weight: 700; }
+      .metric-bad { color: #991b1b; font-weight: 700; }
+      .muted { color: var(--muted); }
+      .empty-state {
+        color: var(--muted);
+        font-style: italic;
+        font-size: 13px;
+      }
+      .meta-label, .kv-key {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin-bottom: 3px;
+      }
+      .meta-value, .kv-value {
+        font-size: 12px;
+        word-break: break-word;
+      }
+      .collapsible {
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+        margin-top: 10px;
+      }
+      .collapsible-header {
+        cursor: pointer;
+        user-select: none;
+        padding: 8px 0;
+        font-weight: 600;
+      }
+      .collapsible-body { display: none; }
+      .collapsible-body.open { display: block; }
+      pre {
+        background: #111;
+        color: #e5e7eb;
+        border-radius: 6px;
+        padding: 12px;
+        overflow-x: auto;
+        font-size: 12px;
+      }
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+      }
+      .modal.hidden { display: none; }
+      .modal-box {
+        background: #1e1e2e;
+        color: #fff;
+        border-radius: 10px;
+        padding: 24px;
+        max-width: 760px;
+        width: 90vw;
+        max-height: 80vh;
+        overflow-y: auto;
+        position: relative;
+      }
+      #modal-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: none;
+        border: none;
+        color: #aaa;
+        font-size: 18px;
+        cursor: pointer;
+        padding: 0;
+      }
+      .modal-box h2 {
+        margin: 0 28px 14px 0;
+        font-size: 20px;
+      }
+      .chart-wrap {
+        position: relative;
+        min-height: 180px;
+      }
+      @media (max-width: 1100px) {
+        .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        .grid-2, .split-panels, .meta-grid, .kv-grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        .kpi-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">Observability Dashboard</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/coverage">Coverage Report</a>
+            <a href="/admin/exercises">Exercise Catalogue</a>
+            <a href="/admin/observability" class="active">Observability</a>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+        </div>
+        <div id="status" class="status"></div>
+      </section>
+
+      <main>
+        <div class="panel">
+          <div class="page-header">
+            <div class="page-title-wrap">
+              <h1>Observability</h1>
+              <p>Generation runs, fill behavior, config activity, and exercise usage.</p>
+            </div>
+            <div class="page-actions">
+              <div class="control">
+                <label for="period-select">Period</label>
+                <select id="period-select">
+                  <option value="7">7 days</option>
+                  <option value="30" selected>30 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+              <button id="refresh-btn" type="button">Refresh</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="overview">Overview</button>
+          <button class="tab-btn" data-tab="fill">Fill Quality</button>
+          <button class="tab-btn" data-tab="config">Config / Rules</button>
+          <button class="tab-btn" data-tab="exercises">Exercises</button>
+        </div>
+
+        <div id="tab-overview" class="tab-panel">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Total Runs</div>
+              <div class="kpi-value" id="kpi-total-runs">-</div>
+              <div class="kpi-note" id="kpi-success-note">-</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Success Rate</div>
+              <div class="kpi-value" id="kpi-success-rate">-</div>
+              <div class="kpi-note" id="kpi-success-band">-</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Mean Duration</div>
+              <div class="kpi-value" id="kpi-mean-duration">-</div>
+              <div class="kpi-note">Completed runs only</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Failed Runs</div>
+              <div class="kpi-value" id="kpi-failed-runs">-</div>
+              <div class="kpi-note" id="kpi-top-error">-</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <section class="panel">
+              <h2>Daily Runs</h2>
+              <div class="chart-wrap">
+                <canvas id="daily-chart" height="180"></canvas>
+              </div>
+            </section>
+            <section class="panel">
+              <h2>Top Errors</h2>
+              <div id="top-errors-list" class="table-wrap"></div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <h2>Recent Runs</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Config</th>
+                    <th>Equipment</th>
+                    <th>Rank</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th>Completed</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-runs-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div id="tab-fill" class="tab-panel hidden">
+          <section class="panel">
+            <h2>Fill Quality by Config</h2>
+            <div class="chart-wrap">
+              <canvas id="fill-chart" height="220"></canvas>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Fill Quality Detail</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Config</th>
+                    <th>Equipment</th>
+                    <th>Runs</th>
+                    <th>Pref Picks</th>
+                    <th>Relaxed Picks</th>
+                    <th>Dup Picks</th>
+                    <th>Fails</th>
+                    <th>Fail %</th>
+                  </tr>
+                </thead>
+                <tbody id="fill-quality-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div id="tab-config" class="tab-panel hidden">
+          <div class="split-panels">
+            <section class="panel">
+              <h2>Config Hit Rate</h2>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Config Key</th>
+                      <th>Runs</th>
+                      <th>Last Seen</th>
+                      <th>% of Total</th>
+                      <th>Days Since Seen</th>
+                    </tr>
+                  </thead>
+                  <tbody id="config-hits-body"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <h2>Narration Adoption</h2>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Config</th>
+                      <th>Runs</th>
+                      <th>Avg Templates</th>
+                      <th>Warmup Added</th>
+                      <th>Cooldown Added</th>
+                      <th>Reps Prescribed</th>
+                      <th>RIR Used</th>
+                      <th>Tempo Used</th>
+                    </tr>
+                  </thead>
+                  <tbody id="narration-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div id="tab-exercises" class="tab-panel hidden">
+          <section class="panel">
+            <h2>Top Used Exercises</h2>
+            <div class="chart-wrap">
+              <canvas id="exercise-chart" height="400"></canvas>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2 id="never-used-title">Never Used (0)</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Exercise ID</th>
+                    <th>Name</th>
+                    <th>Movement Class</th>
+                  </tr>
+                </thead>
+                <tbody id="never-used-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div id="run-modal" class="modal hidden">
+      <div class="modal-box">
+        <button id="modal-close" type="button">x</button>
+        <div id="modal-content"></div>
+      </div>
+    </div>
+
+    <script>
+      const STORAGE_KEY = "admin_internal_api_token";
+      const tokenInput = document.getElementById("token-input");
+      const statusEl = document.getElementById("status");
+
+      function getToken() {
+        return tokenInput.value.trim();
+      }
+
+      async function apiFetch(path) {
+        let token = getToken();
+        if (!token) token = localStorage.getItem("adminToken") || sessionStorage.getItem(STORAGE_KEY) || "";
+        if (!token) token = window.prompt("Paste internal admin token") || "";
+        token = token.trim();
+        if (!token) throw new Error("Missing token. Fill Internal API Token first.");
+        tokenInput.value = token;
+        sessionStorage.setItem(STORAGE_KEY, token);
+        localStorage.setItem("adminToken", token);
+        const res = await fetch(path, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "x-internal-token": token,
+          },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+      function setStatus(message, kind) {
+        statusEl.textContent = message || "";
+        statusEl.className = `status ${kind || ""}`.trim();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function formatDateTime(value) {
+        if (!value) return "-";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toISOString().replace(".000Z", "Z");
+      }
+
+      function formatNumber(value, suffix = "") {
+        if (value == null || value === "") return "-";
+        const n = Number(value);
+        if (!Number.isFinite(n)) return String(value);
+        return `${n}${suffix}`;
+      }
+
+      function statusBadgeClass(status) {
+        if (status === "complete") return "status-pill status-complete";
+        if (status === "failed") return "status-pill status-failed";
+        return "status-pill status-other";
+      }
+
+      function metricClassForRate(rate) {
+        const n = Number(rate || 0);
+        if (n === 0) return "metric-good";
+        if (n <= 5) return "metric-warn";
+        return "metric-bad";
+      }
+
+      function successBandClass(rate) {
+        const n = Number(rate || 0);
+        if (n >= 95) return "badge-green";
+        if (n >= 85) return "badge-amber";
+        return "badge-red";
+      }
+
+      function stringifyJsonPretty(value) {
+        return JSON.stringify(value, null, 2);
+      }
+
+      let chartDaily = null;
+      let chartFill = null;
+      let chartExercise = null;
+      let anomalies = { fill: 0, config: 0, exercises: 0, overview: 0 };
+
+      function renderAnomalyBadges() {
+        const map = { overview: "overview", fill: "fill", config: "config", exercises: "exercises" };
+        for (const [tab, key] of Object.entries(map)) {
+          const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+          if (!btn) continue;
+          btn.querySelector(".anomaly-badge")?.remove();
+          const count = Number(anomalies[key] || 0);
+          if (count > 0) {
+            const badge = document.createElement("span");
+            badge.className = "anomaly-badge";
+            badge.textContent = count;
+            btn.appendChild(badge);
+          }
+        }
+      }
+
+      function activateTab(tabName) {
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.tab === tabName);
+        });
+        document.querySelectorAll(".tab-panel").forEach((panel) => {
+          panel.classList.toggle("hidden", panel.id !== `tab-${tabName}`);
+        });
+      }
+
+      function getSelectedDays() {
+        const value = Number(document.getElementById("period-select").value || 30);
+        return Number.isFinite(value) ? value : 30;
+      }
+
+      async function loadAll() {
+        const days = getSelectedDays();
+        anomalies = { fill: 0, config: 0, exercises: 0, overview: 0 };
+        renderAnomalyBadges();
+        setStatus("Loading observability data...", "");
+        await Promise.all([loadOverview(days), loadFillQuality(days), loadConfigHits(days), loadExercises(days)]);
+        setStatus(`Loaded observability data for the last ${days} days.`, "ok");
+      }
+
+      async function loadOverview(days) {
+        const [summary, runs] = await Promise.all([
+          apiFetch(`/admin/api/observability/summary?days=${encodeURIComponent(days)}`),
+          apiFetch("/admin/api/observability/runs?limit=20&offset=0"),
+        ]);
+        const successRate = Number(summary.success_rate || 0);
+        const meanDuration = summary.mean_duration_s == null ? "-" : `${Number(summary.mean_duration_s).toFixed(1)}s`;
+        const topError = Array.isArray(summary.top_errors) && summary.top_errors.length
+          ? `${summary.top_errors[0].count}x ${summary.top_errors[0].message}`
+          : "No recent failures";
+        document.getElementById("kpi-total-runs").textContent = formatNumber(summary.runs_total);
+        document.getElementById("kpi-success-note").textContent = `${formatNumber(summary.runs_success)} complete / ${formatNumber(summary.runs_failed)} failed`;
+        document.getElementById("kpi-success-rate").innerHTML = `<span class="${successBandClass(successRate)}">${successRate.toFixed(1)}%</span>`;
+        document.getElementById("kpi-success-band").textContent = successRate >= 95 ? "Healthy" : successRate >= 85 ? "Watch" : "Attention needed";
+        document.getElementById("kpi-mean-duration").textContent = meanDuration;
+        document.getElementById("kpi-failed-runs").innerHTML = `<span class="${Number(summary.runs_failed || 0) > 0 ? "badge-red" : "badge-green"}">${formatNumber(summary.runs_failed)}</span>`;
+        document.getElementById("kpi-top-error").textContent = topError;
+        renderDailyChart(Array.isArray(summary.daily_counts) ? summary.daily_counts : []);
+        renderTopErrors(Array.isArray(summary.top_errors) ? summary.top_errors : []);
+        renderRecentRuns(Array.isArray(runs.rows) ? runs.rows : []);
+        anomalies.overview = 0;
+        if (successRate < 95) anomalies.overview += 1;
+        anomalies.overview += Array.isArray(summary.top_errors) ? summary.top_errors.length : 0;
+        renderAnomalyBadges();
+      }
+
+      async function loadFillQuality(days) {
+        const data = await apiFetch(`/admin/api/observability/fill-quality?days=${encodeURIComponent(days)}`);
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        renderFillChart(rows);
+        renderFillQualityTable(rows);
+        anomalies.fill = 0;
+        rows.forEach((row) => {
+          if (Number(row.fail_rate_pct || 0) > 2) anomalies.fill += 1;
+          if (row.allowed_in != null && Number(row.allowed_in) < 30) anomalies.fill += 1;
+        });
+        renderAnomalyBadges();
+      }
+      async function loadConfigHits(days) {
+        const [configHits, narration] = await Promise.all([
+          apiFetch(`/admin/api/observability/config-hits?days=${encodeURIComponent(days)}`),
+          apiFetch(`/admin/api/observability/narration-adoption?days=${encodeURIComponent(days)}`),
+        ]);
+        const configRows = Array.isArray(configHits.rows) ? configHits.rows : [];
+        renderConfigHitsTable(configRows);
+        renderNarrationTable(Array.isArray(narration.rows) ? narration.rows : []);
+        anomalies.config = configRows.reduce((count, row) => count + (Number(row.days_since_last_seen || 0) > 7 ? 1 : 0), 0);
+        renderAnomalyBadges();
+      }
+
+      async function loadExercises(days) {
+        const data = await apiFetch(`/admin/api/observability/exercise-frequency?days=${encodeURIComponent(days)}&limit=20`);
+        const topUsed = Array.isArray(data.top_used) ? data.top_used : [];
+        const neverUsed = Array.isArray(data.never_used) ? data.never_used : [];
+        renderExerciseChart(topUsed);
+        renderNeverUsedTable(neverUsed);
+        anomalies.exercises = neverUsed.length > 0 ? 1 : 0;
+        renderAnomalyBadges();
+      }
+
+      function renderDailyChart(dailyCounts) {
+        const ctx = document.getElementById("daily-chart");
+        if (chartDaily) chartDaily.destroy();
+        chartDaily = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: dailyCounts.map((d) => d.date),
+            datasets: [
+              { label: "Success", data: dailyCounts.map((d) => Number(d.success_count || 0)), backgroundColor: "#22c55e" },
+              { label: "Failed", data: dailyCounts.map((d) => Number(d.count || 0) - Number(d.success_count || 0)), backgroundColor: "#ef4444" },
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: "top" } },
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+          },
+        });
+      }
+
+      function renderFillChart(rows) {
+        const ctx = document.getElementById("fill-chart");
+        if (chartFill) chartFill.destroy();
+        chartFill = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: rows.map((row) => `${row.config_key} / ${row.equipment_profile || "-"}`),
+            datasets: [
+              { label: "sw2_pref", data: rows.map((row) => Number(row.picked_sw2_pref || 0)), backgroundColor: "#166534" },
+              { label: "sw_pref", data: rows.map((row) => Number(row.picked_sw_pref || 0)), backgroundColor: "#16a34a" },
+              { label: "mp_pref", data: rows.map((row) => Number(row.picked_mp_pref || 0)), backgroundColor: "#4ade80" },
+              { label: "sw2_relaxed", data: rows.map((row) => Number(row.picked_sw2_relaxed || 0)), backgroundColor: "#86efac" },
+              { label: "sw_relaxed", data: rows.map((row) => Number(row.picked_sw_relaxed || 0)), backgroundColor: "#bbf7d0" },
+              { label: "mp_relaxed", data: rows.map((row) => Number(row.picked_mp_relaxed || 0)), backgroundColor: "#dcfce7" },
+              { label: "allow_dup", data: rows.map((row) => Number(row.picked_allow_dup || 0)), backgroundColor: "#f59e0b" },
+              { label: "fail", data: rows.map((row) => Number(row.fill_failed || 0)), backgroundColor: "#ef4444" },
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: "top" } },
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+          },
+        });
+      }
+
+      function renderExerciseChart(topUsed) {
+        const ctx = document.getElementById("exercise-chart");
+        if (chartExercise) chartExercise.destroy();
+        chartExercise = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: topUsed.map((row) => row.name || row.exercise_id),
+            datasets: [{ label: "Uses", data: topUsed.map((row) => Number(row.count || 0)), backgroundColor: "#3b82f6" }],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true }, y: { ticks: { autoSkip: false } } },
+          },
+        });
+      }
+
+      function renderTopErrors(topErrors) {
+        const el = document.getElementById("top-errors-list");
+        if (!topErrors.length) {
+          el.innerHTML = `<div class="empty-state">No recent errors in the selected period.</div>`;
+          return;
+        }
+        el.innerHTML = `
+          <table>
+            <thead><tr><th>Error</th><th>Count</th></tr></thead>
+            <tbody>
+              ${topErrors.map((row) => `<tr><td class="wrap">${escapeHtml(row.message)}</td><td>${formatNumber(row.count)}</td></tr>`).join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      function renderRecentRuns(rows) {
+        const tbody = document.getElementById("recent-runs-body");
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No runs found for this period.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows.map((row) => `
+          <tr class="clickable ${Number(row.fill_failed || 0) > 0 ? "row-warn" : ""}" data-run-id="${escapeHtml(row.id)}">
+            <td>${escapeHtml(row.id)}</td>
+            <td>${escapeHtml(row.program_type || "-")}</td>
+            <td>${escapeHtml(row.config_key || "-")}</td>
+            <td>${escapeHtml(row.equipment_profile || "-")}</td>
+            <td>${formatNumber(row.fitness_rank)}</td>
+            <td>${formatNumber(row.duration_mins, "m")}</td>
+            <td><span class="${statusBadgeClass(row.status)}">${escapeHtml(row.status || "-")}</span></td>
+            <td>${escapeHtml(formatDateTime(row.completed_at))}</td>
+          </tr>
+        `).join("");
+      }
+
+      function renderFillQualityTable(rows) {
+        const tbody = document.getElementById("fill-quality-body");
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No fill quality rows in this period.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows.map((row) => {
+          const prefPicks = Number(row.picked_sw2_pref || 0) + Number(row.picked_sw_pref || 0) + Number(row.picked_mp_pref || 0);
+          const relaxedPicks = Number(row.picked_sw2_relaxed || 0) + Number(row.picked_sw_relaxed || 0) + Number(row.picked_mp_relaxed || 0);
+          return `<tr>
+            <td>${escapeHtml(row.config_key || "-")}</td>
+            <td>${escapeHtml(row.equipment_profile || "-")}</td>
+            <td>${formatNumber(row.run_count)}</td>
+            <td>${formatNumber(prefPicks)}</td>
+            <td>${formatNumber(relaxedPicks)}</td>
+            <td>${formatNumber(row.picked_allow_dup)}</td>
+            <td>${formatNumber(row.fill_failed)}</td>
+            <td class="${metricClassForRate(row.fail_rate_pct)}">${formatNumber(row.fail_rate_pct, "%")}</td>
+          </tr>`;
+        }).join("");
+      }
+
+      function renderConfigHitsTable(rows) {
+        const tbody = document.getElementById("config-hits-body");
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No config hits in this period.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows.map((row) => {
+          const daysSince = Number(row.days_since_last_seen);
+          const daysClass = Number.isFinite(daysSince) && daysSince > 14 ? "metric-bad" : Number.isFinite(daysSince) && daysSince > 7 ? "metric-warn" : "";
+          const rowClass = daysClass ? "row-warn" : "";
+          return `<tr class="${rowClass}">
+            <td>${escapeHtml(row.config_key || "-")}</td>
+            <td>${formatNumber(row.run_count)}</td>
+            <td>${escapeHtml(formatDateTime(row.last_seen_at))}</td>
+            <td>${formatNumber(row.pct_of_total, "%")}</td>
+            <td class="${daysClass}">${formatNumber(row.days_since_last_seen)}</td>
+          </tr>`;
+        }).join("");
+      }
+      function renderNarrationTable(rows) {
+        const tbody = document.getElementById("narration-body");
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No narration adoption rows in this period.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows.map((row) => `<tr>
+          <td>${escapeHtml(row.config_key || "-")}</td>
+          <td>${formatNumber(row.run_count)}</td>
+          <td>${formatNumber(row.templates_in_avg)}</td>
+          <td>${formatNumber(row.warmup_segment_added_days_total)}</td>
+          <td>${formatNumber(row.cooldown_segment_added_days_total)}</td>
+          <td>${formatNumber(row.used_item_reps_prescribed_total)}</td>
+          <td>${formatNumber(row.used_item_rir_target_total)}</td>
+          <td>${formatNumber(row.used_item_tempo_prescribed_total)}</td>
+        </tr>`).join("");
+      }
+
+      function renderNeverUsedTable(rows) {
+        const tbody = document.getElementById("never-used-body");
+        document.getElementById("never-used-title").textContent = `Never Used (${rows.length})`;
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="3" class="empty-state">No never-used exercises in this period.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows.map((row) => `<tr>
+          <td>${escapeHtml(row.exercise_id || "-")}</td>
+          <td class="wrap">${escapeHtml(row.name || "-")}</td>
+          <td>${escapeHtml(row.movement_class || "-")}</td>
+        </tr>`).join("");
+      }
+
+      function renderMetaItem(label, value) {
+        return `<div><span class="meta-label">${escapeHtml(label)}</span><div class="meta-value">${escapeHtml(value == null || value === "" ? "-" : value)}</div></div>`;
+      }
+
+      function renderCollapsibleStep1(step1) {
+        if (!step1) {
+          return `<div class="collapsible"><div class="collapsible-header">Step 1 Stats</div><div class="collapsible-body open"><div class="empty-state">- (no debug data for this run)</div></div></div>`;
+        }
+        const entries = Object.entries(step1).filter(([key]) => key !== "notes");
+        return `<div class="collapsible">
+          <div class="collapsible-header">Step 1 Stats</div>
+          <div class="collapsible-body open">
+            <div class="kv-grid">
+              ${entries.map(([key, value]) => `<div><span class="kv-key">${escapeHtml(key)}</span><div class="kv-value">${escapeHtml(Array.isArray(value) || (value && typeof value === "object") ? stringifyJsonPretty(value) : value)}</div></div>`).join("")}
+            </div>
+            ${Array.isArray(step1.notes) && step1.notes.length ? `<div class="collapsible"><div class="collapsible-header">Step 1 Notes (${step1.notes.length})</div><div class="collapsible-body"><pre>${escapeHtml(stringifyJsonPretty(step1.notes))}</pre></div></div>` : ""}
+          </div>
+        </div>`;
+      }
+
+      function renderCollapsibleJson(title, value) {
+        if (!value) {
+          return `<div class="collapsible"><div class="collapsible-header">${escapeHtml(title)}</div><div class="collapsible-body"><div class="empty-state">- (no debug data for this run)</div></div></div>`;
+        }
+        return `<div class="collapsible"><div class="collapsible-header">${escapeHtml(title)}</div><div class="collapsible-body"><pre>${escapeHtml(stringifyJsonPretty(value))}</pre></div></div>`;
+      }
+
+      function wireCollapsibles() {
+        document.querySelectorAll("#modal-content .collapsible-header").forEach((header) => {
+          if (header.dataset.bound === "1") return;
+          header.dataset.bound = "1";
+          header.addEventListener("click", () => {
+            const body = header.nextElementSibling;
+            if (body) body.classList.toggle("open");
+          });
+        });
+      }
+
+      async function openRunModal(id) {
+        const modal = document.getElementById("run-modal");
+        const content = document.getElementById("modal-content");
+        modal.classList.remove("hidden");
+        content.innerHTML = `<div class="muted">Loading run detail...</div>`;
+        try {
+          const run = await apiFetch(`/admin/api/observability/run/${encodeURIComponent(id)}`);
+          const fillFailed = run.step1_stats_json && run.step1_stats_json.fill_failed != null ? run.step1_stats_json.fill_failed : "-";
+          const equipmentProfile = run.step1_stats_json && run.step1_stats_json.equipment_profile ? run.step1_stats_json.equipment_profile : "-";
+          content.innerHTML = `
+            <h2>Run #${escapeHtml(run.id)} - ${escapeHtml(run.program_type || "-")} / ${escapeHtml(run.config_key || "-")}</h2>
+            <div class="meta-grid">
+              ${renderMetaItem("Status", run.status)}
+              ${renderMetaItem("Last Stage", run.last_stage)}
+              ${renderMetaItem("Started", formatDateTime(run.started_at))}
+              ${renderMetaItem("Completed", formatDateTime(run.completed_at))}
+              ${renderMetaItem("Duration", run.duration_mins != null ? `${run.duration_mins}m` : "-")}
+              ${renderMetaItem("Fitness Rank", run.fitness_rank)}
+              ${renderMetaItem("Days / Week", run.days_per_week)}
+              ${renderMetaItem("Allowed Exercise Count", run.allowed_exercise_count)}
+              ${renderMetaItem("Total Days Expected", run.total_days_expected)}
+              ${renderMetaItem("Emitter Rows Count", run.emitter_rows_count)}
+              ${renderMetaItem("Fill Failed", fillFailed)}
+              ${renderMetaItem("Equipment Profile", equipmentProfile)}
+            </div>
+            ${renderCollapsibleStep1(run.step1_stats_json)}
+            ${renderCollapsibleJson("Step 5 Debug", run.step5_debug_json)}
+            ${renderCollapsibleJson("Step 6 Debug", run.step6_debug_json)}
+          `;
+          wireCollapsibles();
+        } catch (err) {
+          content.innerHTML = `<div class="metric-bad">${escapeHtml(err.message || "Failed to load run detail.")}</div>`;
+        }
+      }
+
+      function closeModal() {
+        document.getElementById("run-modal").classList.add("hidden");
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const savedToken = localStorage.getItem("adminToken") || sessionStorage.getItem(STORAGE_KEY);
+        if (savedToken) tokenInput.value = savedToken;
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+        });
+        document.getElementById("period-select").addEventListener("change", () => {
+          loadAll().catch((err) => setStatus(err.message || "Failed to load data", "err"));
+        });
+        document.getElementById("refresh-btn").addEventListener("click", () => {
+          loadAll().catch((err) => setStatus(err.message || "Failed to load data", "err"));
+        });
+        document.getElementById("recent-runs-body").addEventListener("click", (event) => {
+          const row = event.target.closest("tr[data-run-id]");
+          if (row) openRunModal(row.dataset.runId);
+        });
+        document.getElementById("modal-close").addEventListener("click", closeModal);
+        document.getElementById("run-modal").addEventListener("click", (event) => {
+          if (event.target.id === "run-modal") closeModal();
+        });
+        loadAll().catch((err) => setStatus(err.message || "Failed to load data", "err"));
+      });
+    </script>
+  </body>
+</html>

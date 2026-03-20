@@ -61,6 +61,32 @@
     .badge.yes { background: #d1fae5; color: #065f46; }
     .badge.warn { background: #fef3c7; color: #92400e; }
 
+    /* Chip tag input */
+    .chip-input { border: 1px solid var(--border); border-radius: 6px; background: #fff; padding: 4px 6px; min-height: 36px; cursor: text; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .chip-input:focus-within { outline: 2px solid var(--primary); outline-offset: -1px; }
+    .chip-input .chip-list { display: contents; }
+    .chip-input .chip { display: inline-flex; align-items: center; gap: 3px; background: #ede9fe; color: #5b21b6; border-radius: 4px; padding: 2px 6px; font-size: 12px; white-space: nowrap; }
+    .chip-input .chip .chip-remove { cursor: pointer; font-size: 11px; opacity: .7; border: none; background: none; padding: 0; color: inherit; line-height: 1; }
+    .chip-input .chip .chip-remove:hover { opacity: 1; }
+    .chip-input #pref-tag-input, .chip-input #eq-slug-input { border: none; outline: none; font: inherit; font-size: 12px; min-width: 100px; flex: 1; padding: 2px 2px; background: transparent; }
+    .mp-wrapper { position: relative; }
+    .mp-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 200px; overflow-y: auto; z-index: 300; list-style: none; margin: 0; padding: 2px 0; }
+    .mp-dropdown li { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+    .mp-dropdown li:hover, .mp-dropdown li.mp-active { background: #ede9fe; color: #5b21b6; }
+    .mp-dropdown li.mp-new { color: #d97706; }
+    .mp-new-warning { font-size: 11px; color: #d97706; margin-top: 3px; }
+    .sw-wrapper { position: relative; }
+    .sw-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 200px; overflow-y: auto; z-index: 300; list-style: none; margin: 0; padding: 2px 0; }
+    .sw-dropdown li { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+    .sw-dropdown li:hover, .sw-dropdown li.sw-active { background: #e0eaff; color: #1d4ed8; }
+    .sw-dropdown li.sw-new { color: #d97706; }
+    .sw-new-warning { font-size: 11px; color: #d97706; margin-top: 3px; }
+    .eq-slug-wrapper { position: relative; }
+    .eq-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 200px; overflow-y: auto; z-index: 300; list-style: none; margin: 0; padding: 2px 0; }
+    .eq-dropdown li { padding: 6px 10px; cursor: pointer; font-size: 13px; display: flex; align-items: baseline; gap: 6px; }
+    .eq-dropdown li:hover, .eq-dropdown li.eq-active { background: #ede9fe; color: #5b21b6; }
+    .eq-dropdown li .eq-opt-name { color: var(--muted); font-size: 11px; }
+
     /* Selector gap indicators */
     .gap-cell { background: #fff7ed; }
     .gap-dash { color: #ef4444; font-weight: 700; }
@@ -166,6 +192,7 @@
         <a href="/admin-ui/index.html">Config Editor</a>
         <a href="/admin/coverage">Coverage Report</a>
         <a href="/admin/exercises">Exercise Catalogue</a>
+        <a href="/admin/observability">Observability</a>
       </nav>
     </div>
     <div class="controls">
@@ -349,6 +376,7 @@
         <div class="f">
           <label for="f-exercise_id">Exercise ID *</label>
           <input id="f-exercise_id" type="text" placeholder="e.g. barbell_squat" />
+          <span id="exercise-id-was" hidden style="font-size:11px;color:var(--muted);margin-top:2px;display:block"></span>
         </div>
         <div class="f">
           <label for="f-name">Name *</label>
@@ -376,7 +404,11 @@
         </div>
         <div class="f">
           <label for="f-movement_pattern_primary">Movement Pattern *</label>
-          <input id="f-movement_pattern_primary" type="text" placeholder="e.g. squat" />
+          <div class="mp-wrapper">
+            <input id="f-movement_pattern_primary" type="text" placeholder="Search or type new…" autocomplete="off" />
+            <ul class="mp-dropdown" id="mp-dropdown" hidden></ul>
+          </div>
+          <span class="mp-new-warning" id="mp-new-warning" hidden>New pattern — not in existing catalogue. Make sure this is intentional.</span>
         </div>
       </div>
       <div class="row2">
@@ -391,10 +423,24 @@
             <option>upper</option><option>lower</option>
           </select>
         </div>
-        <div class="f"><label for="f-swap_group_id_1">Swap Group 1</label><input id="f-swap_group_id_1" type="text" /></div>
+        <div class="f">
+          <label for="f-swap_group_id_1">Swap Group 1 (sw)</label>
+          <div class="sw-wrapper">
+            <input id="f-swap_group_id_1" type="text" placeholder="Search or type new…" autocomplete="off" />
+            <ul class="sw-dropdown" id="sw1-dropdown" hidden></ul>
+          </div>
+          <span class="sw-new-warning" id="sw1-new-warning" hidden>New swap group — not in existing catalogue. Make sure this is intentional.</span>
+        </div>
       </div>
       <div class="row2">
-        <div class="f"><label for="f-swap_group_id_2">Swap Group 2</label><input id="f-swap_group_id_2" type="text" /></div>
+        <div class="f">
+          <label for="f-swap_group_id_2">Swap Group 2 (sw2)</label>
+          <div class="sw-wrapper">
+            <input id="f-swap_group_id_2" type="text" placeholder="Search or type new…" autocomplete="off" />
+            <ul class="sw-dropdown" id="sw2-dropdown" hidden></ul>
+          </div>
+          <span class="sw-new-warning" id="sw2-new-warning" hidden>New swap group — not in existing catalogue. Make sure this is intentional.</span>
+        </div>
         <div class="f"><label for="f-min_fitness_rank">Min Fitness Rank</label><input id="f-min_fitness_rank" type="number" min="0" max="3" step="1" /></div>
       </div>
       <div class="row2">
@@ -416,12 +462,16 @@
     <fieldset class="fg">
       <legend>Equipment</legend>
       <div class="f">
-        <label for="f-equipment_items_slugs">Equipment Slugs (comma-separated)</label>
-        <input id="f-equipment_items_slugs" type="text" placeholder="e.g. barbell, bench" />
-      </div>
-      <div class="f">
-        <label for="f-equipment_json">Equipment JSON</label>
-        <textarea id="f-equipment_json"></textarea>
+        <label>Equipment Slugs</label>
+        <div class="eq-slug-wrapper">
+          <div class="chip-input" id="eq-chip-container">
+            <div class="chip-list" id="eq-chip-list"></div>
+            <input id="eq-slug-input" type="text" placeholder="Search equipment…" autocomplete="off" />
+          </div>
+          <ul class="eq-dropdown" id="eq-dropdown" hidden></ul>
+        </div>
+        <input type="hidden" id="f-equipment_items_slugs" />
+        <input type="hidden" id="f-equipment_json" />
       </div>
     </fieldset>
 
@@ -430,7 +480,14 @@
       <legend>Regions, Hooks &amp; Placements</legend>
       <div class="f"><label for="f-target_regions_json">Target Regions JSON</label><textarea id="f-target_regions_json"></textarea></div>
       <div class="f"><label for="f-warmup_hooks">Warmup Hooks JSON</label><textarea id="f-warmup_hooks"></textarea></div>
-      <div class="f"><label for="f-preferred_in_json">Preferred In JSON</label><textarea id="f-preferred_in_json"></textarea></div>
+      <div class="f">
+        <label>Preferred In (pref tags)</label>
+        <div class="chip-input" id="pref-chip-container">
+          <div class="chip-list" id="pref-chip-list"></div>
+          <input id="pref-tag-input" type="text" list="pref-tag-options" placeholder="Add tag…" autocomplete="off" />
+        </div>
+        <input type="hidden" id="f-preferred_in_json" />
+      </div>
       <div class="f"><label for="f-contraindications_slugs">Contraindication Slugs (comma-separated)</label><input id="f-contraindications_slugs" type="text" /></div>
       <div class="f"><label for="f-contraindications_json">Contraindications JSON</label><textarea id="f-contraindications_json"></textarea></div>
     </fieldset>
@@ -452,6 +509,7 @@
   <div class="drawer-footer">
     <button id="drawer-queue-btn">Queue Change</button>
     <span class="spacer"></span>
+    <button id="drawer-delete-btn" class="danger" style="display:none">Delete</button>
     <button id="drawer-cancel-btn" class="secondary">Cancel</button>
   </div>
 </aside>
@@ -587,7 +645,7 @@ async function loadState() {
     const data = await apiFetch(`${BASE}/full-state`);
     exercises = data.exercises ?? [];
     gaps = data.coverage_gaps ?? [];
-    equipmentSlugs = data.equipment_slugs ?? [];
+    equipmentSlugs = data.equipmentSlugs ?? [];
     presets = data.presets ?? [];
     renderTable();
     setStatus(`Loaded ${exercises.length} exercises, ${gaps.length} coverage gap slots.`, "ok");
@@ -596,6 +654,307 @@ async function loadState() {
     setStatus(e.message, "err");
   }
 }
+
+// ── Pref-tag chip selector ─────────────────────────────────────────────────
+let _prefTags = [];
+
+function setPrefTags(tags) {
+  _prefTags = Array.isArray(tags) ? [...tags] : [];
+  _syncPrefChips();
+}
+
+function _syncPrefChips() {
+  const list = document.getElementById("pref-chip-list");
+  if (!list) return;
+  list.innerHTML = _prefTags.map(t =>
+    `<span class="chip">${esc(t)}<button type="button" class="chip-remove" data-tag="${esc(t)}" title="Remove">✕</button></span>`
+  ).join("");
+  list.querySelectorAll(".chip-remove").forEach(btn =>
+    btn.addEventListener("click", e => { e.stopPropagation(); _removePrefTag(btn.dataset.tag); })
+  );
+  const hidden = document.getElementById("f-preferred_in_json");
+  if (hidden) {
+    hidden.value = JSON.stringify(_prefTags);
+    hidden.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+function _addPrefTag(raw) {
+  const tag = raw.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!tag || _prefTags.includes(tag)) return;
+  _prefTags = [..._prefTags, tag];
+  _syncPrefChips();
+}
+
+function _removePrefTag(tag) {
+  _prefTags = _prefTags.filter(t => t !== tag);
+  _syncPrefChips();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = document.getElementById("pref-tag-input");
+  if (!inp) return;
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      _addPrefTag(inp.value);
+      inp.value = "";
+    } else if (e.key === "Backspace" && inp.value === "" && _prefTags.length) {
+      _removePrefTag(_prefTags[_prefTags.length - 1]);
+    }
+  });
+  inp.addEventListener("change", e => {
+    // Fires when user selects from datalist
+    if (inp.value) { _addPrefTag(inp.value); inp.value = ""; }
+  });
+  document.getElementById("pref-chip-container")?.addEventListener("click", () => inp.focus());
+});
+
+// ── Equipment-slug chip selector ───────────────────────────────────────────
+let _eqSlugs = [];
+
+function setEqSlugs(slugs) {
+  _eqSlugs = Array.isArray(slugs) ? [...slugs] : [];
+  _syncEqChips();
+}
+
+function _syncEqChips() {
+  const list = document.getElementById("eq-chip-list");
+  if (!list) return;
+  list.innerHTML = _eqSlugs.map(s =>
+    `<span class="chip">${esc(s)}<button type="button" class="chip-remove" data-slug="${esc(s)}" title="Remove">✕</button></span>`
+  ).join("");
+  list.querySelectorAll(".chip-remove").forEach(btn =>
+    btn.addEventListener("click", e => { e.stopPropagation(); _removeEqSlug(btn.dataset.slug); })
+  );
+  const json = JSON.stringify(_eqSlugs);
+  const slugsEl = document.getElementById("f-equipment_items_slugs");
+  const jsonEl  = document.getElementById("f-equipment_json");
+  if (slugsEl) slugsEl.value = json;
+  if (jsonEl)  jsonEl.value  = json;
+}
+
+function _addEqSlug(slug) {
+  // Only accept slugs present in the loaded equipment_items table
+  if (!slug || _eqSlugs.includes(slug)) return;
+  if (!equipmentSlugs.some(s => s.slug === slug)) return; // reject invalid
+  _eqSlugs = [..._eqSlugs, slug];
+  _syncEqChips();
+}
+
+function _removeEqSlug(slug) {
+  _eqSlugs = _eqSlugs.filter(s => s !== slug);
+  _syncEqChips();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = document.getElementById("eq-slug-input");
+  const ddEl = document.getElementById("eq-dropdown");
+  if (!inp || !ddEl) return;
+
+  let _ddActive = -1; // keyboard-highlighted index
+
+  function _ddItems() { return ddEl.querySelectorAll("li"); }
+
+  function _openDd(query) {
+    const q = query.trim().toLowerCase();
+    const matches = equipmentSlugs
+      .filter(s => !_eqSlugs.includes(s.slug) &&
+        (s.slug.includes(q) || (s.name || "").toLowerCase().includes(q)))
+      .slice(0, 30);
+    if (!matches.length) { _closeDd(); return; }
+    ddEl.innerHTML = matches.map((s, i) =>
+      `<li data-slug="${esc(s.slug)}" data-i="${i}"><span>${esc(s.slug)}</span>${s.name ? `<span class="eq-opt-name">${esc(s.name)}</span>` : ""}</li>`
+    ).join("");
+    ddEl.querySelectorAll("li").forEach(li =>
+      li.addEventListener("mousedown", e => { e.preventDefault(); _selectSlug(li.dataset.slug); })
+    );
+    _ddActive = -1;
+    ddEl.hidden = false;
+  }
+
+  function _closeDd() { ddEl.hidden = true; _ddActive = -1; }
+
+  function _highlightDd(idx) {
+    const items = _ddItems();
+    items.forEach(li => li.classList.remove("eq-active"));
+    if (idx >= 0 && idx < items.length) { items[idx].classList.add("eq-active"); items[idx].scrollIntoView({ block: "nearest" }); }
+    _ddActive = idx;
+  }
+
+  function _selectSlug(slug) {
+    _addEqSlug(slug);
+    inp.value = "";
+    _closeDd();
+    inp.focus();
+  }
+
+  inp.addEventListener("input", () => {
+    if (inp.value.trim()) _openDd(inp.value); else _closeDd();
+  });
+
+  inp.addEventListener("keydown", e => {
+    const items = _ddItems();
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      _highlightDd(Math.min(_ddActive + 1, items.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      _highlightDd(Math.max(_ddActive - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (_ddActive >= 0 && items[_ddActive]) _selectSlug(items[_ddActive].dataset.slug);
+      else if (items.length === 1) _selectSlug(items[0].dataset.slug);
+    } else if (e.key === "Escape") {
+      _closeDd();
+    } else if (e.key === "Backspace" && inp.value === "" && _eqSlugs.length) {
+      _removeEqSlug(_eqSlugs[_eqSlugs.length - 1]);
+    }
+  });
+
+  inp.addEventListener("blur", () => setTimeout(_closeDd, 150));
+
+  document.getElementById("eq-chip-container")?.addEventListener("click", () => inp.focus());
+});
+
+// ── Movement pattern combobox ─────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = document.getElementById("f-movement_pattern_primary");
+  const ddEl = document.getElementById("mp-dropdown");
+  const warn = document.getElementById("mp-new-warning");
+  if (!inp || !ddEl) return;
+
+  let _mpActive = -1;
+  function _mpItems() { return ddEl.querySelectorAll("li"); }
+  function _knownPatterns() { return [...new Set(exercises.map(e => e.movement_pattern_primary).filter(Boolean))].sort(); }
+  function _isKnown(v) { return _knownPatterns().includes(v); }
+
+  function _updateWarning() {
+    const v = inp.value.trim();
+    warn.hidden = !v || _isKnown(v);
+  }
+
+  function _openDd(query) {
+    const q = query.trim().toLowerCase();
+    const known = _knownPatterns();
+    const matches = known.filter(p => p.includes(q));
+    const rows = matches.map(p => `<li data-val="${esc(p)}">${esc(p)}</li>`);
+    if (q && !known.includes(q)) {
+      rows.push(`<li class="mp-new" data-val="${esc(q.replace(/\s+/g, '_'))}" data-new="1">Add new: "${esc(q)}"</li>`);
+    }
+    if (!rows.length) { _closeDd(); return; }
+    ddEl.innerHTML = rows.join("");
+    ddEl.querySelectorAll("li").forEach(li =>
+      li.addEventListener("mousedown", e => { e.preventDefault(); _select(li.dataset.val); })
+    );
+    _mpActive = -1;
+    ddEl.hidden = false;
+  }
+
+  function _closeDd() { ddEl.hidden = true; _mpActive = -1; }
+
+  function _highlight(idx) {
+    const items = _mpItems();
+    items.forEach(li => li.classList.remove("mp-active"));
+    if (idx >= 0 && idx < items.length) { items[idx].classList.add("mp-active"); items[idx].scrollIntoView({ block: "nearest" }); }
+    _mpActive = idx;
+  }
+
+  function _select(val) {
+    inp.value = val;
+    _closeDd();
+    _updateWarning();
+    inp.focus();
+  }
+
+  inp.addEventListener("focus", () => _openDd(inp.value || ""));
+  inp.addEventListener("input", () => { _openDd(inp.value); _updateWarning(); });
+  inp.addEventListener("keydown", e => {
+    const items = _mpItems();
+    if (e.key === "ArrowDown") { e.preventDefault(); _highlight(Math.min(_mpActive + 1, items.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); _highlight(Math.max(_mpActive - 1, 0)); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      if (_mpActive >= 0 && items[_mpActive]) _select(items[_mpActive].dataset.val);
+      else if (items.length === 1) _select(items[0].dataset.val);
+    } else if (e.key === "Escape") { _closeDd(); }
+  });
+  inp.addEventListener("blur", () => { setTimeout(_closeDd, 150); _updateWarning(); });
+});
+
+// ── Swap group comboboxes (sw1 / sw2) ─────────────────────────────────────
+(function initSwComboboxes() {
+  const configs = [
+    { inputId: "f-swap_group_id_1", ddId: "sw1-dropdown", warnId: "sw1-new-warning", field: "swap_group_id_1" },
+    { inputId: "f-swap_group_id_2", ddId: "sw2-dropdown", warnId: "sw2-new-warning", field: "swap_group_id_2" },
+  ];
+
+  configs.forEach(({ inputId, ddId, warnId, field }) => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const inp  = document.getElementById(inputId);
+      const ddEl = document.getElementById(ddId);
+      const warn = document.getElementById(warnId);
+      if (!inp || !ddEl) return;
+
+      let _active = -1;
+      const _items = () => ddEl.querySelectorAll("li");
+      const _known = () => [...new Set(exercises.map(e => e[field]).filter(Boolean))].sort();
+      const _isKnown = v => _known().includes(v);
+
+      function _updateWarning() {
+        const v = inp.value.trim();
+        if (warn) warn.hidden = !v || _isKnown(v);
+      }
+
+      function _openDd(query) {
+        const q = query.trim().toLowerCase();
+        const known = _known();
+        const matches = known.filter(p => p.includes(q));
+        const rows = matches.map(p => `<li data-val="${esc(p)}">${esc(p)}</li>`);
+        if (q && !known.includes(q)) {
+          rows.push(`<li class="sw-new" data-val="${esc(q.replace(/\s+/g, '_'))}" data-new="1">Add new: "${esc(q)}"</li>`);
+        }
+        if (!rows.length) { _closeDd(); return; }
+        ddEl.innerHTML = rows.join("");
+        ddEl.querySelectorAll("li").forEach(li =>
+          li.addEventListener("mousedown", e => { e.preventDefault(); _select(li.dataset.val); })
+        );
+        _active = -1;
+        ddEl.hidden = false;
+      }
+
+      function _closeDd() { ddEl.hidden = true; _active = -1; }
+
+      function _highlight(idx) {
+        const items = _items();
+        items.forEach(li => li.classList.remove("sw-active"));
+        if (idx >= 0 && idx < items.length) { items[idx].classList.add("sw-active"); items[idx].scrollIntoView({ block: "nearest" }); }
+        _active = idx;
+      }
+
+      function _select(val) {
+        inp.value = val;
+        _closeDd();
+        _updateWarning();
+        inp.focus();
+      }
+
+      inp.addEventListener("focus", () => _openDd(inp.value || ""));
+      inp.addEventListener("input", () => { _openDd(inp.value); _updateWarning(); });
+      inp.addEventListener("keydown", e => {
+        const items = _items();
+        if (e.key === "ArrowDown") { e.preventDefault(); _highlight(Math.min(_active + 1, items.length - 1)); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); _highlight(Math.max(_active - 1, 0)); }
+        else if (e.key === "Enter") {
+          e.preventDefault();
+          if (_active >= 0 && items[_active]) _select(items[_active].dataset.val);
+          else if (items.length === 1) _select(items[0].dataset.val);
+        } else if (e.key === "Escape") { _closeDd(); }
+      });
+      inp.addEventListener("blur", () => { setTimeout(_closeDd, 150); _updateWarning(); });
+    });
+  });
+})();
 
 // ── Selector helpers ───────────────────────────────────────────────────────
 function prefTagsHtml(json) {
@@ -741,6 +1100,23 @@ document.getElementById("drawer-close").addEventListener("click", closeDrawer);
 document.getElementById("drawer-cancel-btn").addEventListener("click", closeDrawer);
 document.getElementById("drawer-queue-btn").addEventListener("click", queueChange);
 document.getElementById("clone-btn").addEventListener("click", openCloneModal);
+document.getElementById("drawer-delete-btn").addEventListener("click", async () => {
+  if (!editingId) return;
+  const ex = exercises.find(e => e.exercise_id === editingId);
+  const label = ex ? `"${ex.name}" (${editingId})` : editingId;
+  if (!confirm(`Permanently delete ${label}?\n\nThis will be queued and applied when you generate the migration. It cannot be undone.`)) return;
+  try {
+    const d = await apiFetch(`${BASE}/session/queue-change`, {
+      method: "POST",
+      body: JSON.stringify({ action: "delete", exercise_id: editingId }),
+    });
+    await refreshSessionBar();
+    closeDrawer();
+    setStatus(`Queued delete: ${editingId}`, "ok");
+  } catch (e) {
+    setStatus(`Queue failed: ${e.message}`, "err");
+  }
+});
 
 const FIELDS = [
   "exercise_id","name","slug","creator",
@@ -755,8 +1131,12 @@ const FIELDS = [
 
 function fEl(id) { return document.getElementById(`f-${id}`); }
 function setFV(id, value) {
+  if (id === "preferred_in_json") { setPrefTags(Array.isArray(value) ? value : []); return; }
+  if (id === "equipment_items_slugs") { setEqSlugs(Array.isArray(value) ? value : (value ? String(value).split(",").map(s=>s.trim()).filter(Boolean) : [])); return; }
+  if (id === "equipment_json") return; // auto-synced from equipment_items_slugs chips
   const el = fEl(id); if (!el) return;
   if (el.type === "checkbox") { el.checked = Boolean(value); }
+  else if (el.type === "hidden") { el.value = value != null ? JSON.stringify(value) : ""; }
   else if (Array.isArray(value)) { el.value = value.join(", "); }
   else if (value !== null && typeof value === "object") { el.value = JSON.stringify(value, null, 2); }
   else { el.value = value ?? ""; }
@@ -767,6 +1147,9 @@ function getFV(id) {
 }
 function clearForm() {
   FIELDS.forEach(id => {
+    if (id === "preferred_in_json") { setPrefTags([]); return; }
+    if (id === "equipment_items_slugs") { setEqSlugs([]); return; }
+    if (id === "equipment_json") return; // auto-synced
     const el = fEl(id); if (!el) return;
     if (el.type === "checkbox") el.checked = false; else el.value = "";
   });
@@ -777,21 +1160,36 @@ function openNewDrawer() {
   drawerMode = "new"; editingId = null;
   document.getElementById("drawer-title").textContent = "New Exercise";
   document.getElementById("clone-btn").style.display = "none";
+  document.getElementById("drawer-delete-btn").style.display = "none";
   fEl("exercise_id").readOnly = false;
   clearForm();
+  updateIdWasIndicator();
   openDrawer();
   fEl("exercise_id").focus();
-  // auto-generate ID from name
-  fEl("name").addEventListener("input", onNameInput);
 }
 
 async function onNameInput() {
   const name = fEl("name").value;
-  if (!name || drawerMode !== "new") return;
+  if (!name) return;
   try {
     const d = await apiFetch(`${BASE}/generate-id`, { method: "POST", body: JSON.stringify({ name }) });
-    if (d.exercise_id) fEl("exercise_id").value = d.exercise_id;
+    if (d.exercise_id) {
+      fEl("exercise_id").value = d.exercise_id;
+      updateIdWasIndicator();
+    }
   } catch {}
+}
+
+function updateIdWasIndicator() {
+  const wasEl = document.getElementById("exercise-id-was");
+  if (!wasEl) return;
+  const current = getFV("exercise_id");
+  if (drawerMode === "edit" && editingId && current && current !== editingId) {
+    wasEl.textContent = `Was: ${editingId}`;
+    wasEl.hidden = false;
+  } else {
+    wasEl.hidden = true;
+  }
 }
 
 function openEditDrawer(id) {
@@ -800,13 +1198,18 @@ function openEditDrawer(id) {
   drawerMode = "edit"; editingId = id;
   document.getElementById("drawer-title").textContent = ex.name;
   document.getElementById("clone-btn").style.display = "";
+  document.getElementById("drawer-delete-btn").style.display = "";
   fEl("exercise_id").readOnly = true;
   FIELDS.forEach(key => setFV(key, ex[key] ?? null));
-  setFV("equipment_items_slugs", (ex.equipment_items_slugs ?? []).join(", "));
+  setFV("equipment_items_slugs", ex.equipment_items_slugs ?? []);
   setFV("contraindications_slugs", (ex.contraindications_slugs ?? []).join(", "));
+  onNameInput(); // auto-sync exercise_id from current name, show "was:" if different
   openDrawer();
   scheduleImpactPreview();
 }
+
+// Auto-generate exercise_id from name in both new and edit modes
+fEl("name").addEventListener("input", onNameInput);
 
 // Wire all fields to trigger impact preview on change
 FIELDS.filter(id => !["exercise_id"].includes(id)).forEach(id => {
@@ -885,9 +1288,9 @@ function collectPayload() {
     swap_group_id_2: getFV("swap_group_id_2") || null,
     strength_equivalent: getFV("strength_equivalent"),
     form_cues: getFV("form_cues") || null,
-    equipment_items_slugs: toArr(getFV("equipment_items_slugs")),
+    equipment_items_slugs: _eqSlugs,
     contraindications_slugs: toArr(getFV("contraindications_slugs")),
-    equipment_json: toJson(getFV("equipment_json")),
+    equipment_json: _eqSlugs,
     contraindications_json: toJson(getFV("contraindications_json")),
     preferred_in_json: toJson(getFV("preferred_in_json")),
     target_regions_json: toJson(getFV("target_regions_json")),
@@ -904,9 +1307,13 @@ async function queueChange() {
   if (!payload.movement_pattern_primary) { document.getElementById("drawer-err").textContent = "Movement Pattern required."; return; }
 
   try {
+    // In edit mode use the original editingId for the WHERE clause; new exercise_id lives in changes.
+    // If the ID hasn't changed, remove it from changes to keep the generated SQL clean.
+    const queueId = drawerMode === "edit" ? editingId : payload.exercise_id;
+    if (drawerMode === "edit" && payload.exercise_id === editingId) delete payload.exercise_id;
     await apiFetch(`${BASE}/session/queue-change`, {
       method: "POST",
-      body: JSON.stringify({ action: drawerMode, exercise_id: payload.exercise_id, changes: payload }),
+      body: JSON.stringify({ action: drawerMode, exercise_id: queueId, changes: payload }),
     });
     closeDrawer();
     await refreshSessionBar();
@@ -959,12 +1366,24 @@ async function refreshMigrationTab() {
 
 document.getElementById("mig-generate-btn").addEventListener("click", async () => {
   const el = document.getElementById("mig-status");
-  el.textContent = "Generating…";
+  el.textContent = "Applying…";
   try {
     const d = await apiFetch(`${BASE}/session/generate-migration`, { method: "POST" });
     el.textContent = d.message ?? "Done";
-    el.className = "ok";
-  } catch (e) { el.textContent = e.message; el.className = "err"; }
+    el.style.color = d.db_error ? "var(--err)" : "var(--success)";
+    if (d.db_applied) {
+      // Reload exercise data so browse table reflects the applied changes immediately
+      const state = await apiFetch(`${BASE}/full-state`);
+      exercises = state.exercises ?? [];
+      gaps = state.coverage_gaps ?? [];
+      equipmentSlugs = state.equipmentSlugs ?? [];
+      presets = state.presets ?? [];
+      const eqDl = document.getElementById("eq-slug-options");
+      if (eqDl) eqDl.innerHTML = equipmentSlugs.map(s => `<option value="${esc(s.slug)}" label="${esc(s.name || s.slug)}"></option>`).join("");
+      renderTable();
+      await refreshSessionBar();
+    }
+  } catch (e) { el.textContent = e.message; el.style.color = "var(--err)"; }
 });
 
 document.getElementById("mig-copy-btn").addEventListener("click", () => {
@@ -1208,7 +1627,7 @@ function renderRecos(recos) {
       <div class="reco-changes">${renderChangePills(r.changes)}</div>
       ${r.explanation ? `<div class="reco-explanation">${esc(r.explanation)}</div>` : ""}
       <div class="reco-actions">
-        <button class="ghost sm" onclick="window.applyReco(${i})">Apply to Drawer</button>
+        <button class="ghost sm" onclick="window.applyReco(${i})">Edit</button>
         <button class="ghost sm" onclick="window.toggleRecoSql(${i})">Show SQL</button>
       </div>
       <pre class="reco-sql" id="reco-sql-${i}">${esc(r.sql_preview ?? r.sql ?? "-- No SQL generated")}</pre>
@@ -1226,8 +1645,8 @@ window.applyReco = function(i) {
   if (!ex) { alert("Exercise not loaded — reload browse tab first."); return; }
   openEditDrawer(r.exercise_id);
   // Apply recommended patches
-  if (r.patch) {
-    Object.entries(r.patch).forEach(([k, v]) => setFV(k, v));
+  if (r.changes) {
+    Object.entries(r.changes).forEach(([k, v]) => setFV(k, v));
   }
   // Switch to browse tab
   document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
@@ -1247,5 +1666,10 @@ if (savedToken) {
   document.getElementById("token-input").value = savedToken;
 }
 </script>
+<datalist id="pref-tag-options">
+  <option value="conditioning_main"><option value="finisher">
+  <option value="hypertrophy_secondary"><option value="hyrox_buy_in">
+  <option value="hyrox_power"><option value="hyrox_station"><option value="strength_main">
+</datalist>
 </body>
 </html>

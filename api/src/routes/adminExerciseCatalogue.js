@@ -143,10 +143,7 @@ function isEligible(ex, presetSlugsSet, rankValue, slot) {
     if (!swMatch && !sw2Match && !swAnyMatch && !mpMatch) return false;
   }
 
-  const rp = slot.requirePref;
-  if (rp) {
-    if (!preferredTags(ex).includes(rp)) return false;
-  }
+  // requirePref is now always a soft bonus, not a hard gate — no rejection here
 
   return true;
 }
@@ -243,9 +240,13 @@ function runRecommendations(exercises, presets, gapRows) {
         const eqSlugs = ex.equipment_items_slugs ?? [];
         const blocking = eqSlugs.filter(s => !pSet.has(s));
         if (blocking.length === 1) {
-          // Suggest removing the blocking slug (only if name doesn't imply it)
+          // Skip if the blocking slug is the exercise's own identity (e.g. ski_erg requires ski_erg)
+          const identitySlug = blocking[0] === ex.exercise_id || blocking[0] === ex.swap_group_id_1;
           const newSlugs = eqSlugs.filter(s => s !== blocking[0]);
-          fails.push({ gate: "equipment_nearMiss", changes: { equipment_items_slugs: newSlugs, equipment_json: newSlugs }, risky: true });
+          // Skip if result would be empty — removing the only equipment slug is never valid
+          if (!identitySlug && newSlugs.length > 0) {
+            fails.push({ gate: "equipment_nearMiss", changes: { equipment_items_slugs: newSlugs, equipment_json: newSlugs }, risky: true });
+          }
         }
 
         // 4. Selector gate
@@ -905,7 +906,9 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", (r
         ? buildInsertSql(changes)
         : action === "archive"
           ? buildEditSql(exercise_id, { is_archived: true })
-          : buildEditSql(exercise_id, changes)
+          : action === "delete"
+            ? `DELETE FROM exercise_catalogue WHERE exercise_id = ${sqlLiteral(exercise_id)};`
+            : buildEditSql(exercise_id, changes)
     );
     _pending.push({ action, exercise_id, changes, sql, queued_at: new Date().toISOString() });
 
@@ -929,7 +932,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/clear", (_req, re
 });
 
 // POST /admin/exercise-catalogue/session/generate-migration
-adminExerciseCatalogueRouter.post("/exercise-catalogue/session/generate-migration", (req, res) => {
+adminExerciseCatalogueRouter.post("/exercise-catalogue/session/generate-migration", async (req, res) => {
   try {
     if (_pending.length === 0) {
       return res.status(400).json({ ok: false, error: "No pending changes to commit" });
@@ -938,20 +941,41 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/generate-migratio
     const content = buildMigrationFileContent(_pending, description);
     const writeResult = writeMigrationFile(content);
 
+    // Apply SQL directly to DB so changes are live immediately (no manual flyway run needed).
+    // The repeatable migration file stays in sync — flyway will re-run it on next migrate and
+    // the idempotent ON CONFLICT DO UPDATE clauses will no-op.
+    const client = await pool.connect();
+    let dbError = null;
+    try {
+      await client.query("BEGIN");
+      for (const item of _pending) {
+        await client.query(item.sql);
+      }
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      dbError = e.message;
+    } finally {
+      client.release();
+    }
+
     invalidateCache();
-    const sql = content;
     _pending.length = 0;
 
     return res.json({
-      ok: true,
+      ok: !dbError,
       filename: MIGRATION_FILE,
       path: writeResult.filePath ?? null,
       write_succeeded: writeResult.ok,
       write_error: writeResult.error ?? null,
-      sql,
-      message: writeResult.ok
-        ? `Migration file written: ${MIGRATION_FILE}`
-        : `File write failed (${writeResult.error}) — copy the SQL below and save manually.`,
+      db_applied: !dbError,
+      db_error: dbError ?? null,
+      sql: content,
+      message: dbError
+        ? `File written but DB apply failed: ${dbError}`
+        : writeResult.ok
+          ? `Changes applied to DB and written to ${MIGRATION_FILE}`
+          : `Changes applied to DB. File write failed (${writeResult.error}) — copy the SQL below.`,
     });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });

@@ -16,6 +16,7 @@ import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
+import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
@@ -155,6 +156,7 @@ app.use("/admin-ui", express.static(join(__dirname, "admin")));
 app.get("/admin/coverage", (_req, res) => res.sendFile(join(__dirname, "admin/coverage.html")));
 app.get("/admin/exercises", (_req, res) => res.sendFile(join(__dirname, "admin/exercises.html")));
 app.get("/admin/narration", (_req, res) => res.sendFile(join(__dirname, "admin/narration.html")));
+app.get("/admin/observability", (_req, res) => res.sendFile(join(__dirname, "admin/observability.html")));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -380,6 +382,7 @@ app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
 app.use("/api/admin", adminCoverageRouter);
+app.use("/admin/api/observability", adminObservabilityRouter);
 app.use("/admin", adminConfigsRouter);
 app.use("/admin", adminExerciseCatalogueRouter);
 app.use("/admin", adminNarrationRouter);
