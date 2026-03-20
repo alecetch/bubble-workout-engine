@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
+import { publicInternalError } from "../utils/publicError.js";
 
 export const adminCoverageRouter = express.Router();
 
@@ -315,6 +316,6 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
 
     return res.json({ presets, ranks: RANKS, rows });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });

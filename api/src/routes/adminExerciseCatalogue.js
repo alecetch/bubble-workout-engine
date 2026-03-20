@@ -3,13 +3,15 @@
  * Exercise Catalogue admin API — coverage optimisation tool.
  *
  * All mutations are staged in a server-side session queue and written to
- * a Flyway repeatable migration file on commit.  The database is never
- * touched directly by these endpoints.
+ * a Flyway repeatable migration file on commit. Execution is explicit and
+ * separate from generation.
  */
 
 import express from "express";
 import { pool } from "../db.js";
-import { requireInternalToken } from "../middleware/auth.js";
+import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
+import { publicInternalError } from "../utils/publicError.js";
+import { auditLog } from "../utils/auditLog.js";
 import { writeFileSync, appendFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +22,7 @@ const MIGRATIONS_DIR = join(__dirname, "../../migrations");
 const MIGRATION_FILE = "R__exercise_catalogue_edits.sql";
 
 export const adminExerciseCatalogueRouter = express.Router();
-adminExerciseCatalogueRouter.use(requireInternalToken);
+adminExerciseCatalogueRouter.use(requireInternalToken, requireTrustedAdminOrigin);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +53,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Single global pending queue (single-admin tool)
 const _pending = []; // { action, exercise_id, changes, sql, queued_at }
+let _generatedCommit = null; // { items, content, description, generated_at, filePath, writeSucceeded, writeError, executedAt }
 
 function invalidateCache() { _cache = null; }
 
@@ -651,6 +654,47 @@ function writeMigrationFile(content) {
   }
 }
 
+function stripSqlStrings(sql) {
+  return String(sql || "").replace(/'(?:''|[^'])*'/g, "''");
+}
+
+function validateExecutableSql(sql) {
+  const raw = String(sql || "").trim();
+  if (!raw) return { ok: false, error: "SQL statement is empty" };
+
+  const withoutStrings = stripSqlStrings(raw);
+  const normalized = withoutStrings.replace(/\s+/g, " ").trim();
+  const trimmedNoTrailing = normalized.replace(/;+$/, "").trim();
+
+  if (/--|\/\*|\*\//.test(withoutStrings)) {
+    return { ok: false, error: "SQL contains disallowed comment syntax" };
+  }
+  if (/\b(DROP|TRUNCATE|GRANT|REVOKE|COPY)\b/i.test(withoutStrings)) {
+    return { ok: false, error: "SQL contains a blocked statement type" };
+  }
+  if (trimmedNoTrailing.includes(";")) {
+    return { ok: false, error: "SQL must contain exactly one statement" };
+  }
+  if (!/^(INSERT INTO exercise_catalogue|UPDATE exercise_catalogue|DELETE FROM exercise_catalogue)\b/i.test(trimmedNoTrailing)) {
+    return { ok: false, error: "SQL statement type is not allowed" };
+  }
+
+  return { ok: true };
+}
+
+function validatePendingItems(items) {
+  for (const item of items) {
+    const result = validateExecutableSql(item?.sql);
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: `${item?.exercise_id || "unknown"}: ${result.error}`,
+      };
+    }
+  }
+  return { ok: true };
+}
+
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -660,7 +704,7 @@ adminExerciseCatalogueRouter.get("/exercise-catalogue/full-state", async (_req, 
     const state = await getFullState();
     return res.json(state);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -670,7 +714,7 @@ adminExerciseCatalogueRouter.get("/exercise-catalogue/equipment-slugs", async (_
     const state = await getFullState();
     return res.json({ slugs: state.equipmentSlugs });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -703,7 +747,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/preview-change", async (r
 
     return res.json({ impact, sql_preview: sql });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -756,7 +800,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/clone-preview", async (re
       sql_preview: buildInsertSql(fullNewExercise),
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -772,7 +816,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/validate-id", async (req,
     const exists = (result.rows?.length ?? 0) > 0;
     return res.json({ available: !exists, conflict: exists ? `'${exercise_id}' already exists` : null });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -913,7 +957,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
       message: `Ready to import ${validRows.length} row(s).`,
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -934,12 +978,26 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", (r
             ? `DELETE FROM exercise_catalogue WHERE exercise_id = ${sqlLiteral(exercise_id)};`
             : buildEditSql(exercise_id, changes)
     );
+    const validation = validateExecutableSql(sql);
+    if (!validation.ok) {
+      return res.status(400).json({ ok: false, error: validation.error });
+    }
     _pending.push({ action, exercise_id, changes, sql, queued_at: new Date().toISOString() });
+    void auditLog(req, {
+      action: "queue_change",
+      entity: "exercise_catalogue",
+      entityId: exercise_id,
+      detail: {
+        change_action: action,
+        fields: Object.keys(changes || {}),
+        pending_count: _pending.length,
+      },
+    });
 
     const sessionSql = _pending.map((p, i) => `-- [${i + 1}] ${p.action}: ${p.exercise_id}\n${p.sql}`).join("\n\n");
     return res.json({ ok: true, pending_count: _pending.length, session_sql_preview: sessionSql });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -950,8 +1008,16 @@ adminExerciseCatalogueRouter.get("/exercise-catalogue/session/pending", (_req, r
 });
 
 // POST /admin/exercise-catalogue/session/clear
-adminExerciseCatalogueRouter.post("/exercise-catalogue/session/clear", (_req, res) => {
+adminExerciseCatalogueRouter.post("/exercise-catalogue/session/clear", (req, res) => {
+  const cleared = _pending.length;
   _pending.length = 0;
+  _generatedCommit = null;
+  void auditLog(req, {
+    action: "clear_session",
+    entity: "exercise_catalogue_session",
+    entityId: null,
+    detail: { cleared_pending_count: cleared },
+  });
   return res.json({ ok: true, pending_count: 0 });
 });
 
@@ -962,54 +1028,113 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/generate-migratio
       return res.status(400).json({ ok: false, error: "No pending changes to commit" });
     }
     const { description } = req.body ?? {};
+    const validation = validatePendingItems(_pending);
+    if (!validation.ok) {
+      return res.status(400).json({ ok: false, error: validation.error });
+    }
     const content = buildMigrationFileContent(_pending, description);
     const writeResult = writeMigrationFile(content);
+    const generatedCount = _pending.length;
+    if (writeResult.ok) {
+      _generatedCommit = {
+        items: _pending.map((item) => ({ ...item })),
+        content,
+        description: description ?? null,
+        generated_at: new Date().toISOString(),
+        filePath: writeResult.filePath ?? null,
+        writeSucceeded: true,
+        writeError: null,
+        executedAt: null,
+      };
+      _pending.length = 0;
+    } else {
+      _generatedCommit = null;
+    }
+    await auditLog(req, {
+      action: "generate_migration",
+      entity: "exercise_catalogue_migration",
+      entityId: MIGRATION_FILE,
+      detail: {
+        description: description ?? null,
+        item_count: generatedCount,
+        write_succeeded: writeResult.ok,
+        write_error: writeResult.error ?? null,
+      },
+    });
 
-    // Apply SQL directly to DB so changes are live immediately (no manual flyway run needed).
-    // The repeatable migration file stays in sync — flyway will re-run it on next migrate and
-    // the idempotent ON CONFLICT DO UPDATE clauses will no-op.
+    return res.json({
+      ok: writeResult.ok,
+      filename: MIGRATION_FILE,
+      path: writeResult.filePath ?? null,
+      write_succeeded: writeResult.ok,
+      write_error: writeResult.error ?? null,
+      db_applied: false,
+      db_error: null,
+      ready_for_execute: writeResult.ok,
+      generated_item_count: generatedCount,
+      sql: content,
+      message: writeResult.ok
+        ? `Migration written to ${MIGRATION_FILE}. Review and call the explicit execute endpoint to apply queued SQL.`
+        : `Migration file write failed (${writeResult.error}) — pending changes were kept so you can retry after fixing the file issue.`,
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+
+// POST /admin/exercise-catalogue/session/execute-migration
+adminExerciseCatalogueRouter.post("/exercise-catalogue/session/execute-migration", async (req, res) => {
+  try {
+    if (!_generatedCommit?.items?.length) {
+      return res.status(400).json({ ok: false, error: "No generated migration batch ready for execution" });
+    }
+    const validation = validatePendingItems(_generatedCommit.items);
+    if (!validation.ok) {
+      return res.status(400).json({ ok: false, error: validation.error });
+    }
+
     const client = await pool.connect();
-    let dbError = null;
     try {
       await client.query("BEGIN");
-      for (const item of _pending) {
+      for (const item of _generatedCommit.items) {
         await client.query(item.sql);
       }
       await client.query("COMMIT");
-    } catch (e) {
+    } catch (_err) {
       await client.query("ROLLBACK");
-      dbError = e.message;
+      return res.status(400).json({ ok: false, error: "SQL execution failed" });
     } finally {
       client.release();
     }
 
     invalidateCache();
-    _pending.length = 0;
+    _generatedCommit.executedAt = new Date().toISOString();
+    await auditLog(req, {
+      action: "execute_migration",
+      entity: "exercise_catalogue_migration",
+      entityId: MIGRATION_FILE,
+      detail: {
+        item_count: _generatedCommit.items.length,
+        generated_at: _generatedCommit.generated_at,
+      },
+    });
 
+    const executedCount = _generatedCommit.items.length;
+    _generatedCommit = null;
     return res.json({
-      ok: !dbError,
-      filename: MIGRATION_FILE,
-      path: writeResult.filePath ?? null,
-      write_succeeded: writeResult.ok,
-      write_error: writeResult.error ?? null,
-      db_applied: !dbError,
-      db_error: dbError ?? null,
-      sql: content,
-      message: dbError
-        ? `File written but DB apply failed: ${dbError}`
-        : writeResult.ok
-          ? `Changes applied to DB and written to ${MIGRATION_FILE}`
-          : `Changes applied to DB. File write failed (${writeResult.error}) — copy the SQL below.`,
+      ok: true,
+      executed_count: executedCount,
+      message: "Generated SQL executed successfully.",
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
 // POST /admin/exercise-catalogue/session/export-snapshot
 // Overwrites R__exercise_catalogue_edits.sql with a full snapshot of the current DB state.
 // Safe: uses DELETE-WHERE-NOT-IN + upsert so FK references to existing rows are preserved.
-adminExerciseCatalogueRouter.post("/exercise-catalogue/session/export-snapshot", async (_req, res) => {
+adminExerciseCatalogueRouter.post("/exercise-catalogue/session/export-snapshot", async (req, res) => {
   try {
     const state = await getFullState(true); // force-refresh so snapshot reflects latest DB state
     const { exercises } = state;
@@ -1018,8 +1143,14 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/export-snapshot",
     try {
       writeFileSync(filePath, content, "utf8");
     } catch (err) {
-      return res.status(500).json({ ok: false, error: `File write failed: ${err.message}` });
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
+    await auditLog(req, {
+      action: "export_snapshot",
+      entity: "exercise_catalogue_migration",
+      entityId: MIGRATION_FILE,
+      detail: { rows: exercises.length },
+    });
     return res.json({
       ok: true,
       rows: exercises.length,
@@ -1027,7 +1158,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/export-snapshot",
       message: `Full snapshot written — ${exercises.length} rows → ${MIGRATION_FILE}`,
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -1038,7 +1169,7 @@ adminExerciseCatalogueRouter.get("/exercise-catalogue/recommendations", async (_
     const recommendations = runRecommendations(state.exercises, state.presets, state.coverageGaps);
     return res.json({ recommendations });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -1049,7 +1180,7 @@ adminExerciseCatalogueRouter.get("/exercise-catalogue/catalogue-health", async (
     const health = runHealthDiagnostics(state.exercises, state.presets, state.slots);
     return res.json(health);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 

@@ -9,10 +9,16 @@ import { pool } from "../db.js";
  * allowing JWT-based auth paths to work unchanged.
  */
 export async function resolveBubbleUser(req, res, next) {
+  const { request_id } = req;
   const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
 
   if (!bubbleUserId) {
-    return next();
+    return res.status(401).json({
+      ok: false,
+      request_id,
+      code: "unauthorized",
+      error: "bubble_user_id is required",
+    });
   }
 
   try {

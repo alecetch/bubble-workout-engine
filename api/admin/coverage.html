@@ -371,6 +371,9 @@
 
     <script type="module">
       const STORAGE_KEY = "admin_internal_api_token";
+      const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+      const LAST_ACTIVE_KEY = `${STORAGE_KEY}:last_active`;
+      const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
       const RANKS_ORDER = [0, 1, 2, 3];
       const RANK_SHORT = { 0: "B", 1: "I", 2: "A", 3: "E" };
       const PRESET_SHORT = {
@@ -511,6 +514,58 @@
 
       function getToken() {
         return tokenInput.value.trim();
+      }
+      function saveToken(token) {
+        const value = String(token || "").trim();
+        if (!value) {
+          clearStoredToken();
+          return "";
+        }
+        sessionStorage.setItem(STORAGE_KEY, value);
+        sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+        return value;
+      }
+      function clearStoredToken() {
+        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(LAST_ACTIVE_KEY);
+      }
+      function clearAdminSession(expired = false) {
+        clearStoredToken();
+        tokenInput.value = "";
+        if (expired) {
+          window.alert("Admin session expired after 30 minutes of inactivity. Please enter the token again.");
+        }
+      }
+      function hasExpiredSession() {
+        const token = sessionStorage.getItem(STORAGE_KEY);
+        if (!token) return false;
+        const lastActive = Number(sessionStorage.getItem(LAST_ACTIVE_KEY) || 0);
+        return !lastActive || Date.now() - lastActive > ADMIN_IDLE_TIMEOUT_MS;
+      }
+      function ensureActiveAdminSession({ reloadOnExpire = false } = {}) {
+        if (!hasExpiredSession()) return true;
+        clearAdminSession(true);
+        if (reloadOnExpire) window.location.reload();
+        return false;
+      }
+      function touchAdminSession() {
+        if (sessionStorage.getItem(STORAGE_KEY)) {
+          sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+        }
+      }
+      function installAdminIdleTimeout() {
+        const onActivity = () => touchAdminSession();
+        for (const eventName of ACTIVITY_EVENTS) {
+          window.addEventListener(eventName, onActivity, { passive: true });
+        }
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState !== "visible") return;
+          if (!ensureActiveAdminSession({ reloadOnExpire: true })) return;
+          touchAdminSession();
+        });
+        window.setInterval(() => {
+          ensureActiveAdminSession({ reloadOnExpire: true });
+        }, 60 * 1000);
       }
 
       function setStatus(msg, kind = "") {
@@ -769,12 +824,14 @@
       async function loadReport() {
         _exerciseCache = null; // Invalidate on each report load so modal reflects fresh DB state
         try {
-          const token = getToken();
+          if (!ensureActiveAdminSession({ reloadOnExpire: true })) {
+            throw new Error("Admin session expired. Reload and enter the token again.");
+          }
+          const token = saveToken(getToken());
           if (!token) {
             setStatus("Missing token. Fill Internal API Token first.", "err");
             return;
           }
-          sessionStorage.setItem(STORAGE_KEY, token);
           setStatus("Loading...", "");
 
           const res = await fetch("/api/admin/coverage-report", {
@@ -800,8 +857,13 @@
       }
 
       function init() {
+        if (!ensureActiveAdminSession()) return;
         const savedToken = sessionStorage.getItem(STORAGE_KEY);
-        if (savedToken) tokenInput.value = savedToken;
+        if (savedToken) {
+          tokenInput.value = savedToken;
+          touchAdminSession();
+        }
+        installAdminIdleTimeout();
         loadBtn.addEventListener("click", loadReport);
 
         tableBodyEl.addEventListener("click", e => {

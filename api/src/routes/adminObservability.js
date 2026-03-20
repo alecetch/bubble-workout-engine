@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
+import { publicInternalError } from "../utils/publicError.js";
 
 export const adminObservabilityRouter = express.Router();
 
@@ -134,7 +135,7 @@ adminObservabilityRouter.get("/summary", async (req, res) => {
       })),
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -218,7 +219,7 @@ adminObservabilityRouter.get("/runs", async (req, res) => {
       total,
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -236,7 +237,7 @@ adminObservabilityRouter.get("/run/:id", async (req, res) => {
     }
     return res.json(row);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -306,7 +307,7 @@ adminObservabilityRouter.get("/fill-quality", async (req, res) => {
       }),
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -363,7 +364,7 @@ adminObservabilityRouter.get("/exercise-frequency", async (req, res) => {
       })),
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -410,7 +411,7 @@ adminObservabilityRouter.get("/config-hits", async (req, res) => {
       }),
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -452,6 +453,6 @@ adminObservabilityRouter.get("/narration-adoption", async (req, res) => {
       })),
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });

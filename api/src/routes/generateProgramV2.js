@@ -6,6 +6,7 @@ import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
+import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
 
@@ -329,7 +330,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       ok: false,
       request_id,
       code: "internal_error",
-      error: err?.message || "Internal server error",
+      error: publicInternalError(err),
     });
   } finally {
     setupClient.release();
@@ -538,7 +539,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       ok: false,
       request_id,
       code: "internal_error",
-      error: err?.message || "Internal server error",
+      error: publicInternalError(err),
       program_id: created_program_id,
       generation_run_id,
     });

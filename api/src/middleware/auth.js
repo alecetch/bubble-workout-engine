@@ -59,3 +59,34 @@ export function requireInternalToken(req, res, next) {
 
   next();
 }
+
+export function requireTrustedAdminOrigin(req, res, next) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    return next();
+  }
+
+  const origin = (req.get("origin") || "").trim();
+  if (!origin) {
+    return next();
+  }
+
+  const host = (req.get("host") || "").trim();
+  const configuredOrigin = (process.env.ADMIN_ALLOWED_ORIGIN || "").trim();
+  const forwardedProto = (req.get("x-forwarded-proto") || "").split(",")[0].trim();
+  const proto = forwardedProto || req.protocol || "http";
+  const allowedOrigins = new Set();
+
+  if (configuredOrigin) allowedOrigins.add(configuredOrigin);
+  if (host) allowedOrigins.add(`${proto}://${host}`);
+
+  if (!allowedOrigins.has(origin)) {
+    return res.status(403).json({
+      ok: false,
+      request_id: req.request_id,
+      code: "forbidden_origin",
+      error: "Origin not allowed for admin mutation",
+    });
+  }
+
+  next();
+}

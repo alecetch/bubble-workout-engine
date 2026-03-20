@@ -1,16 +1,11 @@
 import express from "express";
 import { pool } from "../db.js";
+import { internalApi } from "../middleware/chains.js";
+import { publicInternalError } from "../utils/publicError.js";
+import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
 export const sessionHistoryMetricsRouter = express.Router();
-
-class ValidationError extends Error {
-  constructor(message, details = []) {
-    super(message);
-    this.name = "ValidationError";
-    this.status = 400;
-    this.details = details;
-  }
-}
+sessionHistoryMetricsRouter.use(...internalApi);
 
 class NotFoundError extends Error {
   constructor(message, details = []) {
@@ -21,28 +16,16 @@ class NotFoundError extends Error {
   }
 }
 
-function s(v) {
-  return (v ?? "").toString().trim();
-}
-
-function isUuid(v) {
-  // Accept standard UUID v1-v5 formats (case-insensitive).
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s(v));
-}
-
 async function resolveUserId(client, query) {
-  const user_id = s(query.user_id);
-  const bubble_user_id = s(query.bubble_user_id);
+  const user_id = safeString(query.user_id);
+  const bubble_user_id = safeString(query.bubble_user_id);
 
   if (user_id) {
-    if (!isUuid(user_id)) {
-      throw new ValidationError("Invalid user_id");
-    }
-    return user_id;
+    return requireUuid(user_id, "user_id");
   }
 
   if (!bubble_user_id) {
-    throw new ValidationError("Provide user_id or bubble_user_id");
+    throw new RequestValidationError("Provide user_id or bubble_user_id");
   }
 
   const r = await client.query(
@@ -63,7 +46,7 @@ async function resolveUserId(client, query) {
 }
 
 function mapError(err) {
-  if (err instanceof ValidationError || err instanceof NotFoundError) {
+  if (err instanceof RequestValidationError || err instanceof NotFoundError) {
     return { status: err.status ?? 400, code: err instanceof NotFoundError ? "not_found" : "validation_error", message: err.message, details: err.details };
   }
   if (err && typeof err === "object") {
@@ -73,7 +56,7 @@ function mapError(err) {
     if (err.code === "23505") return { status: 409, code: "unique_violation", message: "Duplicate conflict" };
     if (err.code === "42P01") return { status: 500, code: "schema_missing", message: "Required table is missing; run migrations" };
   }
-  return { status: 500, code: "internal_error", message: err?.message || "Internal server error" };
+  return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
 function asNumber(value, fallback = 0) {

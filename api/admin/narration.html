@@ -572,6 +572,9 @@
 
   <script>
     const STORAGE_KEY = "narration_admin_internal_token";
+    const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+    const LAST_ACTIVE_KEY = `${STORAGE_KEY}:last_active`;
+    const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
     const FIELD_OPTIONS = {
       program: ["PROGRAM_TITLE", "PROGRAM_SUMMARY", "PROGRESSION_BLURB", "SAFETY_BLURB"],
       week: ["WEEK_TITLE", "WEEK_FOCUS", "WEEK_NOTES"],
@@ -655,6 +658,65 @@
 
     function token() {
       return (els.tokenInput.value || "").trim();
+    }
+
+    function saveToken(tokenValue) {
+      const value = String(tokenValue || "").trim();
+      if (!value) {
+        clearStoredToken();
+        return "";
+      }
+      sessionStorage.setItem(STORAGE_KEY, value);
+      sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+      return value;
+    }
+
+    function clearStoredToken() {
+      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(LAST_ACTIVE_KEY);
+    }
+
+    function clearAdminSession(expired = false) {
+      clearStoredToken();
+      els.tokenInput.value = "";
+      if (expired) {
+        window.alert("Admin session expired after 30 minutes of inactivity. Please enter the token again.");
+      }
+    }
+
+    function hasExpiredSession() {
+      const currentToken = sessionStorage.getItem(STORAGE_KEY);
+      if (!currentToken) return false;
+      const lastActive = Number(sessionStorage.getItem(LAST_ACTIVE_KEY) || 0);
+      return !lastActive || Date.now() - lastActive > ADMIN_IDLE_TIMEOUT_MS;
+    }
+
+    function ensureActiveAdminSession({ reloadOnExpire = false } = {}) {
+      if (!hasExpiredSession()) return true;
+      clearAdminSession(true);
+      if (reloadOnExpire) window.location.reload();
+      return false;
+    }
+
+    function touchAdminSession() {
+      if (sessionStorage.getItem(STORAGE_KEY)) {
+        sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+      }
+    }
+
+    function installAdminIdleTimeout() {
+      const onActivity = () => touchAdminSession();
+      for (const eventName of ACTIVITY_EVENTS) {
+        window.addEventListener(eventName, onActivity, { passive: true });
+      }
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") return;
+        if (!ensureActiveAdminSession({ reloadOnExpire: true })) return;
+        touchAdminSession();
+      });
+      window.setInterval(() => {
+        ensureActiveAdminSession({ reloadOnExpire: true });
+      }, 60 * 1000);
     }
 
     function readProgramType(template) {
@@ -1026,9 +1088,11 @@
     }
 
     async function apiFetchJson(path, options) {
-      const apiToken = token();
+      if (!ensureActiveAdminSession({ reloadOnExpire: true })) {
+        throw new Error("Admin session expired. Reload and enter the token again.");
+      }
+      const apiToken = saveToken(token());
       if (!apiToken) throw new Error("Internal API token is required.");
-      localStorage.setItem(STORAGE_KEY, apiToken);
       const response = await fetch(path, {
         ...options,
         headers: {
@@ -1054,7 +1118,10 @@
       setStatus("Loading narration templates...", "warn");
 
       try {
-        localStorage.setItem(STORAGE_KEY, apiToken);
+        if (!ensureActiveAdminSession({ reloadOnExpire: true })) {
+          throw new Error("Admin session expired. Reload and enter the token again.");
+        }
+        saveToken(apiToken);
         const response = await fetch("/admin/narration/templates", {
           headers: {
             "x-internal-token": apiToken,
@@ -1260,7 +1327,13 @@
 
     function init() {
       populateStaticDrawerOptions();
-      els.tokenInput.value = localStorage.getItem(STORAGE_KEY) || "";
+      if (!ensureActiveAdminSession()) return;
+      const savedToken = sessionStorage.getItem(STORAGE_KEY);
+      if (savedToken) {
+        els.tokenInput.value = savedToken;
+        touchAdminSession();
+      }
+      installAdminIdleTimeout();
       els.loadBtn.addEventListener("click", loadTemplates);
       els.newBtn.addEventListener("click", () => renderDrawer(blankTemplate(), "new"));
       els.tableBody.addEventListener("click", onTableClick);

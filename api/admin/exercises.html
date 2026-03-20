@@ -222,9 +222,9 @@
           <option value="all">All</option>
         </select>
       </div>
-      <button id="load-btn">Load</button>
-      <button id="new-btn" class="secondary">+ New</button>
-      <button id="csv-btn" class="secondary">CSV ▾</button>
+      <button id="load-btn" type="button">Load</button>
+      <button id="new-btn" type="button" class="secondary">+ New</button>
+      <button id="csv-btn" type="button" class="secondary">CSV ▾</button>
     </div>
     <div class="controls-row2">
       <div class="ctrl">
@@ -279,7 +279,7 @@
           <option value="no_se">strength_equivalent = false</option>
         </select>
       </div>
-      <button id="clear-filters-btn" class="secondary sm" style="align-self:flex-end">Clear filters</button>
+      <button id="clear-filters-btn" type="button" class="secondary sm" style="align-self:flex-end">Clear filters</button>
     </div>
     <div id="status"></div>
   </div>
@@ -565,6 +565,9 @@
 
 <script type="module">
 const STORAGE_KEY = "admin_internal_api_token";
+const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const LAST_ACTIVE_KEY = `${STORAGE_KEY}:last_active`;
+const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
 const BASE = "/admin/exercise-catalogue";
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -584,14 +587,88 @@ function esc(v) {
   return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 }
 function getToken() { return document.getElementById("token-input").value.trim(); }
-function authH() { return { "x-internal-token": getToken(), "Content-Type": "application/json" }; }
+function getOrPromptToken() {
+  let token = getToken();
+  if (!token) token = sessionStorage.getItem(STORAGE_KEY) || "";
+  if (!token) token = window.prompt("Paste internal admin token") || "";
+  token = saveToken(token);
+  if (token) {
+    const input = document.getElementById("token-input");
+    if (input) input.value = token;
+  }
+  return token;
+}
+function saveToken(token) {
+  const value = String(token || "").trim();
+  if (!value) {
+    clearStoredToken();
+    return "";
+  }
+  sessionStorage.setItem(STORAGE_KEY, value);
+  sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+  return value;
+}
+function clearStoredToken() {
+  sessionStorage.removeItem(STORAGE_KEY);
+  sessionStorage.removeItem(LAST_ACTIVE_KEY);
+}
+function clearAdminSession(expired = false) {
+  clearStoredToken();
+  const input = document.getElementById("token-input");
+  if (input) input.value = "";
+  if (expired) {
+    window.alert("Admin session expired after 30 minutes of inactivity. Please enter the token again.");
+  }
+}
+function hasExpiredSession() {
+  const token = sessionStorage.getItem(STORAGE_KEY);
+  if (!token) return false;
+  const lastActive = Number(sessionStorage.getItem(LAST_ACTIVE_KEY) || 0);
+  return !lastActive || Date.now() - lastActive > ADMIN_IDLE_TIMEOUT_MS;
+}
+function ensureActiveAdminSession({ reloadOnExpire = false } = {}) {
+  if (!hasExpiredSession()) return true;
+  clearAdminSession(true);
+  if (reloadOnExpire) window.location.reload();
+  return false;
+}
+function touchAdminSession() {
+  if (sessionStorage.getItem(STORAGE_KEY)) {
+    sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+  }
+}
+function installAdminIdleTimeout() {
+  const onActivity = () => touchAdminSession();
+  for (const eventName of ACTIVITY_EVENTS) {
+    window.addEventListener(eventName, onActivity, { passive: true });
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (!ensureActiveAdminSession({ reloadOnExpire: true })) return;
+    touchAdminSession();
+  });
+  window.setInterval(() => {
+    ensureActiveAdminSession({ reloadOnExpire: true });
+  }, 60 * 1000);
+}
+function authH() {
+  if (!ensureActiveAdminSession({ reloadOnExpire: true })) {
+    throw new Error("Admin session expired. Reload and enter the token again.");
+  }
+  const token = getOrPromptToken();
+  if (!token) {
+    throw new Error("Missing token. Fill in the token first.");
+  }
+  return { "x-internal-token": token, "Content-Type": "application/json" };
+}
 function setStatus(msg, cls = "") {
   const el = document.getElementById("status");
   el.textContent = msg; el.className = cls;
 }
 
 async function apiFetch(path, opts = {}) {
-  const res = await fetch(path, { headers: authH(), ...opts });
+  const mergedHeaders = { ...authH(), ...(opts.headers || {}) };
+  const res = await fetch(path, { ...opts, headers: mergedHeaders });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
@@ -608,7 +685,15 @@ document.querySelectorAll(".tab").forEach(btn => {
 });
 
 // ── Load ───────────────────────────────────────────────────────────────────
-document.getElementById("load-btn").addEventListener("click", loadState);
+async function handleLoadClick(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  await loadState();
+}
+
+document.getElementById("load-btn").addEventListener("click", (event) => {
+  handleLoadClick(event).catch((e) => setStatus(e.message || "Load failed", "err"));
+});
 document.getElementById("search-input").addEventListener("keydown", e => { if (e.key === "Enter") renderTable(); });
 document.getElementById("search-input").addEventListener("input", renderTable);
 document.getElementById("class-filter").addEventListener("change", renderTable);
@@ -643,9 +728,6 @@ document.querySelectorAll("th[data-sort]").forEach(th => {
 });
 
 async function loadState() {
-  const token = getToken();
-  if (!token) { setStatus("Fill in the token first.", "err"); return; }
-  sessionStorage.setItem(STORAGE_KEY, token);
   setStatus("Loading…");
   try {
     const data = await apiFetch(`${BASE}/full-state`);
@@ -1682,10 +1764,14 @@ window.toggleRecoSql = function(i) {
 };
 
 // ── Init ───────────────────────────────────────────────────────────────────
-const savedToken = sessionStorage.getItem(STORAGE_KEY);
-if (savedToken) {
-  document.getElementById("token-input").value = savedToken;
+if (ensureActiveAdminSession()) {
+  const savedToken = sessionStorage.getItem(STORAGE_KEY);
+  if (savedToken) {
+    document.getElementById("token-input").value = savedToken;
+    touchAdminSession();
+  }
 }
+installAdminIdleTimeout();
 </script>
 <datalist id="pref-tag-options">
   <option value="conditioning_main"><option value="finisher">

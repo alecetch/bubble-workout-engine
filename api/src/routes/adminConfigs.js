@@ -1,10 +1,12 @@
 import express from "express";
 import { pool } from "../db.js";
-import { requireInternalToken } from "../middleware/auth.js";
+import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
+import { publicInternalError } from "../utils/publicError.js";
+import { auditLog } from "../utils/auditLog.js";
 
 export const adminConfigsRouter = express.Router();
 
-adminConfigsRouter.use(requireInternalToken);
+adminConfigsRouter.use(requireInternalToken, requireTrustedAdminOrigin);
 
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -23,7 +25,7 @@ adminConfigsRouter.get("/configs", async (_req, res) => {
     `);
     return res.json({ configs: result.rows ?? [] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -49,7 +51,7 @@ adminConfigsRouter.get("/configs/:key", async (req, res) => {
 
     return res.json({ config: result.rows[0] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -99,9 +101,25 @@ adminConfigsRouter.put("/configs/:key", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Config not found" });
     }
 
+    await auditLog(req, {
+      action: "update",
+      entity: "program_generation_config",
+      entityId: result.rows[0].config_key,
+      detail: {
+        fields_updated: [
+          "program_generation_config_json",
+          progression_by_rank_json != null ? "progression_by_rank_json" : null,
+          week_phase_config_json != null ? "week_phase_config_json" : null,
+          total_weeks_default != null ? "total_weeks_default" : null,
+          notes != null ? "notes" : null,
+          typeof is_active === "boolean" ? "is_active" : null,
+        ].filter(Boolean),
+      },
+    });
+
     return res.json({ ok: true, config: result.rows[0] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -144,9 +162,16 @@ adminConfigsRouter.post("/configs", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Source config not found" });
     }
 
+    await auditLog(req, {
+      action: "create",
+      entity: "program_generation_config",
+      entityId: result.rows[0].config_key,
+      detail: { source_key: source_key.trim() },
+    });
+
     return res.json({ ok: true, config: result.rows[0] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
@@ -171,8 +196,15 @@ adminConfigsRouter.patch("/configs/:key/activate", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Config not found" });
     }
 
+    await auditLog(req, {
+      action: "activate",
+      entity: "program_generation_config",
+      entityId: result.rows[0].config_key,
+      detail: { is_active },
+    });
+
     return res.json({ ok: true, config: result.rows[0] });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Internal server error" });
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });

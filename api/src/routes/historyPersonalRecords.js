@@ -1,7 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
-import { requireInternalToken } from "../middleware/auth.js";
-import { resolveBubbleUser } from "../middleware/resolveUser.js";
+import { internalWithUser } from "../middleware/chains.js";
 
 const SQL_PERSONAL_RECORDS = `
 SELECT DISTINCT ON (pe.exercise_id)
@@ -97,8 +96,7 @@ export const historyPersonalRecordsRouter = express.Router();
 
 historyPersonalRecordsRouter.get(
   "/v1/history/personal-records",
-  requireInternalToken,
-  resolveBubbleUser,
+  ...internalWithUser,
   createHistoryPersonalRecordsHandler(pool),
 );
 

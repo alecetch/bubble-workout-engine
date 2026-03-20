@@ -2,6 +2,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
+import { publicInternalError } from "../utils/publicError.js";
 
 export const readProgramRouter = express.Router();
 
@@ -108,7 +109,7 @@ function mapError(err) {
     if (err.code === "23505") return { status: 409, code: "unique_violation", message: "Duplicate conflict" };
     if (err.code === "42P01") return { status: 500, code: "schema_missing", message: "Required table is missing; run migrations" };
   }
-  return { status: 500, code: "internal_error", message: err?.message || "Internal server error" };
+  return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
 // ---- GET /api/program/:program_id/overview ----

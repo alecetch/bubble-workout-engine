@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Observability - Workout Engine Admin</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" integrity="sha512-SIMGYRUjwY8+gKg7nn9EItdD8LCADSDfJNutF9TPrvEo86sQmFMh6MyralfIyhADlajSxqc7G0gs7+MwWF/ogQ==" crossorigin="anonymous"></script>
     <style>
       :root {
         --bg: #f4f6f8;
@@ -492,6 +492,9 @@
 
     <script>
       const STORAGE_KEY = "admin_internal_api_token";
+      const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+      const LAST_ACTIVE_KEY = `${STORAGE_KEY}:last_active`;
+      const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
       const tokenInput = document.getElementById("token-input");
       const statusEl = document.getElementById("status");
 
@@ -499,15 +502,75 @@
         return tokenInput.value.trim();
       }
 
+      function saveToken(token) {
+        const value = String(token || "").trim();
+        if (!value) {
+          clearStoredToken();
+          return "";
+        }
+        sessionStorage.setItem(STORAGE_KEY, value);
+        sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+        return value;
+      }
+
+      function clearStoredToken() {
+        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(LAST_ACTIVE_KEY);
+      }
+
+      function clearAdminSession(expired = false) {
+        clearStoredToken();
+        tokenInput.value = "";
+        if (expired) {
+          window.alert("Admin session expired after 30 minutes of inactivity. Please enter the token again.");
+        }
+      }
+
+      function hasExpiredSession() {
+        const token = sessionStorage.getItem(STORAGE_KEY);
+        if (!token) return false;
+        const lastActive = Number(sessionStorage.getItem(LAST_ACTIVE_KEY) || 0);
+        return !lastActive || Date.now() - lastActive > ADMIN_IDLE_TIMEOUT_MS;
+      }
+
+      function ensureActiveAdminSession({ reloadOnExpire = false } = {}) {
+        if (!hasExpiredSession()) return true;
+        clearAdminSession(true);
+        if (reloadOnExpire) window.location.reload();
+        return false;
+      }
+
+      function touchAdminSession() {
+        if (sessionStorage.getItem(STORAGE_KEY)) {
+          sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+        }
+      }
+
+      function installAdminIdleTimeout() {
+        const onActivity = () => touchAdminSession();
+        for (const eventName of ACTIVITY_EVENTS) {
+          window.addEventListener(eventName, onActivity, { passive: true });
+        }
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState !== "visible") return;
+          if (!ensureActiveAdminSession({ reloadOnExpire: true })) return;
+          touchAdminSession();
+        });
+        window.setInterval(() => {
+          ensureActiveAdminSession({ reloadOnExpire: true });
+        }, 60 * 1000);
+      }
+
       async function apiFetch(path) {
+        if (!ensureActiveAdminSession({ reloadOnExpire: true })) {
+          throw new Error("Admin session expired. Reload and enter the token again.");
+        }
         let token = getToken();
-        if (!token) token = localStorage.getItem("adminToken") || sessionStorage.getItem(STORAGE_KEY) || "";
+        if (!token) token = sessionStorage.getItem(STORAGE_KEY) || "";
         if (!token) token = window.prompt("Paste internal admin token") || "";
-        token = token.trim();
+        token = saveToken(token);
         if (!token) throw new Error("Missing token. Fill Internal API Token first.");
         tokenInput.value = token;
-        sessionStorage.setItem(STORAGE_KEY, token);
-        localStorage.setItem("adminToken", token);
         const res = await fetch(path, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -926,8 +989,13 @@
       }
 
       document.addEventListener("DOMContentLoaded", () => {
-        const savedToken = localStorage.getItem("adminToken") || sessionStorage.getItem(STORAGE_KEY);
-        if (savedToken) tokenInput.value = savedToken;
+        if (!ensureActiveAdminSession()) return;
+        const savedToken = sessionStorage.getItem(STORAGE_KEY);
+        if (savedToken) {
+          tokenInput.value = savedToken;
+          touchAdminSession();
+        }
+        installAdminIdleTimeout();
         document.querySelectorAll(".tab-btn").forEach((btn) => {
           btn.addEventListener("click", () => activateTab(btn.dataset.tab));
         });

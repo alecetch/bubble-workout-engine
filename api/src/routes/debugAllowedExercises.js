@@ -2,6 +2,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
+import { publicInternalError } from "../utils/publicError.js";
 
 export const debugAllowedExercisesRouter = express.Router();
 
@@ -134,7 +135,7 @@ debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (
     return res.status(500).json({
       ok: false,
       code: "internal_error",
-      error: err?.message || "Internal server error",
+      error: publicInternalError(err),
     });
   } finally {
     client.release();
