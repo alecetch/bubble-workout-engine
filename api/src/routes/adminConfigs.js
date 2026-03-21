@@ -3,14 +3,11 @@ import { pool } from "../db.js";
 import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { auditLog } from "../utils/auditLog.js";
+import { safeString, requireNonEmpty, RequestValidationError } from "../utils/validate.js";
 
 export const adminConfigsRouter = express.Router();
 
 adminConfigsRouter.use(requireInternalToken, requireTrustedAdminOrigin);
-
-function nonEmptyString(value) {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -128,13 +125,22 @@ adminConfigsRouter.post("/configs", async (req, res) => {
     const source_key = req.body?.source_key;
     const new_key = req.body?.new_key;
 
-    if (!nonEmptyString(source_key) || !nonEmptyString(new_key)) {
-      return res.status(400).json({ ok: false, error: "source_key and new_key are required" });
+    try {
+      requireNonEmpty(source_key, "source_key");
+      requireNonEmpty(new_key, "new_key");
+    } catch (err) {
+      if (err instanceof RequestValidationError) {
+        return res.status(400).json({ ok: false, error: err.message });
+      }
+      throw err;
     }
+
+    const sourceKey = safeString(source_key);
+    const newKey = safeString(new_key);
 
     const exists = await pool.query(
       `SELECT 1 FROM public.program_generation_config WHERE config_key = $1`,
-      [new_key.trim()],
+      [newKey],
     );
     if (exists.rows?.length) {
       return res.status(409).json({ ok: false, error: "new_key already exists" });
@@ -155,7 +161,7 @@ adminConfigsRouter.post("/configs", async (req, res) => {
       WHERE config_key = $1
       RETURNING id, config_key, program_type, is_active
       `,
-      [source_key.trim(), new_key.trim()],
+      [sourceKey, newKey],
     );
 
     if (!result.rows?.length) {
@@ -166,7 +172,7 @@ adminConfigsRouter.post("/configs", async (req, res) => {
       action: "create",
       entity: "program_generation_config",
       entityId: result.rows[0].config_key,
-      detail: { source_key: source_key.trim() },
+      detail: { source_key: sourceKey },
     });
 
     return res.json({ ok: true, config: result.rows[0] });

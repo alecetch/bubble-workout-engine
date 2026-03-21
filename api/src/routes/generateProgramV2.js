@@ -11,8 +11,6 @@ import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
 
-let cachedInjuryColumn = null;
-
 function s(v) {
   return (v ?? "").toString().trim();
 }
@@ -74,50 +72,61 @@ function utcDateString(ms) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-async function resolveInjuryColumn(client) {
-  if (cachedInjuryColumn) return cachedInjuryColumn;
+export function createGenerateProgramV2Handler({
+  db = pool,
+  getProfile = getProfileByBubbleUserId,
+  pipeline = runPipeline,
+  getAllowed = getAllowedExerciseIds,
+  buildInputs = buildInputsFromDevProfile,
+  ensureCalendar = ensureProgramCalendarCoverage,
+  emitPayload = importEmitterPayload,
+} = {}) {
+  let cachedInjuryColumn = null;
 
-  const r = await client.query(
-    `
-    SELECT column_name
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'client_profile'
-      AND column_name IN ('injury_flags_slugs', 'injury_flags')
-    `,
-  );
+  async function resolveInjuryColumn(client) {
+    if (cachedInjuryColumn) return cachedInjuryColumn;
 
-  const cols = new Set(r.rows.map((x) => x.column_name));
-  if (cols.has("injury_flags_slugs")) {
-    cachedInjuryColumn = "injury_flags_slugs";
-    return cachedInjuryColumn;
-  }
-  if (cols.has("injury_flags")) {
-    cachedInjuryColumn = "injury_flags";
-    return cachedInjuryColumn;
-  }
+    const r = await client.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'client_profile'
+        AND column_name IN ('injury_flags_slugs', 'injury_flags')
+      `,
+    );
 
-  throw new Error("client_profile missing injury flags column (injury_flags_slugs or injury_flags)");
-}
+    const cols = new Set(r.rows.map((x) => x.column_name));
+    if (cols.has("injury_flags_slugs")) {
+      cachedInjuryColumn = "injury_flags_slugs";
+      return cachedInjuryColumn;
+    }
+    if (cols.has("injury_flags")) {
+      cachedInjuryColumn = "injury_flags";
+      return cachedInjuryColumn;
+    }
 
-generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (req, res) => {
-  const request_id = req.request_id;
-  const bubble_user_id = s(req.body?.bubble_user_id);
-  const programTypeInput = s(req.body?.programType);
-  const anchorInput = req.body?.anchor_date_ms;
-  const anchor_date_ms = anchorInput == null ? Date.now() : Number(anchorInput);
-
-  if (!bubble_user_id) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "Missing bubble_user_id" });
-  }
-  if (!Number.isFinite(anchor_date_ms)) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "anchor_date_ms must be a finite number" });
+    throw new Error("client_profile missing injury flags column (injury_flags_slugs or injury_flags)");
   }
 
-  const devProfile = await getProfileByBubbleUserId(bubble_user_id);
-  if (!devProfile) {
-    return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for bubble_user_id" });
-  }
+  return async function generateProgramV2Handler(req, res) {
+    const request_id = req.request_id;
+    const bubble_user_id = s(req.body?.bubble_user_id);
+    const programTypeInput = s(req.body?.programType);
+    const anchorInput = req.body?.anchor_date_ms;
+    const anchor_date_ms = anchorInput == null ? Date.now() : Number(anchorInput);
+
+    if (!bubble_user_id) {
+      return res.status(400).json({ ok: false, code: "validation_error", error: "Missing bubble_user_id" });
+    }
+    if (!Number.isFinite(anchor_date_ms)) {
+      return res.status(400).json({ ok: false, code: "validation_error", error: "anchor_date_ms must be a finite number" });
+    }
+
+    const devProfile = await getProfile(bubble_user_id);
+    if (!devProfile) {
+      return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for bubble_user_id" });
+    }
 
   const GOAL_TO_PROGRAM_TYPE = {
     strength: "strength",
@@ -171,8 +180,9 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
   let allowedIds = [];
   let exerciseRows = [];
 
-  const setupClient = await pool.connect();
+  let setupClient;
   try {
+    setupClient = await db.connect();
     await setupClient.query("BEGIN");
 
     // Phase 1a: Upsert app_user
@@ -245,7 +255,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     ]);
 
     // Phase 1c: Allowed exercise IDs + exercise catalogue
-    allowedIds = await getAllowedExerciseIds(setupClient, {
+    allowedIds = await getAllowed(setupClient, {
       fitness_rank: mappedFitnessRank,
       injury_flags_slugs: mappedInjuryFlags,
       equipment_items_slugs: mappedEquipmentSlugs,
@@ -320,7 +330,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
 
     await setupClient.query("COMMIT");
   } catch (err) {
-    try { await setupClient.query("ROLLBACK"); } catch (_) { /* ignore */ }
+    try { await setupClient?.query("ROLLBACK"); } catch (_) { /* ignore */ }
     req.log.error({ event: "pipeline.setup.error", err: err?.message, stack: err?.stack }, "generate-plan-v2 setup error");
     return res.status(500).json({
       ok: false,
@@ -329,32 +339,32 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       error: publicInternalError(err),
     });
   } finally {
-    setupClient.release();
+    setupClient?.release();
   }
 
   // ── Phase 3–6: Pipeline + import (program_id is now stable) ──────────────
   // On any error: mark generation_run + program as failed (best-effort, no delete).
 
   async function markFailed(message) {
-    await pool
+    await db
       .query(
         `UPDATE generation_run SET status='failed', last_stage='error', failed_at=now(), error_message=$1, updated_at=now() WHERE id=$2`,
         [message, generation_run_id],
       )
       .catch((e) => req.log.error({ event: "pipeline.mark_failed.error", err: e?.message }, "markFailed gen_run error"));
-    await pool
+    await db
       .query(`UPDATE program SET status='failed', updated_at=now() WHERE id=$1`, [created_program_id])
       .catch((e) => req.log.error({ event: "pipeline.mark_failed.error", err: e?.message }, "markFailed program error"));
   }
 
   try {
     // Phase 3: Run pipeline
-    await pool.query(
+    await db.query(
       `UPDATE generation_run SET last_stage='pipeline', updated_at=now() WHERE id=$1`,
       [generation_run_id],
     );
 
-    const inputs = buildInputsFromDevProfile(devProfile, exerciseRows);
+    const inputs = buildInputs(devProfile, exerciseRows);
     const allowed_ids_csv = allowedIds.join(",");
 
     req.log.info({
@@ -367,8 +377,8 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       generation_run_id,
     }, "Pipeline starting");
 
-    const pipelineOut = await runPipeline({
-      db: pool,
+    const pipelineOut = await pipeline({
+      db,
       inputs,
       programType,
       request: {
@@ -409,7 +419,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       const step1Json = JSON.stringify(step1Debug);
       const step5Json = JSON.stringify(step5Debug);
       const step6Json = JSON.stringify(step6Debug);
-      await pool.query(
+      await db.query(
         `UPDATE generation_run SET
            config_key       = $1,
            fitness_rank     = $2,
@@ -434,13 +444,13 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     }
 
     // Phase 4: Import child rows into the pre-created program
-    await pool.query(
+    await db.query(
       `UPDATE generation_run SET last_stage='importing', updated_at=now() WHERE id=$1`,
       [generation_run_id],
     );
 
-    const importResult = await importEmitterPayload({
-      poolOrClient: pool,
+    const importResult = await emitPayload({
+      poolOrClient: db,
       payload: {
         user_id: pg_user_id,
         anchor_date_ms,
@@ -457,7 +467,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     const programSummary = prgData.program_summary
       || `Auto-generated ${programType} program.`;
 
-    await pool.query(
+    await db.query(
       `
       UPDATE program SET
         program_title = $1,
@@ -506,7 +516,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       }
     }
     for (const [heroId, progId, weekNum, dayNum] of dayHeroUpdates) {
-      await pool.query(
+      await db.query(
         `UPDATE program_day
             SET hero_media_id = $1
           WHERE program_id = $2
@@ -519,14 +529,14 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     // Phase 5b: Fill recovery (rest) days into program_calendar_day.
     // Must run after the program row has its final start_date + weeks_count
     // and after importEmitterPayload has committed the training-day rows.
-    await pool.query(
+    await db.query(
       `UPDATE generation_run SET last_stage='calendar_coverage', updated_at=now() WHERE id=$1`,
       [generation_run_id],
     );
-    await ensureProgramCalendarCoverage(pool, created_program_id);
+    await ensureCalendar(db, created_program_id);
 
     // Phase 6: Mark generation_run complete
-    await pool.query(
+    await db.query(
       `
       UPDATE generation_run SET
         status = 'complete',
@@ -560,4 +570,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       generation_run_id,
     });
   }
-});
+  };
+}
+
+generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, createGenerateProgramV2Handler());

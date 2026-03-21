@@ -2,6 +2,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
 import { publicInternalError } from "../utils/publicError.js";
+import { safeString } from "../utils/validate.js";
 
 export const adminCoverageRouter = express.Router();
 
@@ -30,13 +31,9 @@ function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function asText(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function asTextArray(value) {
   return asArray(value)
-    .map((item) => asText(item))
+    .map((item) => safeString(item))
     .filter(Boolean);
 }
 
@@ -72,18 +69,18 @@ function resolveSlotVariant(slot, equipmentProfile) {
   const match = variants.find((variant) => asObject(variant?.when).equipment_profile === equipmentProfile);
   if (!match) return slot;
   const { when, ...variantFields } = asObject(match);
-  return { ...slot, ...variantFields, slot: asText(slot?.slot) };
+  return { ...slot, ...variantFields, slot: safeString(slot?.slot) };
 }
 
 function summarizeSlot(slot) {
   return {
-    sw: asText(slot?.sw) || null,
-    sw2: asText(slot?.sw2) || null,
-    swAny: asArray(slot?.swAny).map((v) => asText(v)).filter(Boolean),
-    sw2Any: asArray(slot?.sw2Any).map((v) => asText(v)).filter(Boolean),
-    mp: asText(slot?.mp) || null,
-    requirePref: asText(slot?.requirePref) || null,
-    pref_mode: asText(slot?.pref_mode) || (slot?.allowPrefFallback ? "soft" : "strict"),
+    sw: safeString(slot?.sw) || null,
+    sw2: safeString(slot?.sw2) || null,
+    swAny: asArray(slot?.swAny).map((v) => safeString(v)).filter(Boolean),
+    sw2Any: asArray(slot?.sw2Any).map((v) => safeString(v)).filter(Boolean),
+    mp: safeString(slot?.mp) || null,
+    requirePref: safeString(slot?.requirePref) || null,
+    pref_mode: safeString(slot?.pref_mode) || (slot?.allowPrefFallback ? "soft" : "strict"),
     pref_bonus: Number.isFinite(Number(slot?.pref_bonus)) ? Number(slot.pref_bonus) : null,
     strength_equivalent_bonus: slot?.strength_equivalent_bonus === true,
     variant_matched: Array.isArray(slot?.variants) ? false : true,
@@ -108,17 +105,17 @@ function buildPresetValuesSql(presets, startParam = 1) {
 }
 
 async function fetchSlotCounts(client, presets, slot, excludedClasses) {
-  const sw = asText(slot.sw) || null;
-  const sw2 = asText(slot.sw2) || null;
+  const sw = safeString(slot.sw) || null;
+  const sw2 = safeString(slot.sw2) || null;
   const swAny = asArray(slot.swAny)
-    .map((v) => asText(v))
+    .map((v) => safeString(v))
     .filter(Boolean);
   const sw2Any = asArray(slot.sw2Any)
-    .map((v) => asText(v))
+    .map((v) => safeString(v))
     .filter(Boolean);
-  const mp = asText(slot.mp) || null;
-  const prefMode = asText(slot.pref_mode) || (slot.allowPrefFallback ? "soft" : "strict");
-  const requirePref = prefMode === "strict" ? (asText(slot.requirePref) || null) : null;
+  const mp = safeString(slot.mp) || null;
+  const prefMode = safeString(slot.pref_mode) || (slot.allowPrefFallback ? "soft" : "strict");
+  const requirePref = prefMode === "strict" ? (safeString(slot.requirePref) || null) : null;
   const unconstrained = !sw && !sw2 && swAny.length === 0 && sw2Any.length === 0 && !mp;
   const excluded = asTextArray(excludedClasses);
 
@@ -224,7 +221,7 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
 
     const presetSlugsByCode = new Map(PRESETS.map((p) => [p.code, []]));
     for (const row of equipmentRows.rows ?? []) {
-      const slug = asText(row.exercise_slug);
+      const slug = safeString(row.exercise_slug);
       if (!slug) continue;
       for (const preset of PRESETS) {
         if (flagIsTrue(row[preset.column])) {
@@ -240,8 +237,8 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
       equipment_profile: deriveEquipmentProfile(presetSlugsByCode.get(p.code) ?? []),
     }));
 
-    const requestedConfigKey = asText(req.query?.config_key);
-    const requestedProgramType = asText(req.query?.program_type);
+    const requestedConfigKey = safeString(req.query?.config_key);
+    const requestedProgramType = safeString(req.query?.program_type);
     const cfgFilters = ["is_active = true"];
     const cfgParams = [];
 
@@ -294,17 +291,17 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
           rows.push({
             config_key: cfg.config_key,
             program_type: cfg.program_type,
-            day_key: asText(day.day_key) || `day${i + 1}`,
+            day_key: safeString(day.day_key) || `day${i + 1}`,
             day_index: i + 1,
-            day_focus: asText(day.focus) || null,
-            slot: asText(slot.slot) || "",
-            sw: asText(slot.sw) || null,
-            sw2: asText(slot.sw2) || null,
-            swAny: asArray(slot.swAny).map((v) => asText(v)).filter(Boolean) || null,
-            sw2Any: asArray(slot.sw2Any).map((v) => asText(v)).filter(Boolean) || null,
-            mp: asText(slot.mp) || null,
-            requirePref: asText(slot.requirePref) || null,
-            pref_mode: asText(slot.pref_mode) || (slot.allowPrefFallback ? "soft" : "strict"),
+            day_focus: safeString(day.focus) || null,
+            slot: safeString(slot.slot) || "",
+            sw: safeString(slot.sw) || null,
+            sw2: safeString(slot.sw2) || null,
+            swAny: asArray(slot.swAny).map((v) => safeString(v)).filter(Boolean) || null,
+            sw2Any: asArray(slot.sw2Any).map((v) => safeString(v)).filter(Boolean) || null,
+            mp: safeString(slot.mp) || null,
+            requirePref: safeString(slot.requirePref) || null,
+            pref_mode: safeString(slot.pref_mode) || (slot.allowPrefFallback ? "soft" : "strict"),
             pref_bonus: Number.isFinite(Number(slot.pref_bonus)) ? Number(slot.pref_bonus) : null,
             strength_equivalent_bonus: slot.strength_equivalent_bonus === true,
             resolved_by_preset: resolvedByPreset,
