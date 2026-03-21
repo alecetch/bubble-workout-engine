@@ -680,8 +680,8 @@
 
       async function loadOverview(days) {
         const [summary, runs] = await Promise.all([
-          apiFetch(`/admin/api/observability/summary?days=${encodeURIComponent(days)}`),
-          apiFetch("/admin/api/observability/runs?limit=20&offset=0"),
+          apiFetch(`/api/admin/observability/summary?days=${encodeURIComponent(days)}`),
+          apiFetch("/api/admin/observability/runs?limit=20&offset=0"),
         ]);
         const successRate = Number(summary.success_rate || 0);
         const meanDuration = summary.mean_duration_s == null ? "-" : `${Number(summary.mean_duration_s).toFixed(1)}s`;
@@ -705,7 +705,7 @@
       }
 
       async function loadFillQuality(days) {
-        const data = await apiFetch(`/admin/api/observability/fill-quality?days=${encodeURIComponent(days)}`);
+        const data = await apiFetch(`/api/admin/observability/fill-quality?days=${encodeURIComponent(days)}`);
         const rows = Array.isArray(data.rows) ? data.rows : [];
         renderFillChart(rows);
         renderFillQualityTable(rows);
@@ -718,8 +718,8 @@
       }
       async function loadConfigHits(days) {
         const [configHits, narration] = await Promise.all([
-          apiFetch(`/admin/api/observability/config-hits?days=${encodeURIComponent(days)}`),
-          apiFetch(`/admin/api/observability/narration-adoption?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/config-hits?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/narration-adoption?days=${encodeURIComponent(days)}`),
         ]);
         const configRows = Array.isArray(configHits.rows) ? configHits.rows : [];
         renderConfigHitsTable(configRows);
@@ -729,7 +729,7 @@
       }
 
       async function loadExercises(days) {
-        const data = await apiFetch(`/admin/api/observability/exercise-frequency?days=${encodeURIComponent(days)}&limit=20`);
+        const data = await apiFetch(`/api/admin/observability/exercise-frequency?days=${encodeURIComponent(days)}&limit=20`);
         const topUsed = Array.isArray(data.top_used) ? data.top_used : [];
         const neverUsed = Array.isArray(data.never_used) ? data.never_used : [];
         renderExerciseChart(topUsed);
@@ -955,7 +955,7 @@
         modal.classList.remove("hidden");
         content.innerHTML = `<div class="muted">Loading run detail...</div>`;
         try {
-          const run = await apiFetch(`/admin/api/observability/run/${encodeURIComponent(id)}`);
+          const run = await apiFetch(`/api/admin/observability/run/${encodeURIComponent(id)}`);
           const fillFailed = run.step1_stats_json && run.step1_stats_json.fill_failed != null ? run.step1_stats_json.fill_failed : "-";
           const equipmentProfile = run.step1_stats_json && run.step1_stats_json.equipment_profile ? run.step1_stats_json.equipment_profile : "-";
           content.innerHTML = `

@@ -2,6 +2,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
 import { publicInternalError } from "../utils/publicError.js";
+import { safeString, clampInt } from "../utils/validate.js";
 
 export const adminObservabilityRouter = express.Router();
 
@@ -10,22 +11,8 @@ adminObservabilityRouter.use(requireInternalToken);
 const VALID_STATUSES = new Set(["started", "pipeline", "importing", "complete", "failed"]);
 const VALID_PROGRAM_TYPES = new Set(["hypertrophy", "strength", "conditioning", "hyrox"]);
 
-function toText(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function toInt(value, fallback) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function clampInt(value, fallback, min, max) {
-  const parsed = toInt(value, fallback);
-  return Math.max(min, Math.min(max, parsed));
-}
-
 function asNullableEnum(value, validValues) {
-  const text = toText(value);
+  const text = safeString(value);
   return validValues.has(text) ? text : null;
 }
 
@@ -61,7 +48,7 @@ function fillDailyCounts(days, rows) {
 }
 
 adminObservabilityRouter.get("/summary", async (req, res) => {
-  const days = clampInt(req.query?.days, 30, 1, 365);
+  const days = clampInt(req.query?.days, { defaultValue: 30, min: 1, max: 365 });
 
   try {
     const [summaryResult, dailyResult, errorsResult] = await Promise.all([
@@ -140,8 +127,8 @@ adminObservabilityRouter.get("/summary", async (req, res) => {
 });
 
 adminObservabilityRouter.get("/runs", async (req, res) => {
-  const limit = clampInt(req.query?.limit, 50, 1, 200);
-  const offset = clampInt(req.query?.offset, 0, 0, 100000);
+  const limit = clampInt(req.query?.limit, { defaultValue: 50, min: 1, max: 200 });
+  const offset = clampInt(req.query?.offset, { defaultValue: 0, min: 0, max: 100000 });
   const status = asNullableEnum(req.query?.status, VALID_STATUSES);
   const programType = asNullableEnum(req.query?.program_type, VALID_PROGRAM_TYPES);
 
@@ -224,7 +211,7 @@ adminObservabilityRouter.get("/runs", async (req, res) => {
 });
 
 adminObservabilityRouter.get("/run/:id", async (req, res) => {
-  const id = toText(req.params?.id);
+  const id = safeString(req.params?.id);
   if (!id) {
     return res.status(404).json({ ok: false, error: "Not found" });
   }
@@ -242,7 +229,7 @@ adminObservabilityRouter.get("/run/:id", async (req, res) => {
 });
 
 adminObservabilityRouter.get("/fill-quality", async (req, res) => {
-  const days = clampInt(req.query?.days, 30, 1, 365);
+  const days = clampInt(req.query?.days, { defaultValue: 30, min: 1, max: 365 });
 
   try {
     const result = await pool.query(
@@ -312,8 +299,8 @@ adminObservabilityRouter.get("/fill-quality", async (req, res) => {
 });
 
 adminObservabilityRouter.get("/exercise-frequency", async (req, res) => {
-  const days = clampInt(req.query?.days, 30, 1, 365);
-  const limit = clampInt(req.query?.limit, 20, 1, 200);
+  const days = clampInt(req.query?.days, { defaultValue: 30, min: 1, max: 365 });
+  const limit = clampInt(req.query?.limit, { defaultValue: 20, min: 1, max: 200 });
 
   try {
     const [topUsedResult, neverUsedResult] = await Promise.all([
@@ -369,7 +356,7 @@ adminObservabilityRouter.get("/exercise-frequency", async (req, res) => {
 });
 
 adminObservabilityRouter.get("/config-hits", async (req, res) => {
-  const days = clampInt(req.query?.days, 30, 1, 365);
+  const days = clampInt(req.query?.days, { defaultValue: 30, min: 1, max: 365 });
 
   try {
     const result = await pool.query(
@@ -416,7 +403,7 @@ adminObservabilityRouter.get("/config-hits", async (req, res) => {
 });
 
 adminObservabilityRouter.get("/narration-adoption", async (req, res) => {
-  const days = clampInt(req.query?.days, 30, 1, 365);
+  const days = clampInt(req.query?.days, { defaultValue: 30, min: 1, max: 365 });
 
   try {
     const result = await pool.query(

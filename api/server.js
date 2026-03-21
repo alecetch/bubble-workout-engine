@@ -229,6 +229,7 @@ app.use("/admin", adminRateLimiter);
 app.use("/api/admin", adminRateLimiter);
 app.use("/admin-ui", adminRateLimiter);
 app.use("/generate-plan-v2", generationRateLimiter);
+app.use("/api/generate-plan-v2", generationRateLimiter);
 
 // Serve local media assets (dev only — in prod these are served from S3).
 app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
@@ -263,7 +264,7 @@ app.get("/health", healthRateLimiter, async (req, res) => {
   }
 });
 
-app.get("/reference-data", async (req, res) => {
+const handleReferenceData = async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT exercise_slug AS code, name AS label, category
@@ -280,11 +281,16 @@ app.get("/reference-data", async (req, res) => {
     req.log.error({ event: "http.reference_data.error", err: err?.message }, "reference-data error");
     return res.status(200).json(devReferenceData);
   }
-});
+};
+
+// Canonical (new)
+app.get("/api/reference-data", handleReferenceData);
+// DEPRECATED — remove after Bubble client updates to /api/reference-data
+app.get("/reference-data", handleReferenceData);
 
 // Verify:
 // curl "http://localhost:3000/media-assets?usage_scope=program_day"
-app.get("/media-assets", async (req, res) => {
+const handleMediaAssets = async (req, res) => {
   const usageScope = typeof req.query.usage_scope === "string" ? req.query.usage_scope.trim() : "";
   const dayType = typeof req.query.day_type === "string" ? req.query.day_type.trim() : "";
   const focusType = typeof req.query.focus_type === "string" ? req.query.focus_type.trim() : "";
@@ -352,11 +358,16 @@ app.get("/media-assets", async (req, res) => {
     req.log.error({ event: "http.media_assets.error", err: err?.message }, "media-assets error");
     return res.status(500).json({ error: "internal_error" });
   }
-});
+};
+
+// Canonical (new)
+app.get("/api/media-assets", handleMediaAssets);
+// DEPRECATED — remove after Bubble client updates to /api/media-assets
+app.get("/media-assets", handleMediaAssets);
 
 // Verify:
 // curl "http://localhost:3000/equipment-items?preset=commercial_gym"
-app.get("/equipment-items", async (req, res) => {
+const handleEquipmentItems = async (req, res) => {
   const preset = typeof req.query.preset === "string" ? req.query.preset : "";
   if (!preset) {
     return res.status(400).json({ error: "preset is required" });
@@ -388,11 +399,16 @@ app.get("/equipment-items", async (req, res) => {
     req.log.error({ event: "http.equipment_items.error", err: err?.message }, "equipment-items error");
     return res.status(500).json({ error: "internal_error" });
   }
-});
+};
+
+// Canonical (new)
+app.get("/api/equipment-items", handleEquipmentItems);
+// DEPRECATED — remove after Bubble client updates to /api/equipment-items
+app.get("/equipment-items", handleEquipmentItems);
 
 // GET /me — returns the user's identity and current profile ID.
 // Query: ?bubble_user_id=<id>
-app.get("/me", requireInternalToken, async (req, res) => {
+const handleMe = async (req, res) => {
   const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
   if (!bubbleUserId) {
     return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
@@ -407,11 +423,16 @@ app.get("/me", requireInternalToken, async (req, res) => {
     req.log.error({ event: "profile.me.error", err: err?.message }, "GET /me error");
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-});
+};
+
+// Canonical (new)
+app.get("/api/me", requireInternalToken, handleMe);
+// DEPRECATED — remove after Bubble client updates to /api/me
+app.get("/me", requireInternalToken, handleMe);
 
 // POST /client-profiles — upsert user + create profile if none exists.
 // Query: ?bubble_user_id=<id>
-app.post("/client-profiles", requireInternalToken, async (req, res) => {
+const handleCreateClientProfile = async (req, res) => {
   const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
   if (!bubbleUserId) {
     return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
@@ -425,11 +446,16 @@ app.post("/client-profiles", requireInternalToken, async (req, res) => {
     req.log.error({ event: "profile.create.error", err: err?.message }, "POST /client-profiles error");
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-});
+};
+
+// Canonical (new)
+app.post("/api/client-profiles", requireInternalToken, handleCreateClientProfile);
+// DEPRECATED — remove after Bubble client updates to /api/client-profiles
+app.post("/client-profiles", requireInternalToken, handleCreateClientProfile);
 
 // GET /client-profiles/:id — read profile by bubble_client_profile_id (= bubble_user_id).
 // :id is bubble_client_profile_id, which equals bubble_user_id by convention (see clientProfileService).
-app.get("/client-profiles/:id", requireInternalToken, async (req, res) => {
+const handleGetClientProfile = async (req, res) => {
   const profileId = req.params.id;
   try {
     const profile = await getProfileByBubbleUserId(profileId);
@@ -441,11 +467,16 @@ app.get("/client-profiles/:id", requireInternalToken, async (req, res) => {
     req.log.error({ event: "profile.get.error", err: err?.message }, "GET /client-profiles/:id error");
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-});
+};
+
+// Canonical (new)
+app.get("/api/client-profiles/:id", requireInternalToken, handleGetClientProfile);
+// DEPRECATED — remove after Bubble client updates to /api/client-profiles/:id
+app.get("/client-profiles/:id", requireInternalToken, handleGetClientProfile);
 
 // PATCH /client-profiles/:id — patch profile fields.
 // :id is bubble_client_profile_id (= bubble_user_id).
-app.patch("/client-profiles/:id", requireInternalToken, async (req, res) => {
+const handlePatchClientProfile = async (req, res) => {
   const profileId = req.params.id;
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   try {
@@ -459,12 +490,17 @@ app.patch("/client-profiles/:id", requireInternalToken, async (req, res) => {
     req.log.error({ event: "profile.patch.error", err: err?.message }, "PATCH /client-profiles/:id error");
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-});
+};
+
+// Canonical (new)
+app.patch("/api/client-profiles/:id", requireInternalToken, handlePatchClientProfile);
+// DEPRECATED — remove after Bubble client updates to /api/client-profiles/:id
+app.patch("/client-profiles/:id", requireInternalToken, handlePatchClientProfile);
 
 // PATCH /users/me — associate a profile with a user (no-op for Postgres-backed store,
 // kept for API compatibility; returns current identity).
 // Query: ?bubble_user_id=<id>
-app.patch("/users/me", requireInternalToken, async (req, res) => {
+const handleUsersMe = async (req, res) => {
   const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
   if (!bubbleUserId) {
     return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
@@ -479,7 +515,12 @@ app.patch("/users/me", requireInternalToken, async (req, res) => {
     req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-});
+};
+
+// Canonical (new)
+app.patch("/api/users/me", requireInternalToken, handleUsersMe);
+// DEPRECATED — remove after Bubble client updates to /api/users/me
+app.patch("/users/me", requireInternalToken, handleUsersMe);
 
 // Mount routers.
 app.use("/api", segmentLogRouter);
@@ -504,10 +545,16 @@ app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
+// Canonical — /api/admin matches all other API admin routes
+app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
+// DEPRECATED backward-compat alias
 app.use("/admin/api/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/admin", ...adminOnly, adminConfigsRouter);
 app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
 app.use("/admin", ...adminOnly, adminNarrationRouter);
+// Canonical (new)
+app.use("/api", generateProgramV2Router);
+// DEPRECATED — remove after Bubble client updates
 app.use(generateProgramV2Router);
 
 // JSON parse error handler (ONLY for invalid JSON payloads).

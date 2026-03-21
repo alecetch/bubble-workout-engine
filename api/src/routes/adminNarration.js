@@ -3,6 +3,7 @@ import { pool } from "../db.js";
 import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { auditLog } from "../utils/auditLog.js";
+import { safeString } from "../utils/validate.js";
 
 export const adminNarrationRouter = express.Router();
 
@@ -30,12 +31,8 @@ const STATIC_EXPECTED_COMBOS = [
   { scope: "exercise", field: "LOGGING_PROMPT", purpose: null, segment_type: null },
 ];
 
-function asTrimmedString(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function toNullableText(value) {
-  const text = asTrimmedString(value);
+  const text = safeString(value);
   return text || null;
 }
 
@@ -69,7 +66,7 @@ function parseTextPoolInput(value) {
   if (!Array.isArray(parsed)) {
     return { error: "text_pool_json must be a JSON array of non-empty strings" };
   }
-  const normalized = parsed.map((item) => asTrimmedString(item)).filter(Boolean);
+  const normalized = parsed.map((item) => safeString(item)).filter(Boolean);
   if (normalized.length === 0) {
     return { error: "text_pool_json must contain at least one non-empty string" };
   }
@@ -86,9 +83,9 @@ function parsePriority(value) {
 }
 
 function validateTemplatePayload(body, { requireTemplateId }) {
-  const templateId = asTrimmedString(body?.template_id);
-  const scope = asTrimmedString(body?.scope);
-  const field = asTrimmedString(body?.field);
+  const templateId = safeString(body?.template_id);
+  const scope = safeString(body?.scope);
+  const field = safeString(body?.field);
   const purpose = toNullableText(body?.purpose);
   const segmentType = toNullableText(body?.segment_type);
   const priority = parsePriority(body?.priority);
@@ -132,14 +129,14 @@ function normalizeTemplates(rows) {
     const applies = isPlainObject(row?.applies_json) ? row.applies_json : {};
     const poolValue = Array.isArray(row?.text_pool_json) ? row.text_pool_json : [];
     return {
-      template_id: asTrimmedString(row?.template_id),
-      scope: asTrimmedString(row?.scope),
-      field: asTrimmedString(row?.field),
-      purpose: asTrimmedString(row?.purpose),
-      segment_type: asTrimmedString(row?.segment_type),
-      applies_program_type: asTrimmedString(applies.program_type),
-      applies_day_focus: asTrimmedString(applies.day_focus),
-      applies_phase: asTrimmedString(applies.phase),
+      template_id: safeString(row?.template_id),
+      scope: safeString(row?.scope),
+      field: safeString(row?.field),
+      purpose: safeString(row?.purpose),
+      segment_type: safeString(row?.segment_type),
+      applies_program_type: safeString(applies.program_type),
+      applies_day_focus: safeString(applies.day_focus),
+      applies_phase: safeString(applies.phase),
       priority: parsePriority(row?.priority) ?? 1,
       text_pool_json: poolValue,
       raw: row,
@@ -152,9 +149,9 @@ function scoreTemplateMatch(template, combo, matchCtx) {
   if (template.scope !== combo.scope) return null;
   if (template.field !== combo.field) return null;
 
-  const programType = asTrimmedString(matchCtx?.program_type);
-  const dayFocus = asTrimmedString(matchCtx?.day_focus);
-  const phase = asTrimmedString(matchCtx?.phase);
+  const programType = safeString(matchCtx?.program_type);
+  const dayFocus = safeString(matchCtx?.day_focus);
+  const phase = safeString(matchCtx?.phase);
   const hasProgramType = Boolean(template.applies_program_type);
   const hasDayFocus = Boolean(template.applies_day_focus);
   const hasPhase = Boolean(template.applies_phase);
@@ -164,8 +161,8 @@ function scoreTemplateMatch(template, combo, matchCtx) {
   if (hasPhase && template.applies_phase !== phase) return null;
 
   let score = 1;
-  const purpose = asTrimmedString(combo.purpose);
-  const segmentType = asTrimmedString(combo.segment_type);
+  const purpose = safeString(combo.purpose);
+  const segmentType = safeString(combo.segment_type);
   const hasPurpose = Boolean(template.purpose);
   const hasSegmentType = Boolean(template.segment_type);
 
@@ -258,13 +255,13 @@ adminNarrationRouter.get("/narration/templates", async (req, res) => {
       return `$${params.length}`;
     };
 
-    const scope = asTrimmedString(req.query?.scope);
-    const field = asTrimmedString(req.query?.field);
-    const purpose = asTrimmedString(req.query?.purpose);
-    const segmentType = asTrimmedString(req.query?.segment_type);
-    const programType = asTrimmedString(req.query?.program_type);
-    const q = asTrimmedString(req.query?.q);
-    const isActiveRaw = asTrimmedString(req.query?.is_active).toLowerCase();
+    const scope = safeString(req.query?.scope);
+    const field = safeString(req.query?.field);
+    const purpose = safeString(req.query?.purpose);
+    const segmentType = safeString(req.query?.segment_type);
+    const programType = safeString(req.query?.program_type);
+    const q = safeString(req.query?.q);
+    const isActiveRaw = safeString(req.query?.is_active).toLowerCase();
 
     if (scope) where.push(`scope = ${addParam(scope)}`);
     if (field) where.push(`field = ${addParam(field)}`);
@@ -393,11 +390,11 @@ adminNarrationRouter.post("/narration/templates", async (req, res) => {
 
 adminNarrationRouter.put("/narration/templates/:template_id", async (req, res) => {
   try {
-    const templateId = asTrimmedString(req.params.template_id);
+    const templateId = safeString(req.params.template_id);
     if (!templateId) {
       return res.status(400).json({ ok: false, error: "template_id is required" });
     }
-    if (req.body?.template_id != null && asTrimmedString(req.body.template_id) !== templateId) {
+    if (req.body?.template_id != null && safeString(req.body.template_id) !== templateId) {
       return res.status(400).json({ ok: false, error: "template_id cannot be changed" });
     }
 
@@ -501,7 +498,7 @@ adminNarrationRouter.delete("/narration/templates/:template_id", async (req, res
 
 adminNarrationRouter.get("/narration/coverage", async (req, res) => {
   try {
-    const programType = asTrimmedString(req.query?.program_type);
+    const programType = safeString(req.query?.program_type);
     if (!programType) {
       return res.status(400).json({ ok: false, error: "program_type is required" });
     }

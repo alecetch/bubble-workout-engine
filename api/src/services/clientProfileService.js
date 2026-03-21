@@ -1,4 +1,4 @@
-import { pool } from "../db.js";
+import { pool as defaultPool } from "../db.js";
 
 const profileFieldToColumn = new Map([
   ["goals", "main_goals_slugs"],
@@ -19,99 +19,110 @@ const profileFieldToColumn = new Map([
   ["programType", "program_type_slug"],
 ]);
 
-export async function upsertUser(bubbleUserId) {
-  const result = await pool.query(
-    `
-    INSERT INTO app_user (bubble_user_id)
-    VALUES ($1)
-    ON CONFLICT (bubble_user_id)
-    DO UPDATE SET updated_at = now()
-    RETURNING id
-    `,
-    [bubbleUserId],
-  );
+export function makeClientProfileService(db = defaultPool) {
+  async function upsertUser(bubbleUserId) {
+    const result = await db.query(
+      `
+      INSERT INTO app_user (bubble_user_id)
+      VALUES ($1)
+      ON CONFLICT (bubble_user_id)
+      DO UPDATE SET updated_at = now()
+      RETURNING id
+      `,
+      [bubbleUserId],
+    );
 
-  return { id: result.rows[0].id };
-}
-
-export async function upsertProfile(pgUserId, bubbleClientProfileId) {
-  const insertResult = await pool.query(
-    `
-    INSERT INTO client_profile (user_id, bubble_client_profile_id)
-    VALUES ($1, $2)
-    ON CONFLICT (bubble_client_profile_id)
-    DO NOTHING
-    RETURNING id
-    `,
-    [pgUserId, bubbleClientProfileId],
-  );
-
-  if (insertResult.rowCount > 0) {
-    return insertResult.rows[0].id;
+    return { id: result.rows[0].id };
   }
 
-  const selectResult = await pool.query(
-    `
-    SELECT id
-    FROM client_profile
-    WHERE bubble_client_profile_id = $1
-    LIMIT 1
-    `,
-    [bubbleClientProfileId],
-  );
+  async function upsertProfile(pgUserId, bubbleClientProfileId) {
+    const insertResult = await db.query(
+      `
+      INSERT INTO client_profile (user_id, bubble_client_profile_id)
+      VALUES ($1, $2)
+      ON CONFLICT (bubble_client_profile_id)
+      DO NOTHING
+      RETURNING id
+      `,
+      [pgUserId, bubbleClientProfileId],
+    );
 
-  return selectResult.rows[0]?.id ?? null;
-}
+    if (insertResult.rowCount > 0) {
+      return insertResult.rows[0].id;
+    }
 
-export async function getProfileByBubbleUserId(bubbleUserId) {
-  const result = await pool.query(
-    `
-    SELECT cp.*
-    FROM client_profile cp
-    JOIN app_user au ON cp.user_id = au.id
-    WHERE au.bubble_user_id = $1
-    LIMIT 1
-    `,
-    [bubbleUserId],
-  );
+    const selectResult = await db.query(
+      `
+      SELECT id
+      FROM client_profile
+      WHERE bubble_client_profile_id = $1
+      LIMIT 1
+      `,
+      [bubbleClientProfileId],
+    );
 
-  if (result.rowCount === 0) {
-    return null;
+    return selectResult.rows[0]?.id ?? null;
   }
 
-  return toApiShape(result.rows[0]);
-}
+  async function getProfileByBubbleUserId(bubbleUserId) {
+    const result = await db.query(
+      `
+      SELECT cp.*
+      FROM client_profile cp
+      JOIN app_user au ON cp.user_id = au.id
+      WHERE au.bubble_user_id = $1
+      LIMIT 1
+      `,
+      [bubbleUserId],
+    );
 
-export async function patchProfile(profileId, fields) {
-  const assignments = [];
-  const values = [];
+    if (result.rowCount === 0) {
+      return null;
+    }
 
-  for (const [field, column] of profileFieldToColumn.entries()) {
-    if (!Object.prototype.hasOwnProperty.call(fields, field)) continue;
-    if (fields[field] === undefined) continue;
-    values.push(fields[field]);
-    assignments.push(`${column} = $${values.length}`);
+    return toApiShape(result.rows[0]);
   }
 
-  assignments.push("updated_at = now()");
+  async function patchProfile(profileId, fields) {
+    const assignments = [];
+    const values = [];
 
-  values.push(profileId);
-  const result = await pool.query(
-    `
-    UPDATE client_profile
-    SET ${assignments.join(", ")}
-    WHERE bubble_client_profile_id = $${values.length}
-    RETURNING *
-    `,
-    values,
-  );
+    for (const [field, value] of Object.entries(fields)) {
+      const column = profileFieldToColumn.get(field);
+      if (!column) continue;
+      if (value === undefined) continue;
+      values.push(value);
+      assignments.push(`${column} = $${values.length}`);
+    }
 
-  if (result.rowCount === 0) {
-    return null;
+    assignments.push("updated_at = now()");
+
+    values.push(profileId);
+    const result = await db.query(
+      `
+      UPDATE client_profile
+      SET ${assignments.join(", ")}
+      WHERE bubble_client_profile_id = $${values.length}
+      RETURNING *
+      `,
+      values,
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    return toApiShape(result.rows[0]);
   }
 
-  return toApiShape(result.rows[0]);
+  return { upsertUser, upsertProfile, getProfileByBubbleUserId, patchProfile };
 }
+
+const _default = makeClientProfileService();
+export const upsertUser = _default.upsertUser;
+export const upsertProfile = _default.upsertProfile;
+export const getProfileByBubbleUserId = _default.getProfileByBubbleUserId;
+export const patchProfile = _default.patchProfile;
 
 export function toApiShape(row) {
   return {
