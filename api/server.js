@@ -24,9 +24,16 @@ import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
+import { requireInternalToken } from "./src/middleware/auth.js";
 import { adminOnly } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
+import {
+  upsertUser,
+  upsertProfile,
+  getProfileByBubbleUserId,
+  patchProfile,
+} from "./src/services/clientProfileService.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -97,7 +104,6 @@ const app = express();
 // Trust the single Fly.io load-balancer hop so req.ip is the real client IP
 // (not the proxy IP) and x-forwarded-for is correctly resolved by Express.
 app.set("trust proxy", 1);
-const DEV_USER_ID = "dev-user-1";
 const adminCspMiddleware = helmet.contentSecurityPolicy({
   directives: {
     defaultSrc: ["'self'"],
@@ -117,11 +123,6 @@ function sendAdminPage(res, fileName) {
   res.set("Pragma", "no-cache");
   return res.sendFile(join(__dirname, `admin/${fileName}`));
 }
-
-// TODO: Dev-only in-memory store. Replace with Postgres-backed persistence.
-const profilesById = new Map();
-const userToProfileId = new Map();
-app.locals.profilesById = profilesById;
 
 const profilePatchKeys = [
   "goals",
@@ -149,29 +150,6 @@ const presetColumnByCode = {
   minimal_equipment: "minimal_equipment",
   no_equipment: "no_equipment",
 };
-
-function createDevProfile(id, userId) {
-  return {
-    id,
-    userId,
-    goals: [],
-    fitnessLevel: null,
-    injuryFlags: [],
-    goalNotes: "",
-    equipmentPreset: null,
-    equipmentItemCodes: [],
-    preferredDays: [],
-    scheduleConstraints: "",
-    heightCm: null,
-    weightKg: null,
-    minutesPerSession: null,
-    sex: null,
-    ageRange: null,
-    onboardingStepCompleted: 0,
-    onboardingCompletedAt: null,
-    programType: null,
-  };
-}
 
 // TODO: Dev-only static reference data. Move these lists into Postgres-backed tables.
 const devReferenceData = {
@@ -412,72 +390,95 @@ app.get("/equipment-items", async (req, res) => {
   }
 });
 
-// TODO: Replace with authenticated user when auth layer is implemented
-app.get("/me", (req, res) => {
-  const clientProfileId = userToProfileId.get(DEV_USER_ID) ?? null;
-  return res.status(200).json({
-    id: DEV_USER_ID,
-    clientProfileId,
-  });
+// GET /me — returns the user's identity and current profile ID.
+// Query: ?bubble_user_id=<id>
+app.get("/me", requireInternalToken, async (req, res) => {
+  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
+  if (!bubbleUserId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
+  }
+  try {
+    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    return res.status(200).json({
+      id: bubbleUserId,
+      clientProfileId: profile?.id ?? null,
+    });
+  } catch (err) {
+    req.log.error({ event: "profile.me.error", err: err?.message }, "GET /me error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  }
 });
 
-// TODO: Dev-only in-memory routes. Replace with authenticated + Postgres-backed routes.
-app.post("/client-profiles", (req, res) => {
-  const existingProfileId = userToProfileId.get(DEV_USER_ID);
-  if (existingProfileId) {
-    const existingProfile = profilesById.get(existingProfileId);
-    if (existingProfile) {
-      return res.status(200).json(existingProfile);
+// POST /client-profiles — upsert user + create profile if none exists.
+// Query: ?bubble_user_id=<id>
+app.post("/client-profiles", requireInternalToken, async (req, res) => {
+  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
+  if (!bubbleUserId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
+  }
+  try {
+    const { id: pgUserId } = await upsertUser(bubbleUserId);
+    await upsertProfile(pgUserId, bubbleUserId);
+    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    return res.status(200).json(profile);
+  } catch (err) {
+    req.log.error({ event: "profile.create.error", err: err?.message }, "POST /client-profiles error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  }
+});
+
+// GET /client-profiles/:id — read profile by bubble_client_profile_id (= bubble_user_id).
+// :id is bubble_client_profile_id, which equals bubble_user_id by convention (see clientProfileService).
+app.get("/client-profiles/:id", requireInternalToken, async (req, res) => {
+  const profileId = req.params.id;
+  try {
+    const profile = await getProfileByBubbleUserId(profileId);
+    if (!profile) {
+      return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
     }
+    return res.status(200).json(profile);
+  } catch (err) {
+    req.log.error({ event: "profile.get.error", err: err?.message }, "GET /client-profiles/:id error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-
-  const id = "dev-profile-1";
-  const profile = createDevProfile(id, DEV_USER_ID);
-  profilesById.set(id, profile);
-  userToProfileId.set(DEV_USER_ID, id);
-  return res.status(200).json(profile);
 });
 
-app.get("/client-profiles/:id", (req, res) => {
-  const profile = profilesById.get(req.params.id);
-  if (!profile) {
-    return res.status(404).json({ error: "not found" });
-  }
-
-  return res.status(200).json(profile);
-});
-
-app.patch("/client-profiles/:id", (req, res) => {
-  const profile = profilesById.get(req.params.id);
-  if (!profile) {
-    return res.status(404).json({ error: "not found" });
-  }
-
+// PATCH /client-profiles/:id — patch profile fields.
+// :id is bubble_client_profile_id (= bubble_user_id).
+app.patch("/client-profiles/:id", requireInternalToken, async (req, res) => {
+  const profileId = req.params.id;
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-  req.log.debug({ event: "dev.profile_patch", id: req.params.id, patch }, "profile patch applied");
-  for (const key of profilePatchKeys) {
-    if (Object.prototype.hasOwnProperty.call(patch, key)) {
-      profile[key] = patch[key];
+  try {
+    const updated = await patchProfile(profileId, patch);
+    if (!updated) {
+      return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
     }
+    req.log.debug({ event: "profile.patch", id: profileId }, "profile patch applied");
+    return res.status(200).json(updated);
+  } catch (err) {
+    req.log.error({ event: "profile.patch.error", err: err?.message }, "PATCH /client-profiles/:id error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-
-  profilesById.set(profile.id, profile);
-  return res.status(200).json(profile);
 });
 
-app.patch("/users/me", (req, res) => {
-  const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-  const clientProfileId = typeof patch.clientProfileId === "string" ? patch.clientProfileId : null;
-  if (clientProfileId) {
-    userToProfileId.set(DEV_USER_ID, clientProfileId);
-  } else {
-    userToProfileId.delete(DEV_USER_ID);
+// PATCH /users/me — associate a profile with a user (no-op for Postgres-backed store,
+// kept for API compatibility; returns current identity).
+// Query: ?bubble_user_id=<id>
+app.patch("/users/me", requireInternalToken, async (req, res) => {
+  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
+  if (!bubbleUserId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
   }
-
-  return res.status(200).json({
-    id: DEV_USER_ID,
-    clientProfileId,
-  });
+  try {
+    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    return res.status(200).json({
+      id: bubbleUserId,
+      clientProfileId: profile?.id ?? null,
+    });
+  } catch (err) {
+    req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  }
 });
 
 // Mount routers.

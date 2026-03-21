@@ -6,6 +6,7 @@ import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
+import { getProfileByBubbleUserId } from "../services/clientProfileService.js";
 import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
@@ -101,26 +102,21 @@ async function resolveInjuryColumn(client) {
 
 generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (req, res) => {
   const request_id = req.request_id;
-  const dev_user_id = s(req.body?.dev_user_id);
-  const dev_client_profile_id = s(req.body?.dev_client_profile_id);
+  const bubble_user_id = s(req.body?.bubble_user_id);
   const programTypeInput = s(req.body?.programType);
   const anchorInput = req.body?.anchor_date_ms;
   const anchor_date_ms = anchorInput == null ? Date.now() : Number(anchorInput);
 
-  if (!dev_user_id) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "Missing dev_user_id" });
-  }
-  if (!dev_client_profile_id) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "Missing dev_client_profile_id" });
+  if (!bubble_user_id) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "Missing bubble_user_id" });
   }
   if (!Number.isFinite(anchor_date_ms)) {
     return res.status(400).json({ ok: false, code: "validation_error", error: "anchor_date_ms must be a finite number" });
   }
 
-  const profilesById = req.app?.locals?.profilesById;
-  const devProfile = profilesById?.get(dev_client_profile_id);
+  const devProfile = await getProfileByBubbleUserId(bubble_user_id);
   if (!devProfile) {
-    return res.status(404).json({ ok: false, code: "not_found", error: "Dev client profile not found" });
+    return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for bubble_user_id" });
   }
 
   const GOAL_TO_PROGRAM_TYPE = {
@@ -188,7 +184,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       DO UPDATE SET updated_at = now()
       RETURNING id
       `,
-      [dev_user_id],
+      [bubble_user_id],
     );
     pg_user_id = userR.rows[0].id;
 
@@ -234,7 +230,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
 
     await setupClient.query(profileSql, [
       pg_user_id,
-      dev_client_profile_id,
+      bubble_user_id,
       mappedFitnessRank,
       mappedEquipmentSlugs,
       mappedInjuryFlags,
