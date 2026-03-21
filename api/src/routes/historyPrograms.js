@@ -82,7 +82,7 @@ export function createHistoryProgramsHandler(db = pool) {
       const result = await db.query(SQL_HISTORY_PROGRAMS, [authUserId, limit]);
       return res.status(200).json(result.rows.map(mapHistoryProgramRow));
     } catch (error) {
-      console.error("history-programs error:", error);
+      req.log.error({ event: "history.programs.error", err: error?.message }, "history-programs query failed");
       return res.status(500).json({
         ok: false,
         code: "internal_error",

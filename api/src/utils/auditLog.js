@@ -1,4 +1,5 @@
 import { pool } from "../db.js";
+import logger from "./logger.js";
 
 function requestIp(req) {
   // req.ip is populated by Express from the last x-forwarded-for entry when
@@ -23,6 +24,6 @@ export async function auditLog(req, { action, entity, entityId = null, detail = 
       ],
     );
   } catch (err) {
-    console.error("admin audit log failed (non-fatal):", err?.message || err);
+    logger.warn({ event: "audit.write.error", err: err?.message }, "Admin audit log write failed (non-fatal)");
   }
 }

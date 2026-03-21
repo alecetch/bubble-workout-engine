@@ -658,7 +658,7 @@ function stripSqlStrings(sql) {
   return String(sql || "").replace(/'(?:''|[^'])*'/g, "''");
 }
 
-function validateExecutableSql(sql) {
+export function validateExecutableSql(sql) {
   const raw = String(sql || "").trim();
   if (!raw) return { ok: false, error: "SQL statement is empty" };
 

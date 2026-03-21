@@ -6,6 +6,7 @@ import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
+import { getProfileByBubbleUserId } from "../services/clientProfileService.js";
 import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
@@ -101,26 +102,21 @@ async function resolveInjuryColumn(client) {
 
 generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (req, res) => {
   const request_id = req.request_id;
-  const dev_user_id = s(req.body?.dev_user_id);
-  const dev_client_profile_id = s(req.body?.dev_client_profile_id);
+  const bubble_user_id = s(req.body?.bubble_user_id);
   const programTypeInput = s(req.body?.programType);
   const anchorInput = req.body?.anchor_date_ms;
   const anchor_date_ms = anchorInput == null ? Date.now() : Number(anchorInput);
 
-  if (!dev_user_id) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "Missing dev_user_id" });
-  }
-  if (!dev_client_profile_id) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "Missing dev_client_profile_id" });
+  if (!bubble_user_id) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "Missing bubble_user_id" });
   }
   if (!Number.isFinite(anchor_date_ms)) {
     return res.status(400).json({ ok: false, code: "validation_error", error: "anchor_date_ms must be a finite number" });
   }
 
-  const profilesById = req.app?.locals?.profilesById;
-  const devProfile = profilesById?.get(dev_client_profile_id);
+  const devProfile = await getProfileByBubbleUserId(bubble_user_id);
   if (!devProfile) {
-    return res.status(404).json({ ok: false, code: "not_found", error: "Dev client profile not found" });
+    return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for bubble_user_id" });
   }
 
   const GOAL_TO_PROGRAM_TYPE = {
@@ -138,14 +134,14 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
   const explicitType = programTypeInput && programTypeInput !== "default" ? programTypeInput : null;
   const programType = explicitType || goalDerivedType || s(devProfile.programType) || "hypertrophy";
 
-  console.log("[generateProgramV2] program-type resolution", {
+  req.log.debug({ event: "pipeline.type_resolution",
     rawGoals: devProfile.goals,
     goalSlugs,
     goalDerivedType,
     explicitType,
     profileProgramType: devProfile.programType,
     resolvedProgramType: programType,
-  });
+  }, "program-type resolution");
 
   const mappedFitnessRank = mapFitnessRank(devProfile.fitnessLevel);
   const mappedEquipmentSlugs = ensureArray(devProfile.equipmentItemCodes, toSlug);
@@ -188,7 +184,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       DO UPDATE SET updated_at = now()
       RETURNING id
       `,
-      [dev_user_id],
+      [bubble_user_id],
     );
     pg_user_id = userR.rows[0].id;
 
@@ -234,7 +230,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
 
     await setupClient.query(profileSql, [
       pg_user_id,
-      dev_client_profile_id,
+      bubble_user_id,
       mappedFitnessRank,
       mappedEquipmentSlugs,
       mappedInjuryFlags,
@@ -325,7 +321,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     await setupClient.query("COMMIT");
   } catch (err) {
     try { await setupClient.query("ROLLBACK"); } catch (_) { /* ignore */ }
-    console.error("generate-plan-v2 setup error:", err);
+    req.log.error({ event: "pipeline.setup.error", err: err?.message, stack: err?.stack }, "generate-plan-v2 setup error");
     return res.status(500).json({
       ok: false,
       request_id,
@@ -345,10 +341,10 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
         `UPDATE generation_run SET status='failed', last_stage='error', failed_at=now(), error_message=$1, updated_at=now() WHERE id=$2`,
         [message, generation_run_id],
       )
-      .catch((e) => console.error("markFailed gen_run error:", e));
+      .catch((e) => req.log.error({ event: "pipeline.mark_failed.error", err: e?.message }, "markFailed gen_run error"));
     await pool
       .query(`UPDATE program SET status='failed', updated_at=now() WHERE id=$1`, [created_program_id])
-      .catch((e) => console.error("markFailed program error:", e));
+      .catch((e) => req.log.error({ event: "pipeline.mark_failed.error", err: e?.message }, "markFailed program error"));
   }
 
   try {
@@ -360,6 +356,16 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
 
     const inputs = buildInputsFromDevProfile(devProfile, exerciseRows);
     const allowed_ids_csv = allowedIds.join(",");
+
+    req.log.info({
+      event: "pipeline.run.start",
+      program_type: programType,
+      days_per_week: daysPerWeek,
+      duration_mins: mappedMinutesPerSession ?? 50,
+      fitness_rank: mappedFitnessRank,
+      allowed_exercise_count: allowedIds.length,
+      generation_run_id,
+    }, "Pipeline starting");
 
     const pipelineOut = await runPipeline({
       db: pool,
@@ -384,6 +390,16 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error("Pipeline did not produce emitter rows");
     }
+
+    req.log.info({
+      event: "pipeline.run.finish",
+      program_type: programType,
+      config_key: pipelineOut?.debug?.step1?.config_key ?? pipelineOut?.plan?.debug?.step1?.config_key ?? null,
+      equipment_profile: pipelineOut?.debug?.step1?.equipment_profile ?? pipelineOut?.plan?.debug?.step1?.equipment_profile ?? null,
+      fill_failed: pipelineOut?.debug?.step1?.fill_failed ?? pipelineOut?.plan?.debug?.step1?.fill_failed ?? null,
+      emitter_rows: rows.length,
+      generation_run_id,
+    }, "Pipeline completed");
 
     // Phase 3b: Persist pipeline debug to generation_run (best-effort — never throws).
     try {
@@ -414,7 +430,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
         ],
       );
     } catch (debugErr) {
-      console.error("generation_run debug persist failed (non-fatal):", debugErr?.message);
+      req.log.warn({ event: "pipeline.debug_persist.error", err: debugErr?.message }, "generation_run debug persist failed (non-fatal)");
     }
 
     // Phase 4: Import child rows into the pre-created program
@@ -533,7 +549,7 @@ generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, async (r
       idempotent: importResult.idempotent,
     });
   } catch (err) {
-    console.error("generate-plan-v2 pipeline/import error:", err);
+    req.log.error({ event: "pipeline.error", err: err?.message, stack: err?.stack }, "generate-plan-v2 pipeline/import error");
     await markFailed(err?.message || "unknown error");
     return res.status(500).json({
       ok: false,

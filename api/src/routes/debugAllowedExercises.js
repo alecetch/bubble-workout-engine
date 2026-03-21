@@ -3,6 +3,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { publicInternalError } from "../utils/publicError.js";
+import logger from "../utils/logger.js";
 
 export const debugAllowedExercisesRouter = express.Router();
 
@@ -39,10 +40,6 @@ async function resolveInjuryColumn(client) {
   }
 
   return cachedInjuryColumn;
-}
-
-function logInfo(payload) {
-  console.info(JSON.stringify({ ts: new Date().toISOString(), ...payload }));
 }
 
 debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (req, res) => {
@@ -97,9 +94,8 @@ debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (
 
     const duration_ms = Date.now() - startedAt;
 
-    logInfo({
-      level: "info",
-      event: "debug_allowed_exercises",
+    req.log.info({
+      event: "debug.allowed_exercises",
       request_id: request_id || undefined,
       client_profile_id,
       bubble_client_profile_id: profile.bubble_client_profile_id,
@@ -123,14 +119,13 @@ debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (
   } catch (err) {
     const duration_ms = Date.now() - startedAt;
 
-    logInfo({
-      level: "error",
-      event: "debug_allowed_exercises_failed",
+    (req.log || logger).error({
+      event: "debug.allowed_exercises_failed",
       request_id: request_id || undefined,
       client_profile_id,
       duration_ms,
       error: err?.message || String(err),
-    });
+    }, "debug allowed exercises failed");
 
     return res.status(500).json({
       ok: false,

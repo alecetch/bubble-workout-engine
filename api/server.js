@@ -22,9 +22,18 @@ import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogu
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
+import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
+import { requireInternalToken } from "./src/middleware/auth.js";
 import { adminOnly } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
+import { requestLogger } from "./src/middleware/requestLogger.js";
+import {
+  upsertUser,
+  upsertProfile,
+  getProfileByBubbleUserId,
+  patchProfile,
+} from "./src/services/clientProfileService.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -42,7 +51,7 @@ function isWeakSecret(value, minLength = 12) {
 }
 
 function failStartup(message) {
-  console.error(`[startup] ${message}`);
+  logger.fatal({ event: "server.startup.fatal", message }, "Startup validation failed");
   process.exit(1);
 }
 
@@ -95,7 +104,6 @@ const app = express();
 // Trust the single Fly.io load-balancer hop so req.ip is the real client IP
 // (not the proxy IP) and x-forwarded-for is correctly resolved by Express.
 app.set("trust proxy", 1);
-const DEV_USER_ID = "dev-user-1";
 const adminCspMiddleware = helmet.contentSecurityPolicy({
   directives: {
     defaultSrc: ["'self'"],
@@ -115,11 +123,6 @@ function sendAdminPage(res, fileName) {
   res.set("Pragma", "no-cache");
   return res.sendFile(join(__dirname, `admin/${fileName}`));
 }
-
-// TODO: Dev-only in-memory store. Replace with Postgres-backed persistence.
-const profilesById = new Map();
-const userToProfileId = new Map();
-app.locals.profilesById = profilesById;
 
 const profilePatchKeys = [
   "goals",
@@ -147,29 +150,6 @@ const presetColumnByCode = {
   minimal_equipment: "minimal_equipment",
   no_equipment: "no_equipment",
 };
-
-function createDevProfile(id, userId) {
-  return {
-    id,
-    userId,
-    goals: [],
-    fitnessLevel: null,
-    injuryFlags: [],
-    goalNotes: "",
-    equipmentPreset: null,
-    equipmentItemCodes: [],
-    preferredDays: [],
-    scheduleConstraints: "",
-    heightCm: null,
-    weightKg: null,
-    minutesPerSession: null,
-    sex: null,
-    ageRange: null,
-    onboardingStepCompleted: 0,
-    onboardingCompletedAt: null,
-    programType: null,
-  };
-}
 
 // TODO: Dev-only static reference data. Move these lists into Postgres-backed tables.
 const devReferenceData = {
@@ -237,6 +217,7 @@ const devReferenceData = {
 
 // Assign/echo request_id before any other middleware or route handler.
 app.use(requestId);
+app.use(requestLogger);
 app.use(
   helmet({
     contentSecurityPolicy: false,
@@ -272,7 +253,7 @@ app.get("/health", healthRateLimiter, async (req, res) => {
     const r = await pool.query("select now() as now");
     res.json({ ok: true, dbTime: r.rows[0].now });
   } catch (err) {
-    console.error("health error:", err?.stack || err);
+    req.log.error({ event: "http.health.error", err: err?.message }, "Health check failed");
     return res.status(500).json({
       ok: false,
       request_id: req.request_id,
@@ -282,7 +263,7 @@ app.get("/health", healthRateLimiter, async (req, res) => {
   }
 });
 
-app.get("/reference-data", async (_req, res) => {
+app.get("/reference-data", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT exercise_slug AS code, name AS label, category
@@ -296,7 +277,7 @@ app.get("/reference-data", async (_req, res) => {
     }));
     return res.status(200).json({ ...devReferenceData, equipmentItems });
   } catch (err) {
-    console.error("reference-data equipment_items error:", err);
+    req.log.error({ event: "http.reference_data.error", err: err?.message }, "reference-data error");
     return res.status(200).json(devReferenceData);
   }
 });
@@ -368,7 +349,7 @@ app.get("/media-assets", async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error("media-assets error:", err);
+    req.log.error({ event: "http.media_assets.error", err: err?.message }, "media-assets error");
     return res.status(500).json({ error: "internal_error" });
   }
 });
@@ -404,78 +385,100 @@ app.get("/equipment-items", async (req, res) => {
 
     return res.status(200).json({ preset, items });
   } catch (err) {
-    console.error("equipment-items error:", err);
+    req.log.error({ event: "http.equipment_items.error", err: err?.message }, "equipment-items error");
     return res.status(500).json({ error: "internal_error" });
   }
 });
 
-// TODO: Replace with authenticated user when auth layer is implemented
-app.get("/me", (req, res) => {
-  const clientProfileId = userToProfileId.get(DEV_USER_ID) ?? null;
-  return res.status(200).json({
-    id: DEV_USER_ID,
-    clientProfileId,
-  });
+// GET /me — returns the user's identity and current profile ID.
+// Query: ?bubble_user_id=<id>
+app.get("/me", requireInternalToken, async (req, res) => {
+  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
+  if (!bubbleUserId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
+  }
+  try {
+    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    return res.status(200).json({
+      id: bubbleUserId,
+      clientProfileId: profile?.id ?? null,
+    });
+  } catch (err) {
+    req.log.error({ event: "profile.me.error", err: err?.message }, "GET /me error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  }
 });
 
-// TODO: Dev-only in-memory routes. Replace with authenticated + Postgres-backed routes.
-app.post("/client-profiles", (req, res) => {
-  const existingProfileId = userToProfileId.get(DEV_USER_ID);
-  if (existingProfileId) {
-    const existingProfile = profilesById.get(existingProfileId);
-    if (existingProfile) {
-      return res.status(200).json(existingProfile);
+// POST /client-profiles — upsert user + create profile if none exists.
+// Query: ?bubble_user_id=<id>
+app.post("/client-profiles", requireInternalToken, async (req, res) => {
+  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
+  if (!bubbleUserId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
+  }
+  try {
+    const { id: pgUserId } = await upsertUser(bubbleUserId);
+    await upsertProfile(pgUserId, bubbleUserId);
+    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    return res.status(200).json(profile);
+  } catch (err) {
+    req.log.error({ event: "profile.create.error", err: err?.message }, "POST /client-profiles error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  }
+});
+
+// GET /client-profiles/:id — read profile by bubble_client_profile_id (= bubble_user_id).
+// :id is bubble_client_profile_id, which equals bubble_user_id by convention (see clientProfileService).
+app.get("/client-profiles/:id", requireInternalToken, async (req, res) => {
+  const profileId = req.params.id;
+  try {
+    const profile = await getProfileByBubbleUserId(profileId);
+    if (!profile) {
+      return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
     }
+    return res.status(200).json(profile);
+  } catch (err) {
+    req.log.error({ event: "profile.get.error", err: err?.message }, "GET /client-profiles/:id error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-
-  const id = "dev-profile-1";
-  const profile = createDevProfile(id, DEV_USER_ID);
-  profilesById.set(id, profile);
-  userToProfileId.set(DEV_USER_ID, id);
-  return res.status(200).json(profile);
 });
 
-app.get("/client-profiles/:id", (req, res) => {
-  const profile = profilesById.get(req.params.id);
-  if (!profile) {
-    return res.status(404).json({ error: "not found" });
-  }
-
-  return res.status(200).json(profile);
-});
-
-app.patch("/client-profiles/:id", (req, res) => {
-  const profile = profilesById.get(req.params.id);
-  if (!profile) {
-    return res.status(404).json({ error: "not found" });
-  }
-
+// PATCH /client-profiles/:id — patch profile fields.
+// :id is bubble_client_profile_id (= bubble_user_id).
+app.patch("/client-profiles/:id", requireInternalToken, async (req, res) => {
+  const profileId = req.params.id;
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-  console.log("[profile-patch]", req.params.id, JSON.stringify(patch));
-  for (const key of profilePatchKeys) {
-    if (Object.prototype.hasOwnProperty.call(patch, key)) {
-      profile[key] = patch[key];
+  try {
+    const updated = await patchProfile(profileId, patch);
+    if (!updated) {
+      return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
     }
+    req.log.debug({ event: "profile.patch", id: profileId }, "profile patch applied");
+    return res.status(200).json(updated);
+  } catch (err) {
+    req.log.error({ event: "profile.patch.error", err: err?.message }, "PATCH /client-profiles/:id error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
-  console.log("[profile-patch] goals after patch:", profile.goals);
-
-  profilesById.set(profile.id, profile);
-  return res.status(200).json(profile);
 });
 
-app.patch("/users/me", (req, res) => {
-  const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-  const clientProfileId = typeof patch.clientProfileId === "string" ? patch.clientProfileId : null;
-  if (clientProfileId) {
-    userToProfileId.set(DEV_USER_ID, clientProfileId);
-  } else {
-    userToProfileId.delete(DEV_USER_ID);
+// PATCH /users/me — associate a profile with a user (no-op for Postgres-backed store,
+// kept for API compatibility; returns current identity).
+// Query: ?bubble_user_id=<id>
+app.patch("/users/me", requireInternalToken, async (req, res) => {
+  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
+  if (!bubbleUserId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
   }
-
-  return res.status(200).json({
-    id: DEV_USER_ID,
-    clientProfileId,
-  });
+  try {
+    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    return res.status(200).json({
+      id: bubbleUserId,
+      clientProfileId: profile?.id ?? null,
+    });
+  } catch (err) {
+    req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");
+    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  }
 });
 
 // Mount routers.
@@ -501,15 +504,12 @@ app.use(generateProgramV2Router);
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.type === "entity.parse.failed") {
     const raw = typeof req.rawBody === "string" ? req.rawBody : "";
-    console.error(
-      JSON.stringify({
-        event: "invalid_json",
-        message: err.message,
-        content_type: req.headers["content-type"] || "",
-        raw_body_length: raw.length,
-        raw_body_preview: raw.slice(0, 200),
-      }),
-    );
+    req.log.warn({
+      event: "http.invalid_json",
+      content_type: req.headers["content-type"] || "",
+      raw_body_length: raw.length,
+      raw_body_preview: raw.slice(0, 200),
+    }, "Invalid JSON body");
 
     return res.status(400).json({
       ok: false,
@@ -524,7 +524,11 @@ app.use((err, req, res, next) => {
 
 // Final generic error handler.
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err?.stack || err);
+  (req.log || logger).error({
+    event: "http.unhandled_error",
+    err: err?.message,
+    stack: err?.stack,
+  }, "Unhandled error");
   return res.status(500).json({
     ok: false,
     request_id: req.request_id,
@@ -534,4 +538,4 @@ app.use((err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, "0.0.0.0", () => console.log(`API listening on :${port}`));
+app.listen(port, "0.0.0.0", () => logger.info({ event: "server.listening", port }, `API listening on :${port}`));
