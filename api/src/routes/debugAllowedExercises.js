@@ -4,18 +4,11 @@ import { pool } from "../db.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { publicInternalError } from "../utils/publicError.js";
 import logger from "../utils/logger.js";
+import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
 export const debugAllowedExercisesRouter = express.Router();
 
 let cachedInjuryColumn = null;
-
-function s(v) {
-  return (v ?? "").toString().trim();
-}
-
-function isUuid(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s(v));
-}
 
 async function resolveInjuryColumn(client) {
   if (cachedInjuryColumn) return cachedInjuryColumn;
@@ -44,14 +37,17 @@ async function resolveInjuryColumn(client) {
 
 debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (req, res) => {
   const startedAt = Date.now();
-  const request_id = s(req.headers["x-request-id"]);
-  const client_profile_id = s(req.params.id);
+  const request_id = safeString(req.headers["x-request-id"]);
+  const client_profile_id = safeString(req.params.id);
 
-  if (!isUuid(client_profile_id)) {
+  try {
+    requireUuid(client_profile_id, "client_profile_id");
+  } catch (err) {
+    if (!(err instanceof RequestValidationError)) throw err;
     return res.status(400).json({
       ok: false,
       code: "validation_error",
-      error: "Invalid client_profile_id",
+      error: err.message,
     });
   }
 

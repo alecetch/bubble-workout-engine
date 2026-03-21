@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { internalWithUser } from "../middleware/chains.js";
+import { clampInt, safeString } from "../utils/validate.js";
 
 const SQL_PERSONAL_RECORDS = `
 SELECT DISTINCT ON (pe.exercise_id)
@@ -46,12 +47,9 @@ function toAuthUserId(req) {
 }
 
 export function clampPersonalRecordsLimit(rawLimit) {
-  const parsed = Number(rawLimit);
-  if (!Number.isFinite(parsed)) return 20;
-  const rounded = Math.floor(parsed);
-  if (rounded < 1) return 1;
-  if (rounded > 50) return 50;
-  return rounded;
+  if (rawLimit === undefined) return 20;
+  if (safeString(rawLimit) === "") return 1;
+  return clampInt(rawLimit, { defaultValue: 20, min: 1, max: 50 });
 }
 
 export function mapPersonalRecordRow(row) {

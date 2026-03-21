@@ -3,19 +3,11 @@ import express from "express";
 import { pool } from "../db.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
+import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
 export const readProgramRouter = express.Router();
 
 // ---- Helpers ----
-class ValidationError extends Error {
-  constructor(message, details = []) {
-    super(message);
-    this.name = "ValidationError";
-    this.status = 400;
-    this.details = details;
-  }
-}
-
 class NotFoundError extends Error {
   constructor(message, details = []) {
     super(message);
@@ -23,15 +15,6 @@ class NotFoundError extends Error {
     this.status = 404;
     this.details = details;
   }
-}
-
-function s(v) {
-  return (v ?? "").toString().trim();
-}
-
-function isUuid(v) {
-  // Accept standard UUID v1-v5 formats (case-insensitive).
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s(v));
 }
 
 function uniq(arr) {
@@ -49,17 +32,17 @@ const SEGMENT_TYPE_LABELS = {
 };
 
 function segmentTypeLabel(segment_type) {
-  return SEGMENT_TYPE_LABELS[s(segment_type)] ?? s(segment_type);
+  return SEGMENT_TYPE_LABELS[safeString(segment_type)] ?? safeString(segment_type);
 }
 
 function parseEquipmentSlugs(rows) {
   // equipment_items_slugs_csv is a text column (default ''), comma-separated.
   const slugs = [];
   for (const r of rows) {
-    const csv = s(r.equipment_items_slugs_csv);
+    const csv = safeString(r.equipment_items_slugs_csv);
     if (!csv) continue;
     for (const part of csv.split(",")) {
-      const t = s(part);
+      const t = safeString(part);
       if (t) slugs.push(t);
     }
   }
@@ -67,18 +50,16 @@ function parseEquipmentSlugs(rows) {
 }
 
 async function resolveUserId(client, query) {
-  const user_id = s(query.user_id);
-  const bubble_user_id = s(query.bubble_user_id);
+  const user_id = safeString(query.user_id);
+  const bubble_user_id = safeString(query.bubble_user_id);
 
   if (user_id) {
-    if (!isUuid(user_id)) {
-      throw new ValidationError("Invalid user_id");
-    }
+    requireUuid(user_id, "user_id");
     return user_id;
   }
 
   if (!bubble_user_id) {
-    throw new ValidationError("Provide user_id or bubble_user_id");
+    throw new RequestValidationError("Provide user_id or bubble_user_id");
   }
 
   const r = await client.query(
@@ -99,7 +80,7 @@ async function resolveUserId(client, query) {
 }
 
 function mapError(err) {
-  if (err instanceof ValidationError || err instanceof NotFoundError) {
+  if (err instanceof RequestValidationError || err instanceof NotFoundError) {
     return { status: err.status ?? 400, code: err instanceof NotFoundError ? "not_found" : "validation_error", message: err.message, details: err.details };
   }
   if (err && typeof err === "object") {
@@ -116,14 +97,12 @@ function mapError(err) {
 // Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs).
 readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
   const { request_id } = req;
-  const program_id = s(req.params.program_id);
-  const selected_program_day_id = s(req.query.selected_program_day_id);
+  const program_id = safeString(req.params.program_id);
+  const selected_program_day_id = safeString(req.query.selected_program_day_id);
 
   try {
-    if (!isUuid(program_id)) throw new ValidationError("Invalid program_id");
-    if (selected_program_day_id && !isUuid(selected_program_day_id)) {
-      throw new ValidationError("Invalid selected_program_day_id");
-    }
+    requireUuid(program_id, "program_id");
+    if (selected_program_day_id) requireUuid(selected_program_day_id, "selected_program_day_id");
 
     const client = await pool.connect();
     try {
@@ -300,10 +279,10 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
 // Returns: day header + ordered segments[] with nested items[].
 readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
   const { request_id } = req;
-  const program_day_id = s(req.params.program_day_id);
+  const program_day_id = safeString(req.params.program_day_id);
 
   try {
-    if (!isUuid(program_day_id)) throw new ValidationError("Invalid program_day_id");
+    requireUuid(program_day_id, "program_day_id");
 
     const client = await pool.connect();
     try {
@@ -477,11 +456,11 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
 // Marks (or unmarks) a program day as completed.
 readProgramRouter.patch("/day/:program_day_id/complete", async (req, res) => {
   const { request_id } = req;
-  const program_day_id = s(req.params.program_day_id);
+  const program_day_id = safeString(req.params.program_day_id);
   const is_completed = req.body?.is_completed !== false; // default true
 
   try {
-    if (!isUuid(program_day_id)) throw new ValidationError("Invalid program_day_id");
+    requireUuid(program_day_id, "program_day_id");
 
     const client = await pool.connect();
     try {

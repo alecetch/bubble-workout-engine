@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { internalWithUser } from "../middleware/chains.js";
+import { clampInt, requireUuid, safeString } from "../utils/validate.js";
 
 const SQL_HISTORY_TIMELINE = `
 SELECT
@@ -37,7 +38,6 @@ WHERE l.is_draft = FALSE
 GROUP BY l.program_day_id;
 `;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function asString(value, fallback = "") {
@@ -61,23 +61,26 @@ function toFiniteNumber(value, fallback = 0) {
 }
 
 export function clampTimelineLimit(rawLimit) {
-  const parsed = Number(rawLimit);
-  if (!Number.isFinite(parsed)) return 40;
-  const rounded = Math.floor(parsed);
-  if (rounded < 1) return 1;
-  if (rounded > 100) return 100;
-  return rounded;
+  if (rawLimit === undefined) return 40;
+  if (safeString(rawLimit) === "") return 1;
+  return clampInt(rawLimit, { defaultValue: 40, min: 1, max: 100 });
 }
 
 export function parseTimelineCursor(query) {
-  const rawDate = typeof query?.cursorDate === "string" ? query.cursorDate.trim() : "";
-  const rawId = typeof query?.cursorId === "string" ? query.cursorId.trim() : "";
+  const rawDate = safeString(query?.cursorDate);
+  const rawId = safeString(query?.cursorId);
 
   if (!rawDate && !rawId) {
     return { cursorDate: null, cursorId: null };
   }
 
-  if (!ISO_DATE_RE.test(rawDate) || !UUID_RE.test(rawId)) {
+  try {
+    requireUuid(rawId, "cursorId");
+  } catch {
+    return { error: "Invalid cursorDate/cursorId" };
+  }
+
+  if (!ISO_DATE_RE.test(rawDate)) {
     return { error: "Invalid cursorDate/cursorId" };
   }
 

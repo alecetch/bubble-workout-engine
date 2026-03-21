@@ -1,17 +1,9 @@
 import express from "express";
 import { pool } from "../db.js";
 import { publicInternalError } from "../utils/publicError.js";
+import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
 export const segmentLogRouter = express.Router();
-
-class ValidationError extends Error {
-  constructor(message, details = []) {
-    super(message);
-    this.name = "ValidationError";
-    this.status = 400;
-    this.details = details;
-  }
-}
 
 class NotFoundError extends Error {
   constructor(message, details = []) {
@@ -22,28 +14,17 @@ class NotFoundError extends Error {
   }
 }
 
-function s(v) {
-  return (v ?? "").toString().trim();
-}
-
-function isUuid(v) {
-  // Accept standard UUID v1-v5 formats (case-insensitive).
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s(v));
-}
-
 async function resolveUserId(client, query) {
-  const user_id = s(query.user_id);
-  const bubble_user_id = s(query.bubble_user_id);
+  const user_id = safeString(query.user_id);
+  const bubble_user_id = safeString(query.bubble_user_id);
 
   if (user_id) {
-    if (!isUuid(user_id)) {
-      throw new ValidationError("Invalid user_id");
-    }
+    requireUuid(user_id, "user_id");
     return user_id;
   }
 
   if (!bubble_user_id) {
-    throw new ValidationError("Provide user_id or bubble_user_id");
+    throw new RequestValidationError("Provide user_id or bubble_user_id");
   }
 
   const r = await client.query(
@@ -64,7 +45,7 @@ async function resolveUserId(client, query) {
 }
 
 function mapError(err) {
-  if (err instanceof ValidationError || err instanceof NotFoundError) {
+  if (err instanceof RequestValidationError || err instanceof NotFoundError) {
     return { status: err.status ?? 400, code: err instanceof NotFoundError ? "not_found" : "validation_error", message: err.message, details: err.details };
   }
   if (err && typeof err === "object") {
@@ -79,12 +60,12 @@ function mapError(err) {
 
 segmentLogRouter.get("/segment-log", async (req, res) => {
   const { request_id } = req;
-  const workout_segment_id = s(req.query.workout_segment_id);
-  const program_day_id = s(req.query.program_day_id);
+  const workout_segment_id = safeString(req.query.workout_segment_id);
+  const program_day_id = safeString(req.query.program_day_id);
 
   try {
-    if (!isUuid(workout_segment_id)) throw new ValidationError("Invalid workout_segment_id");
-    if (!isUuid(program_day_id)) throw new ValidationError("Invalid program_day_id");
+    requireUuid(workout_segment_id, "workout_segment_id");
+    requireUuid(program_day_id, "program_day_id");
 
     const client = await pool.connect();
     try {
@@ -119,22 +100,20 @@ segmentLogRouter.get("/segment-log", async (req, res) => {
 
 segmentLogRouter.post("/segment-log", async (req, res) => {
   const { request_id } = req;
-  const program_id = s(req.body?.program_id);
-  const program_day_id = s(req.body?.program_day_id);
-  const workout_segment_id = s(req.body?.workout_segment_id);
+  const program_id = safeString(req.body?.program_id);
+  const program_day_id = safeString(req.body?.program_day_id);
+  const workout_segment_id = safeString(req.body?.workout_segment_id);
   const rows = req.body?.rows;
 
   try {
-    if (!isUuid(program_id)) throw new ValidationError("Invalid program_id");
-    if (!isUuid(program_day_id)) throw new ValidationError("Invalid program_day_id");
-    if (!isUuid(workout_segment_id)) throw new ValidationError("Invalid workout_segment_id");
+    requireUuid(program_id, "program_id");
+    requireUuid(program_day_id, "program_day_id");
+    requireUuid(workout_segment_id, "workout_segment_id");
     if (!Array.isArray(rows) || rows.length === 0) {
-      throw new ValidationError("rows must be a non-empty array");
+      throw new RequestValidationError("rows must be a non-empty array");
     }
     for (const row of rows) {
-      if (!isUuid(row?.program_exercise_id)) {
-        throw new ValidationError("Invalid program_exercise_id");
-      }
+      requireUuid(safeString(row?.program_exercise_id), "program_exercise_id");
     }
 
     const client = await pool.connect();
