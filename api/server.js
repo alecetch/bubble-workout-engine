@@ -7,11 +7,11 @@ import { readProgramRouter } from "./src/routes/readProgram.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
 import { segmentLogRouter } from "./src/routes/segmentLog.js";
-import { historyProgramsRouter } from "./src/routes/historyPrograms.js";
-import { historyTimelineRouter } from "./src/routes/historyTimeline.js";
-import { historyOverviewRouter } from "./src/routes/historyOverview.js";
-import { historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
-import { historyExerciseRouter } from "./src/routes/historyExercise.js";
+import { createHistoryProgramsHandler, historyProgramsRouter } from "./src/routes/historyPrograms.js";
+import { createHistoryTimelineHandler, historyTimelineRouter } from "./src/routes/historyTimeline.js";
+import { createHistoryOverviewHandler, historyOverviewRouter } from "./src/routes/historyOverview.js";
+import { createHistoryPersonalRecordsHandler, historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
+import { createHistoryExerciseHandler, historyExerciseRouter } from "./src/routes/historyExercise.js";
 import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.js";
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
@@ -25,7 +25,7 @@ import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
-import { adminOnly } from "./src/middleware/chains.js";
+import { adminOnly, internalWithUser } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
@@ -485,11 +485,21 @@ app.patch("/users/me", requireInternalToken, async (req, res) => {
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
 app.use("/api", debugAllowedExercisesRouter);
-app.use(historyProgramsRouter);
-app.use(historyTimelineRouter);
-app.use(historyOverviewRouter);
-app.use(historyPersonalRecordsRouter);
-app.use(historyExerciseRouter);
+
+// Canonical /api-prefixed mounts (new).
+app.get("/api/v1/history/programs", ...internalWithUser, createHistoryProgramsHandler(pool));
+app.get("/api/v1/history/timeline", ...internalWithUser, createHistoryTimelineHandler(pool));
+app.get("/api/v1/history/overview", ...internalWithUser, createHistoryOverviewHandler(pool));
+app.get("/api/v1/history/personal-records", ...internalWithUser, createHistoryPersonalRecordsHandler(pool));
+app.get("/api/v1/history/exercise/:exerciseId", ...internalWithUser, createHistoryExerciseHandler(pool));
+
+// DEPRECATED backward-compat aliases — remove after Bubble client is updated to /api/v1/history/*.
+app.use(historyProgramsRouter); // → GET /v1/history/programs
+app.use(historyTimelineRouter); // → GET /v1/history/timeline
+app.use(historyOverviewRouter); // → GET /v1/history/overview
+app.use(historyPersonalRecordsRouter); // → GET /v1/history/personal-records
+app.use(historyExerciseRouter); // → GET /v1/history/exercise/:exerciseId
+
 app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);

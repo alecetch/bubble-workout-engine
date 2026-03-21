@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { internalWithUser } from "../middleware/chains.js";
+import { clampInt, safeString } from "../utils/validate.js";
 
 const SQL_HISTORY_PROGRAMS = `
 SELECT
@@ -40,12 +41,9 @@ function asString(value, fallback = "") {
 }
 
 export function clampLimit(rawLimit) {
-  const parsed = Number(rawLimit);
-  if (!Number.isFinite(parsed)) return 10;
-  const rounded = Math.floor(parsed);
-  if (rounded < 1) return 1;
-  if (rounded > 50) return 50;
-  return rounded;
+  if (rawLimit === undefined) return 10;
+  if (safeString(rawLimit) === "") return 1;
+  return clampInt(rawLimit, { defaultValue: 10, min: 1, max: 50 });
 }
 
 export function mapHistoryProgramRow(row) {
