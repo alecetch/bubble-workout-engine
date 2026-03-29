@@ -151,7 +151,32 @@ function segmentDayFromBlocks(day, blockSemantics, dbg) {
       slot: b.slot,
       sets: toInt(b.sets, 0),
       is_buy_in: b.is_buy_in === true,
+      simulation_resolution: b.simulation_resolution ?? null,
+      simulation_fallback_index: b.simulation_fallback_index ?? null,
+      simulation_station_index: b.simulation_station_index ?? null,
+      simulation_require_hyrox_role: b.simulation_require_hyrox_role ?? null,
+      simulation_required_equipment_slugs: b.simulation_required_equipment_slugs ?? null,
     }));
+
+  if (day?.is_ordered_simulation === true) {
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (!isRealExerciseBlock(b)) continue;
+      const letter = getBlockLetter(b.slot);
+      const sem = blockSemantics?.[letter] || {};
+      segments.push({
+        segment_index: segIndex++,
+        segment_type: "single",
+        purpose: toStr(sem.purpose) || "main",
+        rounds: 1,
+        time_cap_sec: sem.time_cap_sec ?? null,
+        post_segment_rest_sec: sem.post_segment_rest_sec ?? 0,
+        items: mkItems([b]),
+      });
+    }
+    dbg.ordered_simulation_days = toInt(dbg.ordered_simulation_days, 0) + 1;
+    return segments;
+  }
 
   for (const letter of orderedLetters) {
     const group = byLetter[letter] || [];
@@ -336,6 +361,7 @@ export async function segmentProgram({ program, compiledConfig }) {
     resolved_fills: resolved.debug,
     days_out: 0,
     circuit_rounds_promoted: 0,
+    ordered_simulation_days: 0,
   };
 
   for (let d = 0; d < (resolved.programResolved.days || []).length; d++) {
@@ -352,6 +378,7 @@ export async function segmentProgram({ program, compiledConfig }) {
       day_type: toStr(day.day_type) || toStr(compiledConfig?.programType) || "unknown",
       day_focus: dayFocus,
       duration_mins: toInt(day.duration_mins, out.duration_mins),
+      is_ordered_simulation: day.is_ordered_simulation === true,
       segments,
     });
   }

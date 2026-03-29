@@ -25,6 +25,10 @@ const IMPORT_SPECS = [
     fileStem: "export_All-ProgramGenerationConfigs-modified_2026-03-01_15-22-30",
   },
   {
+    table: "program_generation_config",
+    fileStem: "export_Hyrox-ProgramGenerationConfigs-supplement_2026-03-29",
+  },
+  {
     table: "program_rep_rule",
     fileStem: "export_All-program-rep-rules-modified_2026-03-01_15-22-18",
   },

@@ -19,6 +19,7 @@ import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
+import { adminHealthRouter } from "./src/routes/adminHealth.js";
 import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
@@ -241,6 +242,7 @@ app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-ass
 app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));
 app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coverage.html"));
 app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
+app.get("/admin/health", adminCspMiddleware, (_req, res) => sendAdminPage(res, "health.html"));
 app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res, "narration.html"));
 app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
 app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
@@ -560,6 +562,7 @@ app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
+app.use("/admin/health", ...adminOnly, adminHealthRouter);
 // Canonical — /api/admin matches all other API admin routes
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 // DEPRECATED backward-compat alias

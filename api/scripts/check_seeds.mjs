@@ -86,8 +86,8 @@ WITH checks AS (
   UNION ALL SELECT
     'program_generation_config_present',
     (SELECT COUNT(*) FROM public.program_generation_config
-      WHERE config_key = 'hypertrophy_default_v1')::int,
-    1
+      WHERE config_key IN ('hypertrophy_default_v1', 'hyrox_default_v1'))::int,
+    2
 
   UNION ALL SELECT
     'media_assets_seed_rows_present',
