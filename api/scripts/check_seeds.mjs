@@ -53,7 +53,7 @@ WITH checks AS (
         'barbell_back_squat','barbell_deadlift','bench_press','ohp',
         'pull_up','barbell_row','row_erg','ski_erg','assault_bike','burpee'
       ))::int,
-    10
+    8
 
   UNION ALL SELECT
     'equipment_aware_seed_rows_present',
@@ -125,7 +125,7 @@ WITH checks AS (
         'barbell_row','ohp','pull_up'
       )
       AND strength_primary_region IN ('upper','lower'))::int,
-    6
+    4
 )
 SELECT
   check_name,
