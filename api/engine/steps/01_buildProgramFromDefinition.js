@@ -7,6 +7,22 @@ import {
   pickSeedExerciseForSlot,
 } from "../exerciseSelector.js";
 import { fillSlot } from "../selectorStrategies.js";
+import {
+  createVariabilityState,
+  getBlockStickyMeta,
+  getBlockStickyExerciseId,
+  getMedAvoidCanonicalNames,
+  getProgramStickyMeta,
+  getProgramStickyExerciseId,
+  recordBlockStickyChoice,
+  recordProgramStickyChoice,
+} from "../variabilityState.js";
+import {
+  buildSimulationAttemptChain,
+  classifySimulationResolution,
+  matchesSimulationFilters,
+  normalizeSimulationSlotFields,
+} from "../orderedSimulation.js";
 
 function toStr(v) {
   return v === null || v === undefined ? "" : String(v);
@@ -119,12 +135,18 @@ function normalizeSlotDefinition(rawSlot) {
       fill_fallback_slot: null,
       variants: null,
       selector_strategy: "best_match_by_movement",
+      slot_family: null,
+      variability_policy: null,
+      requireHyroxRole: null,
+      station_index: null,
+      required_equipment_slugs: null,
+      station_fallback_chain: null,
     };
   }
   if (rawSlot && typeof rawSlot === "object") {
     const slotName = toStr(rawSlot.slot);
     const [block, key] = slotName.split(":");
-    return {
+    return normalizeSimulationSlotFields({
       ...rawSlot,
       slot: slotName,
       block: rawSlot.block ?? (block || ""),
@@ -135,7 +157,9 @@ function normalizeSlotDefinition(rawSlot) {
       pref_bonus: rawSlot.pref_bonus ?? 4,
       strength_equivalent_bonus: rawSlot.strength_equivalent_bonus === true,
       selector_strategy: rawSlot.selector_strategy || "best_match_by_movement",
-    };
+      slot_family: rawSlot.slot_family ?? null,
+      variability_policy: rawSlot.variability_policy ?? null,
+    });
   }
   return {
     slot: "",
@@ -154,6 +178,12 @@ function normalizeSlotDefinition(rawSlot) {
     fill_fallback_slot: null,
     variants: null,
     selector_strategy: "best_match_by_movement",
+    slot_family: null,
+    variability_policy: null,
+    requireHyroxRole: null,
+    station_index: null,
+    required_equipment_slugs: null,
+    station_fallback_chain: null,
   };
 }
 
@@ -205,6 +235,101 @@ function resolveAllowedExerciseIds(inputs, exercises) {
     .filter(Boolean);
 }
 
+function buildSimulationAllowedSet(allowedSet, byId, slotDef, excludeMovementClassesSet) {
+  const filtered = new Set();
+  for (const id of allowedSet) {
+    const ex = byId[id];
+    if (!ex) continue;
+    if (isExcludedExercise(ex, excludeMovementClassesSet)) continue;
+    if (!matchesSimulationFilters(ex, slotDef)) continue;
+    filtered.add(id);
+  }
+  return filtered;
+}
+
+function resolveOrderedSimulationSlot({
+  slotName,
+  dayIndex,
+  blockLetter,
+  resolvedSlot,
+  slotFamily,
+  variabilityPolicy,
+  byId,
+  allowedSet,
+  builderState,
+  excludeMovementClassesSet,
+  stats,
+}) {
+  const attempts = [];
+  const chain = buildSimulationAttemptChain(resolvedSlot);
+
+  for (let idx = 0; idx < chain.length; idx++) {
+    const attemptSlot = chain[idx];
+    const attemptAllowedSet = buildSimulationAllowedSet(allowedSet, byId, attemptSlot, excludeMovementClassesSet);
+    const resolution = classifySimulationResolution(idx);
+    const attemptMeta = {
+      simulation_resolution: resolution,
+      simulation_fallback_index: idx,
+      simulation_require_hyrox_role: attemptSlot.requireHyroxRole ?? null,
+      simulation_station_index: attemptSlot.station_index ?? null,
+      simulation_required_equipment_slugs: Array.isArray(attemptSlot.required_equipment_slugs)
+        ? attemptSlot.required_equipment_slugs
+        : [],
+    };
+    attempts.push({
+      ...attemptMeta,
+      candidate_count: attemptAllowedSet.size,
+    });
+
+    if (attemptAllowedSet.size === 0) continue;
+
+    const ex = fillSlot(
+      { ...attemptSlot, slot_family: slotFamily, variability_policy: variabilityPolicy },
+      { byId, allowedSet: attemptAllowedSet },
+      builderState,
+    );
+    if (!ex || isExcludedExercise(ex, excludeMovementClassesSet)) continue;
+
+    logBuilderEvent(stats, {
+      event: "ordered_simulation_resolved",
+      slot: slotName,
+      day_index: dayIndex,
+      block: blockLetter,
+      ...attemptMeta,
+      exercise_id: ex.id,
+      attempts,
+    });
+
+    return {
+      ex,
+      metadata: attemptMeta,
+      attempts,
+    };
+  }
+
+  logBuilderEvent(stats, {
+    event: "ordered_simulation_unresolvable",
+    slot: slotName,
+    day_index: dayIndex,
+    block: blockLetter,
+    attempts,
+  });
+
+  return {
+    ex: null,
+    metadata: {
+      simulation_resolution: "unresolvable",
+      simulation_fallback_index: null,
+      simulation_require_hyrox_role: resolvedSlot.requireHyroxRole ?? null,
+      simulation_station_index: resolvedSlot.station_index ?? null,
+      simulation_required_equipment_slugs: Array.isArray(resolvedSlot.required_equipment_slugs)
+        ? resolvedSlot.required_equipment_slugs
+        : [],
+    },
+    attempts,
+  };
+}
+
 export async function buildProgramFromDefinition({ inputs, request, compiledConfig }) {
   const clientProfile = inputs?.clientProfile?.response ?? {};
   const exercises = inputs?.exercises?.response?.results ?? [];
@@ -245,6 +370,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
   const setsByDurationCfg = builderCfg.setsByDuration ?? defaultSetsByDuration();
   const blockBudgetCfg = builderCfg.blockBudget ?? defaultBlockBudget();
   const slotDefaults = builderCfg.slotDefaults ?? {};
+  const blockVariabilityDefaults = builderCfg.blockVariabilityDefaults ?? {};
   const excludeMovementClasses = Array.isArray(builderCfg.excludeMovementClasses)
     ? builderCfg.excludeMovementClasses
     : ["cardio", "conditioning", "locomotion"];
@@ -283,6 +409,10 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
 
     avoided_repeat_sw2: 0,
     avoided_repeat_cn: 0,
+    simulation_exact: 0,
+    simulation_family: 0,
+    simulation_fallback: 0,
+    simulation_unresolvable: 0,
 
     fills_add_sets: 0,
     fill_failed: 0,
@@ -298,12 +428,14 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
 
   const days = [];
   const usedIdsWeek = new Set();
+  const variabilityState = createVariabilityState();
   const maxDays = Math.min(dperweek, dayTemplates.length);
 
   for (let day = 1; day <= maxDays; day++) {
     const template = dayTemplates[day - 1];
     const slots = extractSlotsFromTemplate(template);
-    const take = Math.min(budget, slots.length);
+    const isOrderedSimulationDay = template && typeof template === "object" && template.is_ordered_simulation === true;
+    const take = isOrderedSimulationDay ? slots.length : Math.min(budget, slots.length);
     const blocks = [];
 
     const builderState = {
@@ -324,6 +456,9 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       usedRegionsToday: new Set(),
       stats,
       equipmentProfile,
+      variabilityState,
+      variabilityAvoidCanonicalNames: null,
+      dayIndex: day,
     };
 
     if (builderState.conditioning) {
@@ -346,6 +481,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       logBuilderEvent(stats, {
         event: "slot_resolved",
         slot: slotName,
+        is_ordered_simulation: isOrderedSimulationDay,
         equipment_profile: equipmentProfile,
         variant_matched: resolvedSlot !== slotDef,
         resolved_sw2: resolvedSlot.sw2 ?? null,
@@ -355,9 +491,105 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       });
 
       const [blockLetter] = slotName.split(":");
+      const slotFamily = toStr(resolvedSlot.slot_family).trim() || null;
+      const variabilityPolicy =
+        toStr(resolvedSlot.variability_policy).trim() ||
+        toStr(blockVariabilityDefaults?.[blockLetter]).trim() ||
+        "high";
 
       const catalogIndex = { byId, allowedSet };
-      let ex = fillSlot(resolvedSlot, catalogIndex, builderState);
+      logBuilderEvent(stats, {
+        event: "slot_variability",
+        slot: slotName,
+        day_index: day,
+        block: blockLetter,
+        slot_family: slotFamily,
+        variability_policy: variabilityPolicy,
+      });
+
+      let ex = null;
+      let simulationMetadata = null;
+      let simulationAttempts = null;
+      builderState.variabilityAvoidCanonicalNames = null;
+
+      if (variabilityPolicy === "none" && slotFamily) {
+        const stickyExerciseId = getProgramStickyExerciseId(variabilityState, slotFamily);
+        const stickyExercise = stickyExerciseId ? byId[stickyExerciseId] : null;
+        const stickyMeta = getProgramStickyMeta(variabilityState, slotFamily);
+        if (stickyExercise && !isExcludedExercise(stickyExercise, excludeMovementClassesSet)) {
+          ex = stickyExercise;
+          simulationMetadata = stickyMeta;
+          logBuilderEvent(stats, {
+            event: "slot_variability_reuse",
+            slot: slotName,
+            day_index: day,
+            block: blockLetter,
+            slot_family: slotFamily,
+            variability_policy: variabilityPolicy,
+            reuse: "program_sticky",
+            exercise_id: stickyExercise.id,
+          });
+        }
+      }
+
+      if (!ex && variabilityPolicy === "med" && slotFamily) {
+        const stickyExerciseId = getBlockStickyExerciseId(variabilityState, day, blockLetter, slotFamily);
+        const stickyExercise = stickyExerciseId ? byId[stickyExerciseId] : null;
+        const stickyMeta = getBlockStickyMeta(variabilityState, day, blockLetter, slotFamily);
+        if (stickyExercise && !isExcludedExercise(stickyExercise, excludeMovementClassesSet)) {
+          ex = stickyExercise;
+          simulationMetadata = stickyMeta;
+          logBuilderEvent(stats, {
+            event: "slot_variability_reuse",
+            slot: slotName,
+            day_index: day,
+            block: blockLetter,
+            slot_family: slotFamily,
+            variability_policy: variabilityPolicy,
+            reuse: "block_sticky",
+            exercise_id: stickyExercise.id,
+          });
+        } else {
+          const avoidSet = getMedAvoidCanonicalNames(variabilityState, slotFamily);
+          builderState.variabilityAvoidCanonicalNames = avoidSet.size ? avoidSet : null;
+          logBuilderEvent(stats, {
+            event: "slot_variability_avoid",
+            slot: slotName,
+            day_index: day,
+            block: blockLetter,
+            slot_family: slotFamily,
+            variability_policy: variabilityPolicy,
+            avoid_canonical_names: Array.from(avoidSet),
+          });
+        }
+      }
+
+      if (!ex && isOrderedSimulationDay) {
+        const simulationResolved = resolveOrderedSimulationSlot({
+          slotName,
+          dayIndex: day,
+          blockLetter,
+          resolvedSlot,
+          slotFamily,
+          variabilityPolicy,
+          byId,
+          allowedSet,
+          builderState,
+          excludeMovementClassesSet,
+          stats,
+        });
+        ex = simulationResolved.ex;
+        simulationMetadata = simulationResolved.metadata;
+        simulationAttempts = simulationResolved.attempts;
+      }
+
+      if (!ex && !isOrderedSimulationDay) {
+        ex = fillSlot(
+          { ...resolvedSlot, slot_family: slotFamily, variability_policy: variabilityPolicy },
+          catalogIndex,
+          builderState,
+        );
+      }
       if (ex && isExcludedExercise(ex, excludeMovementClassesSet)) {
         ex = null;
       }
@@ -371,9 +603,9 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       }
 
       if (ex) {
+        const cn = canonicalName(ex.n);
         usedIdsWeek.add(ex.id);
         if (ex.sw2) builderState.usedSw2Today.add(ex.sw2);
-        const cn = canonicalName(ex.n);
         if (cn) builderState.usedCanonicalNamesToday.add(cn);
         for (const r of ex.tr || []) {
           const rr = toStr(r).trim();
@@ -399,6 +631,39 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           if (complexity >= HIGH_COMPLEXITY) c.highComplexityCountToday++;
         }
 
+        if (slotFamily && variabilityPolicy === "none") {
+          recordProgramStickyChoice(variabilityState, slotFamily, ex.id, simulationMetadata);
+        }
+        if (slotFamily && variabilityPolicy === "med") {
+          recordBlockStickyChoice(variabilityState, day, blockLetter, slotFamily, ex.id, cn, simulationMetadata);
+        }
+
+        if (simulationMetadata?.simulation_resolution === "exact") stats.simulation_exact += 1;
+        else if (simulationMetadata?.simulation_resolution === "family") stats.simulation_family += 1;
+        else if (simulationMetadata?.simulation_resolution === "fallback") stats.simulation_fallback += 1;
+
+        const simulationBlockFields = simulationMetadata
+          ? {
+              simulation_resolution: simulationMetadata.simulation_resolution,
+              simulation_fallback_index: simulationMetadata.simulation_fallback_index,
+              simulation_require_hyrox_role: simulationMetadata.simulation_require_hyrox_role,
+              simulation_station_index: simulationMetadata.simulation_station_index,
+              simulation_required_equipment_slugs: simulationMetadata.simulation_required_equipment_slugs,
+              simulation_attempts: simulationAttempts,
+            }
+          : {};
+
+        if (simulationMetadata && (simulationMetadata.simulation_resolution || simulationMetadata.simulation_resolution === "exact")) {
+          logBuilderEvent(stats, {
+            event: "ordered_simulation_block",
+            slot: slotName,
+            day_index: day,
+            block: blockLetter,
+            exercise_id: ex.id,
+            ...simulationBlockFields,
+          });
+        }
+
         const sets = setsMap[blockLetter] || 2;
         blocks.push({
           block: blockLetter,
@@ -409,6 +674,23 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           ex_sw: ex.sw || "",
           ex_sw2: ex.sw2 || "",
           is_buy_in: resolvedSlot.is_buy_in === true,
+          ...simulationBlockFields,
+        });
+        continue;
+      }
+
+      if (isOrderedSimulationDay) {
+        stats.simulation_unresolvable += 1;
+        blocks.push({
+          block: blockLetter,
+          slot: slotName,
+          fill: "simulation_unresolvable",
+          simulation_resolution: "unresolvable",
+          simulation_fallback_index: null,
+          simulation_require_hyrox_role: simulationMetadata?.simulation_require_hyrox_role ?? null,
+          simulation_station_index: simulationMetadata?.simulation_station_index ?? null,
+          simulation_required_equipment_slugs: simulationMetadata?.simulation_required_equipment_slugs ?? [],
+          simulation_attempts: simulationAttempts,
         });
         continue;
       }
@@ -439,6 +721,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       day_type: compiledConfig.programType,
       day_focus: toStr(template.focus) || null,
       duration_mins: duration,
+      is_ordered_simulation: isOrderedSimulationDay,
       blocks,
     });
   }

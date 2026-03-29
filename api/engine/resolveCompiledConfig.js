@@ -113,6 +113,7 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
       setsByDuration: pgcJson?.builder?.sets_by_duration ?? null,
       blockBudget: pgcJson?.builder?.block_budget ?? null,
       slotDefaults: pgcJson?.builder?.slot_defaults ?? {},
+      blockVariabilityDefaults: pgcJson?.builder?.block_variability_defaults ?? {},
       excludeMovementClasses:
         pgcJson?.builder?.exclude_movement_classes ?? ["cardio", "conditioning", "locomotion"],
     },

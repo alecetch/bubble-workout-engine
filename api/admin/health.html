@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Catalogue Rule Health</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --critical: #b42318;
+        --warning: #b45309;
+        --info: #1d4ed8;
+        --ok: #0f766e;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+      .title { margin: 0; font-size: 22px; }
+      .nav { display: flex; gap: 10px; }
+      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
+      .nav a:hover { text-decoration: underline; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+      .controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 280px; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, button { font: inherit; }
+      input { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--critical); }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+      .summary-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #fafbfd; }
+      .summary-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+      .summary-value { font-size: 24px; font-weight: 700; }
+      .critical { color: var(--critical); }
+      .warning { color: var(--warning); }
+      .info { color: var(--info); }
+      .ok { color: var(--ok); }
+      .section h2 { margin: 0 0 8px; font-size: 16px; }
+      .section-meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+      .table-wrap { overflow: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; min-width: 760px; }
+      th, td { border: 1px solid #ecf0f4; padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; }
+      th { background: #f9fbfd; }
+      .severity-chip { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+      .severity-critical { background: #fde8e8; color: var(--critical); }
+      .severity-warning { background: #fef3c7; color: var(--warning); }
+      .severity-info { background: #dbeafe; color: var(--info); }
+      .severity-ok { background: #d1fae5; color: var(--ok); }
+      .mono { font-family: Consolas, monospace; }
+      .muted { color: var(--muted); }
+      .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">Catalogue Rule Health</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/coverage">Coverage</a>
+            <a href="/admin/health" class="active">Health</a>
+            <a href="/admin/exercises">Exercises</a>
+            <a href="/admin/narration">Narration</a>
+            <a href="/admin/observability">Observability</a>
+            <a href="/admin/preview">Preview</a>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <button id="load-btn" type="button">Load Report</button>
+        </div>
+        <div id="status" class="status"></div>
+        <div id="summary-grid" class="summary-grid"></div>
+      </section>
+
+      <section class="section">
+        <h2>Uncovered Exercises</h2>
+        <div id="uncovered-meta" class="section-meta"></div>
+        <div id="uncovered-table"></div>
+      </section>
+
+      <section class="section">
+        <h2>Orphaned Prefs</h2>
+        <div id="prefs-meta" class="section-meta"></div>
+        <div id="prefs-table"></div>
+      </section>
+
+      <section class="section">
+        <h2>Orphaned Rules</h2>
+        <div id="rules-meta" class="section-meta"></div>
+        <div id="rules-table"></div>
+      </section>
+
+      <section class="section">
+        <h2>Slot Coverage Issues</h2>
+        <div id="coverage-meta" class="section-meta"></div>
+        <div id="coverage-table"></div>
+      </section>
+
+      <section class="section">
+        <h2>Rule Coverage</h2>
+        <div id="rule-coverage-meta" class="section-meta"></div>
+        <div id="rule-coverage-table"></div>
+      </section>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_health_token";
+      const tokenInput = document.getElementById("token-input");
+      const loadBtn = document.getElementById("load-btn");
+      const statusEl = document.getElementById("status");
+
+      tokenInput.value = sessionStorage.getItem(STORAGE_KEY) || "";
+      tokenInput.addEventListener("change", () => sessionStorage.setItem(STORAGE_KEY, tokenInput.value.trim()));
+
+      function esc(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function severityChip(severity) {
+        const normalized = ["critical", "warning", "info", "ok"].includes(severity) ? severity : "info";
+        return `<span class="severity-chip severity-${normalized}">${esc(normalized)}</span>`;
+      }
+
+      function setStatus(message, kind = "") {
+        statusEl.textContent = message;
+        statusEl.className = `status ${kind}`.trim();
+      }
+
+      function renderSummary(summary) {
+        const grid = document.getElementById("summary-grid");
+        grid.innerHTML = `
+          <div class="summary-card"><div class="summary-label">Critical</div><div class="summary-value critical">${summary.critical ?? 0}</div></div>
+          <div class="summary-card"><div class="summary-label">Warning</div><div class="summary-value warning">${summary.warning ?? 0}</div></div>
+          <div class="summary-card"><div class="summary-label">Info</div><div class="summary-value info">${summary.info ?? 0}</div></div>
+          <div class="summary-card"><div class="summary-label">Active Exercises</div><div class="summary-value">${summary.active_exercises ?? 0}</div></div>
+          <div class="summary-card"><div class="summary-label">Active Rules</div><div class="summary-value">${summary.active_rules ?? 0}</div></div>
+          <div class="summary-card"><div class="summary-label">Active Configs</div><div class="summary-value">${summary.active_configs ?? 0}</div></div>
+        `;
+      }
+
+      function renderTable(hostId, columns, rows, emptyMessage) {
+        const host = document.getElementById(hostId);
+        if (!Array.isArray(rows) || rows.length === 0) {
+          host.innerHTML = `<div class="empty">${esc(emptyMessage)}</div>`;
+          return;
+        }
+        host.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>${columns.map((col) => `<th>${esc(col.label)}</th>`).join("")}</tr>
+              </thead>
+              <tbody>
+                ${rows.map((row) => `<tr>${columns.map((col) => `<td>${col.render(row)}</td>`).join("")}</tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      function loadSectionMeta(id, summary) {
+        const el = document.getElementById(id);
+        if (!summary) {
+          el.textContent = "";
+          return;
+        }
+        el.textContent = `total ${summary.total ?? 0} · critical ${summary.critical ?? 0} · warning ${summary.warning ?? 0} · info ${summary.info ?? 0}`;
+      }
+
+      async function loadReport() {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          setStatus("Missing token. Fill Internal API Token first.", "err");
+          return;
+        }
+        sessionStorage.setItem(STORAGE_KEY, token);
+        setStatus("Loading...", "");
+        try {
+          const res = await fetch("/admin/health/report", {
+            headers: { "x-internal-token": token },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+          const report = data.report || {};
+          renderSummary(report.summary || {});
+
+          loadSectionMeta("uncovered-meta", report.uncovered_exercises?.summary);
+          renderTable(
+            "uncovered-table",
+            [
+              { label: "Severity", render: (row) => severityChip(row.severity) },
+              { label: "Exercise", render: (row) => `<span class="mono">${esc(row.exercise_id)}</span><br>${esc(row.name)}` },
+              { label: "Program", render: (row) => esc(row.program_type) },
+              { label: "Matched Rule", render: (row) => row.matched_rule_id ? `<span class="mono">${esc(row.matched_rule_id)}</span>` : `<span class="muted">none</span>` },
+              { label: "Reason", render: (row) => esc(row.reason) },
+            ],
+            report.uncovered_exercises?.rows || [],
+            "No uncovered exercises found.",
+          );
+
+          loadSectionMeta("prefs-meta", report.orphaned_prefs?.summary);
+          renderTable(
+            "prefs-table",
+            [
+              { label: "Severity", render: (row) => severityChip(row.severity) },
+              { label: "Pref Tag", render: (row) => `<span class="mono">${esc(row.pref_tag)}</span>` },
+              { label: "Strict Refs", render: (row) => esc(row.strict_refs) },
+              { label: "Soft Refs", render: (row) => esc(row.soft_refs) },
+              { label: "Referenced By", render: (row) => row.referenced_by.map((ref) => `${esc(ref.config_key)} · ${esc(ref.slot)} · ${esc(ref.source)}`).join("<br>") },
+            ],
+            report.orphaned_prefs?.rows || [],
+            "No orphaned pref tags found.",
+          );
+
+          loadSectionMeta("rules-meta", report.orphaned_rules?.summary);
+          renderTable(
+            "rules-table",
+            [
+              { label: "Severity", render: (row) => severityChip(row.severity) },
+              { label: "Rule", render: (row) => `<span class="mono">${esc(row.rule_id)}</span>` },
+              { label: "Program", render: (row) => esc(row.program_type) },
+              { label: "Priority", render: (row) => esc(row.priority) },
+              { label: "Orphaned Dimensions", render: (row) => row.orphaned_dimensions.map((dim) => `${esc(dim.field)}=${esc(dim.value)}`).join("<br>") },
+            ],
+            report.orphaned_rules?.rows || [],
+            "No orphaned rule dimensions found.",
+          );
+
+          loadSectionMeta("coverage-meta", report.slot_coverage?.summary);
+          renderTable(
+            "coverage-table",
+            [
+              { label: "Severity", render: (row) => severityChip(row.severity) },
+              { label: "Config / Day / Slot", render: (row) => `${esc(row.config_key)}<br>${esc(row.day_key)}<br><span class="mono">${esc(row.slot)}</span>` },
+              { label: "Preset", render: (row) => esc(row.preset_label) },
+              { label: "Rank", render: (row) => esc(row.rank_label) },
+              { label: "Count", render: (row) => esc(row.count) },
+              { label: "Selector", render: (row) => {
+                const parts = [];
+                if (row.resolved_selector?.sw) parts.push(`sw:${row.resolved_selector.sw}`);
+                if (row.resolved_selector?.sw2) parts.push(`sw2:${row.resolved_selector.sw2}`);
+                if (row.resolved_selector?.mp) parts.push(`mp:${row.resolved_selector.mp}`);
+                if (row.resolved_selector?.requirePref) parts.push(`pref:${row.resolved_selector.requirePref}`);
+                return parts.length ? esc(parts.join(" · ")) : `<span class="muted">unconstrained</span>`;
+              } },
+            ],
+            (report.slot_coverage?.rows || []).filter((row) => row.severity !== "ok"),
+            "No slot coverage issues found.",
+          );
+
+          document.getElementById("rule-coverage-meta").textContent =
+            `total ${report.rule_coverage?.summary?.total ?? 0} · fallback-only ${report.rule_coverage?.summary?.fallback_only ?? 0} · ok ${report.rule_coverage?.summary?.ok ?? 0}`;
+          renderTable(
+            "rule-coverage-table",
+            [
+              { label: "Severity", render: (row) => severityChip(row.severity) },
+              { label: "Exercise", render: (row) => `<span class="mono">${esc(row.exercise_id)}</span><br>${esc(row.name)}` },
+              { label: "Program", render: (row) => esc(row.program_type) },
+              { label: "Matched Rule", render: (row) => row.matched_rule_id ? `<span class="mono">${esc(row.matched_rule_id)}</span>` : `<span class="muted">none</span>` },
+              { label: "Priority", render: (row) => esc(row.matched_rule_priority ?? "") },
+              { label: "Plausible Slots", render: (row) => esc(row.plausible_slot_count ?? 0) },
+              { label: "Context", render: (row) => row.sample_context ? `${esc(row.sample_context.config_key)}<br>${esc(row.sample_context.slot)}<br>${esc(row.sample_context.day_type)} / ${esc(row.sample_context.purpose)} / ${esc(row.sample_context.segment_type)}` : `<span class="muted">none</span>` },
+            ],
+            report.rule_coverage?.rows || [],
+            "No rule coverage rows found.",
+          );
+
+          setStatus("Report loaded.", "ok");
+        } catch (err) {
+          setStatus(err.message || "Failed to load report.", "err");
+        }
+      }
+
+      loadBtn.addEventListener("click", loadReport);
+    </script>
+  </body>
+</html>

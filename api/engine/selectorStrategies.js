@@ -3,6 +3,14 @@ import { pickWithFallback } from "./exerciseSelector.js";
 function bestMatchByMovement(slotDef, catalogIndex, state) {
   const compiledConfig = state?.compiledConfig ?? null;
   const isConditioning = compiledConfig?.programType === "conditioning";
+  const mergedAvoidCanonicalNames = new Set(
+    state?.usedCanonicalNamesToday instanceof Set ? state.usedCanonicalNamesToday : [],
+  );
+  if (state?.variabilityAvoidCanonicalNames instanceof Set) {
+    for (const name of state.variabilityAvoidCanonicalNames) {
+      mergedAvoidCanonicalNames.add(name);
+    }
+  }
   const sel = {
     mp: slotDef.mp || null,
     sw: slotDef.sw || null,
@@ -20,6 +28,8 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     rankValue: state?.rankValue ?? 0,
     condState: state?.conditioning ?? null,
     condThresholds: compiledConfig?.builder?.conditioningThresholds ?? {},
+    variabilityPolicy: slotDef.variability_policy || null,
+    slotFamily: slotDef.slot_family || null,
   };
 
   return pickWithFallback(
@@ -30,7 +40,7 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     state.stats,
     state.usedSw2Today,
     state.usedRegionsToday,
-    state.usedCanonicalNamesToday,
+    mergedAvoidCanonicalNames,
   );
 }
 

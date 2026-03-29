@@ -3,6 +3,13 @@
 // Applies rep rules to segmented hypertrophy program and enriches BOTH:
 // - program.days
 // - program.weeks[w].days (if present)
+import {
+  buildCatalogIndex,
+  makeItemContext,
+  normalizeRule,
+  pickBestRule,
+  pickBestRuleWithFallback,
+} from "../repRuleMatcher.js";
 
 function deepClone(obj) {
   if (typeof structuredClone === "function") return structuredClone(obj);
@@ -64,30 +71,6 @@ function formatTempo(rule) {
   return `${ecc}-${pb}-${con}-${pt}`;
 }
 
-function toArrayMaybe(v) {
-  if (v === null || v === undefined || v === "") return [];
-  if (Array.isArray(v)) return v.map((x) => normalizeCmp(x)).filter(Boolean);
-  if (typeof v === "string") {
-    const t = v.trim();
-    if (!t) return [];
-    if (t[0] === "[") {
-      const a = safeJsonParseMaybe(t, []);
-      return Array.isArray(a) ? a.map((x) => normalizeCmp(x)).filter(Boolean) : [];
-    }
-    return t.split(",").map((x) => normalizeCmp(x)).filter(Boolean);
-  }
-  return [];
-}
-
-function hasOverlap(arrA, arrB) {
-  const setB = new Set((arrB || []).map((x) => normalizeCmp(x)).filter(Boolean));
-  for (const a of arrA || []) {
-    const aa = normalizeCmp(a);
-    if (aa && setB.has(aa)) return true;
-  }
-  return false;
-}
-
 function isBlank(v) {
   return s(v) === "";
 }
@@ -100,126 +83,6 @@ function writeOnce(obj, key, value) {
   if (!hasWritableValue(obj?.[key]) && value !== undefined && value !== null && s(value) !== "") {
     obj[key] = value;
   }
-}
-
-// ---------------- catalog indexing ----------------
-function getExField(ex, shortKey, longKey) {
-  if (!ex) return "";
-  const v1 = ex[shortKey];
-  if (v1 !== undefined && v1 !== null && v1 !== "") return v1;
-  const v2 = ex[longKey];
-  if (v2 !== undefined && v2 !== null && v2 !== "") return v2;
-  return "";
-}
-
-function buildCatalogIndex(cat) {
-  const byId = Object.create(null);
-  if (!cat || !Array.isArray(cat.ex)) return byId;
-  for (const ex of cat.ex) {
-    if (ex && ex.id) byId[String(ex.id)] = ex;
-  }
-  return byId;
-}
-
-function deriveEquipmentSlug(ex) {
-  const direct =
-    s(getExField(ex, "equipment_slug", "equipment_slug")) ||
-    s(getExField(ex, "equipmentSlug", "equipmentSlug"));
-  if (direct) return normalizeCmp(direct);
-
-  const eq = getExField(ex, "eq", "equipment_json");
-  const arr = toArrayMaybe(eq);
-  return arr.length ? arr[0] : "";
-}
-
-// ---------------- rule matching ----------------
-function normalizeRule(rawRule) {
-  return {
-    ...rawRule,
-    rule_id: s(rawRule.rule_id),
-    program_type: normalizeCmp(rawRule.program_type),
-    day_type: normalizeCmp(rawRule.day_type),
-    segment_type: normalizeCmp(rawRule.segment_type),
-    purpose: normalizeCmp(rawRule.purpose),
-    movement_pattern: normalizeCmp(rawRule.movement_pattern),
-    swap_group_id_2: normalizeCmp(rawRule.swap_group_id_2),
-    movement_class: normalizeCmp(rawRule.movement_class),
-    equipment_slug: normalizeCmp(rawRule.equipment_slug),
-    target_regions_json_arr: toArrayMaybe(rawRule.target_regions_json),
-    priority_num: toInt(rawRule.priority, 0),
-    schema_version_num:
-      rawRule.schema_version === undefined || rawRule.schema_version === null || s(rawRule.schema_version) === ""
-        ? null
-        : toInt(rawRule.schema_version, 0),
-  };
-}
-
-function specificityScore(rule) {
-  let sc = 0;
-  if (rule.schema_version_num !== null) sc += 1;
-  if (rule.day_type) sc += 1;
-  if (rule.segment_type) sc += 1;
-  if (rule.purpose) sc += 1;
-  if (rule.movement_pattern) sc += 1;
-  if (rule.swap_group_id_2) sc += 1;
-  if (rule.movement_class) sc += 1;
-  if (rule.equipment_slug) sc += 1;
-  if (rule.target_regions_json_arr.length > 0) sc += 1;
-  return sc;
-}
-
-function ruleMatches(rule, ctx) {
-  // Mandatory: program_type must match context, never wildcard.
-  if (!rule.program_type || rule.program_type !== ctx.program_type) return false;
-
-  // Optional schema_version wildcard.
-  if (rule.schema_version_num !== null && rule.schema_version_num !== ctx.schema_version) return false;
-
-  if (rule.day_type && rule.day_type !== ctx.day_type) return false;
-  if (rule.segment_type && rule.segment_type !== ctx.segment_type) return false;
-  if (rule.purpose && rule.purpose !== ctx.purpose) return false;
-  if (rule.movement_pattern && rule.movement_pattern !== ctx.movement_pattern) return false;
-  if (rule.swap_group_id_2 && rule.swap_group_id_2 !== ctx.swap_group_id_2) return false;
-  if (rule.movement_class && rule.movement_class !== ctx.movement_class) return false;
-  if (rule.equipment_slug && rule.equipment_slug !== ctx.equipment_slug) return false;
-
-  if (rule.target_regions_json_arr.length > 0) {
-    if (!ctx.target_regions.length) return false;
-    if (!hasOverlap(rule.target_regions_json_arr, ctx.target_regions)) return false;
-  }
-
-  return true;
-}
-
-function pickBestRule(rules, ctx) {
-  let best = null;
-  for (const rule of rules) {
-    if (!ruleMatches(rule, ctx)) continue;
-    const cand = {
-      rule,
-      priority: rule.priority_num,
-      specificity: specificityScore(rule),
-      ruleId: rule.rule_id,
-    };
-    if (!best) {
-      best = cand;
-      continue;
-    }
-    if (cand.priority > best.priority) {
-      best = cand;
-      continue;
-    }
-    if (cand.priority < best.priority) continue;
-
-    if (cand.specificity > best.specificity) {
-      best = cand;
-      continue;
-    }
-    if (cand.specificity < best.specificity) continue;
-
-    if (cand.ruleId < best.ruleId) best = cand;
-  }
-  return best ? best.rule : null;
 }
 
 function applyRuleToItem(item, rule) {
@@ -249,38 +112,6 @@ function applyRuleToSegment(seg, rule) {
   // Always overwrite for traceability when a rule is applied.
   seg.rep_rule_id = rule.rule_id;
   return true;
-}
-
-function makeItemContext({ programType, schemaVersion, dayType, purpose, segType, ex }) {
-  const mp = normalizeCmp(getExField(ex, "mp", "movement_pattern"));
-  const sw2 = normalizeCmp(getExField(ex, "sw2", "swap_group_id_2"));
-  const mc = normalizeCmp(getExField(ex, "mc", "movement_class"));
-  const tr = toArrayMaybe(getExField(ex, "tr", "target_regions_json"));
-  const eq = deriveEquipmentSlug(ex);
-
-  return {
-    program_type: normalizeCmp(programType),
-    schema_version: schemaVersion,
-    day_type: normalizeCmp(dayType),
-    segment_type: normalizeCmp(segType),
-    purpose: normalizeCmp(purpose),
-    movement_pattern: mp,
-    swap_group_id_2: sw2,
-    movement_class: mc,
-    equipment_slug: eq,
-    target_regions: tr,
-  };
-}
-
-function buildFallbackItemContext(ctx) {
-  return {
-    ...ctx,
-    movement_pattern: "",
-    swap_group_id_2: "",
-    movement_class: "",
-    equipment_slug: "",
-    target_regions: [],
-  };
 }
 
 function enrichProgramDays({ program, catalogJson, rules, source }) {
@@ -359,14 +190,11 @@ function enrichProgramDays({ program, catalogJson, rules, source }) {
           ex: ex || {},
         });
 
-        let rule = pickBestRule(rules, itemCtx);
-        if (!rule) {
-          const fallbackCtx = buildFallbackItemContext(itemCtx);
-          rule = pickBestRule(rules, fallbackCtx);
-          if (rule) {
-            dbg.items_with_fallback_rule += 1;
-            dbg.items_fell_back_to_defaults += 1;
-          }
+        const match = pickBestRuleWithFallback(rules, itemCtx);
+        const rule = match.rule;
+        if (match.viaFallback) {
+          dbg.items_with_fallback_rule += 1;
+          dbg.items_fell_back_to_defaults += 1;
         }
 
         if (rule) {

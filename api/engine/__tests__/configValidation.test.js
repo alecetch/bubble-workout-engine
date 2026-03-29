@@ -13,13 +13,19 @@ function makeValidConfig() {
         {
           day_key: "day1",
           ordered_slots: [
-            { slot: "A:squat", sw2: "squat_compound", requirePref: "strength_main" },
+            {
+              slot: "A:squat",
+              sw2: "squat_compound",
+              requirePref: "strength_main",
+              variability_policy: "high",
+            },
             { slot: "B:lunge", mp: "lunge", sw: "quad_iso_unilateral" },
           ],
         },
       ],
       setsByDuration: { "50": { A: 4, B: 3, C: 3, D: 2 } },
       blockBudget: { "50": 5 },
+      blockVariabilityDefaults: { A: "none", B: "med" },
       slotDefaults: {
         C: { requirePref: "hypertrophy_secondary" },
         D: { requirePref: "hypertrophy_secondary" },
@@ -95,6 +101,54 @@ test("validateCompiledConfig catches unknown selector_strategy", () => {
   cfg.builder.dayTemplates[0].ordered_slots[0].selector_strategy = "wizard_mode";
   const err = expectValidationError(cfg);
   assert.ok(err.details.some((d) => d.includes("selector_strategy must be one of")));
+});
+
+test("validateCompiledConfig catches unknown slot variability_policy", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].ordered_slots[0].variability_policy = "low";
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes("variability_policy must be one of none|med|high")));
+});
+
+test("validateCompiledConfig catches invalid block variability default", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.blockVariabilityDefaults.A = "low";
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes('builder.blockVariabilityDefaults["A"]')));
+});
+
+test("validateCompiledConfig accepts ordered simulation day fields", () => {
+  const cfg = makeValidConfig();
+  cfg.programType = "hyrox";
+  cfg.builder.dayTemplates[0].is_ordered_simulation = true;
+  cfg.builder.dayTemplates[0].ordered_slots[0] = {
+    slot: "A:run_1",
+    mp: "locomotion",
+    sw2: "run_family",
+    variability_policy: "none",
+    requireHyroxRole: "run",
+    station_index: 1,
+    required_equipment_slugs: ["treadmill"],
+    station_fallback_chain: [
+      { station_index: 1, required_equipment_slugs: ["treadmill"] },
+      { sw2: "run_family" },
+      { mp: "locomotion" },
+    ],
+  };
+  assert.doesNotThrow(() => validateCompiledConfig(cfg));
+});
+
+test("validateCompiledConfig catches invalid ordered simulation field shapes", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].is_ordered_simulation = "yes";
+  cfg.builder.dayTemplates[0].ordered_slots[0].station_index = 0;
+  cfg.builder.dayTemplates[0].ordered_slots[0].required_equipment_slugs = "treadmill";
+  cfg.builder.dayTemplates[0].ordered_slots[0].station_fallback_chain = [{ station_index: "x" }];
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes("is_ordered_simulation must be a boolean")));
+  assert.ok(err.details.some((d) => d.includes("station_index must be a positive integer")));
+  assert.ok(err.details.some((d) => d.includes("required_equipment_slugs must be an array")));
+  assert.ok(err.details.some((d) => d.includes("station_fallback_chain[0].station_index")));
 });
 
 test("validateCompiledConfig catches invalid preferred_segment_type", () => {

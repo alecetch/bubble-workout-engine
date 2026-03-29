@@ -83,6 +83,8 @@ export function buildIndex(cat) {
       load: raw.load,
       strength_equivalent: raw.strength_equivalent === true,
       rank: Number(raw.rank ?? 0),
+      hyrox_role: toStr(raw.hyrox_role || raw.hyroxRole || "").trim(),
+      hyrox_station_index: Number.parseInt(toStr(raw.hyrox_station_index || raw.hyroxStationIndex).trim(), 10) || null,
 
       mc: mc,
       tr: tr,
@@ -571,6 +573,12 @@ export function buildCatalogJsonFromBubble(exercises) {
 
     const tr = normalizeArr(r.target_regions_json || r.tr || []);
     const wh = normalizeArr(r.warmup_hooks || r.wh || []);
+    const hyrox_role = toStr(r.hyrox_role || r.hyroxRole || "").trim();
+    const hyrox_station_index_raw = Number.parseInt(
+      toStr(r.hyrox_station_index || r.hyroxStationIndex).trim(),
+      10,
+    );
+    const hyrox_station_index = Number.isFinite(hyrox_station_index_raw) ? hyrox_station_index_raw : null;
 
     return {
       id,
@@ -588,6 +596,8 @@ export function buildCatalogJsonFromBubble(exercises) {
       load,
       strength_equivalent,
       rank,
+      hyrox_role,
+      hyrox_station_index,
       mc,
       tr,
       wh,

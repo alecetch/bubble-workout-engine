@@ -10,6 +10,11 @@ export class ConfigValidationError extends Error {
 export function validateCompiledConfig(config) {
   const details = [];
   const knownStrategies = new Set(["best_match_by_movement"]);
+  const knownVariabilityPolicies = new Set(["none", "med", "high"]);
+
+  function isValidSimulationEntry(entry) {
+    return entry && typeof entry === "object" && !Array.isArray(entry);
+  }
 
   if (!config || typeof config !== "object") {
     details.push("config must be an object");
@@ -72,6 +77,10 @@ export function validateCompiledConfig(config) {
       dayKeySeen.add(dayKey);
     }
 
+    if (template.is_ordered_simulation !== undefined && typeof template.is_ordered_simulation !== "boolean") {
+      details.push(`builder.dayTemplates[${i}].is_ordered_simulation must be a boolean when provided`);
+    }
+
     if (!Array.isArray(template.ordered_slots) || template.ordered_slots.length === 0) {
       details.push(`builder.dayTemplates[${i}].ordered_slots must be a non-empty array`);
       continue;
@@ -104,6 +113,67 @@ export function validateCompiledConfig(config) {
           `builder.dayTemplates[${i}].ordered_slots[${j}].selector_strategy must be one of best_match_by_movement`,
         );
       }
+      if (
+        slot.variability_policy !== undefined &&
+        !knownVariabilityPolicies.has(slot.variability_policy)
+      ) {
+        details.push(
+          `builder.dayTemplates[${i}].ordered_slots[${j}].variability_policy must be one of none|med|high`,
+        );
+      }
+      if (slot.requireHyroxRole !== undefined && typeof slot.requireHyroxRole !== "string") {
+        details.push(`builder.dayTemplates[${i}].ordered_slots[${j}].requireHyroxRole must be a string when provided`);
+      }
+      if (
+        slot.station_index !== undefined &&
+        (!Number.isFinite(Number(slot.station_index)) || Number(slot.station_index) <= 0)
+      ) {
+        details.push(`builder.dayTemplates[${i}].ordered_slots[${j}].station_index must be a positive integer when provided`);
+      }
+      if (
+        slot.required_equipment_slugs !== undefined &&
+        !Array.isArray(slot.required_equipment_slugs)
+      ) {
+        details.push(`builder.dayTemplates[${i}].ordered_slots[${j}].required_equipment_slugs must be an array when provided`);
+      }
+      if (slot.station_fallback_chain !== undefined) {
+        if (!Array.isArray(slot.station_fallback_chain) || slot.station_fallback_chain.length === 0) {
+          details.push(
+            `builder.dayTemplates[${i}].ordered_slots[${j}].station_fallback_chain must be a non-empty array when provided`,
+          );
+        } else {
+          for (let k = 0; k < slot.station_fallback_chain.length; k++) {
+            const entry = slot.station_fallback_chain[k];
+            if (!isValidSimulationEntry(entry)) {
+              details.push(
+                `builder.dayTemplates[${i}].ordered_slots[${j}].station_fallback_chain[${k}] must be an object`,
+              );
+              continue;
+            }
+            if (
+              entry.station_index !== undefined &&
+              (!Number.isFinite(Number(entry.station_index)) || Number(entry.station_index) <= 0)
+            ) {
+              details.push(
+                `builder.dayTemplates[${i}].ordered_slots[${j}].station_fallback_chain[${k}].station_index must be a positive integer when provided`,
+              );
+            }
+            if (
+              entry.required_equipment_slugs !== undefined &&
+              !Array.isArray(entry.required_equipment_slugs)
+            ) {
+              details.push(
+                `builder.dayTemplates[${i}].ordered_slots[${j}].station_fallback_chain[${k}].required_equipment_slugs must be an array when provided`,
+              );
+            }
+            if (entry.requireHyroxRole !== undefined && typeof entry.requireHyroxRole !== "string") {
+              details.push(
+                `builder.dayTemplates[${i}].ordered_slots[${j}].station_fallback_chain[${k}].requireHyroxRole must be a string when provided`,
+              );
+            }
+          }
+        }
+      }
     }
   }
 
@@ -117,6 +187,23 @@ export function validateCompiledConfig(config) {
     details.push("builder.blockBudget must be a non-empty object");
   } else if (Object.keys(builder.blockBudget).length === 0) {
     details.push("builder.blockBudget must be a non-empty object");
+  }
+
+  if (
+    builder?.blockVariabilityDefaults !== undefined &&
+    (typeof builder.blockVariabilityDefaults !== "object" ||
+      builder.blockVariabilityDefaults === null ||
+      Array.isArray(builder.blockVariabilityDefaults))
+  ) {
+    details.push("builder.blockVariabilityDefaults must be an object when provided");
+  } else if (builder?.blockVariabilityDefaults) {
+    for (const [blockKey, policy] of Object.entries(builder.blockVariabilityDefaults)) {
+      if (!knownVariabilityPolicies.has(policy)) {
+        details.push(
+          `builder.blockVariabilityDefaults["${blockKey}"] must be one of none|med|high`,
+        );
+      }
+    }
   }
 
   if (details.length > 0) {

@@ -67,6 +67,7 @@ function makeState(overrides = {}) {
     usedSw2Today: new Set(),
     usedCanonicalNamesToday: new Set(),
     usedRegionsToday: new Set(),
+    variabilityAvoidCanonicalNames: null,
     stats: makeStats(),
     conditioning: null,
     ...overrides,
@@ -162,6 +163,47 @@ test("fillSlot avoids same-day canonical-name repeats when an alternative exists
     makeSlotDef({ slot: "B:lunge", mp: "lunge", sw: "lunge_group", sw2: "lunge_comp" }),
     pool,
     makeState({ usedCanonicalNamesToday: new Set(["bulgarian_split_squat"]) }),
+  );
+  assert.equal(result.id, "walking_lunge");
+});
+
+test("fillSlot merges med variability canonical-name avoids with same-day avoids", () => {
+  const sameDayRepeat = makeExercise({
+    id: "db_split_squat",
+    name: "Dumbbell Bulgarian Split Squat",
+    mp: "lunge",
+    sw: "lunge_group",
+    sw2: "lunge_comp",
+  });
+  const historyRepeat = makeExercise({
+    id: "kb_reverse_lunge",
+    name: "Kettlebell Reverse Lunge",
+    mp: "lunge",
+    sw: "lunge_group",
+    sw2: "lunge_comp",
+  });
+  const freshOption = makeExercise({
+    id: "walking_lunge",
+    name: "Walking Lunge",
+    mp: "lunge",
+    sw: "lunge_group",
+    sw2: "lunge_comp",
+  });
+  const pool = makeSelectorPool([sameDayRepeat, historyRepeat, freshOption]);
+  const result = fillSlot(
+    makeSlotDef({
+      slot: "B:lunge",
+      mp: "lunge",
+      sw: "lunge_group",
+      sw2: "lunge_comp",
+      slot_family: "lunge_family",
+      variability_policy: "med",
+    }),
+    pool,
+    makeState({
+      usedCanonicalNamesToday: new Set(["bulgarian_split_squat"]),
+      variabilityAvoidCanonicalNames: new Set(["reverse_lunge"]),
+    }),
   );
   assert.equal(result.id, "walking_lunge");
 });
