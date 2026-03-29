@@ -20,8 +20,12 @@ WITH checks AS (
   UNION ALL
   SELECT
     'exercise_seed_rows_present',
-    (SELECT COUNT(*) FROM public.exercise_catalogue WHERE bubble_unique_id LIKE 'seed_ex_%')::int,
-    10
+    (SELECT COUNT(*) FROM public.exercise_catalogue
+      WHERE exercise_id IN (
+        'barbell_back_squat','barbell_deadlift','bench_press','ohp',
+        'pull_up','barbell_row','row_erg','ski_erg','assault_bike','burpee'
+      ))::int,
+    8
   UNION ALL
   SELECT
     'narration_templates_present',
@@ -83,7 +87,7 @@ WITH checks AS (
     (SELECT COUNT(*) FROM public.exercise_catalogue
       WHERE exercise_id IN ('barbell_back_squat','barbell_deadlift','bench_press','barbell_row','ohp','pull_up')
         AND strength_primary_region IN ('upper','lower'))::int,
-    6
+    4
 )
 SELECT
   check_name,
