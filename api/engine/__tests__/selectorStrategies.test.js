@@ -53,6 +53,7 @@ function makeStats() {
     picked_allow_dup: 0,
     picked_seed_slot_aware: 0,
     avoided_repeat_sw2: 0,
+    avoided_repeat_cn: 0,
     fills_add_sets: 0,
     fill_failed: 0,
   };
@@ -64,6 +65,7 @@ function makeState(overrides = {}) {
     rankValue: 0,
     usedIdsWeek: new Set(),
     usedSw2Today: new Set(),
+    usedCanonicalNamesToday: new Set(),
     usedRegionsToday: new Set(),
     stats: makeStats(),
     conditioning: null,
@@ -138,4 +140,28 @@ test("preferIsolation bias applied for C-block slots", () => {
     makeState(),
   );
   assert.equal(result.id, "b");
+});
+
+test("fillSlot avoids same-day canonical-name repeats when an alternative exists", () => {
+  const repeatedVariant = makeExercise({
+    id: "db_split_squat",
+    name: "Dumbbell Bulgarian Split Squat",
+    mp: "lunge",
+    sw: "lunge_group",
+    sw2: "lunge_comp",
+  });
+  const freshOption = makeExercise({
+    id: "walking_lunge",
+    name: "Walking Lunge",
+    mp: "lunge",
+    sw: "lunge_group",
+    sw2: "lunge_comp",
+  });
+  const pool = makeSelectorPool([repeatedVariant, freshOption]);
+  const result = fillSlot(
+    makeSlotDef({ slot: "B:lunge", mp: "lunge", sw: "lunge_group", sw2: "lunge_comp" }),
+    pool,
+    makeState({ usedCanonicalNamesToday: new Set(["bulgarian_split_squat"]) }),
+  );
+  assert.equal(result.id, "walking_lunge");
 });

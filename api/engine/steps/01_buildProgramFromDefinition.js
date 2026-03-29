@@ -1,6 +1,7 @@
 import {
   buildCatalogJsonFromBubble,
   buildIndex,
+  canonicalName,
   dayHasRealExercise,
   isConditioning,
   pickSeedExerciseForSlot,
@@ -281,6 +282,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     picked_seed_slot_aware: 0,
 
     avoided_repeat_sw2: 0,
+    avoided_repeat_cn: 0,
 
     fills_add_sets: 0,
     fill_failed: 0,
@@ -318,6 +320,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       },
       usedIdsWeek,
       usedSw2Today: new Set(),
+      usedCanonicalNamesToday: new Set(),
       usedRegionsToday: new Set(),
       stats,
       equipmentProfile,
@@ -370,6 +373,8 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       if (ex) {
         usedIdsWeek.add(ex.id);
         if (ex.sw2) builderState.usedSw2Today.add(ex.sw2);
+        const cn = canonicalName(ex.n);
+        if (cn) builderState.usedCanonicalNamesToday.add(cn);
         for (const r of ex.tr || []) {
           const rr = toStr(r).trim();
           if (rr) builderState.usedRegionsToday.add(rr);

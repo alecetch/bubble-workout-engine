@@ -1,4 +1,5 @@
-import { getJson, patchJson } from "./client";
+import { engineGetJson, enginePatchJson } from "./client";
+import { getOrCreateUserId } from "./userIdentity";
 
 export type MeResponse = {
   id: string;
@@ -9,10 +10,12 @@ export type LinkClientProfilePayload = {
   clientProfileId: string;
 };
 
-export function getMe(): Promise<MeResponse> {
-  return getJson<MeResponse>("/me");
+export async function getMe(): Promise<MeResponse> {
+  const userId = await getOrCreateUserId();
+  return engineGetJson<MeResponse>(`/me?user_id=${encodeURIComponent(userId)}`);
 }
 
-export function linkClientProfileToMe(payload: LinkClientProfilePayload): Promise<MeResponse> {
-  return patchJson<MeResponse, LinkClientProfilePayload>("/users/me", payload);
+export async function linkClientProfileToMe(payload: LinkClientProfilePayload): Promise<MeResponse> {
+  const userId = await getOrCreateUserId();
+  return enginePatchJson<MeResponse, LinkClientProfilePayload>(`/users/me?user_id=${encodeURIComponent(userId)}`, payload);
 }

@@ -25,6 +25,38 @@ function normalizeArr(v) {
   return [];
 }
 
+export function canonicalName(name) {
+  const PREFIXES = [
+    "smith machine",
+    "resistance band",
+    "trap bar",
+    "single-arm",
+    "single arm",
+    "ez-bar",
+    "ez bar",
+    "dumbbells",
+    "dumbbell",
+    "kettlebells",
+    "kettlebell",
+    "barbell",
+    "machine",
+    "sandbag",
+    "cable",
+    "trx",
+  ];
+  let s = toStr(name).trim().toLowerCase();
+  if (!s) return "";
+  for (const prefix of PREFIXES) {
+    if (s.startsWith(prefix + " ")) {
+      s = s.slice(prefix.length).trim();
+      break;
+    }
+  }
+  return s
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export function buildIndex(cat) {
   const byId = Object.create(null);
 
@@ -38,6 +70,7 @@ export function buildIndex(cat) {
     byId[raw.id] = {
       id: raw.id,
       n: raw.n,
+      cn: toStr(raw.cn || ""),
       mp: raw.mp || "",
       sw: raw.sw || "",
       sw2: raw.sw2 || "",
@@ -138,7 +171,7 @@ export function sw2UsedToday(blocks) {
   return s;
 }
 
-export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
+export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCnSet) {
   let best = null;
   const mp = sel ? sel.mp : null;
   const sw = sel ? sel.sw : null;
@@ -160,6 +193,7 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet) {
     const ex = byId[id];
     if (!ex) continue;
     if (usedSet && usedSet.has(id)) continue;
+    if (avoidCnSet && ex.cn && avoidCnSet.has(ex.cn)) continue;
 
     const exMp = toStr(ex.mp);
     const exSw = toStr(ex.sw);
@@ -304,31 +338,33 @@ export function pickSeedExerciseForSlot(allowedSet, byId, sel) {
   return firstPref || first || null;
 }
 
-function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, usedRegionsSet, stats) {
+function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, usedRegionsSet, stats, avoidCnSet) {
   if (!sel.sw2) return null;
   if (!usedSw2Set || usedSw2Set.size === 0) return null;
   if (!usedSw2Set.has(sel.sw2)) return null;
+
+  const sharedFields = {
+    prefMode: sel.prefMode,
+    prefBonus: sel.prefBonus,
+    preferLoadable: sel.preferLoadable,
+    preferIsolation: sel.preferIsolation,
+    preferCompound: sel.preferCompound,
+    strengthEquivalentBonus: sel.strengthEquivalentBonus,
+    rankValue: sel.rankValue,
+    programType: sel.programType,
+    condState: sel.condState,
+    condThresholds: sel.condThresholds,
+  };
 
   const swList = (sel.swAny && sel.swAny.length > 0) ? sel.swAny : (sel.sw ? [sel.sw] : []);
   for (const sw of swList) {
     const ex = pickBest(
       allowedSet,
       byId,
-      {
-        mp: null,
-        sw: sw,
-        sw2: null,
-        requirePref: sel.requirePref,
-        prefMode: sel.prefMode,
-        prefBonus: sel.prefBonus,
-        avoidSw2: sel.sw2,
-        preferLoadable: sel.preferLoadable,
-        preferIsolation: sel.preferIsolation,
-        preferCompound: sel.preferCompound,
-        strengthEquivalentBonus: sel.strengthEquivalentBonus,
-      },
+      { mp: null, sw: sw, sw2: null, requirePref: sel.requirePref, avoidSw2: sel.sw2, ...sharedFields },
       usedWeek,
       usedRegionsSet,
+      avoidCnSet,
     );
     if (ex) {
       stats.avoided_repeat_sw2++;
@@ -340,21 +376,10 @@ function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, used
     const ex2 = pickBest(
       allowedSet,
       byId,
-      {
-        mp: sel.mp,
-        sw: null,
-        sw2: null,
-        requirePref: sel.requirePref,
-        prefMode: sel.prefMode,
-        prefBonus: sel.prefBonus,
-        avoidSw2: sel.sw2,
-        preferLoadable: sel.preferLoadable,
-        preferIsolation: sel.preferIsolation,
-        preferCompound: sel.preferCompound,
-        strengthEquivalentBonus: sel.strengthEquivalentBonus,
-      },
+      { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, avoidSw2: sel.sw2, ...sharedFields },
       usedWeek,
       usedRegionsSet,
+      avoidCnSet,
     );
     if (ex2) {
       stats.avoided_repeat_sw2++;
@@ -364,30 +389,45 @@ function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, used
   return null;
 }
 
-export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2Set, usedRegionsSet) {
+export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2Set, usedRegionsSet, usedCanonicalNamesSet) {
+  const sharedFields = {
+    prefMode: sel.prefMode,
+    prefBonus: sel.prefBonus,
+    preferLoadable: sel.preferLoadable,
+    preferIsolation: sel.preferIsolation,
+    preferCompound: sel.preferCompound,
+    strengthEquivalentBonus: sel.strengthEquivalentBonus,
+    rankValue: sel.rankValue,
+    programType: sel.programType,
+    condState: sel.condState,
+    condThresholds: sel.condThresholds,
+  };
+
   function attempt(mp, sw, sw2, sw2Any, requirePref) {
-    return pickBest(
+    const picked = pickBest(
       allowedSet,
       byId,
-      {
-        mp: mp,
-        sw: sw,
-        sw2: sw2,
-        sw2Any: sw2Any,
-        requirePref: requirePref,
-        prefMode: sel.prefMode,
-        prefBonus: sel.prefBonus,
-        preferLoadable: sel.preferLoadable,
-        preferIsolation: sel.preferIsolation,
-        preferCompound: sel.preferCompound,
-        strengthEquivalentBonus: sel.strengthEquivalentBonus,
-      },
+      { mp, sw, sw2, sw2Any, requirePref, ...sharedFields },
       usedWeek,
       usedRegionsSet,
+      usedCanonicalNamesSet,
     );
+    if (picked && usedCanonicalNamesSet && usedCanonicalNamesSet.size > 0 && stats) {
+      stats.avoided_repeat_cn = Number(stats.avoided_repeat_cn || 0) + 1;
+    }
+    return picked;
   }
 
-  let ex = attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, usedRegionsSet, stats);
+  let ex = attemptAvoidRepeatSw2(
+    allowedSet,
+    byId,
+    sel,
+    usedWeek,
+    usedSw2Set,
+    usedRegionsSet,
+    stats,
+    usedCanonicalNamesSet,
+  );
   if (ex) return ex;
 
   ex = attempt(null, null, sel.sw2, sel.sw2Any || null, sel.requirePref);
@@ -411,6 +451,20 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   if (ex) {
     stats.picked_mp_pref++;
     return ex;
+  }
+
+  // Strict-pref: allow repeating a correct-pref exercise before picking any wrong-pref exercise
+  if (sel.requirePref && sel.prefMode === "strict") {
+    ex = pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet, usedCanonicalNamesSet);
+    if (ex) { stats.picked_pref_repeat = (stats.picked_pref_repeat || 0) + 1; return ex; }
+    if (swList) {
+      for (const sw of swList) {
+        ex = pickBest(allowedSet, byId, { mp: null, sw, sw2: null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet, usedCanonicalNamesSet);
+        if (ex) { stats.picked_pref_repeat = (stats.picked_pref_repeat || 0) + 1; return ex; }
+      }
+    }
+    ex = pickBest(allowedSet, byId, { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet, usedCanonicalNamesSet);
+    if (ex) { stats.picked_pref_repeat = (stats.picked_pref_repeat || 0) + 1; return ex; }
   }
 
   if (sel.requirePref) {
@@ -440,114 +494,28 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   }
 
   const exDup =
-    pickBest(
-      allowedSet,
-      byId,
-      {
-        mp: null,
-        sw: null,
-        sw2: sel.sw2,
-        sw2Any: sel.sw2Any || null,
-        requirePref: sel.requirePref,
-        prefMode: sel.prefMode,
-        prefBonus: sel.prefBonus,
-        strengthEquivalentBonus: sel.strengthEquivalentBonus,
-      },
-      null,
-      usedRegionsSet,
-    ) ||
+    pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet) ||
     (swList
       ? (() => {
           for (const sw of swList) {
-            const e = pickBest(
-              allowedSet,
-              byId,
-              {
-                mp: null,
-                sw: sw,
-                sw2: null,
-                requirePref: sel.requirePref,
-                prefMode: sel.prefMode,
-                prefBonus: sel.prefBonus,
-                strengthEquivalentBonus: sel.strengthEquivalentBonus,
-              },
-              null,
-              usedRegionsSet,
-            );
+            const e = pickBest(allowedSet, byId, { mp: null, sw: sw, sw2: null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet);
             if (e) return e;
           }
           return null;
         })()
       : null) ||
-    pickBest(
-      allowedSet,
-      byId,
-      {
-        mp: sel.mp,
-        sw: null,
-        sw2: null,
-        requirePref: sel.requirePref,
-        prefMode: sel.prefMode,
-        prefBonus: sel.prefBonus,
-        strengthEquivalentBonus: sel.strengthEquivalentBonus,
-      },
-      null,
-      usedRegionsSet,
-    ) ||
-    pickBest(
-      allowedSet,
-      byId,
-      {
-        mp: null,
-        sw: null,
-        sw2: sel.sw2,
-        sw2Any: sel.sw2Any || null,
-        requirePref: null,
-        prefMode: sel.prefMode,
-        prefBonus: sel.prefBonus,
-        strengthEquivalentBonus: sel.strengthEquivalentBonus,
-      },
-      null,
-      usedRegionsSet,
-    ) ||
+    pickBest(allowedSet, byId, { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet) ||
+    pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: null, ...sharedFields }, null, usedRegionsSet) ||
     (swList
       ? (() => {
           for (const sw of swList) {
-            const e = pickBest(
-              allowedSet,
-              byId,
-              {
-                mp: null,
-                sw: sw,
-                sw2: null,
-                requirePref: null,
-                prefMode: sel.prefMode,
-                prefBonus: sel.prefBonus,
-                strengthEquivalentBonus: sel.strengthEquivalentBonus,
-              },
-              null,
-              usedRegionsSet,
-            );
+            const e = pickBest(allowedSet, byId, { mp: null, sw: sw, sw2: null, requirePref: null, ...sharedFields }, null, usedRegionsSet);
             if (e) return e;
           }
           return null;
         })()
       : null) ||
-    pickBest(
-      allowedSet,
-      byId,
-      {
-        mp: sel.mp,
-        sw: null,
-        sw2: null,
-        requirePref: null,
-        prefMode: sel.prefMode,
-        prefBonus: sel.prefBonus,
-        strengthEquivalentBonus: sel.strengthEquivalentBonus,
-      },
-      null,
-      usedRegionsSet,
-    );
+    pickBest(allowedSet, byId, { mp: sel.mp, sw: null, sw2: null, requirePref: null, ...sharedFields }, null, usedRegionsSet);
 
   if (exDup) {
     stats.picked_allow_dup++;
@@ -577,6 +545,7 @@ export function buildCatalogJsonFromBubble(exercises) {
   const ex = (exercises || []).map((r) => {
     const id = r.exercise_id || r.id || r.slug || r._id;
     const n = r.name || r.n || r.title || "";
+    const cn = canonicalName(n);
 
     const sw = r.swap_group_id_1 || r.sw || "";
     const sw2 = r.swap_group_id_2 || r.swap_group_rollup || r.sw2 || "";
@@ -606,6 +575,7 @@ export function buildCatalogJsonFromBubble(exercises) {
     return {
       id,
       n,
+      cn,
       sw,
       sw2,
       mp,

@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Program Preview</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --panel: #fff; --border: #d8dee6;
+      --text: #1f2937; --muted: #6b7280; --primary: #0f62fe;
+      --danger: #b42318; --success: #0f766e; --warn: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; font-size: 13px; }
+    a { color: #1d4ed8; text-decoration: none; font-size: 12px; }
+    a:hover { text-decoration: underline; }
+    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+    input, select, button { font: inherit; }
+    button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+    button:hover { filter: brightness(.9); }
+    button.secondary { background: #fff; color: var(--primary); }
+    button.ghost { background: transparent; border-color: var(--border); color: var(--text); }
+    button.ghost:hover { background: var(--bg); }
+    button.toggle { background: #fff; color: var(--text); border-color: var(--border); border-radius: 4px; padding: 4px 10px; font-size: 12px; }
+    button.toggle.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .ok { color: var(--success); } .err { color: var(--danger); } .warn { color: var(--warn); }
+
+    /* Header */
+    .header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }
+    .header h1 { margin: 0; font-size: 16px; }
+    .nav { display: flex; gap: 10px; }
+    .ctrl-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .ctrl-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .toggle-row { display: flex; gap: 3px; }
+    .sep { width: 1px; height: 20px; background: var(--border); align-self: center; }
+
+    /* Meta bar */
+    .meta-bar { background: #f0f7ff; border-bottom: 1px solid #bcd; padding: 5px 14px; font-size: 12px; color: #1e40af; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+    .meta-bar.hidden { display: none; }
+    .meta-item { display: flex; gap: 4px; }
+    .meta-key { color: var(--muted); }
+
+    /* Tabs */
+    .type-tabs { display: flex; gap: 2px; padding: 10px 14px 0; border-bottom: 2px solid var(--border); background: var(--bg); position: sticky; top: 49px; z-index: 90; }
+    .type-tab { padding: 6px 16px; cursor: pointer; border: none; background: transparent; color: var(--muted); font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -2px; border-radius: 6px 6px 0 0; }
+    .type-tab:hover { background: #edf2f7; color: var(--text); }
+    .type-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    .type-panel { display: none; padding: 14px; }
+    .type-panel.active { display: block; }
+
+    /* Program */
+    .prog-hdr { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+    .prog-hdr h2 { margin: 0 0 4px; font-size: 15px; }
+    .prog-summary { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .prog-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+    .badge { display: inline-block; background: #e5e7eb; color: #374151; border-radius: 4px; padding: 2px 7px; font-size: 11px; }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+    .badge.err { background: #fde8e8; color: #b42318; }
+    .badge.ok { background: #d1fae5; color: #065f46; }
+
+    /* Weeks */
+    details.week { margin-bottom: 6px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: var(--panel); }
+    details.week > summary { padding: 7px 12px; cursor: pointer; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; user-select: none; }
+    details.week > summary:hover { background: #f8fafc; }
+    details.week > summary::marker { color: var(--muted); }
+    .phase-label { font-size: 11px; font-weight: normal; background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 3px; }
+    .week-notes { font-size: 12px; color: var(--muted); padding: 4px 12px 8px; font-style: italic; }
+    .week-body { padding: 0 10px 10px; }
+
+    /* Days */
+    details.day { margin-bottom: 5px; border: 1px solid #e5e7eb; border-radius: 6px; }
+    details.day > summary { padding: 6px 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; background: #f9fafb; border-radius: 6px 6px 0 0; }
+    details.day > summary:hover { background: #f0f2f5; }
+    details.day[open] > summary { border-bottom: 1px solid #e5e7eb; border-radius: 6px 6px 0 0; }
+    .day-label { font-weight: 600; font-size: 12px; }
+    .day-meta { font-size: 11px; color: var(--muted); margin-left: auto; }
+    .day-body { padding: 8px 10px; }
+    .day-goal { font-size: 12px; color: var(--muted); margin-bottom: 7px; font-style: italic; }
+
+    /* Segments */
+    .seg { margin-bottom: 8px; border-left: 3px solid var(--border); padding-left: 8px; }
+    .seg-hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+    .seg-purpose { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 1px 5px; border-radius: 3px; background: #e5e7eb; color: #374151; }
+    .seg-purpose-main { background: #dbeafe; color: #1e40af; }
+    .seg-purpose-warmup { background: #fef3c7; color: #92400e; }
+    .seg-purpose-cooldown { background: #d1fae5; color: #065f46; }
+    .seg-purpose-finisher { background: #fce7f3; color: #9d174d; }
+    .seg-purpose-secondary { background: #ede9fe; color: #5b21b6; }
+    .seg-type { font-size: 11px; color: var(--muted); }
+    .seg-rounds { font-size: 11px; background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
+    .seg-title { font-size: 12px; font-weight: 500; }
+
+    /* Items */
+    .items { padding: 2px 0 0 4px; }
+    .item { padding: 3px 0; border-bottom: 1px dotted #e5e7eb; }
+    .item:last-child { border-bottom: none; }
+    .item-main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .ex-name { font-weight: 500; font-size: 12px; }
+    .ex-meta { font-size: 11px; color: var(--muted); font-family: monospace; }
+    .item-nar { margin-top: 2px; }
+
+    /* Narration fields */
+    .nar { font-size: 11px; color: #4b5563; line-height: 1.5; }
+    .nar-k { font-weight: 500; color: #9ca3af; text-transform: capitalize; }
+
+    /* Errors / empty */
+    .panel-err { background: #fde8e8; color: var(--danger); border-radius: 8px; padding: 14px; margin: 10px 0; }
+    .panel-empty { color: var(--muted); padding: 24px; text-align: center; font-size: 13px; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Debug accordion */
+    details.dbg { margin-top: 10px; }
+    details.dbg > summary { font-size: 11px; color: var(--muted); cursor: pointer; }
+    details.dbg > summary:hover { color: var(--text); }
+    pre.dbg-json { font-size: 10px; background: #f8fafc; border: 1px solid var(--border); border-radius: 4px; padding: 8px; overflow: auto; max-height: 300px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Program Preview</h1>
+  <div class="nav">
+    <a href="/admin-ui/index.html">Config Editor</a>
+    <a href="/admin/coverage">Coverage</a>
+    <a href="/admin/exercises">Exercises</a>
+    <a href="/admin/narration">Narration</a>
+    <a href="/admin/observability">Observability</a>
+    <a href="/admin/preview" class="active">Preview</a>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Token</span>
+    <input id="token-input" type="password" placeholder="x-internal-token" style="width:170px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">Fitness</span>
+    <div class="toggle-row" id="rank-btns">
+      <button class="toggle" data-val="0">Beginner</button>
+      <button class="toggle active" data-val="1">Intermediate</button>
+      <button class="toggle" data-val="2">Advanced</button>
+      <button class="toggle" data-val="3">Elite</button>
+    </div>
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">Equipment</span>
+    <div class="toggle-row" id="preset-btns">
+      <button class="toggle" data-val="no_equipment">None</button>
+      <button class="toggle" data-val="minimal_equipment">Minimal</button>
+      <button class="toggle" data-val="decent_home_gym">Home</button>
+      <button class="toggle active" data-val="commercial_gym">Commercial</button>
+      <button class="toggle" data-val="crossfit_hyrox_gym">Hyrox</button>
+    </div>
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">Days/wk</span>
+    <div class="toggle-row" id="dpw-btns">
+      <button class="toggle" data-val="2">2</button>
+      <button class="toggle active" data-val="3">3</button>
+      <button class="toggle" data-val="4">4</button>
+      <button class="toggle" data-val="5">5</button>
+    </div>
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">Duration</span>
+    <div class="toggle-row" id="dur-btns">
+      <button class="toggle" data-val="45">45m</button>
+      <button class="toggle active" data-val="50">50m</button>
+      <button class="toggle" data-val="60">60m</button>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+  <button id="generate-btn">Generate All</button>
+  <span id="gen-status" style="font-size:12px"></span>
+</div>
+
+<div id="meta-bar" class="meta-bar hidden"></div>
+
+<div class="type-tabs" id="type-tabs" style="display:none">
+  <button class="type-tab active" data-type="hypertrophy">Hypertrophy</button>
+  <button class="type-tab" data-type="strength">Strength</button>
+  <button class="type-tab" data-type="conditioning">Conditioning</button>
+  <button class="type-tab" data-type="hyrox">HYROX</button>
+</div>
+
+<div id="panels">
+  <div id="panel-hypertrophy" class="type-panel active"></div>
+  <div id="panel-strength"    class="type-panel"></div>
+  <div id="panel-conditioning" class="type-panel"></div>
+  <div id="panel-hyrox"       class="type-panel"></div>
+</div>
+
+<script type="module">
+const STORAGE_KEY = "admin_preview_token";
+
+function getToken() {
+  return document.getElementById("token-input").value.trim();
+}
+
+// Restore token from sessionStorage on load
+const _saved = sessionStorage.getItem(STORAGE_KEY);
+if (_saved) document.getElementById("token-input").value = _saved;
+document.getElementById("token-input").addEventListener("change", () => {
+  sessionStorage.setItem(STORAGE_KEY, getToken());
+});
+
+function selectedVal(groupId) {
+  const btn = document.querySelector(`#${groupId} .toggle.active`);
+  return btn?.dataset.val ?? "";
+}
+
+// Toggle button groups
+document.querySelectorAll(".toggle-row").forEach(row => {
+  row.addEventListener("click", e => {
+    const btn = e.target.closest(".toggle");
+    if (!btn) return;
+    row.querySelectorAll(".toggle").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+  });
+});
+
+// Tab switching
+document.querySelectorAll(".type-tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".type-tab").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".type-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`panel-${btn.dataset.type}`).classList.add("active");
+  });
+});
+
+// ── HTML helpers ──────────────────────────────────────────────────────────────
+
+function esc(v) {
+  return String(v ?? "")
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+// Renders all non-empty string fields from a narration object generically.
+// Any new narration fields added to the pipeline show up here automatically.
+function renderNar(nar, skip = new Set()) {
+  if (!nar || typeof nar !== "object") return "";
+  return Object.entries(nar)
+    .filter(([k, v]) => !skip.has(k) && typeof v === "string" && v.trim())
+    .map(([k, v]) => `<div class="nar"><span class="nar-k">${esc(k.replace(/_/g, " "))}:</span> ${esc(v)}</div>`)
+    .join("");
+}
+
+function renderItem(item, nameMap) {
+  const name = nameMap[String(item.ex_id)] ?? `#${item.ex_id}`;
+  const parts = [];
+  if (item.sets != null) parts.push(`${item.sets}×`);
+  if (item.reps_prescribed) parts.push(item.reps_prescribed);
+  if (item.tempo_prescribed) parts.push(item.tempo_prescribed);
+  if (item.rir_target != null) parts.push(`RIR ${item.rir_target}`);
+  if (item.rest_after_set_sec) parts.push(`${item.rest_after_set_sec}s`);
+  return `
+    <div class="item">
+      <div class="item-main">
+        <span class="ex-name">${esc(name)}</span>
+        <span class="ex-meta">${esc(parts.join(" · "))}</span>
+      </div>
+      <div class="item-nar">${renderNar(item.narration)}</div>
+    </div>`;
+}
+
+function renderSeg(seg, nameMap) {
+  const purpose = seg.purpose ?? "";
+  const narSkip = new Set(["title"]);
+  const titleText = seg.narration?.title ?? "";
+  const durSec = seg.duration_seconds;
+  const durLabel = durSec ? ` · ${Math.round(durSec / 60)}min` : "";
+  return `
+    <div class="seg">
+      <div class="seg-hdr">
+        <span class="seg-purpose seg-purpose-${esc(purpose)}">${esc(purpose || "segment")}</span>
+        <span class="seg-type">${esc(seg.segment_type ?? "")}</span>
+        ${(seg.rounds ?? 0) > 1 ? `<span class="seg-rounds">${seg.rounds}×</span>` : ""}
+        ${titleText ? `<span class="seg-title">${esc(titleText)}</span>` : ""}
+        <span class="seg-type" style="margin-left:auto">${esc(durLabel)}</span>
+      </div>
+      ${renderNar(seg.narration, narSkip)}
+      <div class="items">${(seg.items ?? []).map(it => renderItem(it, nameMap)).join("")}</div>
+    </div>`;
+}
+
+function renderDay(day, nameMap) {
+  const narTitle = day.narration?.day_title ?? "";
+  const label = narTitle || day.label || `Day ${day.day_index}`;
+  const focus = (day.day_focus_slug ?? "").replace(/_/g, " ");
+  const dur = day.duration_mins ? `${day.duration_mins}m` : "";
+  const metaParts = [focus, dur].filter(Boolean);
+  const dayNarSkip = new Set(["day_title", "day_goal", "warmup", "cooldown"]);
+  const segs = day.segments ?? [];
+  return `
+    <details class="day" open>
+      <summary>
+        <span class="day-label">${esc(label)}</span>
+        ${metaParts.length ? `<span class="day-meta">${esc(metaParts.join(" · "))}</span>` : ""}
+      </summary>
+      <div class="day-body">
+        ${day.narration?.day_goal ? `<div class="day-goal">${esc(day.narration.day_goal)}</div>` : ""}
+        ${renderNar(day.narration, dayNarSkip)}
+        ${segs.map(s => renderSeg(s, nameMap)).join("")}
+        ${!segs.length ? `<div class="panel-empty" style="padding:8px">No segments</div>` : ""}
+      </div>
+    </details>`;
+}
+
+function renderWeek(wk, programNarration, nameMap) {
+  // program.narration.weeks is indexed in order (week 1 = index 0)
+  const wkNar = (programNarration?.weeks ?? [])[wk.week_index - 1] ?? {};
+  const phaseLabel = wkNar.phase_label || wkNar.label || "";
+  const focus = wkNar.focus || "";
+  const notes = wkNar.notes || "";
+  const summary = [focus, notes].filter(Boolean).join(" — ");
+  return `
+    <details class="week" open>
+      <summary>
+        Week ${wk.week_index}
+        ${phaseLabel ? `<span class="phase-label">${esc(phaseLabel)}</span>` : ""}
+      </summary>
+      <div class="week-body">
+        ${summary ? `<div class="week-notes">${esc(summary)}</div>` : ""}
+        ${(wk.days ?? []).map(d => renderDay(d, nameMap)).join("")}
+      </div>
+    </details>`;
+}
+
+function renderProgram(type, preview, meta) {
+  if (!preview.ok) {
+    return `<div class="panel-err">Pipeline error for ${esc(type)}: ${esc(preview.error)}</div>`;
+  }
+  const { program, debug } = preview;
+  const nameMap = meta.exercise_name_map ?? {};
+  const title = program.program_title || program.narration?.program?.title || type;
+  const summary = program.program_summary || program.narration?.program?.summary || "";
+  const configKey = debug?.step1?.config_key ?? "";
+  const allowedCount = meta.allowed_exercise_count ?? "?";
+  const fillFailed = debug?.step1?.fill_failed;
+  const narSource = debug?.step5?.source ?? "";
+  const weeks = program.weeks ?? [];
+
+  const badges = [
+    configKey ? `<span class="badge">${esc(configKey)}</span>` : "",
+    `<span class="badge ok">${esc(String(allowedCount))} allowed</span>`,
+    narSource ? `<span class="badge">narration: ${esc(narSource)}</span>` : "",
+    fillFailed && Object.keys(fillFailed).length
+      ? `<span class="badge warn">fill_failed: ${esc(JSON.stringify(fillFailed))}</span>`
+      : "",
+  ].filter(Boolean).join("");
+
+  return `
+    <div class="prog-hdr">
+      <h2>${esc(title)}</h2>
+      ${summary ? `<p class="prog-summary">${esc(summary)}</p>` : ""}
+      <div class="prog-meta">${badges}</div>
+    </div>
+    <div class="weeks">
+      ${weeks.map(w => renderWeek(w, program.narration, nameMap)).join("")}
+      ${!weeks.length ? `<div class="panel-empty">No weeks in program output</div>` : ""}
+    </div>
+    <details class="dbg">
+      <summary>Debug (step1–step6)</summary>
+      <pre class="dbg-json">${esc(JSON.stringify(debug, null, 2))}</pre>
+    </details>`;
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+
+document.getElementById("generate-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("gen-status");
+  const tabsEl = document.getElementById("type-tabs");
+  statusEl.innerHTML = `<span class="spinner"></span>Generating…`;
+  if (getToken()) sessionStorage.setItem(STORAGE_KEY, getToken());
+
+  const body = {
+    fitness_rank: Number(selectedVal("rank-btns")),
+    equipment_preset: selectedVal("preset-btns"),
+    days_per_week: Number(selectedVal("dpw-btns")),
+    duration_mins: Number(selectedVal("dur-btns")),
+  };
+
+  let data;
+  try {
+    const res = await fetch("/admin/preview/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-token": getToken() },
+      body: JSON.stringify(body),
+    });
+    data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      const inp = document.getElementById("token-input");
+      inp.value = "";
+      inp.style.borderColor = "var(--danger)";
+      setTimeout(() => { inp.style.borderColor = ""; }, 3000);
+    }
+    if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  } catch (e) {
+    statusEl.textContent = "";
+    document.getElementById("meta-bar").classList.add("hidden");
+    document.getElementById("panel-hypertrophy").innerHTML = `<div class="panel-err">${esc(e.message)}</div>`;
+    document.getElementById("panel-hypertrophy").classList.add("active");
+    document.querySelectorAll(".type-panel:not(#panel-hypertrophy)").forEach(p => p.classList.remove("active"));
+    document.querySelector('.type-tab[data-type="hypertrophy"]').click();
+    tabsEl.style.display = "";
+    return;
+  }
+
+  const meta = data.meta ?? {};
+  const previews = data.previews ?? {};
+
+  // Meta bar
+  const metaBar = document.getElementById("meta-bar");
+  metaBar.classList.remove("hidden");
+  metaBar.innerHTML = [
+    ["fitness", `${meta.fitness_level} (rank ${meta.fitness_rank})`],
+    ["preset", meta.equipment_preset],
+    ["equipment", `${meta.equipment_slugs?.length ?? 0} items`],
+    ["allowed exercises", String(meta.allowed_exercise_count)],
+    ["days/wk", String(meta.days_per_week)],
+    ["duration", `${meta.duration_mins}min`],
+  ].map(([k, v]) => `<span class="meta-item"><span class="meta-key">${esc(k)}:</span> ${esc(v)}</span>`).join("");
+
+  // Render each program type into its panel
+  for (const type of ["hypertrophy", "strength", "conditioning", "hyrox"]) {
+    const panel = document.getElementById(`panel-${type}`);
+    const preview = previews[type];
+    if (!preview) {
+      panel.innerHTML = `<div class="panel-empty">Not generated</div>`;
+    } else {
+      panel.innerHTML = renderProgram(type, preview, meta);
+    }
+  }
+
+  tabsEl.style.display = "";
+  statusEl.textContent = "Done";
+  setTimeout(() => { statusEl.textContent = ""; }, 2000);
+});
+</script>
+</body>
+</html>

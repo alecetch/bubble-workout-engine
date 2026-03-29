@@ -54,6 +54,7 @@
       .nav a:hover {
         text-decoration: underline;
       }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls {
         display: grid;
         grid-template-columns: 280px 200px 200px 160px auto;
@@ -217,6 +218,7 @@
       }
       .badge-red   { background: #fde8e8; color: #b42318; }
       .badge-amber { background: #fef3c7; color: #92400e; }
+      .badge-blue  { background: #dbeafe; color: #1e40af; }
       .badge-green { background: #d1fae5; color: #065f46; }
       .score-breakdowns {
         display: grid;
@@ -294,8 +296,11 @@
           <h1 class="title">Coverage Report</h1>
           <div class="nav">
             <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage Report</a>
+            <a href="/admin/coverage" class="active">Coverage</a>
+            <a href="/admin/exercises">Exercises</a>
+            <a href="/admin/narration">Narration</a>
             <a href="/admin/observability">Observability</a>
+            <a href="/admin/preview">Preview</a>
           </div>
         </div>
         <div class="controls">
@@ -332,9 +337,11 @@
             <span id="score-value" class="score-value">—</span>
           </div>
           <div class="score-badges">
-            <span id="badge-zero" class="badge badge-red">— zero gaps</span>
-            <span id="badge-thin" class="badge badge-amber">— thin (1 option)</span>
-            <span id="badge-ok"   class="badge badge-green">— covered (2+)</span>
+            <span id="badge-zero"   class="badge badge-red">— zero gaps</span>
+            <span id="badge-thin"   class="badge badge-amber">— thin (1 option)</span>
+            <span id="badge-two"    class="badge badge-amber">— ok (2 options)</span>
+            <span id="badge-three"  class="badge badge-blue">— good (3 options)</span>
+            <span id="badge-four"   class="badge badge-green">— strong (4+)</span>
           </div>
         </div>
         <div class="score-breakdowns">
@@ -438,11 +445,15 @@
         const prefTags = Array.isArray(ex.preferred_in_json) ? ex.preferred_in_json : [];
         if (slot.requirePref) {
           const hasPref = prefTags.includes(slot.requirePref);
-          if (slot.pref_mode !== "soft" && !hasPref) return null; // strict hard gate (matches SQL)
+          if (slot.pref_mode !== "soft" && !hasPref) return null; // strict hard gate
           if (hasPref) {
-            const bonus = slot.pref_bonus ?? 4;
-            score += bonus;
-            reasons.push(`pref+${bonus}`);
+            if (slot.pref_mode === "soft") {
+              const bonus = slot.pref_bonus ?? 4;
+              score += bonus;
+              reasons.push(`pref+${bonus}`);
+            } else {
+              reasons.push(`pref✓`); // strict gate passed — no score bonus
+            }
           }
         }
         if (ex.strength_equivalent) { score += 3; reasons.push(`SE+3`); }
@@ -628,7 +639,7 @@
       }
 
       function computeScoreForRows(rows, presetCodes) {
-        let total = 0, points = 0, zeros = 0, thins = 0, covered = 0;
+        let total = 0, points = 0, zeros = 0, thins = 0, twos = 0, threes = 0, fours = 0;
         for (const row of rows) {
           for (const code of presetCodes) {
             for (const rank of RANKS_ORDER) {
@@ -637,12 +648,14 @@
               total += 1;
               if (count === 0) zeros++;
               else if (count === 1) thins++;
-              else covered++;
+              else if (count === 2) twos++;
+              else if (count === 3) threes++;
+              else fours++;
             }
           }
         }
         const pct = total === 0 ? 0 : Math.round((points / total) * 100);
-        return { pct, zeros, thins, covered, total };
+        return { pct, zeros, thins, twos, threes, fours, total };
       }
 
       function renderBar(label, pct) {
@@ -665,7 +678,9 @@
         const scoreValueEl = document.getElementById("score-value");
         const badgeZeroEl  = document.getElementById("badge-zero");
         const badgeThinEl  = document.getElementById("badge-thin");
-        const badgeOkEl    = document.getElementById("badge-ok");
+        const badgeTwoEl   = document.getElementById("badge-two");
+        const badgeThreeEl = document.getElementById("badge-three");
+        const badgeFourEl  = document.getElementById("badge-four");
         const breakdownCfgEl    = document.getElementById("breakdown-config");
         const breakdownPresetEl = document.getElementById("breakdown-preset");
 
@@ -673,9 +688,11 @@
         scoreValueEl.textContent = `${overall.pct}%`;
         scoreValueEl.className = `score-value ${gradeClass(overall.pct)}`;
 
-        badgeZeroEl.textContent = `${overall.zeros} zero gaps`;
-        badgeThinEl.textContent = `${overall.thins} thin (1 option)`;
-        badgeOkEl.textContent   = `${overall.covered} covered (2+)`;
+        badgeZeroEl.textContent  = `${overall.zeros} zero gaps`;
+        badgeThinEl.textContent  = `${overall.thins} thin (1 option)`;
+        badgeTwoEl.textContent   = `${overall.twos} ok (2 options)`;
+        badgeThreeEl.textContent = `${overall.threes} good (3 options)`;
+        badgeFourEl.textContent  = `${overall.fours} strong (4+)`;
 
         // By config
         const configKeys = Array.from(new Set(rows.map((r) => r.config_key))).sort();

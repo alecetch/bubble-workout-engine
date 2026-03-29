@@ -1,3 +1,5 @@
+import "./instrument.js";
+import * as Sentry from "@sentry/node";
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -20,6 +22,7 @@ import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
 import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
+import { adminPreviewRouter } from "./src/routes/adminPreview.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
@@ -31,9 +34,11 @@ import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
   upsertUser,
   upsertProfile,
-  getProfileByBubbleUserId,
+  getProfileById,
+  getProfileByUserId,
   patchProfile,
 } from "./src/services/clientProfileService.js";
+import { readRequestedUserId } from "./src/utils/userIdentity.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -238,6 +243,7 @@ app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res,
 app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
 app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res, "narration.html"));
 app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
+app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -407,16 +413,16 @@ app.get("/api/equipment-items", handleEquipmentItems);
 app.get("/equipment-items", handleEquipmentItems);
 
 // GET /me — returns the user's identity and current profile ID.
-// Query: ?bubble_user_id=<id>
+// Query: ?user_id=<id>
 const handleMe = async (req, res) => {
-  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
-  if (!bubbleUserId) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
+  const userId = readRequestedUserId(req.query);
+  if (!userId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "user_id is required" });
   }
   try {
-    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    const profile = await getProfileByUserId(userId);
     return res.status(200).json({
-      id: bubbleUserId,
+      id: userId,
       clientProfileId: profile?.id ?? null,
     });
   } catch (err) {
@@ -431,16 +437,16 @@ app.get("/api/me", requireInternalToken, handleMe);
 app.get("/me", requireInternalToken, handleMe);
 
 // POST /client-profiles — upsert user + create profile if none exists.
-// Query: ?bubble_user_id=<id>
+// Query: ?user_id=<id>
 const handleCreateClientProfile = async (req, res) => {
-  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
-  if (!bubbleUserId) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
+  const userId = readRequestedUserId(req.query);
+  if (!userId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "user_id is required" });
   }
   try {
-    const { id: pgUserId } = await upsertUser(bubbleUserId);
-    await upsertProfile(pgUserId, bubbleUserId);
-    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    const { id: pgUserId } = await upsertUser(userId);
+    await upsertProfile(pgUserId, userId);
+    const profile = await getProfileByUserId(userId);
     return res.status(200).json(profile);
   } catch (err) {
     req.log.error({ event: "profile.create.error", err: err?.message }, "POST /client-profiles error");
@@ -453,12 +459,11 @@ app.post("/api/client-profiles", requireInternalToken, handleCreateClientProfile
 // DEPRECATED — remove after Bubble client updates to /api/client-profiles
 app.post("/client-profiles", requireInternalToken, handleCreateClientProfile);
 
-// GET /client-profiles/:id — read profile by bubble_client_profile_id (= bubble_user_id).
-// :id is bubble_client_profile_id, which equals bubble_user_id by convention (see clientProfileService).
+// GET /client-profiles/:id — read profile by internal profile id.
 const handleGetClientProfile = async (req, res) => {
   const profileId = req.params.id;
   try {
-    const profile = await getProfileByBubbleUserId(profileId);
+    const profile = await getProfileById(profileId);
     if (!profile) {
       return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
     }
@@ -475,7 +480,6 @@ app.get("/api/client-profiles/:id", requireInternalToken, handleGetClientProfile
 app.get("/client-profiles/:id", requireInternalToken, handleGetClientProfile);
 
 // PATCH /client-profiles/:id — patch profile fields.
-// :id is bubble_client_profile_id (= bubble_user_id).
 const handlePatchClientProfile = async (req, res) => {
   const profileId = req.params.id;
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
@@ -497,18 +501,29 @@ app.patch("/api/client-profiles/:id", requireInternalToken, handlePatchClientPro
 // DEPRECATED — remove after Bubble client updates to /api/client-profiles/:id
 app.patch("/client-profiles/:id", requireInternalToken, handlePatchClientProfile);
 
-// PATCH /users/me — associate a profile with a user (no-op for Postgres-backed store,
-// kept for API compatibility; returns current identity).
-// Query: ?bubble_user_id=<id>
+// PATCH /users/me — associate a profile with a user; returns current identity.
+// Query/body: ?user_id=<id>
 const handleUsersMe = async (req, res) => {
-  const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
-  if (!bubbleUserId) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "bubble_user_id is required" });
+  const userId = readRequestedUserId({ ...req.query, ...req.body });
+  if (!userId) {
+    return res.status(400).json({ ok: false, code: "validation_error", error: "user_id is required" });
   }
   try {
-    const profile = await getProfileByBubbleUserId(bubbleUserId);
+    const { id: pgUserId } = await upsertUser(userId);
+    const clientProfileId = (req.body?.clientProfileId ?? "").toString().trim();
+    if (clientProfileId) {
+      await pool.query(
+        `
+        UPDATE client_profile
+        SET user_id = $1, updated_at = now()
+        WHERE id::text = $2 OR bubble_client_profile_id = $2
+        `,
+        [pgUserId, clientProfileId],
+      );
+    }
+    const profile = await getProfileByUserId(userId);
     return res.status(200).json({
-      id: bubbleUserId,
+      id: userId,
       clientProfileId: profile?.id ?? null,
     });
   } catch (err) {
@@ -552,10 +567,14 @@ app.use("/admin/api/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/admin", ...adminOnly, adminConfigsRouter);
 app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
 app.use("/admin", ...adminOnly, adminNarrationRouter);
+app.use("/admin", ...adminOnly, adminPreviewRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates
 app.use(generateProgramV2Router);
+
+// Sentry error handler — must come BEFORE the generic error handler and AFTER all routes.
+Sentry.setupExpressErrorHandler(app);
 
 // JSON parse error handler (ONLY for invalid JSON payloads).
 app.use((err, req, res, next) => {

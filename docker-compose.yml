@@ -3,6 +3,8 @@ services:
     image: postgres:16
     env_file:
       - ./api/.env
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -52,14 +54,7 @@ services:
         condition: service_healthy
     volumes:
       - ./migrations:/flyway/sql:ro
-    entrypoint: ["/bin/sh", "-lc"]
-    command: >
-      flyway
-      -url=jdbc:postgresql://db:5432/$$POSTGRES_DB
-      -user=$$POSTGRES_USER
-      -password=$$POSTGRES_PASSWORD
-      -schemas=public
-      migrate
+    command: ["migrate"]
 
   minio:
     image: minio/minio

@@ -6,7 +6,7 @@ import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
-import { getProfileByBubbleUserId } from "../services/clientProfileService.js";
+import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
 import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
@@ -74,7 +74,8 @@ function utcDateString(ms) {
 
 export function createGenerateProgramV2Handler({
   db = pool,
-  getProfile = getProfileByBubbleUserId,
+  getProfileByUser,
+  getProfile = getProfileById,
   pipeline = runPipeline,
   getAllowed = getAllowedExerciseIds,
   buildInputs = buildInputsFromDevProfile,
@@ -82,6 +83,7 @@ export function createGenerateProgramV2Handler({
   emitPayload = importEmitterPayload,
 } = {}) {
   let cachedInjuryColumn = null;
+  const getProfileByResolvedUser = getProfileByUser ?? getProfile;
 
   async function resolveInjuryColumn(client) {
     if (cachedInjuryColumn) return cachedInjuryColumn;
@@ -111,21 +113,27 @@ export function createGenerateProgramV2Handler({
 
   return async function generateProgramV2Handler(req, res) {
     const request_id = req.request_id;
-    const bubble_user_id = s(req.body?.bubble_user_id);
+    const user_id = s(req.body?.user_id || req.body?.bubble_user_id || req.body?.dev_user_id);
+    const client_profile_id = s(
+      req.body?.client_profile_id ||
+      req.body?.bubble_client_profile_id ||
+      req.body?.dev_client_profile_id ||
+      req.body?.clientProfileId,
+    );
     const programTypeInput = s(req.body?.programType);
     const anchorInput = req.body?.anchor_date_ms;
     const anchor_date_ms = anchorInput == null ? Date.now() : Number(anchorInput);
 
-    if (!bubble_user_id) {
-      return res.status(400).json({ ok: false, code: "validation_error", error: "Missing bubble_user_id" });
+    if (!user_id) {
+      return res.status(400).json({ ok: false, code: "validation_error", error: "Missing user_id" });
     }
     if (!Number.isFinite(anchor_date_ms)) {
       return res.status(400).json({ ok: false, code: "validation_error", error: "anchor_date_ms must be a finite number" });
     }
 
-    const devProfile = await getProfile(bubble_user_id);
+    const devProfile = client_profile_id ? await getProfile(client_profile_id) : await getProfileByResolvedUser(user_id);
     if (!devProfile) {
-      return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for bubble_user_id" });
+      return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for user_id" });
     }
 
   const GOAL_TO_PROGRAM_TYPE = {
@@ -174,9 +182,9 @@ export function createGenerateProgramV2Handler({
   // generation_run rows. All in a single transaction so we get program_id
   // before the (slow) pipeline runs.
 
-  let pg_user_id;
-  let created_program_id;
-  let generation_run_id;
+    let pg_user_id;
+    let created_program_id;
+    let generation_run_id;
   let allowedIds = [];
   let exerciseRows = [];
 
@@ -194,53 +202,33 @@ export function createGenerateProgramV2Handler({
       DO UPDATE SET updated_at = now()
       RETURNING id
       `,
-      [bubble_user_id],
+      [user_id],
     );
     pg_user_id = userR.rows[0].id;
 
-    // Phase 1b: Upsert client_profile
+    // Phase 1b: Refresh client_profile from the current API profile shape
     const injuryColumn = await resolveInjuryColumn(setupClient);
-    const profileSql = `
-      INSERT INTO client_profile (
-        user_id,
-        bubble_client_profile_id,
-        fitness_rank,
-        equipment_items_slugs,
-        ${injuryColumn},
-        preferred_days,
-        main_goals_slugs,
-        minutes_per_session,
-        height_cm,
-        weight_kg,
-        equipment_preset_slug,
-        goal_notes,
-        schedule_constraints,
-        updated_at
-      )
-      VALUES (
-        $1,$2,$3,$4::text[],$5::text[],$6::text[],$7::text[],$8,$9,$10,$11,$12,$13,now()
-      )
-      ON CONFLICT (bubble_client_profile_id)
-      DO UPDATE SET
-        user_id = EXCLUDED.user_id,
-        fitness_rank = EXCLUDED.fitness_rank,
-        equipment_items_slugs = EXCLUDED.equipment_items_slugs,
-        ${injuryColumn} = EXCLUDED.${injuryColumn},
-        preferred_days = EXCLUDED.preferred_days,
-        main_goals_slugs = EXCLUDED.main_goals_slugs,
-        minutes_per_session = EXCLUDED.minutes_per_session,
-        height_cm = EXCLUDED.height_cm,
-        weight_kg = EXCLUDED.weight_kg,
-        equipment_preset_slug = EXCLUDED.equipment_preset_slug,
-        goal_notes = EXCLUDED.goal_notes,
-        schedule_constraints = EXCLUDED.schedule_constraints,
+    await setupClient.query(
+      `
+      UPDATE client_profile
+      SET
+        user_id = $1,
+        fitness_rank = $2,
+        equipment_items_slugs = $3::text[],
+        ${injuryColumn} = $4::text[],
+        preferred_days = $5::text[],
+        main_goals_slugs = $6::text[],
+        minutes_per_session = $7,
+        height_cm = $8,
+        weight_kg = $9,
+        equipment_preset_slug = $10,
+        goal_notes = $11,
+        schedule_constraints = $12,
         updated_at = now()
-      RETURNING id
-    `;
-
-    await setupClient.query(profileSql, [
+      WHERE id::text = $13 OR bubble_client_profile_id = $13
+      `,
+      [
       pg_user_id,
-      bubble_user_id,
       mappedFitnessRank,
       mappedEquipmentSlugs,
       mappedInjuryFlags,
@@ -252,6 +240,7 @@ export function createGenerateProgramV2Handler({
       mappedEquipmentPreset || null,
       mappedGoalNotes,
       mappedScheduleConstraints,
+      devProfile.id,
     ]);
 
     // Phase 1c: Allowed exercise IDs + exercise catalogue

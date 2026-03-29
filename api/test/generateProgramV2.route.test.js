@@ -44,7 +44,7 @@ function mockRes() {
   return res;
 }
 
-test("missing bubble_user_id returns 400", async () => {
+test("missing user_id returns 400", async () => {
   const handler = createGenerateProgramV2Handler({
     getProfile: async () => null,
   });
@@ -55,14 +55,14 @@ test("missing bubble_user_id returns 400", async () => {
 
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.code, "validation_error");
-  assert.match(res.body.error, /bubble_user_id/i);
+  assert.match(res.body.error, /user_id/i);
 });
 
 test("non-finite anchor_date_ms returns 400", async () => {
   const handler = createGenerateProgramV2Handler({
     getProfile: async () => minimalProfile,
   });
-  const req = mockReq({ bubble_user_id: "buid-1", anchor_date_ms: "not-a-number" });
+  const req = mockReq({ user_id: "user-1", anchor_date_ms: "not-a-number" });
   const res = mockRes();
 
   await handler(req, res);
@@ -80,7 +80,7 @@ test("null anchor_date_ms is accepted and does not fail validation", async () =>
       },
     },
   });
-  const req = mockReq({ bubble_user_id: "buid-1" });
+  const req = mockReq({ user_id: "user-1" });
   const res = mockRes();
 
   await handler(req, res);
@@ -93,7 +93,7 @@ test("profile not found returns 404", async () => {
   const handler = createGenerateProgramV2Handler({
     getProfile: async () => null,
   });
-  const req = mockReq({ bubble_user_id: "buid-unknown", anchor_date_ms: Date.now() });
+  const req = mockReq({ user_id: "user-unknown", anchor_date_ms: Date.now() });
   const res = mockRes();
 
   await handler(req, res);

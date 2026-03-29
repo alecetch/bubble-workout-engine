@@ -39,8 +39,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const programId = route.params?.programId ?? null;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
-  const bubbleUserId = sessionUserId ?? onboardingUserId ?? undefined;
-  const userId = onboardingUserId ?? sessionUserId ?? undefined;
+  const userId = sessionUserId ?? onboardingUserId ?? undefined;
 
   // ── UI state (user interactions only) ────────────────────────────────────
   //
@@ -68,15 +67,12 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   // useDayPreview: fires only when the user has explicitly picked a day.
   // Independent cache entry keyed by [programId, programDayId].
   // Falls back to overview.selectedDayPreview while loading.
-  const overviewQuery = useProgramOverview(programId ?? "", { bubbleUserId, userId });
+  const overviewQuery = useProgramOverview(programId ?? "", { userId });
   const overview = overviewQuery.data;
   const calendarDays = overview?.calendarDays ?? [];
   const weeks = overview?.weeks ?? [];
 
-  const dayPreviewQuery = useDayPreview(programId ?? "", userSelectedDayId, {
-    bubbleUserId,
-    userId,
-  });
+  const dayPreviewQuery = useDayPreview(programId ?? "", userSelectedDayId, { userId });
 
   // ── Stable string signatures (collapse array-identity churn) ─────────────
   const calendarSig = useMemo(

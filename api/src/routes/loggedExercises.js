@@ -3,6 +3,7 @@ import { pool } from "../db.js";
 import { internalApi } from "../middleware/chains.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireNonEmpty, requireUuid, safeString } from "../utils/validate.js";
+import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
 
 export const loggedExercisesRouter = express.Router();
 loggedExercisesRouter.use(...internalApi);
@@ -17,32 +18,18 @@ class NotFoundError extends Error {
 }
 
 async function resolveUserId(client, query) {
-  const user_id = safeString(query.user_id);
-  const bubble_user_id = safeString(query.bubble_user_id);
+  const requestedUserId = readRequestedUserId(query);
 
-  if (user_id) {
-    return requireUuid(user_id, "user_id");
+  if (requestedUserId) {
+    if (isUuid(requestedUserId)) {
+      return requireUuid(requestedUserId, "user_id");
+    }
+    const internalUserId = await findInternalUserIdByExternalId(client, requestedUserId);
+    if (internalUserId) return internalUserId;
+    throw new NotFoundError("User not found for user_id");
   }
 
-  if (!bubble_user_id) {
-    throw new RequestValidationError("Provide user_id or bubble_user_id");
-  }
-
-  const r = await client.query(
-    `
-    SELECT id
-    FROM app_user
-    WHERE bubble_user_id = $1
-    LIMIT 1
-    `,
-    [bubble_user_id],
-  );
-
-  if (r.rowCount === 0) {
-    throw new NotFoundError("User not found for bubble_user_id");
-  }
-
-  return r.rows[0].id;
+  throw new RequestValidationError("Provide user_id");
 }
 
 function mapError(err) {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeResolveBubbleUser } from "../resolveUser.js";
+import { makeResolveUser } from "../resolveUser.js";
 
 function mockReq(overrides = {}) {
   return {
@@ -23,8 +23,8 @@ function mockRes() {
   return res;
 }
 
-test("missing bubble_user_id returns 401", async () => {
-  const middleware = makeResolveBubbleUser({ async query() { throw new Error("should not run"); } });
+test("missing user_id returns 401", async () => {
+  const middleware = makeResolveUser({ async query() { throw new Error("should not run"); } });
   const req = mockReq({ query: {} });
   const res = mockRes();
   let nextCalled = false;
@@ -34,33 +34,33 @@ test("missing bubble_user_id returns 401", async () => {
   assert.equal(res.body.code, "unauthorized");
 });
 
-test("empty string bubble_user_id returns 401", async () => {
-  const middleware = makeResolveBubbleUser({ async query() { throw new Error("should not run"); } });
-  const req = mockReq({ query: { bubble_user_id: "   " } });
+test("empty string user_id returns 401", async () => {
+  const middleware = makeResolveUser({ async query() { throw new Error("should not run"); } });
+  const req = mockReq({ query: { user_id: "   " } });
   const res = mockRes();
   await middleware(req, res, () => {});
   assert.equal(res.statusCode, 401);
   assert.equal(res.body.code, "unauthorized");
 });
 
-test("unknown bubble_user_id returns 401", async () => {
+test("unknown external user_id returns 401", async () => {
   const mockDb = { async query() { return { rowCount: 0, rows: [] }; } };
-  const middleware = makeResolveBubbleUser(mockDb);
-  const req = mockReq({ query: { bubble_user_id: "unknown-user" } });
+  const middleware = makeResolveUser(mockDb);
+  const req = mockReq({ query: { user_id: "unknown-user" } });
   const res = mockRes();
   await middleware(req, res, () => {});
   assert.equal(res.statusCode, 401);
   assert.match(res.body.error, /not found/i);
 });
 
-test("known bubble_user_id sets req.auth.user_id and calls next()", async () => {
+test("known external user_id sets req.auth.user_id and calls next()", async () => {
   const mockDb = {
     async query() {
       return { rowCount: 1, rows: [{ id: "pg-uuid-here" }] };
     },
   };
-  const middleware = makeResolveBubbleUser(mockDb);
-  const req = mockReq({ query: { bubble_user_id: "bubble-123" } });
+  const middleware = makeResolveUser(mockDb);
+  const req = mockReq({ query: { user_id: "user-123" } });
   const res = mockRes();
   let nextCalled = false;
   await middleware(req, res, () => { nextCalled = true; });
@@ -68,10 +68,27 @@ test("known bubble_user_id sets req.auth.user_id and calls next()", async () => 
   assert.equal(req.auth.user_id, "pg-uuid-here");
 });
 
+test("uuid user_id is accepted without DB lookup", async () => {
+  let queryCount = 0;
+  const middleware = makeResolveUser({
+    async query() {
+      queryCount += 1;
+      return { rowCount: 0, rows: [] };
+    },
+  });
+  const req = mockReq({ query: { user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
+  const res = mockRes();
+  let nextCalled = false;
+  await middleware(req, res, () => { nextCalled = true; });
+  assert.equal(nextCalled, true);
+  assert.equal(queryCount, 0);
+  assert.equal(req.auth.user_id, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+});
+
 test("DB error returns 500", async () => {
   const mockDb = { async query() { throw new Error("connection refused"); } };
-  const middleware = makeResolveBubbleUser(mockDb);
-  const req = mockReq({ query: { bubble_user_id: "bubble-123" } });
+  const middleware = makeResolveUser(mockDb);
+  const req = mockReq({ query: { user_id: "user-123" } });
   const res = mockRes();
   await middleware(req, res, () => {});
   assert.equal(res.statusCode, 500);

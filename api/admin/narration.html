@@ -79,6 +79,7 @@
       font-size: 12px;
     }
     .nav a:hover { text-decoration: underline; }
+    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
     .controls, .filter-grid {
       display: flex;
       flex-wrap: wrap;
@@ -334,9 +335,11 @@
         </div>
         <nav class="nav">
           <a href="/admin-ui/index.html">Config Editor</a>
-          <a href="/admin/coverage">Coverage Report</a>
-          <a href="/admin/exercises">Exercise Catalogue</a>
-          <a href="/admin/narration">Narration Templates</a>
+          <a href="/admin/coverage">Coverage</a>
+          <a href="/admin/exercises">Exercises</a>
+          <a href="/admin/narration" class="active">Narration</a>
+          <a href="/admin/observability">Observability</a>
+          <a href="/admin/preview">Preview</a>
         </nav>
       </div>
       <div class="controls">

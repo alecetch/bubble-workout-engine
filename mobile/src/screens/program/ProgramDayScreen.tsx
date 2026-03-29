@@ -34,10 +34,10 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const { programDayId } = route.params;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
-  const bubbleUserId = sessionUserId ?? onboardingUserId ?? undefined;
+  const userId = sessionUserId ?? onboardingUserId ?? undefined;
   const programId = useSessionStore((state) => state.activeProgramId) ?? "";
 
-  const dayQuery = useProgramDayFull(programDayId, { bubbleUserId });
+  const dayQuery = useProgramDayFull(programDayId, { userId });
   const markDayComplete = useMarkDayComplete();
   const [segmentLogs, setSegmentLogs] = useState<Record<string, SegmentLogEntry>>({});
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
@@ -104,7 +104,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     await setWorkoutComplete(programDayId, true);
     setWorkoutCompleteState(true);
     setConfirmationText("Workout marked complete.");
-    markDayComplete.mutate({ programDayId, isCompleted: true, bubbleUserId });
+    markDayComplete.mutate({ programDayId, isCompleted: true, userId });
     await hapticMedium();
   };
 
@@ -112,7 +112,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     await setWorkoutComplete(programDayId, false);
     setWorkoutCompleteState(false);
     setConfirmationText("Workout completion cleared.");
-    markDayComplete.mutate({ programDayId, isCompleted: false, bubbleUserId });
+    markDayComplete.mutate({ programDayId, isCompleted: false, userId });
   };
 
   if (dayQuery.isLoading) {
@@ -186,7 +186,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         segment={activeSegment}
         programDayId={programDayId}
         programId={programId}
-        bubbleUserId={bubbleUserId}
+        userId={userId}
         onClose={() => setActiveSegmentId(null)}
         onSave={() => {
           if (activeSegment) {

@@ -119,6 +119,29 @@ export async function engineFetch<T>(path: string, options: RequestOptions = {})
   return requestJson<T>(path, { ...options, extraHeaders });
 }
 
+export function engineGetJson<T>(
+  path: string,
+  options?: Omit<RequestOptions, "method" | "body">,
+): Promise<T> {
+  return engineFetch<T>(path, { ...options, method: "GET" });
+}
+
+export function enginePostJson<TResponse, TBody = unknown>(
+  path: string,
+  body: TBody,
+  options?: Omit<RequestOptions, "method" | "body">,
+): Promise<TResponse> {
+  return engineFetch<TResponse>(path, { ...options, method: "POST", body });
+}
+
+export function enginePatchJson<TResponse, TBody = unknown>(
+  path: string,
+  body: TBody,
+  options?: Omit<RequestOptions, "method" | "body">,
+): Promise<TResponse> {
+  return engineFetch<TResponse>(path, { ...options, method: "PATCH", body });
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, headers, signal } = options;
   return apiFetch<T>(path, { method, body, headers, signal });
