@@ -252,18 +252,18 @@ function normalizeExerciseHistory(raw: unknown): ExerciseHistoryResponse {
   };
 }
 
-export async function getHistoryOverview(bubbleUserId?: string): Promise<HistoryOverviewResponse> {
+export async function getHistoryOverview(userId?: string): Promise<HistoryOverviewResponse> {
   const params = new URLSearchParams();
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  if (userId) params.set("user_id", userId);
   const qs = params.toString();
   const raw = await engineFetch<unknown>(`/v1/history/overview${qs ? `?${qs}` : ""}`);
   return normalizeOverview(raw);
 }
 
-export async function getHistoryPrograms(limit = 10, bubbleUserId?: string): Promise<HistoryProgramItem[]> {
+export async function getHistoryPrograms(limit = 10, userId?: string): Promise<HistoryProgramItem[]> {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  if (userId) params.set("user_id", userId);
   const raw = await engineFetch<unknown>(`/v1/history/programs?${params.toString()}`);
   return normalizePrograms(raw);
 }
@@ -272,7 +272,7 @@ export type GetHistoryTimelineOptions = {
   limit?: number;
   cursorDate?: string | null;
   cursorId?: string | null;
-  bubbleUserId?: string;
+  userId?: string;
 };
 
 export async function getHistoryTimeline(options: GetHistoryTimelineOptions = {}): Promise<HistoryTimelineResponse> {
@@ -283,33 +283,33 @@ export async function getHistoryTimeline(options: GetHistoryTimelineOptions = {}
     params.set("cursorDate", options.cursorDate);
     params.set("cursorId", options.cursorId);
   }
-  if (options.bubbleUserId) params.set("bubble_user_id", options.bubbleUserId);
+  if (options.userId) params.set("user_id", options.userId);
 
   const raw = await engineFetch<unknown>(`/v1/history/timeline?${params.toString()}`);
   return normalizeTimeline(raw);
 }
 
-export async function getHistoryPersonalRecords(limit = 20, bubbleUserId?: string): Promise<HistoryPersonalRecordItem[]> {
+export async function getHistoryPersonalRecords(limit = 20, userId?: string): Promise<HistoryPersonalRecordItem[]> {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  if (userId) params.set("user_id", userId);
   const raw = await engineFetch<unknown>(`/v1/history/personal-records?${params.toString()}`);
   return normalizePersonalRecords(raw);
 }
 
-export async function searchExercises(q: string, bubbleUserId?: string): Promise<ExerciseSearchItem[]> {
+export async function searchExercises(q: string, userId?: string): Promise<ExerciseSearchItem[]> {
   const term = q.trim();
   if (term.length < 2) return [];
   const params = new URLSearchParams();
   params.set("q", term);
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  if (userId) params.set("user_id", userId);
   const raw = await engineFetch<unknown>(`/v1/exercises/search?${params.toString()}`);
   return normalizeExerciseSearch(raw);
 }
 
-export async function fetchExerciseHistory(exerciseId: string, bubbleUserId?: string): Promise<ExerciseHistoryResponse> {
+export async function fetchExerciseHistory(exerciseId: string, userId?: string): Promise<ExerciseHistoryResponse> {
   const params = new URLSearchParams();
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  if (userId) params.set("user_id", userId);
   const qs = params.toString();
   const raw = await engineFetch<unknown>(`/v1/history/exercise/${encodeURIComponent(exerciseId)}${qs ? `?${qs}` : ""}`);
   return normalizeExerciseHistory(raw);
@@ -484,37 +484,37 @@ function normalizeExerciseSummary(raw: unknown): ExerciseSummaryResponse {
   };
 }
 
-export async function getSessionHistoryMetrics(bubbleUserId?: string): Promise<SessionHistoryMetrics> {
+export async function getSessionHistoryMetrics(userId?: string): Promise<SessionHistoryMetrics> {
   const params = new URLSearchParams();
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  if (userId) params.set("user_id", userId);
   const qs = params.toString();
-  const raw = await apiFetch<unknown>(`/api/session-history-metrics${qs ? `?${qs}` : ""}`);
+  const raw = await engineFetch<unknown>(`/api/session-history-metrics${qs ? `?${qs}` : ""}`);
   return normalizeSessionHistoryMetrics(raw);
 }
 
-export async function getPrsFeed(bubbleUserId?: string): Promise<PrsFeedResponse> {
+export async function getPrsFeed(userId?: string): Promise<PrsFeedResponse> {
   const params = new URLSearchParams();
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
+  if (userId) params.set("user_id", userId);
   const qs = params.toString();
-  const raw = await apiFetch<unknown>(`/api/prs-feed${qs ? `?${qs}` : ""}`);
+  const raw = await engineFetch<unknown>(`/api/prs-feed${qs ? `?${qs}` : ""}`);
   return normalizePrsFeed(raw);
 }
 
-export async function searchLoggedExercises(q: string, bubbleUserId?: string): Promise<LoggedExerciseItem[]> {
+export async function searchLoggedExercises(q: string, userId?: string): Promise<LoggedExerciseItem[]> {
   const term = q.trim();
   if (term.length < 2) return [];
 
   const params = new URLSearchParams();
   params.set("q", term);
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
-  const raw = await apiFetch<unknown>(`/api/logged-exercises/search?${params.toString()}`);
+  if (userId) params.set("user_id", userId);
+  const raw = await engineFetch<unknown>(`/api/logged-exercises/search?${params.toString()}`);
   return normalizeLoggedExercises(raw);
 }
 
-export async function getExerciseSummary(exerciseId: string, bubbleUserId?: string): Promise<ExerciseSummaryResponse> {
+export async function getExerciseSummary(exerciseId: string, userId?: string): Promise<ExerciseSummaryResponse> {
   const params = new URLSearchParams();
   params.set("exercise_id", exerciseId);
-  if (bubbleUserId) params.set("bubble_user_id", bubbleUserId);
-  const raw = await apiFetch<unknown>(`/api/exercise-summary?${params.toString()}`);
+  if (userId) params.set("user_id", userId);
+  const raw = await engineFetch<unknown>(`/api/exercise-summary?${params.toString()}`);
   return normalizeExerciseSummary(raw);
 }

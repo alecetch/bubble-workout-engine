@@ -18,12 +18,11 @@ function toLocalIsoDate(date: Date): string {
 
 export function TodayScreen(): React.JSX.Element {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
-  const bubbleUserId = useSessionStore((state) => state.userId) ?? undefined;
   const userId = useSessionStore((state) => state.userId) ?? undefined;
   const activeProgramId = useSessionStore((state) => state.activeProgramId);
   const hasNavigatedRef = useRef<string | null>(null);
 
-  const overviewQuery = useProgramOverview(activeProgramId ?? "", { bubbleUserId, userId });
+  const overviewQuery = useProgramOverview(activeProgramId ?? "", { userId });
   const calendarDays = overviewQuery.data?.calendarDays ?? [];
   const todayIso = useMemo(() => toLocalIsoDate(new Date()), []);
 

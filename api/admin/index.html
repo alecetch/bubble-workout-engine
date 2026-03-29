@@ -219,6 +219,17 @@
         border-color: var(--primary);
         color: #fff;
       }
+      button.saved {
+        background: var(--success);
+        border-color: var(--success);
+        color: #fff;
+      }
+      button:disabled {
+        background: #e5e7eb;
+        border-color: #d1d5db;
+        color: #9ca3af;
+        cursor: default;
+      }
       button.danger {
         border-color: #f0b7bf;
         color: #b42318;
@@ -325,6 +336,7 @@
             <a href="/admin-ui/index.html">Config Editor</a>
             <a href="/admin/coverage">Coverage Report</a>
             <a href="/admin/exercises">Exercise Catalogue</a>
+            <a href="/admin/preview">Program Preview</a>
             <a href="/admin/narration">Narration Templates</a>
             <a href="/admin/observability">Observability</a>
           </div>
@@ -347,7 +359,19 @@
       const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
       const DURATIONS = ["40", "50", "60"];
       const BLOCKS = ["A", "B", "C", "D"];
-      const REQUIRE_PREF_OPTIONS = ["", "strength_main", "hypertrophy_secondary"];
+      const REQUIRE_PREF_OPTIONS = [
+        "",
+        "strength_main",
+        "hypertrophy_secondary",
+        "conditioning_main",
+        "finisher",
+        "hyrox_buy_in",
+        "hyrox_station",
+        "hyrox_power",
+        "ski_erg",
+        "row_erg",
+        "bike_erg",
+      ];
       const PREF_MODE_OPTIONS = ["", "strict", "soft"];
       const SEGMENT_TYPES = ["single", "superset", "giant_set", "amrap", "emom"];
       const PURPOSE_TYPES = ["main", "secondary", "accessory"];
@@ -712,7 +736,7 @@
                   <input id="active-toggle" type="checkbox" ${activeChecked} />
                   Active
                 </label>
-                <button id="save-btn-top" class="primary" type="button">Save</button>
+                <button id="save-btn-top" class="primary" type="button">Save Changes</button>
               </div>
             </div>
           </section>
@@ -834,13 +858,14 @@
           </details>
 
           <div class="sticky-actions">
-            <button id="save-btn" class="primary" type="button">Save</button>
+            <button id="save-btn" class="primary" type="button">Save Changes</button>
             <button id="discard-btn" type="button">Discard</button>
             <span id="save-status" class="status"></span>
           </div>
         `;
 
         wireEditorEvents();
+        updateSaveBtnState(state.isDirty);
         renderStickyStatus();
       }
 
@@ -974,6 +999,7 @@
       function onStructuredChanged() {
         state.rawEdited = false;
         state.isDirty = true;
+        updateSaveBtnState(true);
         updateFromStructuredInputs();
         syncRaw();
       }
@@ -1349,6 +1375,8 @@
         if (rawJsonEl) {
           rawJsonEl.addEventListener("input", () => {
             state.rawEdited = true;
+            state.isDirty = true;
+            updateSaveBtnState(true);
             state.rawText = rawJsonEl.value;
           });
         }
@@ -1362,6 +1390,8 @@
               raw.value = JSON.stringify(parsed, null, 2);
               state.rawText = raw.value;
               state.rawEdited = true;
+              state.isDirty = true;
+              updateSaveBtnState(true);
               setStatus("JSON formatted", "ok");
             } catch {
               setStatus("Invalid JSON in raw editor", "err");
@@ -1449,6 +1479,17 @@
         });
       }
 
+      function updateSaveBtnState(isDirty) {
+        for (const id of ["save-btn", "save-btn-top"]) {
+          const btn = document.getElementById(id);
+          if (!btn) continue;
+          btn.classList.toggle("primary", isDirty);
+          btn.classList.toggle("saved", !isDirty);
+          btn.textContent = isDirty ? "Save Changes" : "Saved";
+          btn.disabled = !isDirty;
+        }
+      }
+
       async function onSave() {
         try {
           let baseJson = {};
@@ -1478,6 +1519,7 @@
 
           state.rawEdited = false;
           state.isDirty = false;
+          updateSaveBtnState(false);
           setStatus("Saved ✓", "ok");
           if (data?.config) {
             state.configRow = { ...state.configRow, ...data.config };

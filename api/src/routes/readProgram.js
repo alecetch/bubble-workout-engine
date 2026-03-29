@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
+import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
 
 export const readProgramRouter = express.Router();
 
@@ -31,11 +32,11 @@ const SEGMENT_TYPE_LABELS = {
   cooldown: "Cool-down",
 };
 
-function segmentTypeLabel(segment_type) {
+export function segmentTypeLabel(segment_type) {
   return SEGMENT_TYPE_LABELS[safeString(segment_type)] ?? safeString(segment_type);
 }
 
-function parseEquipmentSlugs(rows) {
+export function parseEquipmentSlugs(rows) {
   // equipment_items_slugs_csv is a text column (default ''), comma-separated.
   const slugs = [];
   for (const r of rows) {
@@ -47,36 +48,6 @@ function parseEquipmentSlugs(rows) {
     }
   }
   return uniq(slugs);
-}
-
-async function resolveUserId(client, query) {
-  const user_id = safeString(query.user_id);
-  const bubble_user_id = safeString(query.bubble_user_id);
-
-  if (user_id) {
-    requireUuid(user_id, "user_id");
-    return user_id;
-  }
-
-  if (!bubble_user_id) {
-    throw new RequestValidationError("Provide user_id or bubble_user_id");
-  }
-
-  const r = await client.query(
-    `
-    SELECT id
-    FROM app_user
-    WHERE bubble_user_id = $1
-    LIMIT 1
-    `,
-    [bubble_user_id],
-  );
-
-  if (r.rowCount === 0) {
-    throw new NotFoundError("User not found for bubble_user_id");
-  }
-
-  return r.rows[0].id;
 }
 
 function mapError(err) {
@@ -93,20 +64,35 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-// ---- GET /api/program/:program_id/overview ----
-// Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs).
-readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
-  const { request_id } = req;
-  const program_id = safeString(req.params.program_id);
-  const selected_program_day_id = safeString(req.query.selected_program_day_id);
+export function createReadProgramHandlers(db = pool) {
+  async function resolveUserId(client, query) {
+    const requestedUserId = readRequestedUserId(query);
 
-  try {
-    requireUuid(program_id, "program_id");
-    if (selected_program_day_id) requireUuid(selected_program_day_id, "selected_program_day_id");
+    if (requestedUserId) {
+      if (isUuid(requestedUserId)) {
+        requireUuid(requestedUserId, "user_id");
+        return requestedUserId;
+      }
+      const internalUserId = await findInternalUserIdByExternalId(client, requestedUserId);
+      if (internalUserId) return internalUserId;
+      throw new NotFoundError("User not found for user_id");
+    }
 
-    const client = await pool.connect();
+    throw new RequestValidationError("Provide user_id");
+  }
+
+  async function programOverview(req, res) {
+    const { request_id } = req;
+    const program_id = safeString(req.params.program_id);
+    const selected_program_day_id = safeString(req.query.selected_program_day_id);
+
     try {
-      const user_id = await resolveUserId(client, req.query);
+      requireUuid(program_id, "program_id");
+      if (selected_program_day_id) requireUuid(selected_program_day_id, "selected_program_day_id");
+
+      const client = await db.connect();
+      try {
+        const user_id = await resolveUserId(client, req.query);
 
       // 1) Program (guard by user_id)
       const prgR = await client.query(
@@ -253,40 +239,38 @@ readProgramRouter.get("/program/:program_id/overview", async (req, res) => {
         }
       }
 
-      return res.json({
-        ok: true,
-        program,
-        weeks: weeksR.rows,
-        calendar_days: calR.rows,
-        selected_day,
+        return res.json({
+          ok: true,
+          program,
+          weeks: weeksR.rows,
+          calendar_days: calR.rows,
+          selected_day,
+        });
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
       });
-    } finally {
-      client.release();
     }
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-      details: mapped.details,
-    });
   }
-});
 
-// ---- GET /api/day/:program_day_id/full ----
-// Returns: day header + ordered segments[] with nested items[].
-readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
-  const { request_id } = req;
-  const program_day_id = safeString(req.params.program_day_id);
+  async function dayFull(req, res) {
+    const { request_id } = req;
+    const program_day_id = safeString(req.params.program_day_id);
 
-  try {
-    requireUuid(program_day_id, "program_day_id");
-
-    const client = await pool.connect();
     try {
-      const user_id = await resolveUserId(client, req.query);
+      requireUuid(program_day_id, "program_day_id");
+
+      const client = await db.connect();
+      try {
+        const user_id = await resolveUserId(client, req.query);
 
       // 1) Day header (guard by user_id via program)
       const dayR = await client.query(
@@ -432,40 +416,38 @@ readProgramRouter.get("/day/:program_day_id/full", async (req, res) => {
         });
       }
 
-      return res.json({
-        ok: true,
-        day,
-        segments,
+        return res.json({
+          ok: true,
+          day,
+          segments,
+        });
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
       });
-    } finally {
-      client.release();
     }
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-      details: mapped.details,
-    });
   }
-});
 
-// ---- PATCH /api/day/:program_day_id/complete ----
-// Marks (or unmarks) a program day as completed.
-readProgramRouter.patch("/day/:program_day_id/complete", async (req, res) => {
-  const { request_id } = req;
-  const program_day_id = safeString(req.params.program_day_id);
-  const is_completed = req.body?.is_completed !== false; // default true
+  async function dayComplete(req, res) {
+    const { request_id } = req;
+    const program_day_id = safeString(req.params.program_day_id);
+    const is_completed = req.body?.is_completed !== false; // default true
 
-  try {
-    requireUuid(program_day_id, "program_day_id");
-
-    const client = await pool.connect();
     try {
-      // Accept identity from body (PATCH) or query (fallback).
-      const user_id = await resolveUserId(client, { ...req.query, ...req.body });
+      requireUuid(program_day_id, "program_day_id");
+
+      const client = await db.connect();
+      try {
+        // Accept identity from body (PATCH) or query (fallback).
+        const user_id = await resolveUserId(client, { ...req.query, ...req.body });
 
       const r = await client.query(
         `UPDATE program_day pd
@@ -480,18 +462,35 @@ readProgramRouter.patch("/day/:program_day_id/complete", async (req, res) => {
 
       if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
 
-      return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
-    } finally {
-      client.release();
+        return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
     }
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-      details: mapped.details,
-    });
   }
-});
+
+  return { programOverview, dayFull, dayComplete };
+}
+
+const handlers = createReadProgramHandlers();
+
+// ---- GET /api/program/:program_id/overview ----
+// Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs).
+readProgramRouter.get("/program/:program_id/overview", handlers.programOverview);
+
+// ---- GET /api/day/:program_day_id/full ----
+// Returns: day header + ordered segments[] with nested items[].
+readProgramRouter.get("/day/:program_day_id/full", handlers.dayFull);
+
+// ---- PATCH /api/day/:program_day_id/complete ----
+// Marks (or unmarks) a program day as completed.
+readProgramRouter.patch("/day/:program_day_id/complete", handlers.dayComplete);

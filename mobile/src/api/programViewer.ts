@@ -2,7 +2,6 @@ import { apiFetch } from "./client";
 
 export type ViewerIdentityOptions = {
   userId?: string;
-  bubbleUserId?: string;
 };
 
 export type ProgramOverviewOptions = ViewerIdentityOptions & {
@@ -139,9 +138,7 @@ function toIsoDateFromMs(value: unknown): string | undefined {
 
 function buildIdentityQuery(opts: ViewerIdentityOptions): URLSearchParams {
   const params = new URLSearchParams();
-  if (opts.bubbleUserId) {
-    params.set("bubble_user_id", opts.bubbleUserId);
-  } else if (opts.userId) {
+  if (opts.userId) {
     params.set("user_id", opts.userId);
   }
   return params;
@@ -327,7 +324,6 @@ export async function markProgramDayComplete(
     method: "PATCH",
     body: {
       is_completed: isCompleted,
-      ...(opts.bubbleUserId ? { bubble_user_id: opts.bubbleUserId } : {}),
       ...(opts.userId ? { user_id: opts.userId } : {}),
     },
   });

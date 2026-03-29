@@ -232,6 +232,7 @@ test("pickWithFallback returns a soft-pref match instead of null", () => {
     picked_mp_relaxed: 0,
     picked_allow_dup: 0,
     avoided_repeat_sw2: 0,
+    avoided_repeat_cn: 0,
   };
 
   const picked = pickWithFallback(
@@ -250,6 +251,76 @@ test("pickWithFallback returns a soft-pref match instead of null", () => {
   );
 
   assert.equal(picked?.id, "fallback");
+});
+
+test("buildProgramFromDefinition avoids same-day equipment variants with matching canonical names", async () => {
+  const exercises = [
+    makeExercise({
+      id: "db_bss",
+      name: "Dumbbell Bulgarian Split Squat",
+      mp: "lunge",
+      sw: "lunge_group",
+      sw2: "lunge_comp",
+      pref: ["strength_main"],
+      movementClass: "compound",
+      equipment: ["dumbbells"],
+      regions: ["quads", "glutes"],
+    }),
+    makeExercise({
+      id: "kb_bss",
+      name: "Kettlebell Bulgarian Split Squat",
+      mp: "lunge",
+      sw: "lunge_group",
+      sw2: "lunge_comp",
+      pref: ["strength_main"],
+      movementClass: "compound",
+      equipment: ["kettlebells"],
+      regions: ["quads", "glutes"],
+    }),
+    makeExercise({
+      id: "walking_lunge",
+      name: "Walking Lunge",
+      mp: "lunge",
+      sw: "lunge_group",
+      sw2: "lunge_comp",
+      pref: ["strength_main"],
+      movementClass: "compound",
+      equipment: [],
+      regions: ["quads", "glutes"],
+    }),
+  ];
+  const compiledConfig = makeCompiledConfig([
+    {
+      day_key: "day1",
+      focus: "lower_strength",
+      ordered_slots: [
+        {
+          slot: "B:lunge",
+          sw2: "lunge_comp",
+          requirePref: "strength_main",
+        },
+        {
+          slot: "C:lunge_accessory",
+          sw2: "lunge_comp",
+          requirePref: "strength_main",
+        },
+      ],
+    },
+  ]);
+
+  const built = await buildProgramFromDefinition({
+    inputs: {
+      exercises: { response: { results: exercises } },
+      clientProfile: { response: { fitness_rank: 1, equipment_items_slugs: ["dumbbells", "kettlebells"] } },
+      allowed_exercise_ids: ["db_bss", "kb_bss", "walking_lunge"],
+    },
+    request: { duration_mins: 40, days_per_week: 1 },
+    compiledConfig,
+  });
+
+  const pickedIds = built.program.days[0].blocks.filter((b) => b.ex_id).map((b) => b.ex_id);
+  assert.deepEqual(pickedIds, ["db_bss", "walking_lunge"]);
+  assert.equal(built.debug.avoided_repeat_cn, 1);
 });
 
 test("buildProgramFromDefinition resolves minimal-equipment squat variant", async () => {

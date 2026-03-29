@@ -16,6 +16,8 @@ function mockDb(responses) {
 
 test("toApiShape maps all DB columns to camelCase API fields", () => {
   const row = {
+    id: "profile-uuid-123",
+    user_id: "pg-user-123",
     bubble_client_profile_id: "buid-123",
     main_goals_slugs: ["strength"],
     fitness_level_slug: "intermediate",
@@ -36,8 +38,8 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
   };
 
   assert.deepEqual(toApiShape(row), {
-    id: "buid-123",
-    userId: "buid-123",
+    id: "profile-uuid-123",
+    userId: "pg-user-123",
     goals: ["strength"],
     fitnessLevel: "intermediate",
     injuryFlags: ["knee_issues"],
@@ -116,17 +118,25 @@ test("upsertProfile returns null when both INSERT and SELECT return nothing", as
 
 test("getProfileByBubbleUserId returns null when no row found", async () => {
   const svc = makeClientProfileService(mockDb([{ rowCount: 0, rows: [] }]));
-  const result = await svc.getProfileByBubbleUserId("bubble-user-1");
+  const result = await svc.getProfileByUserId("user-1");
   assert.equal(result, null);
 });
 
-test("getProfileByBubbleUserId returns toApiShape(row) when row found", async () => {
+test("getProfileByUserId returns toApiShape(row) when row found", async () => {
   const svc = makeClientProfileService(mockDb([
-    { rowCount: 1, rows: [{ bubble_client_profile_id: "buid-xyz", main_goals_slugs: ["strength"] }] },
+    { rowCount: 1, rows: [{ id: "profile-xyz", bubble_client_profile_id: "legacy-profile", main_goals_slugs: ["strength"] }] },
   ]));
-  const result = await svc.getProfileByBubbleUserId("bubble-user-1");
-  assert.equal(result.id, "buid-xyz");
+  const result = await svc.getProfileByUserId("user-1");
+  assert.equal(result.id, "profile-xyz");
   assert.deepEqual(result.goals, ["strength"]);
+});
+
+test("getProfileById returns toApiShape(row) when row found", async () => {
+  const svc = makeClientProfileService(mockDb([
+    { rowCount: 1, rows: [{ id: "profile-xyz", bubble_client_profile_id: "legacy-profile" }] },
+  ]));
+  const result = await svc.getProfileById("profile-xyz");
+  assert.equal(result.id, "profile-xyz");
 });
 
 test("patchProfile returns null when no row matches", async () => {
@@ -148,7 +158,8 @@ test("patchProfile builds SET clause for known fields only", async () => {
   assert.match(capturedSql, /fitness_level_slug = \$1/);
   assert.match(capturedSql, /main_goals_slugs = \$2/);
   assert.match(capturedSql, /updated_at = now\(\)/);
-  assert.match(capturedSql, /WHERE bubble_client_profile_id = \$3/);
+  assert.match(capturedSql, /WHERE id::text = \$3/);
+  assert.match(capturedSql, /OR bubble_client_profile_id = \$3/);
 });
 
 test("patchProfile ignores fields not in profileFieldToColumn", async () => {
@@ -195,9 +206,9 @@ test("patchProfile empty patch only updates updated_at", async () => {
 
 test("patchProfile returns toApiShape of updated row", async () => {
   const svc = makeClientProfileService(mockDb([
-    { rowCount: 1, rows: [{ bubble_client_profile_id: "buid-xyz", fitness_level_slug: "advanced" }] },
+    { rowCount: 1, rows: [{ id: "profile-xyz", bubble_client_profile_id: "buid-xyz", fitness_level_slug: "advanced" }] },
   ]));
   const result = await svc.patchProfile("buid-xyz", { fitnessLevel: "advanced" });
-  assert.equal(result.id, "buid-xyz");
+  assert.equal(result.id, "profile-xyz");
   assert.equal(result.fitnessLevel, "advanced");
 });

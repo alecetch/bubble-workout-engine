@@ -1,11 +1,14 @@
 import rateLimit from "express-rate-limit";
 
+const isDev = process.env.NODE_ENV !== "production";
+
 function buildLimiter(windowMs, max, message) {
   return rateLimit({
     windowMs,
     max,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: isDev ? () => true : undefined,
     message: {
       ok: false,
       code: "rate_limited",

@@ -23,6 +23,7 @@ docker compose logs -f
 docker compose logs -f api
 docker compose logs -f db
 docker compose logs -f flyway
+
 ```
 
 ### API container
@@ -63,7 +64,8 @@ docker compose down -v --remove-orphans
 
 ```powershell
 # Run pending migrations (versioned V__ and repeatable R__ that changed)
-docker compose --profile tools run --rm flyway
+#docker compose --profile tools run --rm flyway # try the next line instead
+docker compose --profile tools up flyway
 
 # Check migration status / history
 docker compose --profile tools run --rm flyway info

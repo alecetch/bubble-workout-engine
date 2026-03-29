@@ -23,4 +23,5 @@ export const pool = new Pool({
   ...poolConfig,
   max: Number(process.env.PGPOOL_MAX || 10),
   idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
 });

@@ -1131,6 +1131,45 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/execute-migration
   }
 });
 
+// POST /admin/exercise-catalogue/session/apply-to-db
+// Executes all pending queued changes directly against Postgres — no migration file written.
+adminExerciseCatalogueRouter.post("/exercise-catalogue/session/apply-to-db", async (req, res) => {
+  try {
+    if (_pending.length === 0) {
+      return res.status(400).json({ ok: false, error: "No pending changes to apply" });
+    }
+    const validation = validatePendingItems(_pending);
+    if (!validation.ok) {
+      return res.status(400).json({ ok: false, error: validation.error });
+    }
+    const items = _pending.map((item) => ({ ...item }));
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const item of items) {
+        await client.query(item.sql);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ ok: false, error: `SQL execution failed: ${err.message}` });
+    } finally {
+      client.release();
+    }
+    _pending.length = 0;
+    invalidateCache();
+    await auditLog(req, {
+      action: "apply_to_db",
+      entity: "exercise_catalogue",
+      entityId: null,
+      detail: { item_count: items.length },
+    });
+    return res.json({ ok: true, applied_count: items.length, message: `${items.length} change(s) applied to database.` });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+
 // POST /admin/exercise-catalogue/session/export-snapshot
 // Overwrites R__exercise_catalogue_edits.sql with a full snapshot of the current DB state.
 // Safe: uses DELETE-WHERE-NOT-IN + upsert so FK references to existing rows are preserved.
@@ -1190,3 +1229,81 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/generate-id", (req, res) 
   if (!name) return res.status(400).json({ ok: false, error: "name required" });
   return res.json({ exercise_id: generateExerciseId(name) });
 });
+
+// ── Equipment Items CRUD ───────────────────────────────────────────────────
+
+// GET /admin/equipment-items
+adminExerciseCatalogueRouter.get("/equipment-items", async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, bubble_id, name, category, exercise_slug,
+              commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment
+       FROM equipment_items ORDER BY category, name`
+    );
+    return res.json({ ok: true, items: result.rows });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+
+// POST /admin/equipment-items
+adminExerciseCatalogueRouter.post("/equipment-items", async (req, res) => {
+  try {
+    const { name, category, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment } = req.body ?? {};
+    if (!name || !exercise_slug) {
+      return res.status(400).json({ ok: false, error: "name and exercise_slug are required" });
+    }
+    const bubble_id = `admin_${Date.now()}`;
+    const result = await pool.query(
+      `INSERT INTO equipment_items
+         (bubble_id, name, category, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),now())
+       RETURNING id`,
+      [bubble_id, name, category ?? null, exercise_slug, !!commercial_gym, !!crossfit_hyrox_gym, !!decent_home_gym, !!minimal_equipment, !!no_equipment]
+    );
+    invalidateCache();
+    await auditLog(req, { action: "create_equipment_item", entity: "equipment_items", entityId: result.rows[0].id, detail: { name, exercise_slug } });
+    return res.json({ ok: true, id: result.rows[0].id, message: "Created." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+
+// PUT /admin/equipment-items/:id
+adminExerciseCatalogueRouter.put("/equipment-items/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, category, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment } = req.body ?? {};
+    if (!name || !exercise_slug) {
+      return res.status(400).json({ ok: false, error: "name and exercise_slug are required" });
+    }
+    const result = await pool.query(
+      `UPDATE equipment_items
+       SET name=$1, category=$2, exercise_slug=$3,
+           commercial_gym=$4, crossfit_hyrox_gym=$5, decent_home_gym=$6,
+           minimal_equipment=$7, no_equipment=$8, updated_at=now()
+       WHERE id=$9 RETURNING id`,
+      [name, category ?? null, exercise_slug, !!commercial_gym, !!crossfit_hyrox_gym, !!decent_home_gym, !!minimal_equipment, !!no_equipment, id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ ok: false, error: "Item not found" });
+    invalidateCache();
+    await auditLog(req, { action: "update_equipment_item", entity: "equipment_items", entityId: id, detail: { name, exercise_slug } });
+    return res.json({ ok: true, message: "Updated." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+
+// DELETE /admin/equipment-items/:id
+adminExerciseCatalogueRouter.delete("/equipment-items/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM equipment_items WHERE id=$1", [id]);
+    invalidateCache();
+    await auditLog(req, { action: "delete_equipment_item", entity: "equipment_items", entityId: id, detail: {} });
+    return res.json({ ok: true, message: "Deleted." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+

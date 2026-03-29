@@ -20,7 +20,7 @@ const profileFieldToColumn = new Map([
 ]);
 
 export function makeClientProfileService(db = defaultPool) {
-  async function upsertUser(bubbleUserId) {
+  async function upsertUser(userId) {
     const result = await db.query(
       `
       INSERT INTO app_user (bubble_user_id)
@@ -29,13 +29,13 @@ export function makeClientProfileService(db = defaultPool) {
       DO UPDATE SET updated_at = now()
       RETURNING id
       `,
-      [bubbleUserId],
+      [userId],
     );
 
     return { id: result.rows[0].id };
   }
 
-  async function upsertProfile(pgUserId, bubbleClientProfileId) {
+  async function upsertProfile(pgUserId, legacyProfileKey) {
     const insertResult = await db.query(
       `
       INSERT INTO client_profile (user_id, bubble_client_profile_id)
@@ -44,7 +44,7 @@ export function makeClientProfileService(db = defaultPool) {
       DO NOTHING
       RETURNING id
       `,
-      [pgUserId, bubbleClientProfileId],
+      [pgUserId, legacyProfileKey],
     );
 
     if (insertResult.rowCount > 0) {
@@ -58,13 +58,13 @@ export function makeClientProfileService(db = defaultPool) {
       WHERE bubble_client_profile_id = $1
       LIMIT 1
       `,
-      [bubbleClientProfileId],
+      [legacyProfileKey],
     );
 
     return selectResult.rows[0]?.id ?? null;
   }
 
-  async function getProfileByBubbleUserId(bubbleUserId) {
+  async function getProfileByUserId(userId) {
     const result = await db.query(
       `
       SELECT cp.*
@@ -73,7 +73,26 @@ export function makeClientProfileService(db = defaultPool) {
       WHERE au.bubble_user_id = $1
       LIMIT 1
       `,
-      [bubbleUserId],
+      [userId],
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    return toApiShape(result.rows[0]);
+  }
+
+  async function getProfileById(profileId) {
+    const result = await db.query(
+      `
+      SELECT cp.*
+      FROM client_profile cp
+      WHERE cp.id::text = $1
+         OR cp.bubble_client_profile_id = $1
+      LIMIT 1
+      `,
+      [profileId],
     );
 
     if (result.rowCount === 0) {
@@ -102,7 +121,8 @@ export function makeClientProfileService(db = defaultPool) {
       `
       UPDATE client_profile
       SET ${assignments.join(", ")}
-      WHERE bubble_client_profile_id = $${values.length}
+      WHERE id::text = $${values.length}
+         OR bubble_client_profile_id = $${values.length}
       RETURNING *
       `,
       values,
@@ -115,19 +135,20 @@ export function makeClientProfileService(db = defaultPool) {
     return toApiShape(result.rows[0]);
   }
 
-  return { upsertUser, upsertProfile, getProfileByBubbleUserId, patchProfile };
+  return { upsertUser, upsertProfile, getProfileByUserId, getProfileById, patchProfile };
 }
 
 const _default = makeClientProfileService();
 export const upsertUser = _default.upsertUser;
 export const upsertProfile = _default.upsertProfile;
-export const getProfileByBubbleUserId = _default.getProfileByBubbleUserId;
+export const getProfileByUserId = _default.getProfileByUserId;
+export const getProfileById = _default.getProfileById;
 export const patchProfile = _default.patchProfile;
 
 export function toApiShape(row) {
   return {
-    id: row.bubble_client_profile_id,
-    userId: row.bubble_client_profile_id,
+    id: row.id ?? row.bubble_client_profile_id,
+    userId: row.user_id ?? null,
     goals: row.main_goals_slugs ?? [],
     fitnessLevel: row.fitness_level_slug ?? null,
     injuryFlags: row.injury_flags ?? [],

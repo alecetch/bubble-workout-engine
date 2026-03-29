@@ -23,7 +23,7 @@ type LogSegmentModalProps = {
   segment: Segment | null;
   programDayId: string;
   programId: string;
-  bubbleUserId?: string;
+  userId?: string;
   onClose: () => void;
   onSave: () => void;
 };
@@ -56,7 +56,7 @@ export function LogSegmentModal({
   segment,
   programDayId,
   programId,
-  bubbleUserId,
+  userId,
   onClose,
   onSave,
 }: LogSegmentModalProps): React.JSX.Element {
@@ -69,7 +69,7 @@ export function LogSegmentModal({
   const existingLogsQuery = useSegmentExerciseLogs(
     segment?.id ?? null,
     programDayId,
-    { bubbleUserId },
+    { userId },
   );
 
   const saveMutation = useSaveSegmentLogs();
@@ -118,7 +118,7 @@ export function LogSegmentModal({
     });
 
     const payload: SaveSegmentLogPayload = {
-      bubbleUserId,
+      userId,
       programId,
       programDayId,
       workoutSegmentId: segment.id,

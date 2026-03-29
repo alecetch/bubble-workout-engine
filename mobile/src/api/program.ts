@@ -58,22 +58,22 @@ async function generateAtEndpoint(
   const body =
     endpoint === "/generate-plan-v2"
       ? {
-          dev_user_id: payload.userId,
-          dev_client_profile_id: payload.clientProfileId,
+          user_id: payload.userId,
+          client_profile_id: payload.clientProfileId,
           programType: payload.programType,
           anchor_date_ms: payload.anchor_date_ms,
         }
       : endpoint === "/generate-plan"
         ? {
-            clientProfileId: payload.clientProfileId,
-            bubble_user_id: payload.userId,
-            bubble_client_profile_id: payload.clientProfileId,
+          clientProfileId: payload.clientProfileId,
+            user_id: payload.userId,
+            client_profile_id: payload.clientProfileId,
             programType: payload.programType,
             anchor_date_ms: payload.anchor_date_ms,
           }
         : {
-            bubble_user_id: payload.userId,
-            bubble_client_profile_id: payload.clientProfileId,
+            user_id: payload.userId,
+            client_profile_id: payload.clientProfileId,
             programType: payload.programType,
             anchor_date_ms: payload.anchor_date_ms,
           };

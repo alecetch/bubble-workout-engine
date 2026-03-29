@@ -1,45 +1,45 @@
 // api/src/middleware/resolveUser.js
 import { pool } from "../db.js";
+import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
 
 /**
- * Async middleware — resolves bubble_user_id query param to an internal user UUID
+ * Async middleware — resolves user_id query param to an internal user UUID
  * and sets req.auth.user_id so that subsequent handlers can read it via toAuthUserId().
  *
- * Falls through without modifying req if bubble_user_id is not provided,
+ * Falls through without modifying req if user_id is not provided,
  * allowing JWT-based auth paths to work unchanged.
  */
-export function makeResolveBubbleUser(db = pool) {
-  return async function resolveBubbleUser(req, res, next) {
+export function makeResolveUser(db = pool) {
+  return async function resolveUser(req, res, next) {
     const { request_id } = req;
-    const bubbleUserId = (req.query.bubble_user_id ?? "").toString().trim();
+    const requestedUserId = readRequestedUserId(req.query);
 
-    if (!bubbleUserId) {
+    if (!requestedUserId) {
       return res.status(401).json({
         ok: false,
         request_id,
         code: "unauthorized",
-        error: "bubble_user_id is required",
+        error: "user_id is required",
       });
     }
 
     try {
-      const result = await db.query(
-        "SELECT id FROM app_user WHERE bubble_user_id = $1 LIMIT 1",
-        [bubbleUserId],
-      );
+      const internalUserId = isUuid(requestedUserId)
+        ? requestedUserId
+        : await findInternalUserIdByExternalId(db, requestedUserId);
 
-      if (result.rowCount === 0) {
+      if (!internalUserId) {
         return res.status(401).json({
           ok: false,
           code: "unauthorized",
-          error: "User not found for bubble_user_id",
+          error: "User not found for user_id",
         });
       }
 
-      req.auth = { ...(req.auth ?? {}), user_id: result.rows[0].id };
+      req.auth = { ...(req.auth ?? {}), user_id: internalUserId };
       return next();
     } catch (err) {
-      req.log.error({ event: "auth.resolve_user.error", err: err?.message }, "resolveBubbleUser DB error");
+      req.log.error({ event: "auth.resolve_user.error", err: err?.message }, "resolveUser DB error");
       return res.status(500).json({
         ok: false,
         code: "internal_error",
@@ -49,4 +49,4 @@ export function makeResolveBubbleUser(db = pool) {
   };
 }
 
-export const resolveBubbleUser = makeResolveBubbleUser();
+export const resolveUser = makeResolveUser();

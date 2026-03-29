@@ -694,6 +694,28 @@ SELECT
   NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_run_buy_in');
 
+-- Run buy-in: any run exercise (no equipment constraint) — catches outdoor run, treadmill, etc.
+-- Matches on sw2=run_interval (the dedicated run/row/ski family group).
+-- Priority 55: above locomotion generic (30) and treadmill-specific rule (50).
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_run_any_v2', true, 'hyrox', 1, 55,
+  NULL, NULL, 'amrap', 'locomotion', 'run_interval', NULL,
+  400, 400, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_run_any_v2');
+
 -- Wallball station
 INSERT INTO public.program_rep_rule (
   rule_id, is_active, program_type, schema_version, priority,
@@ -734,6 +756,26 @@ SELECT
   NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_ski_erg');
 
+-- Ski erg: matches new sw2=ski_interval group (replaces cyclical_compound constraint above)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_ski_erg_v2', true, 'hyrox', 1, 60,
+  NULL, NULL, 'amrap', 'cyclical_engine', 'ski_interval', 'ski_erg',
+  250, 300, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_ski_erg_v2');
+
 -- Row erg station
 INSERT INTO public.program_rep_rule (
   rule_id, is_active, program_type, schema_version, priority,
@@ -753,6 +795,26 @@ SELECT
   0, 0,
   NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_row_erg');
+
+-- Row erg: matches new sw2=row_interval group (replaces cyclical_compound constraint above)
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_amrap_row_erg_v2', true, 'hyrox', 1, 60,
+  NULL, NULL, 'amrap', 'cyclical_engine', 'row_interval', 'row_erg',
+  250, 300, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_row_erg_v2');
 
 -- Sled push station
 INSERT INTO public.program_rep_rule (

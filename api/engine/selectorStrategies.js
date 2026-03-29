@@ -30,6 +30,7 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     state.stats,
     state.usedSw2Today,
     state.usedRegionsToday,
+    state.usedCanonicalNamesToday,
   );
 }
 

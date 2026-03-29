@@ -31,9 +31,10 @@
     /* Header */
     .header { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
     .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-    .nav { display: flex; gap: 10px; }
+    .nav { display: flex; gap: 10px; flex-wrap: wrap; }
     .nav a { color: #1d4ed8; text-decoration: none; font-size: 12px; }
     .nav a:hover { text-decoration: underline; }
+    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
     .ctrl { display: grid; gap: 3px; }
     .ctrl label { font-size: 11px; color: var(--muted); }
@@ -191,9 +192,11 @@
       <h1>Exercise Catalogue</h1>
       <nav class="nav">
         <a href="/admin-ui/index.html">Config Editor</a>
-        <a href="/admin/coverage">Coverage Report</a>
-        <a href="/admin/exercises">Exercise Catalogue</a>
+        <a href="/admin/coverage">Coverage</a>
+        <a href="/admin/exercises" class="active">Exercises</a>
+        <a href="/admin/narration">Narration</a>
         <a href="/admin/observability">Observability</a>
+        <a href="/admin/preview">Preview</a>
       </nav>
     </div>
     <div class="controls">
@@ -240,7 +243,15 @@
       </div>
       <div class="ctrl">
         <label for="pattern-filter">Pattern</label>
-        <input id="pattern-filter" type="search" style="width:130px" placeholder="e.g. squat" />
+        <select id="pattern-filter" style="width:150px"><option value="">All patterns</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="sw-filter">SW (swap group 1)</label>
+        <select id="sw-filter" style="width:160px"><option value="">All SW</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="sw2-filter">SW2 (swap group 2)</label>
+        <select id="sw2-filter" style="width:180px"><option value="">All SW2</option></select>
       </div>
       <div class="ctrl">
         <label for="rank-filter">Min Rank ≤</label>
@@ -270,6 +281,10 @@
         </select>
       </div>
       <div class="ctrl">
+        <label for="pref-filter">Pref tag</label>
+        <select id="pref-filter" style="width:160px"><option value="">All pref tags</option></select>
+      </div>
+      <div class="ctrl">
         <label for="gaps-filter">Selector gaps</label>
         <select id="gaps-filter" style="width:145px">
           <option value="">Any</option>
@@ -290,6 +305,7 @@
     <button class="tab" data-tab="health">Catalogue Health</button>
     <button class="tab" data-tab="recos">Recommendations</button>
     <button class="tab" data-tab="migration">Migration Preview</button>
+    <button class="tab" data-tab="equipment">Equipment Items</button>
   </div>
 
   <!-- Browse tab -->
@@ -305,7 +321,7 @@
             <th data-sort="movement_pattern_primary">Pattern<span class="sort-icon">↕</span></th>
             <th data-sort="min_fitness_rank" style="text-align:center">Rank<span class="sort-icon">↕</span></th>
             <th data-sort="is_loadable" style="text-align:center">Loadable<span class="sort-icon">↕</span></th>
-            <th>Equipment</th>
+            <th data-sort="equipment_items_slugs">Equipment<span class="sort-icon">↕</span></th>
             <th data-sort="strength_primary_region">Region<span class="sort-icon">↕</span></th>
             <th data-sort="swap_group_id_1" title="swap_group_id_1 — used for swAny matching">sw<span class="sort-icon">↕</span></th>
             <th data-sort="swap_group_id_2" title="swap_group_id_2 — used for sw2Any matching">sw2<span class="sort-icon">↕</span></th>
@@ -340,7 +356,8 @@
   <!-- Migration Preview tab -->
   <div id="tab-migration" class="tab-panel">
     <div class="mig-toolbar">
-      <button id="mig-generate-btn">Generate Migration File on Server</button>
+      <button id="mig-apply-btn">Apply to Database</button>
+      <button id="mig-generate-btn" class="secondary">Generate Migration File on Server</button>
       <button id="mig-copy-btn" class="secondary">Copy SQL</button>
       <button id="mig-download-btn" class="secondary">Download .sql</button>
       <span id="mig-status" style="font-size:12px;color:var(--muted)"></span>
@@ -353,14 +370,67 @@
     </div>
   </div>
 
+  <!-- Equipment Items tab -->
+  <div id="tab-equipment" class="tab-panel">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <input id="eq-search" type="search" placeholder="Search name, slug or category…" style="width:260px" />
+      <button id="eq-new-btn">Add New</button>
+      <span id="eq-status" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
+    </div>
+    <table class="data-table" style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Name</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Category</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Exercise Slug</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:2px solid var(--border)" title="Commercial gym">Com</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:2px solid var(--border)" title="CrossFit / Hyrox gym">Hyrox</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:2px solid var(--border)" title="Decent home gym">Home</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:2px solid var(--border)" title="Minimal equipment">Min</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:2px solid var(--border)" title="No equipment">None</th>
+          <th style="width:60px;border-bottom:2px solid var(--border)"></th>
+        </tr>
+      </thead>
+      <tbody id="eq-table-body"></tbody>
+    </table>
+  </div>
+
 </div><!-- .page -->
+
+<!-- Equipment Items edit modal -->
+<div id="eq-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:20px 24px;width:480px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <h3 id="eq-modal-title" style="margin:0 0 16px;font-size:15px">Edit Equipment Item</h3>
+    <div style="display:grid;gap:10px">
+      <div class="f"><label>Name *</label><input id="eq-f-name" type="text" /></div>
+      <div class="f"><label>Category</label><input id="eq-f-category" type="text" /></div>
+      <div class="f"><label>Exercise Slug *</label><input id="eq-f-slug" type="text" placeholder="e.g. barbell, dumbbells" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px"><input id="eq-f-commercial" type="checkbox" /> Commercial Gym</label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px"><input id="eq-f-hyrox" type="checkbox" /> Hyrox Gym</label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px"><input id="eq-f-home" type="checkbox" /> Decent Home Gym</label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px"><input id="eq-f-minimal" type="checkbox" /> Minimal Equipment</label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px"><input id="eq-f-noequip" type="checkbox" /> No Equipment</label>
+      </div>
+      <div id="eq-modal-err" class="err" style="font-size:12px;min-height:16px"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
+      <button id="eq-modal-delete-btn" class="danger" style="display:none">Delete</button>
+      <span style="flex:1"></span>
+      <button id="eq-modal-cancel-btn" class="secondary">Cancel</button>
+      <button id="eq-modal-save-btn">Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- Session bar -->
 <div id="session-bar" class="hidden">
-  <span>Pending changes: <span id="session-count">0</span></span>
+  <span><span id="session-count">0</span> change(s) queued — keep editing or apply when ready</span>
   <span id="session-bar-spacer" class="bar-spacer"></span>
+  <button id="session-apply-btn" class="sm">Apply to Database</button>
   <button id="session-view-btn" class="secondary sm">View SQL</button>
   <button id="session-clear-btn" class="danger sm">Clear Queue</button>
+  <span id="session-apply-status" style="font-size:12px"></span>
 </div>
 
 <!-- Overlay + Edit Drawer -->
@@ -411,7 +481,7 @@
         <div class="f">
           <label for="f-movement_pattern_primary">Movement Pattern *</label>
           <div class="mp-wrapper">
-            <input id="f-movement_pattern_primary" type="text" placeholder="Search or type new…" autocomplete="off" />
+            <input id="f-movement_pattern_primary" type="text" placeholder="Search existing patterns…" autocomplete="off" />
             <ul class="mp-dropdown" id="mp-dropdown" hidden></ul>
           </div>
           <span class="mp-new-warning" id="mp-new-warning" hidden>New pattern — not in existing catalogue. Make sure this is intentional.</span>
@@ -432,7 +502,7 @@
         <div class="f">
           <label for="f-swap_group_id_1">Swap Group 1 (sw)</label>
           <div class="sw-wrapper">
-            <input id="f-swap_group_id_1" type="text" placeholder="Search or type new…" autocomplete="off" />
+            <input id="f-swap_group_id_1" type="text" placeholder="Search existing values…" autocomplete="off" />
             <ul class="sw-dropdown" id="sw1-dropdown" hidden></ul>
           </div>
           <span class="sw-new-warning" id="sw1-new-warning" hidden>New swap group — not in existing catalogue. Make sure this is intentional.</span>
@@ -442,7 +512,7 @@
         <div class="f">
           <label for="f-swap_group_id_2">Swap Group 2 (sw2)</label>
           <div class="sw-wrapper">
-            <input id="f-swap_group_id_2" type="text" placeholder="Search or type new…" autocomplete="off" />
+            <input id="f-swap_group_id_2" type="text" placeholder="Search existing values…" autocomplete="off" />
             <ul class="sw-dropdown" id="sw2-dropdown" hidden></ul>
           </div>
           <span class="sw-new-warning" id="sw2-new-warning" hidden>New swap group — not in existing catalogue. Make sure this is intentional.</span>
@@ -704,11 +774,30 @@ document.getElementById("rank-filter").addEventListener("change", renderTable);
 document.getElementById("loadable-filter").addEventListener("change", renderTable);
 document.getElementById("region-filter").addEventListener("change", renderTable);
 document.getElementById("gaps-filter").addEventListener("change", renderTable);
+document.getElementById("pattern-filter").addEventListener("change", renderTable);
+document.getElementById("sw-filter").addEventListener("change", renderTable);
+document.getElementById("sw2-filter").addEventListener("change", renderTable);
+document.getElementById("pref-filter").addEventListener("change", renderTable);
 document.getElementById("new-btn").addEventListener("click", openNewDrawer);
 
+function populateFilterDropdowns() {
+  const fill = (id, vals, allLabel) => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` +
+      vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    if (vals.includes(cur)) sel.value = cur;
+  };
+  fill("pattern-filter", [...new Set(exercises.map(e => e.movement_pattern_primary).filter(Boolean))].sort(), "All patterns");
+  fill("sw-filter",      [...new Set(exercises.map(e => e.swap_group_id_1).filter(Boolean))].sort(), "All SW");
+  fill("sw2-filter",     [...new Set(exercises.map(e => e.swap_group_id_2).filter(Boolean))].sort(), "All SW2");
+  const allPrefTags = [...new Set(exercises.flatMap(e => Array.isArray(e.preferred_in_json) ? e.preferred_in_json : []).filter(Boolean))].sort();
+  fill("pref-filter", allPrefTags, "All pref tags");
+}
+
 document.getElementById("clear-filters-btn").addEventListener("click", () => {
-  ["search-input","pattern-filter"].forEach(id => document.getElementById(id).value = "");
-  ["class-filter","archived-filter","preset-filter","rank-filter","loadable-filter","region-filter","gaps-filter"]
+  ["search-input"].forEach(id => document.getElementById(id).value = "");
+  ["class-filter","archived-filter","preset-filter","pattern-filter","sw-filter","sw2-filter","pref-filter","rank-filter","loadable-filter","region-filter","gaps-filter"]
     .forEach(id => document.getElementById(id).value = "");
   renderTable();
 });
@@ -735,6 +824,7 @@ async function loadState() {
     gaps = data.coverage_gaps ?? [];
     equipmentSlugs = data.equipmentSlugs ?? [];
     presets = data.presets ?? [];
+    populateFilterDropdowns();
     renderTable();
     setStatus(`Loaded ${exercises.length} exercises, ${gaps.length} coverage gap slots.`, "ok");
     await refreshSessionBar();
@@ -927,9 +1017,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const known = _knownPatterns();
     const matches = known.filter(p => p.includes(q));
     const rows = matches.map(p => `<li data-val="${esc(p)}">${esc(p)}</li>`);
-    if (q && !known.includes(q)) {
-      rows.push(`<li class="mp-new" data-val="${esc(q.replace(/\s+/g, '_'))}" data-new="1">Add new: "${esc(q)}"</li>`);
-    }
     if (!rows.length) { _closeDd(); return; }
     ddEl.innerHTML = rows.join("");
     ddEl.querySelectorAll("li").forEach(li =>
@@ -999,9 +1086,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const known = _known();
         const matches = known.filter(p => p.includes(q));
         const rows = matches.map(p => `<li data-val="${esc(p)}">${esc(p)}</li>`);
-        if (q && !known.includes(q)) {
-          rows.push(`<li class="sw-new" data-val="${esc(q.replace(/\s+/g, '_'))}" data-new="1">Add new: "${esc(q)}"</li>`);
-        }
         if (!rows.length) { _closeDd(); return; }
         ddEl.innerHTML = rows.join("");
         ddEl.querySelectorAll("li").forEach(li =>
@@ -1059,7 +1143,10 @@ function renderTable() {
   const cls     = document.getElementById("class-filter").value;
   const arch    = document.getElementById("archived-filter").value;
   const preset  = document.getElementById("preset-filter").value;
-  const pattern = document.getElementById("pattern-filter").value.toLowerCase();
+  const pattern = document.getElementById("pattern-filter").value;
+  const swF     = document.getElementById("sw-filter").value;
+  const sw2F    = document.getElementById("sw2-filter").value;
+  const prefF   = document.getElementById("pref-filter").value;
   const rankMax = document.getElementById("rank-filter").value;
   const loadable= document.getElementById("loadable-filter").value;
   const region  = document.getElementById("region-filter").value;
@@ -1075,7 +1162,10 @@ function renderTable() {
     if (cls && ex.movement_class !== cls) return false;
     if (arch === "" && ex.is_archived) return false;
     if (arch === "true" && !ex.is_archived) return false;
-    if (pattern && !(ex.movement_pattern_primary ?? "").toLowerCase().includes(pattern)) return false;
+    if (pattern && ex.movement_pattern_primary !== pattern) return false;
+    if (swF  && ex.swap_group_id_1 !== swF)  return false;
+    if (sw2F && ex.swap_group_id_2 !== sw2F) return false;
+    if (prefF && !(Array.isArray(ex.preferred_in_json) && ex.preferred_in_json.includes(prefF))) return false;
     if (rankMax !== "" && (ex.min_fitness_rank ?? 0) > parseInt(rankMax, 10)) return false;
     if (loadable === "yes" && !ex.is_loadable) return false;
     if (loadable === "no" && ex.is_loadable) return false;
@@ -1110,6 +1200,9 @@ function renderTable() {
     if (sortCol === "_gap_count") {
       av = gapCounts.get(a.exercise_id) ?? 0;
       bv = gapCounts.get(b.exercise_id) ?? 0;
+    } else if (sortCol === "equipment_items_slugs") {
+      av = (Array.isArray(a.equipment_items_slugs) ? a.equipment_items_slugs : (a.equipment_items_slugs ?? "").split(",").filter(Boolean)).sort().join(",");
+      bv = (Array.isArray(b.equipment_items_slugs) ? b.equipment_items_slugs : (b.equipment_items_slugs ?? "").split(",").filter(Boolean)).sort().join(",");
     } else if (sortCol === "is_archived" || sortCol === "is_loadable" || sortCol === "strength_equivalent") {
       av = a[sortCol] ? 1 : 0;
       bv = b[sortCol] ? 1 : 0;
@@ -1422,6 +1515,25 @@ async function refreshSessionBar() {
   } catch {}
 }
 
+document.getElementById("session-apply-btn").addEventListener("click", async () => {
+  const el = document.getElementById("session-apply-status");
+  el.textContent = "Applying…"; el.style.color = "#fff";
+  try {
+    const d = await apiFetch(`${BASE}/session/apply-to-db`, { method: "POST" });
+    el.textContent = d.message ?? "Done"; el.style.color = "#6ee7b7";
+    const state = await apiFetch(`${BASE}/full-state`);
+    exercises = state.exercises ?? [];
+    gaps = state.coverage_gaps ?? [];
+    equipmentSlugs = state.equipmentSlugs ?? [];
+    presets = state.presets ?? [];
+    populateFilterDropdowns();
+    renderTable();
+    await refreshSessionBar();
+    await refreshMigrationTab();
+    setTimeout(() => { el.textContent = ""; }, 3000);
+  } catch (e) { el.textContent = e.message; el.style.color = "#fca5a5"; }
+});
+
 document.getElementById("session-view-btn").addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
@@ -1451,6 +1563,24 @@ async function refreshMigrationTab() {
     document.getElementById("migration-sql").textContent = d.session_sql || (d.items ?? []).map(p => p.sql || `-- ${p.action}: ${p.exercise_id}`).join("\n\n");
   } catch {}
 }
+
+document.getElementById("mig-apply-btn").addEventListener("click", async () => {
+  const el = document.getElementById("mig-status");
+  el.textContent = "Applying…"; el.style.color = "var(--muted)";
+  try {
+    const d = await apiFetch(`${BASE}/session/apply-to-db`, { method: "POST" });
+    el.textContent = d.message ?? "Done"; el.style.color = "var(--success)";
+    const state = await apiFetch(`${BASE}/full-state`);
+    exercises = state.exercises ?? [];
+    gaps = state.coverage_gaps ?? [];
+    equipmentSlugs = state.equipmentSlugs ?? [];
+    presets = state.presets ?? [];
+    populateFilterDropdowns();
+    renderTable();
+    await refreshSessionBar();
+    await refreshMigrationTab();
+  } catch (e) { el.textContent = e.message; el.style.color = "var(--danger)"; }
+});
 
 document.getElementById("mig-generate-btn").addEventListener("click", async () => {
   const el = document.getElementById("mig-status");
@@ -1762,6 +1892,148 @@ window.toggleRecoSql = function(i) {
   const el = document.getElementById(`reco-sql-${i}`);
   el.style.display = el.style.display === "none" || !el.style.display ? "block" : "none";
 };
+
+// ── Equipment Items tab ────────────────────────────────────────────────────
+const EQ_BASE = "/admin/equipment-items";
+let eqItems = [];
+let eqEditingId = null;
+let eqLoaded = false;
+
+async function loadEquipmentItems() {
+  document.getElementById("eq-status").textContent = "Loading…";
+  try {
+    const d = await apiFetch(EQ_BASE);
+    eqItems = d.items ?? [];
+    renderEquipmentTable();
+    document.getElementById("eq-status").textContent = `${eqItems.length} item(s)`;
+  } catch (e) {
+    document.getElementById("eq-status").className = "err";
+    document.getElementById("eq-status").textContent = "Error: " + e.message;
+  }
+}
+
+function renderEquipmentTable() {
+  const q = (document.getElementById("eq-search").value ?? "").toLowerCase();
+  const rows = eqItems.filter(it =>
+    !q ||
+    (it.name ?? "").toLowerCase().includes(q) ||
+    (it.exercise_slug ?? "").toLowerCase().includes(q) ||
+    (it.category ?? "").toLowerCase().includes(q)
+  );
+  const tick = v => v ? "✓" : "";
+  document.getElementById("eq-table-body").innerHTML = rows.map(it => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px">${esc(it.name)}</td>
+      <td style="padding:6px 8px;color:var(--muted)">${esc(it.category ?? "")}</td>
+      <td style="padding:6px 8px"><code style="font-size:11px">${esc(it.exercise_slug)}</code></td>
+      <td style="padding:6px 8px;text-align:center">${tick(it.commercial_gym)}</td>
+      <td style="padding:6px 8px;text-align:center">${tick(it.crossfit_hyrox_gym)}</td>
+      <td style="padding:6px 8px;text-align:center">${tick(it.decent_home_gym)}</td>
+      <td style="padding:6px 8px;text-align:center">${tick(it.minimal_equipment)}</td>
+      <td style="padding:6px 8px;text-align:center">${tick(it.no_equipment)}</td>
+      <td style="padding:6px 8px;text-align:right"><button class="ghost sm eq-edit-btn" data-id="${esc(it.id)}">Edit</button></td>
+    </tr>
+  `).join("");
+}
+
+function openEqModal(id) {
+  const it = eqItems.find(x => x.id === id);
+  if (!it) return;
+  eqEditingId = id;
+  document.getElementById("eq-modal-title").textContent = "Edit Equipment Item";
+  document.getElementById("eq-f-name").value = it.name ?? "";
+  document.getElementById("eq-f-category").value = it.category ?? "";
+  document.getElementById("eq-f-slug").value = it.exercise_slug ?? "";
+  document.getElementById("eq-f-commercial").checked = !!it.commercial_gym;
+  document.getElementById("eq-f-hyrox").checked = !!it.crossfit_hyrox_gym;
+  document.getElementById("eq-f-home").checked = !!it.decent_home_gym;
+  document.getElementById("eq-f-minimal").checked = !!it.minimal_equipment;
+  document.getElementById("eq-f-noequip").checked = !!it.no_equipment;
+  document.getElementById("eq-modal-err").textContent = "";
+  document.getElementById("eq-modal-delete-btn").style.display = "inline-flex";
+  document.getElementById("eq-modal-overlay").style.display = "flex";
+}
+
+function openEqNewModal() {
+  eqEditingId = null;
+  document.getElementById("eq-modal-title").textContent = "Add Equipment Item";
+  document.getElementById("eq-f-name").value = "";
+  document.getElementById("eq-f-category").value = "";
+  document.getElementById("eq-f-slug").value = "";
+  document.getElementById("eq-f-commercial").checked = false;
+  document.getElementById("eq-f-hyrox").checked = false;
+  document.getElementById("eq-f-home").checked = false;
+  document.getElementById("eq-f-minimal").checked = false;
+  document.getElementById("eq-f-noequip").checked = false;
+  document.getElementById("eq-modal-err").textContent = "";
+  document.getElementById("eq-modal-delete-btn").style.display = "none";
+  document.getElementById("eq-modal-overlay").style.display = "flex";
+}
+
+function closeEqModal() {
+  document.getElementById("eq-modal-overlay").style.display = "none";
+  eqEditingId = null;
+}
+
+function collectEqPayload() {
+  return {
+    name: document.getElementById("eq-f-name").value.trim(),
+    category: document.getElementById("eq-f-category").value.trim() || null,
+    exercise_slug: document.getElementById("eq-f-slug").value.trim(),
+    commercial_gym: document.getElementById("eq-f-commercial").checked,
+    crossfit_hyrox_gym: document.getElementById("eq-f-hyrox").checked,
+    decent_home_gym: document.getElementById("eq-f-home").checked,
+    minimal_equipment: document.getElementById("eq-f-minimal").checked,
+    no_equipment: document.getElementById("eq-f-noequip").checked,
+  };
+}
+
+document.getElementById("eq-table-body").addEventListener("click", e => {
+  const btn = e.target.closest(".eq-edit-btn");
+  if (btn) openEqModal(btn.dataset.id);
+});
+document.getElementById("eq-new-btn").addEventListener("click", openEqNewModal);
+document.getElementById("eq-modal-cancel-btn").addEventListener("click", closeEqModal);
+document.getElementById("eq-modal-overlay").addEventListener("click", e => {
+  if (e.target === document.getElementById("eq-modal-overlay")) closeEqModal();
+});
+document.getElementById("eq-search").addEventListener("input", renderEquipmentTable);
+
+document.getElementById("eq-modal-save-btn").addEventListener("click", async () => {
+  const payload = collectEqPayload();
+  if (!payload.name) { document.getElementById("eq-modal-err").textContent = "Name is required."; return; }
+  if (!payload.exercise_slug) { document.getElementById("eq-modal-err").textContent = "Exercise slug is required."; return; }
+  document.getElementById("eq-modal-err").textContent = "";
+  try {
+    if (eqEditingId) {
+      await apiFetch(`${EQ_BASE}/${eqEditingId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    } else {
+      await apiFetch(EQ_BASE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    }
+    closeEqModal();
+    await loadEquipmentItems();
+  } catch (e) {
+    document.getElementById("eq-modal-err").textContent = e.message;
+  }
+});
+
+document.getElementById("eq-modal-delete-btn").addEventListener("click", async () => {
+  if (!eqEditingId) return;
+  const it = eqItems.find(x => x.id === eqEditingId);
+  if (!confirm(`Delete "${it?.name ?? eqEditingId}"? This cannot be undone.`)) return;
+  try {
+    await apiFetch(`${EQ_BASE}/${eqEditingId}`, { method: "DELETE" });
+    closeEqModal();
+    await loadEquipmentItems();
+  } catch (e) {
+    document.getElementById("eq-modal-err").textContent = e.message;
+  }
+});
+
+// Lazy-load equipment items on first tab activation
+document.querySelector('.tab[data-tab="equipment"]').addEventListener("click", () => {
+  if (!eqLoaded) { eqLoaded = true; loadEquipmentItems(); }
+});
 
 // ── Init ───────────────────────────────────────────────────────────────────
 if (ensureActiveAdminSession()) {

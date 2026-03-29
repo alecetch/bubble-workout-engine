@@ -9,7 +9,7 @@ export type SegmentLogRow = {
 };
 
 export type SaveSegmentLogPayload = {
-  bubbleUserId?: string;
+  userId?: string;
   programId: string;
   programDayId: string;
   workoutSegmentId: string;
@@ -22,13 +22,13 @@ export type SaveSegmentLogPayload = {
 };
 
 export async function getSegmentExerciseLogs(params: {
-  bubbleUserId?: string;
+  userId?: string;
   workoutSegmentId: string;
   programDayId: string;
 }): Promise<SegmentLogRow[]> {
   try {
     const query = new URLSearchParams();
-    if (params.bubbleUserId) query.set("bubble_user_id", params.bubbleUserId);
+    if (params.userId) query.set("user_id", params.userId);
     query.set("workout_segment_id", params.workoutSegmentId);
     query.set("program_day_id", params.programDayId);
 
@@ -56,7 +56,7 @@ export async function saveSegmentExerciseLogs(
   await apiFetch<unknown>("/api/segment-log", {
     method: "POST",
     body: {
-      bubble_user_id: payload.bubbleUserId,
+      user_id: payload.userId,
       program_id: payload.programId,
       program_day_id: payload.programDayId,
       workout_segment_id: payload.workoutSegmentId,

@@ -2,6 +2,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
+import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
 
 export const segmentLogRouter = express.Router();
 
@@ -12,36 +13,6 @@ class NotFoundError extends Error {
     this.status = 404;
     this.details = details;
   }
-}
-
-async function resolveUserId(client, query) {
-  const user_id = safeString(query.user_id);
-  const bubble_user_id = safeString(query.bubble_user_id);
-
-  if (user_id) {
-    requireUuid(user_id, "user_id");
-    return user_id;
-  }
-
-  if (!bubble_user_id) {
-    throw new RequestValidationError("Provide user_id or bubble_user_id");
-  }
-
-  const r = await client.query(
-    `
-    SELECT id
-    FROM app_user
-    WHERE bubble_user_id = $1
-    LIMIT 1
-    `,
-    [bubble_user_id],
-  );
-
-  if (r.rowCount === 0) {
-    throw new NotFoundError("User not found for bubble_user_id");
-  }
-
-  return r.rows[0].id;
 }
 
 function mapError(err) {
@@ -58,153 +29,178 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-segmentLogRouter.get("/segment-log", async (req, res) => {
-  const { request_id } = req;
-  const workout_segment_id = safeString(req.query.workout_segment_id);
-  const program_day_id = safeString(req.query.program_day_id);
-
-  try {
-    requireUuid(workout_segment_id, "workout_segment_id");
-    requireUuid(program_day_id, "program_day_id");
-
-    const client = await pool.connect();
-    try {
-      const user_id = await resolveUserId(client, req.query);
-      const result = await client.query(
-        `
-        SELECT id, program_exercise_id, weight_kg, reps_completed, order_index
-        FROM segment_exercise_log
-        WHERE user_id = $1
-          AND workout_segment_id = $2
-          AND program_day_id = $3
-        ORDER BY order_index ASC
-        `,
-        [user_id, workout_segment_id, program_day_id],
-      );
-
-      return res.json({ rows: result.rows });
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-      details: mapped.details,
-    });
+export function compute1rmKg(weightKg, repsCompleted, region) {
+  if (
+    !Number.isFinite(weightKg) ||
+    !Number.isFinite(repsCompleted) ||
+    weightKg <= 0 ||
+    repsCompleted < 1
+  ) {
+    return null;
   }
-});
+  const epley = weightKg * (1 + repsCompleted / 30);
+  if (region === "lower" && repsCompleted < 37) {
+    return Number(((weightKg * 36) / (37 - repsCompleted)).toFixed(2));
+  }
+  return Number(epley.toFixed(2));
+}
 
-segmentLogRouter.post("/segment-log", async (req, res) => {
-  const { request_id } = req;
-  const program_id = safeString(req.body?.program_id);
-  const program_day_id = safeString(req.body?.program_day_id);
-  const workout_segment_id = safeString(req.body?.workout_segment_id);
-  const rows = req.body?.rows;
+export function createSegmentLogHandlers(db = pool) {
+  async function resolveUserId(client, query) {
+    const requestedUserId = readRequestedUserId(query);
 
-  try {
-    requireUuid(program_id, "program_id");
-    requireUuid(program_day_id, "program_day_id");
-    requireUuid(workout_segment_id, "workout_segment_id");
-    if (!Array.isArray(rows) || rows.length === 0) {
-      throw new RequestValidationError("rows must be a non-empty array");
+    if (requestedUserId) {
+      if (isUuid(requestedUserId)) {
+        requireUuid(requestedUserId, "user_id");
+        return requestedUserId;
+      }
+      const internalUserId = await findInternalUserIdByExternalId(client, requestedUserId);
+      if (internalUserId) return internalUserId;
+      throw new NotFoundError("User not found for user_id");
     }
-    for (const row of rows) {
-      requireUuid(safeString(row?.program_exercise_id), "program_exercise_id");
-    }
 
-    const client = await pool.connect();
+    throw new RequestValidationError("Provide user_id");
+  }
+
+  async function getSegmentLog(req, res) {
+    const { request_id } = req;
+    const workout_segment_id = safeString(req.query.workout_segment_id);
+    const program_day_id = safeString(req.query.program_day_id);
+
     try {
-      const user_id = await resolveUserId(client, req.body);
-      await client.query("BEGIN");
+      requireUuid(workout_segment_id, "workout_segment_id");
+      requireUuid(program_day_id, "program_day_id");
 
-      const programExerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
-      const regionResult = await client.query(
-        `
-        SELECT pe.id AS program_exercise_id, ec.strength_primary_region
-        FROM program_exercise pe
-        LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
-        WHERE pe.id = ANY($1::uuid[])
-        `,
-        [programExerciseIds],
-      );
-      const regionByProgramExerciseId = new Map(
-        regionResult.rows.map((r) => [r.program_exercise_id, r.strength_primary_region]),
-      );
+      const client = await db.connect();
+      try {
+        const user_id = await resolveUserId(client, req.query);
+        const result = await client.query(
+          `
+          SELECT id, program_exercise_id, weight_kg, reps_completed, order_index
+          FROM segment_exercise_log
+          WHERE user_id = $1
+            AND workout_segment_id = $2
+            AND program_day_id = $3
+          ORDER BY order_index ASC
+          `,
+          [user_id, workout_segment_id, program_day_id],
+        );
 
+        return res.json({ rows: result.rows });
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
+    }
+  }
+
+  async function postSegmentLog(req, res) {
+    const { request_id } = req;
+    const program_id = safeString(req.body?.program_id);
+    const program_day_id = safeString(req.body?.program_day_id);
+    const workout_segment_id = safeString(req.body?.workout_segment_id);
+    const rows = req.body?.rows;
+
+    try {
+      requireUuid(program_id, "program_id");
+      requireUuid(program_day_id, "program_day_id");
+      requireUuid(workout_segment_id, "workout_segment_id");
+      if (!Array.isArray(rows) || rows.length === 0) {
+        throw new RequestValidationError("rows must be a non-empty array");
+      }
       for (const row of rows) {
-        const region = regionByProgramExerciseId.get(row.program_exercise_id) ?? null;
-        const weightKg = Number(row.weight_kg);
-        const repsCompleted = Number(row.reps_completed);
+        requireUuid(safeString(row?.program_exercise_id), "program_exercise_id");
+      }
 
-        let estimated1rmKg = null;
-        if (
-          Number.isFinite(weightKg) &&
-          Number.isFinite(repsCompleted) &&
-          weightKg > 0 &&
-          repsCompleted >= 1
-        ) {
-          const epley = weightKg * (1 + repsCompleted / 30);
-          if (region === "lower" && repsCompleted < 37) {
-            estimated1rmKg = (weightKg * 36) / (37 - repsCompleted);
-          } else {
-            // Fallback for upper/unknown regions and any invalid Brzycki denominator.
-            estimated1rmKg = epley;
-          }
-          estimated1rmKg = Number(estimated1rmKg.toFixed(2));
+      const client = await db.connect();
+      try {
+        const user_id = await resolveUserId(client, req.body);
+        await client.query("BEGIN");
+
+        const programExerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
+        const regionResult = await client.query(
+          `
+          SELECT pe.id AS program_exercise_id, ec.strength_primary_region
+          FROM program_exercise pe
+          LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
+          WHERE pe.id = ANY($1::uuid[])
+          `,
+          [programExerciseIds],
+        );
+        const regionByProgramExerciseId = new Map(
+          regionResult.rows.map((r) => [r.program_exercise_id, r.strength_primary_region]),
+        );
+
+        for (const row of rows) {
+          const region = regionByProgramExerciseId.get(row.program_exercise_id) ?? null;
+          const weightKg = Number(row.weight_kg);
+          const repsCompleted = Number(row.reps_completed);
+          const estimated1rmKg = compute1rmKg(weightKg, repsCompleted, region);
+
+          await client.query(
+            `
+            INSERT INTO segment_exercise_log
+              (user_id, program_id, program_day_id, workout_segment_id,
+               program_exercise_id, order_index, weight_kg, reps_completed, estimated_1rm_kg, is_draft)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false)
+            ON CONFLICT ON CONSTRAINT uq_sel_user_segment_exercise
+            DO UPDATE SET
+              weight_kg      = EXCLUDED.weight_kg,
+              reps_completed = EXCLUDED.reps_completed,
+              estimated_1rm_kg = EXCLUDED.estimated_1rm_kg,
+              order_index    = EXCLUDED.order_index,
+              is_draft       = false
+            `,
+            [
+              user_id,
+              program_id,
+              program_day_id,
+              workout_segment_id,
+              row.program_exercise_id,
+              row.order_index,
+              row.weight_kg,
+              row.reps_completed,
+              estimated1rmKg,
+            ],
+          );
         }
 
-        await client.query(
-          `
-          INSERT INTO segment_exercise_log
-            (user_id, program_id, program_day_id, workout_segment_id,
-             program_exercise_id, order_index, weight_kg, reps_completed, estimated_1rm_kg, is_draft)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false)
-          ON CONFLICT ON CONSTRAINT uq_sel_user_segment_exercise
-          DO UPDATE SET
-            weight_kg      = EXCLUDED.weight_kg,
-            reps_completed = EXCLUDED.reps_completed,
-            estimated_1rm_kg = EXCLUDED.estimated_1rm_kg,
-            order_index    = EXCLUDED.order_index,
-            is_draft       = false
-          `,
-          [
-            user_id,
-            program_id,
-            program_day_id,
-            workout_segment_id,
-            row.program_exercise_id,
-            row.order_index,
-            row.weight_kg,
-            row.reps_completed,
-            estimated1rmKg,
-          ],
-        );
+        await client.query("COMMIT");
+        return res.json({ saved: rows.length });
+      } catch (err) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          // no-op
+        }
+        throw err;
+      } finally {
+        client.release();
       }
-
-      await client.query("COMMIT");
-      return res.json({ saved: rows.length });
     } catch (err) {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        // no-op
-      }
-      throw err;
-    } finally {
-      client.release();
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
     }
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-      details: mapped.details,
-    });
   }
-});
+
+  return { getSegmentLog, postSegmentLog };
+}
+
+const handlers = createSegmentLogHandlers();
+
+segmentLogRouter.get("/segment-log", handlers.getSegmentLog);
+segmentLogRouter.post("/segment-log", handlers.postSegmentLog);

@@ -99,12 +99,12 @@ export function HistoryScreen(): React.JSX.Element {
   const queryClient = useQueryClient();
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
-  const bubbleUserId = sessionUserId ?? onboardingUserId ?? undefined;
+  const userId = sessionUserId ?? onboardingUserId ?? undefined;
 
-  const metricsQuery = useSessionHistoryMetrics(bubbleUserId);
-  const prsFeedQuery = usePrsFeed(bubbleUserId);
-  const programsQuery = useHistoryPrograms(10, bubbleUserId);
-  const timelineQuery = useHistoryTimeline(40, bubbleUserId);
+  const metricsQuery = useSessionHistoryMetrics(userId);
+  const prsFeedQuery = usePrsFeed(userId);
+  const programsQuery = useHistoryPrograms(10, userId);
+  const timelineQuery = useHistoryTimeline(40, userId);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
@@ -117,8 +117,8 @@ export function HistoryScreen(): React.JSX.Element {
     return () => clearTimeout(timeout);
   }, [searchTerm]);
 
-  const exerciseSearchQuery = useLoggedExercisesSearch(debouncedSearchTerm, bubbleUserId);
-  const exerciseSummaryQuery = useExerciseSummary(selectedExercise?.exerciseId ?? null, bubbleUserId);
+  const exerciseSearchQuery = useLoggedExercisesSearch(debouncedSearchTerm, userId);
+  const exerciseSummaryQuery = useExerciseSummary(selectedExercise?.exerciseId ?? null, userId);
 
   const metrics = metricsQuery.data;
   const prsFeed = prsFeedQuery.data;

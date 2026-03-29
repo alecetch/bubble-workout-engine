@@ -60,6 +60,8 @@ function mapExerciseRowsToBubbleResults(exerciseRows) {
     density_rating: row.density_rating ?? 0,
     complexity_rank: row.complexity_rank ?? 0,
     is_loadable: row.is_loadable ?? false,
+    strength_equivalent: row.strength_equivalent ?? false,
+    min_fitness_rank: row.min_fitness_rank ?? 0,
     movement_class: row.movement_class,
     target_regions_json: row.target_regions_json ?? [],
     warmup_hooks: row.warmup_hooks ?? [],

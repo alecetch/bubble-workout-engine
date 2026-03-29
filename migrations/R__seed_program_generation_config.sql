@@ -553,13 +553,13 @@ SELECT
           'day_key', 'engine_day',
           'focus', 'engine',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:run_buy_in', 'block', 'A', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'A:run_buy_in', 'block', 'A', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'A:station_wall', 'block', 'A', 'sw', 'wallball', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'A:run_buy_in'),
-            jsonb_build_object('slot', 'B:run_buy_in', 'block', 'B', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'B:run_buy_in', 'block', 'B', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'B:station_erg', 'block', 'B', 'sw', 'ski_erg', 'mp', 'cyclical_engine', 'requirePref', 'ski_erg', 'pref_mode', 'soft', 'fill_fallback_slot', 'B:run_buy_in'),
             jsonb_build_object('slot', 'C:station_carry', 'block', 'C', 'mp', 'carry', 'requirePref', 'hyrox_station'),
             jsonb_build_object('slot', 'C:station_lunge', 'block', 'C', 'sw', 'sandbag_lunge', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'C:station_carry'),
-            jsonb_build_object('slot', 'D:run_buy_in', 'block', 'D', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'D:run_buy_in', 'block', 'D', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'D:station_burst', 'block', 'D', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'A:station_wall')
           )
         ),
@@ -572,7 +572,7 @@ SELECT
             jsonb_build_object('slot', 'B:sled_push', 'block', 'B', 'sw', 'sled_push', 'sw2', 'sled_compound', 'requirePref', 'hyrox_station'),
             jsonb_build_object('slot', 'B:sled_pull', 'block', 'B', 'sw', 'sled_pull', 'sw2', 'sled_compound', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'B:sled_push'),
             jsonb_build_object('slot', 'B:wallball', 'block', 'B', 'sw', 'wallball', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'B:sled_push'),
-            jsonb_build_object('slot', 'C:run_buy_in', 'block', 'C', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'C:run_buy_in', 'block', 'C', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'C:carry', 'block', 'C', 'mp', 'carry', 'requirePref', 'hyrox_station'),
             jsonb_build_object('slot', 'D:station_erg', 'block', 'D', 'sw', 'ski_erg', 'mp', 'cyclical_engine', 'requirePref', 'ski_erg', 'pref_mode', 'soft')
           )
@@ -581,13 +581,13 @@ SELECT
           'day_key', 'endurance_day',
           'focus', 'endurance',
           'ordered_slots', jsonb_build_array(
-            jsonb_build_object('slot', 'A:run_buy_in', 'block', 'A', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'A:run_buy_in', 'block', 'A', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'A:station_erg', 'block', 'A', 'sw', 'ski_erg', 'mp', 'cyclical_engine', 'requirePref', 'ski_erg', 'pref_mode', 'soft', 'fill_fallback_slot', 'A:run_buy_in'),
-            jsonb_build_object('slot', 'B:run_buy_in', 'block', 'B', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'B:run_buy_in', 'block', 'B', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'B:station_wall', 'block', 'B', 'sw', 'wallball', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'B:run_buy_in'),
-            jsonb_build_object('slot', 'C:run_buy_in', 'block', 'C', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'C:run_buy_in', 'block', 'C', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'C:carry', 'block', 'C', 'mp', 'carry', 'requirePref', 'hyrox_station'),
-            jsonb_build_object('slot', 'D:run_buy_in', 'block', 'D', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'is_buy_in', true),
+            jsonb_build_object('slot', 'D:run_buy_in', 'block', 'D', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'D:station_lunge', 'block', 'D', 'sw', 'sandbag_lunge', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'D:run_buy_in')
           )
         )

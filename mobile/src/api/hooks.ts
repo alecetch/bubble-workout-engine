@@ -66,13 +66,13 @@ export const queryKeys = {
   equipmentItems: (presetCode: string | null) => ["equipmentItems", presetCode] as const,
   // selectedProgramDayId intentionally excluded — overview is static per program/user.
   // Selection state belongs to the UI layer only, not the cache key.
-  programOverview: (programId: string, opts: { userId?: string | null; bubbleUserId?: string | null }) =>
-    ["programOverview", programId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
+  programOverview: (programId: string, opts: { userId?: string | null }) =>
+    ["programOverview", programId, opts.userId ?? null] as const,
   // Per-day preview: independent cache entry per selected day.
-  dayPreview: (programId: string, programDayId: string, opts: { userId?: string | null; bubbleUserId?: string | null }) =>
-    ["dayPreview", programId, programDayId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
+  dayPreview: (programId: string, programDayId: string, opts: { userId?: string | null }) =>
+    ["dayPreview", programId, programDayId, opts.userId ?? null] as const,
   programDayFull: (programDayId: string, opts: ViewerIdentityOptions) =>
-    ["programDayFull", programDayId, opts.userId ?? null, opts.bubbleUserId ?? null] as const,
+    ["programDayFull", programDayId, opts.userId ?? null] as const,
   historyOverview: ["historyOverview"] as const,
   historyPrograms: ["historyPrograms"] as const,
   historyTimeline: ["historyTimeline"] as const,
@@ -154,12 +154,12 @@ export function useEquipmentItems(
 
 export function useProgramOverview(
   programId: string,
-  opts: { userId?: string; bubbleUserId?: string },
+  opts: { userId?: string },
 ): UseQueryResult<ProgramOverviewResponse> {
   return useQuery({
     queryKey: queryKeys.programOverview(programId, opts),
     queryFn: () => getProgramOverview(programId, opts),
-    enabled: Boolean(programId && (opts.bubbleUserId || opts.userId)),
+    enabled: Boolean(programId && opts.userId),
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -177,100 +177,100 @@ export function useProgramOverview(
 export function useDayPreview(
   programId: string,
   programDayId: string | undefined,
-  opts: { userId?: string; bubbleUserId?: string },
+  opts: { userId?: string },
 ): UseQueryResult<ProgramOverviewResponse["selectedDayPreview"]> {
   return useQuery({
     queryKey: queryKeys.dayPreview(programId, programDayId ?? "", opts),
     queryFn: () => getProgramOverview(programId, { ...opts, selectedProgramDayId: programDayId }),
     select: (data) => data.selectedDayPreview,
-    enabled: Boolean(programId && programDayId && (opts.bubbleUserId || opts.userId)),
+    enabled: Boolean(programId && programDayId && opts.userId),
     staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useProgramDayFull(
   programDayId: string,
-  opts: { userId?: string; bubbleUserId?: string },
+  opts: { userId?: string },
 ): UseQueryResult<ProgramDayFullResponse> {
   return useQuery({
     queryKey: queryKeys.programDayFull(programDayId, opts),
     queryFn: () => getProgramDayFull(programDayId, opts),
-    enabled: Boolean(programDayId && (opts.bubbleUserId || opts.userId)),
+    enabled: Boolean(programDayId && opts.userId),
   });
 }
 
 const HISTORY_STALE_MS = 5 * 60 * 1000; // 5 minutes — history changes only after workout completion
 
-export function useHistoryOverview(bubbleUserId?: string): UseQueryResult<HistoryOverviewResponse> {
+export function useHistoryOverview(userId?: string): UseQueryResult<HistoryOverviewResponse> {
   return useQuery({
-    queryKey: [...queryKeys.historyOverview, bubbleUserId ?? null],
-    queryFn: () => getHistoryOverview(bubbleUserId),
-    enabled: Boolean(bubbleUserId),
+    queryKey: [...queryKeys.historyOverview, userId ?? null],
+    queryFn: () => getHistoryOverview(userId),
+    enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useHistoryPrograms(limit = 10, bubbleUserId?: string): UseQueryResult<HistoryProgramItem[]> {
+export function useHistoryPrograms(limit = 10, userId?: string): UseQueryResult<HistoryProgramItem[]> {
   return useQuery({
-    queryKey: [...queryKeys.historyPrograms, bubbleUserId ?? null],
-    queryFn: () => getHistoryPrograms(limit, bubbleUserId),
-    enabled: Boolean(bubbleUserId),
+    queryKey: [...queryKeys.historyPrograms, userId ?? null],
+    queryFn: () => getHistoryPrograms(limit, userId),
+    enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
 export function useHistoryTimeline(
   limit = 40,
-  bubbleUserId?: string,
+  userId?: string,
 ): UseInfiniteQueryResult<InfiniteData<HistoryTimelineResponse, HistoryTimelineCursor | null>, Error> {
   return useInfiniteQuery({
-    queryKey: [...queryKeys.historyTimeline, bubbleUserId ?? null],
+    queryKey: [...queryKeys.historyTimeline, userId ?? null],
     initialPageParam: null as HistoryTimelineCursor | null,
     queryFn: ({ pageParam }) =>
       getHistoryTimeline({
         limit,
         cursorDate: pageParam?.cursorDate ?? null,
         cursorId: pageParam?.cursorId ?? null,
-        bubbleUserId,
+        userId,
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? null,
-    enabled: Boolean(bubbleUserId),
+    enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useHistoryPersonalRecords(limit = 20, bubbleUserId?: string): UseQueryResult<HistoryPersonalRecordItem[]> {
+export function useHistoryPersonalRecords(limit = 20, userId?: string): UseQueryResult<HistoryPersonalRecordItem[]> {
   return useQuery({
-    queryKey: [...queryKeys.historyPersonalRecords, bubbleUserId ?? null],
-    queryFn: () => getHistoryPersonalRecords(limit, bubbleUserId),
-    enabled: Boolean(bubbleUserId),
+    queryKey: [...queryKeys.historyPersonalRecords, userId ?? null],
+    queryFn: () => getHistoryPersonalRecords(limit, userId),
+    enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useSessionHistoryMetrics(bubbleUserId?: string): UseQueryResult<SessionHistoryMetrics> {
+export function useSessionHistoryMetrics(userId?: string): UseQueryResult<SessionHistoryMetrics> {
   return useQuery({
-    queryKey: ["sessionHistoryMetrics", bubbleUserId ?? null],
-    queryFn: () => getSessionHistoryMetrics(bubbleUserId),
-    enabled: Boolean(bubbleUserId),
+    queryKey: ["sessionHistoryMetrics", userId ?? null],
+    queryFn: () => getSessionHistoryMetrics(userId),
+    enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function usePrsFeed(bubbleUserId?: string): UseQueryResult<PrsFeedResponse> {
+export function usePrsFeed(userId?: string): UseQueryResult<PrsFeedResponse> {
   return useQuery({
-    queryKey: ["prsFeed", bubbleUserId ?? null],
-    queryFn: () => getPrsFeed(bubbleUserId),
-    enabled: Boolean(bubbleUserId),
+    queryKey: ["prsFeed", userId ?? null],
+    queryFn: () => getPrsFeed(userId),
+    enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useLoggedExercisesSearch(q: string, bubbleUserId?: string): UseQueryResult<LoggedExerciseItem[]> {
+export function useLoggedExercisesSearch(q: string, userId?: string): UseQueryResult<LoggedExerciseItem[]> {
   const term = q.trim();
   return useQuery({
-    queryKey: ["loggedExercisesSearch", term, bubbleUserId ?? null],
-    queryFn: () => searchLoggedExercises(term, bubbleUserId),
+    queryKey: ["loggedExercisesSearch", term, userId ?? null],
+    queryFn: () => searchLoggedExercises(term, userId),
     enabled: term.length >= 2,
     staleTime: 30 * 1000,
   });
@@ -278,30 +278,30 @@ export function useLoggedExercisesSearch(q: string, bubbleUserId?: string): UseQ
 
 export function useExerciseSummary(
   exerciseId: string | null,
-  bubbleUserId?: string,
+  userId?: string,
 ): UseQueryResult<ExerciseSummaryResponse> {
   return useQuery({
-    queryKey: ["exerciseSummary", exerciseId ?? "", bubbleUserId ?? null],
-    queryFn: () => getExerciseSummary(exerciseId as string, bubbleUserId),
+    queryKey: ["exerciseSummary", exerciseId ?? "", userId ?? null],
+    queryFn: () => getExerciseSummary(exerciseId as string, userId),
     enabled: Boolean(exerciseId),
     staleTime: HISTORY_STALE_MS,
   });
 }
 
-export function useExerciseSearch(q: string, bubbleUserId?: string): UseQueryResult<ExerciseSearchItem[]> {
+export function useExerciseSearch(q: string, userId?: string): UseQueryResult<ExerciseSearchItem[]> {
   const term = q.trim();
   return useQuery({
-    queryKey: [...queryKeys.exerciseSearch(term), bubbleUserId ?? null],
-    queryFn: () => searchExercises(term, bubbleUserId),
+    queryKey: [...queryKeys.exerciseSearch(term), userId ?? null],
+    queryFn: () => searchExercises(term, userId),
     enabled: term.length >= 2,
     staleTime: 30 * 1000,
   });
 }
 
-export function useExerciseHistory(exerciseId: string | null, bubbleUserId?: string): UseQueryResult<ExerciseHistoryResponse> {
+export function useExerciseHistory(exerciseId: string | null, userId?: string): UseQueryResult<ExerciseHistoryResponse> {
   return useQuery({
-    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), bubbleUserId ?? null],
-    queryFn: () => fetchExerciseHistory(exerciseId as string, bubbleUserId),
+    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), userId ?? null],
+    queryFn: () => fetchExerciseHistory(exerciseId as string, userId),
     enabled: Boolean(exerciseId),
     staleTime: HISTORY_STALE_MS,
   });
@@ -310,12 +310,12 @@ export function useExerciseHistory(exerciseId: string | null, bubbleUserId?: str
 export function useMarkDayComplete(): UseMutationResult<
   void,
   Error,
-  { programDayId: string; isCompleted: boolean; bubbleUserId?: string }
+  { programDayId: string; isCompleted: boolean; userId?: string }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ programDayId, isCompleted, bubbleUserId }) =>
-      markProgramDayComplete(programDayId, isCompleted, { bubbleUserId }),
+    mutationFn: ({ programDayId, isCompleted, userId }) =>
+      markProgramDayComplete(programDayId, isCompleted, { userId }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyOverview });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
@@ -330,13 +330,13 @@ export function useMarkDayComplete(): UseMutationResult<
 export function useSegmentExerciseLogs(
   workoutSegmentId: string | null | undefined,
   programDayId: string,
-  opts: { bubbleUserId?: string },
+  opts: { userId?: string },
 ): UseQueryResult<SegmentLogRow[]> {
   return useQuery({
     queryKey: queryKeys.segmentExerciseLogs(workoutSegmentId ?? "", programDayId),
     queryFn: () =>
       getSegmentExerciseLogs({
-        bubbleUserId: opts.bubbleUserId,
+        userId: opts.userId,
         workoutSegmentId: workoutSegmentId as string,
         programDayId,
       }),

@@ -59,7 +59,7 @@
         font-size: 13px;
       }
       .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls, .page-actions { align-items: end; }
       .control { display: grid; gap: 4px; }
       .control label {
@@ -283,9 +283,11 @@
           <h1 class="title">Observability Dashboard</h1>
           <div class="nav">
             <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage Report</a>
-            <a href="/admin/exercises">Exercise Catalogue</a>
+            <a href="/admin/coverage">Coverage</a>
+            <a href="/admin/exercises">Exercises</a>
+            <a href="/admin/narration">Narration</a>
             <a href="/admin/observability" class="active">Observability</a>
+            <a href="/admin/preview">Preview</a>
           </div>
         </div>
         <div class="controls">
