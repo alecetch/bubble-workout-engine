@@ -64,7 +64,7 @@ test("handler uses required filters, user scope, ASC series ordering, and exact 
   const handler = createHistoryExerciseHandler(db);
   const req = {
     auth: { user_id: "user-123" },
-    params: { exerciseId: "barbell_back_squat" },
+    params: { exerciseId: "bb_back_squat" },
     headers: {},
   };
   const res = createMockRes();
@@ -86,11 +86,11 @@ test("handler uses required filters, user scope, ASC series ordering, and exact 
   assert.ok(queries[1].text.includes("l.is_draft = FALSE"));
   assert.ok(queries[1].text.includes("pe.exercise_id = $2"));
 
-  assert.deepEqual(queries[0].params, ["user-123", "barbell_back_squat"]);
-  assert.deepEqual(queries[1].params, ["user-123", "barbell_back_squat"]);
+  assert.deepEqual(queries[0].params, ["user-123", "bb_back_squat"]);
+  assert.deepEqual(queries[1].params, ["user-123", "bb_back_squat"]);
 
   assert.deepEqual(res.body, {
-    exerciseId: "barbell_back_squat",
+    exerciseId: "bb_back_squat",
     exerciseName: "Barbell Back Squat",
     series: [
       { date: "2026-02-25", topWeightKg: 100, tonnage: 900, topReps: 5 },
@@ -126,7 +126,7 @@ test("name resolution query prefers catalogue name then program_exercise fallbac
   await handler(
     {
       auth: { user_id: "user-123" },
-      params: { exerciseId: "barbell_back_squat" },
+      params: { exerciseId: "bb_back_squat" },
       headers: {},
     },
     res,

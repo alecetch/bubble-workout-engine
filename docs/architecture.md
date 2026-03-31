@@ -467,7 +467,7 @@ The `strength_equivalent` boolean (default `false`) marks exercises that produce
 After V23 (equipment-aware variants), **A and B slots have zero coverage gaps** for both `strength_default_v1` and `hypertrophy_default_v1` across all equipment presets and fitness ranks. The fix involved three coordinated changes:
 
 1. **New catalogue exercises** — 13 new exercises (`pistol_squat`, `inverted_row`, `kb_deadlift`, `feet_elevated_inverted_row`, etc.) tagged with pattern-group `sw`/`sw2` values and `strength_equivalent = true` where appropriate.
-2. **Reclassification UPDATEs** — existing exercises (`double_db_front_squat`, `kb_rdl`, `ring_row`, etc.) had their `sw`/`sw2` overwritten to the new pattern group values.
+2. **Reclassification UPDATEs** — existing exercises (`double_db_front_squat`, `kb_romanian_deadlift`, `ring_row`, etc.) had their `sw`/`sw2` overwritten to the new pattern group values.
 3. **Slot variants** — A and B slots in both strength and hypertrophy configs were given three-variant arrays (`full`/`minimal`/`bodyweight`), each with appropriate `swAny`, `pref_mode`, and `strength_equivalent_bonus` settings.
 
 ### Complexity assessment

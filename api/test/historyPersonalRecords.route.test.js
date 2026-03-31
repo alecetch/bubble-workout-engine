@@ -31,7 +31,7 @@ test("clampPersonalRecordsLimit defaults and clamps to 1..50", () => {
 
 test("mapPersonalRecordRow returns exact API shape", () => {
   const mapped = mapPersonalRecordRow({
-    exercise_id: "barbell_back_squat",
+    exercise_id: "bb_back_squat",
     exercise_name: "Back Squat",
     value: "140.5",
     date: "2026-03-01T00:00:00.000Z",
@@ -39,7 +39,7 @@ test("mapPersonalRecordRow returns exact API shape", () => {
   });
 
   assert.deepEqual(mapped, {
-    exerciseId: "barbell_back_squat",
+    exerciseId: "bb_back_squat",
     exerciseName: "Back Squat",
     metric: "weight_kg",
     value: 140.5,

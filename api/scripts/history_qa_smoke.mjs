@@ -19,7 +19,7 @@
  *   INTERNAL_TOKEN=secret \
  *   USER_A=user-uuid \
  *   USER_B=other-uuid \
- *   EXERCISE_ID=barbell_back_squat \
+ *   EXERCISE_ID=bb_back_squat \
  *   DATABASE_URL=postgres://... \
  *   INTERNAL_TOKEN_HEADER=authorization \
  *   USER_ID_HEADER=x-user-id \

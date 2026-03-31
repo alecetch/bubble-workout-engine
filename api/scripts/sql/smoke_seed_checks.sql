@@ -22,8 +22,8 @@ WITH checks AS (
     'exercise_seed_rows_present',
     (SELECT COUNT(*) FROM public.exercise_catalogue
       WHERE exercise_id IN (
-        'barbell_back_squat','barbell_deadlift','bench_press','ohp',
-        'pull_up','barbell_row','row_erg','ski_erg','assault_bike','burpee'
+        'bb_back_squat','bb_deadlift','bb_bench_press','bb_overhead_press',
+        'pullup','bb_bentover_row','row_erg','ski_erg','assault_bike','burpee'
       ))::int,
     8
   UNION ALL
@@ -85,7 +85,7 @@ WITH checks AS (
   SELECT
     'strength_primary_region_seeded',
     (SELECT COUNT(*) FROM public.exercise_catalogue
-      WHERE exercise_id IN ('barbell_back_squat','barbell_deadlift','bench_press','barbell_row','ohp','pull_up')
+      WHERE exercise_id IN ('bb_back_squat','bb_deadlift','bb_bench_press','bb_bentover_row','bb_overhead_press','pullup')
         AND strength_primary_region IN ('upper','lower'))::int,
     4
 )
@@ -126,7 +126,7 @@ SELECT
   is_loadable,
   strength_primary_region
 FROM public.exercise_catalogue
-WHERE exercise_id IN ('barbell_back_squat','bench_press','barbell_deadlift','assault_bike')
+WHERE exercise_id IN ('bb_back_squat','bb_bench_press','bb_deadlift','assault_bike')
 ORDER BY exercise_id;
 
 -- Detail: seeded equipment preset booleans.
