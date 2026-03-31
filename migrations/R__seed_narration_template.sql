@@ -518,6 +518,60 @@ INSERT INTO public.narration_template (
   applies_json, field, priority, purpose, scope, segment_type,
   template_id, text_pool_json, created_at, updated_at, is_active
 )
+VALUES (
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'simulation'),
+  'DAY_TITLE',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_simulation_title',
+  '["Simulation Day", "Race Day Simulation", "Full Race Simulation"]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
+VALUES (
+  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'simulation'),
+  'DAY_GOAL',
+  10,
+  NULL,
+  'day',
+  NULL,
+  'hyrx_day_simulation_goal',
+  '["Full race simulation. Complete all four blocks in order as if it were race day. Treat the transitions as race transitions.", "Race-pace simulation. Every block, every station, no skipping. Your goal is to experience the full race flow from start to finish.", "Race rehearsal: run the full simulation at an effort you could sustain if it were the real thing. Note where your pace dropped — that is where to focus next."]'::jsonb,
+  now(), now(), true
+)
+ON CONFLICT (template_id)
+DO UPDATE SET
+  applies_json = EXCLUDED.applies_json,
+  field = EXCLUDED.field,
+  priority = EXCLUDED.priority,
+  purpose = EXCLUDED.purpose,
+  scope = EXCLUDED.scope,
+  segment_type = EXCLUDED.segment_type,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.narration_template (
+  applies_json, field, priority, purpose, scope, segment_type,
+  template_id, text_pool_json, created_at, updated_at, is_active
+)
 SELECT
   jsonb_build_object('program_type', 'hyrox'),
   'SEGMENT_TITLE',

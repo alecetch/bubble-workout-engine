@@ -123,8 +123,10 @@
   <div class="nav">
     <a href="/admin-ui/index.html">Config Editor</a>
     <a href="/admin/coverage">Coverage</a>
+    <a href="/admin/health">Health</a>
     <a href="/admin/exercises">Exercises</a>
     <a href="/admin/narration">Narration</a>
+    <a href="/admin/rep-rules">Rep Rules</a>
     <a href="/admin/observability">Observability</a>
     <a href="/admin/preview" class="active">Preview</a>
   </div>
@@ -176,6 +178,13 @@
   </div>
 
   <div class="sep"></div>
+  <div class="ctrl-group">
+    <label class="ctrl-label" style="display:flex;align-items:center;gap:6px;">
+      <input id="show-narration-toggle" type="checkbox" checked />
+      Show narration
+    </label>
+  </div>
+  <div class="sep"></div>
   <button id="generate-btn">Generate All</button>
   <span id="gen-status" style="font-size:12px"></span>
 </div>
@@ -198,6 +207,8 @@
 
 <script type="module">
 const STORAGE_KEY = "admin_preview_token";
+const SHOW_NARRATION_KEY = "admin_preview_show_narration";
+const previewState = { lastData: null };
 
 function getToken() {
   return document.getElementById("token-input").value.trim();
@@ -209,6 +220,14 @@ if (_saved) document.getElementById("token-input").value = _saved;
 document.getElementById("token-input").addEventListener("change", () => {
   sessionStorage.setItem(STORAGE_KEY, getToken());
 });
+const narrationToggleEl = document.getElementById("show-narration-toggle");
+if (sessionStorage.getItem(SHOW_NARRATION_KEY) === "0") {
+  narrationToggleEl.checked = false;
+}
+
+function showNarrationEnabled() {
+  return !!document.getElementById("show-narration-toggle")?.checked;
+}
 
 function selectedVal(groupId) {
   const btn = document.querySelector(`#${groupId} .toggle.active`);
@@ -246,6 +265,7 @@ function esc(v) {
 // Renders all non-empty string fields from a narration object generically.
 // Any new narration fields added to the pipeline show up here automatically.
 function renderNar(nar, skip = new Set()) {
+  if (!showNarrationEnabled()) return "";
   if (!nar || typeof nar !== "object") return "";
   return Object.entries(nar)
     .filter(([k, v]) => !skip.has(k) && typeof v === "string" && v.trim())
@@ -267,7 +287,7 @@ function renderItem(item, nameMap) {
         <span class="ex-name">${esc(name)}</span>
         <span class="ex-meta">${esc(parts.join(" · "))}</span>
       </div>
-      <div class="item-nar">${renderNar(item.narration)}</div>
+      ${showNarrationEnabled() ? `<div class="item-nar">${renderNar(item.narration)}</div>` : ""}
     </div>`;
 }
 
@@ -286,7 +306,7 @@ function renderSeg(seg, nameMap) {
         ${titleText ? `<span class="seg-title">${esc(titleText)}</span>` : ""}
         <span class="seg-type" style="margin-left:auto">${esc(durLabel)}</span>
       </div>
-      ${renderNar(seg.narration, narSkip)}
+      ${showNarrationEnabled() ? renderNar(seg.narration, narSkip) : ""}
       <div class="items">${(seg.items ?? []).map(it => renderItem(it, nameMap)).join("")}</div>
     </div>`;
 }
@@ -306,8 +326,8 @@ function renderDay(day, nameMap) {
         ${metaParts.length ? `<span class="day-meta">${esc(metaParts.join(" · "))}</span>` : ""}
       </summary>
       <div class="day-body">
-        ${day.narration?.day_goal ? `<div class="day-goal">${esc(day.narration.day_goal)}</div>` : ""}
-        ${renderNar(day.narration, dayNarSkip)}
+        ${showNarrationEnabled() && day.narration?.day_goal ? `<div class="day-goal">${esc(day.narration.day_goal)}</div>` : ""}
+        ${showNarrationEnabled() ? renderNar(day.narration, dayNarSkip) : ""}
         ${segs.map(s => renderSeg(s, nameMap)).join("")}
         ${!segs.length ? `<div class="panel-empty" style="padding:8px">No segments</div>` : ""}
       </div>
@@ -351,7 +371,7 @@ function renderProgram(type, preview, meta) {
   const badges = [
     configKey ? `<span class="badge">${esc(configKey)}</span>` : "",
     `<span class="badge ok">${esc(String(allowedCount))} allowed</span>`,
-    narSource ? `<span class="badge">narration: ${esc(narSource)}</span>` : "",
+    showNarrationEnabled() && narSource ? `<span class="badge">narration: ${esc(narSource)}</span>` : "",
     fillFailed && Object.keys(fillFailed).length
       ? `<span class="badge warn">fill_failed: ${esc(JSON.stringify(fillFailed))}</span>`
       : "",
@@ -360,7 +380,7 @@ function renderProgram(type, preview, meta) {
   return `
     <div class="prog-hdr">
       <h2>${esc(title)}</h2>
-      ${summary ? `<p class="prog-summary">${esc(summary)}</p>` : ""}
+      ${showNarrationEnabled() && summary ? `<p class="prog-summary">${esc(summary)}</p>` : ""}
       <div class="prog-meta">${badges}</div>
     </div>
     <div class="weeks">
@@ -415,6 +435,7 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
     return;
   }
 
+  previewState.lastData = data;
   const meta = data.meta ?? {};
   const previews = data.previews ?? {};
 
@@ -444,6 +465,27 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
   tabsEl.style.display = "";
   statusEl.textContent = "Done";
   setTimeout(() => { statusEl.textContent = ""; }, 2000);
+});
+
+function rerenderPreviewPanels() {
+  const data = previewState.lastData;
+  if (!data) return;
+  const meta = data.meta ?? {};
+  const previews = data.previews ?? {};
+  for (const type of ["hypertrophy", "strength", "conditioning", "hyrox"]) {
+    const panel = document.getElementById(`panel-${type}`);
+    const preview = previews[type];
+    if (!preview) {
+      panel.innerHTML = `<div class="panel-empty">Not generated</div>`;
+    } else {
+      panel.innerHTML = renderProgram(type, preview, meta);
+    }
+  }
+}
+
+narrationToggleEl.addEventListener("change", () => {
+  sessionStorage.setItem(SHOW_NARRATION_KEY, narrationToggleEl.checked ? "1" : "0");
+  rerenderPreviewPanels();
 });
 </script>
 </body>

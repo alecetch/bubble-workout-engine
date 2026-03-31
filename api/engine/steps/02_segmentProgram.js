@@ -166,7 +166,7 @@ function segmentDayFromBlocks(day, blockSemantics, dbg) {
       const sem = blockSemantics?.[letter] || {};
       segments.push({
         segment_index: segIndex++,
-        segment_type: "single",
+        segment_type: "amrap",
         purpose: toStr(sem.purpose) || "main",
         rounds: 1,
         time_cap_sec: sem.time_cap_sec ?? null,

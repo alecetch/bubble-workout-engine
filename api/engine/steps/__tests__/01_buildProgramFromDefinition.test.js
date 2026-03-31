@@ -704,3 +704,87 @@ test("ordered simulation emits unresolvable blocks when fallback chain cannot re
   assert.equal(block.simulation_resolution, "unresolvable");
   assert.equal(result.debug.simulation_unresolvable, 1);
 });
+
+test("benchmark_exactness day mode bypasses weekly dedupe while default mode does not", async () => {
+  const exercises = [
+    makeExercise({
+      id: "sandbag_lunge",
+      name: "Sandbag Lunge",
+      mp: "lunge",
+      sw: "sandbag_lunge",
+      sw2: "lunge_compound",
+      pref: ["hyrox_station"],
+      loadable: false,
+      eq: ["sandbag"],
+    }),
+    makeExercise({
+      id: "kb_walking_lunges",
+      name: "Kettlebell Walking Lunges",
+      mp: "lunge",
+      sw: "lunge_pattern",
+      sw2: "lunge_compound",
+      pref: ["hyrox_station"],
+      loadable: true,
+      eq: ["kettlebells"],
+    }),
+  ];
+
+  const lungeSlot = {
+    slot: "A:lunge",
+    mp: "lunge",
+    sw: "sandbag_lunge",
+    sw2: "lunge_compound",
+    requirePref: "hyrox_station",
+    pref_mode: "strict",
+    preferLoadable: true,
+  };
+
+  const baseConfig = {
+    ...makeMinimalCompiledConfig({ programType: "hyrox", configKey: "hyrox_benchmark_mode_v1" }),
+    builder: {
+      dayTemplates: [
+        {
+          day_key: "day_1",
+          focus: "endurance",
+          ordered_slots: [{ ...lungeSlot, sw2: null }],
+        },
+        { day_key: "day_2", focus: "simulation", is_ordered_simulation: true, ordered_slots: [lungeSlot] },
+      ],
+      setsByDuration: { "50": { A: 1, B: 1, C: 1, D: 1 } },
+      blockBudget: { "50": 1 },
+      slotDefaults: {},
+      excludeMovementClasses: [],
+    },
+  };
+
+  const defaultResult = await buildProgramFromDefinition({
+    inputs: makeInputs(exercises, { fitness_rank: 1 }, ["sandbag_lunge", "kb_walking_lunges"]),
+    request: { days_per_week: 2 },
+    compiledConfig: baseConfig,
+  });
+
+  assert.equal(defaultResult.program.days[0].blocks[0].ex_id, "sandbag_lunge");
+  assert.equal(defaultResult.program.days[1].blocks[0].ex_id, "kb_walking_lunges");
+
+  const benchmarkResult = await buildProgramFromDefinition({
+    inputs: makeInputs(exercises, { fitness_rank: 1 }, ["sandbag_lunge", "kb_walking_lunges"]),
+    request: { days_per_week: 2 },
+    compiledConfig: {
+      ...baseConfig,
+      builder: {
+        ...baseConfig.builder,
+        dayTemplates: [
+          baseConfig.builder.dayTemplates[0],
+          {
+            ...baseConfig.builder.dayTemplates[1],
+            day_selection_mode: "benchmark_exactness",
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(benchmarkResult.program.days[0].blocks[0].ex_id, "sandbag_lunge");
+  assert.equal(benchmarkResult.program.days[1].blocks[0].ex_id, "sandbag_lunge");
+  assert.equal(benchmarkResult.program.days[1].day_selection_mode, "benchmark_exactness");
+});

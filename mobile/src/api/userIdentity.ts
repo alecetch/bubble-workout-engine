@@ -6,6 +6,7 @@ type AsyncStorageLike = {
 const STORAGE_KEY = "app:user-id";
 const inMemoryStore = new Map<string, string>();
 let cachedUserId: string | null = null;
+const INVALID_USER_IDS = new Set(["", "undefined", "null"]);
 
 function getStorage(): AsyncStorageLike {
   const requireFn = (globalThis as { require?: (id: string) => unknown }).require;
@@ -42,11 +43,20 @@ function createUserId(): string {
   return `user_${Date.now().toString(36)}_${random}`;
 }
 
+function normalizeUserId(value: string | null | undefined): string {
+  const normalized = value?.trim() ?? "";
+  return INVALID_USER_IDS.has(normalized) ? "" : normalized;
+}
+
 export async function getOrCreateUserId(): Promise<string> {
-  if (cachedUserId) return cachedUserId;
+  const normalizedCachedUserId = normalizeUserId(cachedUserId);
+  if (normalizedCachedUserId) {
+    cachedUserId = normalizedCachedUserId;
+    return normalizedCachedUserId;
+  }
 
   const storage = getStorage();
-  const stored = (await storage.getItem(STORAGE_KEY))?.trim() ?? "";
+  const stored = normalizeUserId(await storage.getItem(STORAGE_KEY));
   if (stored) {
     cachedUserId = stored;
     return stored;
@@ -56,4 +66,12 @@ export async function getOrCreateUserId(): Promise<string> {
   await storage.setItem(STORAGE_KEY, created);
   cachedUserId = created;
   return created;
+}
+
+export async function getUserIdentityQueryString(): Promise<string> {
+  const userId = await getOrCreateUserId();
+  const params = new URLSearchParams();
+  params.set("user_id", userId);
+  params.set("bubble_user_id", userId);
+  return params.toString();
 }

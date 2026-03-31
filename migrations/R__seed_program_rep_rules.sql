@@ -693,6 +693,10 @@ SELECT
   0, 0,
   NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_run_buy_in');
+-- Deactivated: shadowed by hyrx_amrap_run_any_v2 (sw2=run_interval, priority 55) which is more principled.
+UPDATE public.program_rep_rule
+SET is_active = false, updated_at = now()
+WHERE rule_id = 'hyrx_amrap_run_buy_in' AND is_active = true;
 
 -- Run buy-in: any run exercise (no equipment constraint) — catches outdoor run, treadmill, etc.
 -- Matches on sw2=run_interval (the dedicated run/row/ski family group).
@@ -755,6 +759,11 @@ SELECT
   0, 0,
   NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_ski_erg');
+-- Deactivated: shadowed by hyrx_amrap_ski_erg_v2 (sw2=ski_interval, priority 60).
+-- v1 matches sw2=cyclical_compound which is too broad and can misprescribe non-ski-erg exercises.
+UPDATE public.program_rep_rule
+SET is_active = false, updated_at = now()
+WHERE rule_id = 'hyrx_amrap_ski_erg' AND is_active = true;
 
 -- Ski erg: matches new sw2=ski_interval group (replaces cyclical_compound constraint above)
 INSERT INTO public.program_rep_rule (
@@ -795,6 +804,10 @@ SELECT
   0, 0,
   NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_amrap_row_erg');
+-- Deactivated: shadowed by hyrx_amrap_row_erg_v2 (sw2=row_interval, priority 60).
+UPDATE public.program_rep_rule
+SET is_active = false, updated_at = now()
+WHERE rule_id = 'hyrx_amrap_row_erg' AND is_active = true;
 
 -- Row erg: matches new sw2=row_interval group (replaces cyclical_compound constraint above)
 INSERT INTO public.program_rep_rule (
@@ -1075,3 +1088,201 @@ SELECT
   90, 0,
   NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_power_single_fallback');
+
+-- ── HYROX simulation-day rules (day_type = 'simulation') ────────────────────────────────────────
+-- These rules fire only when day.day_type = 'simulation' (ordered simulation days).
+-- They prescribe full race / simulation distances rather than scaled training volumes.
+-- Priority 100 ensures they beat all base HYROX rules (max base priority is ~80).
+-- Prescription values are intentional defaults — edit via the Rep Rules admin UI after seeding.
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_run', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'locomotion', 'run_interval', NULL,
+  1000, 1000, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_run');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_ski_erg', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'cyclical_engine', 'ski_interval', 'ski_erg',
+  1000, 1000, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_ski_erg');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_row_erg', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'cyclical_engine', 'row_interval', 'row_erg',
+  1000, 1000, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_row_erg');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_sled_push', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'sled_push', 'sled_compound', NULL,
+  25, 25, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_sled_push');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_sled_pull', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'sled_pull', 'sled_compound', NULL,
+  25, 25, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_sled_pull');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_farmer_carry', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'carry', 'carry_compound', NULL,
+  80, 80, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_farmer_carry');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_sandbag_lunge', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', NULL, NULL, 'sandbag',
+  100, 100, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_sandbag_lunge');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_wallball', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'push_ballistic', 'push_ballistic_compound', NULL,
+  100, 100, 'reps',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_wallball');
+
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_burpee', true, 'hyrox', 1, 100,
+  'simulation', NULL, 'amrap', 'locomotion', NULL, NULL,
+  80, 80, 'm',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_burpee');
+
+-- Simulation global fallback: catches any simulation-day exercise not matched by a specific rule above.
+-- Priority 1 (lowest) so it only fires when nothing else matches.
+INSERT INTO public.program_rep_rule (
+  rule_id, is_active, program_type, schema_version, priority,
+  day_type, purpose, segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  rep_low, rep_high, reps_unit,
+  rir_min, rir_max, rir_target,
+  tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
+  rest_after_set_sec, rest_after_round_sec,
+  logging_prompt_mode, notes_style
+)
+SELECT
+  'hyrx_sim_global_fallback', true, 'hyrox', 1, 1,
+  'simulation', NULL, NULL, NULL, NULL, NULL,
+  10, 15, 'reps',
+  0, 0, 0,
+  0, 0, 0, 0,
+  0, 0,
+  NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM public.program_rep_rule WHERE rule_id = 'hyrx_sim_global_fallback');

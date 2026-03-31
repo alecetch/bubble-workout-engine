@@ -11,6 +11,8 @@ export function validateCompiledConfig(config) {
   const details = [];
   const knownStrategies = new Set(["best_match_by_movement"]);
   const knownVariabilityPolicies = new Set(["none", "med", "high"]);
+  const knownDaySelectionModes = new Set(["default", "benchmark_exactness"]);
+  const slugPattern = /^[a-z][a-z0-9_]*$/;
 
   function isValidSimulationEntry(entry) {
     return entry && typeof entry === "object" && !Array.isArray(entry);
@@ -77,8 +79,20 @@ export function validateCompiledConfig(config) {
       dayKeySeen.add(dayKey);
     }
 
+    if (template.focus !== undefined && template.focus !== null && !slugPattern.test(String(template.focus))) {
+      details.push(`builder.dayTemplates[${i}].focus must match /^[a-z][a-z0-9_]*$/ when provided`);
+    }
+
     if (template.is_ordered_simulation !== undefined && typeof template.is_ordered_simulation !== "boolean") {
       details.push(`builder.dayTemplates[${i}].is_ordered_simulation must be a boolean when provided`);
+    }
+    if (
+      template.day_selection_mode !== undefined &&
+      !knownDaySelectionModes.has(template.day_selection_mode)
+    ) {
+      details.push(
+        `builder.dayTemplates[${i}].day_selection_mode must be one of default|benchmark_exactness when provided`,
+      );
     }
 
     if (!Array.isArray(template.ordered_slots) || template.ordered_slots.length === 0) {

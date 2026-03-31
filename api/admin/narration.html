@@ -116,6 +116,26 @@
       padding: 4px 0 10px;
       flex-wrap: wrap;
     }
+    .coverage-warning {
+      margin-top: 10px;
+      border: 1px solid #fed7aa;
+      background: #fff7ed;
+      color: #9a3412;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+    .coverage-warning h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+    .coverage-warning ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .coverage-warning li + li {
+      margin-top: 6px;
+    }
     .cov-badge {
       display: inline-block;
       padding: 2px 9px;
@@ -336,8 +356,10 @@
         <nav class="nav">
           <a href="/admin-ui/index.html">Config Editor</a>
           <a href="/admin/coverage">Coverage</a>
+          <a href="/admin/health">Health</a>
           <a href="/admin/exercises">Exercises</a>
           <a href="/admin/narration" class="active">Narration</a>
+          <a href="/admin/rep-rules">Rep Rules</a>
           <a href="/admin/observability">Observability</a>
           <a href="/admin/preview">Preview</a>
         </nav>
@@ -404,6 +426,7 @@
                 <th>Field</th>
                 <th>Purpose</th>
                 <th>Segment type</th>
+                <th>Day focus</th>
                 <th>Coverage</th>
                 <th>Winning template</th>
                 <th></th>
@@ -412,6 +435,7 @@
             <tbody id="coverage-table-body"></tbody>
           </table>
         </div>
+        <div id="coverage-orphaned-wrap" class="coverage-warning" style="display:none"></div>
       </div>
     </details>
 
@@ -1253,6 +1277,10 @@
       document.getElementById("coverage-status").innerHTML = html || "";
       document.getElementById("coverage-summary-bar").style.display = showSummary ? "" : "none";
       document.getElementById("coverage-table-wrap").style.display = showTable ? "" : "none";
+      if (!showTable) {
+        document.getElementById("coverage-orphaned-wrap").style.display = "none";
+        document.getElementById("coverage-orphaned-wrap").innerHTML = "";
+      }
     }
 
     async function loadCoverage(programType) {
@@ -1288,7 +1316,7 @@
     function renderCoverage() {
       const data = coverageState.data;
       if (!data) return;
-      const { expected, summary, program_type, config_key } = data;
+      const { expected, orphaned_templates, summary, program_type, config_key } = data;
 
       setCoverageStatus(
         `Coverage for <strong>${escapeHtml(program_type)}</strong> &middot; config: <code>${escapeHtml(config_key)}</code> &middot; ${expected.length} expected combos`,
@@ -1312,6 +1340,7 @@
               data-field="${escapeHtml(row.field)}"
               data-purpose="${escapeHtml(row.purpose || "")}"
               data-segment-type="${escapeHtml(row.segment_type || "")}"
+              data-day-focus="${escapeHtml(row.day_focus || "")}"
               data-program-type="${escapeHtml(program_type)}">Create</button>`
           : "";
         return `
@@ -1320,12 +1349,34 @@
             <td>${escapeHtml(row.field)}</td>
             <td>${escapeHtml(row.purpose || "-")}</td>
             <td>${escapeHtml(row.segment_type || "-")}</td>
+            <td>${escapeHtml(row.day_focus || "-")}</td>
             <td><span class="cov-badge ${badgeClass}">${badgeLabel}</span></td>
             <td>${row.winning_template_id ? escapeHtml(row.winning_template_id) : "-"}</td>
             <td>${createBtn}</td>
           </tr>
         `;
       }).join("");
+
+      const orphanedWrap = document.getElementById("coverage-orphaned-wrap");
+      if (Array.isArray(orphaned_templates) && orphaned_templates.length > 0) {
+        orphanedWrap.style.display = "";
+        orphanedWrap.innerHTML = `
+          <h3>Warning: orphaned day_focus templates</h3>
+          <ul>
+            ${orphaned_templates.map((row) => `
+              <li>
+                <code>${escapeHtml(row.template_id)}</code> targets
+                <code>${escapeHtml(row.applies_day_focus || "-")}</code>
+                but known focus values are
+                <code>${escapeHtml((row.known_focus_values || []).join(", ") || "-")}</code>
+              </li>
+            `).join("")}
+          </ul>
+        `;
+      } else {
+        orphanedWrap.style.display = "none";
+        orphanedWrap.innerHTML = "";
+      }
     }
 
     function init() {
@@ -1343,15 +1394,18 @@
       document.getElementById("coverage-table-body").addEventListener("click", (event) => {
         const createBtn = event.target.closest(".cov-create-btn");
         if (!createBtn) return;
+        const covProgramType = createBtn.getAttribute("data-program-type") || "";
+        const covDayFocus = createBtn.getAttribute("data-day-focus") || "";
+        const covApplies = {};
+        if (covProgramType) covApplies.program_type = covProgramType;
+        if (covDayFocus) covApplies.day_focus = covDayFocus;
         const prefill = {
           ...blankTemplate(),
           scope: createBtn.getAttribute("data-scope") || "segment",
           field: createBtn.getAttribute("data-field") || "",
           purpose: createBtn.getAttribute("data-purpose") || "",
           segment_type: createBtn.getAttribute("data-segment-type") || "",
-          applies_json: createBtn.getAttribute("data-program-type")
-            ? { program_type: createBtn.getAttribute("data-program-type") }
-            : {},
+          applies_json: covApplies,
         };
         renderDrawer(prefill, "new");
       });

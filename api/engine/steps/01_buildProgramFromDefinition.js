@@ -435,6 +435,10 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     const template = dayTemplates[day - 1];
     const slots = extractSlotsFromTemplate(template);
     const isOrderedSimulationDay = template && typeof template === "object" && template.is_ordered_simulation === true;
+    const daySelectionMode =
+      template && typeof template === "object" && toStr(template.day_selection_mode).trim() === "benchmark_exactness"
+        ? "benchmark_exactness"
+        : "default";
     const take = isOrderedSimulationDay ? slots.length : Math.min(budget, slots.length);
     const blocks = [];
 
@@ -450,7 +454,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         highDensityCountToday: 0,
         highComplexityCountToday: 0,
       },
-      usedIdsWeek,
+      usedIdsWeek: daySelectionMode === "benchmark_exactness" ? null : usedIdsWeek,
       usedSw2Today: new Set(),
       usedCanonicalNamesToday: new Set(),
       usedRegionsToday: new Set(),
@@ -459,6 +463,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       variabilityState,
       variabilityAvoidCanonicalNames: null,
       dayIndex: day,
+      daySelectionMode,
     };
 
     if (builderState.conditioning) {
@@ -482,6 +487,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         event: "slot_resolved",
         slot: slotName,
         is_ordered_simulation: isOrderedSimulationDay,
+        day_selection_mode: daySelectionMode,
         equipment_profile: equipmentProfile,
         variant_matched: resolvedSlot !== slotDef,
         resolved_sw2: resolvedSlot.sw2 ?? null,
@@ -503,6 +509,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         slot: slotName,
         day_index: day,
         block: blockLetter,
+        day_selection_mode: daySelectionMode,
         slot_family: slotFamily,
         variability_policy: variabilityPolicy,
       });
@@ -718,10 +725,11 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
 
     days.push({
       day_index: day,
-      day_type: compiledConfig.programType,
+      day_type: isOrderedSimulationDay ? "simulation" : compiledConfig.programType,
       day_focus: toStr(template.focus) || null,
       duration_mins: duration,
       is_ordered_simulation: isOrderedSimulationDay,
+      day_selection_mode: daySelectionMode,
       blocks,
     });
   }

@@ -68,6 +68,19 @@ test("validateCompiledConfig does not throw for valid hypertrophy config", () =>
   assert.doesNotThrow(() => validateCompiledConfig(cfg));
 });
 
+test("validateCompiledConfig accepts lowercase slug focus values", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].focus = "simulation";
+  assert.doesNotThrow(() => validateCompiledConfig(cfg));
+});
+
+test("validateCompiledConfig catches non-slug focus values", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].focus = "Simulation";
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes('.focus must match /^[a-z][a-z0-9_]*$/')));
+});
+
 test("validateCompiledConfig catches missing programType", () => {
   const cfg = makeValidConfig();
   cfg.programType = "";
@@ -121,6 +134,7 @@ test("validateCompiledConfig accepts ordered simulation day fields", () => {
   const cfg = makeValidConfig();
   cfg.programType = "hyrox";
   cfg.builder.dayTemplates[0].is_ordered_simulation = true;
+  cfg.builder.dayTemplates[0].day_selection_mode = "benchmark_exactness";
   cfg.builder.dayTemplates[0].ordered_slots[0] = {
     slot: "A:run_1",
     mp: "locomotion",
@@ -136,6 +150,13 @@ test("validateCompiledConfig accepts ordered simulation day fields", () => {
     ],
   };
   assert.doesNotThrow(() => validateCompiledConfig(cfg));
+});
+
+test("validateCompiledConfig catches invalid day_selection_mode", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].day_selection_mode = "allow_week_repeats";
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes("day_selection_mode must be one of default|benchmark_exactness")));
 });
 
 test("validateCompiledConfig catches invalid ordered simulation field shapes", () => {

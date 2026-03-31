@@ -590,6 +590,31 @@ SELECT
             jsonb_build_object('slot', 'D:run_buy_in', 'block', 'D', 'mp', 'locomotion', 'sw', 'run_interval', 'requirePref', 'hyrox_buy_in', 'pref_mode', 'strict', 'is_buy_in', true),
             jsonb_build_object('slot', 'D:station_lunge', 'block', 'D', 'sw', 'sandbag_lunge', 'requirePref', 'hyrox_station', 'fill_fallback_slot', 'D:run_buy_in')
           )
+        ),
+        jsonb_build_object(
+          'day_key', 'hyrox_simulation',
+          'focus', 'simulation',
+          'day_type', 'simulation',
+          'is_ordered_simulation', true,
+          'day_selection_mode', 'benchmark_exactness',
+          'ordered_slots', jsonb_build_array(
+            jsonb_build_object('slot', 'A:run_1', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'A:ski_1', 'sw', 'ski_erg', 'sw2', 'ski_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'B:run_2', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'B:sled_push', 'sw', 'sled_push', 'sw2', 'sled_compound', 'pref_mode', 'strict', 'requirePref', 'hyrox_station', 'preferLoadable', true),
+            jsonb_build_object('slot', 'C:run_3', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'C:sled_pull', 'sw', 'sled_pull', 'sw2', 'sled_compound', 'pref_mode', 'strict', 'requirePref', 'hyrox_station', 'preferLoadable', true),
+            jsonb_build_object('slot', 'D:run_4', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'D:burpee', 'sw', 'burpee', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'E:run_5', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'E:row', 'sw', 'row_erg', 'sw2', 'row_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'F:run_6', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'F:carry', 'sw', 'farmer_carry', 'pref_mode', 'strict', 'requirePref', 'hyrox_station', 'preferLoadable', true),
+            jsonb_build_object('slot', 'G:run_7', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'G:lunge', 'mp', 'lunge', 'sw', 'sandbag_lunge', 'sw2', 'lunge_compound', 'pref_mode', 'strict', 'requirePref', 'hyrox_station', 'preferLoadable', true),
+            jsonb_build_object('slot', 'H:run_8', 'sw2', 'run_interval', 'pref_mode', 'strict', 'requirePref', 'hyrox_station'),
+            jsonb_build_object('slot', 'H:wall_ball', 'mp', 'push_ballistic', 'sw', 'wallball', 'pref_mode', 'strict', 'requirePref', 'hyrox_station', 'preferLoadable', true)
+          )
         )
       ),
       'sets_by_duration', jsonb_build_object(
@@ -606,7 +631,11 @@ SELECT
         'A', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'main', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
         'B', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'secondary', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
         'C', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
-        'D', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 0)
+        'D', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 0),
+        'E', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+        'F', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+        'G', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 60),
+        'H', jsonb_build_object('preferred_segment_type', 'amrap', 'purpose', 'accessory', 'time_cap_sec', 480, 'post_segment_rest_sec', 0)
       ),
       'block_semantics_by_focus', jsonb_build_object(
         'power', jsonb_build_object(
