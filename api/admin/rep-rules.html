@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rep Rules — Admin</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --panel: #fff; --border: #d8dee6;
+      --text: #1f2937; --muted: #6b7280; --primary: #0f62fe;
+      --danger: #b42318; --success: #0f766e; --warn: #b45309;
+      --drawer-w: 520px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; font-size: 13px; padding-bottom: 64px; }
+    .page { padding: 12px; }
+    h1 { margin: 0; font-size: 20px; }
+    input, select, textarea, button { font: inherit; }
+    input, select, textarea { border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; background: #fff; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+    button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 6px 13px; cursor: pointer; white-space: nowrap; }
+    button:hover { filter: brightness(.9); }
+    button.secondary { background: #fff; color: var(--primary); }
+    button.ghost { background: transparent; border-color: var(--border); color: var(--text); padding: 3px 9px; font-size: 12px; }
+    button.ghost:hover { background: var(--bg); }
+    button:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+
+    /* Header */
+    .header { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .header-title { display: flex; align-items: center; gap: 12px; }
+    .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+    .nav a { color: #1d4ed8; text-decoration: none; font-size: 12px; }
+    .nav a:hover { text-decoration: underline; }
+    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+    .ctrl { display: grid; gap: 3px; }
+    .ctrl label { font-size: 11px; color: var(--muted); }
+    #status { margin-top: 6px; font-size: 12px; min-height: 18px; }
+    .ok { color: var(--success); } .err { color: var(--danger); } .warn { color: var(--warn); }
+
+    /* Filter bar */
+    .filter-bar { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+    .filter-bar .ctrl select, .filter-bar .ctrl input { min-width: 140px; }
+    .summary-bar { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
+    /* Table */
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th, td { border-bottom: 1px solid #ecf0f4; padding: 5px 8px; text-align: left; vertical-align: middle; white-space: nowrap; }
+    th { background: #f9fbfd; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    tbody tr:hover { background: #f4f8ff; }
+    tbody tr.inactive td:not(.actions-cell) { opacity: .45; }
+    /* Simulation / day-type-scoped rows get a blue left border */
+    tbody tr.scoped { border-left: 3px solid #3b82f6; }
+    tbody tr.scoped td:first-child { padding-left: 5px; }
+    /* Inactive scoped rows combine both styles */
+    tbody tr.scoped.inactive td:not(.actions-cell) { opacity: .45; }
+
+    .mono { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+    .badge { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge.sim { background: #dbeafe; color: #1d4ed8; }
+    .badge.base { background: #f3f4f6; color: #6b7280; }
+    .badge.inactive { background: #fee2e2; color: #b42318; }
+
+    /* Editable prescription cells */
+    td.editable { cursor: pointer; }
+    td.editable:hover { background: #eff6ff; outline: 1px dashed #93c5fd; }
+    td.editable.editing { padding: 2px 4px; }
+    td.editable input, td.editable select { padding: 2px 5px; font-size: 12px; width: 70px; border-radius: 4px; }
+    td.editable select { width: auto; }
+    .flash-ok { animation: flashok .6s ease; }
+    @keyframes flashok { 0%,100% { background: inherit; } 40% { background: #d1fae5; } }
+
+    /* Empty / loading states */
+    .state-row td { text-align: center; padding: 32px; color: var(--muted); font-size: 13px; }
+
+    /* Drawer */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 100; }
+    .overlay.open { display: block; }
+    .drawer { position: fixed; top: 0; right: 0; width: var(--drawer-w); height: 100%; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -4px 0 24px rgba(0,0,0,.1); display: flex; flex-direction: column; z-index: 101; transform: translateX(100%); transition: transform .2s ease; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .drawer-title { margin: 0; font-size: 15px; }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 14px; display: grid; gap: 12px; }
+    .drawer-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0; align-items: center; }
+    .spacer { flex: 1; }
+    .fg { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 0; }
+    .fg legend { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 0 4px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .f { display: grid; gap: 3px; }
+    .f label { font-size: 11px; color: var(--muted); }
+    .f input, .f select { width: 100%; }
+    .f .hint { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .err-msg { font-size: 12px; color: var(--danger); min-height: 16px; }
+    .warn-note { font-size: 11px; color: var(--warn); background: #fef3c7; border-radius: 4px; padding: 6px 8px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div class="header-title">
+        <h1>Rep Rules</h1>
+        <button id="new-rule-btn" disabled>+ New Simulation Rule</button>
+      </div>
+      <nav class="nav">
+        <a href="/admin-ui/index.html">Config Editor</a>
+        <a href="/admin/coverage">Coverage</a>
+        <a href="/admin/health">Health</a>
+        <a href="/admin/exercises">Exercises</a>
+        <a href="/admin/narration">Narration</a>
+        <a href="/admin/rep-rules" class="active">Rep Rules</a>
+        <a href="/admin/observability">Observability</a>
+        <a href="/admin/preview">Preview</a>
+      </nav>
+    </div>
+    <div class="controls">
+      <div class="ctrl">
+        <label for="token-input">Internal API Token</label>
+        <input id="token-input" type="password" style="width:220px" placeholder="x-internal-token" />
+      </div>
+      <button id="load-btn">Load</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="ctrl">
+      <label for="filter-program">Program type</label>
+      <select id="filter-program">
+        <option value="">All</option>
+        <option value="hypertrophy">hypertrophy</option>
+        <option value="strength">strength</option>
+        <option value="conditioning">conditioning</option>
+        <option value="hyrox">hyrox</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label for="filter-daytype">Day type</label>
+      <select id="filter-daytype">
+        <option value="">All</option>
+        <option value="simulation">simulation</option>
+        <option value="__none__">(base rules only)</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label for="filter-active">Show</label>
+      <select id="filter-active">
+        <option value="active">Active only</option>
+        <option value="all">Include inactive</option>
+        <option value="inactive">Inactive only</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="summary-bar" id="summary-bar"></div>
+
+  <!-- Table -->
+  <div class="panel">
+    <table id="rules-table">
+      <thead>
+        <tr>
+          <th>Rule ID</th>
+          <th>Day type</th>
+          <th>sw2</th>
+          <th>mp</th>
+          <th>equip</th>
+          <th>Rep low</th>
+          <th>Rep high</th>
+          <th>Unit</th>
+          <th>Rest (s)</th>
+          <th>Active</th>
+          <th class="actions-cell">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="rules-tbody">
+        <tr class="state-row"><td colspan="11">Enter token and click Load.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- Overlay + Drawer (creation form — wired in R4) -->
+<div class="overlay" id="drawer-overlay"></div>
+<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+  <div class="drawer-header">
+    <h2 class="drawer-title" id="drawer-title">New Simulation Rule</h2>
+    <button class="ghost" id="drawer-close" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body" id="drawer-body">
+    <p class="warn-note">
+      ⚠ New rules require a <strong>day_type</strong>. Base rules (day_type = any)
+      must be added via the seed migration.
+    </p>
+
+    <fieldset class="fg">
+      <legend>Identity</legend>
+      <div class="f">
+        <label for="d-rule-id">Rule ID <span style="color:var(--danger)">*</span></label>
+        <input id="d-rule-id" type="text" placeholder="e.g. hyrx_sim_mystation" autocomplete="off" />
+        <span class="hint">No whitespace. Must be unique.</span>
+      </div>
+      <div class="row2">
+        <div class="f">
+          <label for="d-program-type">Program type <span style="color:var(--danger)">*</span></label>
+          <select id="d-program-type">
+            <option value="hyrox" selected>hyrox</option>
+            <option value="hypertrophy">hypertrophy</option>
+            <option value="strength">strength</option>
+            <option value="conditioning">conditioning</option>
+          </select>
+        </div>
+        <div class="f">
+          <label for="d-day-type">Day type <span style="color:var(--danger)">*</span></label>
+          <input id="d-day-type" type="text" value="simulation" readonly style="background:#f9fafb;color:var(--muted);" />
+          <span class="hint">Locked — new rules require a day type.</span>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="fg">
+      <legend>Matching dimensions <span style="font-size:11px;font-weight:400;text-transform:none">(leave blank = match any)</span></legend>
+      <div class="row2">
+        <div class="f">
+          <label for="d-segment-type">Segment type</label>
+          <input id="d-segment-type" list="d-segment-type-list" placeholder="e.g. amrap" autocomplete="off" />
+          <datalist id="d-segment-type-list">
+            <option value="single"></option><option value="superset"></option>
+            <option value="giant_set"></option><option value="amrap"></option><option value="emom"></option>
+          </datalist>
+        </div>
+        <div class="f">
+          <label for="d-purpose">Purpose</label>
+          <input id="d-purpose" list="d-purpose-list" placeholder="e.g. main" autocomplete="off" />
+          <datalist id="d-purpose-list">
+            <option value="main"></option><option value="secondary"></option>
+            <option value="accessory"></option>
+          </datalist>
+        </div>
+      </div>
+      <div class="row3">
+        <div class="f">
+          <label for="d-mp">Movement pattern (mp)</label>
+          <input id="d-mp" type="text" placeholder="e.g. locomotion" autocomplete="off" />
+        </div>
+        <div class="f">
+          <label for="d-sw2">sw2</label>
+          <input id="d-sw2" type="text" placeholder="e.g. run_interval" autocomplete="off" />
+        </div>
+        <div class="f">
+          <label for="d-equipment">Equipment slug</label>
+          <input id="d-equipment" type="text" placeholder="e.g. ski_erg" autocomplete="off" />
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="fg">
+      <legend>Prescription <span style="color:var(--danger)">*</span></legend>
+      <div class="row3">
+        <div class="f">
+          <label for="d-rep-low">Rep low</label>
+          <input id="d-rep-low" type="number" min="0" placeholder="0" />
+        </div>
+        <div class="f">
+          <label for="d-rep-high">Rep high</label>
+          <input id="d-rep-high" type="number" min="0" placeholder="0" />
+        </div>
+        <div class="f">
+          <label for="d-reps-unit">Unit <span style="color:var(--danger)">*</span></label>
+          <select id="d-reps-unit">
+            <option value="reps">reps</option>
+            <option value="m">m</option>
+            <option value="cal">cal</option>
+            <option value="seconds">seconds</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="f">
+          <label for="d-rest-set">Rest after set (sec)</label>
+          <input id="d-rest-set" type="number" min="0" placeholder="0" />
+        </div>
+        <div class="f">
+          <label for="d-priority">Priority</label>
+          <input id="d-priority" type="number" min="1" value="100" />
+          <span class="hint">Higher = matched first. Simulation rules default 100.</span>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="f">
+      <label><input id="d-is-active" type="checkbox" checked /> Active</label>
+    </div>
+
+    <div class="err-msg" id="drawer-err"></div>
+  </div>
+  <div class="drawer-footer">
+    <button id="drawer-save-btn">Save Rule</button>
+    <button class="secondary" id="drawer-cancel-btn">Cancel</button>
+    <span class="spacer"></span>
+  </div>
+</div>
+
+<script>
+  // ── State ─────────────────────────────────────────────────────────────────
+  let _allRules = [];
+  let _token = localStorage.getItem("admin_token") || "";
+  let _drawerMode = "new";   // "new" | "edit"
+  let _drawerRuleId = null;  // rule_id being edited (edit mode only)
+
+  const $ = (id) => document.getElementById(id);
+
+  function setStatus(msg, kind = "") {
+    const el = $("status");
+    el.textContent = msg;
+    el.className = kind;
+  }
+
+  function getToken() {
+    return ($("token-input").value || "").trim() || _token;
+  }
+
+  function saveToken(t) {
+    _token = t;
+    localStorage.setItem("admin_token", t);
+  }
+
+  // ── API helpers ───────────────────────────────────────────────────────────
+  async function apiFetch(path, init = {}) {
+    const token = getToken();
+    const res = await fetch(path, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Token": token,
+        ...(init.headers || {}),
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status, data });
+    return data;
+  }
+
+  // ── Load & filter ─────────────────────────────────────────────────────────
+  async function loadRules() {
+    const token = ($("token-input").value || "").trim();
+    if (token) saveToken(token);
+    setStatus("Loading…");
+    try {
+      const data = await apiFetch("/admin/rep-rules/rules");
+      _allRules = data.rules || [];
+      populateDayTypeFilter();
+      renderTable();
+      $("new-rule-btn").disabled = false;
+      setStatus(`Loaded ${_allRules.length} rules.`, "ok");
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, "err");
+      renderEmpty("Failed to load rules. Check your token.");
+    }
+  }
+
+  function populateDayTypeFilter() {
+    const sel = $("filter-daytype");
+    const existing = new Set(["", "simulation", "__none__"]);
+    const extra = [...new Set(_allRules.map(r => r.day_type).filter(Boolean))]
+      .filter(v => !existing.has(v)).sort();
+    for (const v of extra) {
+      if (!sel.querySelector(`option[value="${CSS.escape(v)}"]`)) {
+        const opt = document.createElement("option");
+        opt.value = v; opt.textContent = v;
+        sel.appendChild(opt);
+      }
+    }
+  }
+
+  function getFilters() {
+    return {
+      program: $("filter-program").value,
+      dayType: $("filter-daytype").value,
+      active: $("filter-active").value,
+    };
+  }
+
+  function filterRules(rules, { program, dayType, active }) {
+    return rules.filter(r => {
+      if (program && r.program_type !== program) return false;
+      if (dayType === "__none__" && r.day_type != null) return false;
+      if (dayType && dayType !== "__none__" && r.day_type !== dayType) return false;
+      if (active === "active" && !r.is_active) return false;
+      if (active === "inactive" && r.is_active) return false;
+      return true;
+    });
+  }
+
+  function fmt(v) {
+    return (v === null || v === undefined || v === "") ? "—" : String(v);
+  }
+
+  function renderTable() {
+    const filters = getFilters();
+    const visible = filterRules(_allRules, filters);
+    const tbody = $("rules-tbody");
+
+    if (!visible.length) {
+      renderEmpty("No rules match the current filters.");
+      updateSummary(0, 0);
+      return;
+    }
+
+    const scoped = visible.filter(r => r.day_type != null).length;
+    updateSummary(visible.length, scoped);
+
+    tbody.innerHTML = visible.map(r => {
+      const isScoped = r.day_type != null;
+      const isInactive = !r.is_active;
+      const rowClass = [isScoped ? "scoped" : "", isInactive ? "inactive" : ""].filter(Boolean).join(" ");
+
+      const dayBadge = isScoped
+        ? `<span class="badge sim">${escHtml(r.day_type)}</span>`
+        : `<span class="badge base">—</span>`;
+
+      const activeBadge = r.is_active
+        ? `<span class="badge" style="background:#d1fae5;color:#065f46">✓</span>`
+        : `<span class="badge inactive">off</span>`;
+
+      const repLow  = editableCell(r, "rep_low",  fmt(r.rep_low));
+      const repHigh = editableCell(r, "rep_high", fmt(r.rep_high));
+      const unit    = editableCell(r, "reps_unit", fmt(r.reps_unit));
+      const rest    = editableCell(r, "rest_after_set_sec", fmt(r.rest_after_set_sec));
+      const active  = editableCell(r, "is_active", activeBadge, /*rawHtml*/true);
+
+      return `<tr class="${rowClass}" data-rule-id="${escHtml(r.rule_id)}">
+        <td title="${escHtml(r.rule_id)}" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">${escHtml(r.rule_id)}</td>
+        <td>${dayBadge}</td>
+        <td class="mono">${escHtml(fmt(r.swap_group_id_2))}</td>
+        <td class="mono">${escHtml(fmt(r.movement_pattern))}</td>
+        <td class="mono">${escHtml(fmt(r.equipment_slug))}</td>
+        ${repLow}
+        ${repHigh}
+        ${unit}
+        ${rest}
+        ${active}
+        <td class="actions-cell"><button class="ghost edit-btn" data-rule-id="${escHtml(r.rule_id)}">Edit</button></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function editableCell(rule, field, display, rawHtml = false) {
+    const content = rawHtml ? display : escHtml(display);
+    return `<td class="editable" data-field="${field}" data-rule-id="${escHtml(rule.rule_id)}">${content}</td>`;
+  }
+
+  function renderEmpty(msg) {
+    $("rules-tbody").innerHTML = `<tr class="state-row"><td colspan="11">${escHtml(msg)}</td></tr>`;
+  }
+
+  function updateSummary(total, scoped) {
+    $("summary-bar").textContent = total
+      ? `${total} rule${total !== 1 ? "s" : ""} shown — ${scoped} day-type-scoped (blue), ${total - scoped} base`
+      : "";
+  }
+
+  // ── Escaping ──────────────────────────────────────────────────────────────
+  function escHtml(v) {
+    return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // ── Inline editing ────────────────────────────────────────────────────────
+  const UNIT_OPTIONS = ["reps", "m", "cal", "seconds"];
+
+  $("rules-tbody").addEventListener("click", e => {
+    // Edit button → open drawer
+    if (e.target.classList.contains("edit-btn")) {
+      const ruleId = e.target.dataset.ruleId;
+      const rule = _allRules.find(r => r.rule_id === ruleId);
+      if (rule) openEditDrawer(rule);
+      return;
+    }
+
+    // Editable cell click
+    const cell = e.target.closest("td.editable");
+    if (!cell || cell.classList.contains("editing")) return;
+
+    const field = cell.dataset.field;
+    const ruleId = cell.dataset.ruleId;
+    const rule = _allRules.find(r => r.rule_id === ruleId);
+    if (!rule) return;
+
+    // is_active — confirm dialog, immediate PATCH
+    if (field === "is_active") {
+      const nextVal = !rule.is_active;
+      const verb = nextVal ? "Activate" : "Deactivate";
+      if (!confirm(`${verb} rule "${ruleId}"?`)) return;
+      patchRule(ruleId, { is_active: nextVal }, cell);
+      return;
+    }
+
+    // Other prescription fields — replace cell content with input/select
+    const originalHTML = cell.innerHTML;
+    const currentVal = rule[field] ?? "";
+    cell.classList.add("editing");
+
+    let input;
+    if (field === "reps_unit") {
+      input = document.createElement("select");
+      UNIT_OPTIONS.forEach(u => {
+        const opt = document.createElement("option");
+        opt.value = u; opt.textContent = u;
+        if (u === currentVal) opt.selected = true;
+        input.appendChild(opt);
+      });
+    } else {
+      input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.value = (currentVal === null || currentVal === undefined) ? "" : currentVal;
+      input.style.width = "70px";
+    }
+
+    cell.innerHTML = "";
+    cell.appendChild(input);
+    input.focus();
+    if (input.select) input.select();
+
+    function commit() {
+      const newVal = field === "reps_unit" ? input.value : parseInt(input.value, 10);
+      if (field !== "reps_unit" && (!Number.isFinite(newVal) || newVal < 0)) {
+        revert();
+        return;
+      }
+      if (String(newVal) === String(currentVal)) { revert(); return; }
+      patchRule(ruleId, { [field]: newVal }, cell);
+    }
+
+    function revert() {
+      cell.classList.remove("editing");
+      cell.innerHTML = originalHTML;
+    }
+
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+      if (ev.key === "Escape") { ev.preventDefault(); input.removeEventListener("blur", commit); revert(); }
+    });
+    // For select, commit immediately on change
+    if (field === "reps_unit") {
+      input.addEventListener("change", () => { input.removeEventListener("blur", commit); commit(); });
+    }
+  });
+
+  async function patchRule(ruleId, fields, cellEl) {
+    try {
+      const data = await apiFetch(`/admin/rep-rules/rules/${encodeURIComponent(ruleId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(fields),
+      });
+      // Update in-place in _allRules
+      const idx = _allRules.findIndex(r => r.rule_id === ruleId);
+      if (idx !== -1) _allRules[idx] = { ..._allRules[idx], ...data.rule };
+      renderTable();
+      // Flash the updated row green
+      const row = $("rules-tbody").querySelector(`tr[data-rule-id="${CSS.escape(ruleId)}"]`);
+      if (row) { row.classList.add("flash-ok"); row.addEventListener("animationend", () => row.classList.remove("flash-ok"), { once: true }); }
+      setStatus(`Saved ${ruleId}.`, "ok");
+    } catch (err) {
+      setStatus(`Save failed: ${err.message}`, "err");
+      if (cellEl) { cellEl.classList.remove("editing"); }
+      renderTable(); // re-render to restore original cell
+    }
+  }
+
+  // ── Drawer ────────────────────────────────────────────────────────────────
+  function openDrawer() {
+    $("drawer-overlay").classList.add("open");
+    $("drawer").classList.add("open");
+    $("drawer-err").textContent = "";
+    setTimeout(() => $("d-rule-id").focus(), 50);
+  }
+
+  function closeDrawer() {
+    $("drawer-overlay").classList.remove("open");
+    $("drawer").classList.remove("open");
+    _drawerMode = "new";
+    _drawerRuleId = null;
+  }
+
+  function openNewDrawer() {
+    _drawerMode = "new";
+    _drawerRuleId = null;
+    $("drawer-title").textContent = "New Simulation Rule";
+    $("d-rule-id").value = "";
+    $("d-rule-id").readOnly = false;
+    $("d-program-type").value = "hyrox";
+    $("d-day-type").value = "simulation";
+    $("d-segment-type").value = "";
+    $("d-purpose").value = "";
+    $("d-mp").value = "";
+    $("d-sw2").value = "";
+    $("d-equipment").value = "";
+    $("d-rep-low").value = "";
+    $("d-rep-high").value = "";
+    $("d-reps-unit").value = "reps";
+    $("d-rest-set").value = "";
+    $("d-priority").value = "100";
+    $("d-is-active").checked = true;
+    openDrawer();
+  }
+
+  function openEditDrawer(rule) {
+    _drawerMode = "edit";
+    _drawerRuleId = rule.rule_id;
+    $("drawer-title").textContent = `Edit: ${rule.rule_id}`;
+    $("d-rule-id").value = rule.rule_id;
+    $("d-rule-id").readOnly = true;
+    $("d-program-type").value = rule.program_type || "hyrox";
+    $("d-day-type").value = rule.day_type || "";
+    $("d-segment-type").value = rule.segment_type || "";
+    $("d-purpose").value = rule.purpose || "";
+    $("d-mp").value = rule.movement_pattern || "";
+    $("d-sw2").value = rule.swap_group_id_2 || "";
+    $("d-equipment").value = rule.equipment_slug || "";
+    $("d-rep-low").value = rule.rep_low ?? "";
+    $("d-rep-high").value = rule.rep_high ?? "";
+    $("d-reps-unit").value = rule.reps_unit || "reps";
+    $("d-rest-set").value = rule.rest_after_set_sec ?? "";
+    $("d-priority").value = rule.priority ?? 100;
+    $("d-is-active").checked = !!rule.is_active;
+    openDrawer();
+  }
+
+  // ── Drawer save ───────────────────────────────────────────────────────────
+  async function saveDrawer() {
+    $("drawer-err").textContent = "";
+    const btn = $("drawer-save-btn");
+
+    // Collect values
+    const ruleId   = ($("d-rule-id").value || "").trim();
+    const repLow   = parseInt($("d-rep-low").value, 10);
+    const repHigh  = parseInt($("d-rep-high").value, 10);
+    const repsUnit = $("d-reps-unit").value;
+    const restSet  = parseInt($("d-rest-set").value || "0", 10);
+    const priority = parseInt($("d-priority").value || "100", 10);
+
+    // Client-side validation
+    if (_drawerMode === "new") {
+      if (!ruleId) { $("drawer-err").textContent = "Rule ID is required."; return; }
+      if (/\s/.test(ruleId)) { $("drawer-err").textContent = "Rule ID must not contain whitespace."; return; }
+    }
+    if (!Number.isFinite(repLow) || repLow < 0)  { $("drawer-err").textContent = "Rep low must be 0 or greater."; return; }
+    if (!Number.isFinite(repHigh) || repHigh < 0) { $("drawer-err").textContent = "Rep high must be 0 or greater."; return; }
+    if (!repsUnit) { $("drawer-err").textContent = "Unit is required."; return; }
+    if (!Number.isFinite(priority) || priority < 1) { $("drawer-err").textContent = "Priority must be >= 1."; return; }
+
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+
+    try {
+      if (_drawerMode === "new") {
+        const body = {
+          rule_id:       ruleId,
+          program_type:  $("d-program-type").value,
+          day_type:      ($("d-day-type").value || "").trim(),
+          segment_type:  ($("d-segment-type").value || "").trim() || undefined,
+          purpose:       ($("d-purpose").value || "").trim() || undefined,
+          movement_pattern: ($("d-mp").value || "").trim() || undefined,
+          swap_group_id_2:  ($("d-sw2").value || "").trim() || undefined,
+          equipment_slug:   ($("d-equipment").value || "").trim() || undefined,
+          rep_low:   repLow,
+          rep_high:  repHigh,
+          reps_unit: repsUnit,
+          rest_after_set_sec: Number.isFinite(restSet) ? restSet : 0,
+          priority,
+          is_active: $("d-is-active").checked,
+        };
+        const data = await apiFetch("/admin/rep-rules/rules", { method: "POST", body: JSON.stringify(body) });
+        _allRules.unshift(data.rule);
+        closeDrawer();
+        renderTable();
+        // Flash the new row
+        const row = $("rules-tbody").querySelector(`tr[data-rule-id="${CSS.escape(data.rule.rule_id)}"]`);
+        if (row) { row.classList.add("flash-ok"); row.addEventListener("animationend", () => row.classList.remove("flash-ok"), { once: true }); }
+        setStatus(`Created rule: ${data.rule.rule_id}`, "ok");
+      } else {
+        // Edit mode — PATCH prescription fields only
+        const body = {
+          rep_low:   repLow,
+          rep_high:  repHigh,
+          reps_unit: repsUnit,
+          rest_after_set_sec: Number.isFinite(restSet) ? restSet : 0,
+          is_active: $("d-is-active").checked,
+        };
+        const data = await apiFetch(`/admin/rep-rules/rules/${encodeURIComponent(_drawerRuleId)}`, {
+          method: "PATCH", body: JSON.stringify(body),
+        });
+        const idx = _allRules.findIndex(r => r.rule_id === _drawerRuleId);
+        if (idx !== -1) _allRules[idx] = { ..._allRules[idx], ...data.rule };
+        closeDrawer();
+        renderTable();
+        const row = $("rules-tbody").querySelector(`tr[data-rule-id="${CSS.escape(_drawerRuleId)}"]`);
+        if (row) { row.classList.add("flash-ok"); row.addEventListener("animationend", () => row.classList.remove("flash-ok"), { once: true }); }
+        setStatus(`Saved ${_drawerRuleId}.`, "ok");
+      }
+    } catch (err) {
+      $("drawer-err").textContent = err.status === 409
+        ? "Rule ID already exists — choose a different ID."
+        : `Error: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save Rule";
+    }
+  }
+
+  // ── Event wiring ──────────────────────────────────────────────────────────
+  $("load-btn").addEventListener("click", loadRules);
+  $("token-input").addEventListener("keydown", e => { if (e.key === "Enter") loadRules(); });
+
+  $("filter-program").addEventListener("change", renderTable);
+  $("filter-daytype").addEventListener("change", renderTable);
+  $("filter-active").addEventListener("change", renderTable);
+
+  $("new-rule-btn").addEventListener("click", openNewDrawer);
+  $("drawer-close").addEventListener("click", closeDrawer);
+  $("drawer-cancel-btn").addEventListener("click", closeDrawer);
+  $("drawer-overlay").addEventListener("click", closeDrawer);
+  $("drawer-save-btn").addEventListener("click", saveDrawer);
+
+  // ── Init: restore token if stored ─────────────────────────────────────────
+  if (_token) {
+    $("token-input").value = _token;
+  }
+</script>
+</body>
+</html>

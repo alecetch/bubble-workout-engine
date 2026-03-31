@@ -249,3 +249,49 @@ test("applyNarration segment template tie-break uses lower priority number", asy
   assert.equal(out.debug.ok, true);
   assert.equal(mainSingle?.narration?.title, "Priority 1 Title");
 });
+
+test("applyNarration prefers simulation-specific day title over generic fallback", async () => {
+  const out = await applyNarration({
+    program: {
+      program_type: "hyrox",
+      duration_mins: 40,
+      days_per_week: 1,
+      days: [
+        {
+          day_index: 1,
+          day_focus: "simulation",
+          segments: [],
+        },
+      ],
+    },
+    narrationTemplates: [
+      {
+        template_id: "day_title_generic",
+        scope: "day",
+        field: "DAY_TITLE",
+        priority: 1,
+        text_pool_json: ["Day {DAY_INDEX}: {DAY_FOCUS} Hypertrophy"],
+      },
+      {
+        template_id: "day_title_simulation",
+        scope: "day",
+        field: "DAY_TITLE",
+        priority: 1,
+        applies_json: { program_type: "hyrox", day_focus: "simulation" },
+        text_pool_json: ["Simulation Day"],
+      },
+    ],
+    narrationSource: "db",
+    narrationTemplatesJson: null,
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: makeCatalogJson(),
+    cooldownSeconds: 120,
+  });
+
+  const dayTitle = out.program?.days?.[0]?.narration?.day_title ?? "";
+  assert.equal(out.debug.ok, true);
+  assert.equal(dayTitle, "Simulation Day");
+  assert.equal(dayTitle.includes("Hypertrophy"), false);
+});

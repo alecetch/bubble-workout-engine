@@ -432,6 +432,14 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   );
   if (ex) return ex;
 
+  if (sel.selectionMode === "benchmark_exactness") {
+    ex = attempt(sel.mp || null, sel.sw || null, sel.sw2 || null, sel.sw2Any || null, sel.requirePref);
+    if (ex) {
+      stats.picked_benchmark_exact = Number(stats.picked_benchmark_exact || 0) + 1;
+      return ex;
+    }
+  }
+
   ex = attempt(null, null, sel.sw2, sel.sw2Any || null, sel.requirePref);
   if (ex) {
     stats.picked_sw2_pref++;

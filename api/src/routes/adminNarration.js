@@ -10,6 +10,19 @@ export const adminNarrationRouter = express.Router();
 adminNarrationRouter.use(requireInternalToken, requireTrustedAdminOrigin);
 
 const VALID_SCOPES = new Set(["program", "week", "day", "segment", "transition", "exercise"]);
+const VALID_FIELDS = new Set([
+  "PROGRAM_TITLE", "PROGRAM_SUMMARY", "PROGRESSION_BLURB", "SAFETY_BLURB",
+  "WEEK_TITLE", "WEEK_FOCUS", "WEEK_NOTES",
+  "DAY_TITLE", "DAY_GOAL", "TIME_BUDGET_HINT",
+  "WARMUP_TITLE", "WARMUP_GENERAL_HEAT", "RAMP_SETS_TEXT",
+  "SEGMENT_TITLE", "SEGMENT_EXECUTION", "SEGMENT_INTENT",
+  "SETUP_NOTE", "TRANSITION_NOTE", "PACE_NOTE",
+  "EXERCISE_LINE", "CUE_LINE", "LOAD_HINT", "LOGGING_PROMPT",
+]);
+const VALID_PURPOSES = new Set(["main", "secondary", "accessory"]);
+const VALID_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
+const VALID_PROGRAM_TYPES = new Set(["hypertrophy", "strength", "hyrox", "conditioning"]);
+const VALID_PHASES = new Set(["BASELINE", "BUILD", "PEAK", "CONSOLIDATE", "DELOAD"]);
 
 const STATIC_EXPECTED_COMBOS = [
   { scope: "program", field: "PROGRAM_TITLE", purpose: null, segment_type: null },
@@ -33,6 +46,11 @@ const STATIC_EXPECTED_COMBOS = [
 
 function toNullableText(value) {
   const text = safeString(value);
+  return text || null;
+}
+
+function normalizeFocusValue(value) {
+  const text = safeString(value).trim().toLowerCase();
   return text || null;
 }
 
@@ -82,7 +100,7 @@ function parsePriority(value) {
   return null;
 }
 
-function validateTemplatePayload(body, { requireTemplateId }) {
+export function validateTemplatePayload(body, { requireTemplateId }) {
   const templateId = safeString(body?.template_id);
   const scope = safeString(body?.scope);
   const field = safeString(body?.field);
@@ -100,7 +118,15 @@ function validateTemplatePayload(body, { requireTemplateId }) {
     return { error: "scope must be one of program, week, day, segment, transition, exercise" };
   }
 
-  if (!field) return { error: "field is required" };
+  if (!VALID_FIELDS.has(field)) {
+    return { error: `field must be one of: ${[...VALID_FIELDS].sort().join(", ")}` };
+  }
+  if (purpose && !VALID_PURPOSES.has(purpose)) {
+    return { error: "purpose must be one of main, secondary, accessory" };
+  }
+  if (segmentType && !VALID_SEGMENT_TYPES.has(segmentType)) {
+    return { error: "segment_type must be one of single, superset, giant_set, amrap, emom" };
+  }
   if (priority == null) return { error: "priority must be an integer >= 1" };
 
   const textPool = parseTextPoolInput(body?.text_pool_json);
@@ -108,6 +134,28 @@ function validateTemplatePayload(body, { requireTemplateId }) {
 
   const applies = parseJsonObjectInput(body?.applies_json);
   if (applies.error) return applies;
+  if (applies.value) {
+    if (typeof applies.value.program_type === "string") {
+      applies.value.program_type = applies.value.program_type.trim().toLowerCase() || undefined;
+    }
+    if (typeof applies.value.day_focus === "string") {
+      applies.value.day_focus = applies.value.day_focus.trim().toLowerCase() || undefined;
+    }
+    if (typeof applies.value.phase === "string") {
+      applies.value.phase = applies.value.phase.trim() || undefined;
+    }
+
+    if (applies.value.program_type && !VALID_PROGRAM_TYPES.has(applies.value.program_type)) {
+      return { error: `applies_json.program_type must be one of: ${[...VALID_PROGRAM_TYPES].join(", ")}` };
+    }
+    if (applies.value.phase && !VALID_PHASES.has(applies.value.phase)) {
+      return { error: `applies_json.phase must be one of: ${[...VALID_PHASES].join(", ")}` };
+    }
+
+    Object.keys(applies.value).forEach((key) => {
+      if (applies.value[key] === undefined) delete applies.value[key];
+    });
+  }
 
   return {
     value: {
@@ -124,7 +172,7 @@ function validateTemplatePayload(body, { requireTemplateId }) {
   };
 }
 
-function normalizeTemplates(rows) {
+export function normalizeTemplates(rows) {
   return (rows ?? []).map((row) => {
     const applies = isPlainObject(row?.applies_json) ? row.applies_json : {};
     const poolValue = Array.isArray(row?.text_pool_json) ? row.text_pool_json : [];
@@ -134,8 +182,8 @@ function normalizeTemplates(rows) {
       field: safeString(row?.field),
       purpose: safeString(row?.purpose),
       segment_type: safeString(row?.segment_type),
-      applies_program_type: safeString(applies.program_type),
-      applies_day_focus: safeString(applies.day_focus),
+      applies_program_type: safeString(applies.program_type).toLowerCase(),
+      applies_day_focus: safeString(applies.day_focus).toLowerCase(),
       applies_phase: safeString(applies.phase),
       priority: parsePriority(row?.priority) ?? 1,
       text_pool_json: poolValue,
@@ -525,6 +573,21 @@ adminNarrationRouter.get("/narration/coverage", async (req, res) => {
     const blockSemantics = configJson?.segmentation?.block_semantics;
     const expectedCombos = deriveExpectedCombos(blockSemantics);
 
+    // Add per-day_focus variants of day-scope combos derived from the config's day templates.
+    // This allows templates with applies_day_focus (e.g. simulation-specific day titles)
+    // to appear in coverage rather than always being reported as "missing".
+    const dayFocusValues = [...new Set(
+      (configJson?.builder?.day_templates ?? [])
+        .map((t) => normalizeFocusValue(t?.focus))
+        .filter(Boolean),
+    )];
+    const staticDayCombos = STATIC_EXPECTED_COMBOS.filter((c) => c.scope === "day");
+    for (const df of dayFocusValues) {
+      for (const c of staticDayCombos) {
+        expectedCombos.push({ ...c, day_focus: df });
+      }
+    }
+
     const templateResult = await pool.query(
       `
       SELECT
@@ -546,10 +609,20 @@ adminNarrationRouter.get("/narration/coverage", async (req, res) => {
     );
 
     const templates = normalizeTemplates(templateResult.rows);
-    const matchCtx = { program_type: programType, day_focus: "" };
+    const knownFocusValues = [...dayFocusValues];
+    const knownFocusSet = new Set(knownFocusValues);
+    const orphanedTemplates = templates
+      .filter((template) => template.applies_day_focus)
+      .filter((template) => !knownFocusSet.has(normalizeFocusValue(template.applies_day_focus)))
+      .map((template) => ({
+        template_id: template.template_id,
+        applies_day_focus: template.applies_day_focus,
+        known_focus_values: knownFocusValues,
+      }));
     const summary = { specific: 0, generic_fallback: 0, missing: 0 };
 
     const expected = expectedCombos.map((combo) => {
+      const matchCtx = { program_type: programType, day_focus: combo.day_focus ?? "" };
       const winner = findWinningTemplate(templates, combo, matchCtx);
       let coverage = "missing";
       let winningTemplateId = null;
@@ -558,7 +631,9 @@ adminNarrationRouter.get("/narration/coverage", async (req, res) => {
       if (winner) {
         winningTemplateId = winner.template.template_id;
         winningScore = winner.score;
-        coverage = winner.template.applies_program_type ? "specific" : "generic_fallback";
+        coverage = (winner.template.applies_program_type || winner.template.applies_day_focus)
+          ? "specific"
+          : "generic_fallback";
       }
 
       summary[coverage] += 1;
@@ -567,6 +642,7 @@ adminNarrationRouter.get("/narration/coverage", async (req, res) => {
         field: combo.field,
         purpose: combo.purpose,
         segment_type: combo.segment_type,
+        day_focus: combo.day_focus ?? null,
         coverage,
         winning_template_id: winningTemplateId,
         winning_score: winningScore,
@@ -577,6 +653,7 @@ adminNarrationRouter.get("/narration/coverage", async (req, res) => {
       program_type: programType,
       config_key: configRow.config_key,
       expected,
+      orphaned_templates: orphanedTemplates,
       summary,
     });
   } catch (err) {

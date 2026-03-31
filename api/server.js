@@ -23,6 +23,7 @@ import { adminHealthRouter } from "./src/routes/adminHealth.js";
 import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
+import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
@@ -244,6 +245,7 @@ app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res,
 app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
 app.get("/admin/health", adminCspMiddleware, (_req, res) => sendAdminPage(res, "health.html"));
 app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res, "narration.html"));
+app.get("/admin/rep-rules", adminCspMiddleware, (_req, res) => sendAdminPage(res, "rep-rules.html"));
 app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
 app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
 
@@ -570,6 +572,7 @@ app.use("/admin/api/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/admin", ...adminOnly, adminConfigsRouter);
 app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
 app.use("/admin", ...adminOnly, adminNarrationRouter);
+app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);

@@ -1,6 +1,6 @@
 import type { OnboardingDraft } from "../state/onboarding/types";
 import { engineGetJson, enginePatchJson, enginePostJson } from "./client";
-import { getOrCreateUserId } from "./userIdentity";
+import { getUserIdentityQueryString } from "./userIdentity";
 
 export type ClientProfileServer = OnboardingDraft & {
   id: string;
@@ -16,9 +16,9 @@ export function getClientProfile(profileId: string): Promise<ClientProfileServer
 }
 
 export async function createClientProfile(payload: CreateClientProfileInput): Promise<ClientProfileServer> {
-  const userId = await getOrCreateUserId();
+  const query = await getUserIdentityQueryString();
   return enginePostJson<ClientProfileServer, CreateClientProfileInput>(
-    `/client-profiles?user_id=${encodeURIComponent(userId)}`,
+    `/client-profiles?${query}`,
     payload,
   );
 }

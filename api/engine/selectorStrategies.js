@@ -30,6 +30,7 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     condThresholds: compiledConfig?.builder?.conditioningThresholds ?? {},
     variabilityPolicy: slotDef.variability_policy || null,
     slotFamily: slotDef.slot_family || null,
+    selectionMode: state?.daySelectionMode || "default",
   };
 
   return pickWithFallback(

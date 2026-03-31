@@ -29,6 +29,10 @@
         display: grid;
         grid-template-columns: 320px 1fr;
         height: 100vh;
+        transition: grid-template-columns 0.18s ease;
+      }
+      .page.sidebar-collapsed {
+        grid-template-columns: 0 1fr;
       }
       .sidebar,
       .editor {
@@ -39,14 +43,32 @@
         background: var(--panel);
         display: flex;
         flex-direction: column;
+        min-width: 0;
+        transition: opacity 0.18s ease, border-color 0.18s ease;
+      }
+      .page.sidebar-collapsed .sidebar {
+        opacity: 0;
+        pointer-events: none;
+        border-right-color: transparent;
       }
       .sidebar-header {
         padding: 14px;
         border-bottom: 1px solid var(--border);
       }
+      .sidebar-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
       .sidebar-title {
         margin: 0 0 8px 0;
         font-size: 20px;
+      }
+      .sidebar-toggle-btn {
+        font-size: 12px;
+        padding: 5px 8px;
+        white-space: nowrap;
       }
       .token-row {
         display: grid;
@@ -100,6 +122,14 @@
       }
       .editor {
         padding: 16px 18px 96px 18px;
+      }
+      .editor-toolbar {
+        display: flex;
+        justify-content: flex-start;
+        margin-bottom: 10px;
+      }
+      .editor-toolbar:empty {
+        display: none;
       }
       .editor-empty {
         color: var(--muted);
@@ -246,6 +276,10 @@
         display: flex;
         align-items: center;
         gap: 8px;
+        transition: left 0.18s ease;
+      }
+      .page.sidebar-collapsed .sticky-actions {
+        left: 0;
       }
       .status {
         font-size: 13px;
@@ -309,6 +343,16 @@
       .variant-table th { background: #fef9e7; font-size: 11px; padding: 4px 6px; }
       .variant-table td { vertical-align: top; padding: 4px 6px; }
       .add-variant-btn { font-size: 12px; padding: 4px 8px; }
+      .simulation-toggle-btn { background: #e0f2fe; border: 1px solid #bae6fd; color: #075985; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; width: auto; }
+      .simulation-toggle-btn:hover { background: #bae6fd; }
+      .simulation-expand-row > td { background: #f0f9ff; padding: 8px 10px; border-top: none; }
+      .simulation-section { border: 1px solid #bae6fd; border-radius: 6px; padding: 10px; background: #f8fdff; }
+      .simulation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+      .simulation-table { margin-bottom: 6px; font-size: 12px; }
+      .simulation-table th { background: #eff6ff; font-size: 11px; padding: 4px 6px; }
+      .simulation-table td { vertical-align: top; padding: 4px 6px; }
+      .add-fallback-btn { font-size: 12px; padding: 4px 8px; }
+      .field-hint { display: block; margin-top: 4px; font-size: 11px; color: #64748b; }
       @media (max-width: 980px) {
         .page {
           grid-template-columns: 1fr;
@@ -326,7 +370,10 @@
     <div class="page">
       <aside class="sidebar">
         <div class="sidebar-header">
-          <h1 class="sidebar-title">Config Admin</h1>
+          <div class="sidebar-header-row">
+            <h1 class="sidebar-title">Config Admin</h1>
+            <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" type="button">Hide</button>
+          </div>
           <div class="token-row">
             <label for="token-input">Internal API Token</label>
             <input id="token-input" type="password" placeholder="Paste x-internal-token" />
@@ -334,11 +381,13 @@
           </div>
           <div class="nav-row">
             <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage Report</a>
-            <a href="/admin/exercises">Exercise Catalogue</a>
-            <a href="/admin/preview">Program Preview</a>
-            <a href="/admin/narration">Narration Templates</a>
+            <a href="/admin/coverage">Coverage</a>
+            <a href="/admin/health">Health</a>
+            <a href="/admin/exercises">Exercises</a>
+            <a href="/admin/narration">Narration</a>
+            <a href="/admin/rep-rules">Rep Rules</a>
             <a href="/admin/observability">Observability</a>
+            <a href="/admin/preview">Preview</a>
           </div>
         </div>
         <div id="config-list" class="list-wrap"></div>
@@ -348,17 +397,21 @@
       </aside>
 
       <main class="editor">
+        <div class="editor-toolbar">
+          <button id="sidebar-show-btn" class="sidebar-toggle-btn" type="button" hidden>Show Configs</button>
+        </div>
         <div id="editor-root"></div>
       </main>
     </div>
 
-    <script type="module">
-      const STORAGE_KEY = "admin_internal_api_token";
-      const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+	    <script type="module">
+	      const STORAGE_KEY = "admin_internal_api_token";
+	      const SIDEBAR_COLLAPSED_KEY = "admin_config_sidebar_collapsed";
+	      const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
       const LAST_ACTIVE_KEY = `${STORAGE_KEY}:last_active`;
       const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
       const DURATIONS = ["40", "50", "60"];
-      const BLOCKS = ["A", "B", "C", "D"];
+      const CORE_BLOCKS = ["A", "B", "C", "D"];
       const REQUIRE_PREF_OPTIONS = [
         "",
         "strength_main",
@@ -372,7 +425,9 @@
         "row_erg",
         "bike_erg",
       ];
-      const PREF_MODE_OPTIONS = ["", "strict", "soft"];
+	      const PREF_MODE_OPTIONS = ["", "strict", "soft"];
+	      const VARIABILITY_POLICY_OPTIONS = ["", "high", "med", "none"];
+	      const DAY_SELECTION_MODE_OPTIONS = ["default", "benchmark_exactness"];
       const SEGMENT_TYPES = ["single", "superset", "giant_set", "amrap", "emom"];
       const PURPOSE_TYPES = ["main", "secondary", "accessory"];
       const RANKS = ["beginner", "intermediate", "advanced", "elite"];
@@ -389,20 +444,36 @@
         status: "",
         statusKind: "",
         expandedVariantSlots: new Set(),
+        expandedSimulationSlots: new Set(),
       };
 
       const tokenInput = document.getElementById("token-input");
-      const loadBtn = document.getElementById("load-btn");
-      const duplicateBtn = document.getElementById("duplicate-btn");
-      const configListEl = document.getElementById("config-list");
-      const editorRoot = document.getElementById("editor-root");
+	      const loadBtn = document.getElementById("load-btn");
+	      const duplicateBtn = document.getElementById("duplicate-btn");
+	      const configListEl = document.getElementById("config-list");
+	      const editorRoot = document.getElementById("editor-root");
+	      const pageEl = document.querySelector(".page");
+	      const sidebarToggleBtn = document.getElementById("sidebar-toggle-btn");
+	      const sidebarShowBtn = document.getElementById("sidebar-show-btn");
 
-      function deepClone(x) {
-        return JSON.parse(JSON.stringify(x ?? {}));
-      }
-      function getToken() {
-        return tokenInput.value.trim();
-      }
+	      function deepClone(x) {
+	        return JSON.parse(JSON.stringify(x ?? {}));
+	      }
+	      function isSidebarCollapsed() {
+	        return sessionStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+	      }
+	      function applySidebarState(collapsed) {
+	        pageEl.classList.toggle("sidebar-collapsed", !!collapsed);
+	        if (sidebarToggleBtn) sidebarToggleBtn.textContent = collapsed ? "Show" : "Hide";
+	        if (sidebarShowBtn) sidebarShowBtn.hidden = !collapsed;
+	      }
+	      function setSidebarCollapsed(collapsed) {
+	        sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+	        applySidebarState(collapsed);
+	      }
+	      function getToken() {
+	        return tokenInput.value.trim();
+	      }
       function saveToken(token) {
         const value = String(token || "").trim();
         if (!value) {
@@ -413,11 +484,18 @@
         sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
         return value;
       }
-      function clearStoredToken() {
-        sessionStorage.removeItem(STORAGE_KEY);
-        sessionStorage.removeItem(LAST_ACTIVE_KEY);
-      }
-      function clearAdminSession(expired = false) {
+	      function clearStoredToken() {
+	        sessionStorage.removeItem(STORAGE_KEY);
+	        sessionStorage.removeItem(LAST_ACTIVE_KEY);
+	      }
+	      applySidebarState(isSidebarCollapsed());
+	      sidebarToggleBtn?.addEventListener("click", () => {
+	        setSidebarCollapsed(!isSidebarCollapsed());
+	      });
+	      sidebarShowBtn?.addEventListener("click", () => {
+	        setSidebarCollapsed(false);
+	      });
+	      function clearAdminSession(expired = false) {
         clearStoredToken();
         tokenInput.value = "";
         if (expired) {
@@ -467,6 +545,54 @@
         const n = Number(value);
         return Number.isFinite(n) ? Math.round(n) : fallback;
       }
+      function parseCsvList(value) {
+        return String(value || "")
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean);
+      }
+      function formatCsvList(values) {
+        return Array.isArray(values) ? values.filter(Boolean).join(", ") : "";
+      }
+      function isValidSlotKey(value) {
+        return /^[A-Z]:.+/.test(String(value || "").trim());
+      }
+      function getEditorBlockLetters(root) {
+        const semantics = root?.segmentation?.block_semantics;
+        const semanticKeys =
+          semantics && typeof semantics === "object" && !Array.isArray(semantics)
+            ? Object.keys(semantics)
+            : [];
+        const slotKeys = Array.isArray(root?.builder?.day_templates)
+          ? root.builder.day_templates.flatMap((day) =>
+              (Array.isArray(day?.ordered_slots) ? day.ordered_slots : [])
+                .map((slot) => String(slot?.slot || "").trim().split(":")[0])
+                .filter((block) => /^[A-Z]$/.test(block)),
+            )
+          : [];
+        return Array.from(new Set([...CORE_BLOCKS, ...semanticKeys, ...slotKeys]))
+          .filter((block) => /^[A-Z]$/.test(String(block || "").trim()))
+          .sort();
+      }
+      function validateStructuredEditor() {
+        const slotInputs = Array.from(document.querySelectorAll('[data-slot-field="slot"]'));
+        for (const input of slotInputs) {
+          const value = String(input.value || "").trim();
+          if (!value) {
+            input.setCustomValidity("");
+            continue;
+          }
+          if (!isValidSlotKey(value)) {
+            input.setCustomValidity('Slot must look like "A:name" with a block letter, colon, and name.');
+            input.reportValidity();
+            input.focus();
+            setStatus(`Invalid slot key: ${value}`, "err");
+            return false;
+          }
+          input.setCustomValidity("");
+        }
+        return true;
+      }
 
       function setStatus(message, kind = "") {
         state.status = message;
@@ -511,6 +637,13 @@
           Array.isArray(root.builder.block_budget)
         ) {
           root.builder.block_budget = {};
+        }
+        if (
+          !root.builder.block_variability_defaults ||
+          typeof root.builder.block_variability_defaults !== "object" ||
+          Array.isArray(root.builder.block_variability_defaults)
+        ) {
+          root.builder.block_variability_defaults = {};
         }
         if (!Array.isArray(root.builder.day_templates)) root.builder.day_templates = [];
         if (
@@ -598,24 +731,50 @@
         if (state.dayTab < 0) state.dayTab = 0;
 
         const selectedDay = dayTemplates[state.dayTab] || null;
+        const isOrderedSimulationDay = !!selectedDay?.is_ordered_simulation;
         const semantics = root.segmentation.block_semantics || {};
-        const semKeys = Array.from(new Set([...BLOCKS, ...Object.keys(semantics)]));
+        const editorBlocks = getEditorBlockLetters(root);
+        const semKeys = Array.from(new Set([...editorBlocks, ...Object.keys(semantics)]));
         const rankJson = getRankConfig();
         const activeChecked = state.configRow.is_active ? "checked" : "";
         const dirtyBadge = state.isDirty ? ' <span style="color:#b45309;font-size:12px;font-weight:normal;">(unsaved changes)</span>' : "";
 
-        const setsRows = [
-          { label: "Block A sets", block: "A" },
-          { label: "Block B sets", block: "B" },
-          { label: "Block C sets", block: "C" },
-          { label: "Block D sets", block: "D" },
-        ];
+        const setsRows = editorBlocks.map((block) => ({
+          label: `Block ${block} sets`,
+          block,
+        }));
+        const variabilityDefaultRows = editorBlocks.map((block) => {
+          const current = root.builder.block_variability_defaults?.[block] ?? "";
+          const options = VARIABILITY_POLICY_OPTIONS.map((value) => {
+            const selected = value === current ? "selected" : "";
+            const label = value || "(inherit default high)";
+            return `<option value="${escapeHtml(value)}" ${selected}>${escapeHtml(label)}</option>`;
+          }).join("");
+          return `
+            <tr>
+              <td>Block ${block}</td>
+              <td><select data-block-variability="${block}">${options}</select></td>
+            </tr>
+          `;
+        }).join("");
 
         const dayTabsHtml = dayTemplates
           .map(
             (d, i) =>
               `<button class="tab-btn ${i === state.dayTab ? "selected" : ""}" data-day-tab="${i}">${escapeHtml(d?.day_key || `day${i + 1}`)}</button>`,
           )
+          .join("");
+        const familyOptionsHtml = Array.from(
+          new Set(
+            dayTemplates.flatMap((day) =>
+              (Array.isArray(day?.ordered_slots) ? day.ordered_slots : [])
+                .map((slot) => String(slot?.slot_family || "").trim())
+                .filter(Boolean),
+            ),
+          ),
+        )
+          .sort()
+          .map((family) => `<option value="${escapeHtml(family)}"></option>`)
           .join("");
 
         const slotRowsHtml = (selectedDay?.ordered_slots || [])
@@ -629,7 +788,13 @@
             const prefMode = slot.pref_mode ?? "";
             const prefModeOptions = PREF_MODE_OPTIONS.map((v) => {
               const selected = v === prefMode ? "selected" : "";
-              const label = v === "" ? "strict" : v;
+              const label = v === "" ? "(default soft)" : v;
+              return `<option value="${escapeHtml(v)}" ${selected}>${escapeHtml(label)}</option>`;
+            }).join("");
+            const variabilityPolicy = slot.variability_policy ?? "";
+            const variabilityOptions = VARIABILITY_POLICY_OPTIONS.map((v) => {
+              const selected = v === variabilityPolicy ? "selected" : "";
+              const label = v || "(default high)";
               return `<option value="${escapeHtml(v)}" ${selected}>${escapeHtml(label)}</option>`;
             }).join("");
             const sw2AnyChipHtml = (Array.isArray(slot.sw2Any) ? slot.sw2Any : []).map(v =>
@@ -641,11 +806,27 @@
             const variantCount = Array.isArray(slot.variants) ? slot.variants.length : 0;
             const isExpanded = state.expandedVariantSlots.has(idx);
             const variantCell = `<button type="button" class="variant-toggle-btn" data-variant-toggle="${idx}">${variantCount}v ${isExpanded ? "▴" : "▾"}</button>`;
+            const fallbackCount = Array.isArray(slot.station_fallback_chain) ? slot.station_fallback_chain.length : 0;
+            const simExpanded = state.expandedSimulationSlots.has(idx);
+            const simSummaryBits = [
+              slot.requireHyroxRole ? `role:${slot.requireHyroxRole}` : "",
+              slot.station_index != null && slot.station_index !== "" ? `station:${slot.station_index}` : "",
+              Array.isArray(slot.required_equipment_slugs) && slot.required_equipment_slugs.length
+                ? `${slot.required_equipment_slugs.length} eq`
+                : "",
+            ].filter(Boolean);
+            const simulationCell = isOrderedSimulationDay
+              ? `<button type="button" class="simulation-toggle-btn" data-simulation-toggle="${idx}">${fallbackCount}f ${simExpanded ? "▴" : "▾"}<span class="field-hint">${escapeHtml(simSummaryBits.join(" · ") || "configure")}</span></button>`
+              : "";
             const variantsList = Array.isArray(slot.variants) ? slot.variants : [];
             const variantRowsHtml = variantsList.map((v, vi) => `<tr data-variant-index="${vi}">${renderVariantRowHtml(v)}</tr>`).join("");
+            const fallbackList = Array.isArray(slot.station_fallback_chain) ? slot.station_fallback_chain : [];
+            const fallbackRowsHtml = fallbackList
+              .map((attempt, attemptIdx) => `<tr data-fallback-index="${attemptIdx}">${renderFallbackRowHtml(attempt)}</tr>`)
+              .join("");
             const expandRow = `
               <tr class="variant-expand-row" data-variant-for="${idx}"${isExpanded ? "" : " hidden"}>
-                <td colspan="11">
+                <td colspan="14">
                   <div class="variant-section">
                     <table class="variant-table">
                       <thead>
@@ -658,10 +839,46 @@
                 </td>
               </tr>
             `;
+            const simulationExpandRow = isOrderedSimulationDay
+              ? `
+              <tr class="simulation-expand-row" data-simulation-for="${idx}"${simExpanded ? "" : " hidden"}>
+                <td colspan="14">
+                  <div class="simulation-section">
+                    <div class="simulation-grid">
+                      <div>
+                        <label>requireHyroxRole</label>
+                        <input data-sim-field="requireHyroxRole" value="${escapeHtml(slot.requireHyroxRole || "")}" />
+                      </div>
+                      <div>
+                        <label>station_index</label>
+                        <input type="number" min="0" data-sim-field="station_index" value="${escapeHtml(slot.station_index ?? "")}" />
+                      </div>
+                      <div>
+                        <label>required_equipment_slugs</label>
+                        <input data-sim-field="required_equipment_slugs" value="${escapeHtml(formatCsvList(slot.required_equipment_slugs))}" />
+                        <span class="field-hint">Comma-separated slugs</span>
+                      </div>
+                    </div>
+                    <table class="simulation-table">
+                      <thead>
+                        <tr><th>requireHyroxRole</th><th>station_index</th><th>required_equipment_slugs</th><th>sw2 / sw2Any</th><th>sw / swAny</th><th>mp</th><th>requirePref</th><th>pref_mode</th><th></th></tr>
+                      </thead>
+                      <tbody data-fallback-tbody="${idx}">${fallbackRowsHtml}</tbody>
+                    </table>
+                    <button type="button" class="add-fallback-btn" data-add-fallback-for="${idx}">+ Add fallback</button>
+                  </div>
+                </td>
+              </tr>
+            `
+              : "";
             return `
               <tr data-slot-index="${idx}">
                 <td>${idx + 1}</td>
-                <td><input data-slot-field="slot" value="${escapeHtml(slot.slot || "")}" /></td>
+                <td><input data-slot-field="slot" value="${escapeHtml(slot.slot || "")}" pattern="[A-Z]:.+" title="Use slot ids like A:run_1 or B:sled_push" /></td>
+                <td>
+                  <input data-slot-field="slot_family" list="slot-family-options" value="${escapeHtml(slot.slot_family || "")}" />
+                </td>
+                <td><select data-slot-field="variability_policy">${variabilityOptions}</select></td>
                 <td>
                   <div class="sw-combo-wrap"><input data-slot-field="sw2" value="${escapeHtml(slot.sw2 || "")}" autocomplete="off" /><ul class="sw-combo-dd" hidden></ul></div>
                   <div class="sw-any-wrap" data-any-for="sw2Any">${sw2AnyChipHtml}<button type="button" class="sw-any-add-btn" title="Add sw2Any value">+</button><ul class="sw-any-dd" hidden></ul></div>
@@ -674,6 +891,7 @@
                 <td><select data-slot-field="requirePref">${reqPrefOptions}</select></td>
                 <td><select data-slot-field="pref_mode">${prefModeOptions}</select></td>
                 <td><input type="checkbox" data-slot-field="preferLoadable" ${slot.preferLoadable ? "checked" : ""} /></td>
+                ${isOrderedSimulationDay ? `<td>${simulationCell}</td>` : ""}
                 <td>${variantCell}</td>
                 <td><input data-slot-field="fill_fallback_slot" value="${escapeHtml(slot.fill_fallback_slot || "")}" /></td>
                 <td>
@@ -681,7 +899,7 @@
                   <button type="button" data-slot-act="down">↓</button>
                   <button type="button" class="danger" data-slot-act="remove">✕</button>
                 </td>
-              </tr>${expandRow}
+              </tr>${simulationExpandRow}${expandRow}
             `;
           })
           .join("");
@@ -699,7 +917,7 @@
             }).join("");
             return `
               <tr data-sem-letter="${escapeHtml(letter)}">
-                <td><input data-sem-field="letter" value="${escapeHtml(letter)}" ${BLOCKS.includes(letter) ? "readonly" : ""} /></td>
+                <td><input data-sem-field="letter" value="${escapeHtml(letter)}" ${CORE_BLOCKS.includes(letter) ? "readonly" : ""} /></td>
                 <td><select data-sem-field="preferred_segment_type">${segmentOptions}</select></td>
                 <td><select data-sem-field="purpose">${purposeOptions}</select></td>
               </tr>
@@ -773,6 +991,14 @@
                   </tbody>
                 </table>
               </div>
+              <div class="table-wrap" style="margin-top:12px;max-width:420px;">
+                <table>
+                  <thead>
+                    <tr><th>Block</th><th>Variability default</th></tr>
+                  </thead>
+                  <tbody>${variabilityDefaultRows}</tbody>
+                </table>
+              </div>
             </div>
           </details>
 
@@ -795,12 +1021,35 @@
                         <label>Focus</label>
                         <input id="day-focus-input" value="${escapeHtml(selectedDay.focus || "")}" />
                       </div>
+                      <div>
+                        <label>Day selection mode</label>
+                        <select id="day-selection-mode-input">
+                          ${DAY_SELECTION_MODE_OPTIONS.map((mode) => {
+                            const selected = (selectedDay.day_selection_mode || "default") === mode ? "selected" : "";
+                            return `<option value="${escapeHtml(mode)}" ${selected}>${escapeHtml(mode)}</option>`;
+                          }).join("")}
+                        </select>
+                      </div>
+                      <div style="display:flex;align-items:end;">
+                        <label>
+                          <input id="day-ordered-simulation-input" type="checkbox" ${selectedDay.is_ordered_simulation ? "checked" : ""} />
+                          ordered simulation day
+                        </label>
+                      </div>
+                      <div>
+                        <label>Day type</label>
+                        <input id="day-type-input" list="day-type-options" value="${escapeHtml(selectedDay.day_type || "")}" placeholder="e.g. simulation" autocomplete="off" />
+                        <datalist id="day-type-options">
+                          <option value="simulation"></option>
+                        </datalist>
+                      </div>
                     </div>
                     <div class="table-wrap">
+                      <datalist id="slot-family-options">${familyOptionsHtml}</datalist>
                       <table>
                         <thead>
                           <tr>
-                            <th>#</th><th>Slot</th><th>sw2 / sw2Any</th><th>sw / swAny</th><th>mp</th><th>requirePref</th><th>pref_mode</th><th>Loadable</th><th>Variants</th><th>Fallback slot</th><th>Actions</th>
+                            <th>#</th><th>Slot</th><th>Family</th><th>Variability</th><th>sw2 / sw2Any</th><th>sw / swAny</th><th>mp</th><th>requirePref</th><th>pref_mode</th><th>Loadable</th>${isOrderedSimulationDay ? "<th>Simulation</th>" : ""}<th>Variants</th><th>Fallback slot</th><th>Actions</th>
                           </tr>
                         </thead>
                         <tbody id="slots-tbody">${slotRowsHtml}</tbody>
@@ -877,25 +1126,40 @@
           if (!root.builder.sets_by_duration[d] || typeof root.builder.sets_by_duration[d] !== "object") {
             root.builder.sets_by_duration[d] = {};
           }
-          BLOCKS.forEach((b) => {
+          getEditorBlockLetters(root).forEach((b) => {
             const input = document.querySelector(`[data-sets-block="${b}"][data-sets-duration="${d}"]`);
             root.builder.sets_by_duration[d][b] = toInt(input?.value, 0);
           });
           const budgetInput = document.querySelector(`[data-budget-duration="${d}"]`);
           root.builder.block_budget[d] = toInt(budgetInput?.value, 0);
         });
+        const nextBlockVariabilityDefaults = {};
+        getEditorBlockLetters(root).forEach((block) => {
+          const input = document.querySelector(`[data-block-variability="${block}"]`);
+          const value = (input?.value || "").trim();
+          if (value) nextBlockVariabilityDefaults[block] = value;
+        });
+        root.builder.block_variability_defaults = nextBlockVariabilityDefaults;
 
         const templates = root.builder.day_templates;
         if (templates[state.dayTab]) {
           const template = templates[state.dayTab];
           template.day_key = (document.getElementById("day-key-input")?.value || "").trim();
           template.focus = (document.getElementById("day-focus-input")?.value || "").trim();
+          template.day_selection_mode = document.getElementById("day-selection-mode-input")?.value || "default";
+          if (template.day_selection_mode === "default") delete template.day_selection_mode;
+          template.is_ordered_simulation = !!document.getElementById("day-ordered-simulation-input")?.checked;
+          if (!template.is_ordered_simulation) delete template.is_ordered_simulation;
+          const dayTypeVal = (document.getElementById("day-type-input")?.value || "").trim();
+          if (dayTypeVal) template.day_type = dayTypeVal; else delete template.day_type;
           const slotRows = Array.from(document.querySelectorAll("#slots-tbody tr[data-slot-index]"));
           const existingSlots = template.ordered_slots || [];
           template.ordered_slots = slotRows.map((row) => {
             const slotIdx = Number(row.dataset.slotIndex);
             const existing = existingSlots[slotIdx] || {};
             const slot = (row.querySelector('[data-slot-field="slot"]')?.value || "").trim();
+            const slotFamily = (row.querySelector('[data-slot-field="slot_family"]')?.value || "").trim();
+            const variabilityPolicy = row.querySelector('[data-slot-field="variability_policy"]')?.value || "";
             const sw2 = (row.querySelector('[data-slot-field="sw2"]')?.value || "").trim();
             const sw = (row.querySelector('[data-slot-field="sw"]')?.value || "").trim();
             const mp = (row.querySelector('[data-slot-field="mp"]')?.value || "").trim();
@@ -903,6 +1167,12 @@
             const prefMode = row.querySelector('[data-slot-field="pref_mode"]')?.value || "";
             const preferLoadable = !!row.querySelector('[data-slot-field="preferLoadable"]')?.checked;
             const fillFallback = (row.querySelector('[data-slot-field="fill_fallback_slot"]')?.value || "").trim();
+            const simulationRow = document.querySelector(`[data-simulation-for="${slotIdx}"]`);
+            const requireHyroxRole = (simulationRow?.querySelector('[data-sim-field="requireHyroxRole"]')?.value || "").trim();
+            const stationIndexRaw = (simulationRow?.querySelector('[data-sim-field="station_index"]')?.value || "").trim();
+            const requiredEquipmentSlugs = parseCsvList(
+              simulationRow?.querySelector('[data-sim-field="required_equipment_slugs"]')?.value || "",
+            );
             // Read swAny/sw2Any from DOM chip elements
             const swAnyVals = [...row.querySelectorAll('[data-any-for="swAny"] [data-chip-val]')].map(el => el.dataset.chipVal).filter(Boolean);
             const sw2AnyVals = [...row.querySelectorAll('[data-any-for="sw2Any"] [data-chip-val]')].map(el => el.dataset.chipVal).filter(Boolean);
@@ -933,18 +1203,56 @@
               if (vSeBonus) variant.strength_equivalent_bonus = true;
               return variant;
             });
+            const fallbackDomRows = Array.from(document.querySelectorAll(`[data-fallback-tbody="${slotIdx}"] tr[data-fallback-index]`));
+            const existingFallbacks = Array.isArray(existing.station_fallback_chain) ? existing.station_fallback_chain : [];
+            const fallbackChain = fallbackDomRows.map((fr) => {
+              const fallbackIdx = Number(fr.dataset.fallbackIndex);
+              const existingFallback = existingFallbacks[fallbackIdx] || {};
+              const fallbackRole = (fr.querySelector('[data-fallback-field="requireHyroxRole"]')?.value || "").trim();
+              const fallbackStationRaw = (fr.querySelector('[data-fallback-field="station_index"]')?.value || "").trim();
+              const fallbackEquipmentSlugs = parseCsvList(
+                fr.querySelector('[data-fallback-field="required_equipment_slugs"]')?.value || "",
+              );
+              const fallbackSw2 = (fr.querySelector('[data-fallback-field="sw2"]')?.value || "").trim();
+              const fallbackSw = (fr.querySelector('[data-fallback-field="sw"]')?.value || "").trim();
+              const fallbackMp = (fr.querySelector('[data-fallback-field="mp"]')?.value || "").trim();
+              const fallbackRequirePref = fr.querySelector('[data-fallback-field="requirePref"]')?.value || "";
+              const fallbackPrefMode = fr.querySelector('[data-fallback-field="pref_mode"]')?.value || "";
+              const fallbackSwAnyVals = [...fr.querySelectorAll('[data-fallback-any-for="swAny"] [data-chip-val]')].map((el) => el.dataset.chipVal).filter(Boolean);
+              const fallbackSw2AnyVals = [...fr.querySelectorAll('[data-fallback-any-for="sw2Any"] [data-chip-val]')].map((el) => el.dataset.chipVal).filter(Boolean);
+              const fallback = {
+                ...(existingFallback.pref_bonus != null ? { pref_bonus: existingFallback.pref_bonus } : {}),
+                ...(existingFallback.strength_equivalent_bonus != null ? { strength_equivalent_bonus: existingFallback.strength_equivalent_bonus } : {}),
+                ...(existingFallback.selector_strategy ? { selector_strategy: existingFallback.selector_strategy } : {}),
+                ...(existingFallback.preferLoadable != null ? { preferLoadable: existingFallback.preferLoadable } : {}),
+              };
+              if (fallbackRole) fallback.requireHyroxRole = fallbackRole;
+              if (fallbackStationRaw !== "") fallback.station_index = toInt(fallbackStationRaw, 0);
+              if (fallbackEquipmentSlugs.length) fallback.required_equipment_slugs = fallbackEquipmentSlugs;
+              if (fallbackSw2) fallback.sw2 = fallbackSw2;
+              if (fallbackSw) fallback.sw = fallbackSw;
+              if (fallbackSw2AnyVals.length) fallback.sw2Any = fallbackSw2AnyVals;
+              if (fallbackSwAnyVals.length) fallback.swAny = fallbackSwAnyVals;
+              if (fallbackMp) fallback.mp = fallbackMp;
+              if (fallbackRequirePref) fallback.requirePref = fallbackRequirePref;
+              if (fallbackPrefMode) fallback.pref_mode = fallbackPrefMode;
+              return fallback;
+            });
             // Start with the existing slot to preserve fields not shown in the table
             // (pref_bonus at root level, selector_strategy, is_buy_in, etc.)
             const rebuilt = {
               ...(swAnyVals.length ? { swAny: swAnyVals } : {}),
               ...(sw2AnyVals.length ? { sw2Any: sw2AnyVals } : {}),
               ...(domVariants.length ? { variants: domVariants } : {}),
+              ...(fallbackChain.length ? { station_fallback_chain: fallbackChain } : {}),
               ...(existing.pref_bonus != null ? { pref_bonus: existing.pref_bonus } : {}),
               ...(existing.strength_equivalent_bonus != null ? { strength_equivalent_bonus: existing.strength_equivalent_bonus } : {}),
               ...(existing.selector_strategy ? { selector_strategy: existing.selector_strategy } : {}),
               ...(existing.is_buy_in != null ? { is_buy_in: existing.is_buy_in } : {}),
             };
             rebuilt.slot = slot;
+            if (slotFamily) rebuilt.slot_family = slotFamily; else delete rebuilt.slot_family;
+            if (variabilityPolicy) rebuilt.variability_policy = variabilityPolicy; else delete rebuilt.variability_policy;
             if (sw2) rebuilt.sw2 = sw2; else delete rebuilt.sw2;
             if (sw) rebuilt.sw = sw; else delete rebuilt.sw;
             if (mp) rebuilt.mp = mp; else delete rebuilt.mp;
@@ -952,6 +1260,9 @@
             if (preferLoadable) rebuilt.preferLoadable = true; else delete rebuilt.preferLoadable;
             if (fillFallback) rebuilt.fill_fallback_slot = fillFallback; else delete rebuilt.fill_fallback_slot;
             if (prefMode) rebuilt.pref_mode = prefMode; else delete rebuilt.pref_mode;
+            if (requireHyroxRole) rebuilt.requireHyroxRole = requireHyroxRole; else delete rebuilt.requireHyroxRole;
+            if (stationIndexRaw !== "") rebuilt.station_index = toInt(stationIndexRaw, 0); else delete rebuilt.station_index;
+            if (requiredEquipmentSlugs.length) rebuilt.required_equipment_slugs = requiredEquipmentSlugs; else delete rebuilt.required_equipment_slugs;
             return rebuilt;
           });
         }
@@ -1013,6 +1324,7 @@
         template.ordered_slots[index] = template.ordered_slots[next];
         template.ordered_slots[next] = tmp;
         state.expandedVariantSlots = new Set();
+        state.expandedSimulationSlots = new Set();
         renderEditor();
       }
       function renderVariantRowHtml(v) {
@@ -1026,7 +1338,7 @@
         ).join("");
         const prefMode = v?.pref_mode ?? "";
         const prefModeOpts = PREF_MODE_OPTIONS.map(o =>
-          `<option value="${escapeHtml(o)}" ${prefMode === o ? "selected" : ""}>${o || "strict"}</option>`
+          `<option value="${escapeHtml(o)}" ${prefMode === o ? "selected" : ""}>${o || "(default soft)"}</option>`
         ).join("");
         const sw2AnyChips = (Array.isArray(v?.sw2Any) ? v.sw2Any : []).map(val =>
           `<span class="chip sw-chip" data-chip-val="${escapeHtml(val)}">${escapeHtml(val)}<button type="button" class="chip-del">×</button></span>`
@@ -1052,6 +1364,39 @@
           <td><button type="button" class="danger" data-variant-act="remove">✕</button></td>
         `;
       }
+      function renderFallbackRowHtml(attempt) {
+        const reqPref = attempt?.requirePref ?? "";
+        const reqPrefOpts = REQUIRE_PREF_OPTIONS.map(o =>
+          `<option value="${escapeHtml(o)}" ${reqPref === o ? "selected" : ""}>${o || "(none)"}</option>`
+        ).join("");
+        const prefMode = attempt?.pref_mode ?? "";
+        const prefModeOpts = PREF_MODE_OPTIONS.map(o =>
+          `<option value="${escapeHtml(o)}" ${prefMode === o ? "selected" : ""}>${o || "(default soft)"}</option>`
+        ).join("");
+        const sw2AnyChips = (Array.isArray(attempt?.sw2Any) ? attempt.sw2Any : []).map(val =>
+          `<span class="chip sw-chip" data-chip-val="${escapeHtml(val)}">${escapeHtml(val)}<button type="button" class="chip-del">×</button></span>`
+        ).join("");
+        const swAnyChips = (Array.isArray(attempt?.swAny) ? attempt.swAny : []).map(val =>
+          `<span class="chip sw-chip" data-chip-val="${escapeHtml(val)}">${escapeHtml(val)}<button type="button" class="chip-del">×</button></span>`
+        ).join("");
+        return `
+          <td><input data-fallback-field="requireHyroxRole" value="${escapeHtml(attempt?.requireHyroxRole || "")}" /></td>
+          <td><input type="number" min="0" data-fallback-field="station_index" value="${escapeHtml(attempt?.station_index ?? "")}" style="width:72px" /></td>
+          <td><input data-fallback-field="required_equipment_slugs" value="${escapeHtml(formatCsvList(attempt?.required_equipment_slugs))}" /></td>
+          <td>
+            <div class="sw-combo-wrap"><input data-fallback-field="sw2" value="${escapeHtml(attempt?.sw2 || "")}" autocomplete="off" /><ul class="sw-combo-dd" hidden></ul></div>
+            <div class="sw-any-wrap" data-fallback-any-for="sw2Any">${sw2AnyChips}<button type="button" class="sw-any-add-btn" title="Add sw2Any value">+</button><ul class="sw-any-dd" hidden></ul></div>
+          </td>
+          <td>
+            <div class="sw-combo-wrap"><input data-fallback-field="sw" value="${escapeHtml(attempt?.sw || "")}" autocomplete="off" /><ul class="sw-combo-dd" hidden></ul></div>
+            <div class="sw-any-wrap" data-fallback-any-for="swAny">${swAnyChips}<button type="button" class="sw-any-add-btn" title="Add swAny value">+</button><ul class="sw-any-dd" hidden></ul></div>
+          </td>
+          <td><div class="mp-combo-wrap"><input data-fallback-field="mp" value="${escapeHtml(attempt?.mp || "")}" autocomplete="off" /><ul class="mp-combo-dd" hidden></ul></div></td>
+          <td><select data-fallback-field="requirePref">${reqPrefOpts}</select></td>
+          <td><select data-fallback-field="pref_mode">${prefModeOpts}</select></td>
+          <td><button type="button" class="danger" data-fallback-act="remove">✕</button></td>
+        `;
+      }
 
       function updateVariantToggleBtn(slotIdx) {
         const btn = document.querySelector(`[data-variant-toggle="${slotIdx}"]`);
@@ -1060,6 +1405,23 @@
         const count = tbody ? tbody.querySelectorAll("tr[data-variant-index]").length : 0;
         const expanded = state.expandedVariantSlots.has(slotIdx);
         btn.textContent = `${count}v ${expanded ? "▴" : "▾"}`;
+      }
+      function updateSimulationToggleBtn(slotIdx) {
+        const btn = document.querySelector(`[data-simulation-toggle="${slotIdx}"]`);
+        if (!btn) return;
+        const tbody = document.querySelector(`[data-fallback-tbody="${slotIdx}"]`);
+        const count = tbody ? tbody.querySelectorAll("tr[data-fallback-index]").length : 0;
+        const expanded = state.expandedSimulationSlots.has(slotIdx);
+        const simulationRow = document.querySelector(`[data-simulation-for="${slotIdx}"]`);
+        const role = simulationRow?.querySelector('[data-sim-field="requireHyroxRole"]')?.value?.trim() || "";
+        const stationIndex = simulationRow?.querySelector('[data-sim-field="station_index"]')?.value?.trim() || "";
+        const equipment = parseCsvList(
+          simulationRow?.querySelector('[data-sim-field="required_equipment_slugs"]')?.value || "",
+        );
+        const summary = [role ? `role:${role}` : "", stationIndex ? `station:${stationIndex}` : "", equipment.length ? `${equipment.length} eq` : ""]
+          .filter(Boolean)
+          .join(" · ");
+        btn.innerHTML = `${count}f ${expanded ? "▴" : "▾"}<span class="field-hint">${escapeHtml(summary || "configure")}</span>`;
       }
 
       // ── Movement pattern combobox ─────────────────────────────────────────
@@ -1133,7 +1495,7 @@
 
       function initSwComboboxes() {
         for (const field of ["sw", "sw2"]) {
-          document.querySelectorAll(`[data-slot-field="${field}"], [data-variant-field="${field}"]`).forEach(inp => {
+          document.querySelectorAll(`[data-slot-field="${field}"], [data-variant-field="${field}"], [data-fallback-field="${field}"]`).forEach(inp => {
             attachSwCombobox(inp, field);
           });
         }
@@ -1185,6 +1547,7 @@
           const sourceField = anyFor === "swAny" ? "sw" : "sw2";
           document.querySelectorAll(`[data-any-for="${anyFor}"]`).forEach(wrap => attachSwAnyWrap(wrap, sourceField));
           document.querySelectorAll(`[data-variant-any-for="${anyFor}"]`).forEach(wrap => attachSwAnyWrap(wrap, sourceField));
+          document.querySelectorAll(`[data-fallback-any-for="${anyFor}"]`).forEach(wrap => attachSwAnyWrap(wrap, sourceField));
         }
       }
 
@@ -1274,7 +1637,7 @@
       }
 
       function initMpComboboxes() {
-        document.querySelectorAll('[data-slot-field="mp"], [data-variant-field="mp"]').forEach(inp => attachMpCombobox(inp));
+        document.querySelectorAll('[data-slot-field="mp"], [data-variant-field="mp"], [data-fallback-field="mp"]').forEach(inp => attachMpCombobox(inp));
       }
 
       function wireEditorEvents() {
@@ -1293,10 +1656,26 @@
             state.configRow.is_active = !!activeToggle.checked;
           });
         }
+        const orderedSimulationToggle = document.getElementById("day-ordered-simulation-input");
+        if (orderedSimulationToggle) {
+          orderedSimulationToggle.addEventListener("change", () => {
+            // Auto-fill day_type with "simulation" when toggling on, if currently empty.
+            if (orderedSimulationToggle.checked) {
+              const dayTypeInput = document.getElementById("day-type-input");
+              if (dayTypeInput && !dayTypeInput.value.trim()) {
+                dayTypeInput.value = "simulation";
+              }
+            }
+            onStructuredChanged();
+            state.expandedSimulationSlots = new Set();
+            renderEditor();
+          });
+        }
 
         document.querySelectorAll("input, select").forEach((el) => {
           if (el.id === "token-input") return;
           if (el.id === "active-toggle") return;
+          if (el.id === "day-ordered-simulation-input") return;
           if (el.id === "raw-json") return;
           el.addEventListener("change", onStructuredChanged);
           el.addEventListener("input", onStructuredChanged);
@@ -1309,6 +1688,7 @@
             state.jsonObj.builder.day_templates.push({
               day_key: `day${state.jsonObj.builder.day_templates.length + 1}`,
               focus: "",
+              is_ordered_simulation: false,
               ordered_slots: [],
             });
             state.dayTab = state.jsonObj.builder.day_templates.length - 1;
@@ -1324,11 +1704,17 @@
             if (!template) return;
             template.ordered_slots.push({
               slot: "",
+              slot_family: "",
+              variability_policy: "",
               sw2: "",
               sw: "",
               mp: "",
               requirePref: "",
               preferLoadable: false,
+              requireHyroxRole: "",
+              station_index: "",
+              required_equipment_slugs: [],
+              station_fallback_chain: [],
               fill_fallback_slot: "",
             });
             renderEditor();
@@ -1348,6 +1734,7 @@
               if (act === "remove") {
                 template.ordered_slots.splice(index, 1);
                 state.expandedVariantSlots = new Set();
+                state.expandedSimulationSlots = new Set();
                 renderEditor();
               }
             });
@@ -1439,6 +1826,22 @@
             updateVariantToggleBtn(idx);
           });
         });
+        document.querySelectorAll("[data-simulation-toggle]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const idx = Number(btn.dataset.simulationToggle);
+            const expandRow = document.querySelector(`[data-simulation-for="${idx}"]`);
+            if (!expandRow) return;
+            const nowHidden = expandRow.hidden;
+            if (nowHidden) {
+              state.expandedSimulationSlots.add(idx);
+              expandRow.hidden = false;
+            } else {
+              state.expandedSimulationSlots.delete(idx);
+              expandRow.hidden = true;
+            }
+            updateSimulationToggleBtn(idx);
+          });
+        });
 
         // Add variant row
         document.querySelectorAll(".add-variant-btn").forEach(btn => {
@@ -1477,6 +1880,52 @@
             onStructuredChanged();
           });
         });
+        document.querySelectorAll(".add-fallback-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const slotIdx = Number(btn.dataset.addFallbackFor);
+            const tbody = document.querySelector(`[data-fallback-tbody="${slotIdx}"]`);
+            if (!tbody) return;
+            const newIdx = tbody.querySelectorAll("tr[data-fallback-index]").length;
+            const tr = document.createElement("tr");
+            tr.dataset.fallbackIndex = String(newIdx);
+            tr.innerHTML = renderFallbackRowHtml({});
+            tbody.appendChild(tr);
+            tr.querySelectorAll("input, select").forEach((el) => {
+              el.addEventListener("change", onStructuredChanged);
+              el.addEventListener("input", onStructuredChanged);
+            });
+            initSwComboboxes();
+            initMpComboboxes();
+            initSwAnyChips();
+            updateSimulationToggleBtn(slotIdx);
+            onStructuredChanged();
+          });
+        });
+        document.querySelectorAll("[data-fallback-tbody]").forEach((tbody) => {
+          tbody.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-fallback-act='remove']");
+            if (!btn) return;
+            const row = btn.closest("tr[data-fallback-index]");
+            if (!row) return;
+            const slotIdx = Number(tbody.dataset.fallbackTbody);
+            row.remove();
+            tbody.querySelectorAll("tr[data-fallback-index]").forEach((r, i) => { r.dataset.fallbackIndex = String(i); });
+            updateSimulationToggleBtn(slotIdx);
+            onStructuredChanged();
+          });
+        });
+        document.querySelectorAll("[data-sim-field]").forEach((el) => {
+          el.addEventListener("input", () => {
+            const row = el.closest("[data-simulation-for]");
+            if (!row) return;
+            updateSimulationToggleBtn(Number(row.dataset.simulationFor));
+          });
+          el.addEventListener("change", () => {
+            const row = el.closest("[data-simulation-for]");
+            if (!row) return;
+            updateSimulationToggleBtn(Number(row.dataset.simulationFor));
+          });
+        });
       }
 
       function updateSaveBtnState(isDirty) {
@@ -1492,6 +1941,7 @@
 
       async function onSave() {
         try {
+          if (!validateStructuredEditor()) return;
           let baseJson = {};
           const rawEl = document.getElementById("raw-json");
           if (state.rawEdited) {
@@ -1553,6 +2003,7 @@
           state.jsonObj = deepClone(data.config?.program_generation_config_json || {});
           if (!preserveDayTab) state.dayTab = 0;
           state.expandedVariantSlots = new Set();
+          state.expandedSimulationSlots = new Set();
           state.rawEdited = false;
           state.isDirty = false;
           ensureBuilderAndSegmentation();

@@ -15,6 +15,12 @@ function safeJsonParse(value, fallback = {}) {
   }
 }
 
+function normalizeSlugText(value) {
+  if (typeof value !== "string") return value ?? null;
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+}
+
 function pickPreferredConfigRow(rows, schemaVersion) {
   const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
   if (!list.length) return null;
@@ -109,7 +115,12 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     configKey: pgcRow?.config_key ?? `hardcoded_${programType}_v${schemaVersion}`,
     source,
     builder: {
-      dayTemplates: pgcJson?.builder?.day_templates ?? null,
+      dayTemplates:
+        (pgcJson?.builder?.day_templates ?? null)?.map((template) => ({
+          ...template,
+          focus: normalizeSlugText(template?.focus),
+          day_type: normalizeSlugText(template?.day_type),
+        })) ?? null,
       setsByDuration: pgcJson?.builder?.sets_by_duration ?? null,
       blockBudget: pgcJson?.builder?.block_budget ?? null,
       slotDefaults: pgcJson?.builder?.slot_defaults ?? {},
