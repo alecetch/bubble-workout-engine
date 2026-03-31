@@ -456,7 +456,7 @@ test("buildProgramFromDefinition resolves bodyweight squat variant", async () =>
 test("buildProgramFromDefinition keeps full-equipment variant behavior", async () => {
   const exercises = [
     makeExercise({
-      id: "barbell_back_squat",
+      id: "bb_back_squat",
       name: "Back Squat",
       mp: "squat",
       sw: "quad_compound",
@@ -489,12 +489,12 @@ test("buildProgramFromDefinition keeps full-equipment variant behavior", async (
     inputs: {
       exercises: { response: { results: exercises } },
       clientProfile: { response: { fitness_rank: 2, equipment_items_slugs: ["barbell"] } },
-      allowed_exercise_ids: ["barbell_back_squat"],
+      allowed_exercise_ids: ["bb_back_squat"],
     },
     request: { duration_mins: 40, days_per_week: 1 },
     compiledConfig,
   });
 
-  assert.equal(built.program.days[0].blocks[0].ex_id, "barbell_back_squat");
+  assert.equal(built.program.days[0].blocks[0].ex_id, "bb_back_squat");
   assert.equal(built.debug.equipment_profile, "full");
 });

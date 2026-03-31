@@ -117,7 +117,7 @@ Also update `preferred_in_json` for these existing exercises by appending `"hyro
 - `trap_bar_deadlift`, `romanian_deadlift`, `conventional_deadlift`
 - `dumbbell_walking_lunge`, `step_up_dumbbell`
 - `push_press`, `thruster`
-- `pull_up`, `barbell_row`, `dumbbell_row`
+- `pullup`, `bb_bentover_row`, `singlearm_db_row`
 
 Run `docker compose run --rm flyway migrate` after saving.
 

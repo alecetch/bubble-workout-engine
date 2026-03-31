@@ -227,8 +227,8 @@ The following existing exercises have their swap group values **overwritten** (v
 |---|---|---|---|
 | `goblet_squat` | `squat_pattern` | `squat_pattern_compound` | **Conditional** — only reclassify if coverage gap persists after new exercises are added (see §16) |
 | `double_db_front_squat` | `squat_pattern` | `squat_pattern_compound` | |
-| `kb_rdl` | `hinge_pattern` | `hinge_pattern_compound` | |
-| `single_leg_rdl` | `hinge_pattern` | `hinge_pattern_compound` | |
+| `kb_romanian_deadlift` | `hinge_pattern` | `hinge_pattern_compound` | |
+| `singleleg_romanian_deadlift` | `hinge_pattern` | `hinge_pattern_compound` | |
 | `db_flat_press` | `push_horizontal_pattern` | `push_horizontal_any` | |
 | `db_incline_press` | `push_horizontal_pattern` | `push_horizontal_any` | |
 | `db_row` | `pull_horizontal_pattern` | `pull_horizontal_any` | |
@@ -794,7 +794,7 @@ Result for `minimal_equipment` user: **0 candidates** (no exercise has `sw2: squ
 
 Result for `minimal_equipment` user with `{dumbbells}`: **`double_db_front_squat`** selected (sw: `squat_pattern`, pref: `strength_main`, `strength_equivalent: true`, score ≈ 10 + 4 + 3 = 17).
 
-Result for `full` user with `{barbell}`: **`barbell_back_squat`** selected — identical to pre-change behaviour.
+Result for `full` user with `{barbell}`: **`bb_back_squat`** selected — identical to pre-change behaviour.
 
 ---
 
@@ -893,8 +893,8 @@ The implementation is complete when ALL of the following pass:
 ```json
 { "sw2": "squat_compound", "requirePref": "strength_main", "pref_mode": "strict" }
 ```
-**Candidate pool (filtered):** `barbell_back_squat`, `barbell_front_squat`, `hack_squat`, `leg_press`
-**Winner:** `barbell_back_squat` — sw2 match (+12), strength_main pref (+0 strict), compound class +1.5, low density +0.2 = **score 13.7**
+**Candidate pool (filtered):** `bb_back_squat`, `bb_front_squat`, `hack_squat_machine`, `leg_press`
+**Winner:** `bb_back_squat` — sw2 match (+12), strength_main pref (+0 strict), compound class +1.5, low density +0.2 = **score 13.7**
 **Outcome:** Same as current behaviour. ✓
 
 ---

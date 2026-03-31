@@ -50,8 +50,8 @@ WITH checks AS (
     'exercise_seed_rows_present',
     (SELECT COUNT(*) FROM public.exercise_catalogue
       WHERE exercise_id IN (
-        'barbell_back_squat','barbell_deadlift','bench_press','ohp',
-        'pull_up','barbell_row','row_erg','ski_erg','assault_bike','burpee'
+        'bb_back_squat','bb_deadlift','bb_bench_press','bb_overhead_press',
+        'pullup','bb_bentover_row','row_erg','ski_erg','assault_bike','burpee'
       ))::int,
     8
 
@@ -121,8 +121,8 @@ WITH checks AS (
     'strength_primary_region_seeded',
     (SELECT COUNT(*) FROM public.exercise_catalogue
       WHERE exercise_id IN (
-        'barbell_back_squat','barbell_deadlift','bench_press',
-        'barbell_row','ohp','pull_up'
+        'bb_back_squat','bb_deadlift','bb_bench_press',
+        'bb_bentover_row','bb_overhead_press','pullup'
       )
       AND strength_primary_region IN ('upper','lower'))::int,
     4
