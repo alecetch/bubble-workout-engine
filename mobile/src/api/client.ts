@@ -1,4 +1,5 @@
 import { API_BASE_URL, ENGINE_KEY } from "./config";
+import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
 
 type ApiDiagnostics = {
   lastAttemptedUrl: string | null;
@@ -33,6 +34,11 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+};
+
+type ApiErrorPayload = {
+  code?: string;
+  error?: string;
 };
 
 async function parseResponseBody(response: Response): Promise<unknown> {
@@ -119,6 +125,90 @@ export async function engineFetch<T>(path: string, options: RequestOptions = {})
   return requestJson<T>(path, { ...options, extraHeaders });
 }
 
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) {
+        await clearTokens();
+        return null;
+      }
+
+      try {
+        const refreshed = await apiFetch<{ access_token: string; refresh_token: string }>(
+          "/api/auth/refresh",
+          {
+            method: "POST",
+            body: { refresh_token: refreshToken },
+          },
+        );
+        await saveTokens(refreshed.access_token, refreshed.refresh_token);
+        return refreshed.access_token;
+      } catch {
+        await clearTokens();
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+
+  return refreshPromise;
+}
+
+function getErrorCode(details: unknown): string | undefined {
+  if (!details || typeof details !== "object") return undefined;
+  return (details as ApiErrorPayload).code;
+}
+
+export async function authenticatedFetch<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
+    throw new ApiError(401, "Session expired", { code: "session_expired" });
+  }
+
+  const makeHeaders = (token: string) => ({
+    Authorization: `Bearer ${token}`,
+    ...(options.headers ?? {}),
+  });
+
+  try {
+    return await apiFetch<T>(path, {
+      ...options,
+      headers: makeHeaders(accessToken),
+    });
+  } catch (error) {
+    const apiError = error instanceof ApiError ? error : null;
+    if (apiError?.status !== 401 || getErrorCode(apiError.details) !== "token_expired") {
+      throw error;
+    }
+
+    const nextAccessToken = await refreshAccessToken();
+    if (!nextAccessToken) {
+      throw new ApiError(401, "Session expired", { code: "session_expired" });
+    }
+
+    try {
+      return await apiFetch<T>(path, {
+        ...options,
+        headers: makeHeaders(nextAccessToken),
+      });
+    } catch (retryError) {
+      const retryApiError = retryError instanceof ApiError ? retryError : null;
+      if (retryApiError?.status === 401) {
+        await clearTokens();
+        throw new ApiError(401, "Session expired", { code: "session_expired" });
+      }
+      throw retryError;
+    }
+  }
+}
+
 export function engineGetJson<T>(
   path: string,
   options?: Omit<RequestOptions, "method" | "body">,
@@ -140,6 +230,36 @@ export function enginePatchJson<TResponse, TBody = unknown>(
   options?: Omit<RequestOptions, "method" | "body">,
 ): Promise<TResponse> {
   return engineFetch<TResponse>(path, { ...options, method: "PATCH", body });
+}
+
+export function authGetJson<T>(
+  path: string,
+  options?: Omit<RequestOptions, "method" | "body">,
+): Promise<T> {
+  return authenticatedFetch<T>(path, { ...options, method: "GET" });
+}
+
+export function authPostJson<TResponse, TBody = unknown>(
+  path: string,
+  body: TBody,
+  options?: Omit<RequestOptions, "method" | "body">,
+): Promise<TResponse> {
+  return authenticatedFetch<TResponse>(path, { ...options, method: "POST", body });
+}
+
+export function authPatchJson<TResponse, TBody = unknown>(
+  path: string,
+  body: TBody,
+  options?: Omit<RequestOptions, "method" | "body">,
+): Promise<TResponse> {
+  return authenticatedFetch<TResponse>(path, { ...options, method: "PATCH", body });
+}
+
+export function authDeleteJson<T>(
+  path: string,
+  options?: Omit<RequestOptions, "method" | "body">,
+): Promise<T> {
+  return authenticatedFetch<T>(path, { ...options, method: "DELETE" });
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {

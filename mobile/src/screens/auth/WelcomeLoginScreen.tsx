@@ -17,11 +17,11 @@ export function WelcomeLoginScreen({ navigation }: Props): React.JSX.Element {
       </View>
 
       <View style={styles.actions}>
-        <PressableScale style={styles.primaryButton} onPress={() => navigation.navigate("DevLogin")}>
-          <Text style={styles.primaryLabel}>Continue</Text>
+        <PressableScale style={styles.primaryButton} onPress={() => navigation.navigate("Login")}>
+          <Text style={styles.primaryLabel}>Sign in</Text>
         </PressableScale>
-        <PressableScale style={styles.secondaryButton} onPress={() => navigation.navigate("ResetPassword")}>
-          <Text style={styles.secondaryLabel}>Reset password</Text>
+        <PressableScale style={styles.secondaryButton} onPress={() => navigation.navigate("Register")}>
+          <Text style={styles.secondaryLabel}>Create account</Text>
         </PressableScale>
       </View>
     </View>

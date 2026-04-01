@@ -1,5 +1,4 @@
-import { engineGetJson, enginePatchJson } from "./client";
-import { getUserIdentityQueryString } from "./userIdentity";
+import { authGetJson, authPatchJson } from "./client";
 
 export type MeResponse = {
   id: string;
@@ -11,11 +10,9 @@ export type LinkClientProfilePayload = {
 };
 
 export async function getMe(): Promise<MeResponse> {
-  const query = await getUserIdentityQueryString();
-  return engineGetJson<MeResponse>(`/me?${query}`);
+  return authGetJson<MeResponse>("/api/me");
 }
 
 export async function linkClientProfileToMe(payload: LinkClientProfilePayload): Promise<MeResponse> {
-  const query = await getUserIdentityQueryString();
-  return enginePatchJson<MeResponse, LinkClientProfilePayload>(`/users/me?${query}`, payload);
+  return authPatchJson<MeResponse, LinkClientProfilePayload>("/api/users/me", payload);
 }

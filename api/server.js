@@ -31,17 +31,16 @@ import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
-import { adminOnly, internalWithUser } from "./src/middleware/chains.js";
+import { requireAuth } from "./src/middleware/requireAuth.js";
+import { adminOnly, userAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
-  upsertUser,
   upsertProfile,
   getProfileById,
-  getProfileByUserId,
   patchProfile,
+  toApiShape,
 } from "./src/services/clientProfileService.js";
-import { readRequestedUserId } from "./src/utils/userIdentity.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -428,15 +427,20 @@ app.get("/equipment-items", handleEquipmentItems);
 // GET /me — returns the user's identity and current profile ID.
 // Query: ?user_id=<id>
 const handleMe = async (req, res) => {
-  const userId = readRequestedUserId(req.query);
-  if (!userId) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "user_id is required" });
-  }
+  const userId = req.auth.user_id;
   try {
-    const profile = await getProfileByUserId(userId);
+    const profileResult = await pool.query(
+      `
+      SELECT id
+      FROM client_profile
+      WHERE user_id = $1
+      LIMIT 1
+      `,
+      [userId],
+    );
     return res.status(200).json({
       id: userId,
-      clientProfileId: profile?.id ?? null,
+      clientProfileId: profileResult.rows[0]?.id ?? null,
     });
   } catch (err) {
     req.log.error({ event: "profile.me.error", err: err?.message }, "GET /me error");
@@ -445,21 +449,26 @@ const handleMe = async (req, res) => {
 };
 
 // Canonical (new)
-app.get("/api/me", requireInternalToken, handleMe);
+app.get("/api/me", requireAuth, handleMe);
 // DEPRECATED — remove after Bubble client updates to /api/me
-app.get("/me", requireInternalToken, handleMe);
+app.get("/me", requireAuth, handleMe);
 
 // POST /client-profiles — upsert user + create profile if none exists.
 // Query: ?user_id=<id>
 const handleCreateClientProfile = async (req, res) => {
-  const userId = readRequestedUserId(req.query);
-  if (!userId) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "user_id is required" });
-  }
+  const userId = req.auth.user_id;
   try {
-    const { id: pgUserId } = await upsertUser(userId);
-    await upsertProfile(pgUserId, userId);
-    const profile = await getProfileByUserId(userId);
+    await upsertProfile(userId);
+    const profileResult = await pool.query(
+      `
+      SELECT *
+      FROM client_profile
+      WHERE user_id = $1
+      LIMIT 1
+      `,
+      [userId],
+    );
+    const profile = profileResult.rows[0] ? toApiShape(profileResult.rows[0]) : null;
     return res.status(200).json(profile);
   } catch (err) {
     req.log.error({ event: "profile.create.error", err: err?.message }, "POST /client-profiles error");
@@ -468,9 +477,9 @@ const handleCreateClientProfile = async (req, res) => {
 };
 
 // Canonical (new)
-app.post("/api/client-profiles", requireInternalToken, handleCreateClientProfile);
+app.post("/api/client-profiles", requireAuth, handleCreateClientProfile);
 // DEPRECATED — remove after Bubble client updates to /api/client-profiles
-app.post("/client-profiles", requireInternalToken, handleCreateClientProfile);
+app.post("/client-profiles", requireAuth, handleCreateClientProfile);
 
 // GET /client-profiles/:id — read profile by internal profile id.
 const handleGetClientProfile = async (req, res) => {
@@ -488,9 +497,9 @@ const handleGetClientProfile = async (req, res) => {
 };
 
 // Canonical (new)
-app.get("/api/client-profiles/:id", requireInternalToken, handleGetClientProfile);
+app.get("/api/client-profiles/:id", requireAuth, handleGetClientProfile);
 // DEPRECATED — remove after Bubble client updates to /api/client-profiles/:id
-app.get("/client-profiles/:id", requireInternalToken, handleGetClientProfile);
+app.get("/client-profiles/:id", requireAuth, handleGetClientProfile);
 
 // PATCH /client-profiles/:id — patch profile fields.
 const handlePatchClientProfile = async (req, res) => {
@@ -510,19 +519,15 @@ const handlePatchClientProfile = async (req, res) => {
 };
 
 // Canonical (new)
-app.patch("/api/client-profiles/:id", requireInternalToken, handlePatchClientProfile);
+app.patch("/api/client-profiles/:id", requireAuth, handlePatchClientProfile);
 // DEPRECATED — remove after Bubble client updates to /api/client-profiles/:id
-app.patch("/client-profiles/:id", requireInternalToken, handlePatchClientProfile);
+app.patch("/client-profiles/:id", requireAuth, handlePatchClientProfile);
 
 // PATCH /users/me — associate a profile with a user; returns current identity.
 // Query/body: ?user_id=<id>
 const handleUsersMe = async (req, res) => {
-  const userId = readRequestedUserId({ ...req.query, ...req.body });
-  if (!userId) {
-    return res.status(400).json({ ok: false, code: "validation_error", error: "user_id is required" });
-  }
+  const userId = req.auth.user_id;
   try {
-    const { id: pgUserId } = await upsertUser(userId);
     const clientProfileId = (req.body?.clientProfileId ?? "").toString().trim();
     if (clientProfileId) {
       await pool.query(
@@ -531,13 +536,21 @@ const handleUsersMe = async (req, res) => {
         SET user_id = $1, updated_at = now()
         WHERE id::text = $2
         `,
-        [pgUserId, clientProfileId],
+        [userId, clientProfileId],
       );
     }
-    const profile = await getProfileByUserId(userId);
+    const profileResult = await pool.query(
+      `
+      SELECT id
+      FROM client_profile
+      WHERE user_id = $1
+      LIMIT 1
+      `,
+      [userId],
+    );
     return res.status(200).json({
       id: userId,
-      clientProfileId: profile?.id ?? null,
+      clientProfileId: profileResult.rows[0]?.id ?? null,
     });
   } catch (err) {
     req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");
@@ -546,9 +559,9 @@ const handleUsersMe = async (req, res) => {
 };
 
 // Canonical (new)
-app.patch("/api/users/me", requireInternalToken, handleUsersMe);
+app.patch("/api/users/me", requireAuth, handleUsersMe);
 // DEPRECATED — remove after Bubble client updates to /api/users/me
-app.patch("/users/me", requireInternalToken, handleUsersMe);
+app.patch("/users/me", requireAuth, handleUsersMe);
 
 // Mount routers.
 app.use("/api", segmentLogRouter);
@@ -556,11 +569,11 @@ app.use("/api", readProgramRouter);
 app.use("/api", debugAllowedExercisesRouter);
 
 // Canonical /api-prefixed mounts (new).
-app.get("/api/v1/history/programs", ...internalWithUser, createHistoryProgramsHandler(pool));
-app.get("/api/v1/history/timeline", ...internalWithUser, createHistoryTimelineHandler(pool));
-app.get("/api/v1/history/overview", ...internalWithUser, createHistoryOverviewHandler(pool));
-app.get("/api/v1/history/personal-records", ...internalWithUser, createHistoryPersonalRecordsHandler(pool));
-app.get("/api/v1/history/exercise/:exerciseId", ...internalWithUser, createHistoryExerciseHandler(pool));
+app.get("/api/v1/history/programs", ...userAuth, createHistoryProgramsHandler(pool));
+app.get("/api/v1/history/timeline", ...userAuth, createHistoryTimelineHandler(pool));
+app.get("/api/v1/history/overview", ...userAuth, createHistoryOverviewHandler(pool));
+app.get("/api/v1/history/personal-records", ...userAuth, createHistoryPersonalRecordsHandler(pool));
+app.get("/api/v1/history/exercise/:exerciseId", ...userAuth, createHistoryExerciseHandler(pool));
 
 // DEPRECATED backward-compat aliases — remove after Bubble client is updated to /api/v1/history/*.
 app.use(historyProgramsRouter); // → GET /v1/history/programs

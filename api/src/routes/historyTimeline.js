@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
-import { internalWithUser } from "../middleware/chains.js";
+import { userAuth } from "../middleware/chains.js";
 import { clampInt, requireUuid, safeString } from "../utils/validate.js";
 
 const SQL_HISTORY_TIMELINE = `
@@ -185,7 +185,7 @@ export const historyTimelineRouter = express.Router();
 
 historyTimelineRouter.get(
   "/v1/history/timeline",
-  ...internalWithUser,
+  ...userAuth,
   createHistoryTimelineHandler(pool),
 );
 

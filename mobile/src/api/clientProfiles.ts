@@ -1,6 +1,5 @@
 import type { OnboardingDraft } from "../state/onboarding/types";
-import { engineGetJson, enginePatchJson, enginePostJson } from "./client";
-import { getUserIdentityQueryString } from "./userIdentity";
+import { authGetJson, authPatchJson, authPostJson } from "./client";
 
 export type ClientProfileServer = OnboardingDraft & {
   id: string;
@@ -12,20 +11,19 @@ export type CreateClientProfileInput = Partial<Omit<ClientProfileServer, "id" | 
 export type UpdateClientProfileInput = Partial<Omit<ClientProfileServer, "id" | "userId">>;
 
 export function getClientProfile(profileId: string): Promise<ClientProfileServer> {
-  return engineGetJson<ClientProfileServer>(`/client-profiles/${profileId}`);
+  return authGetJson<ClientProfileServer>(`/api/client-profiles/${profileId}`);
 }
 
 export async function createClientProfile(payload: CreateClientProfileInput): Promise<ClientProfileServer> {
-  const query = await getUserIdentityQueryString();
-  return enginePostJson<ClientProfileServer, CreateClientProfileInput>(
-    `/client-profiles?${query}`,
-    payload,
-  );
+  return authPostJson<ClientProfileServer, CreateClientProfileInput>("/api/client-profiles", payload);
 }
 
 export function updateClientProfile(
   profileId: string,
   payload: UpdateClientProfileInput,
 ): Promise<ClientProfileServer> {
-  return enginePatchJson<ClientProfileServer, UpdateClientProfileInput>(`/client-profiles/${profileId}`, payload);
+  return authPatchJson<ClientProfileServer, UpdateClientProfileInput>(
+    `/api/client-profiles/${profileId}`,
+    payload,
+  );
 }

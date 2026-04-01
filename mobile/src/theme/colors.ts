@@ -8,6 +8,7 @@ export const colors = {
   accentHover: "#2563EB",
   accentPressed: "#1D4ED8",
   success: "#22C55E",
+  error: "#EF4444",
   warning: "#FACC15",
   border: "rgba(148,163,184,0.15)",
   focus: "#3B82F6",

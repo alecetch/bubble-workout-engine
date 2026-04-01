@@ -1,12 +1,11 @@
 import express from "express";
 import { pool } from "../db.js";
-import { internalApi } from "../middleware/chains.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 import { publicInternalError } from "../utils/publicError.js";
-import { RequestValidationError, requireNonEmpty, requireUuid, safeString } from "../utils/validate.js";
-import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
+import { RequestValidationError, requireNonEmpty, safeString } from "../utils/validate.js";
 
 export const loggedExercisesRouter = express.Router();
-loggedExercisesRouter.use(...internalApi);
+loggedExercisesRouter.use(requireAuth);
 
 class NotFoundError extends Error {
   constructor(message, details = []) {
@@ -17,19 +16,10 @@ class NotFoundError extends Error {
   }
 }
 
-async function resolveUserId(client, query) {
-  const requestedUserId = readRequestedUserId(query);
-
-  if (requestedUserId) {
-    if (isUuid(requestedUserId)) {
-      return requireUuid(requestedUserId, "user_id");
-    }
-    const internalUserId = await findInternalUserIdByExternalId(client, requestedUserId);
-    if (internalUserId) return internalUserId;
-    throw new NotFoundError("User not found for user_id");
-  }
-
-  throw new RequestValidationError("Provide user_id");
+function resolveUserId(req) {
+  const userId = safeString(req.auth?.user_id);
+  if (userId) return userId;
+  throw new RequestValidationError("Missing authenticated user context");
 }
 
 function mapError(err) {
@@ -67,7 +57,7 @@ loggedExercisesRouter.get("/logged-exercises/search", async (req, res) => {
 
     const client = await pool.connect();
     try {
-      const user_id = await resolveUserId(client, req.query);
+      const user_id = resolveUserId(req);
 
       const result = await client.query(
         `
@@ -115,7 +105,7 @@ loggedExercisesRouter.get("/exercise-summary", async (req, res) => {
     const exercise_id = requireNonEmpty(req.query.exercise_id, "exercise_id");
     const client = await pool.connect();
     try {
-      const user_id = await resolveUserId(client, req.query);
+      const user_id = resolveUserId(req);
 
       const bestEverQuery = client.query(
         `

@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
-import { internalWithUser } from "../middleware/chains.js";
+import { userAuth } from "../middleware/chains.js";
 import { clampInt, safeString } from "../utils/validate.js";
 
 const SQL_HISTORY_PROGRAMS = `
@@ -94,6 +94,6 @@ export const historyProgramsRouter = express.Router();
 
 historyProgramsRouter.get(
   "/v1/history/programs",
-  ...internalWithUser,
+  ...userAuth,
   createHistoryProgramsHandler(pool),
 );

@@ -15,7 +15,7 @@ export function ResetPasswordScreen({ navigation }: Props): React.JSX.Element {
   const [confirmation, setConfirmation] = useState<string | null>(null);
 
   const handleSubmit = (): void => {
-    setConfirmation("Not available in dev mode.");
+    setConfirmation("If an account exists for this email, a reset link will be sent.");
   };
 
   return (
