@@ -25,6 +25,7 @@ import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogu
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
+import { authRouter } from "./src/routes/auth.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
@@ -65,6 +66,8 @@ function failStartup(message) {
 function validateStartupEnv() {
   const engineKey = (process.env.ENGINE_KEY || "").trim();
   const internalApiToken = (process.env.INTERNAL_API_TOKEN || "").trim();
+  const jwtSecret = (process.env.JWT_SECRET || "").trim();
+  const jwtIssuer = (process.env.JWT_ISSUER || "").trim();
   const databaseUrl = (process.env.DATABASE_URL || "").trim();
   const pgHost = (process.env.PGHOST || "").trim();
   const pgUser = (process.env.PGUSER || "").trim();
@@ -76,6 +79,12 @@ function validateStartupEnv() {
   }
   if (isWeakSecret(internalApiToken, 16)) {
     failStartup("INTERNAL_API_TOKEN is missing, too short, or uses a weak default.");
+  }
+  if (isWeakSecret(jwtSecret, 32)) {
+    failStartup("JWT_SECRET is missing, too short, or uses a weak default.");
+  }
+  if (!jwtIssuer) {
+    failStartup("JWT_ISSUER is missing.");
   }
 
   if (databaseUrl) {
@@ -520,7 +529,7 @@ const handleUsersMe = async (req, res) => {
         `
         UPDATE client_profile
         SET user_id = $1, updated_at = now()
-        WHERE id::text = $2 OR bubble_client_profile_id = $2
+        WHERE id::text = $2
         `,
         [pgUserId, clientProfileId],
       );
@@ -574,6 +583,7 @@ app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
 app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
+app.use("/api/auth", authRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates
