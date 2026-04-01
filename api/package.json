@@ -22,7 +22,7 @@
     "jsonwebtoken": "^9.0.3",
     "luxon": "^3.7.2",
     "pg": "^8.18.0",
-    "pino": "^9.0.0"
+    "pino": "^10.3.1"
   },
   "devDependencies": {
     "pino-pretty": "^13.0.0",
