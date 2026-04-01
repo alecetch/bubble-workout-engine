@@ -70,7 +70,7 @@ test("INSERT on a different table is blocked", () => {
 });
 
 test("UPDATE on a different table is blocked", () => {
-  assertBlocked("UPDATE app_user SET bubble_user_id = 'hacked'");
+  assertBlocked("UPDATE app_user SET subject_id = 'hacked'");
 });
 
 test("SELECT is blocked", () => {

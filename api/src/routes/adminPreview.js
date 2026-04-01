@@ -2,7 +2,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
-import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
+import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 
 export const adminPreviewRouter = express.Router();
 
@@ -48,7 +48,7 @@ export function createPreviewHandler({
   db = pool,
   pipeline = runPipeline,
   getAllowed = getAllowedExerciseIds,
-  buildInputs = buildInputsFromDevProfile,
+  buildInputs = buildInputsFromProfile,
 } = {}) {
   return async function previewHandler(req, res) {
     const fitnessRank = Number(req.body?.fitness_rank ?? 1);

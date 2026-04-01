@@ -15,7 +15,7 @@
 WITH checks AS (
   SELECT
     'equipment_seed_rows_present'::text AS check_name,
-    (SELECT COUNT(*) FROM public.equipment_items WHERE bubble_id LIKE 'seed_eq_%')::int AS actual,
+    (SELECT COUNT(*) FROM public.equipment_items WHERE external_id LIKE 'seed_eq_%')::int AS actual,
     9::int AS expected_min
   UNION ALL
   SELECT
@@ -131,7 +131,7 @@ ORDER BY exercise_id;
 
 -- Detail: seeded equipment preset booleans.
 SELECT
-  bubble_id,
+  external_id,
   exercise_slug,
   commercial_gym,
   crossfit_hyrox_gym,
@@ -139,7 +139,7 @@ SELECT
   minimal_equipment,
   no_equipment
 FROM public.equipment_items
-WHERE bubble_id LIKE 'seed_eq_%'
+WHERE external_id LIKE 'seed_eq_%'
 ORDER BY exercise_slug;
 
 -- Detail: media assets seeded by repeatable migration.

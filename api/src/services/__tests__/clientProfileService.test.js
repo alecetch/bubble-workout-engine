@@ -18,7 +18,6 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
   const row = {
     id: "profile-uuid-123",
     user_id: "pg-user-123",
-    bubble_client_profile_id: "buid-123",
     main_goals_slugs: ["strength"],
     fitness_level_slug: "intermediate",
     injury_flags: ["knee_issues"],
@@ -60,7 +59,7 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
 });
 
 test("toApiShape applies null/empty defaults for missing fields", () => {
-  const result = toApiShape({ bubble_client_profile_id: "buid-empty" });
+  const result = toApiShape({});
   assert.deepEqual(result.goals, []);
   assert.deepEqual(result.injuryFlags, []);
   assert.deepEqual(result.equipmentItemCodes, []);
@@ -94,7 +93,7 @@ test("upsertUser propagates DB error", async () => {
 
 test("upsertProfile returns new profile UUID when INSERT succeeds", async () => {
   const svc = makeClientProfileService(mockDb([{ rowCount: 1, rows: [{ id: "profile-uuid-1" }] }]));
-  const result = await svc.upsertProfile("pg-user-uuid", "bubble-user-1");
+  const result = await svc.upsertProfile("pg-user-uuid");
   assert.equal(result, "profile-uuid-1");
 });
 
@@ -103,7 +102,7 @@ test("upsertProfile falls back to SELECT when INSERT conflicts (rowCount 0)", as
     { rowCount: 0, rows: [] },
     { rowCount: 1, rows: [{ id: "existing-profile-uuid" }] },
   ]));
-  const result = await svc.upsertProfile("pg-user-uuid", "bubble-user-1");
+  const result = await svc.upsertProfile("pg-user-uuid");
   assert.equal(result, "existing-profile-uuid");
 });
 
@@ -112,7 +111,7 @@ test("upsertProfile returns null when both INSERT and SELECT return nothing", as
     { rowCount: 0, rows: [] },
     { rowCount: 0, rows: [] },
   ]));
-  const result = await svc.upsertProfile("pg-user-uuid", "bubble-user-1");
+  const result = await svc.upsertProfile("pg-user-uuid");
   assert.equal(result, null);
 });
 
@@ -124,7 +123,7 @@ test("getProfileByBubbleUserId returns null when no row found", async () => {
 
 test("getProfileByUserId returns toApiShape(row) when row found", async () => {
   const svc = makeClientProfileService(mockDb([
-    { rowCount: 1, rows: [{ id: "profile-xyz", bubble_client_profile_id: "legacy-profile", main_goals_slugs: ["strength"] }] },
+    { rowCount: 1, rows: [{ id: "profile-xyz", main_goals_slugs: ["strength"] }] },
   ]));
   const result = await svc.getProfileByUserId("user-1");
   assert.equal(result.id, "profile-xyz");
@@ -133,7 +132,7 @@ test("getProfileByUserId returns toApiShape(row) when row found", async () => {
 
 test("getProfileById returns toApiShape(row) when row found", async () => {
   const svc = makeClientProfileService(mockDb([
-    { rowCount: 1, rows: [{ id: "profile-xyz", bubble_client_profile_id: "legacy-profile" }] },
+    { rowCount: 1, rows: [{ id: "profile-xyz" }] },
   ]));
   const result = await svc.getProfileById("profile-xyz");
   assert.equal(result.id, "profile-xyz");
@@ -150,7 +149,7 @@ test("patchProfile builds SET clause for known fields only", async () => {
   const db = {
     async query(sql, _params) {
       capturedSql = sql;
-      return { rowCount: 1, rows: [{ bubble_client_profile_id: "buid-xyz" }] };
+      return { rowCount: 1, rows: [{ id: "buid-xyz" }] };
     },
   };
   const svc = makeClientProfileService(db);
@@ -159,7 +158,6 @@ test("patchProfile builds SET clause for known fields only", async () => {
   assert.match(capturedSql, /main_goals_slugs = \$2/);
   assert.match(capturedSql, /updated_at = now\(\)/);
   assert.match(capturedSql, /WHERE id::text = \$3/);
-  assert.match(capturedSql, /OR bubble_client_profile_id = \$3/);
 });
 
 test("patchProfile ignores fields not in profileFieldToColumn", async () => {
@@ -167,7 +165,7 @@ test("patchProfile ignores fields not in profileFieldToColumn", async () => {
   const db = {
     async query(sql, _params) {
       capturedSql = sql;
-      return { rowCount: 1, rows: [{ bubble_client_profile_id: "buid-xyz" }] };
+      return { rowCount: 1, rows: [{ id: "buid-xyz" }] };
     },
   };
   const svc = makeClientProfileService(db);
@@ -181,7 +179,7 @@ test("patchProfile skips fields with undefined value", async () => {
   const db = {
     async query(sql, _params) {
       capturedSql = sql;
-      return { rowCount: 1, rows: [{ bubble_client_profile_id: "buid-xyz" }] };
+      return { rowCount: 1, rows: [{ id: "buid-xyz" }] };
     },
   };
   const svc = makeClientProfileService(db);
@@ -195,7 +193,7 @@ test("patchProfile empty patch only updates updated_at", async () => {
   const db = {
     async query(sql, _params) {
       capturedSql = sql;
-      return { rowCount: 1, rows: [{ bubble_client_profile_id: "buid-xyz" }] };
+      return { rowCount: 1, rows: [{ id: "buid-xyz" }] };
     },
   };
   const svc = makeClientProfileService(db);
@@ -206,7 +204,7 @@ test("patchProfile empty patch only updates updated_at", async () => {
 
 test("patchProfile returns toApiShape of updated row", async () => {
   const svc = makeClientProfileService(mockDb([
-    { rowCount: 1, rows: [{ id: "profile-xyz", bubble_client_profile_id: "buid-xyz", fitness_level_slug: "advanced" }] },
+    { rowCount: 1, rows: [{ id: "profile-xyz", fitness_level_slug: "advanced" }] },
   ]));
   const result = await svc.patchProfile("buid-xyz", { fitnessLevel: "advanced" });
   assert.equal(result.id, "profile-xyz");

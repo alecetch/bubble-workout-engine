@@ -60,8 +60,7 @@ debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (
       SELECT
         fitness_rank,
         ${injuryColumn} AS injury_flags_slugs,
-        equipment_items_slugs,
-        bubble_client_profile_id
+        equipment_items_slugs
       FROM client_profile
       WHERE id = $1
       LIMIT 1
@@ -94,7 +93,6 @@ debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (
       event: "debug.allowed_exercises",
       request_id: request_id || undefined,
       client_profile_id,
-      bubble_client_profile_id: profile.bubble_client_profile_id,
       allowed_count: allowedIds.length,
       duration_ms,
     });
@@ -102,7 +100,6 @@ debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (
     return res.json({
       ok: true,
       client_profile_id,
-      bubble_client_profile_id: profile.bubble_client_profile_id,
       inputs: {
         fitness_rank,
         injury_flags_slugs,

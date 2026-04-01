@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { pool } from "../src/db.js";
 import { createGenerateProgramV2Handler } from "../src/routes/generateProgramV2.js";
 
-const TEST_BUBBLE_USER_ID = `smoke-test-user-${Date.now()}`;
+const TEST_SUBJECT_ID = `smoke-test-user-${Date.now()}`;
 
 function mockRes() {
   const res = { statusCode: 200, body: null };
@@ -20,21 +20,21 @@ function mockRes() {
 
 async function seedTestUser(db) {
   const userResult = await db.query(
-    `INSERT INTO app_user (bubble_user_id) VALUES ($1)
-     ON CONFLICT (bubble_user_id) DO UPDATE SET updated_at = now()
+    `INSERT INTO app_user (subject_id) VALUES ($1)
+     ON CONFLICT (subject_id) DO UPDATE SET updated_at = now()
      RETURNING id`,
-    [TEST_BUBBLE_USER_ID],
+    [TEST_SUBJECT_ID],
   );
   const pgUserId = userResult.rows[0].id;
 
   await db.query(
-    `INSERT INTO client_profile (user_id, bubble_client_profile_id,
-       fitness_level_slug, main_goals_slugs, equipment_items_slugs,
+    `INSERT INTO client_profile (user_id, fitness_level_slug, main_goals_slugs,
+       equipment_items_slugs,
        injury_flags, preferred_days, minutes_per_session)
-     VALUES ($1, $2, 'intermediate', ARRAY['strength'], ARRAY['barbell'],
+     VALUES ($1, 'intermediate', ARRAY['strength'], ARRAY['barbell'],
              ARRAY[]::text[], ARRAY['mon','wed','fri'], 60)
-     ON CONFLICT (bubble_client_profile_id) DO NOTHING`,
-    [pgUserId, TEST_BUBBLE_USER_ID],
+     ON CONFLICT (user_id) DO NOTHING`,
+    [pgUserId],
   );
 }
 
@@ -45,19 +45,18 @@ async function cleanupTestUser(db) {
         SELECT p.id
         FROM program p
         JOIN app_user au ON au.id = p.user_id
-        WHERE au.bubble_user_id = $1
+        WHERE au.subject_id = $1
       )`,
-    [TEST_BUBBLE_USER_ID],
+    [TEST_SUBJECT_ID],
   );
   await db.query(
     `DELETE FROM program
       WHERE user_id IN (
-        SELECT id FROM app_user WHERE bubble_user_id = $1
+        SELECT id FROM app_user WHERE subject_id = $1
       )`,
-    [TEST_BUBBLE_USER_ID],
+    [TEST_SUBJECT_ID],
   );
-  await db.query(`DELETE FROM client_profile WHERE bubble_client_profile_id = $1`, [TEST_BUBBLE_USER_ID]);
-  await db.query(`DELETE FROM app_user WHERE bubble_user_id = $1`, [TEST_BUBBLE_USER_ID]);
+  await db.query(`DELETE FROM app_user WHERE subject_id = $1`, [TEST_SUBJECT_ID]);
 }
 
 test("generate-plan-v2: profile found -> pipeline called -> 200 response with program", async (t) => {
@@ -127,7 +126,7 @@ test("generate-plan-v2: profile found -> pipeline called -> 200 response with pr
   const req = {
     request_id: "smoke-test-req",
     body: {
-      bubble_user_id: TEST_BUBBLE_USER_ID,
+      user_id: TEST_SUBJECT_ID,
       anchor_date_ms: Date.now(),
       programType: "strength",
     },
