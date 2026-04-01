@@ -4,7 +4,7 @@ import { requireInternalToken } from "../middleware/auth.js";
 import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
-import { buildInputsFromDevProfile } from "../services/buildInputsFromDevProfile.js";
+import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
 import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -74,11 +74,11 @@ function utcDateString(ms) {
 
 export function createGenerateProgramV2Handler({
   db = pool,
-  getProfileByUser,
+  getProfileByUser = getProfileByUserId,
   getProfile = getProfileById,
   pipeline = runPipeline,
   getAllowed = getAllowedExerciseIds,
-  buildInputs = buildInputsFromDevProfile,
+  buildInputs = buildInputsFromProfile,
   ensureCalendar = ensureProgramCalendarCoverage,
   emitPayload = importEmitterPayload,
 } = {}) {
@@ -113,11 +113,9 @@ export function createGenerateProgramV2Handler({
 
   return async function generateProgramV2Handler(req, res) {
     const request_id = req.request_id;
-    const user_id = s(req.body?.user_id || req.body?.bubble_user_id || req.body?.dev_user_id);
+    const user_id = s(req.body?.user_id || req.body?.bubble_user_id);
     const client_profile_id = s(
       req.body?.client_profile_id ||
-      req.body?.bubble_client_profile_id ||
-      req.body?.dev_client_profile_id ||
       req.body?.clientProfileId,
     );
     const programTypeInput = s(req.body?.programType);
@@ -196,9 +194,9 @@ export function createGenerateProgramV2Handler({
     // Phase 1a: Upsert app_user
     const userR = await setupClient.query(
       `
-      INSERT INTO app_user (bubble_user_id)
+      INSERT INTO app_user (subject_id)
       VALUES ($1)
-      ON CONFLICT (bubble_user_id)
+      ON CONFLICT (subject_id)
       DO UPDATE SET updated_at = now()
       RETURNING id
       `,
@@ -225,7 +223,7 @@ export function createGenerateProgramV2Handler({
         goal_notes = $11,
         schedule_constraints = $12,
         updated_at = now()
-      WHERE id::text = $13 OR bubble_client_profile_id = $13
+      WHERE id::text = $13
       `,
       [
       pg_user_id,

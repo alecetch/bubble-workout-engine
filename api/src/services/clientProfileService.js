@@ -23,9 +23,9 @@ export function makeClientProfileService(db = defaultPool) {
   async function upsertUser(userId) {
     const result = await db.query(
       `
-      INSERT INTO app_user (bubble_user_id)
+      INSERT INTO app_user (subject_id)
       VALUES ($1)
-      ON CONFLICT (bubble_user_id)
+      ON CONFLICT (subject_id)
       DO UPDATE SET updated_at = now()
       RETURNING id
       `,
@@ -35,30 +35,30 @@ export function makeClientProfileService(db = defaultPool) {
     return { id: result.rows[0].id };
   }
 
-  async function upsertProfile(pgUserId, legacyProfileKey) {
-    const insertResult = await db.query(
+  async function upsertProfile(pgUserId) {
+    const result = await db.query(
       `
-      INSERT INTO client_profile (user_id, bubble_client_profile_id)
-      VALUES ($1, $2)
-      ON CONFLICT (bubble_client_profile_id)
+      INSERT INTO client_profile (user_id)
+      VALUES ($1)
+      ON CONFLICT (user_id)
       DO NOTHING
       RETURNING id
       `,
-      [pgUserId, legacyProfileKey],
+      [pgUserId],
     );
 
-    if (insertResult.rowCount > 0) {
-      return insertResult.rows[0].id;
+    if (result.rowCount > 0) {
+      return result.rows[0].id;
     }
 
     const selectResult = await db.query(
       `
       SELECT id
       FROM client_profile
-      WHERE bubble_client_profile_id = $1
+      WHERE user_id = $1
       LIMIT 1
       `,
-      [legacyProfileKey],
+      [pgUserId],
     );
 
     return selectResult.rows[0]?.id ?? null;
@@ -70,7 +70,7 @@ export function makeClientProfileService(db = defaultPool) {
       SELECT cp.*
       FROM client_profile cp
       JOIN app_user au ON cp.user_id = au.id
-      WHERE au.bubble_user_id = $1
+      WHERE au.subject_id = $1
       LIMIT 1
       `,
       [userId],
@@ -89,7 +89,6 @@ export function makeClientProfileService(db = defaultPool) {
       SELECT cp.*
       FROM client_profile cp
       WHERE cp.id::text = $1
-         OR cp.bubble_client_profile_id = $1
       LIMIT 1
       `,
       [profileId],
@@ -122,7 +121,6 @@ export function makeClientProfileService(db = defaultPool) {
       UPDATE client_profile
       SET ${assignments.join(", ")}
       WHERE id::text = $${values.length}
-         OR bubble_client_profile_id = $${values.length}
       RETURNING *
       `,
       values,
@@ -147,7 +145,7 @@ export const patchProfile = _default.patchProfile;
 
 export function toApiShape(row) {
   return {
-    id: row.id ?? row.bubble_client_profile_id,
+    id: row.id,
     userId: row.user_id ?? null,
     goals: row.main_goals_slugs ?? [],
     fitnessLevel: row.fitness_level_slug ?? null,

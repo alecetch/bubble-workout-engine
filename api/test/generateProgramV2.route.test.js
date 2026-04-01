@@ -73,7 +73,7 @@ test("non-finite anchor_date_ms returns 400", async () => {
 
 test("null anchor_date_ms is accepted and does not fail validation", async () => {
   const handler = createGenerateProgramV2Handler({
-    getProfile: async () => minimalProfile,
+    getProfileByUser: async () => minimalProfile,
     db: {
       async connect() {
         throw new Error("setup stop");
@@ -91,7 +91,7 @@ test("null anchor_date_ms is accepted and does not fail validation", async () =>
 
 test("profile not found returns 404", async () => {
   const handler = createGenerateProgramV2Handler({
-    getProfile: async () => null,
+    getProfileByUser: async () => null,
   });
   const req = mockReq({ user_id: "user-unknown", anchor_date_ms: Date.now() });
   const res = mockRes();

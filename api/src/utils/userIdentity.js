@@ -15,7 +15,7 @@ export async function findInternalUserIdByExternalId(client, externalUserId) {
     `
     SELECT id
     FROM app_user
-    WHERE bubble_user_id = $1
+    WHERE subject_id = $1
     LIMIT 1
     `,
     [externalUserId],

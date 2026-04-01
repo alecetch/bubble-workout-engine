@@ -1,3 +1,8 @@
+// RETIRED - 2026
+// This script was used for a one-time Bubble CSV import.
+// The target columns (bubble_creation_date, bubble_modified_date, bubble_user_raw,
+// slug, creator) have been dropped from client_profile (V32).
+// Do not run this script. Retained for historical reference only.
 // api/scripts/importClientProfilesFromCsv.js
 // Transactional importer for Bubble Client Profiles CSV -> Postgres client_profile.
 import "dotenv/config";

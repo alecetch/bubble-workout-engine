@@ -15,7 +15,7 @@ const DEFAULT_CSV_PATH = path.resolve(
 
 const UPSERT_SQL = `
 INSERT INTO equipment_items (
-  bubble_id,
+  external_id,
   category,
   name,
   exercise_slug,
@@ -33,7 +33,7 @@ INSERT INTO equipment_items (
 VALUES (
   $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::timestamptz,$13::timestamptz,$14::jsonb
 )
-ON CONFLICT (bubble_id)
+ON CONFLICT (external_id)
 DO UPDATE SET
   category = EXCLUDED.category,
   name = EXCLUDED.name,
@@ -134,7 +134,7 @@ function parseBubbleTimestamp(value: string | undefined, bubbleId: string, field
     console.warn(
       JSON.stringify({
         event: "equipment_items.bad_timestamp",
-        bubble_id: bubbleId,
+        external_id: bubbleId,
         field: fieldName,
         value: raw,
       }),
@@ -146,7 +146,7 @@ function parseBubbleTimestamp(value: string | undefined, bubbleId: string, field
 }
 
 type EquipmentRow = {
-  bubble_id: string;
+  external_id: string;
   category: string | null;
   name: string;
   exercise_slug: string;
@@ -163,22 +163,22 @@ type EquipmentRow = {
 };
 
 function mapRow(row: Record<string, string>): EquipmentRow {
-  const bubble_id = String(row.unique_id || "").trim();
+  const external_id = String(row.unique_id || "").trim();
   const name = String(row.name || "").trim();
   const exercise_slug = String(row.exercise_slug || "").trim();
 
-  if (!bubble_id) {
+  if (!external_id) {
     throw new Error("Missing unique id");
   }
   if (!name) {
-    throw new Error(`Missing name for bubble_id=${bubble_id}`);
+    throw new Error(`Missing name for external_id=${external_id}`);
   }
   if (!exercise_slug) {
-    throw new Error(`Missing exercise_slug for bubble_id=${bubble_id}`);
+    throw new Error(`Missing exercise_slug for external_id=${external_id}`);
   }
 
   return {
-    bubble_id,
+    external_id,
     category: toNullableText(row.category),
     name,
     exercise_slug,
@@ -189,8 +189,8 @@ function mapRow(row: Record<string, string>): EquipmentRow {
     decent_home_gym: toBool(row.decent_home_gym),
     minimal_equipment: toBool(row.minimal_equipment),
     no_equipment: toBool(row.no_equipment),
-    created_at: parseBubbleTimestamp(row.creation_date, bubble_id, "creation_date"),
-    updated_at: parseBubbleTimestamp(row.modified_date, bubble_id, "modified_date"),
+    created_at: parseBubbleTimestamp(row.creation_date, external_id, "creation_date"),
+    updated_at: parseBubbleTimestamp(row.modified_date, external_id, "modified_date"),
     raw_json: row,
   };
 }
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
       try {
         const row = mapRow(raw);
         const params = [
-          row.bubble_id,
+          row.external_id,
           row.category,
           row.name,
           row.exercise_slug,
@@ -250,7 +250,7 @@ async function main(): Promise<void> {
         console.error(
           JSON.stringify({
             event: "equipment_items.row_failed",
-            bubble_id: fallbackBubbleId,
+            external_id: fallbackBubbleId,
             error: err?.message || String(err),
           }),
         );

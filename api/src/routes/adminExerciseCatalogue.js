@@ -1236,7 +1236,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/generate-id", (req, res) 
 adminExerciseCatalogueRouter.get("/equipment-items", async (_req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, bubble_id, name, category, exercise_slug,
+      `SELECT id, external_id, name, category, exercise_slug,
               commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment
        FROM equipment_items ORDER BY category, name`
     );
@@ -1253,13 +1253,13 @@ adminExerciseCatalogueRouter.post("/equipment-items", async (req, res) => {
     if (!name || !exercise_slug) {
       return res.status(400).json({ ok: false, error: "name and exercise_slug are required" });
     }
-    const bubble_id = `admin_${Date.now()}`;
+    const external_id = `admin_${Date.now()}`;
     const result = await pool.query(
       `INSERT INTO equipment_items
-         (bubble_id, name, category, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment, created_at, updated_at)
+         (external_id, name, category, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),now())
        RETURNING id`,
-      [bubble_id, name, category ?? null, exercise_slug, !!commercial_gym, !!crossfit_hyrox_gym, !!decent_home_gym, !!minimal_equipment, !!no_equipment]
+      [external_id, name, category ?? null, exercise_slug, !!commercial_gym, !!crossfit_hyrox_gym, !!decent_home_gym, !!minimal_equipment, !!no_equipment]
     );
     invalidateCache();
     await auditLog(req, { action: "create_equipment_item", entity: "equipment_items", entityId: result.rows[0].id, detail: { name, exercise_slug } });

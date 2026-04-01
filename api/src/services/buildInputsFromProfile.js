@@ -47,7 +47,7 @@ function mapFitnessRank(fitnessLevel) {
   return 0;
 }
 
-function mapExerciseRowsToBubbleResults(exerciseRows) {
+function mapExerciseRowsToResults(exerciseRows) {
   return (exerciseRows || []).map((row) => ({
     id: row.exercise_id,
     exercise_id: row.exercise_id,
@@ -86,46 +86,45 @@ function mapExerciseRowsToCatalogEx(exerciseRows) {
   }));
 }
 
-export function buildInputsFromDevProfile(devProfile, exerciseRows) {
-  const preferredDays = asArray(devProfile?.preferredDays)
+export function buildInputsFromProfile(profile, exerciseRows) {
+  const preferredDays = asArray(profile?.preferredDays)
     .map((day) => toPreferredDayCode(day))
     .filter(Boolean);
-  const equipmentItems = asArray(devProfile?.equipmentItemCodes)
+  const equipmentItems = asArray(profile?.equipmentItemCodes)
     .map((x) => toSlug(x))
     .filter(Boolean);
-  const injuryFlags = asArray(devProfile?.injuryFlags)
+  const injuryFlags = asArray(profile?.injuryFlags)
     .map((x) => toSlug(x))
     .filter(Boolean);
-  const goals = asArray(devProfile?.goals)
+  const goals = asArray(profile?.goals)
     .map((x) => toSlug(x))
     .filter(Boolean);
 
-  const exercises = mapExerciseRowsToBubbleResults(exerciseRows);
+  const exercises = mapExerciseRowsToResults(exerciseRows);
   const catalogEx = mapExerciseRowsToCatalogEx(exerciseRows);
-  const fitnessRank = mapFitnessRank(devProfile?.fitnessLevel);
+  const fitnessRank = mapFitnessRank(profile?.fitnessLevel);
 
   return {
     clientProfile: {
       response: {
-        bubble_client_profile_id: devProfile?.id ?? null,
         fitness_rank: fitnessRank,
-        fitness_level_slug: toSlug(devProfile?.fitnessLevel || "beginner"),
+        fitness_level_slug: toSlug(profile?.fitnessLevel || "beginner"),
         equipment_items_slugs: equipmentItems,
         injury_flags_slugs: injuryFlags,
         preferred_days: preferredDays.join(","),
         main_goals_slugs: goals,
-        minutes_per_session: Number.isFinite(Number(devProfile?.minutesPerSession))
-          ? Number(devProfile.minutesPerSession)
+        minutes_per_session: Number.isFinite(Number(profile?.minutesPerSession))
+          ? Number(profile.minutesPerSession)
           : null,
-        duration_mins: Number.isFinite(Number(devProfile?.minutesPerSession))
-          ? Number(devProfile.minutesPerSession)
+        duration_mins: Number.isFinite(Number(profile?.minutesPerSession))
+          ? Number(profile.minutesPerSession)
           : 50,
         days_per_week: preferredDays.length || 3,
-        height_cm: devProfile?.heightCm ?? null,
-        weight_kg: devProfile?.weightKg ?? null,
-        equipment_preset_slug: toSlug(devProfile?.equipmentPreset || ""),
-        goal_notes: devProfile?.goalNotes ?? "",
-        schedule_constraints: devProfile?.scheduleConstraints ?? "",
+        height_cm: profile?.heightCm ?? null,
+        weight_kg: profile?.weightKg ?? null,
+        equipment_preset_slug: toSlug(profile?.equipmentPreset || ""),
+        goal_notes: profile?.goalNotes ?? "",
+        schedule_constraints: profile?.scheduleConstraints ?? "",
       },
     },
     exercises: {

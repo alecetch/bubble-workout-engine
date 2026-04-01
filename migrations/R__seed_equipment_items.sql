@@ -1,5 +1,5 @@
 -- Seed: equipment items baseline sourced from api/data/export_EquipmentItem-2026-03-08.csv
--- Idempotent via ON CONFLICT (bubble_id) DO UPDATE.
+-- Idempotent via ON CONFLICT (external_id) DO UPDATE.
 
 WITH seed_rows AS (
   SELECT *
@@ -38,7 +38,7 @@ WITH seed_rows AS (
       ('1771082757661x347316869190645200', 'Strength machine', 'shoulder press machine', 'shoulder_press', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "shoulder press machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757661x347316869190645200", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "shoulder_press", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
       ('1771082757668x328813685294877950', 'Strength machine', 'hack squat machine', 'hack_squat', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "hack squat machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757668x328813685294877950", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "hack_squat", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}')
   ) AS t(
-    bubble_id,
+    external_id,
     category,
     name,
     exercise_slug,
@@ -55,7 +55,7 @@ WITH seed_rows AS (
   )
 )
 INSERT INTO public.equipment_items (
-  bubble_id,
+  external_id,
   category,
   name,
   exercise_slug,
@@ -71,7 +71,7 @@ INSERT INTO public.equipment_items (
   raw_json
 )
 SELECT
-  bubble_id,
+  external_id,
   category,
   name,
   exercise_slug,
@@ -86,7 +86,7 @@ SELECT
   updated_at::timestamptz,
   raw_json::jsonb
 FROM seed_rows
-ON CONFLICT (bubble_id)
+ON CONFLICT (external_id)
 DO UPDATE SET
   category = EXCLUDED.category,
   name = EXCLUDED.name,
