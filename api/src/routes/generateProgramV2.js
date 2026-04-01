@@ -74,7 +74,7 @@ function utcDateString(ms) {
 
 export function createGenerateProgramV2Handler({
   db = pool,
-  getProfileByUser,
+  getProfileByUser = getProfileByUserId,
   getProfile = getProfileById,
   pipeline = runPipeline,
   getAllowed = getAllowedExerciseIds,
