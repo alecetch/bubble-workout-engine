@@ -1,1143 +1,1947 @@
--- Seed: narration templates sourced from api/data/export_Narration-template_2026-03-08.csv
--- Idempotent via ON CONFLICT (template_id) DO UPDATE.
-
-WITH seed_rows AS (
-  SELECT *
-  FROM (
-    VALUES
-      (NULL, 'PROGRAM_SUMMARY', '1', NULL, 'program', NULL, 'prog_summary_1', '["Three focused sessions per week with a main lift, a secondary pattern, and short accessories. Keep effort at ~{RIR} RIR on most work and progress steadily.", "A simple, repeatable hypertrophy week: main movement first, then secondary volume, then a tight accessory finisher. Prioritise clean reps and consistent loading.", "Built for consistency: key compounds each week, then targeted accessories. Aim to add small load or reps week-to-week while keeping form sharp."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'WARMUP_TITLE', '1', NULL, 'day', NULL, 'warmup_title_1', '["Warm-up (8?12 min)", "Warm-up: ramp + prep", "Warm-up: mobilise, activate, ramp"]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'PROGRESSION_BLURB', '1', NULL, 'program', NULL, 'prog_progression_1', '["Progression: add 1 set to key lifts in weeks 2?3 (as prescribed), then reduce volume in week 4 to consolidate.", "Progression: build volume through weeks 2?3, then deload week 4. Keep 1?2 reps in reserve on most sets.", "Progression: small weekly volume increases, then a lighter week 4. Add load only when reps stay crisp."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'DAY_TITLE', '1', NULL, 'day', NULL, 'day_title_1', '["Day {DAY_INDEX}: {DAY_FOCUS} Hypertrophy", "Day {DAY_INDEX}: {DAY_FOCUS} ? Build Volume", "Day {DAY_INDEX}: {DAY_FOCUS} Session"]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SAFETY_BLURB', '1', NULL, 'program', NULL, 'prog_safety_1', '["Pain rule: stop if you get sharp pain. Swap to a safer variation and keep training quality high.", "Quality first: if form degrades, reduce load and finish the prescribed work cleanly.", "Stay conservative on the first week?earn the right to add load."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'PROGRAM_TITLE', '1', NULL, 'program', NULL, 'prog_title_1', '["{DAYS_PER_WEEK}-Day Hypertrophy ( {DURATION_MINS} min )", "Hypertrophy Builder ? {DAYS_PER_WEEK} Days / Week", "Strength + Size ( {DURATION_MINS}-Minute Sessions )"]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'WARMUP_GENERAL_HEAT', '1', NULL, 'day', NULL, 'warmup_heat_1', '["2?4 minutes easy pace to raise core temp (bike/row/jog).", "Start with 3 minutes of easy engine work to get warm.", "Quick pulse-raiser: 2?3 minutes steady movement."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'TIME_BUDGET_HINT', '1', NULL, 'day', NULL, 'day_time_40', '["40-minute cap: set up stations early and keep rests honest.", "Keep transitions tight to stay inside 40 minutes.", "Move with purpose?this session is short by design."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'RAMP_SETS_TEXT', '1', NULL, 'day', NULL, 'warmup_ramp_1', '["Ramp: empty bar x8, ~40% x5, ~60% x3, ~75% x1?2, then start work sets.", "Ramp sets: bar x8, light x5, moderate x3, 1?2 crisp singles, then into working sets.", "Build gradually: bar x8, 2?3 progressive jumps to your first work set."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'DAY_GOAL', '1', NULL, 'day', NULL, 'day_intro_1', '["Today?s priority is {MAIN_LIFT_NAME}. Get quality sets in early, then build volume with {SECONDARY_LIFT_NAME} and accessories.", "Main focus: {MAIN_LIFT_NAME}. Keep the clock moving?secondary work and accessories should feel efficient, not rushed.", "Hit {MAIN_LIFT_NAME} hard but controlled, then accumulate good reps on {SECONDARY_LIFT_NAME}. Finish with short accessory work."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_TITLE', '1', 'secondary', 'segment', NULL, 'seg_title_secondary', '["Secondary Volume", "Secondary Block", "Build Sets"]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_TITLE', '1', 'main', 'segment', 'single', 'seg_title_main', '["Main Lift", "Primary Strength Work", "Main Movement"]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_EXECUTION', '1', NULL, 'segment', 'superset', 'seg_exec_superset', '["Superset: alternate the pair with minimal transition. Rest {REST_SEC}s after both. Repeat for {ROUNDS} rounds.", "Run A then B back-to-back; rest {REST_SEC}s after the second movement. {ROUNDS} total rounds.", "Keep the two stations ready. Move straight to the second exercise, then rest {REST_SEC}s. {ROUNDS} rounds."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_EXECUTION', '1', NULL, 'segment', 'single', 'seg_exec_single', '["Complete {ROUNDS} round(s). Rest {REST_SEC}s between sets.", "{ROUNDS} round(s). Keep reps smooth; rest {REST_SEC}s.", "Work through {ROUNDS} round(s) with {REST_SEC}s rest between sets."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_TITLE', '1', 'accessory', 'segment', NULL, 'seg_title_accessory', '["Accessories", "Finishing Work", "Accessory Builder"]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_EXECUTION', '1', NULL, 'segment', 'giant_set', 'seg_exec_giant', '["Giant set: flow through all movements, then rest {REST_SEC}s. Repeat for {ROUNDS} rounds.", "Complete the circuit in order with quick transitions; rest {REST_SEC}s after the last movement. {ROUNDS} rounds.", "Move station-to-station, then take {REST_SEC}s. Repeat for {ROUNDS} rounds."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_INTENT', '1', 'accessory', 'segment', NULL, 'seg_intent_accessory', '["Chase quality contractions and a strong pump.", "Keep tension where you want it?controlled reps.", "Short rests, clean reps, finish strong."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SEGMENT_INTENT', '1', 'secondary', 'segment', NULL, 'seg_intent_secondary', '["Aim for steady volume?no grinders.", "Accumulate clean reps and keep rest disciplined.", "This block should feel challenging but repeatable."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'SETUP_NOTE', '1', NULL, 'transition', 'superset', 'trans_setup_superset', '["Set both stations up before you start.", "Have both implements ready so you don?t waste time mid-round.", "Quick set-up now saves minutes later?prep both movements."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'TRANSITION_NOTE', '1', NULL, 'transition', 'superset', 'trans_transition_superset', '["Transition quickly?rest comes after both movements.", "Move straight to the second exercise; earn the rest after.", "No hanging around between exercises?rest after the pair."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'PACE_NOTE', '1', NULL, 'transition', NULL, 'trans_pace_note', '["Stop 1 rep before form breaks.", "Keep reps crisp?quality over ego.", "If tempo slips, reduce load and keep moving."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'CUE_LINE', '1', NULL, 'exercise', NULL, 'ex_cue_line', '["Cues: {CUE_1}. {CUE_2}.", "Focus: {CUE_1}; {CUE_2}.", "Keep in mind: {CUE_1}. Then {CUE_2}."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'LOGGING_PROMPT', '1', NULL, 'exercise', NULL, 'ex_log_prompt', '["Log load + reps for your hardest set.", "Track the top set and total reps.", "Note the weight used and how many reps you had in reserve."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'EXERCISE_LINE', '1', 'main', 'exercise', NULL, 'ex_line_main', '["{EX_NAME}: {SETS} set(s) of {REP_RANGE} @ ~{RIR} RIR. Tempo {TEMPO}.", "{EX_NAME}: {SETS} x {REP_RANGE}, leave {RIR} reps in reserve. Tempo {TEMPO}.", "{EX_NAME}: {SETS} sets in the {REP_RANGE} range. Keep {RIR} RIR and controlled tempo ({TEMPO})."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'EXERCISE_LINE', '1', 'secondary', 'exercise', NULL, 'ex_line_secondary', '["{EX_NAME}: {SETS} x {REP_RANGE}. Smooth reps, {RIR} RIR.", "{EX_NAME}: {SETS} sets of {REP_RANGE} with control?no grinders.", "{EX_NAME}: {SETS} x {REP_RANGE}. Add load only if reps stay clean."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'LOAD_HINT', '1', NULL, 'exercise', NULL, 'ex_load_hint', '["If you hit the top of the rep range with clean form, add a small amount of load next time.", "Progression: add reps first, then load once you own the range.", "Add load only when every rep looks the same."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True'),
-      (NULL, 'EXERCISE_LINE', '1', 'accessory', 'exercise', NULL, 'ex_line_accessory', '["{EX_NAME}: {SETS} x {REP_RANGE}. Control the eccentric.", "{EX_NAME}: {SETS} sets in {REP_RANGE}?chase tension, not momentum.", "{EX_NAME}: {SETS} x {REP_RANGE}. Keep the last reps hard but tidy."]', '2026-03-01 16:19:26.993318+00', '2026-03-01 16:19:26.993318+00', 'True')
-  ) AS t(
-    applies_json,
-    field,
-    priority,
-    purpose,
-    scope,
-    segment_type,
-    template_id,
-    text_pool_json,
-    created_at,
-    updated_at,
-    is_active
-  )
-)
+-- Narration Templates — Full Snapshot
+-- Auto-generated by Admin UI. DO NOT edit manually.
+-- Generated: 2026-04-02 17:07:28 UTC
+-- Row count: 72
 INSERT INTO public.narration_template (
-  applies_json,
-  field,
-  priority,
-  purpose,
-  scope,
-  segment_type,
-  template_id,
-  text_pool_json,
-  created_at,
-  updated_at,
-  is_active
-)
-SELECT
-  applies_json::jsonb,
-  field,
-  priority::int,
-  purpose,
-  scope,
-  segment_type,
-  template_id,
-  text_pool_json::jsonb,
-  COALESCE(created_at::timestamptz, now()),
-  COALESCE(updated_at::timestamptz, now()),
-  COALESCE(is_active::boolean, true)
-FROM seed_rows
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
--- Seed: minimal strength phase narration templates.
-INSERT INTO public.narration_template (
-  applies_json,
-  field,
-  priority,
-  purpose,
-  scope,
-  segment_type,
-  template_id,
-  text_pool_json,
-  created_at,
-  updated_at,
-  is_active
-)
-VALUES (
-  '{"program_type":"strength","phase":"BASELINE"}'::jsonb,
-  'PROGRESSION_BLURB',
-  1,
-  NULL,
-  'program',
-  NULL,
-  'strength_phase_baseline_v1',
-  '["Baseline phase: establish consistent setup, bar path, and repeatable working loads.", "Baseline week: prioritize clean reps and stable technique before adding load."]'::jsonb,
-  now(),
-  now(),
-  true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json,
-  field,
-  priority,
-  purpose,
-  scope,
-  segment_type,
-  template_id,
-  text_pool_json,
-  created_at,
-  updated_at,
-  is_active
-)
-VALUES (
-  '{"program_type":"strength","phase":"BUILD"}'::jsonb,
-  'PROGRESSION_BLURB',
-  1,
-  NULL,
-  'program',
-  NULL,
-  'strength_phase_build_v1',
-  '["Build phase: add small load increments while keeping every rep technically sound.", "Build week: progress gradually and keep 1-2 reps in reserve on your heaviest sets."]'::jsonb,
-  now(),
-  now(),
-  true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json,
-  field,
-  priority,
-  purpose,
-  scope,
-  segment_type,
-  template_id,
-  text_pool_json,
-  created_at,
-  updated_at,
-  is_active
-)
-VALUES (
-  '{"program_type":"strength","phase":"CONSOLIDATE"}'::jsonb,
-  'PROGRESSION_BLURB',
-  1,
-  NULL,
-  'program',
-  NULL,
-  'strength_phase_consolidate_v1',
-  '["Consolidate phase: reduce fatigue, keep bar speed crisp, and finish the block strong.", "Consolidate week: trim effort slightly and lock in movement quality under load."]'::jsonb,
-  now(),
-  now(),
-  true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
--- Seed: minimal conditioning phase narration templates.
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning","phase":"BASELINE"}'::jsonb,
-  'PROGRESSION_BLURB',
-  1, NULL, 'program', NULL,
-  'cond_phase_baseline_v1',
-  '["Baseline phase: settle into your pacing, get comfortable with the formats, and build the aerobic base.", "Baseline week: effort is moderate — prioritise consistency and movement quality over intensity."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  NULL,
-  'SEGMENT_EXECUTION',
-  8, NULL, 'segment', 'amrap',
-  'seg_exec_amrap_v1',
-  '["Complete as many rounds as possible in the time cap. Log total rounds completed.", "Start conservatively — the goal is consistent pace through the full time cap."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
--- Hyrox narration templates
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'PROGRAM_TITLE',
-  10,
-  NULL,
-  'program',
-  NULL,
-  'hyrx_program_title',
-  jsonb_build_array('Hyrox Prep - {DAYS_PER_WEEK}-Day ({DURATION_MINS} min)'),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_program_title');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'PROGRAM_SUMMARY',
-  10,
-  NULL,
-  'program',
-  NULL,
-  'hyrx_program_summary',
-  jsonb_build_array(
-    'Three day types, one goal: the run-station rhythm of a Hyrox race. Engine days build aerobic capacity through 8-minute blocks that open with a run every time. Power days put strength first - squat, press, sled - then drive it through AMRAP circuits. Endurance days deliver 10-minute blocks, all four starting with a run, at a threshold pace you can hold. Every session is race prep.',
-    'Hyrox is a pacing problem, not a fitness problem. This program uses three session types to teach you to run, arrive at a station under control, work efficiently, and leave. Engine day: run-station rhythm. Power day: force production and station durability. Endurance day: sustained aerobic output.',
-    'Eight weeks of run-station training. Engine sessions pair runs with wallballs, sleds, carries, and ergs - just like a race. Power sessions anchor on squat and press, then build to sled and carry AMRAPs. Endurance sessions use longer 10-minute blocks for threshold engine work. Train to pace. Race to perform.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_program_summary');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'PROGRESSION_BLURB',
-  10,
-  NULL,
-  'program',
-  NULL,
-  'hyrx_progression_blurb',
-  jsonb_build_array(
-    'Each week raises the target round count by one. Chase the numbers - but hold your pace. A slower round completed is better than a fast round abandoned.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_progression_blurb');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'phase', 'BASELINE'),
-  'WEEK_FOCUS',
-  10,
-  NULL,
-  'week',
-  NULL,
-  'hyrx_week_baseline',
-  jsonb_build_array(
-    'Learn the movements. Build pacing discipline before you chase rounds.',
-    'Baseline week: sub-maximal effort. Get comfortable with the block format and each station.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_baseline');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'phase', 'BUILD'),
-  'WEEK_FOCUS',
-  10,
-  NULL,
-  'week',
-  NULL,
-  'hyrx_week_build',
-  jsonb_build_array(
-    'Push the blocks. Add a round where you can sustain form and pace.',
-    'Build phase: increase effort gradually. A negative split - getting stronger through the block - is the target.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_build');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'phase', 'CONSOLIDATE'),
-  'WEEK_FOCUS',
-  10,
-  NULL,
-  'week',
-  NULL,
-  'hyrx_week_consolidate',
-  jsonb_build_array(
-    'Hold quality. Reduce volume. Arrive fresh.',
-    'Consolidate phase: do not add rounds. Sharpen movement efficiency and transitions.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_consolidate');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'phase', 'PEAK'),
-  'WEEK_FOCUS',
-  10,
-  NULL,
-  'week',
-  NULL,
-  'hyrx_week_peak',
-  jsonb_build_array(
-    'Race-intensity effort. Treat every block like a race station. Arrive at each run ready to push.',
-    'Peak week: near-maximal output. Minimal rest transitions. Simulate the conditions of race day.',
-    'This is what you have been building toward. Race-effort blocks, race-pace runs, race-level discipline.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_week_peak');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'engine'),
-  'DAY_TITLE',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_engine_title',
-  jsonb_build_array('Engine Day'),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_engine_title');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'power'),
-  'DAY_TITLE',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_power_title',
-  jsonb_build_array('Power Day'),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_power_title');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'engine'),
-  'DAY_GOAL',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_engine_goal',
-  jsonb_build_array(
-    'Four 8-minute blocks. Start each run at a pace you can hold through the station. Do not sprint the buy-in.',
-    'Focus on the run-station rhythm today. Consistent pacing across all four blocks beats a fast first block followed by collapse.',
-    'Engine work. Your aerobic system is the engine that keeps your stations clean in a race. Train it today.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_engine_goal');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'power'),
-  'DAY_GOAL',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_power_goal',
-  jsonb_build_array(
-    'Strength foundation first, then three AMRAP blocks. The squat and press sets build the capacity to hold sled and carry form when you are deeply fatigued.',
-    'Power day: heavy work, then hard blocks. Block A is real strength - use it. Block B is sled and carry - the stations that decide race splits. Block C is the run-wallball transfer. Treat it like race day.',
-    'Build the engine chassis today. Squat, press, sled, carry, wallball. Every exercise earns its place by making you more durable in a Hyrox race.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_power_goal');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
-  'DAY_TITLE',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_endurance_title',
-  jsonb_build_array('Endurance Day'),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_endurance_title');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
-  'DAY_GOAL',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_endurance_goal',
-  jsonb_build_array(
-    'Four 10-minute blocks. Every block starts with a run. Your only job today is to arrive at each station under control and hold your pace through all four blocks.',
-    'Threshold work. Every block opens with a run buy-in - just like the race. If your pace in block 4 is significantly faster than block 1, you went out too easy. If it is slower, you went out too hard. Find the line.',
-    'Aerobic engine day. Longer blocks, all four starting with a run, station pairs that match the race. The goal is sustained output - not max effort, not easy effort. Find race pace and hold it.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_day_endurance_goal');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'simulation'),
-  'DAY_TITLE',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_simulation_title',
-  '["Simulation Day", "Race Day Simulation", "Full Race Simulation"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'simulation'),
-  'DAY_GOAL',
-  10,
-  NULL,
-  'day',
-  NULL,
-  'hyrx_day_simulation_goal',
-  '["Full race simulation. Complete all four blocks in order as if it were race day. Treat the transitions as race transitions.", "Race-pace simulation. Every block, every station, no skipping. Your goal is to experience the full race flow from start to finish.", "Race rehearsal: run the full simulation at an effort you could sustain if it were the real thing. Note where your pace dropped — that is where to focus next."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'SEGMENT_TITLE',
-  10,
-  NULL,
-  'segment',
-  'amrap',
-  'hyrx_seg_amrap_title',
-  jsonb_build_array('Block {SEGMENT_INDEX} - AMRAP'),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_title');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'SEGMENT_EXECUTION',
-  10,
-  NULL,
-  'segment',
-  'amrap',
-  'hyrx_seg_amrap_execution',
-  jsonb_build_array(
-    '8-minute AMRAP. Complete as many rounds as possible. Rest 60 seconds before the next block.',
-    'As Many Rounds As Possible in 8 minutes. Keep a consistent pace - do not go out too hot. Rest 60 seconds after the clock stops.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_execution');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'SEGMENT_INTENT',
-  10,
-  NULL,
-  'segment',
-  'amrap',
-  'hyrx_seg_amrap_intent',
-  jsonb_build_array(
-    'Target: {ROUNDS} rounds. Start conservative - your pace in round 1 should be the same in round {ROUNDS}.',
-    'Settle into a rhythm you can hold for all 8 minutes. Negative split is the goal.',
-    'Race discipline: pick a pace from the first rep and hold it. Do not accelerate until the last 90 seconds.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_intent');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
-  'SEGMENT_EXECUTION',
-  5,
-  NULL,
-  'segment',
-  'amrap',
-  'hyrx_seg_amrap_endurance_execution',
-  jsonb_build_array(
-    '10-minute AMRAP. This is a threshold block - find a pace you can sustain for the full 10 minutes. Rest 90 seconds before the next block.',
-    'As Many Rounds As Possible in 10 minutes. Negative split is the goal: aim to be moving as well in minute 9 as in minute 1. Rest 90 seconds after the clock stops.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_endurance_execution');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox', 'day_focus', 'endurance'),
-  'SEGMENT_INTENT',
-  5,
-  NULL,
-  'segment',
-  'amrap',
-  'hyrx_seg_amrap_endurance_intent',
-  jsonb_build_array(
-    'Threshold pace. Not a sprint, not a jog. The pace you could hold for 20 minutes if you had to.',
-    'Target: {ROUNDS} rounds at a pace that feels controlled. If you need to stop within a round, you are going too hard.',
-    'Race discipline: pick an effort level from the first rep and commit to it. Consistency across 10 minutes is the training adaptation you are after.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_amrap_endurance_intent');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'SEGMENT_TITLE',
-  10,
-  'main',
-  'segment',
-  'single',
-  'hyrx_seg_strength_title',
-  jsonb_build_array('Strength Foundation'),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_strength_title');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-SELECT
-  jsonb_build_object('program_type', 'hyrox'),
-  'SEGMENT_EXECUTION',
-  10,
-  'main',
-  'segment',
-  'single',
-  'hyrx_seg_strength_execution',
-  jsonb_build_array(
-    '{SETS} sets x {REP_RANGE}. Rest {REST_SEC}s between sets. This is your only strength block - execute it with precision.'
-  ),
-  now(),
-  now(),
-  true
-WHERE NOT EXISTS (SELECT 1 FROM public.narration_template WHERE template_id = 'hyrx_seg_strength_execution');
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  NULL,
-  'SEGMENT_TITLE',
-  8, NULL, 'segment', 'amrap',
-  'seg_title_amrap_v1',
-  '["AMRAP", "As Many Rounds As Possible", "Max Effort Block"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  NULL,
-  'SEGMENT_EXECUTION',
-  8, NULL, 'segment', 'emom',
-  'seg_exec_emom_v1',
-  '["Every minute on the minute: complete your reps, then rest for the remainder of the minute.", "Start each minute on the clock. Rest is whatever time remains after your reps."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  NULL,
-  'SEGMENT_TITLE',
-  8, NULL, 'segment', 'emom',
-  'seg_title_emom_v1',
-  '["EMOM", "Every Minute On the Minute", "Interval Block"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'PROGRAM_TITLE',
-  10, NULL, 'program', NULL,
-  'cond_prog_title_v1',
-  '["Conditioning Programme", "Engine & Capacity", "Conditioning & Fitness"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'PROGRAM_SUMMARY',
-  10, NULL, 'program', NULL,
-  'cond_prog_summary_v1',
-  '["A structured conditioning programme built around engine work, carries, and mixed modal efforts. Each session targets a different energy system."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'PROGRESSION_BLURB',
-  10, NULL, 'program', NULL,
-  'cond_prog_progression_v1',
-  '["Progress by increasing effort or output each week — not by adding weight. The goal is to handle more work at the same or higher intensity."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning","day_focus":"engine_power"}'::jsonb,
-  'DAY_TITLE',
-  10, NULL, 'day', NULL,
-  'cond_day_title_engine_v1',
-  '["Engine Day", "Power & Conditioning", "High-Output Session"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning","day_focus":"mixed_modal"}'::jsonb,
-  'DAY_TITLE',
-  10, NULL, 'day', NULL,
-  'cond_day_title_modal_v1',
-  '["Mixed Modal Day", "Capacity & Ballistics", "Mixed Conditioning"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning","day_focus":"aerobic_base"}'::jsonb,
-  'DAY_TITLE',
-  10, NULL, 'day', NULL,
-  'cond_day_title_aerobic_v1',
-  '["Aerobic Base Day", "Steady State & Chassis", "Endurance Session"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
-  text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'DAY_GOAL',
-  10, NULL, 'day', NULL,
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
   'cond_day_goal_v1',
-  '["Focus on consistent output — not maximum effort on every set.", "Move well, breathe, and maintain pace across the session.", "Quality of effort matters more than speed today."]'::jsonb,
-  now(), now(), true
+  'day',
+  'DAY_GOAL',
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Focus on consistent output — not maximum effort on every set.","Move well, breathe, and maintain pace across the session.","Quality of effort matters more than speed today."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
 )
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_endurance_goal',
+  'day',
+  'DAY_GOAL',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"endurance","program_type":"hyrox"}'::jsonb,
+  '["Four 10-minute blocks. Every block starts with a run. Your only job today is to arrive at each station under control and hold your pace through all four blocks.","Threshold work. Every block opens with a run buy-in - just like the race. If your pace in block 4 is significantly faster than block 1, you went out too easy. If it is slower, you went out too hard. Find the line.","Aerobic engine day. Longer blocks, all four starting with a run, station pairs that match the race. The goal is sustained output - not max effort, not easy effort. Find race pace and hold it."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
 )
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'SEGMENT_EXECUTION',
-  10, NULL, 'segment', 'superset',
-  'cond_seg_exec_superset_v1',
-  '["Move directly from exercise to exercise. Rest fully between rounds.", "Minimise transition time. The rest comes after the round, not between exercises."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_engine_goal',
+  'day',
+  'DAY_GOAL',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"engine","program_type":"hyrox"}'::jsonb,
+  '["Four 8-minute blocks. Start each run at a pace you can hold through the station. Do not sprint the buy-in.","Focus on the run-station rhythm today. Consistent pacing across all four blocks beats a fast first block followed by collapse.","Engine work. Your aerobic system is the engine that keeps your stations clean in a race. Train it today."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
 )
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'SEGMENT_EXECUTION',
-  10, NULL, 'segment', 'giant_set',
-  'cond_seg_exec_giant_v1',
-  '["Move continuously through all exercises. Rest only after completing the full circuit.", "Keep transitions short. Your rest is earned — take it between rounds only."]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_power_goal',
+  'day',
+  'DAY_GOAL',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"power","program_type":"hyrox"}'::jsonb,
+  '["Strength foundation first, then three AMRAP blocks. The squat and press sets build the capacity to hold sled and carry form when you are deeply fatigued.","Power day: heavy work, then hard blocks. Block A is real strength - use it. Block B is sled and carry - the stations that decide race splits. Block C is the run-wallball transfer. Treat it like race day.","Build the engine chassis today. Squat, press, sled, carry, wallball. Every exercise earns its place by making you more durable in a Hyrox race."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
 )
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'SEGMENT_TITLE',
-  10, 'main', 'segment', NULL,
-  'cond_seg_title_main_v1',
-  '["Primary Effort", "Main Engine Work", "Primary Block"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_simulation_goal',
+  'day',
+  'DAY_GOAL',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"simulation","program_type":"hyrox"}'::jsonb,
+  '["Full race simulation. Complete all four blocks in order as if it were race day. Treat the transitions as race transitions.","Race-pace simulation. Every block, every station, no skipping. Your goal is to experience the full race flow from start to finish.","Race rehearsal: run the full simulation at an effort you could sustain if it were the real thing. Note where your pace dropped — that is where to focus next."]'::jsonb,
+  true,
+  '2026-03-31T17:21:55.815Z',
+  '2026-03-31T17:21:55.815Z'
 )
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'SEGMENT_TITLE',
-  10, 'secondary', 'segment', NULL,
-  'cond_seg_title_secondary_v1',
-  '["Capacity Block", "Circuit Work", "Secondary Effort"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'day_intro_1',
+  'day',
+  'DAY_GOAL',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Today?s priority is {MAIN_LIFT_NAME}. Get quality sets in early, then build volume with {SECONDARY_LIFT_NAME} and accessories.","Main focus: {MAIN_LIFT_NAME}. Keep the clock moving?secondary work and accessories should feel efficient, not rushed.","Hit {MAIN_LIFT_NAME} hard but controlled, then accumulate good reps on {SECONDARY_LIFT_NAME}. Finish with short accessory work."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
 )
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'SEGMENT_TITLE',
-  10, 'accessory', 'segment', NULL,
-  'cond_seg_title_accessory_v1',
-  '["Metabolic Finisher", "Accessory Circuit", "Conditioning Accessory"]'::jsonb,
-  now(), now(), true
-)
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_day_title_aerobic_v1',
+  'day',
+  'DAY_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"aerobic_base","program_type":"conditioning"}'::jsonb,
+  '["Aerobic Base Day","Steady State & Chassis","Endurance Session"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
 )
-VALUES (
-  '{"program_type":"conditioning"}'::jsonb,
-  'CUE_LINE',
-  10, NULL, 'exercise', NULL,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_day_title_engine_v1',
+  'day',
+  'DAY_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"engine_power","program_type":"conditioning"}'::jsonb,
+  '["Engine Day","Power & Conditioning","High-Output Session"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_day_title_modal_v1',
+  'day',
+  'DAY_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"mixed_modal","program_type":"conditioning"}'::jsonb,
+  '["Mixed Modal Day","Capacity & Ballistics","Mixed Conditioning"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_endurance_title',
+  'day',
+  'DAY_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"endurance","program_type":"hyrox"}'::jsonb,
+  '["Endurance Day"]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_engine_title',
+  'day',
+  'DAY_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"engine","program_type":"hyrox"}'::jsonb,
+  '["Engine Day"]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_power_title',
+  'day',
+  'DAY_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"power","program_type":"hyrox"}'::jsonb,
+  '["Power Day"]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_day_simulation_title',
+  'day',
+  'DAY_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"day_focus":"simulation","program_type":"hyrox"}'::jsonb,
+  '["Simulation Day","Race Day Simulation","Full Race Simulation"]'::jsonb,
+  true,
+  '2026-03-31T06:27:41.036Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'day_title_1',
+  'day',
+  'DAY_TITLE',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Day {DAY_INDEX}: {DAY_FOCUS} Hypertrophy","Day {DAY_INDEX}: {DAY_FOCUS} ? Build Volume","Day {DAY_INDEX}: {DAY_FOCUS} Session"]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'warmup_ramp_1',
+  'day',
+  'RAMP_SETS_TEXT',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Ramp: empty bar x8, ~40% x5, ~60% x3, ~75% x1?2, then start work sets.","Ramp sets: bar x8, light x5, moderate x3, 1?2 crisp singles, then into working sets.","Build gradually: bar x8, 2?3 progressive jumps to your first work set."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'day_time_40',
+  'day',
+  'TIME_BUDGET_HINT',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["40-minute cap: set up stations early and keep rests honest.","Keep transitions tight to stay inside 40 minutes.","Move with purpose?this session is short by design."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'warmup_heat_1',
+  'day',
+  'WARMUP_GENERAL_HEAT',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["2?4 minutes easy pace to raise core temp (bike/row/jog).","Start with 3 minutes of easy engine work to get warm.","Quick pulse-raiser: 2?3 minutes steady movement."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'warmup_title_1',
+  'day',
+  'WARMUP_TITLE',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Warm-up (8?12 min)","Warm-up: ramp + prep","Warm-up: mobilise, activate, ramp"]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
   'cond_ex_cue_v1',
-  '["Control your breathing. Steady output beats one big burst.", "Pace yourself — the goal is consistent effort, not going all-out.", "Focus on mechanics under fatigue."]'::jsonb,
-  now(), now(), true
+  'exercise',
+  'CUE_LINE',
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Control your breathing. Steady output beats one big burst.","Pace yourself — the goal is consistent effort, not going all-out.","Focus on mechanics under fatigue."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
 )
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'ex_cue_line',
+  'exercise',
+  'CUE_LINE',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Cues: {CUE_1}. {CUE_2}.","Focus: {CUE_1}; {CUE_2}.","Keep in mind: {CUE_1}. Then {CUE_2}."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
 )
-VALUES (
-  '{"program_type":"conditioning","phase":"BUILD"}'::jsonb,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'ex_line_accessory',
+  'exercise',
+  'EXERCISE_LINE',
+  1,
+  'accessory',
+  NULL,
+  NULL,
+  '["{EX_NAME}: {SETS} x {REP_RANGE}. Control the eccentric.","{EX_NAME}: {SETS} sets in {REP_RANGE}?chase tension, not momentum.","{EX_NAME}: {SETS} x {REP_RANGE}. Keep the last reps hard but tidy."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'ex_line_main',
+  'exercise',
+  'EXERCISE_LINE',
+  1,
+  'main',
+  NULL,
+  NULL,
+  '["{EX_NAME}: {SETS} set(s) of {REP_RANGE} @ ~{RIR} RIR. Tempo {TEMPO}.","{EX_NAME}: {SETS} x {REP_RANGE}, leave {RIR} reps in reserve. Tempo {TEMPO}.","{EX_NAME}: {SETS} sets in the {REP_RANGE} range. Keep {RIR} RIR and controlled tempo ({TEMPO})."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'ex_line_secondary',
+  'exercise',
+  'EXERCISE_LINE',
+  1,
+  'secondary',
+  NULL,
+  NULL,
+  '["{EX_NAME}: {SETS} x {REP_RANGE}. Smooth reps, {RIR} RIR.","{EX_NAME}: {SETS} sets of {REP_RANGE} with control?no grinders.","{EX_NAME}: {SETS} x {REP_RANGE}. Add load only if reps stay clean."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'ex_load_hint',
+  'exercise',
+  'LOAD_HINT',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["If you hit the top of the rep range with clean form, add a small amount of load next time.","Progression: add reps first, then load once you own the range.","Add load only when every rep looks the same."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'ex_log_prompt',
+  'exercise',
+  'LOGGING_PROMPT',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Log load + reps for your hardest set.","Track the top set and total reps.","Note the weight used and how many reps you had in reserve."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_prog_summary_v1',
+  'program',
+  'PROGRAM_SUMMARY',
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["A structured conditioning programme built around engine work, carries, and mixed modal efforts. Each session targets a different energy system."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_program_summary',
+  'program',
+  'PROGRAM_SUMMARY',
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"hyrox"}'::jsonb,
+  '["Three day types, one goal: the run-station rhythm of a Hyrox race. Engine days build aerobic capacity through 8-minute blocks that open with a run every time. Power days put strength first - squat, press, sled - then drive it through AMRAP circuits. Endurance days deliver 10-minute blocks, all four starting with a run, at a threshold pace you can hold. Every session is race prep.","Hyrox is a pacing problem, not a fitness problem. This program uses three session types to teach you to run, arrive at a station under control, work efficiently, and leave. Engine day: run-station rhythm. Power day: force production and station durability. Endurance day: sustained aerobic output.","Eight weeks of run-station training. Engine sessions pair runs with wallballs, sleds, carries, and ergs - just like a race. Power sessions anchor on squat and press, then build to sled and carry AMRAPs. Endurance sessions use longer 10-minute blocks for threshold engine work. Train to pace. Race to perform."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'prog_summary_1',
+  'program',
+  'PROGRAM_SUMMARY',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Three focused sessions per week with a main lift, a secondary pattern, and short accessories. Keep effort at ~{RIR} RIR on most work and progress steadily.","A simple, repeatable hypertrophy week: main movement first, then secondary volume, then a tight accessory finisher. Prioritise clean reps and consistent loading.","Built for consistency: key compounds each week, then targeted accessories. Aim to add small load or reps week-to-week while keeping form sharp."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_prog_title_v1',
+  'program',
+  'PROGRAM_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Conditioning Programme","Engine & Capacity","Conditioning & Fitness"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_program_title',
+  'program',
+  'PROGRAM_TITLE',
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"hyrox"}'::jsonb,
+  '["Hyrox Prep - {DAYS_PER_WEEK}-Day ({DURATION_MINS} min)"]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'prog_title_1',
+  'program',
+  'PROGRAM_TITLE',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["{DAYS_PER_WEEK}-Day Hypertrophy ( {DURATION_MINS} min )","Hypertrophy Builder ? {DAYS_PER_WEEK} Days / Week","Strength + Size ( {DURATION_MINS}-Minute Sessions )"]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_prog_progression_v1',
+  'program',
   'PROGRESSION_BLURB',
-  1, NULL, 'program', NULL,
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Progress by increasing effort or output each week — not by adding weight. The goal is to handle more work at the same or higher intensity."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_progression_blurb',
+  'program',
+  'PROGRESSION_BLURB',
+  10,
+  NULL,
+  NULL,
+  '{"program_type":"hyrox"}'::jsonb,
+  '["Each week raises the target round count by one. Chase the numbers - but hold your pace. A slower round completed is better than a fast round abandoned."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_phase_baseline_v1',
+  'program',
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  NULL,
+  '{"phase":"BASELINE","program_type":"conditioning"}'::jsonb,
+  '["Baseline phase: settle into your pacing, get comfortable with the formats, and build the aerobic base.","Baseline week: effort is moderate — prioritise consistency and movement quality over intensity."]'::jsonb,
+  true,
+  '2026-03-10T21:54:40.642Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
   'cond_phase_build_v1',
-  '["Build phase: push the pace a little harder each session and add output where prescribed.", "Build week: increase intensity or volume slightly — you should finish feeling challenged."]'::jsonb,
-  now(), now(), true
+  'program',
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  NULL,
+  '{"phase":"BUILD","program_type":"conditioning"}'::jsonb,
+  '["Build phase: push the pace a little harder each session and add output where prescribed.","Build week: increase intensity or volume slightly — you should finish feeling challenged."]'::jsonb,
+  true,
+  '2026-03-10T21:54:40.642Z',
+  '2026-03-31T17:21:55.815Z'
 )
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
 
 INSERT INTO public.narration_template (
-  applies_json, field, priority, purpose, scope, segment_type,
-  template_id, text_pool_json, created_at, updated_at, is_active
-)
-VALUES (
-  '{"program_type":"conditioning","phase":"CONSOLIDATE"}'::jsonb,
-  'PROGRESSION_BLURB',
-  1, NULL, 'program', NULL,
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
   'cond_phase_consolidate_v1',
-  '["Consolidate phase: reduce effort slightly and lock in your aerobic gains before the next block.", "Consolidate week: back off the intensity, keep the movement quality high, and finish strong."]'::jsonb,
-  now(), now(), true
+  'program',
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  NULL,
+  '{"phase":"CONSOLIDATE","program_type":"conditioning"}'::jsonb,
+  '["Consolidate phase: reduce effort slightly and lock in your aerobic gains before the next block.","Consolidate week: back off the intensity, keep the movement quality high, and finish strong."]'::jsonb,
+  true,
+  '2026-03-10T21:54:40.642Z',
+  '2026-03-31T17:21:55.815Z'
 )
-ON CONFLICT (template_id)
-DO UPDATE SET
-  applies_json = EXCLUDED.applies_json,
-  field = EXCLUDED.field,
-  priority = EXCLUDED.priority,
-  purpose = EXCLUDED.purpose,
-  scope = EXCLUDED.scope,
-  segment_type = EXCLUDED.segment_type,
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
   text_pool_json = EXCLUDED.text_pool_json,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'prog_progression_1',
+  'program',
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Progression: add 1 set to key lifts in weeks 2?3 (as prescribed), then reduce volume in week 4 to consolidate.","Progression: build volume through weeks 2?3, then deload week 4. Keep 1?2 reps in reserve on most sets.","Progression: small weekly volume increases, then a lighter week 4. Add load only when reps stay crisp."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'strength_phase_baseline_v1',
+  'program',
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  NULL,
+  '{"phase":"BASELINE","program_type":"strength"}'::jsonb,
+  '["Baseline phase: establish consistent setup, bar path, and repeatable working loads.","Baseline week: prioritize clean reps and stable technique before adding load."]'::jsonb,
+  true,
+  '2026-03-09T21:26:49.862Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'strength_phase_build_v1',
+  'program',
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  NULL,
+  '{"phase":"BUILD","program_type":"strength"}'::jsonb,
+  '["Build phase: add small load increments while keeping every rep technically sound.","Build week: progress gradually and keep 1-2 reps in reserve on your heaviest sets."]'::jsonb,
+  true,
+  '2026-03-09T21:26:49.862Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'strength_phase_consolidate_v1',
+  'program',
+  'PROGRESSION_BLURB',
+  1,
+  NULL,
+  NULL,
+  '{"phase":"CONSOLIDATE","program_type":"strength"}'::jsonb,
+  '["Consolidate phase: reduce fatigue, keep bar speed crisp, and finish the block strong.","Consolidate week: trim effort slightly and lock in movement quality under load."]'::jsonb,
+  true,
+  '2026-03-09T21:26:49.862Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'prog_safety_1',
+  'program',
+  'SAFETY_BLURB',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Pain rule: stop if you get sharp pain. Swap to a safer variation and keep training quality high.","Quality first: if form degrades, reduce load and finish the prescribed work cleanly.","Stay conservative on the first week?earn the right to add load."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_seg_exec_giant_v1',
+  'segment',
+  'SEGMENT_EXECUTION',
+  10,
+  NULL,
+  'giant_set',
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Move continuously through all exercises. Rest only after completing the full circuit.","Keep transitions short. Your rest is earned — take it between rounds only."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_seg_exec_superset_v1',
+  'segment',
+  'SEGMENT_EXECUTION',
+  10,
+  NULL,
+  'superset',
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Move directly from exercise to exercise. Rest fully between rounds.","Minimise transition time. The rest comes after the round, not between exercises."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_seg_amrap_execution',
+  'segment',
+  'SEGMENT_EXECUTION',
+  10,
+  NULL,
+  'amrap',
+  '{"program_type":"hyrox"}'::jsonb,
+  '["8-minute AMRAP. Complete as many rounds as possible. Rest 60 seconds before the next block.","As Many Rounds As Possible in 8 minutes. Keep a consistent pace - do not go out too hot. Rest 60 seconds after the clock stops."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_seg_strength_execution',
+  'segment',
+  'SEGMENT_EXECUTION',
+  10,
+  'main',
+  'single',
+  '{"program_type":"hyrox"}'::jsonb,
+  '["{SETS} sets x {REP_RANGE}. Rest {REST_SEC}s between sets. This is your only strength block - execute it with precision."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_exec_amrap_v1',
+  'segment',
+  'SEGMENT_EXECUTION',
+  8,
+  NULL,
+  'amrap',
+  NULL,
+  '["Complete as many rounds as possible in the time cap. Log total rounds completed.","Start conservatively — the goal is consistent pace through the full time cap."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_exec_emom_v1',
+  'segment',
+  'SEGMENT_EXECUTION',
+  8,
+  NULL,
+  'emom',
+  NULL,
+  '["Every minute on the minute: complete your reps, then rest for the remainder of the minute.","Start each minute on the clock. Rest is whatever time remains after your reps."]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_seg_amrap_endurance_execution',
+  'segment',
+  'SEGMENT_EXECUTION',
+  5,
+  NULL,
+  'amrap',
+  '{"day_focus":"endurance","program_type":"hyrox"}'::jsonb,
+  '["10-minute AMRAP. This is a threshold block - find a pace you can sustain for the full 10 minutes. Rest 90 seconds before the next block.","As Many Rounds As Possible in 10 minutes. Negative split is the goal: aim to be moving as well in minute 9 as in minute 1. Rest 90 seconds after the clock stops."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_exec_giant',
+  'segment',
+  'SEGMENT_EXECUTION',
+  1,
+  NULL,
+  'giant_set',
+  NULL,
+  '["Giant set: flow through all movements, then rest {REST_SEC}s. Repeat for {ROUNDS} rounds.","Complete the circuit in order with quick transitions; rest {REST_SEC}s after the last movement. {ROUNDS} rounds.","Move station-to-station, then take {REST_SEC}s. Repeat for {ROUNDS} rounds."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_exec_single',
+  'segment',
+  'SEGMENT_EXECUTION',
+  1,
+  NULL,
+  'single',
+  NULL,
+  '["Complete {ROUNDS} round(s). Rest {REST_SEC}s between sets.","{ROUNDS} round(s). Keep reps smooth; rest {REST_SEC}s.","Work through {ROUNDS} round(s) with {REST_SEC}s rest between sets."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_exec_superset',
+  'segment',
+  'SEGMENT_EXECUTION',
+  1,
+  NULL,
+  'superset',
+  NULL,
+  '["Superset: alternate the pair with minimal transition. Rest {REST_SEC}s after both. Repeat for {ROUNDS} rounds.","Run A then B back-to-back; rest {REST_SEC}s after the second movement. {ROUNDS} total rounds.","Keep the two stations ready. Move straight to the second exercise, then rest {REST_SEC}s. {ROUNDS} rounds."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_seg_amrap_intent',
+  'segment',
+  'SEGMENT_INTENT',
+  10,
+  NULL,
+  'amrap',
+  '{"program_type":"hyrox"}'::jsonb,
+  '["Target: {ROUNDS} rounds. Start conservative - your pace in round 1 should be the same in round {ROUNDS}.","Settle into a rhythm you can hold for all 8 minutes. Negative split is the goal.","Race discipline: pick a pace from the first rep and hold it. Do not accelerate until the last 90 seconds."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_seg_amrap_endurance_intent',
+  'segment',
+  'SEGMENT_INTENT',
+  5,
+  NULL,
+  'amrap',
+  '{"day_focus":"endurance","program_type":"hyrox"}'::jsonb,
+  '["Threshold pace. Not a sprint, not a jog. The pace you could hold for 20 minutes if you had to.","Target: {ROUNDS} rounds at a pace that feels controlled. If you need to stop within a round, you are going too hard.","Race discipline: pick an effort level from the first rep and commit to it. Consistency across 10 minutes is the training adaptation you are after."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_intent_accessory',
+  'segment',
+  'SEGMENT_INTENT',
+  1,
+  'accessory',
+  NULL,
+  NULL,
+  '["Chase quality contractions and a strong pump.","Keep tension where you want it?controlled reps.","Short rests, clean reps, finish strong."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_intent_secondary',
+  'segment',
+  'SEGMENT_INTENT',
+  1,
+  'secondary',
+  NULL,
+  NULL,
+  '["Aim for steady volume?no grinders.","Accumulate clean reps and keep rest disciplined.","This block should feel challenging but repeatable."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_seg_title_accessory_v1',
+  'segment',
+  'SEGMENT_TITLE',
+  10,
+  'accessory',
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Metabolic Finisher","Accessory Circuit","Conditioning Accessory"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_seg_title_main_v1',
+  'segment',
+  'SEGMENT_TITLE',
+  10,
+  'main',
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Primary Effort","Main Engine Work","Primary Block"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'cond_seg_title_secondary_v1',
+  'segment',
+  'SEGMENT_TITLE',
+  10,
+  'secondary',
+  NULL,
+  '{"program_type":"conditioning"}'::jsonb,
+  '["Capacity Block","Circuit Work","Secondary Effort"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_seg_amrap_title',
+  'segment',
+  'SEGMENT_TITLE',
+  10,
+  NULL,
+  'amrap',
+  '{"program_type":"hyrox"}'::jsonb,
+  '["Block {SEGMENT_INDEX} - AMRAP"]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_seg_strength_title',
+  'segment',
+  'SEGMENT_TITLE',
+  10,
+  'main',
+  'single',
+  '{"program_type":"hyrox"}'::jsonb,
+  '["Strength Foundation"]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_title_amrap_v1',
+  'segment',
+  'SEGMENT_TITLE',
+  8,
+  NULL,
+  'amrap',
+  NULL,
+  '["AMRAP","As Many Rounds As Possible","Max Effort Block"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_title_emom_v1',
+  'segment',
+  'SEGMENT_TITLE',
+  8,
+  NULL,
+  'emom',
+  NULL,
+  '["EMOM","Every Minute On the Minute","Interval Block"]'::jsonb,
+  true,
+  '2026-03-11T22:19:48.291Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_title_accessory',
+  'segment',
+  'SEGMENT_TITLE',
+  1,
+  'accessory',
+  NULL,
+  NULL,
+  '["Accessories","Finishing Work","Accessory Builder"]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_title_main',
+  'segment',
+  'SEGMENT_TITLE',
+  1,
+  'main',
+  'single',
+  NULL,
+  '["Main Lift","Primary Strength Work","Main Movement"]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'seg_title_secondary',
+  'segment',
+  'SEGMENT_TITLE',
+  1,
+  'secondary',
+  NULL,
+  NULL,
+  '["Secondary Volume","Secondary Block","Build Sets"]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'trans_pace_note',
+  'transition',
+  'PACE_NOTE',
+  1,
+  NULL,
+  NULL,
+  NULL,
+  '["Stop 1 rep before form breaks.","Keep reps crisp?quality over ego.","If tempo slips, reduce load and keep moving."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'trans_setup_superset',
+  'transition',
+  'SETUP_NOTE',
+  1,
+  NULL,
+  'superset',
+  NULL,
+  '["Set both stations up before you start.","Have both implements ready so you don?t waste time mid-round.","Quick set-up now saves minutes later?prep both movements."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'trans_transition_superset',
+  'transition',
+  'TRANSITION_NOTE',
+  1,
+  NULL,
+  'superset',
+  NULL,
+  '["Transition quickly?rest comes after both movements.","Move straight to the second exercise; earn the rest after.","No hanging around between exercises?rest after the pair."]'::jsonb,
+  true,
+  '2026-03-01T16:19:26.993Z',
+  '2026-03-31T17:21:55.815Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_week_baseline',
+  'week',
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  NULL,
+  '{"phase":"BASELINE","program_type":"hyrox"}'::jsonb,
+  '["Learn the movements. Build pacing discipline before you chase rounds.","Baseline week: sub-maximal effort. Get comfortable with the block format and each station."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_week_build',
+  'week',
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  NULL,
+  '{"phase":"BUILD","program_type":"hyrox"}'::jsonb,
+  '["Push the blocks. Add a round where you can sustain form and pace.","Build phase: increase effort gradually. A negative split - getting stronger through the block - is the target."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_week_consolidate',
+  'week',
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  NULL,
+  '{"phase":"CONSOLIDATE","program_type":"hyrox"}'::jsonb,
+  '["Hold quality. Reduce volume. Arrive fresh.","Consolidate phase: do not add rounds. Sharpen movement efficiency and transitions."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
+
+INSERT INTO public.narration_template (
+  template_id, scope, field, priority, purpose, segment_type,
+  applies_json, text_pool_json, is_active, created_at, updated_at
+) VALUES (
+  'hyrx_week_peak',
+  'week',
+  'WEEK_FOCUS',
+  10,
+  NULL,
+  NULL,
+  '{"phase":"PEAK","program_type":"hyrox"}'::jsonb,
+  '["Race-intensity effort. Treat every block like a race station. Arrive at each run ready to push.","Peak week: near-maximal output. Minimal rest transitions. Simulate the conditions of race day.","This is what you have been building toward. Race-effort blocks, race-pace runs, race-level discipline."]'::jsonb,
+  true,
+  '2026-03-14T11:13:49.900Z',
+  '2026-03-14T11:13:49.900Z'
+)
+ON CONFLICT (template_id) DO UPDATE SET
+  scope         = EXCLUDED.scope,
+  field         = EXCLUDED.field,
+  priority      = EXCLUDED.priority,
+  purpose       = EXCLUDED.purpose,
+  segment_type  = EXCLUDED.segment_type,
+  applies_json  = EXCLUDED.applies_json,
+  text_pool_json = EXCLUDED.text_pool_json,
+  is_active     = EXCLUDED.is_active,
+  updated_at    = EXCLUDED.updated_at;
