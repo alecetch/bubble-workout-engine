@@ -598,6 +598,11 @@ function generateExerciseId(name) {
 
 // ── Snapshot SQL builder ──────────────────────────────────────────────────────
 
+export async function exportExerciseCatalogueSnapshot() {
+  const state = await getFullState(true);
+  return { content: buildSnapshotSql(state.exercises), rows: state.exercises.length };
+}
+
 function buildSnapshotSql(exercises) {
   const ts = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
   const ids = exercises.map(ex => sqlLiteral(ex.exercise_id)).join(",\n  ");

@@ -18,6 +18,7 @@ import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
+import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
 import { adminHealthRouter } from "./src/routes/adminHealth.js";
 import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
@@ -595,6 +596,7 @@ app.use("/admin", ...adminOnly, adminConfigsRouter);
 app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
 app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
+app.use("/admin", ...adminOnly, adminSyncRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
 app.use("/api/auth", authRouter);
 // Canonical (new)

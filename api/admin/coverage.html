@@ -304,6 +304,7 @@
             <a href="/admin/observability">Observability</a>
             <a href="/admin/preview">Preview</a>
           </div>
+          <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">⬇ Sync All to Flyway</button>
         </div>
         <div class="controls">
           <div class="control">
@@ -884,6 +885,31 @@
         }
         installAdminIdleTimeout();
         loadBtn.addEventListener("click", loadReport);
+
+        document.getElementById("sync-all-btn").addEventListener("click", async () => {
+          const btn = document.getElementById("sync-all-btn");
+          btn.disabled = true;
+          btn.textContent = "Syncing…";
+          try {
+            const token = saveToken(getToken());
+            if (!token) throw new Error("Missing token. Fill Internal API Token first.");
+            const res = await fetch("/admin/sync-all-to-flyway", {
+              method: "POST",
+              headers: { "x-internal-token": token, "Content-Type": "application/json" },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            const lines = data.files.map(f =>
+              `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
+            ).join("\n");
+            window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
+          } catch (err) {
+            window.alert("Sync failed: " + (err.message || String(err)));
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "⬇ Sync All to Flyway";
+          }
+        });
 
         tableBodyEl.addEventListener("click", e => {
           const td = e.target.closest("td.cell-click");
