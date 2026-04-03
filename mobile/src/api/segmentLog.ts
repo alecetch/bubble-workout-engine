@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { authGetJson, authPostJson } from "./client";
 
 export type SegmentLogRow = {
   id?: string;
@@ -32,7 +32,7 @@ export async function getSegmentExerciseLogs(params: {
     query.set("workout_segment_id", params.workoutSegmentId);
     query.set("program_day_id", params.programDayId);
 
-    const response = await apiFetch<{ rows: unknown[] }>(`/api/segment-log?${query.toString()}`);
+    const response = await authGetJson<{ rows: unknown[] }>(`/api/segment-log?${query.toString()}`);
     const rows = Array.isArray(response?.rows) ? response.rows : [];
 
     return rows.map((raw) => {
@@ -53,9 +53,7 @@ export async function getSegmentExerciseLogs(params: {
 export async function saveSegmentExerciseLogs(
   payload: SaveSegmentLogPayload,
 ): Promise<void> {
-  await apiFetch<unknown>("/api/segment-log", {
-    method: "POST",
-    body: {
+  await authPostJson<unknown, Record<string, unknown>>("/api/segment-log", {
       user_id: payload.userId,
       program_id: payload.programId,
       program_day_id: payload.programDayId,
@@ -66,7 +64,6 @@ export async function saveSegmentExerciseLogs(
         weight_kg: r.weightKg,
         reps_completed: r.repsCompleted,
       })),
-    },
   });
 }
 

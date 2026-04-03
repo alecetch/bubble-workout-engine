@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
-import { internalWithUser } from "../middleware/chains.js";
+import { userAuth } from "../middleware/chains.js";
 
 const SQL_HISTORY_OVERVIEW = `
 WITH user_program_days AS (
@@ -311,7 +311,7 @@ export const historyOverviewRouter = express.Router();
 
 historyOverviewRouter.get(
   "/v1/history/overview",
-  ...internalWithUser,
+  ...userAuth,
   createHistoryOverviewHandler(pool),
 );
 

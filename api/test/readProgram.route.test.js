@@ -82,6 +82,7 @@ test("programOverview non-UUID program_id returns 400", async () => {
     request_id: "t",
     params: { program_id: "not-a-uuid" },
     query: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
     log: { error() {} },
   };
   const res = mockRes();
@@ -98,6 +99,7 @@ test("programOverview non-UUID selected_program_day_id returns 400", async () =>
     request_id: "t",
     params: { program_id: VALID_UUID },
     query: { user_id: USER_UUID, selected_program_day_id: "bad-uuid" },
+    auth: { user_id: USER_UUID },
     log: { error() {} },
   };
   const res = mockRes();
@@ -114,6 +116,7 @@ test("programOverview program not found returns 404", async () => {
     request_id: "t",
     params: { program_id: VALID_UUID },
     query: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
     log: { error() {} },
   };
   const res = mockRes();
@@ -130,6 +133,7 @@ test("dayFull non-UUID program_day_id returns 400", async () => {
     request_id: "t",
     params: { program_day_id: "bad" },
     query: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
     log: { error() {} },
   };
   const res = mockRes();
@@ -146,6 +150,7 @@ test("dayFull day not found returns 404", async () => {
     request_id: "t",
     params: { program_day_id: VALID_UUID },
     query: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
     log: { error() {} },
   };
   const res = mockRes();
@@ -163,6 +168,7 @@ test("dayComplete non-UUID program_day_id returns 400", async () => {
     params: { program_day_id: "bad" },
     query: {},
     body: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
     log: { error() {} },
   };
   const res = mockRes();
@@ -180,6 +186,7 @@ test("dayComplete day not found or access denied returns 404", async () => {
     params: { program_day_id: VALID_UUID },
     query: {},
     body: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
     log: { error() {} },
   };
   const res = mockRes();

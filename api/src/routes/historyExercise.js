@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
-import { internalWithUser } from "../middleware/chains.js";
+import { userAuth } from "../middleware/chains.js";
 
 const SQL_EXERCISE_SERIES = `
 SELECT
@@ -152,6 +152,6 @@ export const historyExerciseRouter = express.Router();
 
 historyExerciseRouter.get(
   "/v1/history/exercise/:exerciseId",
-  ...internalWithUser,
+  ...userAuth,
   createHistoryExerciseHandler(pool),
 );

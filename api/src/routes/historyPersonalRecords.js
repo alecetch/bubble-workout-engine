@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
-import { internalWithUser } from "../middleware/chains.js";
+import { userAuth } from "../middleware/chains.js";
 import { clampInt, safeString } from "../utils/validate.js";
 
 const SQL_PERSONAL_RECORDS = `
@@ -94,7 +94,7 @@ export const historyPersonalRecordsRouter = express.Router();
 
 historyPersonalRecordsRouter.get(
   "/v1/history/personal-records",
-  ...internalWithUser,
+  ...userAuth,
   createHistoryPersonalRecordsHandler(pool),
 );
 

@@ -137,6 +137,12 @@ function dayFocusFromDay(day) {
   return "Hypertrophy";
 }
 
+function segmentLetterFromSegment(seg) {
+  const firstSlot = s(seg?.items?.[0]?.slot);
+  if (!firstSlot) return "";
+  return s(firstSlot.split(":")[0]).trim();
+}
+
 // ---------------- template indexing ----------------
 // Expects rows like:
 // { template_id, scope, field, purpose, segment_type, priority, text_pool_json }
@@ -553,6 +559,8 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       const seg2 = day.segments[sidx] || {};
       const purpose = s(seg2.purpose);
       const segType = s(seg2.segment_type);
+      const segmentIndex = toInt(seg2.segment_index, sidx + 1);
+      const segmentLetter = segmentLetterFromSegment(seg2);
       const rounds = toInt(seg2.rounds, 1);
 
       // Rest
@@ -560,7 +568,14 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       if (restSec > 0) debugCounters.used_segment_rest_after_set_sec += 1;
       else restSec = defaultRestForSegType(segType, cfg);
 
-      const segTokens = { PURPOSE: purpose, SEGMENT_TYPE: segType, ROUNDS: rounds, REST_SEC: restSec };
+      const segTokens = {
+        PURPOSE: purpose,
+        SEGMENT_TYPE: segType,
+        SEGMENT_INDEX: segmentIndex,
+        SEGMENT_LETTER: segmentLetter,
+        ROUNDS: rounds,
+        REST_SEC: restSec,
+      };
       const segKey = `seg|${dayIdx}|${purpose}|${segType}|${sidx}`;
 
       const segTitlePool = findTemplatePool(templates, "segment", "SEGMENT_TITLE", purpose, segType, matchCtx);

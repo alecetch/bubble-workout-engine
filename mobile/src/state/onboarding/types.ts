@@ -40,6 +40,7 @@ export type OnboardingDraft = {
   goals: GoalType[];
   fitnessLevel: FitnessLevel | null;
   injuryFlags: InjuryFlag[];
+  goalNotes: string;
   equipmentPresetCode: EquipmentPreset | null;
   selectedEquipmentCodes: string[];
   // Backward compatibility for existing API payload mapping.
@@ -73,6 +74,7 @@ export const DEFAULT_ONBOARDING_DRAFT: OnboardingDraft = {
   goals: [],
   fitnessLevel: null,
   injuryFlags: [],
+  goalNotes: "",
   equipmentPresetCode: null,
   selectedEquipmentCodes: [],
   equipmentPreset: null,

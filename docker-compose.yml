@@ -56,6 +56,12 @@ services:
       - ./migrations:/flyway/sql:ro
     command: ["migrate"]
 
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"   # web UI
+      - "1025:1025"   # SMTP
+
   minio:
     image: minio/minio
     env_file:

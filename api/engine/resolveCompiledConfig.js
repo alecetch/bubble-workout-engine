@@ -21,6 +21,25 @@ function normalizeSlugText(value) {
   return normalized || null;
 }
 
+function normalizeBlockSemanticsMap(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out = {};
+  for (const [letter, sem] of Object.entries(value)) {
+    if (!/^[A-Z]$/.test(String(letter || "").trim())) continue;
+    if (!sem || typeof sem !== "object" || Array.isArray(sem)) continue;
+    out[String(letter).trim()] = {
+      preferred_segment_type:
+        typeof sem.preferred_segment_type === "string"
+          ? sem.preferred_segment_type.trim()
+          : "",
+      purpose: typeof sem.purpose === "string" ? sem.purpose.trim() : "",
+      time_cap_sec: sem.time_cap_sec ?? null,
+      post_segment_rest_sec: sem.post_segment_rest_sec ?? 0,
+    };
+  }
+  return out;
+}
+
 function pickPreferredConfigRow(rows, schemaVersion) {
   const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
   if (!list.length) return null;
@@ -56,6 +75,23 @@ function buildSyntheticRequestConfigRow({ request, programType, schemaVersion, p
     progressionByRankForStep3 = requestProgressionByRank;
   } else if (nestedProgressionByRank && typeof nestedProgressionByRank === "object") {
     progressionByRankForStep3 = nestedProgressionByRank;
+  }
+
+  const builderDayTemplates =
+    (pgcJson?.builder?.day_templates ?? null)?.map((template) => ({
+      ...template,
+      focus: normalizeSlugText(template?.focus),
+      day_type: normalizeSlugText(template?.day_type),
+    })) ?? null;
+
+  const dayBlockSemanticsByFocus = {};
+  for (const template of builderDayTemplates ?? []) {
+    const focus = normalizeSlugText(template?.focus);
+    if (!focus) continue;
+    if (template?.inherit_segmentation_from_day_1 === true) continue;
+    const localSemantics = normalizeBlockSemanticsMap(template?.block_semantics);
+    if (!localSemantics || !Object.keys(localSemantics).length) continue;
+    dayBlockSemanticsByFocus[focus] = localSemantics;
   }
 
   return {
@@ -115,12 +151,7 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     configKey: pgcRow?.config_key ?? `hardcoded_${programType}_v${schemaVersion}`,
     source,
     builder: {
-      dayTemplates:
-        (pgcJson?.builder?.day_templates ?? null)?.map((template) => ({
-          ...template,
-          focus: normalizeSlugText(template?.focus),
-          day_type: normalizeSlugText(template?.day_type),
-        })) ?? null,
+      dayTemplates: builderDayTemplates,
       setsByDuration: pgcJson?.builder?.sets_by_duration ?? null,
       blockBudget: pgcJson?.builder?.block_budget ?? null,
       slotDefaults: pgcJson?.builder?.slot_defaults ?? {},
@@ -130,7 +161,10 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     },
     segmentation: {
       blockSemantics: pgcJson?.segmentation?.block_semantics ?? null,
-      blockSemanticsByFocus: pgcJson?.segmentation?.block_semantics_by_focus ?? {},
+      blockSemanticsByFocus: {
+        ...(pgcJson?.segmentation?.block_semantics_by_focus ?? {}),
+        ...dayBlockSemanticsByFocus,
+      },
     },
     progression: {
       progressionByRank: pgcRow?.progression_by_rank_json ?? {},

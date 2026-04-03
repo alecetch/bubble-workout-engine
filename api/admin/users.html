@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Accounts</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --danger: #dc3545;
+        --ok: #0f766e;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 22px; }
+      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
+      .nav a:hover { text-decoration: underline; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+      .controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 280px; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, button { font: inherit; }
+      input { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .danger-btn { border-color: var(--danger); background: var(--danger); }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); }
+      .table-wrap { overflow: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ecf0f4; padding: 8px 10px; text-align: left; font-size: 13px; vertical-align: middle; }
+      th { background: #f9fbfd; font-weight: 600; white-space: nowrap; }
+      tr:hover td { background: #f5f8ff; }
+      .mono { font-family: Consolas, monospace; font-size: 12px; }
+      .muted { color: var(--muted); }
+      .empty { color: var(--muted); font-style: italic; padding: 12px; text-align: center; }
+      .chip { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+      .chip-ok { background: #d1fae5; color: var(--ok); }
+      .chip-muted { background: #f3f4f6; color: var(--muted); }
+      .count-badge { display: inline-block; min-width: 22px; text-align: center; background: #e5e7eb; border-radius: 999px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">User Accounts</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin-ui/coverage.html">Coverage</a>
+            <a href="/admin-ui/health.html">Health</a>
+            <a href="/admin-ui/exercises.html">Exercises</a>
+            <a href="/admin-ui/narration.html">Narration</a>
+            <a href="/admin-ui/rep-rules.html">Rep Rules</a>
+            <a href="/admin-ui/observability.html">Observability</a>
+            <a href="/admin-ui/preview.html">Preview</a>
+            <a href="/admin-ui/users.html" class="active">Users</a>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <button id="load-btn" type="button">Load Accounts</button>
+        </div>
+        <div id="status" class="status"></div>
+      </section>
+
+      <section class="section">
+        <h2 style="margin: 0 0 10px; font-size: 16px;">
+          Registered Accounts
+          <span id="user-count" class="count-badge muted" style="margin-left: 6px;">—</span>
+        </h2>
+        <div id="table-wrap" class="table-wrap">
+          <div class="empty">Enter your token and click Load Accounts.</div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_users_token";
+      const tokenInput = document.getElementById("token-input");
+      const loadBtn = document.getElementById("load-btn");
+      const statusEl = document.getElementById("status");
+      const tableWrap = document.getElementById("table-wrap");
+      const userCount = document.getElementById("user-count");
+
+      tokenInput.value = sessionStorage.getItem(STORAGE_KEY) || "";
+      tokenInput.addEventListener("change", () =>
+        sessionStorage.setItem(STORAGE_KEY, tokenInput.value.trim())
+      );
+
+      function esc(v) {
+        return String(v ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function setStatus(msg, kind = "") {
+        statusEl.textContent = msg;
+        statusEl.className = `status ${kind}`.trim();
+      }
+
+      function token() {
+        return (tokenInput.value || sessionStorage.getItem(STORAGE_KEY) || "").trim();
+      }
+
+      async function apiFetch(path, opts = {}) {
+        const res = await fetch(path, {
+          ...opts,
+          headers: { "x-internal-token": token(), "Content-Type": "application/json", ...(opts.headers || {}) },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return '<span class="muted">—</span>';
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+      }
+
+      function onboardingChip(row) {
+        if (row.onboarding_completed_at) return `<span class="chip chip-ok">Complete</span>`;
+        const step = Number(row.onboarding_step_completed ?? 0);
+        if (step >= 3) return `<span class="chip chip-ok">Complete</span>`;
+        if (step > 0) return `<span class="chip chip-muted">Step ${step}</span>`;
+        return `<span class="chip chip-muted">Not started</span>`;
+      }
+
+      let users = [];
+
+      function render() {
+        userCount.textContent = users.length;
+        if (users.length === 0) {
+          tableWrap.innerHTML = '<div class="empty">No registered accounts found.</div>';
+          return;
+        }
+        tableWrap.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Display name</th>
+                <th>Onboarding</th>
+                <th>Programs</th>
+                <th>Registered</th>
+                <th>User ID</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${users.map((u) => `
+                <tr data-id="${esc(u.id)}">
+                  <td>${esc(u.email)}</td>
+                  <td>${u.display_name ? esc(u.display_name) : '<span class="muted">—</span>'}</td>
+                  <td>${onboardingChip(u)}</td>
+                  <td><span class="count-badge">${u.program_count ?? 0}</span></td>
+                  <td class="mono">${fmtDate(u.created_at)}</td>
+                  <td class="mono" style="font-size:11px; color:var(--muted)">${esc(u.id)}</td>
+                  <td>
+                    <button class="danger-btn delete-btn" data-id="${esc(u.id)}" data-email="${esc(u.email)}" type="button">Delete</button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        `;
+
+        tableWrap.querySelectorAll(".delete-btn").forEach((btn) => {
+          btn.addEventListener("click", () => handleDelete(btn.dataset.id, btn.dataset.email));
+        });
+      }
+
+      async function handleDelete(id, email) {
+        if (!confirm(`Permanently delete account for:\n\n${email}\n\nThis removes all their programs, profile and session data. Cannot be undone.`)) return;
+        setStatus("Deleting…", "");
+        try {
+          await apiFetch(`/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+          users = users.filter((u) => u.id !== id);
+          render();
+          setStatus(`Deleted ${email}.`, "ok");
+        } catch (err) {
+          setStatus("Delete failed: " + err.message, "err");
+        }
+      }
+
+      async function loadUsers() {
+        if (!token()) { setStatus("Enter your internal API token first.", "err"); return; }
+        loadBtn.disabled = true;
+        setStatus("Loading…", "");
+        try {
+          const data = await apiFetch("/admin/users");
+          users = data.users;
+          render();
+          setStatus(`Loaded ${users.length} account(s).`, "ok");
+        } catch (err) {
+          setStatus("Failed: " + err.message, "err");
+          tableWrap.innerHTML = '<div class="empty">Failed to load accounts.</div>';
+        } finally {
+          loadBtn.disabled = false;
+        }
+      }
+
+      loadBtn.addEventListener("click", loadUsers);
+    </script>
+  </body>
+</html>

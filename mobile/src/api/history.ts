@@ -1,4 +1,4 @@
-import { apiFetch, engineFetch } from "./client";
+import { authGetJson } from "./client";
 
 export type HistoryOverviewResponse = {
   sessionsCompleted: number;
@@ -256,7 +256,7 @@ export async function getHistoryOverview(userId?: string): Promise<HistoryOvervi
   const params = new URLSearchParams();
   if (userId) params.set("user_id", userId);
   const qs = params.toString();
-  const raw = await engineFetch<unknown>(`/v1/history/overview${qs ? `?${qs}` : ""}`);
+  const raw = await authGetJson<unknown>(`/api/v1/history/overview${qs ? `?${qs}` : ""}`);
   return normalizeOverview(raw);
 }
 
@@ -264,7 +264,7 @@ export async function getHistoryPrograms(limit = 10, userId?: string): Promise<H
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   if (userId) params.set("user_id", userId);
-  const raw = await engineFetch<unknown>(`/v1/history/programs?${params.toString()}`);
+  const raw = await authGetJson<unknown>(`/api/v1/history/programs?${params.toString()}`);
   return normalizePrograms(raw);
 }
 
@@ -285,7 +285,7 @@ export async function getHistoryTimeline(options: GetHistoryTimelineOptions = {}
   }
   if (options.userId) params.set("user_id", options.userId);
 
-  const raw = await engineFetch<unknown>(`/v1/history/timeline?${params.toString()}`);
+  const raw = await authGetJson<unknown>(`/api/v1/history/timeline?${params.toString()}`);
   return normalizeTimeline(raw);
 }
 
@@ -293,7 +293,7 @@ export async function getHistoryPersonalRecords(limit = 20, userId?: string): Pr
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   if (userId) params.set("user_id", userId);
-  const raw = await engineFetch<unknown>(`/v1/history/personal-records?${params.toString()}`);
+  const raw = await authGetJson<unknown>(`/api/v1/history/personal-records?${params.toString()}`);
   return normalizePersonalRecords(raw);
 }
 
@@ -303,7 +303,7 @@ export async function searchExercises(q: string, userId?: string): Promise<Exerc
   const params = new URLSearchParams();
   params.set("q", term);
   if (userId) params.set("user_id", userId);
-  const raw = await engineFetch<unknown>(`/v1/exercises/search?${params.toString()}`);
+  const raw = await authGetJson<unknown>(`/api/logged-exercises/search?${params.toString()}`);
   return normalizeExerciseSearch(raw);
 }
 
@@ -311,7 +311,7 @@ export async function fetchExerciseHistory(exerciseId: string, userId?: string):
   const params = new URLSearchParams();
   if (userId) params.set("user_id", userId);
   const qs = params.toString();
-  const raw = await engineFetch<unknown>(`/v1/history/exercise/${encodeURIComponent(exerciseId)}${qs ? `?${qs}` : ""}`);
+  const raw = await authGetJson<unknown>(`/api/v1/history/exercise/${encodeURIComponent(exerciseId)}${qs ? `?${qs}` : ""}`);
   return normalizeExerciseHistory(raw);
 }
 
@@ -488,7 +488,7 @@ export async function getSessionHistoryMetrics(userId?: string): Promise<Session
   const params = new URLSearchParams();
   if (userId) params.set("user_id", userId);
   const qs = params.toString();
-  const raw = await engineFetch<unknown>(`/api/session-history-metrics${qs ? `?${qs}` : ""}`);
+  const raw = await authGetJson<unknown>(`/api/session-history-metrics${qs ? `?${qs}` : ""}`);
   return normalizeSessionHistoryMetrics(raw);
 }
 
@@ -496,7 +496,7 @@ export async function getPrsFeed(userId?: string): Promise<PrsFeedResponse> {
   const params = new URLSearchParams();
   if (userId) params.set("user_id", userId);
   const qs = params.toString();
-  const raw = await engineFetch<unknown>(`/api/prs-feed${qs ? `?${qs}` : ""}`);
+  const raw = await authGetJson<unknown>(`/api/prs-feed${qs ? `?${qs}` : ""}`);
   return normalizePrsFeed(raw);
 }
 
@@ -507,7 +507,7 @@ export async function searchLoggedExercises(q: string, userId?: string): Promise
   const params = new URLSearchParams();
   params.set("q", term);
   if (userId) params.set("user_id", userId);
-  const raw = await engineFetch<unknown>(`/api/logged-exercises/search?${params.toString()}`);
+  const raw = await authGetJson<unknown>(`/api/logged-exercises/search?${params.toString()}`);
   return normalizeLoggedExercises(raw);
 }
 
@@ -515,6 +515,6 @@ export async function getExerciseSummary(exerciseId: string, userId?: string): P
   const params = new URLSearchParams();
   params.set("exercise_id", exerciseId);
   if (userId) params.set("user_id", userId);
-  const raw = await engineFetch<unknown>(`/api/exercise-summary?${params.toString()}`);
+  const raw = await authGetJson<unknown>(`/api/exercise-summary?${params.toString()}`);
   return normalizeExerciseSummary(raw);
 }

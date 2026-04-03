@@ -3,7 +3,7 @@ import { getJson } from "./client";
 
 export type EquipmentItemOption = {
   id: string;
-  bubbleId: string | null;
+  externalId: string | null;
   category: string | null;
   code: string;
   label: string;

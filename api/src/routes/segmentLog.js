@@ -1,8 +1,8 @@
 import express from "express";
 import { pool } from "../db.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
-import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
 
 export const segmentLogRouter = express.Router();
 
@@ -46,20 +46,10 @@ export function compute1rmKg(weightKg, repsCompleted, region) {
 }
 
 export function createSegmentLogHandlers(db = pool) {
-  async function resolveUserId(client, query) {
-    const requestedUserId = readRequestedUserId(query);
-
-    if (requestedUserId) {
-      if (isUuid(requestedUserId)) {
-        requireUuid(requestedUserId, "user_id");
-        return requestedUserId;
-      }
-      const internalUserId = await findInternalUserIdByExternalId(client, requestedUserId);
-      if (internalUserId) return internalUserId;
-      throw new NotFoundError("User not found for user_id");
-    }
-
-    throw new RequestValidationError("Provide user_id");
+  function resolveUserId(req) {
+    const userId = safeString(req.auth?.user_id);
+    if (userId) return userId;
+    throw new RequestValidationError("Missing authenticated user context");
   }
 
   async function getSegmentLog(req, res) {
@@ -73,7 +63,7 @@ export function createSegmentLogHandlers(db = pool) {
 
       const client = await db.connect();
       try {
-        const user_id = await resolveUserId(client, req.query);
+        const user_id = resolveUserId(req);
         const result = await client.query(
           `
           SELECT id, program_exercise_id, weight_kg, reps_completed, order_index
@@ -122,7 +112,7 @@ export function createSegmentLogHandlers(db = pool) {
 
       const client = await db.connect();
       try {
-        const user_id = await resolveUserId(client, req.body);
+        const user_id = resolveUserId(req);
         await client.query("BEGIN");
 
         const programExerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
@@ -201,6 +191,7 @@ export function createSegmentLogHandlers(db = pool) {
 }
 
 const handlers = createSegmentLogHandlers();
+segmentLogRouter.use(requireAuth);
 
 segmentLogRouter.get("/segment-log", handlers.getSegmentLog);
 segmentLogRouter.post("/segment-log", handlers.postSegmentLog);

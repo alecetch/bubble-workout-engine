@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { authGetJson, authPatchJson } from "./client";
 
 export type ViewerIdentityOptions = {
   userId?: string;
@@ -311,7 +311,7 @@ export async function getProgramOverview(
 
   const queryString = params.toString();
   const path = `/api/program/${encodeURIComponent(programId)}/overview${queryString ? `?${queryString}` : ""}`;
-  const response = await apiFetch<unknown>(path);
+  const response = await authGetJson<unknown>(path);
   return normalizeProgramOverview(response);
 }
 
@@ -320,12 +320,9 @@ export async function markProgramDayComplete(
   isCompleted: boolean,
   opts: ViewerIdentityOptions,
 ): Promise<void> {
-  await apiFetch<unknown>(`/api/day/${encodeURIComponent(programDayId)}/complete`, {
-    method: "PATCH",
-    body: {
+  await authPatchJson<unknown, Record<string, unknown>>(`/api/day/${encodeURIComponent(programDayId)}/complete`, {
       is_completed: isCompleted,
       ...(opts.userId ? { user_id: opts.userId } : {}),
-    },
   });
 }
 
@@ -336,6 +333,6 @@ export async function getProgramDayFull(
   const params = buildIdentityQuery(opts);
   const queryString = params.toString();
   const path = `/api/day/${encodeURIComponent(programDayId)}/full${queryString ? `?${queryString}` : ""}`;
-  const response = await apiFetch<unknown>(path);
+  const response = await authGetJson<unknown>(path);
   return normalizeProgramDayFull(response);
 }

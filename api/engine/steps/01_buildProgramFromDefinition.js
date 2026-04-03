@@ -383,18 +383,9 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     }),
   );
 
-  const setsKey = pickNearestConfigKey(duration, setsByDurationCfg) ?? "50";
-  const budgetKey = pickNearestConfigKey(duration, blockBudgetCfg) ?? "50";
-  const setsMap = setsByDurationCfg[setsKey] ?? defaultSetsByDuration()["50"];
-  const budgetRaw =
-    typeof blockBudgetCfg === "number"
-      ? blockBudgetCfg
-      : blockBudgetCfg?.[budgetKey] ?? defaultBlockBudget()["50"];
-  const budget = Number.isFinite(Number(budgetRaw)) ? Number(budgetRaw) : 5;
-
   const stats = {
     duration_mins: duration,
-    block_budget: budget,
+    block_budget: null,
     allowed_in: allowedIds.length,
     unique_used_week: 0,
 
@@ -433,6 +424,19 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
 
   for (let day = 1; day <= maxDays; day++) {
     const template = dayTemplates[day - 1];
+    const effectiveSetsByDuration =
+      template?.sets_by_duration != null ? template.sets_by_duration : setsByDurationCfg;
+    const effectiveBlockBudget =
+      template?.block_budget != null ? template.block_budget : blockBudgetCfg;
+
+    const setsKey = pickNearestConfigKey(duration, effectiveSetsByDuration) ?? "50";
+    const budgetKey = pickNearestConfigKey(duration, effectiveBlockBudget) ?? "50";
+    const setsMap = effectiveSetsByDuration[setsKey] ?? defaultSetsByDuration()["50"];
+    const budgetRaw =
+      typeof effectiveBlockBudget === "number"
+        ? effectiveBlockBudget
+        : effectiveBlockBudget?.[budgetKey] ?? defaultBlockBudget()["50"];
+    const budget = Number.isFinite(Number(budgetRaw)) ? Number(budgetRaw) : 5;
     const slots = extractSlotsFromTemplate(template);
     const isOrderedSimulationDay = template && typeof template === "object" && template.is_ordered_simulation === true;
     const daySelectionMode =

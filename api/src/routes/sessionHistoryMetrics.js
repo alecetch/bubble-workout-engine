@@ -1,12 +1,11 @@
 import express from "express";
 import { pool } from "../db.js";
-import { internalApi } from "../middleware/chains.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 import { publicInternalError } from "../utils/publicError.js";
-import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
-import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
+import { RequestValidationError, safeString } from "../utils/validate.js";
 
 export const sessionHistoryMetricsRouter = express.Router();
-sessionHistoryMetricsRouter.use(...internalApi);
+sessionHistoryMetricsRouter.use(requireAuth);
 
 class NotFoundError extends Error {
   constructor(message, details = []) {
@@ -17,19 +16,10 @@ class NotFoundError extends Error {
   }
 }
 
-async function resolveUserId(client, query) {
-  const requestedUserId = readRequestedUserId(query);
-
-  if (requestedUserId) {
-    if (isUuid(requestedUserId)) {
-      return requireUuid(requestedUserId, "user_id");
-    }
-    const internalUserId = await findInternalUserIdByExternalId(client, requestedUserId);
-    if (internalUserId) return internalUserId;
-    throw new NotFoundError("User not found for user_id");
-  }
-
-  throw new RequestValidationError("Provide user_id");
+function resolveUserId(req) {
+  const userId = safeString(req.auth?.user_id);
+  if (userId) return userId;
+  throw new RequestValidationError("Missing authenticated user context");
 }
 
 function mapError(err) {
@@ -57,7 +47,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
   try {
     const client = await pool.connect();
     try {
-      const user_id = await resolveUserId(client, req.query);
+      const user_id = resolveUserId(req);
 
       const dayStreakQuery = client.query(
         `

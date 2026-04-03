@@ -388,6 +388,10 @@
             <a href="/admin/rep-rules">Rep Rules</a>
             <a href="/admin/observability">Observability</a>
             <a href="/admin/preview">Preview</a>
+            <a href="/admin-ui/users.html">Users</a>
+          </div>
+          <div style="margin-top:8px">
+            <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;width:100%">⬇ Sync All to Flyway</button>
           </div>
         </div>
         <div id="config-list" class="list-wrap"></div>
@@ -731,6 +735,7 @@
         if (state.dayTab < 0) state.dayTab = 0;
 
         const selectedDay = dayTemplates[state.dayTab] || null;
+        const isFirstDay = state.dayTab === 0;
         const isOrderedSimulationDay = !!selectedDay?.is_ordered_simulation;
         const semantics = root.segmentation.block_semantics || {};
         const editorBlocks = getEditorBlockLetters(root);
@@ -743,6 +748,17 @@
           label: `Block ${block} sets`,
           block,
         }));
+        const sourceDayForSetsBudget = dayTemplates[0] || null;
+        const sourceDayForSegmentation = dayTemplates[0] || null;
+        const inheritSetsBudgetFromDay1 = !isFirstDay && selectedDay?.inherit_sets_budget_from_day_1 !== false;
+        const inheritSegmentationFromDay1 = !isFirstDay && selectedDay?.inherit_segmentation_from_day_1 !== false;
+        const showDaySetsBudgetPanel = isFirstDay || !inheritSetsBudgetFromDay1;
+        const showDaySegmentationPanel = isFirstDay || !inheritSegmentationFromDay1;
+        const daySegmentationSource =
+          selectedDay?.block_semantics
+          ?? sourceDayForSegmentation?.block_semantics
+          ?? root.segmentation.block_semantics
+          ?? {};
         const variabilityDefaultRows = editorBlocks.map((block) => {
           const current = root.builder.block_variability_defaults?.[block] ?? "";
           const options = VARIABILITY_POLICY_OPTIONS.map((value) => {
@@ -960,7 +976,164 @@
           </section>
 
           <details open>
-            <summary>Builder: sets & budget</summary>
+            <summary>Builder: day templates</summary>
+            <div class="section-body">
+              <div class="tabs">
+                ${dayTabsHtml}
+                <button id="add-day-btn" type="button">+ Add day</button>
+                <button id="delete-day-btn" type="button"
+                  style="color:#b42318;border-color:#b42318"
+                  ${dayTemplates.length <= 1 ? "disabled title='Cannot delete the only day'" : ""}>
+                  ✕ Delete day
+                </button>
+              </div>
+              ${
+                selectedDay
+                  ? `
+                    <div class="inline-grid">
+                      <div>
+                        <label>Day key</label>
+                        <input id="day-key-input" value="${escapeHtml(selectedDay.day_key || "")}" />
+                      </div>
+                      <div>
+                        <label>Focus</label>
+                        <input id="day-focus-input" value="${escapeHtml(selectedDay.focus || "")}" />
+                      </div>
+                      <div>
+                        <label>Day selection mode</label>
+                        <select id="day-selection-mode-input">
+                          ${DAY_SELECTION_MODE_OPTIONS.map((mode) => {
+                            const selected = (selectedDay.day_selection_mode || "default") === mode ? "selected" : "";
+                            return `<option value="${escapeHtml(mode)}" ${selected}>${escapeHtml(mode)}</option>`;
+                          }).join("")}
+                        </select>
+                      </div>
+                      <div style="display:flex;align-items:end;">
+                        <label>
+                          <input id="day-ordered-simulation-input" type="checkbox" ${selectedDay.is_ordered_simulation ? "checked" : ""} />
+                          ordered simulation day
+                        </label>
+                      </div>
+                      <div>
+                        <label>Day type</label>
+                        <input id="day-type-input" list="day-type-options" value="${escapeHtml(selectedDay.day_type || "")}" placeholder="e.g. simulation" autocomplete="off" />
+                        <datalist id="day-type-options">
+                          <option value="simulation"></option>
+                        </datalist>
+                      </div>
+                    </div>
+                    ${
+                      isFirstDay
+                        ? `<div style="margin:8px 0 4px 0;font-weight:600;font-size:13px;">
+                            Day 1 sets &amp; budget
+                            <div class="field-hint">Used as the default source for later days.</div>
+                          </div>`
+                        : `<div style="margin:8px 0 4px 0;">
+                            <label style="font-weight:600;font-size:13px;">
+                              <input type="checkbox" id="day-inherit-sets-budget-checkbox" ${inheritSetsBudgetFromDay1 ? "checked" : ""} />
+                              Inherit sets &amp; budget from Day 1
+                            </label>
+                          </div>
+                          <div class="field-hint" style="margin-bottom:6px;">
+                            Uncheck to define sets and block budget specifically for this day.
+                          </div>`
+                    }
+                    <div id="day-sets-budget-panel" ${showDaySetsBudgetPanel ? "" : 'style="display:none"'}>
+                      <div class="table-wrap" style="max-width:480px;margin-bottom:8px;">
+                        <table>
+                          <thead>
+                            <tr><th></th><th>40 min</th><th>50 min</th><th>60 min</th></tr>
+                          </thead>
+                          <tbody>
+                            ${setsRows.map(row => `
+                              <tr>
+                                <td>${row.label}</td>
+                                ${DURATIONS.map(d =>
+                                  `<td><input type="number" min="0" max="20"
+                                    data-day-sets-block="${row.block}"
+                                    data-day-sets-duration="${d}"
+                                    value="${escapeHtml(selectedDay.sets_by_duration?.[d]?.[row.block] ?? sourceDayForSetsBudget?.sets_by_duration?.[d]?.[row.block] ?? root.builder.sets_by_duration?.[d]?.[row.block] ?? 0)}" /></td>`
+                                ).join("")}
+                              </tr>`).join("")}
+                            <tr>
+                              <td>Block budget</td>
+                              ${DURATIONS.map(d =>
+                                `<td><input type="number" min="0" max="20"
+                                  data-day-budget-duration="${d}"
+                                  value="${escapeHtml(selectedDay.block_budget?.[d] ?? sourceDayForSetsBudget?.block_budget?.[d] ?? root.builder.block_budget?.[d] ?? 0)}" /></td>`
+                              ).join("")}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    ${
+                      isFirstDay
+                        ? `<div style="margin:10px 0 4px 0;font-weight:600;font-size:13px;">
+                            Day 1 segmentation
+                            <div class="field-hint">Used as the default source for later days.</div>
+                          </div>`
+                        : `<div style="margin:10px 0 4px 0;">
+                            <label style="font-weight:600;font-size:13px;">
+                              <input type="checkbox" id="day-inherit-segmentation-checkbox" ${inheritSegmentationFromDay1 ? "checked" : ""} />
+                              Inherit segmentation from Day 1
+                            </label>
+                          </div>
+                          <div class="field-hint" style="margin-bottom:6px;">
+                            Uncheck to define segment type and purpose for this day.
+                          </div>`
+                    }
+                    <div id="day-segmentation-panel" ${showDaySegmentationPanel ? "" : 'style="display:none"'}>
+                      <div class="table-wrap" style="margin-bottom:10px;max-width:520px;">
+                        <table>
+                          <thead>
+                            <tr><th>Block letter</th><th>Segment type</th><th>Purpose</th></tr>
+                          </thead>
+                          <tbody>
+                            ${editorBlocks.map((letter) => {
+                              const sem = daySegmentationSource[letter] || {};
+                              const segmentOptions = SEGMENT_TYPES.map((t) => {
+                                const selected = sem.preferred_segment_type === t ? "selected" : "";
+                                return `<option value="${t}" ${selected}>${t}</option>`;
+                              }).join("");
+                              const purposeOptions = PURPOSE_TYPES.map((p) => {
+                                const selected = sem.purpose === p ? "selected" : "";
+                                return `<option value="${p}" ${selected}>${p}</option>`;
+                              }).join("");
+                              return `
+                                <tr data-day-sem-letter="${escapeHtml(letter)}">
+                                  <td>${escapeHtml(letter)}</td>
+                                  <td><select data-day-sem-field="preferred_segment_type">${segmentOptions}</select></td>
+                                  <td><select data-day-sem-field="purpose">${purposeOptions}</select></td>
+                                </tr>
+                              `;
+                            }).join("")}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div class="table-wrap">
+                      <datalist id="slot-family-options">${familyOptionsHtml}</datalist>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>#</th><th>Slot</th><th>Family</th><th>Variability</th><th>sw2 / sw2Any</th><th>sw / swAny</th><th>mp</th><th>requirePref</th><th>pref_mode</th><th>Loadable</th>${isOrderedSimulationDay ? "<th>Simulation</th>" : ""}<th>Variants</th><th>Fallback slot</th><th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="slots-tbody">${slotRowsHtml}</tbody>
+                      </table>
+                    </div>
+                    <div class="btn-row">
+                      <button id="add-slot-btn" type="button">+ Add slot</button>
+                    </div>
+                  `
+                  : `<div class="editor-empty">No day templates. Add one.</div>`
+              }
+            </div>
+          </details>
+
+          <details open>
+            <summary>Builder defaults</summary>
             <div class="section-body">
               <div class="table-wrap">
                 <table>
@@ -1003,69 +1176,7 @@
           </details>
 
           <details open>
-            <summary>Builder: day templates</summary>
-            <div class="section-body">
-              <div class="tabs">
-                ${dayTabsHtml}
-                <button id="add-day-btn" type="button">+ Add day</button>
-              </div>
-              ${
-                selectedDay
-                  ? `
-                    <div class="inline-grid">
-                      <div>
-                        <label>Day key</label>
-                        <input id="day-key-input" value="${escapeHtml(selectedDay.day_key || "")}" />
-                      </div>
-                      <div>
-                        <label>Focus</label>
-                        <input id="day-focus-input" value="${escapeHtml(selectedDay.focus || "")}" />
-                      </div>
-                      <div>
-                        <label>Day selection mode</label>
-                        <select id="day-selection-mode-input">
-                          ${DAY_SELECTION_MODE_OPTIONS.map((mode) => {
-                            const selected = (selectedDay.day_selection_mode || "default") === mode ? "selected" : "";
-                            return `<option value="${escapeHtml(mode)}" ${selected}>${escapeHtml(mode)}</option>`;
-                          }).join("")}
-                        </select>
-                      </div>
-                      <div style="display:flex;align-items:end;">
-                        <label>
-                          <input id="day-ordered-simulation-input" type="checkbox" ${selectedDay.is_ordered_simulation ? "checked" : ""} />
-                          ordered simulation day
-                        </label>
-                      </div>
-                      <div>
-                        <label>Day type</label>
-                        <input id="day-type-input" list="day-type-options" value="${escapeHtml(selectedDay.day_type || "")}" placeholder="e.g. simulation" autocomplete="off" />
-                        <datalist id="day-type-options">
-                          <option value="simulation"></option>
-                        </datalist>
-                      </div>
-                    </div>
-                    <div class="table-wrap">
-                      <datalist id="slot-family-options">${familyOptionsHtml}</datalist>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>#</th><th>Slot</th><th>Family</th><th>Variability</th><th>sw2 / sw2Any</th><th>sw / swAny</th><th>mp</th><th>requirePref</th><th>pref_mode</th><th>Loadable</th>${isOrderedSimulationDay ? "<th>Simulation</th>" : ""}<th>Variants</th><th>Fallback slot</th><th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody id="slots-tbody">${slotRowsHtml}</tbody>
-                      </table>
-                    </div>
-                    <div class="btn-row">
-                      <button id="add-slot-btn" type="button">+ Add slot</button>
-                    </div>
-                  `
-                  : `<div class="editor-empty">No day templates. Add one.</div>`
-              }
-            </div>
-          </details>
-
-          <details open>
-            <summary>Segmentation</summary>
+            <summary>Segmentation defaults</summary>
             <div class="section-body">
               <div class="table-wrap">
                 <table>
@@ -1144,6 +1255,7 @@
         const templates = root.builder.day_templates;
         if (templates[state.dayTab]) {
           const template = templates[state.dayTab];
+          const isFirstDay = state.dayTab === 0;
           template.day_key = (document.getElementById("day-key-input")?.value || "").trim();
           template.focus = (document.getElementById("day-focus-input")?.value || "").trim();
           template.day_selection_mode = document.getElementById("day-selection-mode-input")?.value || "default";
@@ -1152,6 +1264,54 @@
           if (!template.is_ordered_simulation) delete template.is_ordered_simulation;
           const dayTypeVal = (document.getElementById("day-type-input")?.value || "").trim();
           if (dayTypeVal) template.day_type = dayTypeVal; else delete template.day_type;
+          const dayInheritSetsBudgetCheckbox = document.getElementById("day-inherit-sets-budget-checkbox");
+          const inheritSetsBudgetFromDay1 = !isFirstDay && !!dayInheritSetsBudgetCheckbox?.checked;
+          if (isFirstDay || !inheritSetsBudgetFromDay1) {
+            const daySets = {};
+            const dayBudget = {};
+            DURATIONS.forEach((d) => {
+              daySets[d] = {};
+              getEditorBlockLetters(root).forEach((b) => {
+                const input = document.querySelector(
+                  `[data-day-sets-block="${b}"][data-day-sets-duration="${d}"]`
+                );
+                daySets[d][b] = toInt(input?.value, 0);
+              });
+              const budgetInput = document.querySelector(`[data-day-budget-duration="${d}"]`);
+              dayBudget[d] = toInt(budgetInput?.value, 0);
+            });
+            template.inherit_sets_budget_from_day_1 = false;
+            template.sets_by_duration = daySets;
+            template.block_budget = dayBudget;
+          } else {
+            template.inherit_sets_budget_from_day_1 = true;
+            delete template.sets_by_duration;
+            delete template.block_budget;
+          }
+          if (isFirstDay) delete template.inherit_sets_budget_from_day_1;
+          const dayInheritSegmentationCheckbox = document.getElementById("day-inherit-segmentation-checkbox");
+          const inheritSegmentationFromDay1 = !isFirstDay && !!dayInheritSegmentationCheckbox?.checked;
+          if (isFirstDay || !inheritSegmentationFromDay1) {
+            const nextDaySemantics = {};
+            document.querySelectorAll("[data-day-sem-letter]").forEach((row) => {
+              const letter = row.dataset.daySemLetter;
+              if (!letter) return;
+              const preferred_segment_type =
+                row.querySelector('[data-day-sem-field="preferred_segment_type"]')?.value || "single";
+              const purpose =
+                row.querySelector('[data-day-sem-field="purpose"]')?.value || "accessory";
+              nextDaySemantics[letter] = {
+                preferred_segment_type,
+                purpose,
+              };
+            });
+            template.inherit_segmentation_from_day_1 = false;
+            template.block_semantics = nextDaySemantics;
+          } else {
+            template.inherit_segmentation_from_day_1 = true;
+            delete template.block_semantics;
+          }
+          if (isFirstDay) delete template.inherit_segmentation_from_day_1;
           const slotRows = Array.from(document.querySelectorAll("#slots-tbody tr[data-slot-index]"));
           const existingSlots = template.ordered_slots || [];
           template.ordered_slots = slotRows.map((row) => {
@@ -1685,14 +1845,54 @@
         if (addDayBtn) {
           addDayBtn.addEventListener("click", () => {
             onStructuredChanged();
-            state.jsonObj.builder.day_templates.push({
+            const isFirstTemplate = state.jsonObj.builder.day_templates.length === 0;
+            const nextTemplate = {
               day_key: `day${state.jsonObj.builder.day_templates.length + 1}`,
               focus: "",
               is_ordered_simulation: false,
               ordered_slots: [],
-            });
+            };
+            if (!isFirstTemplate) {
+              nextTemplate.inherit_sets_budget_from_day_1 = true;
+              nextTemplate.inherit_segmentation_from_day_1 = true;
+            }
+            state.jsonObj.builder.day_templates.push(nextTemplate);
             state.dayTab = state.jsonObj.builder.day_templates.length - 1;
             renderEditor();
+          });
+        }
+
+        const deleteDayBtn = document.getElementById("delete-day-btn");
+        if (deleteDayBtn) {
+          deleteDayBtn.addEventListener("click", () => {
+            const templates = state.jsonObj.builder.day_templates;
+            if (templates.length <= 1) return;
+            const dayKey = templates[state.dayTab]?.day_key || `day ${state.dayTab + 1}`;
+            if (!confirm(`Delete day "${dayKey}" and all its slots? This cannot be undone.`)) return;
+            onStructuredChanged();
+            templates.splice(state.dayTab, 1);
+            state.dayTab = Math.max(0, state.dayTab - 1);
+            state.expandedVariantSlots = new Set();
+            state.expandedSimulationSlots = new Set();
+            renderEditor();
+          });
+        }
+
+        const dayInheritSetsBudgetCheckbox = document.getElementById("day-inherit-sets-budget-checkbox");
+        const daySetsBudgetPanel = document.getElementById("day-sets-budget-panel");
+        if (dayInheritSetsBudgetCheckbox && daySetsBudgetPanel) {
+          dayInheritSetsBudgetCheckbox.addEventListener("change", () => {
+            daySetsBudgetPanel.style.display = dayInheritSetsBudgetCheckbox.checked ? "none" : "";
+            onStructuredChanged();
+          });
+        }
+
+        const dayInheritSegmentationCheckbox = document.getElementById("day-inherit-segmentation-checkbox");
+        const daySegmentationPanel = document.getElementById("day-segmentation-panel");
+        if (dayInheritSegmentationCheckbox && daySegmentationPanel) {
+          dayInheritSegmentationCheckbox.addEventListener("change", () => {
+            daySegmentationPanel.style.display = dayInheritSegmentationCheckbox.checked ? "none" : "";
+            onStructuredChanged();
           });
         }
 
@@ -2047,6 +2247,24 @@
 
         loadBtn.addEventListener("click", () => loadConfigs(true));
         duplicateBtn.addEventListener("click", duplicateConfig);
+
+        document.getElementById("sync-all-btn").addEventListener("click", async () => {
+          const btn = document.getElementById("sync-all-btn");
+          btn.disabled = true;
+          btn.textContent = "Syncing…";
+          try {
+            const data = await apiFetch("/admin/sync-all-to-flyway", { method: "POST" });
+            const lines = data.files.map(f =>
+              `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
+            ).join("\n");
+            window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
+          } catch (err) {
+            window.alert("Sync failed: " + (err.message || String(err)));
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "⬇ Sync All to Flyway";
+          }
+        });
 
         window.addEventListener("beforeunload", (e) => {
           if (state.isDirty) {

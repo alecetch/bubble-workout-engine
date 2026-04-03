@@ -1,10 +1,10 @@
 // api/src/routes/readProgram.js
 import express from "express";
 import { pool } from "../db.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
-import { findInternalUserIdByExternalId, isUuid, readRequestedUserId } from "../utils/userIdentity.js";
 
 export const readProgramRouter = express.Router();
 
@@ -65,20 +65,14 @@ function mapError(err) {
 }
 
 export function createReadProgramHandlers(db = pool) {
-  async function resolveUserId(client, query) {
-    const requestedUserId = readRequestedUserId(query);
+  function toAuthUserId(req) {
+    return safeString(req.auth?.user_id) || safeString(req.auth?.userId);
+  }
 
-    if (requestedUserId) {
-      if (isUuid(requestedUserId)) {
-        requireUuid(requestedUserId, "user_id");
-        return requestedUserId;
-      }
-      const internalUserId = await findInternalUserIdByExternalId(client, requestedUserId);
-      if (internalUserId) return internalUserId;
-      throw new NotFoundError("User not found for user_id");
-    }
-
-    throw new RequestValidationError("Provide user_id");
+  function resolveUserId(req) {
+    const userId = toAuthUserId(req);
+    if (userId) return userId;
+    throw new RequestValidationError("Missing authenticated user context");
   }
 
   async function programOverview(req, res) {
@@ -92,7 +86,7 @@ export function createReadProgramHandlers(db = pool) {
 
       const client = await db.connect();
       try {
-        const user_id = await resolveUserId(client, req.query);
+        const user_id = resolveUserId(req);
 
       // 1) Program (guard by user_id)
       const prgR = await client.query(
@@ -270,7 +264,7 @@ export function createReadProgramHandlers(db = pool) {
 
       const client = await db.connect();
       try {
-        const user_id = await resolveUserId(client, req.query);
+        const user_id = resolveUserId(req);
 
       // 1) Day header (guard by user_id via program)
       const dayR = await client.query(
@@ -447,7 +441,7 @@ export function createReadProgramHandlers(db = pool) {
       const client = await db.connect();
       try {
         // Accept identity from body (PATCH) or query (fallback).
-        const user_id = await resolveUserId(client, { ...req.query, ...req.body });
+        const user_id = resolveUserId(req);
 
       const r = await client.query(
         `UPDATE program_day pd
@@ -482,6 +476,7 @@ export function createReadProgramHandlers(db = pool) {
 }
 
 const handlers = createReadProgramHandlers();
+readProgramRouter.use(requireAuth);
 
 // ---- GET /api/program/:program_id/overview ----
 // Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs).

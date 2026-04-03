@@ -250,6 +250,60 @@ test("applyNarration segment template tie-break uses lower priority number", asy
   assert.equal(mainSingle?.narration?.title, "Priority 1 Title");
 });
 
+test("applyNarration exposes SEGMENT_INDEX and SEGMENT_LETTER tokens for segment titles", async () => {
+  const out = await applyNarration({
+    program: {
+      program_type: "hyrox",
+      duration_mins: 40,
+      days_per_week: 1,
+      days: [
+        {
+          day_index: 1,
+          day_focus: "engine",
+          segments: [
+            {
+              segment_index: 3,
+              segment_type: "amrap",
+              purpose: "main",
+              rounds: 2,
+              items: [
+                {
+                  ex_id: "ex1",
+                  ex_name: "Ski Erg",
+                  slot: "B:amrap_1",
+                  sets: 1,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    narrationTemplates: [
+      {
+        template_id: "segment_title_tokens",
+        scope: "segment",
+        field: "SEGMENT_TITLE",
+        purpose: "main",
+        segment_type: "amrap",
+        priority: 1,
+        text_pool_json: ["Block {SEGMENT_LETTER} - AMRAP {SEGMENT_INDEX}"],
+      },
+    ],
+    narrationSource: "db",
+    narrationTemplatesJson: null,
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: makeCatalogJson(),
+    cooldownSeconds: 120,
+  });
+
+  const segTitle = out.program?.days?.[0]?.segments?.[0]?.narration?.title ?? "";
+  assert.equal(out.debug.ok, true);
+  assert.equal(segTitle, "Block B - AMRAP 3");
+});
+
 test("applyNarration prefers simulation-specific day title over generic fallback", async () => {
   const out = await applyNarration({
     program: {
