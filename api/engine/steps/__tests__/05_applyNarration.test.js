@@ -299,9 +299,10 @@ test("applyNarration exposes SEGMENT_INDEX and SEGMENT_LETTER tokens for segment
     cooldownSeconds: 120,
   });
 
-  const segTitle = out.program?.days?.[0]?.segments?.[0]?.narration?.title ?? "";
+  // applyNarration unshifts a warmup segment, so find the amrap by type rather than index
+  const amrapSeg = out.program?.days?.[0]?.segments?.find((s) => s.segment_type === "amrap");
   assert.equal(out.debug.ok, true);
-  assert.equal(segTitle, "Block B - AMRAP 3");
+  assert.equal(amrapSeg?.narration?.title ?? "", "Block B - AMRAP 3");
 });
 
 test("applyNarration prefers simulation-specific day title over generic fallback", async () => {
