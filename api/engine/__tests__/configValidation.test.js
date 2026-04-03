@@ -81,6 +81,84 @@ test("validateCompiledConfig catches non-slug focus values", () => {
   assert.ok(err.details.some((d) => d.includes('.focus must match /^[a-z][a-z0-9_]*$/')));
 });
 
+test("validateCompiledConfig accepts day-level block_semantics override with unique focus", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates.push({
+    day_key: "day2",
+    focus: "engine",
+    ordered_slots: [{ slot: "A:run_1", mp: "locomotion" }],
+    block_semantics: {
+      A: { preferred_segment_type: "amrap", purpose: "main" },
+    },
+  });
+  assert.doesNotThrow(() => validateCompiledConfig(cfg));
+});
+
+test("validateCompiledConfig requires focus when day-level block_semantics override is present", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates.push({
+    day_key: "day2",
+    ordered_slots: [{ slot: "A:run_1", mp: "locomotion" }],
+    block_semantics: {
+      A: { preferred_segment_type: "amrap", purpose: "main" },
+    },
+  });
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes(".focus is required when block_semantics override is present")));
+});
+
+test("validateCompiledConfig catches duplicate focus for day-level block_semantics override", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates.push({
+    day_key: "day2",
+    focus: "engine",
+    ordered_slots: [{ slot: "A:run_1", mp: "locomotion" }],
+    block_semantics: {
+      A: { preferred_segment_type: "amrap", purpose: "main" },
+    },
+  });
+  cfg.builder.dayTemplates.push({
+    day_key: "day3",
+    focus: "engine",
+    ordered_slots: [{ slot: "A:bike_1", mp: "locomotion" }],
+    block_semantics: {
+      A: { preferred_segment_type: "emom", purpose: "main" },
+    },
+  });
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes("duplicates another day template focus used for block_semantics override")));
+});
+
+test("validateCompiledConfig catches invalid day-level block_semantics key", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].focus = "engine";
+  cfg.builder.dayTemplates[0].block_semantics = {
+    AA: { preferred_segment_type: "single", purpose: "main" },
+  };
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes('block_semantics key "AA" must be a single uppercase block letter')));
+});
+
+test("validateCompiledConfig catches invalid day-level preferred_segment_type", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].focus = "engine";
+  cfg.builder.dayTemplates[0].block_semantics = {
+    A: { preferred_segment_type: "circuit", purpose: "main" },
+  };
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes('block_semantics["A"].preferred_segment_type must be one of')));
+});
+
+test("validateCompiledConfig catches invalid day-level purpose", () => {
+  const cfg = makeValidConfig();
+  cfg.builder.dayTemplates[0].focus = "engine";
+  cfg.builder.dayTemplates[0].block_semantics = {
+    A: { preferred_segment_type: "single", purpose: "conditioning" },
+  };
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes('block_semantics["A"].purpose must be one of main|secondary|accessory')));
+});
+
 test("validateCompiledConfig catches missing programType", () => {
   const cfg = makeValidConfig();
   cfg.programType = "";

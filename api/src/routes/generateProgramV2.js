@@ -191,18 +191,33 @@ export function createGenerateProgramV2Handler({
     setupClient = await db.connect();
     await setupClient.query("BEGIN");
 
-    // Phase 1a: Upsert app_user
-    const userR = await setupClient.query(
-      `
-      INSERT INTO app_user (subject_id)
-      VALUES ($1)
-      ON CONFLICT (subject_id)
-      DO UPDATE SET updated_at = now()
-      RETURNING id
-      `,
-      [user_id],
-    );
-    pg_user_id = userR.rows[0].id;
+    // Phase 1a: Resolve app_user.
+    // JWT-registered users send their app_user.id (a UUID) as user_id.
+    // Legacy Bubble users send a subject_id string. Try the UUID lookup first;
+    // fall back to the subject_id upsert for legacy compatibility.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (UUID_RE.test(user_id)) {
+      const directR = await setupClient.query(
+        `SELECT id FROM app_user WHERE id = $1`,
+        [user_id],
+      );
+      if (directR.rowCount > 0) {
+        pg_user_id = directR.rows[0].id;
+      }
+    }
+    if (!pg_user_id) {
+      const userR = await setupClient.query(
+        `
+        INSERT INTO app_user (subject_id)
+        VALUES ($1)
+        ON CONFLICT (subject_id)
+        DO UPDATE SET updated_at = now()
+        RETURNING id
+        `,
+        [user_id],
+      );
+      pg_user_id = userR.rows[0].id;
+    }
 
     // Phase 1b: Refresh client_profile from the current API profile shape
     const injuryColumn = await resolveInjuryColumn(setupClient);

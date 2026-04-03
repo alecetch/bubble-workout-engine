@@ -12,6 +12,8 @@ export function validateCompiledConfig(config) {
   const knownStrategies = new Set(["best_match_by_movement"]);
   const knownVariabilityPolicies = new Set(["none", "med", "high"]);
   const knownDaySelectionModes = new Set(["default", "benchmark_exactness"]);
+  const knownSegmentTypes = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
+  const knownPurposes = new Set(["main", "secondary", "accessory"]);
   const slugPattern = /^[a-z][a-z0-9_]*$/;
 
   function isValidSimulationEntry(entry) {
@@ -50,7 +52,7 @@ export function validateCompiledConfig(config) {
       if (!sem?.purpose || typeof sem.purpose !== "string" || !sem.purpose.trim()) {
         details.push(`blockSemantics["${letter}"].purpose must be a non-empty string`);
       }
-      if (!["single", "superset", "giant_set", "amrap", "emom"].includes(sem?.preferred_segment_type)) {
+      if (!knownSegmentTypes.has(sem?.preferred_segment_type)) {
         details.push(
           `blockSemantics["${letter}"].preferred_segment_type must be one of single|superset|giant_set|amrap|emom`,
         );
@@ -63,6 +65,7 @@ export function validateCompiledConfig(config) {
   }
 
   const dayKeySeen = new Set();
+  const segmentationOverrideFocusSeen = new Set();
   for (let i = 0; i < (builder?.dayTemplates || []).length; i++) {
     const template = builder.dayTemplates[i];
     if (!template || typeof template !== "object" || Array.isArray(template)) {
@@ -81,6 +84,67 @@ export function validateCompiledConfig(config) {
 
     if (template.focus !== undefined && template.focus !== null && !slugPattern.test(String(template.focus))) {
       details.push(`builder.dayTemplates[${i}].focus must match /^[a-z][a-z0-9_]*$/ when provided`);
+    }
+
+    if (
+      template.inherit_sets_budget_from_day_1 !== undefined &&
+      typeof template.inherit_sets_budget_from_day_1 !== "boolean"
+    ) {
+      details.push(`builder.dayTemplates[${i}].inherit_sets_budget_from_day_1 must be a boolean when provided`);
+    }
+
+    if (
+      template.inherit_segmentation_from_day_1 !== undefined &&
+      typeof template.inherit_segmentation_from_day_1 !== "boolean"
+    ) {
+      details.push(`builder.dayTemplates[${i}].inherit_segmentation_from_day_1 must be a boolean when provided`);
+    }
+
+    if (template.block_semantics !== undefined) {
+      if (
+        !template.block_semantics ||
+        typeof template.block_semantics !== "object" ||
+        Array.isArray(template.block_semantics)
+      ) {
+        details.push(`builder.dayTemplates[${i}].block_semantics must be an object when provided`);
+      } else {
+        const overrideKeys = Object.keys(template.block_semantics);
+        for (const letter of overrideKeys) {
+          if (!/^[A-Z]$/.test(String(letter || "").trim())) {
+            details.push(`builder.dayTemplates[${i}].block_semantics key "${letter}" must be a single uppercase block letter`);
+            continue;
+          }
+          const sem = template.block_semantics[letter];
+          if (!sem || typeof sem !== "object" || Array.isArray(sem)) {
+            details.push(`builder.dayTemplates[${i}].block_semantics["${letter}"] must be an object`);
+            continue;
+          }
+          if (
+            sem.preferred_segment_type !== undefined &&
+            !knownSegmentTypes.has(sem.preferred_segment_type)
+          ) {
+            details.push(
+              `builder.dayTemplates[${i}].block_semantics["${letter}"].preferred_segment_type must be one of single|superset|giant_set|amrap|emom`,
+            );
+          }
+          if (sem.purpose !== undefined && !knownPurposes.has(sem.purpose)) {
+            details.push(
+              `builder.dayTemplates[${i}].block_semantics["${letter}"].purpose must be one of main|secondary|accessory`,
+            );
+          }
+        }
+        if (overrideKeys.length > 0) {
+          if (!template.focus || typeof template.focus !== "string" || !template.focus.trim()) {
+            details.push(`builder.dayTemplates[${i}].focus is required when block_semantics override is present`);
+          } else if (segmentationOverrideFocusSeen.has(template.focus)) {
+            details.push(
+              `builder.dayTemplates[${i}].focus duplicates another day template focus used for block_semantics override: ${template.focus}`,
+            );
+          } else {
+            segmentationOverrideFocusSeen.add(template.focus);
+          }
+        }
+      }
     }
 
     if (template.is_ordered_simulation !== undefined && typeof template.is_ordered_simulation !== "boolean") {

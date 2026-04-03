@@ -26,6 +26,7 @@ import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogu
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
+import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { authRouter } from "./src/routes/auth.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
@@ -399,7 +400,7 @@ const handleEquipmentItems = async (req, res) => {
 
   try {
     const sql = `
-      SELECT id, bubble_id, category, name, exercise_slug
+      SELECT id, external_id, category, name, exercise_slug
       FROM equipment_items
       WHERE ${mappedColumn} = true
       ORDER BY category NULLS LAST, name ASC
@@ -407,7 +408,7 @@ const handleEquipmentItems = async (req, res) => {
     const result = await pool.query(sql);
     const items = result.rows.map((row) => ({
       id: row.id,
-      bubbleId: row.bubble_id,
+      externalId: row.external_id,
       category: row.category,
       label: row.name,
       code: row.exercise_slug,
@@ -568,6 +569,12 @@ app.patch("/users/me", requireAuth, handleUsersMe);
 app.use("/api/auth", authRouter);
 
 // Mount routers.
+// IMPORTANT: /api/admin mounts must come before the broad /api mounts below.
+// Broad /api routers (segmentLog, readProgram, etc.) apply router-level requireAuth
+// to every /api/* request that reaches them, which intercepts /api/admin/* calls
+// before they can reach the internal-token–guarded admin routers.
+app.use("/api/admin", ...adminOnly, adminCoverageRouter);
+app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
 app.use("/api", debugAllowedExercisesRouter);
@@ -589,11 +596,8 @@ app.use(historyExerciseRouter); // → GET /v1/history/exercise/:exerciseId
 app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
-app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/admin/health", ...adminOnly, adminHealthRouter);
-// Canonical — /api/admin matches all other API admin routes
-app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
-// DEPRECATED backward-compat alias
+// DEPRECATED backward-compat alias (not under /api so no interception risk)
 app.use("/admin/api/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/admin", ...adminOnly, adminConfigsRouter);
 app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
@@ -601,6 +605,7 @@ app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminSyncRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
+app.use("/admin", ...adminOnly, adminUsersRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates

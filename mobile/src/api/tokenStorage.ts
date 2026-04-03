@@ -1,8 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 
 const KEYS = {
-  accessToken: "auth:access_token",
-  refreshToken: "auth:refresh_token",
+  accessToken: "auth.access_token",
+  refreshToken: "auth.refresh_token",
 } as const;
 
 export async function getAccessToken(): Promise<string | null> {

@@ -555,7 +555,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
         throw new ValidationError(`No program_week found for DAY week_number=${d.week_number}`);
       }
 
-      const scheduledDateMs = anchorDayMs + d.scheduled_offset_days * DAY_MS;
+      const scheduledDateMs = programStartMs + d.scheduled_offset_days * DAY_MS;
       const scheduled_date = utcDateFromMs(scheduledDateMs);
 
       const r = await client.query(

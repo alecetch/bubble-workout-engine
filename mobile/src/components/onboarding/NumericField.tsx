@@ -32,6 +32,8 @@ export function NumericField({
         placeholder={placeholder}
         placeholderTextColor={colors.textSecondary}
         keyboardType="numeric"
+        textContentType="none"
+        autoComplete="off"
         style={[styles.input, !!error && styles.inputError]}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}

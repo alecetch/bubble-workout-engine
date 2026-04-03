@@ -159,7 +159,7 @@ npx expo start --ios
 npx expo start --android
 
 # Clear Metro cache and start fresh
-npx expo start -c
+npx expo start -c --go
 
 # Install dependencies
 npm install

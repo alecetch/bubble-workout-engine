@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiLogin } from "../../api/authApi";
 import { ApiError } from "../../api/client";
@@ -32,6 +33,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (): Promise<void> => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -87,6 +89,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
+            textContentType="emailAddress"
             placeholder="you@example.com"
             placeholderTextColor={colors.textSecondary}
             style={styles.input}
@@ -95,16 +98,30 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-            placeholder="Enter password"
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry={!showPassword}
+              textContentType="password"
+              placeholder="Enter password"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.inputFlex}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -177,6 +194,24 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: spacing.md,
     ...typography.body,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 48,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+  },
+  inputFlex: {
+    flex: 1,
+    color: colors.textPrimary,
+    ...typography.body,
+  },
+  eyeBtn: {
+    paddingLeft: spacing.sm,
   },
   errorText: {
     color: colors.warning,

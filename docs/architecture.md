@@ -77,6 +77,7 @@ The React Native mobile app lives in a separate repository and integrates entire
 | - program_generation_config                      |
 | - program_rep_rule, narration_template           |
 | - segment_exercise_log, estimated_1rm            |
+| - password_reset_token                           |
 +--------------------------+-----------------------+
                            ^
                            | Flyway migrate
@@ -139,11 +140,14 @@ Route module files (`api/src/routes/`):
 | `adminNarration.js` | `GET\|POST /admin/narration/*` | Narration template management |
 | `adminConfigs.js` | `GET\|PUT /admin/configs/:key` | Program generation config CRUD |
 | `adminCoverage.js` | `GET /api/admin/coverage/*` | Slot coverage analysis |
+| `auth.js` | `POST /api/auth/forgot-password`, `POST /api/auth/reset-password` | Password reset OTP flow |
+| `adminUsers.js` | `GET /admin/users`, `DELETE /admin/users/:id` | Admin user management (internal token guarded) |
 
 ### Service layer (`api/src/services/`)
 
 | File | Purpose |
 |---|---|
+| `emailService.js` | `sendPasswordResetEmail({ to, code })` — provider-agnostic email abstraction (see §12) |
 | `clientProfileService.js` | `makeClientProfileService(db)` factory — `upsertUser`, `upsertProfile`, `getProfileByBubbleUserId`, `patchProfile`. Handles `app_user` and `client_profile` upserts with deterministic column mapping. |
 | `buildInputsFromDevProfile.js` | Assembles the pipeline `inputs` object from Postgres `client_profile`, exercise catalogue, and seeded DB config rows. **Primary source for all pipeline inputs — no external API calls.** |
 | `importEmitterService.js` | Transactional ingest of PRG/WEEK/DAY/SEG/EX rows with advisory lock + payload hash idempotency. |
@@ -568,6 +572,9 @@ Migrations in `migrations/` define schema evolution via Flyway.
 | V24 | Add debug/observability columns to `generation_run`: `config_key`, pipeline timing, error details (all nullable; existing rows unaffected) |
 | V25 | Add `admin_audit_log` table (records admin panel config and catalogue changes with timestamp and actor) |
 | V26 | Add onboarding fields to `client_profile`: `sex`, `age_range`, `onboarding_step_completed`, `onboarding_completed_at` |
+| V27–V33 | (Various schema additions — equipment, auth, profile fields) |
+| V34 | Change `fk_program_user` and `fk_log_user` FK constraints to `ON DELETE CASCADE` (enables hard-delete of `app_user` without FK violations) |
+| V35 | Add `password_reset_token` table: `id`, `user_id` (FK → `app_user` CASCADE), `code_hash`, `expires_at`, `used_at`, `created_at` |
 
 ### Repeatable migrations (`R__*.sql`)
 Seed data, re-applied whenever the file checksum changes:
@@ -595,6 +602,7 @@ Seed data, re-applied whenever the file checksum changes:
 - `api`: Node 20, mounts `./api:/app` and `./assets:/app/assets`; `working_dir: /app`
 - `flyway`: runs migrations from `./migrations`
 - `minio` + `minio-init` + `minio-seed`: local S3-compatible object store for media assets
+- `mailpit`: local SMTP catch-all (port 1025 SMTP, port 8025 web UI at http://localhost:8025). All outbound email is captured here in local dev — no messages reach real inboxes.
 
 ### Production
 - Deployed to [Fly.io](https://fly.io) (`api/fly.toml`).
@@ -614,6 +622,12 @@ Seed data, re-applied whenever the file checksum changes:
 | `ENGINE_KEY` | Auth header `x-engine-key` for the legacy `/generate-plan` route |
 | `INTERNAL_API_TOKEN` | Auth header `X-Internal-Token` for guarded write routes and admin panel |
 | `S3_PUBLIC_BASE_URL` | Base URL prepended to `image_key` when constructing media asset URLs. Must use LAN IP (not `localhost`) for on-device mobile dev. |
+| `EMAIL_PROVIDER` | `console` (logs to stdout), `smtp` (Mailpit / any SMTP server), or `resend` (Resend API). Default: `console`. |
+| `EMAIL_SMTP_HOST` | SMTP hostname (e.g. `mailpit` in Docker Compose). Required when `EMAIL_PROVIDER=smtp`. |
+| `EMAIL_SMTP_PORT` | SMTP port (e.g. `1025` for Mailpit). Required when `EMAIL_PROVIDER=smtp`. |
+| `EMAIL_FROM_ADDRESS` | Sender address in outbound email (e.g. `noreply@formai.local` locally, verified sender in prod). |
+| `EMAIL_APP_NAME` | App name shown in email copy (e.g. `Formai`). |
+| `RESEND_API_KEY` | Resend API key. Required when `EMAIL_PROVIDER=resend`. Set as a Fly secret — never commit to source. |
 
 ---
 
@@ -761,3 +775,106 @@ All 299 tests pass in CI (`ci.yml`) with a real Postgres 16 instance. Zero tests
 ### Deferred roadmap
 - Sentry error tracking — `docs/ticket-sentry-error-tracking.md`
 - `bubble_user_id` → `user_key` rename — `docs/ticket-rename-bubble-user-id.md`
+
+---
+
+## 12) Authentication — Password Reset
+
+### Overview
+
+Password reset uses a 6-digit OTP (one-time code) sent by email. No magic link or redirect URL is needed — the user enters the code directly in the mobile app. This approach works without a registered domain, making it viable from day one with a free Resend sender address.
+
+### Flow
+
+```
+Mobile: ResetPasswordScreen
+  │  POST /api/auth/forgot-password  { email }
+  ▼
+API: look up app_user by email
+     generate random 6-digit code (crypto.randomInt)
+     SHA-256 hash the code → store in password_reset_token (expires 15 min)
+     send email via emailService
+     always return 200 (never reveal whether email exists)
+  │
+  ▼
+Mobile: ResetPasswordCodeScreen
+  │  POST /api/auth/reset-password  { email, code, new_password }
+  ▼
+API: look up unexpired, unused token for email
+     SHA-256 hash the submitted code → compare to stored hash
+     if match: bcrypt-hash new_password → update app_user.password_hash
+               mark token used_at = now()
+               delete all refresh_token rows for user (force re-login everywhere)
+     return 200 or 400 (invalid/expired code)
+  │
+  ▼
+Mobile: success screen → navigate to Login
+```
+
+### Rate limiting
+
+Both routes are rate-limited to **5 requests per 15 minutes per IP** (via `express-rate-limit`).
+
+### Email service (`api/src/services/emailService.js`)
+
+Provider-agnostic abstraction controlled by `EMAIL_PROVIDER`:
+
+| Provider | Value | Use case |
+|---|---|---|
+| Console | `console` | Default — logs email content to stdout; no external dependency |
+| SMTP | `smtp` | Local dev with Mailpit; also works with any SMTP relay |
+| Resend | `resend` | Production — Resend API, works without a custom domain using `onboarding@resend.dev` |
+
+The service exposes:
+- `sendPasswordResetEmail({ to, code })` — sends the branded reset email
+- `hashCode(code)` — SHA-256 hex digest (shared with auth routes)
+
+### Local dev setup
+
+Mailpit runs as a Docker Compose service. It catches all outbound SMTP on port 1025 and provides a web UI at **http://localhost:8025**.
+
+Required `api/.env` additions:
+```
+EMAIL_PROVIDER=smtp
+EMAIL_SMTP_HOST=mailpit
+EMAIL_SMTP_PORT=1025
+EMAIL_FROM_ADDRESS=noreply@formai.local
+EMAIL_APP_NAME=Formai
+```
+
+### Production (Fly.io) setup
+
+Use Resend with the `onboarding@resend.dev` sender until a verified domain is configured. Set secrets via CLI:
+
+```sh
+fly secrets set EMAIL_PROVIDER=resend
+fly secrets set RESEND_API_KEY=<your-key>
+fly secrets set EMAIL_FROM_ADDRESS=onboarding@resend.dev
+fly secrets set EMAIL_APP_NAME=Formai
+```
+
+Once a domain is added and verified in the Resend dashboard, update `EMAIL_FROM_ADDRESS` to `noreply@yourdomain.com`.
+
+### Mobile screens
+
+| Screen | File | Purpose |
+|---|---|---|
+| `ResetPasswordScreen` | `mobile/src/screens/auth/ResetPasswordScreen.tsx` | Collects email, calls `forgot-password`, navigates to code entry screen |
+| `ResetPasswordCodeScreen` | `mobile/src/screens/auth/ResetPasswordCodeScreen.tsx` | Collects 6-digit code + new password, calls `reset-password`, shows success state |
+
+Both screens are registered in `AuthNavigator` (`ResetPassword` and `ResetPasswordCode` routes). The code screen uses `textContentType="oneTimeCode"` so iOS can auto-fill the code from the SMS/email notification.
+
+### Database
+
+`password_reset_token` table (V35 migration):
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | PK |
+| `user_id` | UUID | FK → `app_user(id)` ON DELETE CASCADE |
+| `code_hash` | TEXT | SHA-256 hex of the 6-digit code |
+| `expires_at` | TIMESTAMPTZ | 15 minutes from creation |
+| `used_at` | TIMESTAMPTZ | Null until redeemed; set on successful reset |
+| `created_at` | TIMESTAMPTZ | Now |
+
+Index: `idx_prt_user` on `(user_id)` for fast lookup.
