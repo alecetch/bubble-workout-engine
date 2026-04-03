@@ -145,6 +145,23 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     }
   }
 
+  const builderDayTemplates =
+    (pgcJson?.builder?.day_templates ?? null)?.map((template) => ({
+      ...template,
+      focus: normalizeSlugText(template?.focus),
+      day_type: normalizeSlugText(template?.day_type),
+    })) ?? null;
+
+  const dayBlockSemanticsByFocus = {};
+  for (const template of builderDayTemplates ?? []) {
+    const focus = normalizeSlugText(template?.focus);
+    if (!focus) continue;
+    if (template?.inherit_segmentation_from_day_1 === true) continue;
+    const localSemantics = normalizeBlockSemanticsMap(template?.block_semantics);
+    if (!localSemantics || !Object.keys(localSemantics).length) continue;
+    dayBlockSemanticsByFocus[focus] = localSemantics;
+  }
+
   return {
     programType,
     schemaVersion,
