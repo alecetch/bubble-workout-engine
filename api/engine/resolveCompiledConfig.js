@@ -78,7 +78,7 @@ function buildSyntheticRequestConfigRow({ request, programType, schemaVersion, p
   }
 
   const builderDayTemplates =
-    (pgcJson?.builder?.day_templates ?? null)?.map((template) => ({
+    (parsedRequestPgc?.builder?.day_templates ?? null)?.map((template) => ({
       ...template,
       focus: normalizeSlugText(template?.focus),
       day_type: normalizeSlugText(template?.day_type),
