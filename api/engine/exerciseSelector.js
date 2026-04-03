@@ -294,8 +294,7 @@ export function rankBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCn
   }
 
   ranked.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return toStr(a.ex?.n).localeCompare(toStr(b.ex?.n));
+    return b.score - a.score;
   });
 
   return Number.isFinite(limit) ? ranked.slice(0, limit) : ranked;
