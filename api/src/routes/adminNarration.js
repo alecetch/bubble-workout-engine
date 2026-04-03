@@ -177,6 +177,7 @@ export function normalizeTemplates(rows) {
     const applies = isPlainObject(row?.applies_json) ? row.applies_json : {};
     const poolValue = Array.isArray(row?.text_pool_json) ? row.text_pool_json : [];
     return {
+      rule_number: Number.isFinite(Number(row?.rule_number)) ? Number(row.rule_number) : null,
       template_id: safeString(row?.template_id),
       scope: safeString(row?.scope),
       field: safeString(row?.field),
@@ -328,6 +329,7 @@ adminNarrationRouter.get("/narration/templates", async (req, res) => {
     const result = await pool.query(
       `
       SELECT
+        ROW_NUMBER() OVER (ORDER BY priority ASC NULLS LAST, template_id ASC) AS rule_number,
         template_id,
         scope,
         field,

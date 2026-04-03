@@ -164,6 +164,7 @@ function normalizeTemplates(raw) {
     if (!Array.isArray(pool)) pool = [];
     out.push({
       template_id: s(r.template_id),
+      rule_number: Number.isFinite(Number(r.rule_number)) ? Number(r.rule_number) : null,
       scope: s(r.scope),
       field: s(r.field),
       purpose: s(r.purpose),
@@ -180,7 +181,7 @@ function normalizeTemplates(raw) {
 }
 
 // Select templates by (scope, field, purpose?, segment_type?) with fallback.
-function findTemplatePool(templates, scope, field, purpose, segment_type, matchCtx) {
+function findTemplateMatch(templates, scope, field, purpose, segment_type, matchCtx) {
   scope = s(scope);
   field = s(field);
   purpose = s(purpose);
@@ -229,7 +230,20 @@ function findTemplatePool(templates, scope, field, purpose, segment_type, matchC
     consider(t, score);
   }
 
-  return best ? best.t.pool : [];
+  return best ? best.t : null;
+}
+
+function findTemplatePool(templates, scope, field, purpose, segment_type, matchCtx) {
+  const match = findTemplateMatch(templates, scope, field, purpose, segment_type, matchCtx);
+  return match ? match.pool : [];
+}
+
+function templateDebugRef(match) {
+  if (!match) return null;
+  return {
+    template_id: s(match.template_id) || null,
+    rule_number: Number.isFinite(Number(match.rule_number)) ? Number(match.rule_number) : null,
+  };
 }
 
 // ---------------- catalog index for warmup_hooks ----------------
@@ -516,25 +530,35 @@ function enrichDays(days, templates, cfg, catalogById, context) {
     };
 
     const dayKey = `day|${dayIdx}|${dayFocus}|${duration}|${context.totalWeeks}|${rankKey}`;
-    const dayTitlePool = findTemplatePool(templates, "day", "DAY_TITLE", "", "", matchCtx);
-    const dayGoalPool = findTemplatePool(templates, "day", "DAY_GOAL", "", "", matchCtx);
-    const timeHintPool = findTemplatePool(templates, "day", "TIME_BUDGET_HINT", "", "", matchCtx);
-    const warmTitlePool = findTemplatePool(templates, "day", "WARMUP_TITLE", "", "", matchCtx);
-    const warmHeatPool = findTemplatePool(templates, "day", "WARMUP_GENERAL_HEAT", "", "", matchCtx);
-    const warmRampPool = findTemplatePool(templates, "day", "RAMP_SETS_TEXT", "", "", matchCtx);
-    const cuePool = findTemplatePool(templates, "exercise", "CUE_LINE", "", "", matchCtx);
-    const loadPool = findTemplatePool(templates, "exercise", "LOAD_HINT", "", "", matchCtx);
-    const logPool = findTemplatePool(templates, "exercise", "LOGGING_PROMPT", "", "", matchCtx);
+    const dayTitleMatch = findTemplateMatch(templates, "day", "DAY_TITLE", "", "", matchCtx);
+    const dayGoalMatch = findTemplateMatch(templates, "day", "DAY_GOAL", "", "", matchCtx);
+    const timeHintMatch = findTemplateMatch(templates, "day", "TIME_BUDGET_HINT", "", "", matchCtx);
+    const warmTitleMatch = findTemplateMatch(templates, "day", "WARMUP_TITLE", "", "", matchCtx);
+    const warmHeatMatch = findTemplateMatch(templates, "day", "WARMUP_GENERAL_HEAT", "", "", matchCtx);
+    const warmRampMatch = findTemplateMatch(templates, "day", "RAMP_SETS_TEXT", "", "", matchCtx);
+    const cueMatch = findTemplateMatch(templates, "exercise", "CUE_LINE", "", "", matchCtx);
+    const loadMatch = findTemplateMatch(templates, "exercise", "LOAD_HINT", "", "", matchCtx);
+    const logMatch = findTemplateMatch(templates, "exercise", "LOGGING_PROMPT", "", "", matchCtx);
 
     day.narration = day.narration || {};
-    day.narration.day_title = applyTokens(pickFromPool(dayTitlePool, `${dayKey}|title`), dayTokens);
-    day.narration.day_goal = applyTokens(pickFromPool(dayGoalPool, `${dayKey}|goal`), dayTokens);
-    day.narration.time_hint = applyTokens(pickFromPool(timeHintPool, `${dayKey}|time`), dayTokens);
+    day.narration.day_title = applyTokens(pickFromPool(dayTitleMatch?.pool, `${dayKey}|title`), dayTokens);
+    day.narration.day_goal = applyTokens(pickFromPool(dayGoalMatch?.pool, `${dayKey}|goal`), dayTokens);
+    day.narration.time_hint = applyTokens(pickFromPool(timeHintMatch?.pool, `${dayKey}|time`), dayTokens);
 
     day.narration.warmup = {
-      title: applyTokens(pickFromPool(warmTitlePool, `${dayKey}|wu_title`), dayTokens),
-      general_heat: applyTokens(pickFromPool(warmHeatPool, `${dayKey}|wu_heat`), dayTokens),
-      ramp_sets: applyTokens(pickFromPool(warmRampPool, `${dayKey}|wu_ramp`), dayTokens),
+      title: applyTokens(pickFromPool(warmTitleMatch?.pool, `${dayKey}|wu_title`), dayTokens),
+      general_heat: applyTokens(pickFromPool(warmHeatMatch?.pool, `${dayKey}|wu_heat`), dayTokens),
+      ramp_sets: applyTokens(pickFromPool(warmRampMatch?.pool, `${dayKey}|wu_ramp`), dayTokens),
+    };
+    day.narration_debug = {
+      templates: {
+        day_title: templateDebugRef(dayTitleMatch),
+        day_goal: templateDebugRef(dayGoalMatch),
+        time_hint: templateDebugRef(timeHintMatch),
+        warmup_title: templateDebugRef(warmTitleMatch),
+        warmup_general_heat: templateDebugRef(warmHeatMatch),
+        ramp_sets_text: templateDebugRef(warmRampMatch),
+      },
     };
 
     // Warmup hooks (optional)
@@ -578,22 +602,32 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       };
       const segKey = `seg|${dayIdx}|${purpose}|${segType}|${sidx}`;
 
-      const segTitlePool = findTemplatePool(templates, "segment", "SEGMENT_TITLE", purpose, segType, matchCtx);
-      const segExecPool = findTemplatePool(templates, "segment", "SEGMENT_EXECUTION", "", segType, matchCtx);
-      const segIntentPool = findTemplatePool(templates, "segment", "SEGMENT_INTENT", purpose, "", matchCtx);
+      const segTitleMatch = findTemplateMatch(templates, "segment", "SEGMENT_TITLE", purpose, segType, matchCtx);
+      const segExecMatch = findTemplateMatch(templates, "segment", "SEGMENT_EXECUTION", "", segType, matchCtx);
+      const segIntentMatch = findTemplateMatch(templates, "segment", "SEGMENT_INTENT", purpose, "", matchCtx);
 
       seg2.narration = seg2.narration || {};
-      seg2.narration.title = applyTokens(pickFromPool(segTitlePool, `${segKey}|title`), segTokens);
-      seg2.narration.execution = applyTokens(pickFromPool(segExecPool, `${segKey}|exec`), segTokens);
-      seg2.narration.intent = applyTokens(pickFromPool(segIntentPool, `${segKey}|intent`), segTokens);
+      seg2.narration.title = applyTokens(pickFromPool(segTitleMatch?.pool, `${segKey}|title`), segTokens);
+      seg2.narration.execution = applyTokens(pickFromPool(segExecMatch?.pool, `${segKey}|exec`), segTokens);
+      seg2.narration.intent = applyTokens(pickFromPool(segIntentMatch?.pool, `${segKey}|intent`), segTokens);
 
-      const setupPool = findTemplatePool(templates, "transition", "SETUP_NOTE", "", segType, matchCtx);
-      const transPool = findTemplatePool(templates, "transition", "TRANSITION_NOTE", "", segType, matchCtx);
-      const pacePool = findTemplatePool(templates, "transition", "PACE_NOTE", "", "", matchCtx);
+      const setupMatch = findTemplateMatch(templates, "transition", "SETUP_NOTE", "", segType, matchCtx);
+      const transMatch = findTemplateMatch(templates, "transition", "TRANSITION_NOTE", "", segType, matchCtx);
+      const paceMatch = findTemplateMatch(templates, "transition", "PACE_NOTE", "", "", matchCtx);
 
-      seg2.narration.setup_note = applyTokens(pickFromPool(setupPool, `${segKey}|setup`), segTokens);
-      seg2.narration.transition_note = applyTokens(pickFromPool(transPool, `${segKey}|transition`), segTokens);
-      seg2.narration.pace_note = applyTokens(pickFromPool(pacePool, `${segKey}|pace`), segTokens);
+      seg2.narration.setup_note = applyTokens(pickFromPool(setupMatch?.pool, `${segKey}|setup`), segTokens);
+      seg2.narration.transition_note = applyTokens(pickFromPool(transMatch?.pool, `${segKey}|transition`), segTokens);
+      seg2.narration.pace_note = applyTokens(pickFromPool(paceMatch?.pool, `${segKey}|pace`), segTokens);
+      seg2.narration_debug = {
+        templates: {
+          title: templateDebugRef(segTitleMatch),
+          execution: templateDebugRef(segExecMatch),
+          intent: templateDebugRef(segIntentMatch),
+          setup_note: templateDebugRef(setupMatch),
+          transition_note: templateDebugRef(transMatch),
+          pace_note: templateDebugRef(paceMatch),
+        },
+      };
 
       const items = Array.isArray(seg2.items) ? seg2.items : [];
       for (let ii = 0; ii < items.length; ii++) {
@@ -630,12 +664,20 @@ function enrichDays(days, templates, cfg, catalogById, context) {
 
         const exKey = `ex|${dayIdx}|${purpose}|${segType}|${exName}|${ii}`;
 
-        const exLinePool = findTemplatePool(templates, "exercise", "EXERCISE_LINE", purpose, "", matchCtx);
+        const exLineMatch = findTemplateMatch(templates, "exercise", "EXERCISE_LINE", purpose, "", matchCtx);
         it.narration = it.narration || {};
-        it.narration.line = applyTokens(pickFromPool(exLinePool, `${exKey}|line`), exTokens);
-        it.narration.cues = applyTokens(pickFromPool(cuePool, `${exKey}|cues`), exTokens);
-        it.narration.load_hint = applyTokens(pickFromPool(loadPool, `${exKey}|load`), exTokens);
-        it.narration.log_prompt = applyTokens(pickFromPool(logPool, `${exKey}|log`), exTokens);
+        it.narration.line = applyTokens(pickFromPool(exLineMatch?.pool, `${exKey}|line`), exTokens);
+        it.narration.cues = applyTokens(pickFromPool(cueMatch?.pool, `${exKey}|cues`), exTokens);
+        it.narration.load_hint = applyTokens(pickFromPool(loadMatch?.pool, `${exKey}|load`), exTokens);
+        it.narration.log_prompt = applyTokens(pickFromPool(logMatch?.pool, `${exKey}|log`), exTokens);
+        it.narration_debug = {
+          templates: {
+            line: templateDebugRef(exLineMatch),
+            cues: templateDebugRef(cueMatch),
+            load_hint: templateDebugRef(loadMatch),
+            log_prompt: templateDebugRef(logMatch),
+          },
+        };
       }
     }
 

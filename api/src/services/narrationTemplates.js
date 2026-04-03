@@ -5,6 +5,7 @@ export async function fetchActiveNarrationTemplates(dbClient) {
 
   const sql = `
     SELECT
+      ROW_NUMBER() OVER (ORDER BY priority ASC NULLS LAST, template_id ASC) AS rule_number,
       template_id,
       scope,
       field,

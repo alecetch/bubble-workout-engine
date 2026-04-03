@@ -102,6 +102,7 @@
     /* Narration fields */
     .nar { font-size: 11px; color: #4b5563; line-height: 1.5; }
     .nar-k { font-weight: 500; color: #9ca3af; text-transform: capitalize; }
+    .slot-dbg { margin-top: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; white-space: pre-wrap; font: 11px/1.45 Consolas, Monaco, monospace; color: #334155; }
 
     /* Errors / empty */
     .panel-err { background: #fde8e8; color: var(--danger); border-radius: 8px; padding: 14px; margin: 10px 0; }
@@ -184,6 +185,12 @@
       Show narration
     </label>
   </div>
+  <div class="ctrl-group">
+    <label class="ctrl-label" style="display:flex;align-items:center;gap:6px;">
+      <input id="show-debug-toggle" type="checkbox" />
+      Show debug
+    </label>
+  </div>
   <div class="sep"></div>
   <button id="generate-btn">Generate All</button>
   <span id="gen-status" style="font-size:12px"></span>
@@ -208,6 +215,7 @@
 <script type="module">
 const STORAGE_KEY = "admin_preview_token";
 const SHOW_NARRATION_KEY = "admin_preview_show_narration";
+const SHOW_DEBUG_KEY = "admin_preview_show_debug";
 const previewState = { lastData: null };
 
 function getToken() {
@@ -224,9 +232,17 @@ const narrationToggleEl = document.getElementById("show-narration-toggle");
 if (sessionStorage.getItem(SHOW_NARRATION_KEY) === "0") {
   narrationToggleEl.checked = false;
 }
+const debugToggleEl = document.getElementById("show-debug-toggle");
+if (sessionStorage.getItem(SHOW_DEBUG_KEY) === "1") {
+  debugToggleEl.checked = true;
+}
 
 function showNarrationEnabled() {
   return !!document.getElementById("show-narration-toggle")?.checked;
+}
+
+function showDebugEnabled() {
+  return !!document.getElementById("show-debug-toggle")?.checked;
 }
 
 function selectedVal(groupId) {
@@ -273,7 +289,56 @@ function renderNar(nar, skip = new Set()) {
     .join("");
 }
 
-function renderItem(item, nameMap) {
+function formatTemplateRef(label, ref) {
+  if (!ref || (!ref.template_id && ref.rule_number == null)) return null;
+  const ruleText = ref.rule_number != null ? `#${ref.rule_number}` : "#?";
+  return `${label}=${ruleText}${ref.template_id ? ` (${ref.template_id})` : ""}`;
+}
+
+function buildSlotDebugMap(debug) {
+  const map = new Map();
+  for (const row of debug?.step1?.slot_debug ?? []) {
+    if (!row?.slot) continue;
+    map.set(`${row.day_index}|${row.slot}`, row);
+  }
+  return map;
+}
+
+function renderSlotDebug(item, seg, day, slotDebug) {
+  if (!showDebugEnabled()) return "";
+  const ranked = Array.isArray(slotDebug?.ranked_candidates) ? slotDebug.ranked_candidates : [];
+  const rankedText = ranked.length
+    ? ranked
+      .map((cand, index) => `${index + 1}. #${cand.exercise_id} ${cand.exercise_name} | score=${cand.score} | mp=${cand.mp || "-"} | sw=${cand.sw || "-"} | sw2=${cand.sw2 || "-"}`)
+      .join("\n")
+    : "none";
+
+  const templateRefs = [
+    formatTemplateRef("day.day_title", day?.narration_debug?.templates?.day_title),
+    formatTemplateRef("day.day_goal", day?.narration_debug?.templates?.day_goal),
+    formatTemplateRef("segment.title", seg?.narration_debug?.templates?.title),
+    formatTemplateRef("segment.execution", seg?.narration_debug?.templates?.execution),
+    formatTemplateRef("segment.intent", seg?.narration_debug?.templates?.intent),
+    formatTemplateRef("exercise.line", item?.narration_debug?.templates?.line),
+    formatTemplateRef("exercise.cues", item?.narration_debug?.templates?.cues),
+    formatTemplateRef("exercise.load_hint", item?.narration_debug?.templates?.load_hint),
+    formatTemplateRef("exercise.log_prompt", item?.narration_debug?.templates?.log_prompt),
+  ].filter(Boolean);
+
+  const lines = [
+    `template: ${slotDebug?.template_name || "-"}`,
+    `slot: ${item?.slot || slotDebug?.slot || "-"} | mp=${slotDebug?.mp || "-"} | sw=${slotDebug?.sw || "-"} | sw2=${slotDebug?.sw2 || "-"}`,
+    `selected: ${slotDebug?.selected_exercise_id ? `#${slotDebug.selected_exercise_id} ${slotDebug.selected_exercise_name || ""}` : (slotDebug?.fill || "none")}`,
+    `selection_path: ${slotDebug?.selected_attempt_label || "-"}`,
+    "ranked_matches:",
+    rankedText,
+    `narration_rules: ${templateRefs.length ? templateRefs.join(" | ") : "none"}`,
+  ];
+
+  return `<pre class="slot-dbg">${esc(lines.join("\n"))}</pre>`;
+}
+
+function renderItem(item, nameMap, ctx) {
   const name = nameMap[String(item.ex_id)] ?? `#${item.ex_id}`;
   const parts = [];
   if (item.sets != null) parts.push(`${item.sets}×`);
@@ -281,6 +346,7 @@ function renderItem(item, nameMap) {
   if (item.tempo_prescribed) parts.push(item.tempo_prescribed);
   if (item.rir_target != null) parts.push(`RIR ${item.rir_target}`);
   if (item.rest_after_set_sec) parts.push(`${item.rest_after_set_sec}s`);
+  const slotDebug = ctx?.slotDebugMap?.get(`${ctx?.day?.day_index}|${item.slot ?? ""}`) ?? null;
   return `
     <div class="item">
       <div class="item-main">
@@ -288,10 +354,11 @@ function renderItem(item, nameMap) {
         <span class="ex-meta">${esc(parts.join(" · "))}</span>
       </div>
       ${showNarrationEnabled() ? `<div class="item-nar">${renderNar(item.narration)}</div>` : ""}
+      ${renderSlotDebug(item, ctx?.seg, ctx?.day, slotDebug)}
     </div>`;
 }
 
-function renderSeg(seg, nameMap) {
+function renderSeg(seg, nameMap, ctx) {
   const purpose = seg.purpose ?? "";
   const narSkip = new Set(["title"]);
   const titleText = seg.narration?.title ?? "";
@@ -307,11 +374,11 @@ function renderSeg(seg, nameMap) {
         <span class="seg-type" style="margin-left:auto">${esc(durLabel)}</span>
       </div>
       ${showNarrationEnabled() ? renderNar(seg.narration, narSkip) : ""}
-      <div class="items">${(seg.items ?? []).map(it => renderItem(it, nameMap)).join("")}</div>
+      <div class="items">${(seg.items ?? []).map(it => renderItem(it, nameMap, { ...ctx, seg })).join("")}</div>
     </div>`;
 }
 
-function renderDay(day, nameMap) {
+function renderDay(day, nameMap, ctx) {
   const narTitle = day.narration?.day_title ?? "";
   const label = narTitle || day.label || `Day ${day.day_index}`;
   const focus = (day.day_focus_slug ?? "").replace(/_/g, " ");
@@ -328,13 +395,13 @@ function renderDay(day, nameMap) {
       <div class="day-body">
         ${showNarrationEnabled() && day.narration?.day_goal ? `<div class="day-goal">${esc(day.narration.day_goal)}</div>` : ""}
         ${showNarrationEnabled() ? renderNar(day.narration, dayNarSkip) : ""}
-        ${segs.map(s => renderSeg(s, nameMap)).join("")}
+        ${segs.map(s => renderSeg(s, nameMap, { ...ctx, day })).join("")}
         ${!segs.length ? `<div class="panel-empty" style="padding:8px">No segments</div>` : ""}
       </div>
     </details>`;
 }
 
-function renderWeek(wk, programNarration, nameMap) {
+function renderWeek(wk, programNarration, nameMap, ctx) {
   // program.narration.weeks is indexed in order (week 1 = index 0)
   const wkNar = (programNarration?.weeks ?? [])[wk.week_index - 1] ?? {};
   const phaseLabel = wkNar.phase_label || wkNar.label || "";
@@ -349,7 +416,7 @@ function renderWeek(wk, programNarration, nameMap) {
       </summary>
       <div class="week-body">
         ${summary ? `<div class="week-notes">${esc(summary)}</div>` : ""}
-        ${(wk.days ?? []).map(d => renderDay(d, nameMap)).join("")}
+        ${(wk.days ?? []).map(d => renderDay(d, nameMap, ctx)).join("")}
       </div>
     </details>`;
 }
@@ -367,6 +434,7 @@ function renderProgram(type, preview, meta) {
   const fillFailed = debug?.step1?.fill_failed;
   const narSource = debug?.step5?.source ?? "";
   const weeks = program.weeks ?? [];
+  const slotDebugMap = buildSlotDebugMap(debug);
 
   const badges = [
     configKey ? `<span class="badge">${esc(configKey)}</span>` : "",
@@ -384,7 +452,7 @@ function renderProgram(type, preview, meta) {
       <div class="prog-meta">${badges}</div>
     </div>
     <div class="weeks">
-      ${weeks.map(w => renderWeek(w, program.narration, nameMap)).join("")}
+      ${weeks.map(w => renderWeek(w, program.narration, nameMap, { slotDebugMap })).join("")}
       ${!weeks.length ? `<div class="panel-empty">No weeks in program output</div>` : ""}
     </div>
     <details class="dbg">
@@ -485,6 +553,10 @@ function rerenderPreviewPanels() {
 
 narrationToggleEl.addEventListener("change", () => {
   sessionStorage.setItem(SHOW_NARRATION_KEY, narrationToggleEl.checked ? "1" : "0");
+  rerenderPreviewPanels();
+});
+debugToggleEl.addEventListener("change", () => {
+  sessionStorage.setItem(SHOW_DEBUG_KEY, debugToggleEl.checked ? "1" : "0");
   rerenderPreviewPanels();
 });
 </script>
