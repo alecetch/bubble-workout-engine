@@ -1,8 +1,9 @@
-import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { apiRegister } from "../../api/authApi";
+import { apiRegister, type AuthTokens } from "../../api/authApi";
 import { ApiError } from "../../api/client";
 import { getClientProfile } from "../../api/clientProfiles";
 import { saveTokens } from "../../api/tokenStorage";
@@ -33,6 +34,9 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
 
   const handleSubmit = async (): Promise<void> => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -56,9 +60,26 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
     setIsSubmitting(true);
     setErrorMessage(null);
 
+    let result: AuthTokens;
     try {
-      const result = await apiRegister(normalizedEmail, password);
+      result = await apiRegister(normalizedEmail, password);
       await saveTokens(result.access_token, result.refresh_token);
+    } catch (error) {
+      console.error("[RegisterScreen] apiRegister failed:", error);
+      if (error instanceof ApiError && error.status === 409) {
+        setErrorMessage("An account with this email already exists.");
+      } else if (error instanceof ApiError && error.status === 400) {
+        setErrorMessage(error.message || "Please check your details.");
+      } else if (error instanceof ApiError) {
+        setErrorMessage(error.message || "Unable to create account. Please try again.");
+      } else {
+        setErrorMessage("Unable to create account. Please try again.");
+      }
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
       const profile = await getClientProfile(result.client_profile_id);
       const entryRoute = isOnboardingComplete(profile) ? "ProgramReview" : "OnboardingEntry";
 
@@ -72,13 +93,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
       setIdentity({ userId: result.user_id, clientProfileId: result.client_profile_id });
       setSession({ userId: result.user_id, clientProfileId: result.client_profile_id, entryRoute });
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        setErrorMessage("An account with this email already exists.");
-      } else if (error instanceof ApiError && error.status === 400) {
-        setErrorMessage(error.message || "Please check your details.");
-      } else {
-        setErrorMessage("Unable to create account. Please try again.");
-      }
+      console.error("[RegisterScreen] post-registration profile fetch failed:", error);
+      navigation.navigate("Login");
     } finally {
       setIsSubmitting(false);
     }
@@ -98,6 +114,9 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
+            textContentType="emailAddress"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
             placeholder="you@example.com"
             placeholderTextColor={colors.textSecondary}
             style={styles.input}
@@ -106,30 +125,70 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
 
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-            placeholder="Create password"
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              ref={passwordRef}
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                // Mirror to confirm while they're still in sync (handles iOS autofill).
+                if (confirmPassword === password) {
+                  setConfirmPassword(text);
+                }
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry={!showPassword}
+              textContentType="newPassword"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+              placeholder="Create password"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.inputFlex}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Confirm password</Text>
-          <TextInput
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-            placeholder="Re-enter password"
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              ref={confirmPasswordRef}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry={!showPassword}
+              textContentType="newPassword"
+              returnKeyType="go"
+              onSubmitEditing={() => void handleSubmit()}
+              placeholder="Re-enter password"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.inputFlex}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -195,6 +254,24 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: spacing.md,
     ...typography.body,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 48,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+  },
+  inputFlex: {
+    flex: 1,
+    color: colors.textPrimary,
+    ...typography.body,
+  },
+  eyeBtn: {
+    paddingLeft: spacing.sm,
   },
   errorText: {
     color: colors.warning,

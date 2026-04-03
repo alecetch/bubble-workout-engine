@@ -564,6 +564,9 @@ app.patch("/api/users/me", requireAuth, handleUsersMe);
 // DEPRECATED — remove after Bubble client updates to /api/users/me
 app.patch("/users/me", requireAuth, handleUsersMe);
 
+// Auth routes must be mounted before any /api router that applies requireAuth globally.
+app.use("/api/auth", authRouter);
+
 // Mount routers.
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
@@ -598,7 +601,6 @@ app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminSyncRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
-app.use("/api/auth", authRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates
