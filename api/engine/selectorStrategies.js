@@ -1,4 +1,4 @@
-import { pickWithFallback } from "./exerciseSelector.js";
+import { debugRankWithFallback, pickWithFallback } from "./exerciseSelector.js";
 
 function bestMatchByMovement(slotDef, catalogIndex, state) {
   const compiledConfig = state?.compiledConfig ?? null;
@@ -33,13 +33,28 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     selectionMode: state?.daySelectionMode || "default",
   };
 
+  if (state?.slotSelectionDebug && typeof state.slotSelectionDebug === "object") {
+    Object.assign(
+      state.slotSelectionDebug,
+      debugRankWithFallback(
+        catalogIndex.allowedSet,
+        catalogIndex.byId,
+        sel,
+        state.usedIdsWeek,
+        state.usedIdsToday,
+        state.usedRegionsToday,
+        mergedAvoidCanonicalNames,
+      ),
+    );
+  }
+
   return pickWithFallback(
     catalogIndex.allowedSet,
     catalogIndex.byId,
     sel,
     state.usedIdsWeek,
     state.stats,
-    state.usedSw2Today,
+    state.usedIdsToday,
     state.usedRegionsToday,
     mergedAvoidCanonicalNames,
   );

@@ -113,8 +113,8 @@ The engine operates three independent deduplication layers:
 ### 6a. Week-level deduplication
 `state.usedIdsWeek` (a `Set`) is maintained across all days in the program week. Any exercise already used in the week is skipped by `pickBest()`. This prevents the same exercise appearing on Monday and Thursday.
 
-### 6b. Swap-group-2 anti-repeat within a day
-`state.usedSw2Today` tracks which `sw2` values have already been assigned within the current day. If a slot's requested `sw2` is already taken, `attemptAvoidRepeatSw2()` tries to find an alternative with the same `sw` or `mp` but a different `sw2`. This prevents, for example, two `squat_compound` exercises in the same session.
+### 6b. Same-day exact-exercise anti-repeat within a day
+`state.usedIdsToday` tracks which exact exercise IDs have already been assigned within the current day. The selector first tries to find a match that avoids repeating an exact exercise already used today, but it does not exclude the whole `sw2` family. This means a later slot can still select a different strong candidate with the same requested `sw2`.
 
 ### 6c. Target region overlap penalty
 `state.usedRegionsToday` accumulates the `target_regions_json` tags of every exercise placed so far in the day. Scoring applies a −0.3 penalty per region overlap (one region shared) and −1.5 for two or more regions shared. This is a soft penalty, not a hard exclusion — if no non-overlapping exercise exists, an overlapping one will still be selected.
@@ -210,6 +210,8 @@ picked_allow_dup     — week-dedup relaxed (low catalogue variety)
 fills_add_sets       — slot unfillable, extra set added to sibling slot
 avoided_repeat_sw2   — anti-repeat sw2 logic triggered
 ```
+
+Note: `avoided_repeat_sw2` is now a legacy stat name. The selector no longer excludes the full `sw2` family as its primary same-day repeat rule; same-day duplicate pressure now focuses on exact exercise repeats.
 
 High counts in `picked_mp_relaxed`, `picked_allow_dup`, or `fills_add_sets` for a specific slot are the signal that the catalogue needs new exercises for that movement pattern or swap group.
 
