@@ -55,6 +55,35 @@ function findMainSingleSegment(program) {
   return segments.find((seg) => seg?.segment_type === "single" && seg?.purpose === "main") ?? null;
 }
 
+function makeSingleItemProgram(item) {
+  return {
+    program_type: "hypertrophy",
+    duration_mins: 40,
+    days_per_week: 1,
+    days: [
+      {
+        day_index: 1,
+        segments: [
+          {
+            segment_index: 1,
+            segment_type: "single",
+            purpose: "main",
+            rounds: 1,
+            items: [
+              {
+                ex_id: "ex1",
+                ex_name: "Test Exercise",
+                sets: 1,
+                ...item,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 test("applyNarration uses narrationTemplates array (DB rows) when provided", async () => {
   const out = await applyNarration({
     program: makeProgram(),
@@ -349,4 +378,346 @@ test("applyNarration prefers simulation-specific day title over generic fallback
   assert.equal(out.debug.ok, true);
   assert.equal(dayTitle, "Simulation Day");
   assert.equal(dayTitle.includes("Hypertrophy"), false);
+});
+
+test("applyNarration suppresses exercise cues, load hint, and log prompt for interval-style items", async () => {
+  const out = await applyNarration({
+    program: {
+      program_type: "hyrox",
+      duration_mins: 40,
+      days_per_week: 1,
+      days: [
+        {
+          day_index: 1,
+          day_focus: "simulation",
+          segments: [
+            {
+              segment_index: 1,
+              segment_type: "single",
+              purpose: "main",
+              rounds: 1,
+              items: [
+                {
+                  ex_id: "run1",
+                  ex_name: "Run Interval",
+                  slot: "A:run_buy_in",
+                  sets: 1,
+                  reps_prescribed: "400-400 m",
+                  reps_unit: "m",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    narrationTemplates: [
+      {
+        template_id: "cue_line",
+        scope: "exercise",
+        field: "CUE_LINE",
+        priority: 1,
+        text_pool_json: ["Cues: {CUE_1}. {CUE_2}."],
+      },
+      {
+        template_id: "load_hint",
+        scope: "exercise",
+        field: "LOAD_HINT",
+        priority: 1,
+        text_pool_json: ["Add load only when every rep looks the same."],
+      },
+      {
+        template_id: "logging_prompt",
+        scope: "exercise",
+        field: "LOGGING_PROMPT",
+        priority: 1,
+        text_pool_json: ["Track the top set and total reps."],
+      },
+      {
+        template_id: "exercise_line",
+        scope: "exercise",
+        field: "EXERCISE_LINE",
+        purpose: "main",
+        priority: 1,
+        text_pool_json: ["{EX_NAME}: {SETS} x {REP_RANGE}"],
+      },
+    ],
+    narrationSource: "db",
+    narrationTemplatesJson: null,
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: JSON.stringify({
+      schema: "catalog_v3",
+      ex: [{ id: "run1", mp: "locomotion", sw2: "run_interval" }],
+    }),
+    cooldownSeconds: 120,
+  });
+
+  const runItem = out.program?.days?.[0]?.segments?.find((seg) => seg.segment_type === "single")?.items?.[0];
+  assert.equal(out.debug.ok, true);
+  assert.equal(runItem?.narration?.cues ?? "", "");
+  assert.equal(runItem?.narration?.load_hint ?? "", "");
+  assert.equal(runItem?.narration?.log_prompt ?? "", "");
+  assert.equal(runItem?.narration?.line ?? "", "Run Interval: 1 x 400-400 m");
+});
+
+test("applyNarration prefers catalogue coaching content over exercise templates when present", async () => {
+  const out = await applyNarration({
+    program: makeProgram(),
+    narrationTemplates: [
+      {
+        template_id: "cue_line",
+        scope: "exercise",
+        field: "CUE_LINE",
+        priority: 1,
+        text_pool_json: ["Cues: {CUE_1}. {CUE_2}."],
+      },
+      {
+        template_id: "load_hint",
+        scope: "exercise",
+        field: "LOAD_HINT",
+        priority: 1,
+        text_pool_json: ["Template load hint."],
+      },
+      {
+        template_id: "logging_prompt",
+        scope: "exercise",
+        field: "LOGGING_PROMPT",
+        priority: 1,
+        text_pool_json: ["Template logging prompt."],
+      },
+      {
+        template_id: "exercise_line",
+        scope: "exercise",
+        field: "EXERCISE_LINE",
+        purpose: "main",
+        priority: 1,
+        text_pool_json: ["{EX_NAME}: {SETS} x {REP_RANGE}"],
+      },
+    ],
+    narrationSource: "db",
+    narrationTemplatesJson: null,
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: JSON.stringify({
+      schema: "catalog_v3",
+      ex: [
+        {
+          id: "ex1",
+          wh: ["hips"],
+          coaching_cues_json: ["Brace before you pull", "Push the floor away", "Keep the bar close"],
+          load_guidance: "Add load gradually while keeping your hinge shape.",
+          logging_guidance: "Log the heaviest successful set and total volume.",
+        },
+      ],
+    }),
+    cooldownSeconds: 120,
+  });
+
+  const item = out.program?.days?.[0]?.segments?.find((seg) => seg.segment_type === "single")?.items?.[0];
+  assert.equal(out.debug.ok, true);
+  assert.equal(item?.narration?.cues ?? "", "Brace before you pull · Push the floor away · Keep the bar close");
+  assert.equal(item?.narration?.load_hint ?? "", "Add load gradually while keeping your hinge shape.");
+  assert.equal(item?.narration?.log_prompt ?? "", "Log the heaviest successful set and total volume.");
+  assert.equal(item?.narration_debug?.cues_source ?? "", "catalogue");
+  assert.equal(item?.narration_debug?.load_hint_source ?? "", "catalogue");
+  assert.equal(item?.narration_debug?.log_prompt_source ?? "", "catalogue");
+});
+
+test("applyNarration keeps catalogue coaching content for interval-style items while suppressing template fallback", async () => {
+  const out = await applyNarration({
+    program: {
+      program_type: "hyrox",
+      duration_mins: 40,
+      days_per_week: 1,
+      days: [
+        {
+          day_index: 1,
+          day_focus: "simulation",
+          segments: [
+            {
+              segment_index: 1,
+              segment_type: "single",
+              purpose: "main",
+              rounds: 1,
+              items: [
+                {
+                  ex_id: "run1",
+                  ex_name: "Run Interval",
+                  slot: "A:run_buy_in",
+                  sets: 1,
+                  reps_prescribed: "400 m",
+                  reps_unit: "m",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    narrationTemplates: [
+      {
+        template_id: "cue_line",
+        scope: "exercise",
+        field: "CUE_LINE",
+        priority: 1,
+        text_pool_json: ["Cues: {CUE_1}. {CUE_2}."],
+      },
+      {
+        template_id: "load_hint",
+        scope: "exercise",
+        field: "LOAD_HINT",
+        priority: 1,
+        text_pool_json: ["Template load hint."],
+      },
+      {
+        template_id: "logging_prompt",
+        scope: "exercise",
+        field: "LOGGING_PROMPT",
+        priority: 1,
+        text_pool_json: ["Template logging prompt."],
+      },
+      {
+        template_id: "exercise_line",
+        scope: "exercise",
+        field: "EXERCISE_LINE",
+        purpose: "main",
+        priority: 1,
+        text_pool_json: ["{EX_NAME}: {SETS} x {REP_RANGE}"],
+      },
+    ],
+    narrationSource: "db",
+    narrationTemplatesJson: null,
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: JSON.stringify({
+      schema: "catalog_v3",
+      ex: [
+        {
+          id: "run1",
+          mp: "locomotion",
+          sw2: "run_interval",
+          coaching_cues_json: ["Stay tall", "Short quick steps"],
+          load_guidance: "Use a pace you can repeat smoothly.",
+          logging_guidance: "Log distance and completion time.",
+        },
+      ],
+    }),
+    cooldownSeconds: 120,
+  });
+
+  const runItem = out.program?.days?.[0]?.segments?.find((seg) => seg.segment_type === "single")?.items?.[0];
+  assert.equal(out.debug.ok, true);
+  assert.equal(runItem?.narration?.cues ?? "", "Stay tall · Short quick steps");
+  assert.equal(runItem?.narration?.load_hint ?? "", "Use a pace you can repeat smoothly.");
+  assert.equal(runItem?.narration?.log_prompt ?? "", "Log distance and completion time.");
+  assert.equal(runItem?.narration_debug?.cues_source ?? "", "catalogue");
+  assert.equal(runItem?.narration_debug?.load_hint_source ?? "", "catalogue");
+  assert.equal(runItem?.narration_debug?.log_prompt_source ?? "", "catalogue");
+});
+
+test("applyNarration PRESCRIPTION_TEXT appends reps for plain rep prescriptions", async () => {
+  const out = await applyNarration({
+    program: makeSingleItemProgram({ reps_prescribed: "15-20", reps_unit: "reps" }),
+    narrationTemplatesJson: JSON.stringify([
+      {
+        template_id: "exercise_line_prescription_text",
+        scope: "exercise",
+        field: "EXERCISE_LINE",
+        priority: 1,
+        purpose: "main",
+        text_pool_json: ["{EX_NAME}: {SETS} x {PRESCRIPTION_TEXT}"],
+      },
+    ]),
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: makeCatalogJson(),
+    cooldownSeconds: 120,
+  });
+
+  const item = out.program?.days?.[0]?.segments?.find((seg) => seg.segment_type === "single")?.items?.[0];
+  assert.equal(out.debug.ok, true);
+  assert.equal(item?.narration?.line?.includes("15-20 reps"), true);
+});
+
+test("applyNarration PRESCRIPTION_TEXT leaves meter prescriptions unchanged", async () => {
+  const out = await applyNarration({
+    program: makeSingleItemProgram({ reps_prescribed: "400 m", reps_unit: "m" }),
+    narrationTemplatesJson: JSON.stringify([
+      {
+        template_id: "exercise_line_prescription_text",
+        scope: "exercise",
+        field: "EXERCISE_LINE",
+        priority: 1,
+        purpose: "main",
+        text_pool_json: ["{EX_NAME}: {SETS} x {PRESCRIPTION_TEXT}"],
+      },
+    ]),
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: makeCatalogJson(),
+    cooldownSeconds: 120,
+  });
+
+  const item = out.program?.days?.[0]?.segments?.find((seg) => seg.segment_type === "single")?.items?.[0];
+  assert.equal(out.debug.ok, true);
+  assert.equal(item?.narration?.line?.includes("400 m"), true);
+  assert.equal(item?.narration?.line?.includes("400 m reps"), false);
+});
+
+test("applyNarration PRESCRIPTION_TEXT leaves seconds prescriptions unchanged", async () => {
+  const out = await applyNarration({
+    program: makeSingleItemProgram({ reps_prescribed: "30 seconds", reps_unit: "seconds" }),
+    narrationTemplatesJson: JSON.stringify([
+      {
+        template_id: "exercise_line_prescription_text",
+        scope: "exercise",
+        field: "EXERCISE_LINE",
+        priority: 1,
+        purpose: "main",
+        text_pool_json: ["{EX_NAME}: {SETS} x {PRESCRIPTION_TEXT}"],
+      },
+    ]),
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: makeCatalogJson(),
+    cooldownSeconds: 120,
+  });
+
+  const item = out.program?.days?.[0]?.segments?.find((seg) => seg.segment_type === "single")?.items?.[0];
+  assert.equal(out.debug.ok, true);
+  assert.equal(item?.narration?.line?.includes("30 seconds"), true);
+  assert.equal(item?.narration?.line?.includes("30 seconds reps"), false);
+});
+
+test("applyNarration REP_RANGE backward compatibility remains unchanged", async () => {
+  const out = await applyNarration({
+    program: makeSingleItemProgram({ reps_prescribed: "15-20", reps_unit: "reps" }),
+    narrationTemplatesJson: JSON.stringify([
+      {
+        template_id: "exercise_line_rep_range",
+        scope: "exercise",
+        field: "EXERCISE_LINE",
+        priority: 1,
+        purpose: "main",
+        text_pool_json: ["{EX_NAME}: {SETS} x {REP_RANGE}"],
+      },
+    ]),
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: makeCatalogJson(),
+    cooldownSeconds: 120,
+  });
+
+  const item = out.program?.days?.[0]?.segments?.find((seg) => seg.segment_type === "single")?.items?.[0];
+  assert.equal(out.debug.ok, true);
+  assert.equal(item?.narration?.line?.includes("15-20"), true);
+  assert.equal(item?.narration?.line?.includes("15-20 reps"), false);
 });

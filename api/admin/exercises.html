@@ -200,6 +200,7 @@
         <a href="/admin/observability">Observability</a>
         <a href="/admin/preview">Preview</a>
         <a href="/admin-ui/users.html">Users</a>
+            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
       </nav>
       <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">⬇ Sync All to Flyway</button>
     </div>
@@ -575,7 +576,9 @@
     <!-- Notes -->
     <fieldset class="fg">
       <legend>Notes</legend>
-      <div class="f"><label for="f-form_cues">Form Cues</label><textarea id="f-form_cues" rows="3"></textarea></div>
+      <div class="f"><label for="f-coaching_cues_json">Coaching Cues JSON</label><textarea id="f-coaching_cues_json" rows="3" placeholder='["Stay tall", "Short quick steps"]'></textarea></div>
+      <div class="f"><label for="f-load_guidance">Load Guidance</label><textarea id="f-load_guidance" rows="3"></textarea></div>
+      <div class="f"><label for="f-logging_guidance">Logging Guidance</label><textarea id="f-logging_guidance" rows="3"></textarea></div>
     </fieldset>
 
     <!-- Impact preview -->
@@ -1311,10 +1314,17 @@ const FIELDS = [
   "is_loadable","engine_anchor","strength_equivalent","is_archived",
   "equipment_items_slugs","equipment_json",
   "target_regions_json","warmup_hooks","preferred_in_json",
-  "contraindications_slugs","contraindications_json","form_cues",
+  "contraindications_slugs","contraindications_json","coaching_cues_json",
+  "load_guidance","logging_guidance",
 ];
 
 function fEl(id) { return document.getElementById(`f-${id}`); }
+const JSON_TEXTAREA_FIELDS = new Set([
+  "coaching_cues_json",
+  "contraindications_json",
+  "target_regions_json",
+  "warmup_hooks",
+]);
 function setFV(id, value) {
   if (id === "preferred_in_json") { setPrefTags(Array.isArray(value) ? value : []); return; }
   if (id === "equipment_items_slugs") { setEqSlugs(Array.isArray(value) ? value : (value ? String(value).split(",").map(s=>s.trim()).filter(Boolean) : [])); return; }
@@ -1322,6 +1332,7 @@ function setFV(id, value) {
   const el = fEl(id); if (!el) return;
   if (el.type === "checkbox") { el.checked = Boolean(value); }
   else if (el.type === "hidden") { el.value = value != null ? JSON.stringify(value) : ""; }
+  else if (JSON_TEXTAREA_FIELDS.has(id)) { el.value = JSON.stringify(value ?? [], null, 2); }
   else if (Array.isArray(value)) { el.value = value.join(", "); }
   else if (value !== null && typeof value === "object") { el.value = JSON.stringify(value, null, 2); }
   else { el.value = value ?? ""; }
@@ -1472,7 +1483,9 @@ function collectPayload() {
     swap_group_id_1: getFV("swap_group_id_1") || null,
     swap_group_id_2: getFV("swap_group_id_2") || null,
     strength_equivalent: getFV("strength_equivalent"),
-    form_cues: getFV("form_cues") || null,
+    coaching_cues_json: toJson(getFV("coaching_cues_json")),
+    load_guidance: getFV("load_guidance") || null,
+    logging_guidance: getFV("logging_guidance") || null,
     equipment_items_slugs: _eqSlugs,
     contraindications_slugs: toArr(getFV("contraindications_slugs")),
     equipment_json: _eqSlugs,

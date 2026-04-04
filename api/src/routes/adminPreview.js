@@ -75,7 +75,7 @@ export function createPreviewHandler({
     const preferredDays = resolvePreferredDays(daysPerWeek);
 
     let client;
-    let equipmentSlugs, allowedIds, exerciseRows;
+    let equipmentSlugs, allowedIds, exerciseRows, repRuleRows;
     try {
       client = await db.connect();
 
@@ -94,6 +94,36 @@ export function createPreviewHandler({
         `SELECT * FROM exercise_catalogue WHERE is_archived = false ORDER BY exercise_id`,
       );
       exerciseRows = exR.rows;
+
+      const repRuleR = await client.query(
+        `SELECT
+           rule_id,
+           program_type,
+           day_type,
+           purpose,
+           segment_type,
+           movement_pattern,
+           swap_group_id_1,
+           swap_group_id_2,
+           equipment_slug,
+           rep_low,
+           rep_high,
+           reps_unit,
+           rir_target,
+           rir_min,
+           rir_max,
+           tempo_eccentric,
+           tempo_pause_bottom,
+           tempo_concentric,
+           tempo_pause_top,
+           rest_after_set_sec,
+           rest_after_round_sec,
+           priority
+         FROM public.program_rep_rule
+         WHERE is_active = true
+         ORDER BY rule_id ASC`,
+      );
+      repRuleRows = repRuleR.rows;
     } finally {
       client?.release();
     }
@@ -101,6 +131,9 @@ export function createPreviewHandler({
     // Exercise name map — passed to UI as display aid, not baked into program tree.
     const exerciseNameMap = Object.fromEntries(
       exerciseRows.map((r) => [String(r.exercise_id), r.name]),
+    );
+    const repRuleMap = Object.fromEntries(
+      (repRuleRows ?? []).map((r) => [String(r.rule_id), r]),
     );
 
     const synthProfile = buildSynthProfile({
@@ -152,6 +185,7 @@ export function createPreviewHandler({
         duration_mins: durationMins,
         allowed_exercise_count: allowedIds.length,
         exercise_name_map: exerciseNameMap,
+        rep_rule_map: repRuleMap,
       },
       previews,
     });

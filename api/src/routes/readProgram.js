@@ -361,7 +361,10 @@ export function createReadProgramHandlers(db = pool) {
           tempo,
           rest_seconds,
           notes,
-          is_loadable
+          is_loadable,
+          coaching_cues_json,
+          load_hint,
+          log_prompt
         FROM program_exercise
         WHERE program_day_id = $1
         ORDER BY order_in_day

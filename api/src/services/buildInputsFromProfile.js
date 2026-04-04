@@ -83,6 +83,10 @@ function mapExerciseRowsToCatalogEx(exerciseRows) {
     mc: row.movement_class || "",
     tr: row.target_regions_json ?? [],
     wh: row.warmup_hooks ?? [],
+    accepts_distance_unit: Boolean(row.accepts_distance_unit),
+    coaching_cues_json: row.coaching_cues_json ?? [],
+    load_guidance: row.load_guidance ?? "",
+    logging_guidance: row.logging_guidance ?? "",
   }));
 }
 

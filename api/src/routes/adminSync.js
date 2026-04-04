@@ -94,7 +94,7 @@ ON CONFLICT (config_key) DO UPDATE SET
 async function generateRepRulesSnapshot(db) {
   const { rows } = await db.query(`
     SELECT rule_id, program_type, schema_version, is_active, day_type, purpose,
-           segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+           segment_type, movement_pattern, swap_group_id_1, swap_group_id_2, equipment_slug,
            rep_low, rep_high, reps_unit,
            rir_target, rir_min, rir_max,
            tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
@@ -107,7 +107,7 @@ async function generateRepRulesSnapshot(db) {
   const inserts = rows.map((r) => `\
 INSERT INTO public.program_rep_rule (
   rule_id, program_type, schema_version, is_active, day_type, purpose,
-  segment_type, movement_pattern, swap_group_id_2, equipment_slug,
+  segment_type, movement_pattern, swap_group_id_1, swap_group_id_2, equipment_slug,
   rep_low, rep_high, reps_unit,
   rir_target, rir_min, rir_max,
   tempo_eccentric, tempo_pause_bottom, tempo_concentric, tempo_pause_top,
@@ -122,6 +122,7 @@ INSERT INTO public.program_rep_rule (
   ${textLit(r.purpose)},
   ${textLit(r.segment_type)},
   ${textLit(r.movement_pattern)},
+  ${textLit(r.swap_group_id_1)},
   ${textLit(r.swap_group_id_2)},
   ${textLit(r.equipment_slug)},
   ${intLit(r.rep_low)},
@@ -148,6 +149,7 @@ ON CONFLICT (rule_id) DO UPDATE SET
   purpose              = EXCLUDED.purpose,
   segment_type         = EXCLUDED.segment_type,
   movement_pattern     = EXCLUDED.movement_pattern,
+  swap_group_id_1      = EXCLUDED.swap_group_id_1,
   swap_group_id_2      = EXCLUDED.swap_group_id_2,
   equipment_slug       = EXCLUDED.equipment_slug,
   rep_low              = EXCLUDED.rep_low,

@@ -165,10 +165,12 @@ function mapRow(row) {
     engine_role: toNullableText(firstNonEmpty(row, ["engine_role"])),
     equipment_items_slugs: parseSlugsCsvToArray(firstNonEmpty(row, ["equipment_items_slugs_csv"])),
     equipment_json: parseJsonArray(firstNonEmpty(row, ["equipment_json"])),
-    form_cues: toNullableText(firstNonEmpty(row, ["form_cues"])),
+    coaching_cues_json: parseJsonArray(firstNonEmpty(row, ["coaching_cues_json"])),
     impact_level: toInt(firstNonEmpty(row, ["impact_level"]), 0),
     lift_class: toNullableText(firstNonEmpty(row, ["lift_class"])),
     preferred_in_json: parseJsonArray(firstNonEmpty(row, ["preferred_in_json"])),
+    load_guidance: toNullableText(firstNonEmpty(row, ["load_guidance"])),
+    logging_guidance: toNullableText(firstNonEmpty(row, ["logging_guidance"])),
     swap_group_id_1: toNullableText(firstNonEmpty(row, ["swap_group_id_1"])),
     swap_group_id_2: toNullableText(firstNonEmpty(row, ["swap_group_id_2"])),
     target_regions_json: parseJsonArray(firstNonEmpty(row, ["target_regions_json"])),
@@ -195,10 +197,12 @@ INSERT INTO exercise_catalogue (
   engine_role,
   equipment_items_slugs,
   equipment_json,
-  form_cues,
+  coaching_cues_json,
   impact_level,
   lift_class,
   preferred_in_json,
+  load_guidance,
+  logging_guidance,
   swap_group_id_1,
   swap_group_id_2,
   target_regions_json,
@@ -208,7 +212,7 @@ INSERT INTO exercise_catalogue (
   updated_at
 )
 VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::text[],$11,$12,$13,$14::text[],$15::jsonb,$16,$17,$18,$19::jsonb,$20,$21,$22::jsonb,$23::jsonb,$24,$25,now()
+  $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::text[],$11,$12,$13,$14::text[],$15::jsonb,$16::jsonb,$17,$18,$19::jsonb,$20,$21,$22,$23,$24::jsonb,$25::jsonb,$26,$27,now()
 )
 ON CONFLICT (exercise_id)
 DO UPDATE SET
@@ -226,10 +230,12 @@ DO UPDATE SET
   engine_role = EXCLUDED.engine_role,
   equipment_items_slugs = EXCLUDED.equipment_items_slugs,
   equipment_json = EXCLUDED.equipment_json,
-  form_cues = EXCLUDED.form_cues,
+  coaching_cues_json = EXCLUDED.coaching_cues_json,
   impact_level = EXCLUDED.impact_level,
   lift_class = EXCLUDED.lift_class,
   preferred_in_json = EXCLUDED.preferred_in_json,
+  load_guidance = EXCLUDED.load_guidance,
+  logging_guidance = EXCLUDED.logging_guidance,
   swap_group_id_1 = EXCLUDED.swap_group_id_1,
   swap_group_id_2 = EXCLUDED.swap_group_id_2,
   target_regions_json = EXCLUDED.target_regions_json,
@@ -275,10 +281,12 @@ async function run() {
         r.engine_role,
         r.equipment_items_slugs,
         JSON.stringify(r.equipment_json),
-        r.form_cues,
+        JSON.stringify(r.coaching_cues_json),
         r.impact_level,
         r.lift_class,
         JSON.stringify(r.preferred_in_json),
+        r.load_guidance,
+        r.logging_guidance,
         r.swap_group_id_1,
         r.swap_group_id_2,
         JSON.stringify(r.target_regions_json),

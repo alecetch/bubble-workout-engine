@@ -13,6 +13,7 @@ export async function fetchActiveRepRules(db) {
       segment_type,
       purpose,
       movement_pattern,
+      swap_group_id_1,
       swap_group_id_2,
       equipment_slug,
       reps_unit,
@@ -28,7 +29,9 @@ export async function fetchActiveRepRules(db) {
       rest_after_set_sec,
       rest_after_round_sec,
       logging_prompt_mode,
-      notes_style
+      notes_style,
+      time_equivalent_low_sec,
+      time_equivalent_high_sec
     FROM program_rep_rule
     WHERE is_active = TRUE
     ORDER BY priority DESC NULLS LAST, rule_id ASC;
