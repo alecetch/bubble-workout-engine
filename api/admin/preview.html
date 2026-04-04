@@ -304,7 +304,54 @@ function buildSlotDebugMap(debug) {
   return map;
 }
 
-function renderSlotDebug(item, seg, day, slotDebug) {
+function formatRepRule(ruleId, repRuleMap) {
+  const id = ruleId == null || ruleId === "" ? "" : String(ruleId);
+  if (!id) return "none";
+  const rule = repRuleMap?.[id];
+  if (!rule) return `#${id}`;
+
+  const repLo = rule.rep_low != null && rule.rep_low !== "" ? String(rule.rep_low) : "";
+  const repHi = rule.rep_high != null && rule.rep_high !== "" ? String(rule.rep_high) : "";
+  let repRange = "-";
+  if (repLo && repHi) repRange = repLo === repHi ? repLo : `${repLo}-${repHi}`;
+  else if (repLo || repHi) repRange = repLo || repHi;
+  if (repRange !== "-" && rule.reps_unit && rule.reps_unit !== "reps") repRange += ` ${rule.reps_unit}`;
+
+  const tempoParts = [
+    rule.tempo_eccentric,
+    rule.tempo_pause_bottom,
+    rule.tempo_concentric,
+    rule.tempo_pause_top,
+  ].map(v => (v == null || v === "" ? "0" : String(v)));
+  const tempo = tempoParts.every(v => v === "0") ? "-" : tempoParts.join("-");
+
+  const rir = rule.rir_target != null && rule.rir_target !== ""
+    ? `target ${rule.rir_target}`
+    : (rule.rir_min != null || rule.rir_max != null)
+      ? `${rule.rir_min ?? "-"}-${rule.rir_max ?? "-"}`
+      : "-";
+
+  const bits = [
+    `#${id}`,
+    `program_type=${rule.program_type || "-"}`,
+    `day_type=${rule.day_type || "-"}`,
+    `purpose=${rule.purpose || "-"}`,
+    `segment_type=${rule.segment_type || "-"}`,
+    `mp=${rule.movement_pattern || "-"}`,
+    `sw=${rule.swap_group_id_1 || "-"}`,
+    `sw2=${rule.swap_group_id_2 || "-"}`,
+    `equipment=${rule.equipment_slug || "-"}`,
+    `reps=${repRange}`,
+    `rir=${rir}`,
+    `tempo=${tempo}`,
+    `rest_set=${rule.rest_after_set_sec || "-"}`,
+    `rest_round=${rule.rest_after_round_sec || "-"}`,
+    `priority=${rule.priority || "-"}`,
+  ];
+  return bits.join(" | ");
+}
+
+function renderSlotDebug(item, seg, day, slotDebug, repRuleMap) {
   if (!showDebugEnabled()) return "";
   const ranked = Array.isArray(slotDebug?.ranked_candidates) ? slotDebug.ranked_candidates : [];
   const rankedText = ranked.length
@@ -330,6 +377,7 @@ function renderSlotDebug(item, seg, day, slotDebug) {
     `slot: ${item?.slot || slotDebug?.slot || "-"} | mp=${slotDebug?.mp || "-"} | sw=${slotDebug?.sw || "-"} | sw2=${slotDebug?.sw2 || "-"}`,
     `selected: ${slotDebug?.selected_exercise_id ? `#${slotDebug.selected_exercise_id} ${slotDebug.selected_exercise_name || ""}` : (slotDebug?.fill || "none")}`,
     `selection_path: ${slotDebug?.selected_attempt_label || "-"}`,
+    `rep_rule: ${formatRepRule(item?.rep_rule_id ?? seg?.rep_rule_id, repRuleMap)}`,
     "ranked_matches:",
     rankedText,
     `narration_rules: ${templateRefs.length ? templateRefs.join(" | ") : "none"}`,
@@ -338,14 +386,33 @@ function renderSlotDebug(item, seg, day, slotDebug) {
   return `<pre class="slot-dbg">${esc(lines.join("\n"))}</pre>`;
 }
 
+function buildCompactPrescriptionText(item) {
+  const base = String(item?.reps_prescribed || "").trim();
+  if (!base) return "";
+  const unit = String(item?.reps_unit || "reps").trim().toLowerCase();
+  if (!unit || unit === "reps") return `${base} reps`;
+  return base;
+}
+
 function renderItem(item, nameMap, ctx) {
   const name = nameMap[String(item.ex_id)] ?? `#${item.ex_id}`;
   const parts = [];
-  if (item.sets != null) parts.push(`${item.sets}×`);
-  if (item.reps_prescribed) parts.push(item.reps_prescribed);
-  if (item.tempo_prescribed) parts.push(item.tempo_prescribed);
-  if (item.rir_target != null) parts.push(`RIR ${item.rir_target}`);
+  const repsUnit = String(item.reps_unit || "").trim().toLowerCase();
+  const isIntervalStyle = repsUnit === "m" || repsUnit === "seconds" || repsUnit === "cal";
+  const prescriptionText = buildCompactPrescriptionText(item);
+  const setsLabel = item.sets != null ? `${item.sets}x` : "";
+  if (item.sets != null) parts.push(`${item.sets}x`);
+  if (prescriptionText) parts.push(prescriptionText);
+  if (item.tempo_prescribed && item.tempo_prescribed !== "0-0-0-0") parts.push(item.tempo_prescribed);
+  if (item.rir_target != null && !(isIntervalStyle && Number(item.rir_target) === 0)) parts.push(`RIR ${item.rir_target}`);
   if (item.rest_after_set_sec) parts.push(`${item.rest_after_set_sec}s`);
+  const metaText = parts.length === 2 && setsLabel && prescriptionText
+    ? `${setsLabel} ${prescriptionText}`
+    : parts.join(" | ");
+  if (metaText && metaText !== parts.join(" | ")) {
+    parts.length = 0;
+    parts.push(metaText);
+  }
   const slotDebug = ctx?.slotDebugMap?.get(`${ctx?.day?.day_index}|${item.slot ?? ""}`) ?? null;
   return `
     <div class="item">
@@ -354,7 +421,7 @@ function renderItem(item, nameMap, ctx) {
         <span class="ex-meta">${esc(parts.join(" · "))}</span>
       </div>
       ${showNarrationEnabled() ? `<div class="item-nar">${renderNar(item.narration)}</div>` : ""}
-      ${renderSlotDebug(item, ctx?.seg, ctx?.day, slotDebug)}
+      ${renderSlotDebug(item, ctx?.seg, ctx?.day, slotDebug, ctx?.repRuleMap)}
     </div>`;
 }
 
@@ -395,7 +462,7 @@ function renderDay(day, nameMap, ctx) {
       <div class="day-body">
         ${showNarrationEnabled() && day.narration?.day_goal ? `<div class="day-goal">${esc(day.narration.day_goal)}</div>` : ""}
         ${showNarrationEnabled() ? renderNar(day.narration, dayNarSkip) : ""}
-        ${segs.map(s => renderSeg(s, nameMap, { ...ctx, day })).join("")}
+      ${segs.map(s => renderSeg(s, nameMap, { ...ctx, day })).join("")}
         ${!segs.length ? `<div class="panel-empty" style="padding:8px">No segments</div>` : ""}
       </div>
     </details>`;
@@ -431,6 +498,7 @@ function renderProgram(type, preview, meta) {
   const summary = program.program_summary || program.narration?.program?.summary || "";
   const configKey = debug?.step1?.config_key ?? "";
   const allowedCount = meta.allowed_exercise_count ?? "?";
+  const repRuleMap = meta.rep_rule_map ?? {};
   const fillFailed = debug?.step1?.fill_failed;
   const narSource = debug?.step5?.source ?? "";
   const weeks = program.weeks ?? [];
@@ -452,7 +520,7 @@ function renderProgram(type, preview, meta) {
       <div class="prog-meta">${badges}</div>
     </div>
     <div class="weeks">
-      ${weeks.map(w => renderWeek(w, program.narration, nameMap, { slotDebugMap })).join("")}
+      ${weeks.map(w => renderWeek(w, program.narration, nameMap, { slotDebugMap, repRuleMap })).join("")}
       ${!weeks.length ? `<div class="panel-empty">No weeks in program output</div>` : ""}
     </div>
     <details class="dbg">

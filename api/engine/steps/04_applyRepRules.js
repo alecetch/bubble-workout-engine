@@ -53,7 +53,7 @@ function formatRepRange(lo, hi, repsUnit) {
   const loN = toInt(lo, 0);
   const hiN = toInt(hi, 0);
   let repRange = "";
-  if (loN > 0 && hiN > 0) repRange = `${loN}-${hiN}`;
+  if (loN > 0 && hiN > 0) repRange = loN === hiN ? `${loN}` : `${loN}-${hiN}`;
   else if (loN > 0) repRange = String(loN);
   else if (hiN > 0) repRange = String(hiN);
   if (!repRange) return "";
@@ -200,6 +200,28 @@ function enrichProgramDays({ program, catalogJson, rules, source }) {
         if (rule) {
           applyRuleToItem(it, rule);
           dbg.items_with_rule += 1;
+
+          // Unit override: if the matched rule prescribes metres but the exercise
+          // does not accept a distance prescription, substitute the rule's
+          // coach-configured time equivalent instead.
+          if (
+            normalizeCmp(rule.reps_unit) === "m" &&
+            ex &&
+            !ex.accepts_distance_unit &&
+            rule.time_equivalent_low_sec != null
+          ) {
+            const timePrescription = formatRepRange(
+              rule.time_equivalent_low_sec,
+              rule.time_equivalent_high_sec,
+              "seconds",
+            );
+            it.reps_prescribed = timePrescription;
+            it.reps_unit = "seconds";
+            dbg.notes.push(
+              `Unit override: ex_id=${s(it.ex_id)} rule=${rule.rule_id} ` +
+              `${rule.rep_low}-${rule.rep_high}m → ${timePrescription} seconds`,
+            );
+          }
         } else {
           dbg.notes.push(
             `No item rule matched for ex_id=${s(it.ex_id)} day_type=${dayType} purpose=${purpose} segment_type=${segType}`,

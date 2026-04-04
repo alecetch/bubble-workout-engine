@@ -271,6 +271,52 @@ function readWarmupHooksForEx(byId, exId) {
   return out;
 }
 
+function readCoachingCues(ex) {
+  if (!ex) return "";
+  const arr = safeJsonParse(ex.coaching_cues_json || ex.coaching_cues, null);
+  if (!Array.isArray(arr) || !arr.length) return "";
+  const out = [];
+  for (const v0 of arr) {
+    const v = s(v0).trim();
+    if (v) out.push(v);
+  }
+  return out.join(" · ");
+}
+
+function buildPrescriptionText(item, fallbackRepRange) {
+  const base = s(item?.reps_prescribed).trim() || fallbackRepRange;
+  if (!base) return fallbackRepRange;
+  const unit = normalizeCmp(item?.reps_unit || "reps");
+  if (!unit || unit === "reps") return `${base} reps`;
+  return base; // m, seconds, cal - unit already embedded by formatRepRange
+}
+
+function getExField(ex, ...keys) {
+  if (!ex || typeof ex !== "object") return "";
+  for (const key of keys) {
+    const value = ex[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+  }
+  return "";
+}
+
+function normalizeCmp(v) {
+  return s(v).trim().toLowerCase().replace(/-/g, "_");
+}
+
+function isIntervalStyleItem(item, ex) {
+  const repsUnit = normalizeCmp(item?.reps_unit);
+  if (repsUnit === "m" || repsUnit === "seconds" || repsUnit === "cal") return true;
+
+  const movementPattern = normalizeCmp(getExField(ex, "mp", "movement_pattern"));
+  if (movementPattern === "locomotion" || movementPattern === "conditioning") return true;
+
+  const swapGroup2 = normalizeCmp(getExField(ex, "sw2", "swap_group_id_2"));
+  if (swapGroup2.includes("interval")) return true;
+
+  return false;
+}
+
 // ---------------- cooldown from warmup hooks (deterministic) ----------------
 function uniq(arr) {
   const seen = Object.create(null);
@@ -634,6 +680,8 @@ function enrichDays(days, templates, cfg, catalogById, context) {
         const it = items[ii] || {};
         const exName = s(it.ex_name);
         const sets = toInt(it.sets, 0);
+        const ex = catalogById && it.ex_id ? catalogById[String(it.ex_id)] : null;
+        const suppressExerciseNarration = isIntervalStyleItem(it, ex);
 
         let repRange = s(it.reps_prescribed);
         if (repRange) debugCounters.used_item_reps_prescribed += 1;
@@ -654,6 +702,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
           EX_NAME: exName,
           SETS: sets,
           REP_RANGE: repRange,
+          PRESCRIPTION_TEXT: buildPrescriptionText(it, repRange),
           RIR: rir,
           TEMPO: tempo,
           TEMPO_SHORT: tempo_short,
@@ -665,11 +714,17 @@ function enrichDays(days, templates, cfg, catalogById, context) {
         const exKey = `ex|${dayIdx}|${purpose}|${segType}|${exName}|${ii}`;
 
         const exLineMatch = findTemplateMatch(templates, "exercise", "EXERCISE_LINE", purpose, "", matchCtx);
+        const catalogCues = readCoachingCues(ex);
+        const catalogLoadHint = ex ? s(ex.load_guidance).trim() : "";
+        const catalogLogPrompt = ex ? s(ex.logging_guidance).trim() : "";
         it.narration = it.narration || {};
         it.narration.line = applyTokens(pickFromPool(exLineMatch?.pool, `${exKey}|line`), exTokens);
-        it.narration.cues = applyTokens(pickFromPool(cueMatch?.pool, `${exKey}|cues`), exTokens);
-        it.narration.load_hint = applyTokens(pickFromPool(loadMatch?.pool, `${exKey}|load`), exTokens);
-        it.narration.log_prompt = applyTokens(pickFromPool(logMatch?.pool, `${exKey}|log`), exTokens);
+        it.narration.cues = catalogCues || (suppressExerciseNarration ? "" :
+          applyTokens(pickFromPool(cueMatch?.pool, `${exKey}|cues`), exTokens));
+        it.narration.load_hint = catalogLoadHint || (suppressExerciseNarration ? "" :
+          applyTokens(pickFromPool(loadMatch?.pool, `${exKey}|load`), exTokens));
+        it.narration.log_prompt = catalogLogPrompt || (suppressExerciseNarration ? "" :
+          applyTokens(pickFromPool(logMatch?.pool, `${exKey}|log`), exTokens));
         it.narration_debug = {
           templates: {
             line: templateDebugRef(exLineMatch),
@@ -677,6 +732,9 @@ function enrichDays(days, templates, cfg, catalogById, context) {
             load_hint: templateDebugRef(loadMatch),
             log_prompt: templateDebugRef(logMatch),
           },
+          cues_source: catalogCues ? "catalogue" : "template",
+          load_hint_source: catalogLoadHint ? "catalogue" : "template",
+          log_prompt_source: catalogLogPrompt ? "catalogue" : "template",
         };
       }
     }

@@ -170,19 +170,22 @@
         <tr>
           <th>Rule ID</th>
           <th>Day type</th>
+          <th>sw</th>
           <th>sw2</th>
           <th>mp</th>
           <th>equip</th>
           <th>Rep low</th>
           <th>Rep high</th>
           <th>Unit</th>
+          <th>Time eq. low</th>
+          <th>Time eq. high</th>
           <th>Rest (s)</th>
           <th>Active</th>
           <th class="actions-cell">Actions</th>
         </tr>
       </thead>
       <tbody id="rules-tbody">
-        <tr class="state-row"><td colspan="11">Enter token and click Load.</td></tr>
+        <tr class="state-row"><td colspan="14">Enter token and click Load.</td></tr>
       </tbody>
     </table>
   </div>
@@ -250,12 +253,21 @@
       <div class="row3">
         <div class="f">
           <label for="d-mp">Movement pattern (mp)</label>
-          <input id="d-mp" type="text" placeholder="e.g. locomotion" autocomplete="off" />
+          <input id="d-mp" list="d-mp-list" type="text" placeholder="e.g. locomotion" autocomplete="off" />
+          <datalist id="d-mp-list"></datalist>
+        </div>
+        <div class="f">
+          <label for="d-sw">sw</label>
+          <input id="d-sw" list="d-sw-list" type="text" placeholder="e.g. run_interval" autocomplete="off" />
+          <datalist id="d-sw-list"></datalist>
         </div>
         <div class="f">
           <label for="d-sw2">sw2</label>
-          <input id="d-sw2" type="text" placeholder="e.g. run_interval" autocomplete="off" />
+          <input id="d-sw2" list="d-sw2-list" type="text" placeholder="e.g. cyclical_compound" autocomplete="off" />
+          <datalist id="d-sw2-list"></datalist>
         </div>
+      </div>
+      <div class="row3">
         <div class="f">
           <label for="d-equipment">Equipment slug</label>
           <input id="d-equipment" type="text" placeholder="e.g. ski_erg" autocomplete="off" />
@@ -282,6 +294,16 @@
             <option value="cal">cal</option>
             <option value="seconds">seconds</option>
           </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="f">
+          <label for="d-time-eq-low">Time equiv. low (s)</label>
+          <input id="d-time-eq-low" type="number" min="0" placeholder="e.g. 60" />
+        </div>
+        <div class="f">
+          <label for="d-time-eq-high">Time equiv. high (s)</label>
+          <input id="d-time-eq-high" type="number" min="0" placeholder="e.g. 90" />
         </div>
       </div>
       <div class="row2">
@@ -313,6 +335,7 @@
 <script>
   // ── State ─────────────────────────────────────────────────────────────────
   let _allRules = [];
+  let _dimensions = { movement_pattern: [], swap_group_id_1: [], swap_group_id_2: [] };
   let _token = localStorage.getItem("admin_token") || "";
   let _drawerMode = "new";   // "new" | "edit"
   let _drawerRuleId = null;  // rule_id being edited (edit mode only)
@@ -356,8 +379,13 @@
     if (token) saveToken(token);
     setStatus("Loading…");
     try {
-      const data = await apiFetch("/admin/rep-rules/rules");
-      _allRules = data.rules || [];
+      const [rulesData, dimensionsData] = await Promise.all([
+        apiFetch("/admin/rep-rules/rules"),
+        apiFetch("/admin/rep-rules/dimensions"),
+      ]);
+      _allRules = rulesData.rules || [];
+      _dimensions = dimensionsData.dimensions || { movement_pattern: [], swap_group_id_1: [], swap_group_id_2: [] };
+      populateDimensionLists();
       populateDayTypeFilter();
       renderTable();
       $("new-rule-btn").disabled = false;
@@ -366,6 +394,18 @@
       setStatus(`Error: ${err.message}`, "err");
       renderEmpty("Failed to load rules. Check your token.");
     }
+  }
+
+  function populateDatalist(id, values) {
+    const el = $(id);
+    if (!el) return;
+    el.innerHTML = (values || []).map(v => `<option value="${escHtml(v)}"></option>`).join("");
+  }
+
+  function populateDimensionLists() {
+    populateDatalist("d-mp-list", _dimensions.movement_pattern);
+    populateDatalist("d-sw-list", _dimensions.swap_group_id_1);
+    populateDatalist("d-sw2-list", _dimensions.swap_group_id_2);
   }
 
   function populateDayTypeFilter() {
@@ -405,6 +445,12 @@
     return (v === null || v === undefined || v === "") ? "—" : String(v);
   }
 
+  function validateDimensionInput(label, value, validValues) {
+    const text = (value || "").trim();
+    if (!text) return "";
+    return (validValues || []).includes(text) ? "" : `${label} must be an existing value from the catalogue.`;
+  }
+
   function renderTable() {
     const filters = getFilters();
     const visible = filterRules(_allRules, filters);
@@ -435,18 +481,23 @@
       const repLow  = editableCell(r, "rep_low",  fmt(r.rep_low));
       const repHigh = editableCell(r, "rep_high", fmt(r.rep_high));
       const unit    = editableCell(r, "reps_unit", fmt(r.reps_unit));
+      const timeEqLow  = editableCell(r, "time_equivalent_low_sec",  fmt(r.time_equivalent_low_sec));
+      const timeEqHigh = editableCell(r, "time_equivalent_high_sec", fmt(r.time_equivalent_high_sec));
       const rest    = editableCell(r, "rest_after_set_sec", fmt(r.rest_after_set_sec));
       const active  = editableCell(r, "is_active", activeBadge, /*rawHtml*/true);
 
       return `<tr class="${rowClass}" data-rule-id="${escHtml(r.rule_id)}">
         <td title="${escHtml(r.rule_id)}" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">${escHtml(r.rule_id)}</td>
         <td>${dayBadge}</td>
+        <td class="mono">${escHtml(fmt(r.swap_group_id_1))}</td>
         <td class="mono">${escHtml(fmt(r.swap_group_id_2))}</td>
         <td class="mono">${escHtml(fmt(r.movement_pattern))}</td>
         <td class="mono">${escHtml(fmt(r.equipment_slug))}</td>
         ${repLow}
         ${repHigh}
         ${unit}
+        ${timeEqLow}
+        ${timeEqHigh}
         ${rest}
         ${active}
         <td class="actions-cell"><button class="ghost edit-btn" data-rule-id="${escHtml(r.rule_id)}">Edit</button></td>
@@ -460,7 +511,7 @@
   }
 
   function renderEmpty(msg) {
-    $("rules-tbody").innerHTML = `<tr class="state-row"><td colspan="11">${escHtml(msg)}</td></tr>`;
+    $("rules-tbody").innerHTML = `<tr class="state-row"><td colspan="14">${escHtml(msg)}</td></tr>`;
   }
 
   function updateSummary(total, scoped) {
@@ -510,19 +561,19 @@
     cell.classList.add("editing");
 
     let input;
-    if (field === "reps_unit") {
-      input = document.createElement("select");
-      UNIT_OPTIONS.forEach(u => {
-        const opt = document.createElement("option");
+      if (field === "reps_unit") {
+        input = document.createElement("select");
+        UNIT_OPTIONS.forEach(u => {
+          const opt = document.createElement("option");
         opt.value = u; opt.textContent = u;
         if (u === currentVal) opt.selected = true;
         input.appendChild(opt);
       });
-    } else {
-      input = document.createElement("input");
-      input.type = "number";
-      input.min = "0";
-      input.value = (currentVal === null || currentVal === undefined) ? "" : currentVal;
+      } else {
+        input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.value = (currentVal === null || currentVal === undefined) ? "" : currentVal;
       input.style.width = "70px";
     }
 
@@ -532,8 +583,15 @@
     if (input.select) input.select();
 
     function commit() {
-      const newVal = field === "reps_unit" ? input.value : parseInt(input.value, 10);
-      if (field !== "reps_unit" && (!Number.isFinite(newVal) || newVal < 0)) {
+      const allowNullInt = ["time_equivalent_low_sec", "time_equivalent_high_sec"].includes(field);
+      const newVal = field === "reps_unit"
+        ? input.value
+        : (allowNullInt && input.value === "" ? null : parseInt(input.value, 10));
+      if (field !== "reps_unit" && !allowNullInt && (!Number.isFinite(newVal) || newVal < 0)) {
+        revert();
+        return;
+      }
+      if (field !== "reps_unit" && allowNullInt && newVal !== null && (!Number.isFinite(newVal) || newVal < 0)) {
         revert();
         return;
       }
@@ -604,11 +662,14 @@
     $("d-segment-type").value = "";
     $("d-purpose").value = "";
     $("d-mp").value = "";
+    $("d-sw").value = "";
     $("d-sw2").value = "";
     $("d-equipment").value = "";
     $("d-rep-low").value = "";
     $("d-rep-high").value = "";
     $("d-reps-unit").value = "reps";
+    $("d-time-eq-low").value = "";
+    $("d-time-eq-high").value = "";
     $("d-rest-set").value = "";
     $("d-priority").value = "100";
     $("d-is-active").checked = true;
@@ -626,11 +687,14 @@
     $("d-segment-type").value = rule.segment_type || "";
     $("d-purpose").value = rule.purpose || "";
     $("d-mp").value = rule.movement_pattern || "";
+    $("d-sw").value = rule.swap_group_id_1 || "";
     $("d-sw2").value = rule.swap_group_id_2 || "";
     $("d-equipment").value = rule.equipment_slug || "";
     $("d-rep-low").value = rule.rep_low ?? "";
     $("d-rep-high").value = rule.rep_high ?? "";
     $("d-reps-unit").value = rule.reps_unit || "reps";
+    $("d-time-eq-low").value = rule.time_equivalent_low_sec ?? "";
+    $("d-time-eq-high").value = rule.time_equivalent_high_sec ?? "";
     $("d-rest-set").value = rule.rest_after_set_sec ?? "";
     $("d-priority").value = rule.priority ?? 100;
     $("d-is-active").checked = !!rule.is_active;
@@ -647,8 +711,15 @@
     const repLow   = parseInt($("d-rep-low").value, 10);
     const repHigh  = parseInt($("d-rep-high").value, 10);
     const repsUnit = $("d-reps-unit").value;
+    const timeEqLowRaw = $("d-time-eq-low").value;
+    const timeEqHighRaw = $("d-time-eq-high").value;
+    const timeEqLow = timeEqLowRaw === "" ? null : parseInt(timeEqLowRaw, 10);
+    const timeEqHigh = timeEqHighRaw === "" ? null : parseInt(timeEqHighRaw, 10);
     const restSet  = parseInt($("d-rest-set").value || "0", 10);
     const priority = parseInt($("d-priority").value || "100", 10);
+    const movementPattern = ($("d-mp").value || "").trim();
+    const swapGroup1 = ($("d-sw").value || "").trim();
+    const swapGroup2 = ($("d-sw2").value || "").trim();
 
     // Client-side validation
     if (_drawerMode === "new") {
@@ -658,7 +729,14 @@
     if (!Number.isFinite(repLow) || repLow < 0)  { $("drawer-err").textContent = "Rep low must be 0 or greater."; return; }
     if (!Number.isFinite(repHigh) || repHigh < 0) { $("drawer-err").textContent = "Rep high must be 0 or greater."; return; }
     if (!repsUnit) { $("drawer-err").textContent = "Unit is required."; return; }
+    if (timeEqLow !== null && (!Number.isFinite(timeEqLow) || timeEqLow < 0)) { $("drawer-err").textContent = "Time equiv. low must be 0 or greater."; return; }
+    if (timeEqHigh !== null && (!Number.isFinite(timeEqHigh) || timeEqHigh < 0)) { $("drawer-err").textContent = "Time equiv. high must be 0 or greater."; return; }
     if (!Number.isFinite(priority) || priority < 1) { $("drawer-err").textContent = "Priority must be >= 1."; return; }
+    const dimensionErr =
+      validateDimensionInput("Movement pattern", movementPattern, _dimensions.movement_pattern) ||
+      validateDimensionInput("sw", swapGroup1, _dimensions.swap_group_id_1) ||
+      validateDimensionInput("sw2", swapGroup2, _dimensions.swap_group_id_2);
+    if (dimensionErr) { $("drawer-err").textContent = dimensionErr; return; }
 
     btn.disabled = true;
     btn.textContent = "Saving…";
@@ -671,12 +749,15 @@
           day_type:      ($("d-day-type").value || "").trim(),
           segment_type:  ($("d-segment-type").value || "").trim() || undefined,
           purpose:       ($("d-purpose").value || "").trim() || undefined,
-          movement_pattern: ($("d-mp").value || "").trim() || undefined,
-          swap_group_id_2:  ($("d-sw2").value || "").trim() || undefined,
+          movement_pattern: movementPattern || undefined,
+          swap_group_id_1:  swapGroup1 || undefined,
+          swap_group_id_2:  swapGroup2 || undefined,
           equipment_slug:   ($("d-equipment").value || "").trim() || undefined,
           rep_low:   repLow,
           rep_high:  repHigh,
           reps_unit: repsUnit,
+          time_equivalent_low_sec: timeEqLow,
+          time_equivalent_high_sec: timeEqHigh,
           rest_after_set_sec: Number.isFinite(restSet) ? restSet : 0,
           priority,
           is_active: $("d-is-active").checked,
@@ -692,10 +773,19 @@
       } else {
         // Edit mode — PATCH prescription fields only
         const body = {
+          segment_type: ($("d-segment-type").value || "").trim() || null,
+          purpose: ($("d-purpose").value || "").trim() || null,
+          movement_pattern: movementPattern || null,
+          swap_group_id_1: swapGroup1 || null,
+          swap_group_id_2: swapGroup2 || null,
+          equipment_slug: ($("d-equipment").value || "").trim() || null,
           rep_low:   repLow,
           rep_high:  repHigh,
           reps_unit: repsUnit,
+          time_equivalent_low_sec: timeEqLow,
+          time_equivalent_high_sec: timeEqHigh,
           rest_after_set_sec: Number.isFinite(restSet) ? restSet : 0,
+          priority,
           is_active: $("d-is-active").checked,
         };
         const data = await apiFetch(`/admin/rep-rules/rules/${encodeURIComponent(_drawerRuleId)}`, {

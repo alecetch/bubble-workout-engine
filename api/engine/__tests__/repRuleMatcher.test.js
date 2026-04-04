@@ -17,6 +17,7 @@ function makeRule(overrides = {}) {
     segment_type: "single",
     purpose: "main",
     movement_pattern: null,
+    swap_group_id_1: null,
     swap_group_id_2: null,
     movement_class: null,
     equipment_slug: null,
@@ -52,6 +53,21 @@ test("pickBestRuleWithFallback prefers direct metadata match before fallback", (
   assert.equal(match.viaFallback, false);
 });
 
+test("pickBestRuleWithFallback can match on swap_group_id_1", () => {
+  const rules = [
+    makeRule({ rule_id: "fallback", priority: 5 }),
+    makeRule({ rule_id: "specific_sw", priority: 5, swap_group_id_1: "row_erg" }),
+  ];
+
+  const match = pickBestRuleWithFallback(
+    rules,
+    makeContext({ sw: "row_erg", sw2: "cyclical_compound", mp: "cyclical_engine" }),
+  );
+
+  assert.equal(match.rule.rule_id, "specific_sw");
+  assert.equal(match.viaFallback, false);
+});
+
 test("buildFallbackItemContext strips exercise-derived matching dimensions only", () => {
   const fallback = buildFallbackItemContext(
     makeContext({ mp: "squat", sw2: "sq_comp", mc: "compound", tr: ["quads"], eq: ["dumbbell"] }),
@@ -62,6 +78,7 @@ test("buildFallbackItemContext strips exercise-derived matching dimensions only"
   assert.equal(fallback.segment_type, "single");
   assert.equal(fallback.purpose, "main");
   assert.equal(fallback.movement_pattern, "");
+  assert.equal(fallback.swap_group_id_1, "");
   assert.equal(fallback.swap_group_id_2, "");
   assert.equal(fallback.movement_class, "");
   assert.equal(fallback.equipment_slug, "");

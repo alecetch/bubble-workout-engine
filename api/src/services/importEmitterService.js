@@ -765,6 +765,9 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
         exercise_name = ec.name,
         is_loadable = ec.is_loadable,
         equipment_items_slugs_csv = array_to_string(ec.equipment_items_slugs, ','),
+        coaching_cues_json = ec.coaching_cues_json,
+        load_hint = coalesce(ec.load_guidance, ''),
+        log_prompt = coalesce(ec.logging_guidance, ''),
         notes = ''
       FROM exercise_catalogue ec
       WHERE pe.exercise_id = ec.exercise_id

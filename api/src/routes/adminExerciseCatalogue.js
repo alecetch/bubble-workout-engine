@@ -38,7 +38,7 @@ const RANKS = [0, 1, 2, 3];
 const EXCLUDED_MOVEMENT_CLASSES = new Set(["cardio", "conditioning", "locomotion"]);
 const JSONB_FIELDS = new Set([
   "contraindications_json", "equipment_json", "preferred_in_json",
-  "target_regions_json", "warmup_hooks",
+  "target_regions_json", "warmup_hooks", "coaching_cues_json",
 ]);
 const ARRAY_FIELDS = new Set(["contraindications_slugs", "equipment_items_slugs"]);
 const VALID_MOVEMENT_CLASSES = new Set([
@@ -101,7 +101,8 @@ function buildInsertSql(exercise) {
     "min_fitness_rank", "is_archived", "is_loadable", "complexity_rank",
     "contraindications_json", "contraindications_slugs", "density_rating",
     "engine_anchor", "engine_role", "equipment_items_slugs", "equipment_json",
-    "form_cues", "impact_level", "lift_class", "preferred_in_json",
+    "coaching_cues_json", "impact_level", "lift_class", "preferred_in_json",
+    "load_guidance", "logging_guidance",
     "swap_group_id_1", "swap_group_id_2", "target_regions_json", "warmup_hooks",
     "slug", "creator", "strength_primary_region", "strength_equivalent",
   ];
@@ -117,6 +118,33 @@ function buildInsertSql(exercise) {
     `INSERT INTO exercise_catalogue (\n  ${COLS.join(", ")}\n) VALUES (\n  ${vals.join(",\n  ")}\n)\n` +
     `ON CONFLICT (exercise_id) DO UPDATE SET\n${updates.join(",\n")};`
   );
+}
+
+function normalizeExerciseName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findExerciseNameConflict(exercises, candidateName, candidateExerciseId, options = {}) {
+  const { allowSameId = false, ignoreArchived = true } = options;
+  const normalized = normalizeExerciseName(candidateName);
+  if (!normalized) return null;
+  for (const ex of exercises || []) {
+    if (!ex) continue;
+    if (ignoreArchived && ex.is_archived) continue;
+    if (allowSameId && ex.exercise_id === candidateExerciseId) continue;
+    if (normalizeExerciseName(ex.name) === normalized) {
+      return {
+        exercise_id: ex.exercise_id,
+        name: ex.name,
+      };
+    }
+  }
+  return null;
 }
 
 // ── In-memory eligibility engine ─────────────────────────────────────────────
@@ -841,6 +869,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
     const state = await getFullState();
     const validSlugs = new Set(state.equipmentSlugs.map(e => e.slug));
     const existingIds = new Set(state.exercises.map(e => e.exercise_id));
+    const seenNormalizedNames = new Map();
 
     const { headers, rows } = parseCsv(csvText);
     if (rows.length === 0) return res.status(400).json({ ok: false, error: "CSV is empty" });
@@ -866,6 +895,15 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
       else seenIds.add(row.exercise_id);
 
       if (!row.name) lineErrors.push("name is required");
+      const normalizedName = normalizeExerciseName(row.name);
+      if (normalizedName) {
+        const seenNameLine = seenNormalizedNames.get(normalizedName);
+        if (seenNameLine) {
+          lineErrors.push(`Duplicate exercise name in file: '${row.name}' (also seen on row ${seenNameLine})`);
+        } else {
+          seenNormalizedNames.set(normalizedName, row._line);
+        }
+      }
       if (!row.movement_class || !VALID_MOVEMENT_CLASSES.has(row.movement_class)) {
         lineErrors.push(`Invalid movement_class: '${row.movement_class}'`);
       }
@@ -902,8 +940,18 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
       } else {
         if (existingIds.has(row.exercise_id)) {
           warnings.push({ row: row._line, message: `exercise_id '${row.exercise_id}' already exists — will be updated` });
+          validRows.push(row);
+        } else {
+          const nameConflict = findExerciseNameConflict(state.exercises, row.name, row.exercise_id);
+          if (nameConflict) {
+            errors.push({
+              row: row._line,
+              error: `Exercise name '${row.name}' duplicates existing exercise '${nameConflict.exercise_id}'. Amend exercise_id/name instead of creating a duplicate.`,
+            });
+          } else {
+            validRows.push(row);
+          }
         }
-        validRows.push(row);
       }
     }
 
@@ -938,10 +986,12 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
         engine_role: row.engine_role || null,
         equipment_items_slugs: toArr(row.equipment_items_slugs),
         equipment_json: toJson(row.equipment_json),
-        form_cues: row.form_cues || null,
+        coaching_cues_json: toJson(row.coaching_cues_json),
         impact_level: row.impact_level ? parseInt(row.impact_level, 10) : null,
         lift_class: row.lift_class || null,
         preferred_in_json: toJson(row.preferred_in_json),
+        load_guidance: row.load_guidance || null,
+        logging_guidance: row.logging_guidance || null,
         swap_group_id_1: row.swap_group_id_1 || null,
         swap_group_id_2: row.swap_group_id_2 || null,
         target_regions_json: toJson(row.target_regions_json),
@@ -967,11 +1017,51 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
 });
 
 // POST /admin/exercise-catalogue/session/queue-change
-adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", (req, res) => {
+adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", async (req, res) => {
   try {
     const { action, exercise_id, changes = {}, sql: sqlOverride } = req.body ?? {};
     if (!action || !exercise_id) {
       return res.status(400).json({ ok: false, error: "action and exercise_id are required" });
+    }
+    const state = await getFullState();
+    const targetExerciseId = String(changes.exercise_id || exercise_id || "").trim();
+    const targetName = String(changes.name || "").trim();
+
+    if (action === "new" || action === "clone") {
+      if (state.exercises.some((ex) => ex.exercise_id === targetExerciseId)) {
+        return res.status(400).json({
+          ok: false,
+          error: `exercise_id '${targetExerciseId}' already exists. Amend exercise_id instead of creating a duplicate.`,
+        });
+      }
+      const nameConflict = findExerciseNameConflict(state.exercises, targetName, targetExerciseId);
+      if (nameConflict) {
+        return res.status(400).json({
+          ok: false,
+          error: `Exercise name '${targetName}' duplicates existing exercise '${nameConflict.exercise_id}'. Amend exercise_id/name instead of creating a duplicate.`,
+        });
+      }
+    }
+
+    if (action === "edit") {
+      const current = state.exercises.find((ex) => ex.exercise_id === exercise_id);
+      const merged = { ...(current || {}), ...(changes || {}) };
+      const mergedExerciseId = String(merged.exercise_id || exercise_id || "").trim();
+      const mergedName = String(merged.name || "").trim();
+      const idConflict = state.exercises.find((ex) => ex.exercise_id === mergedExerciseId && ex.exercise_id !== exercise_id);
+      if (idConflict) {
+        return res.status(400).json({
+          ok: false,
+          error: `exercise_id '${mergedExerciseId}' already exists. Amend exercise_id instead of creating a duplicate.`,
+        });
+      }
+      const nameConflict = findExerciseNameConflict(state.exercises, mergedName, mergedExerciseId, { allowSameId: true });
+      if (nameConflict && nameConflict.exercise_id !== exercise_id) {
+        return res.status(400).json({
+          ok: false,
+          error: `Exercise name '${mergedName}' duplicates existing exercise '${nameConflict.exercise_id}'. Amend exercise_id/name instead of creating a duplicate.`,
+        });
+      }
     }
     // Generate SQL server-side if not provided by caller
     const sql = sqlOverride || (

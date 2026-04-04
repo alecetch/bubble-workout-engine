@@ -472,7 +472,6 @@
     </div>
   </div>
 
-  <datalist id="field-options"></datalist>
   <datalist id="program-type-options"></datalist>
   <datalist id="day-focus-options">
     <option value="Lower (Squat)"></option>
@@ -480,7 +479,6 @@
     <option value="Upper (Push)"></option>
     <option value="Upper (Pull)"></option>
     <option value="Upper (Press)"></option>
-    <option value="Hypertrophy"></option>
   </datalist>
 
   <div id="overlay" class="overlay"></div>
@@ -516,7 +514,7 @@
           </div>
           <div class="f">
             <label for="drawer-field">Field</label>
-            <input id="drawer-field" type="text" list="field-options" placeholder="Select or type a field" />
+            <select id="drawer-field"></select>
           </div>
         </div>
         <div class="row2">
@@ -542,7 +540,7 @@
         <div class="row2">
           <div class="f">
             <label for="drawer-program-type">Program type</label>
-            <input id="drawer-program-type" type="text" list="program-type-options" />
+            <select id="drawer-program-type"></select>
           </div>
           <div class="f">
             <label for="drawer-day-focus">Day focus</label>
@@ -568,7 +566,7 @@
           <div class="row2">
             <div class="f">
               <label for="preview-program-type">Preview program_type</label>
-              <input id="preview-program-type" type="text" list="program-type-options" />
+              <select id="preview-program-type"></select>
             </div>
             <div class="f">
               <label for="preview-day-focus">Preview day_focus</label>
@@ -618,6 +616,7 @@
     const PURPOSES = ["", "main", "secondary", "accessory", "warmup", "cooldown"];
     const SEGMENT_TYPES = ["", "single", "superset", "giant_set", "amrap", "emom"];
     const TOKEN_HINTS = ["{EX_NAME}", "{SETS}", "{REP_RANGE}", "{RIR}", "{REST_SEC}", "{ROUNDS}", "{PURPOSE}", "{SEGMENT_TYPE}", "{DAYS_PER_WEEK}", "{DURATION_MINS}", "{DAY_INDEX}", "{DAY_FOCUS}", "{PROGRAM_TYPE}", "{MAIN_LIFT_NAME}", "{SECONDARY_LIFT_NAME}", "{TEMPO}", "{TOTAL_WEEKS}"];
+    const PROGRAM_TYPES = ["conditioning", "hypertrophy", "hyrox", "strength"];
 
     const state = {
       loaded: false,
@@ -643,7 +642,6 @@
       segmentTypeFilter: document.getElementById("segment-type-filter"),
       activeFilter: document.getElementById("active-filter"),
       searchInput: document.getElementById("search-input"),
-      fieldOptions: document.getElementById("field-options"),
       programTypeOptions: document.getElementById("program-type-options"),
       overlay: document.getElementById("overlay"),
       drawer: document.getElementById("drawer"),
@@ -796,12 +794,23 @@
       selectEl.innerHTML = values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value || noneLabel || "(none)")}</option>`).join("");
     }
 
+    function fillNullableSelect(selectEl, values, noneLabel) {
+      const current = selectEl.value;
+      const allValues = ["", ...values];
+      selectEl.innerHTML = allValues
+        .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value || noneLabel || "(any)")}</option>`)
+        .join("");
+      selectEl.value = allValues.includes(current) ? current : "";
+    }
+
     function populateStaticDrawerOptions() {
       els.drawerScope.innerHTML = SCOPES.map((scope) => `<option value="${scope}">${scope}</option>`).join("");
       fillFixedSelect(els.drawerPurpose, PURPOSES, "(none)");
       fillFixedSelect(els.drawerSegmentType, SEGMENT_TYPES, "(none)");
       fillFixedSelect(els.previewPurpose, PURPOSES, "(none)");
       fillFixedSelect(els.previewSegmentType, SEGMENT_TYPES, "(none)");
+      fillNullableSelect(els.drawerProgramType, PROGRAM_TYPES, "(any)");
+      fillNullableSelect(els.previewProgramType, PROGRAM_TYPES, "(any)");
       els.tokenHints.innerHTML = TOKEN_HINTS.map((tokenText) => `<span class="token-chip">${escapeHtml(tokenText)}</span>`).join("");
     }
 
@@ -811,18 +820,18 @@
       fillSelect(els.fieldFilter, uniqueSorted(state.templates.map((item) => item.field)), "All");
       fillSelect(els.purposeFilter, uniqueSorted(state.templates.map((item) => item.purpose)), "All");
       fillSelect(els.segmentTypeFilter, uniqueSorted(state.templates.map((item) => item.segment_type)), "All");
-      els.programTypeOptions.innerHTML = uniqueSorted(state.templates.map(readProgramType))
-        .map((value) => `<option value="${escapeHtml(value)}"></option>`)
-        .join("");
     }
 
     function currentFieldOptions(scope) {
       return FIELD_OPTIONS[scope] || [];
     }
 
-    function syncFieldDatalist() {
+    function syncFieldOptions() {
       const options = currentFieldOptions(els.drawerScope.value);
-      els.fieldOptions.innerHTML = options.map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+      const current = els.drawerField.value;
+      els.drawerField.innerHTML = options.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
+      if (options.includes(current)) els.drawerField.value = current;
+      else els.drawerField.value = options[0] || "";
     }
 
     function matchesFilters(template) {
@@ -1076,11 +1085,11 @@
           ? "New Template"
           : `Edit: ${template.template_id}`;
       els.drawerTemplateId.value = template.template_id || "";
-      els.drawerTemplateId.readOnly = mode === "edit";
+      els.drawerTemplateId.readOnly = false;
       els.drawerIsActive.checked = template.is_active !== false;
       els.drawerScope.value = template.scope || "program";
-      syncFieldDatalist();
-      els.drawerField.value = template.field || "";
+      syncFieldOptions();
+      els.drawerField.value = template.field || currentFieldOptions(els.drawerScope.value)[0] || "";
       els.drawerPurpose.value = template.purpose || "";
       els.drawerSegmentType.value = template.segment_type || "";
       els.drawerPriority.value = template.priority || 10;
@@ -1430,10 +1439,10 @@
       els.drawerSave.addEventListener("click", saveDrawer);
       els.drawerDeactivate.addEventListener("click", deactivateTemplate);
       els.drawerScope.addEventListener("change", () => {
-        syncFieldDatalist();
+        syncFieldOptions();
         computePreview();
       });
-      els.drawerField.addEventListener("input", computePreview);
+      els.drawerField.addEventListener("change", computePreview);
       els.drawerPurpose.addEventListener("change", () => {
         els.previewPurpose.value = els.drawerPurpose.value;
         computePreview();

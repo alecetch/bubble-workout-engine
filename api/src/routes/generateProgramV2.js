@@ -274,11 +274,15 @@ export function createGenerateProgramV2Handler({
         complexity_rank,
         density_rating,
         equipment_json,
+        coaching_cues_json,
+        load_guidance,
+        logging_guidance,
         preferred_in_json,
         swap_group_id_1,
         swap_group_id_2,
         target_regions_json,
-        warmup_hooks
+        warmup_hooks,
+        accepts_distance_unit
       FROM exercise_catalogue
       WHERE is_archived = false
       ORDER BY exercise_id

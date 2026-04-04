@@ -89,10 +89,13 @@ export function normalizeRule(rawRule) {
     segment_type: normalizeCmp(rawRule.segment_type),
     purpose: normalizeCmp(rawRule.purpose),
     movement_pattern: normalizeCmp(rawRule.movement_pattern),
+    swap_group_id_1: normalizeCmp(rawRule.swap_group_id_1),
     swap_group_id_2: normalizeCmp(rawRule.swap_group_id_2),
     movement_class: normalizeCmp(rawRule.movement_class),
     equipment_slug: normalizeCmp(rawRule.equipment_slug),
     target_regions_json_arr: toArrayMaybe(rawRule.target_regions_json),
+    time_equivalent_low_sec: rawRule.time_equivalent_low_sec ?? null,
+    time_equivalent_high_sec: rawRule.time_equivalent_high_sec ?? null,
     priority_num: toInt(rawRule.priority, 0),
     schema_version_num:
       rawRule.schema_version === undefined || rawRule.schema_version === null || s(rawRule.schema_version) === ""
@@ -108,6 +111,7 @@ export function specificityScore(rule) {
   if (rule.segment_type) sc += 1;
   if (rule.purpose) sc += 1;
   if (rule.movement_pattern) sc += 1;
+  if (rule.swap_group_id_1) sc += 1;
   if (rule.swap_group_id_2) sc += 1;
   if (rule.movement_class) sc += 1;
   if (rule.equipment_slug) sc += 1;
@@ -122,6 +126,7 @@ export function ruleMatches(rule, ctx) {
   if (rule.segment_type && rule.segment_type !== ctx.segment_type) return false;
   if (rule.purpose && rule.purpose !== ctx.purpose) return false;
   if (rule.movement_pattern && rule.movement_pattern !== ctx.movement_pattern) return false;
+  if (rule.swap_group_id_1 && rule.swap_group_id_1 !== ctx.swap_group_id_1) return false;
   if (rule.swap_group_id_2 && rule.swap_group_id_2 !== ctx.swap_group_id_2) return false;
   if (rule.movement_class && rule.movement_class !== ctx.movement_class) return false;
   if (rule.equipment_slug && rule.equipment_slug !== ctx.equipment_slug) return false;
@@ -165,6 +170,7 @@ export function pickBestRule(rules, ctx) {
 
 export function makeItemContext({ programType, schemaVersion, dayType, purpose, segType, ex }) {
   const mp = normalizeCmp(getExField(ex, "mp", "movement_pattern"));
+  const sw = normalizeCmp(getExField(ex, "sw", "swap_group_id_1"));
   const sw2 = normalizeCmp(getExField(ex, "sw2", "swap_group_id_2"));
   const mc = normalizeCmp(getExField(ex, "mc", "movement_class"));
   const tr = toArrayMaybe(getExField(ex, "tr", "target_regions_json"));
@@ -177,6 +183,7 @@ export function makeItemContext({ programType, schemaVersion, dayType, purpose, 
     segment_type: normalizeCmp(segType),
     purpose: normalizeCmp(purpose),
     movement_pattern: mp,
+    swap_group_id_1: sw,
     swap_group_id_2: sw2,
     movement_class: mc,
     equipment_slug: eq,
@@ -188,6 +195,7 @@ export function buildFallbackItemContext(ctx) {
   return {
     ...ctx,
     movement_pattern: "",
+    swap_group_id_1: "",
     swap_group_id_2: "",
     movement_class: "",
     equipment_slug: "",
