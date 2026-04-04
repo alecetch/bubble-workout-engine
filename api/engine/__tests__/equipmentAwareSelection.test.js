@@ -248,6 +248,7 @@ test("pickWithFallback returns a soft-pref match instead of null", () => {
     stats,
     new Set(),
     new Set(),
+    new Set(),
   );
 
   assert.equal(picked?.id, "fallback");

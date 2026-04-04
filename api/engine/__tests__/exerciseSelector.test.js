@@ -362,9 +362,48 @@ test("pickWithFallback returns sw2 match on first attempt (stats.picked_sw2_pref
     stats,
     new Set(),
     new Set(),
+    new Set(),
   );
   assert.equal(result.id, "ex1");
   assert.equal(stats.picked_sw2_pref, 1);
+});
+
+test("pickWithFallback keeps same-sw2 alternatives eligible when one exact exercise was already used today", () => {
+  const exactUsed = makeExercise({
+    id: "sled_pull_a",
+    name: "Sled Pull Heavy",
+    mp: "sled_pull",
+    sw: "sled_pull",
+    sw2: "sled_compound",
+  });
+  const sameSw2Alt = makeExercise({
+    id: "sled_pull_b",
+    name: "Sled Pull Moderate",
+    mp: "sled_pull",
+    sw: "sled_pull",
+    sw2: "sled_compound",
+  });
+  const sameSwFallback = makeExercise({
+    id: "rdl_row",
+    name: "RDL and Bent Over Row",
+    mp: "sled_pull",
+    sw: "sled_pull",
+    sw2: "hinge_compound",
+  });
+  const pool = makeSelectorPool([exactUsed, sameSw2Alt, sameSwFallback]);
+
+  const result = pickWithFallback(
+    pool.allowedSet,
+    pool.byId,
+    { mp: "sled_pull", sw: "sled_pull", sw2: "sled_compound", requirePref: null, prefMode: "soft", prefBonus: 4 },
+    new Set(),
+    makeStats(),
+    new Set(["sled_pull_a"]),
+    new Set(),
+    new Set(),
+  );
+
+  assert.equal(result?.id, "sled_pull_b");
 });
 
 test("avoids exercise with same canonical name already used today", () => {
@@ -431,14 +470,14 @@ test("requirePref soft mode can succeed on initial sw2 attempt without a pref ma
   const pool = makeSelectorPool([exNoPref]);
   const stats = makeStats();
   const sel = { sw2: "sq_comp", requirePref: "strength_main", prefMode: "soft", prefBonus: 4 };
-  const result = pickWithFallback(pool.allowedSet, pool.byId, sel, new Set(), stats, new Set(), new Set());
+  const result = pickWithFallback(pool.allowedSet, pool.byId, sel, new Set(), stats, new Set(), new Set(), new Set());
   assert.equal(result.id, "ex1");
   assert.equal(stats.picked_sw2_pref, 1);
   assert.equal(stats.picked_sw2_relaxed, 0);
 });
 
 test("pickWithFallback returns null when allowedSet is empty", () => {
-  const result = pickWithFallback(new Set(), {}, { sw2: "x", prefMode: "soft", prefBonus: 4 }, new Set(), makeStats(), new Set(), new Set());
+  const result = pickWithFallback(new Set(), {}, { sw2: "x", prefMode: "soft", prefBonus: 4 }, new Set(), makeStats(), new Set(), new Set(), new Set());
   assert.equal(result, null);
 });
 

@@ -174,7 +174,12 @@ export function sw2UsedToday(blocks) {
 }
 
 export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCnSet) {
-  let best = null;
+  const ranked = rankBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCnSet, 1);
+  return ranked[0]?.ex ?? null;
+}
+
+export function rankBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCnSet, limit = Infinity) {
+  const ranked = [];
   const mp = sel ? sel.mp : null;
   const sw = sel ? sel.sw : null;
   const swAny = Array.isArray(sel?.swAny) ? sel.swAny : null;
@@ -285,10 +290,14 @@ export function pickBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCn
       );
     }
 
-    if (!best || score > best.score) best = { ex: ex, score: score };
+    ranked.push({ ex, score });
   }
 
-  return best ? best.ex : null;
+  ranked.sort((a, b) => {
+    return b.score - a.score;
+  });
+
+  return Number.isFinite(limit) ? ranked.slice(0, limit) : ranked;
 }
 
 export function pickSeedExerciseForSlot(allowedSet, byId, sel) {
@@ -340,58 +349,16 @@ export function pickSeedExerciseForSlot(allowedSet, byId, sel) {
   return firstPref || first || null;
 }
 
-function attemptAvoidRepeatSw2(allowedSet, byId, sel, usedWeek, usedSw2Set, usedRegionsSet, stats, avoidCnSet) {
-  if (!sel.sw2) return null;
-  if (!usedSw2Set || usedSw2Set.size === 0) return null;
-  if (!usedSw2Set.has(sel.sw2)) return null;
-
-  const sharedFields = {
-    prefMode: sel.prefMode,
-    prefBonus: sel.prefBonus,
-    preferLoadable: sel.preferLoadable,
-    preferIsolation: sel.preferIsolation,
-    preferCompound: sel.preferCompound,
-    strengthEquivalentBonus: sel.strengthEquivalentBonus,
-    rankValue: sel.rankValue,
-    programType: sel.programType,
-    condState: sel.condState,
-    condThresholds: sel.condThresholds,
-  };
-
-  const swList = (sel.swAny && sel.swAny.length > 0) ? sel.swAny : (sel.sw ? [sel.sw] : []);
-  for (const sw of swList) {
-    const ex = pickBest(
-      allowedSet,
-      byId,
-      { mp: null, sw: sw, sw2: null, requirePref: sel.requirePref, avoidSw2: sel.sw2, ...sharedFields },
-      usedWeek,
-      usedRegionsSet,
-      avoidCnSet,
-    );
-    if (ex) {
-      stats.avoided_repeat_sw2++;
-      return ex;
-    }
+function mergeUsedSets(...sets) {
+  const merged = new Set();
+  for (const set of sets) {
+    if (!(set instanceof Set)) continue;
+    for (const value of set) merged.add(value);
   }
-
-  if (sel.mp) {
-    const ex2 = pickBest(
-      allowedSet,
-      byId,
-      { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, avoidSw2: sel.sw2, ...sharedFields },
-      usedWeek,
-      usedRegionsSet,
-      avoidCnSet,
-    );
-    if (ex2) {
-      stats.avoided_repeat_sw2++;
-      return ex2;
-    }
-  }
-  return null;
+  return merged.size > 0 ? merged : null;
 }
 
-export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2Set, usedRegionsSet, usedCanonicalNamesSet) {
+export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedToday, usedRegionsSet, usedCanonicalNamesSet) {
   const sharedFields = {
     prefMode: sel.prefMode,
     prefBonus: sel.prefBonus,
@@ -405,12 +372,13 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
     condThresholds: sel.condThresholds,
   };
 
-  function attempt(mp, sw, sw2, sw2Any, requirePref) {
+  function attempt(mp, sw, sw2, sw2Any, requirePref, primaryUsedSet) {
+    const primarySet = primaryUsedSet ?? null;
     const picked = pickBest(
       allowedSet,
       byId,
       { mp, sw, sw2, sw2Any, requirePref, ...sharedFields },
-      usedWeek,
+      primarySet,
       usedRegionsSet,
       usedCanonicalNamesSet,
     );
@@ -420,27 +388,42 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
     return picked;
   }
 
-  let ex = attemptAvoidRepeatSw2(
-    allowedSet,
-    byId,
-    sel,
-    usedWeek,
-    usedSw2Set,
-    usedRegionsSet,
-    stats,
-    usedCanonicalNamesSet,
-  );
-  if (ex) return ex;
+  function attemptWithFallback(mp, sw, sw2, sw2Any, requirePref, primaryUsedSet, fallbackUsedSet = primaryUsedSet) {
+    const first = attempt(mp, sw, sw2, sw2Any, requirePref, primaryUsedSet, fallbackUsedSet);
+    if (first) return first;
+    if (fallbackUsedSet === primaryUsedSet) return null;
+    return attempt(mp, sw, sw2, sw2Any, requirePref, fallbackUsedSet, fallbackUsedSet);
+  }
+
+  const exactAvoidUsedSet = mergeUsedSets(usedWeek, usedToday);
+  const weekOnlyUsedSet = usedWeek instanceof Set && usedWeek.size > 0 ? usedWeek : null;
+  const todayOnlyUsedSet = usedToday instanceof Set && usedToday.size > 0 ? usedToday : null;
 
   if (sel.selectionMode === "benchmark_exactness") {
-    ex = attempt(sel.mp || null, sel.sw || null, sel.sw2 || null, sel.sw2Any || null, sel.requirePref);
+    const ex = attemptWithFallback(
+      sel.mp || null,
+      sel.sw || null,
+      sel.sw2 || null,
+      sel.sw2Any || null,
+      sel.requirePref,
+      exactAvoidUsedSet,
+      weekOnlyUsedSet,
+    );
     if (ex) {
       stats.picked_benchmark_exact = Number(stats.picked_benchmark_exact || 0) + 1;
       return ex;
     }
   }
 
-  ex = attempt(null, null, sel.sw2, sel.sw2Any || null, sel.requirePref);
+  let ex = attemptWithFallback(
+    null,
+    null,
+    sel.sw2,
+    sel.sw2Any || null,
+    sel.requirePref,
+    exactAvoidUsedSet,
+    weekOnlyUsedSet,
+  );
   if (ex) {
     stats.picked_sw2_pref++;
     return ex;
@@ -449,7 +432,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   const swList = (sel.swAny && sel.swAny.length > 0) ? sel.swAny : (sel.sw ? [sel.sw] : null);
   if (swList) {
     for (const sw of swList) {
-      ex = attempt(null, sw, null, null, sel.requirePref);
+      ex = attemptWithFallback(null, sw, null, null, sel.requirePref, exactAvoidUsedSet, weekOnlyUsedSet);
       if (ex) {
         stats.picked_sw_pref++;
         return ex;
@@ -457,7 +440,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
     }
   }
 
-  ex = attempt(sel.mp, null, null, null, sel.requirePref);
+  ex = attemptWithFallback(sel.mp, null, null, null, sel.requirePref, exactAvoidUsedSet, weekOnlyUsedSet);
   if (ex) {
     stats.picked_mp_pref++;
     return ex;
@@ -465,20 +448,28 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
 
   // Strict-pref: allow repeating a correct-pref exercise before picking any wrong-pref exercise
   if (sel.requirePref && sel.prefMode === "strict") {
-    ex = pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet, usedCanonicalNamesSet);
+    ex = attemptWithFallback(
+      null,
+      null,
+      sel.sw2,
+      sel.sw2Any || null,
+      sel.requirePref,
+      todayOnlyUsedSet,
+      null,
+    );
     if (ex) { stats.picked_pref_repeat = (stats.picked_pref_repeat || 0) + 1; return ex; }
     if (swList) {
       for (const sw of swList) {
-        ex = pickBest(allowedSet, byId, { mp: null, sw, sw2: null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet, usedCanonicalNamesSet);
+        ex = attemptWithFallback(null, sw, null, null, sel.requirePref, todayOnlyUsedSet, null);
         if (ex) { stats.picked_pref_repeat = (stats.picked_pref_repeat || 0) + 1; return ex; }
       }
     }
-    ex = pickBest(allowedSet, byId, { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet, usedCanonicalNamesSet);
+    ex = attemptWithFallback(sel.mp, null, null, null, sel.requirePref, todayOnlyUsedSet, null);
     if (ex) { stats.picked_pref_repeat = (stats.picked_pref_repeat || 0) + 1; return ex; }
   }
 
   if (sel.requirePref) {
-    ex = attempt(null, null, sel.sw2, sel.sw2Any || null, null);
+    ex = attemptWithFallback(null, null, sel.sw2, sel.sw2Any || null, null, exactAvoidUsedSet, weekOnlyUsedSet);
     if (ex) {
       stats.picked_sw2_relaxed++;
       return ex;
@@ -487,7 +478,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
 
   if (sel.requirePref && swList) {
     for (const sw of swList) {
-      ex = attempt(null, sw, null, null, null);
+      ex = attemptWithFallback(null, sw, null, null, null, exactAvoidUsedSet, weekOnlyUsedSet);
       if (ex) {
         stats.picked_sw_relaxed++;
         return ex;
@@ -496,7 +487,7 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   }
 
   if (sel.requirePref) {
-    ex = attempt(sel.mp, null, null, null, null);
+    ex = attemptWithFallback(sel.mp, null, null, null, null, exactAvoidUsedSet, weekOnlyUsedSet);
     if (ex) {
       stats.picked_mp_relaxed++;
       return ex;
@@ -504,6 +495,28 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   }
 
   const exDup =
+    pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields }, todayOnlyUsedSet, usedRegionsSet) ||
+    (swList
+      ? (() => {
+          for (const sw of swList) {
+            const e = pickBest(allowedSet, byId, { mp: null, sw: sw, sw2: null, requirePref: sel.requirePref, ...sharedFields }, todayOnlyUsedSet, usedRegionsSet);
+            if (e) return e;
+          }
+          return null;
+        })()
+      : null) ||
+    pickBest(allowedSet, byId, { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, ...sharedFields }, todayOnlyUsedSet, usedRegionsSet) ||
+    pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: null, ...sharedFields }, todayOnlyUsedSet, usedRegionsSet) ||
+    (swList
+      ? (() => {
+          for (const sw of swList) {
+            const e = pickBest(allowedSet, byId, { mp: null, sw: sw, sw2: null, requirePref: null, ...sharedFields }, todayOnlyUsedSet, usedRegionsSet);
+            if (e) return e;
+          }
+          return null;
+        })()
+      : null) ||
+    pickBest(allowedSet, byId, { mp: sel.mp, sw: null, sw2: null, requirePref: null, ...sharedFields }, todayOnlyUsedSet, usedRegionsSet) ||
     pickBest(allowedSet, byId, { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields }, null, usedRegionsSet) ||
     (swList
       ? (() => {
@@ -533,6 +546,255 @@ export function pickWithFallback(allowedSet, byId, sel, usedWeek, stats, usedSw2
   }
 
   return null;
+}
+
+function toRankedDebugCandidates(ranked) {
+  return (ranked || []).map(({ ex, score }) => ({
+    exercise_id: ex?.id ?? null,
+    exercise_name: ex?.n ?? "",
+    score: Number(Number(score).toFixed(2)),
+    mp: ex?.mp || "",
+    sw: ex?.sw || "",
+    sw2: ex?.sw2 || "",
+  }));
+}
+
+export function debugRankWithFallback(
+  allowedSet,
+  byId,
+  sel,
+  usedWeek,
+  usedToday,
+  usedRegionsSet,
+  usedCanonicalNamesSet,
+  limit = 5,
+) {
+  const sharedFields = {
+    prefMode: sel.prefMode,
+    prefBonus: sel.prefBonus,
+    preferLoadable: sel.preferLoadable,
+    preferIsolation: sel.preferIsolation,
+    preferCompound: sel.preferCompound,
+    strengthEquivalentBonus: sel.strengthEquivalentBonus,
+    rankValue: sel.rankValue,
+    programType: sel.programType,
+    condState: sel.condState,
+    condThresholds: sel.condThresholds,
+  };
+
+  const swList = (sel.swAny && sel.swAny.length > 0) ? sel.swAny : (sel.sw ? [sel.sw] : []);
+  const attempts = [];
+  const exactAvoidUsedSet = mergeUsedSets(usedWeek, usedToday);
+  const weekOnlyUsedSet = usedWeek instanceof Set && usedWeek.size > 0 ? usedWeek : null;
+  const todayOnlyUsedSet = usedToday instanceof Set && usedToday.size > 0 ? usedToday : null;
+
+  function recordAttempt(label, ranked) {
+    attempts.push({
+      label,
+      candidate_count: ranked.length,
+      candidates: toRankedDebugCandidates(ranked.slice(0, limit)),
+    });
+    if (ranked.length > 0) {
+      return {
+        selected_attempt_label: label,
+        ranked_candidates: toRankedDebugCandidates(ranked.slice(0, limit)),
+        selection_attempts: attempts,
+      };
+    }
+    return null;
+  }
+
+  function recordTwoPass(baseLabel, selector, primaryUsedSet, fallbackUsedSet = primaryUsedSet, avoidCnSet = usedCanonicalNamesSet) {
+    const rankedPrimary = rankBest(
+      allowedSet,
+      byId,
+      selector,
+      primaryUsedSet,
+      usedRegionsSet,
+      avoidCnSet,
+      limit,
+    );
+    const primaryHit = recordAttempt(`${baseLabel}:avoid_repeat_exact_exercise`, rankedPrimary);
+    if (primaryHit) return primaryHit;
+    if (fallbackUsedSet === primaryUsedSet) return null;
+    const rankedFallback = rankBest(
+      allowedSet,
+      byId,
+      selector,
+      fallbackUsedSet,
+      usedRegionsSet,
+      avoidCnSet,
+      limit,
+    );
+    return recordAttempt(`${baseLabel}:fallback_allow_repeat_exact_exercise`, rankedFallback);
+  }
+
+  if (sel.selectionMode === "benchmark_exactness") {
+    const hit = recordTwoPass(
+      "benchmark_exact",
+      { mp: sel.mp || null, sw: sel.sw || null, sw2: sel.sw2 || null, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields },
+      exactAvoidUsedSet,
+      weekOnlyUsedSet,
+    );
+    if (hit) return hit;
+  }
+
+  {
+    const hit = recordTwoPass(
+      "sw2_pref",
+      { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields },
+      exactAvoidUsedSet,
+      weekOnlyUsedSet,
+    );
+    if (hit) return hit;
+  }
+
+  for (const sw of swList) {
+    const hit = recordTwoPass(
+      `sw_pref:${sw}`,
+      { mp: null, sw, sw2: null, requirePref: sel.requirePref, ...sharedFields },
+      exactAvoidUsedSet,
+      weekOnlyUsedSet,
+    );
+    if (hit) return hit;
+  }
+
+  {
+    const hit = recordTwoPass(
+      "mp_pref",
+      { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, ...sharedFields },
+      exactAvoidUsedSet,
+      weekOnlyUsedSet,
+    );
+    if (hit) return hit;
+  }
+
+  if (sel.requirePref && sel.prefMode === "strict") {
+    {
+      const hit = recordTwoPass(
+        "strict_pref_repeat:sw2",
+        { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields },
+        todayOnlyUsedSet,
+        null,
+      );
+      if (hit) return hit;
+    }
+    for (const sw of swList) {
+      const hit = recordTwoPass(
+        `strict_pref_repeat:${sw}`,
+        { mp: null, sw, sw2: null, requirePref: sel.requirePref, ...sharedFields },
+        todayOnlyUsedSet,
+        null,
+      );
+      if (hit) return hit;
+    }
+    {
+      const hit = recordTwoPass(
+        "strict_pref_repeat:mp",
+        { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, ...sharedFields },
+        todayOnlyUsedSet,
+        null,
+      );
+      if (hit) return hit;
+    }
+  }
+
+  if (sel.requirePref) {
+    {
+      const hit = recordTwoPass(
+        "sw2_relaxed",
+        { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: null, ...sharedFields },
+        exactAvoidUsedSet,
+        weekOnlyUsedSet,
+      );
+      if (hit) return hit;
+    }
+    for (const sw of swList) {
+      const hit = recordTwoPass(
+        `sw_relaxed:${sw}`,
+        { mp: null, sw, sw2: null, requirePref: null, ...sharedFields },
+        exactAvoidUsedSet,
+        weekOnlyUsedSet,
+      );
+      if (hit) return hit;
+    }
+    {
+      const hit = recordTwoPass(
+        "mp_relaxed",
+        { mp: sel.mp, sw: null, sw2: null, requirePref: null, ...sharedFields },
+        exactAvoidUsedSet,
+        weekOnlyUsedSet,
+      );
+      if (hit) return hit;
+    }
+  }
+
+  {
+    const hit = recordTwoPass(
+      "allow_dup:sw2_pref",
+      { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: sel.requirePref, ...sharedFields },
+      todayOnlyUsedSet,
+      null,
+      null,
+    );
+    if (hit) return hit;
+  }
+  for (const sw of swList) {
+    const hit = recordTwoPass(
+      `allow_dup:${sw}`,
+      { mp: null, sw, sw2: null, requirePref: sel.requirePref, ...sharedFields },
+      todayOnlyUsedSet,
+      null,
+      null,
+    );
+    if (hit) return hit;
+  }
+  {
+    const hit = recordTwoPass(
+      "allow_dup:mp",
+      { mp: sel.mp, sw: null, sw2: null, requirePref: sel.requirePref, ...sharedFields },
+      todayOnlyUsedSet,
+      null,
+      null,
+    );
+    if (hit) return hit;
+  }
+  {
+    const hit = recordTwoPass(
+      "allow_dup:sw2_relaxed",
+      { mp: null, sw: null, sw2: sel.sw2, sw2Any: sel.sw2Any || null, requirePref: null, ...sharedFields },
+      todayOnlyUsedSet,
+      null,
+      null,
+    );
+    if (hit) return hit;
+  }
+  for (const sw of swList) {
+    const hit = recordTwoPass(
+      `allow_dup_relaxed:${sw}`,
+      { mp: null, sw, sw2: null, requirePref: null, ...sharedFields },
+      todayOnlyUsedSet,
+      null,
+      null,
+    );
+    if (hit) return hit;
+  }
+  {
+    const hit = recordTwoPass(
+      "allow_dup_relaxed:mp",
+      { mp: sel.mp, sw: null, sw2: null, requirePref: null, ...sharedFields },
+      todayOnlyUsedSet,
+      null,
+      null,
+    );
+    if (hit) return hit;
+  }
+
+  return {
+    selected_attempt_label: null,
+    ranked_candidates: [],
+    selection_attempts: attempts,
+  };
 }
 
 export function applyFillAddSets(blocks, targetSlot, addSets) {

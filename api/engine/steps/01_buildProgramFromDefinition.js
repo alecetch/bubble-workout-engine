@@ -262,6 +262,11 @@ function resolveOrderedSimulationSlot({
 }) {
   const attempts = [];
   const chain = buildSimulationAttemptChain(resolvedSlot);
+  let selectionDebug = {
+    selected_attempt_label: null,
+    ranked_candidates: [],
+    selection_attempts: [],
+  };
 
   for (let idx = 0; idx < chain.length; idx++) {
     const attemptSlot = chain[idx];
@@ -283,12 +288,18 @@ function resolveOrderedSimulationSlot({
 
     if (attemptAllowedSet.size === 0) continue;
 
+    const attemptSelectionDebug = {
+      selected_attempt_label: null,
+      ranked_candidates: [],
+      selection_attempts: [],
+    };
     const ex = fillSlot(
       { ...attemptSlot, slot_family: slotFamily, variability_policy: variabilityPolicy },
       { byId, allowedSet: attemptAllowedSet },
-      builderState,
+      { ...builderState, slotSelectionDebug: attemptSelectionDebug },
     );
     if (!ex || isExcludedExercise(ex, excludeMovementClassesSet)) continue;
+    selectionDebug = attemptSelectionDebug;
 
     logBuilderEvent(stats, {
       event: "ordered_simulation_resolved",
@@ -304,6 +315,7 @@ function resolveOrderedSimulationSlot({
       ex,
       metadata: attemptMeta,
       attempts,
+      selectionDebug,
     };
   }
 
@@ -327,6 +339,7 @@ function resolveOrderedSimulationSlot({
         : [],
     },
     attempts,
+    selectionDebug,
   };
 }
 
@@ -415,6 +428,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     config_key: compiledConfig?.configKey,
     equipment_profile: equipmentProfile,
     notes: [],
+    slot_debug: [],
   };
 
   const days = [];
@@ -459,6 +473,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         highComplexityCountToday: 0,
       },
       usedIdsWeek: daySelectionMode === "benchmark_exactness" ? null : usedIdsWeek,
+      usedIdsToday: new Set(),
       usedSw2Today: new Set(),
       usedCanonicalNamesToday: new Set(),
       usedRegionsToday: new Set(),
@@ -521,6 +536,11 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       let ex = null;
       let simulationMetadata = null;
       let simulationAttempts = null;
+      let slotSelectionDebug = {
+        selected_attempt_label: null,
+        ranked_candidates: [],
+        selection_attempts: [],
+      };
       builderState.variabilityAvoidCanonicalNames = null;
 
       if (variabilityPolicy === "none" && slotFamily) {
@@ -592,14 +612,17 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         ex = simulationResolved.ex;
         simulationMetadata = simulationResolved.metadata;
         simulationAttempts = simulationResolved.attempts;
+        if (simulationResolved.selectionDebug) slotSelectionDebug = simulationResolved.selectionDebug;
       }
 
       if (!ex && !isOrderedSimulationDay) {
+        builderState.slotSelectionDebug = slotSelectionDebug;
         ex = fillSlot(
           { ...resolvedSlot, slot_family: slotFamily, variability_policy: variabilityPolicy },
           catalogIndex,
           builderState,
         );
+        delete builderState.slotSelectionDebug;
       }
       if (ex && isExcludedExercise(ex, excludeMovementClassesSet)) {
         ex = null;
@@ -610,12 +633,28 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         if (seeded && !isExcludedExercise(seeded, excludeMovementClassesSet)) {
           stats.picked_seed_slot_aware++;
           ex = seeded;
+          slotSelectionDebug.selected_attempt_label = slotSelectionDebug.selected_attempt_label || "seed_fallback";
         }
       }
+
+      const slotDebugEntry = {
+        day_index: day,
+        template_name: compiledConfig?.configKey ?? compiledConfig?.programType ?? null,
+        day_focus: toStr(template?.focus) || null,
+        slot: slotName,
+        mp: resolvedSlot.mp ?? null,
+        sw: resolvedSlot.sw ?? null,
+        sw2: resolvedSlot.sw2 ?? null,
+        selected_attempt_label: slotSelectionDebug.selected_attempt_label ?? null,
+        ranked_candidates: Array.isArray(slotSelectionDebug.ranked_candidates)
+          ? slotSelectionDebug.ranked_candidates
+          : [],
+      };
 
       if (ex) {
         const cn = canonicalName(ex.n);
         usedIdsWeek.add(ex.id);
+        builderState.usedIdsToday.add(ex.id);
         if (ex.sw2) builderState.usedSw2Today.add(ex.sw2);
         if (cn) builderState.usedCanonicalNamesToday.add(cn);
         for (const r of ex.tr || []) {
@@ -687,6 +726,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           is_buy_in: resolvedSlot.is_buy_in === true,
           ...simulationBlockFields,
         });
+        stats.slot_debug.push({
+          ...slotDebugEntry,
+          selected_exercise_id: ex.id,
+          selected_exercise_name: ex.n,
+          fill: null,
+        });
         continue;
       }
 
@@ -703,6 +748,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           simulation_required_equipment_slugs: simulationMetadata?.simulation_required_equipment_slugs ?? [],
           simulation_attempts: simulationAttempts,
         });
+        stats.slot_debug.push({
+          ...slotDebugEntry,
+          selected_exercise_id: null,
+          selected_exercise_name: null,
+          fill: "simulation_unresolvable",
+        });
         continue;
       }
 
@@ -718,6 +769,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       });
 
       stats.fills_add_sets += 1;
+      stats.slot_debug.push({
+        ...slotDebugEntry,
+        selected_exercise_id: null,
+        selected_exercise_name: null,
+        fill: "add_sets",
+      });
     }
 
     for (let bi = 0; bi < blocks.length; bi++) {
