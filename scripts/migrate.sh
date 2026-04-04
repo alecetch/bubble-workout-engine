@@ -62,4 +62,5 @@ docker run --rm \
   -user="${DB_USER}" \
   -password="${DB_PASSWORD}" \
   -schemas=public \
+  -ignoreMigrationPatterns="*:deleted" \
   migrate
