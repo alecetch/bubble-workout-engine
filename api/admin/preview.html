@@ -194,6 +194,22 @@
   <div class="sep"></div>
   <button id="generate-btn">Generate All</button>
   <span id="gen-status" style="font-size:12px"></span>
+  <div class="sep"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Export</span>
+    <select id="export-scope" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px">
+      <option value="current">Current selection</option>
+      <option value="all_ranks">All fitness levels</option>
+      <option value="all_presets">All equipment presets</option>
+      <option value="all_types">All program types</option>
+      <option value="full_matrix">Full matrix (slow)</option>
+    </select>
+    <select id="export-format" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px">
+      <option value="core">Core</option>
+    </select>
+    <button id="export-btn" class="secondary">Export CSV</button>
+    <span id="export-status" style="font-size:12px"></span>
+  </div>
 </div>
 
 <div id="meta-bar" class="meta-bar hidden"></div>
@@ -601,6 +617,72 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
   tabsEl.style.display = "";
   statusEl.textContent = "Done";
   setTimeout(() => { statusEl.textContent = ""; }, 2000);
+});
+
+document.getElementById("export-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("export-status");
+  statusEl.textContent = "Exporting...";
+
+  const scope = document.getElementById("export-scope").value;
+  const fieldSet = document.getElementById("export-format").value;
+
+  const currentRank = Number(selectedVal("rank-btns"));
+  const currentPreset = selectedVal("preset-btns");
+  const currentDpw = Number(selectedVal("dpw-btns"));
+  const currentDur = Number(selectedVal("dur-btns"));
+
+  const ALL_RANKS = [0, 1, 2, 3];
+  const ALL_PRESETS = ["no_equipment", "minimal_equipment", "decent_home_gym", "commercial_gym", "crossfit_hyrox_gym"];
+  const ALL_TYPES = ["hypertrophy", "strength", "conditioning", "hyrox"];
+
+  let fitnessRanks;
+  let equipmentPresets;
+  let programTypes;
+  switch (scope) {
+    case "all_ranks":
+      fitnessRanks = ALL_RANKS; equipmentPresets = [currentPreset]; programTypes = ALL_TYPES; break;
+    case "all_presets":
+      fitnessRanks = [currentRank]; equipmentPresets = ALL_PRESETS; programTypes = ALL_TYPES; break;
+    case "all_types":
+      fitnessRanks = [currentRank]; equipmentPresets = [currentPreset]; programTypes = ALL_TYPES; break;
+    case "full_matrix":
+      fitnessRanks = ALL_RANKS; equipmentPresets = ALL_PRESETS; programTypes = ALL_TYPES; break;
+    default:
+      fitnessRanks = [currentRank]; equipmentPresets = [currentPreset]; programTypes = ALL_TYPES; break;
+  }
+
+  try {
+    const res = await fetch("/admin/preview/export-csv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-token": getToken() },
+      body: JSON.stringify({
+        fitness_ranks: fitnessRanks,
+        equipment_presets: equipmentPresets,
+        program_types: programTypes,
+        days_per_week: currentDpw,
+        duration_mins: currentDur,
+        field_set: fieldSet,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error ?? `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `preview-export-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    statusEl.textContent = "Downloaded";
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+  } finally {
+    setTimeout(() => { statusEl.textContent = ""; }, 3000);
+  }
 });
 
 function rerenderPreviewPanels() {
