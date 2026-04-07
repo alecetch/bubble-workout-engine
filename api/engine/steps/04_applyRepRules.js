@@ -201,6 +201,17 @@ function enrichProgramDays({ program, catalogJson, rules, source }) {
           applyRuleToItem(it, rule);
           dbg.items_with_rule += 1;
 
+          // Deload RIR bump: progression step stamps deload_rir_bump on items in the
+          // deload week; apply it here after the rep rule has set rir_target.
+          const rirBump = toInt(it.deload_rir_bump, 0);
+          if (rirBump > 0) {
+            const currentRir = toInt(it.rir_target, null);
+            if (currentRir !== null && Number.isFinite(currentRir)) {
+              it.rir_target = currentRir + rirBump;
+              dbg.notes.push(`Deload RIR bump +${rirBump}: ex_id=${s(it.ex_id)} rir_target=${it.rir_target}`);
+            }
+          }
+
           // Unit override: if the matched rule prescribes metres but the exercise
           // does not accept a distance prescription, substitute the rule's
           // coach-configured time equivalent instead.

@@ -187,16 +187,32 @@ test("isConditioning returns true for mp=cardio", () => {
   assert.equal(isConditioning({ mp: "cardio", sw: "", sw2: "", n: "" }), true);
 });
 
-test("isConditioning returns true when sw contains engine", () => {
-  assert.equal(isConditioning({ mp: "", sw: "cardio_engine", sw2: "", n: "" }), true);
+test("isConditioning returns true for conditioning_main pref tag", () => {
+  assert.equal(isConditioning({ mp: "", pref: ["conditioning_main"] }), true);
 });
 
-test("isConditioning returns true for name containing bike", () => {
-  assert.equal(isConditioning({ mp: "", sw: "", sw2: "", n: "Air Bike Intervals" }), true);
+test("isConditioning returns true for hyrox_station pref tag", () => {
+  assert.equal(isConditioning({ mp: "", pref: ["hyrox_station"] }), true);
+});
+
+test("isConditioning returns true for hyrox_buy_in pref tag", () => {
+  assert.equal(isConditioning({ mp: "", pref: ["hyrox_buy_in"] }), true);
+});
+
+test("isConditioning returns false for strength rows", () => {
+  assert.equal(
+    isConditioning({ mp: "pull_horizontal", sw: "pull_horizontal", sw2: "pull_horizontal_compound", n: "Seated Cable Row", pref: [] }),
+    false,
+  );
+});
+
+test("isConditioning does not infer conditioning from names alone", () => {
+  assert.equal(isConditioning({ mp: "", sw: "", sw2: "", n: "Air Bike Intervals", pref: [] }), false);
+  assert.equal(isConditioning({ mp: "", sw: "", sw2: "", n: "Row Erg Intervals", pref: [] }), false);
 });
 
 test("isConditioning returns false for normal strength exercise", () => {
-  assert.equal(isConditioning({ mp: "squat", sw: "squat_group", sw2: "squat_comp", n: "Squat" }), false);
+  assert.equal(isConditioning({ mp: "squat", sw: "squat_group", sw2: "squat_comp", n: "Squat", pref: [] }), false);
 });
 
 test("isLoadable returns true when load=true", () => {

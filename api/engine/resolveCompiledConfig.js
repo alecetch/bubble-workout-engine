@@ -169,6 +169,7 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     source,
     builder: {
       dayTemplates: builderDayTemplates,
+      dayTemplatesByDpw: pgcJson?.builder?.day_templates_by_dpw ?? null,
       setsByDuration: pgcJson?.builder?.sets_by_duration ?? null,
       blockBudget: pgcJson?.builder?.block_budget ?? null,
       slotDefaults: pgcJson?.builder?.slot_defaults ?? {},
