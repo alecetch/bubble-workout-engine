@@ -2,6 +2,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { makeGuidelineLoadService } from "../services/guidelineLoadService.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
@@ -64,7 +65,16 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-export function createReadProgramHandlers(db = pool) {
+export function createReadProgramHandlers(options = pool) {
+  const resolved = options && typeof options.connect === "function"
+    ? { db: options, guidelineLoadService: makeGuidelineLoadService(options) }
+    : {
+        db: options?.db ?? pool,
+        guidelineLoadService: options?.guidelineLoadService ?? makeGuidelineLoadService(options?.db ?? pool),
+      };
+  const db = resolved.db;
+  const guidelineLoadService = resolved.guidelineLoadService;
+
   function toAuthUserId(req) {
     return safeString(req.auth?.user_id) || safeString(req.auth?.userId);
   }
@@ -285,6 +295,7 @@ export function createReadProgramHandlers(db = pool) {
           d.block_format_finisher_text,
           d.is_completed,
           d.has_activity,
+          p.client_profile_id,
           d.hero_media_id,
           ma.image_key  AS hero_image_key,
           ma.image_url  AS hero_image_url
@@ -372,9 +383,41 @@ export function createReadProgramHandlers(db = pool) {
         [program_day_id],
       );
 
+      let resolvedClientProfileId = day.client_profile_id ?? null;
+      if (!resolvedClientProfileId) {
+        const profileR = await client.query(
+          `
+          SELECT id
+          FROM client_profile
+          WHERE user_id = $1
+          ORDER BY updated_at DESC
+          LIMIT 1
+          `,
+          [user_id],
+        );
+        resolvedClientProfileId = profileR.rows[0]?.id ?? null;
+      }
+
+      let annotatedExercises = exR.rows;
+      if (resolvedClientProfileId) {
+        try {
+          annotatedExercises = await guidelineLoadService.annotateExercisesWithGuidelineLoads({
+            exercises: exR.rows,
+            clientProfileId: resolvedClientProfileId,
+            userId: user_id,
+            programType: day.day_type,
+          });
+        } catch (guidelineErr) {
+          req.log.warn(
+            { event: "read_program.guideline_load.warning", err: guidelineErr?.message },
+            "guideline load annotation failed; returning day without guideline loads",
+          );
+        }
+      }
+
       // Group exercises by segment id.
       const itemsBySegmentId = new Map();
-      for (const ex of exR.rows) {
+      for (const ex of annotatedExercises) {
         const key = ex.workout_segment_id;
         if (!key) continue; // Should not happen in current importer.
         if (!itemsBySegmentId.has(key)) itemsBySegmentId.set(key, []);
@@ -388,7 +431,7 @@ export function createReadProgramHandlers(db = pool) {
       }));
 
       // Optionally surface unassigned exercises if any exist.
-      const unassigned = exR.rows.filter((x) => !x.workout_segment_id);
+      const unassigned = annotatedExercises.filter((x) => !x.workout_segment_id);
       if (unassigned.length) {
         segments.push({
           workout_segment_id: null,

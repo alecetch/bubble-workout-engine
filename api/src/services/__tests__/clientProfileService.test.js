@@ -55,6 +55,8 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
     onboardingStepCompleted: 3,
     onboardingCompletedAt: "2026-01-01T00:00:00Z",
     programType: "strength",
+    anchorLiftsSkipped: false,
+    anchorLiftsCollectedAt: null,
   });
 });
 

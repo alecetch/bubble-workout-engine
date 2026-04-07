@@ -38,11 +38,13 @@ import { adminOnly, userAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
+  makeClientProfileService,
   upsertProfile,
   getProfileById,
-  patchProfile,
   toApiShape,
 } from "./src/services/clientProfileService.js";
+import { makeAnchorLiftService } from "./src/services/anchorLiftService.js";
+import { RequestValidationError } from "./src/utils/validate.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -158,6 +160,9 @@ const profilePatchKeys = [
   "onboardingStepCompleted",
   "onboardingCompletedAt",
   "programType",
+  "anchorLiftsSkipped",
+  "anchorLiftsCollectedAt",
+  "anchorLifts",
 ];
 
 const presetColumnByCode = {
@@ -296,7 +301,43 @@ const handleReferenceData = async (req, res) => {
       label: row.label,
       category: row.category ?? null,
     }));
-    return res.status(200).json({ ...devReferenceData, equipmentItems });
+
+    let anchorExercises = [];
+    try {
+      const anchorResult = await pool.query(`
+        SELECT
+          exercise_id,
+          name,
+          equipment_items_slugs,
+          COALESCE(load_estimation_metadata->>'estimation_family', '') AS estimation_family,
+          COALESCE((load_estimation_metadata->>'anchor_priority')::int, 999) AS anchor_priority,
+          COALESCE((load_estimation_metadata->>'is_anchor_eligible')::boolean, false) AS is_anchor_eligible,
+          COALESCE((load_estimation_metadata->>'family_conversion_factor')::numeric, 1) AS family_conversion_factor,
+          COALESCE((load_estimation_metadata->>'is_unilateral')::boolean, false) AS is_unilateral
+        FROM exercise_catalogue
+        WHERE is_archived = false
+          AND COALESCE((load_estimation_metadata->>'is_anchor_eligible')::boolean, false) = true
+        ORDER BY estimation_family ASC, anchor_priority ASC, name ASC
+      `);
+
+      anchorExercises = anchorResult.rows.map((row) => ({
+        exerciseId: row.exercise_id,
+        label: row.name,
+        equipmentItemsSlugs: Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [],
+        estimationFamily: row.estimation_family,
+        anchorPriority: Number(row.anchor_priority ?? 999),
+        isAnchorEligible: Boolean(row.is_anchor_eligible),
+        familyConversionFactor: Number(row.family_conversion_factor ?? 1),
+        isUnilateral: Boolean(row.is_unilateral),
+      }));
+    } catch (anchorErr) {
+      req.log.warn(
+        { event: "http.reference_data.anchor_exercises.warning", err: anchorErr?.message },
+        "anchorExercises unavailable; returning reference data without them",
+      );
+    }
+
+    return res.status(200).json({ ...devReferenceData, equipmentItems, anchorExercises });
   } catch (err) {
     req.log.error({ event: "http.reference_data.error", err: err?.message }, "reference-data error");
     return res.status(200).json(devReferenceData);
@@ -507,16 +548,50 @@ app.get("/client-profiles/:id", requireAuth, handleGetClientProfile);
 const handlePatchClientProfile = async (req, res) => {
   const profileId = req.params.id;
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  let client;
   try {
-    const updated = await patchProfile(profileId, patch);
+    client = await pool.connect();
+    await client.query("BEGIN");
+
+    const anchorLifts = Array.isArray(patch.anchorLifts) ? patch.anchorLifts : undefined;
+    const anchorLiftsSkipped = patch.anchorLiftsSkipped === undefined ? undefined : Boolean(patch.anchorLiftsSkipped);
+    const shouldStampAnchorCollection = anchorLifts !== undefined || anchorLiftsSkipped !== undefined;
+    const profilePatch = {
+      ...patch,
+      anchorLiftsSkipped,
+      anchorLiftsCollectedAt: shouldStampAnchorCollection ? new Date().toISOString() : patch.anchorLiftsCollectedAt,
+    };
+    delete profilePatch.anchorLifts;
+
+    const profileService = makeClientProfileService(client);
+    const anchorLiftService = makeAnchorLiftService(client);
+    const updated = await profileService.patchProfile(profileId, profilePatch);
     if (!updated) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
     }
+
+    if (anchorLifts !== undefined) {
+      await anchorLiftService.upsertAnchorLifts(profileId, anchorLifts);
+    }
+
+    await client.query("COMMIT");
     req.log.debug({ event: "profile.patch", id: profileId }, "profile patch applied");
-    return res.status(200).json(updated);
+    const refreshed = await profileService.getProfileById(profileId);
+    return res.status(200).json(refreshed);
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // ignore rollback failures
+    }
     req.log.error({ event: "profile.patch.error", err: err?.message }, "PATCH /client-profiles/:id error");
+    if (err instanceof RequestValidationError) {
+      return res.status(400).json({ ok: false, code: "validation_error", error: err.message, details: err.details });
+    }
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  } finally {
+    client?.release();
   }
 };
 
