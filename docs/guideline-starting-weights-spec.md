@@ -4,6 +4,8 @@
 > **Source of truth:** `docs/architecture.md` — all architectural references in this spec cite sections from that document.
 > **Status:** Ready for implementation.
 
+> **Relationship to enhanced progression spec:** The anchor lift entries collected on `Step2bBaselineLoadsScreen` are also used to seed `exercise_progression_state` (Layer B) for the athlete's first program. See `docs/enhanced-progression-system-spec.md §10` — specifically the "Baseline loads cold-start" section. The `progressionSeedService` reads the anchor lift data and writes initial progression state rows so that Layer C can apply a starting load override from week 1, not just from week 2 onwards.
+
 > **Schema cross-checks (verified against actual migrations):**
 > - `client_profile.id` — UUID PK ✓ (V5)
 > - `client_profile.fitness_rank` — INT 0–3 (0=beginner, 1=intermediate, 2=advanced, 3=elite) ✓ (`mapFitnessRank` in `generateProgramV2.js:53`)

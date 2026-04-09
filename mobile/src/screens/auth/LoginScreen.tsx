@@ -89,7 +89,8 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
-            textContentType="emailAddress"
+            autoComplete="username"
+            textContentType="username"
             placeholder="you@example.com"
             placeholderTextColor={colors.textSecondary}
             style={styles.input}
@@ -105,6 +106,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
+              autoComplete="password"
               textContentType="password"
               placeholder="Enter password"
               placeholderTextColor={colors.textSecondary}

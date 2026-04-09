@@ -371,6 +371,15 @@ export function createReadProgramHandlers(options = pool) {
           intensity_prescription,
           tempo,
           rest_seconds,
+          progression_outcome,
+          progression_primary_lever,
+          progression_confidence,
+          progression_source,
+          progression_reasoning_json,
+          recommended_load_kg,
+          recommended_reps_target,
+          recommended_sets,
+          recommended_rest_seconds,
           notes,
           is_loadable,
           coaching_cues_json,
@@ -427,11 +436,73 @@ export function createReadProgramHandlers(options = pool) {
       const segments = segR.rows.map((seg) => ({
         ...seg,
         segment_type_label: segmentTypeLabel(seg.segment_type),
-        items: itemsBySegmentId.get(seg.workout_segment_id) || [],
+        items: (itemsBySegmentId.get(seg.workout_segment_id) || []).map((item) => {
+          const {
+            progression_outcome,
+            progression_primary_lever,
+            progression_confidence,
+            progression_source,
+            progression_reasoning_json,
+            recommended_load_kg,
+            recommended_reps_target,
+            recommended_sets,
+            recommended_rest_seconds,
+            ...rest
+          } = item;
+          return {
+            ...rest,
+            progression_recommendation: progression_outcome
+              ? {
+                  outcome: progression_outcome,
+                  primary_lever: progression_primary_lever,
+                  confidence: progression_confidence,
+                  source: progression_source,
+                  reasoning: Array.isArray(progression_reasoning_json)
+                    ? progression_reasoning_json
+                    : [],
+                  recommended_load_kg: recommended_load_kg == null ? null : Number(recommended_load_kg),
+                  recommended_reps_target: recommended_reps_target == null ? null : Number(recommended_reps_target),
+                  recommended_sets: recommended_sets == null ? null : Number(recommended_sets),
+                  recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
+                }
+              : null,
+          };
+        }),
       }));
 
       // Optionally surface unassigned exercises if any exist.
-      const unassigned = annotatedExercises.filter((x) => !x.workout_segment_id);
+      const unassigned = annotatedExercises
+        .filter((x) => !x.workout_segment_id)
+        .map((item) => {
+          const {
+            progression_outcome,
+            progression_primary_lever,
+            progression_confidence,
+            progression_source,
+            progression_reasoning_json,
+            recommended_load_kg,
+            recommended_reps_target,
+            recommended_sets,
+            recommended_rest_seconds,
+            ...rest
+          } = item;
+          return {
+            ...rest,
+            progression_recommendation: progression_outcome
+              ? {
+                  outcome: progression_outcome,
+                  primary_lever: progression_primary_lever,
+                  confidence: progression_confidence,
+                  source: progression_source,
+                  reasoning: Array.isArray(progression_reasoning_json) ? progression_reasoning_json : [],
+                  recommended_load_kg: recommended_load_kg == null ? null : Number(recommended_load_kg),
+                  recommended_reps_target: recommended_reps_target == null ? null : Number(recommended_reps_target),
+                  recommended_sets: recommended_sets == null ? null : Number(recommended_sets),
+                  recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
+                }
+              : null,
+          };
+        });
       if (unassigned.length) {
         segments.push({
           workout_segment_id: null,

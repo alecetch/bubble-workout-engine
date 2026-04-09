@@ -17,6 +17,10 @@ type AsyncStorageLike = {
 
 const inMemoryStore = new Map<string, string>();
 
+export function _resetForTest(): void {
+  inMemoryStore.clear();
+}
+
 function getStorage(): AsyncStorageLike {
   const requireFn = (globalThis as { require?: (id: string) => unknown }).require;
   if (!requireFn) {

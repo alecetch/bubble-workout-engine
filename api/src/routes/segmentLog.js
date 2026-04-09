@@ -66,7 +66,7 @@ export function createSegmentLogHandlers(db = pool) {
         const user_id = resolveUserId(req);
         const result = await client.query(
           `
-          SELECT id, program_exercise_id, weight_kg, reps_completed, order_index
+          SELECT id, program_exercise_id, weight_kg, reps_completed, rir_actual, order_index
           FROM segment_exercise_log
           WHERE user_id = $1
             AND workout_segment_id = $2
@@ -108,6 +108,12 @@ export function createSegmentLogHandlers(db = pool) {
       }
       for (const row of rows) {
         requireUuid(safeString(row?.program_exercise_id), "program_exercise_id");
+        if (row?.rir_actual != null && String(row.rir_actual).trim() !== "") {
+          const rirActual = Number(row.rir_actual);
+          if (!Number.isFinite(rirActual) || rirActual < 0 || rirActual > 4) {
+            throw new RequestValidationError("rir_actual must be a finite number between 0 and 4");
+          }
+        }
       }
 
       const client = await db.connect();
@@ -133,18 +139,22 @@ export function createSegmentLogHandlers(db = pool) {
           const region = regionByProgramExerciseId.get(row.program_exercise_id) ?? null;
           const weightKg = Number(row.weight_kg);
           const repsCompleted = Number(row.reps_completed);
+          const rirActual = row.rir_actual == null || String(row.rir_actual).trim() === ""
+            ? null
+            : Number(row.rir_actual);
           const estimated1rmKg = compute1rmKg(weightKg, repsCompleted, region);
 
           await client.query(
             `
             INSERT INTO segment_exercise_log
               (user_id, program_id, program_day_id, workout_segment_id,
-               program_exercise_id, order_index, weight_kg, reps_completed, estimated_1rm_kg, is_draft)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false)
+               program_exercise_id, order_index, weight_kg, reps_completed, rir_actual, estimated_1rm_kg, is_draft)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,false)
             ON CONFLICT ON CONSTRAINT uq_sel_user_segment_exercise
             DO UPDATE SET
               weight_kg      = EXCLUDED.weight_kg,
               reps_completed = EXCLUDED.reps_completed,
+              rir_actual     = EXCLUDED.rir_actual,
               estimated_1rm_kg = EXCLUDED.estimated_1rm_kg,
               order_index    = EXCLUDED.order_index,
               is_draft       = false
@@ -158,6 +168,7 @@ export function createSegmentLogHandlers(db = pool) {
               row.order_index,
               row.weight_kg,
               row.reps_completed,
+              Number.isFinite(rirActual) ? rirActual : null,
               estimated1rmKg,
             ],
           );

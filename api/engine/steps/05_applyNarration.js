@@ -173,7 +173,8 @@ function normalizeTemplates(raw) {
       applies_day_focus: isObj(applies) ? s(applies.day_focus) : "",
       applies_phase: isObj(applies) ? s(applies.phase) : "",
       // Note: Bubble uses "lower number is higher priority" in tie-breaking. Keep that.
-      priority: toInt(r.priority, 1),
+      // Null/missing priorities should sort after explicit priorities, not collide with priority 1.
+      priority: toInt(r.priority, 9999),
       pool,
     });
   }

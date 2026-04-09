@@ -14,6 +14,7 @@ export function validateCompiledConfig(config) {
   const knownDaySelectionModes = new Set(["default", "benchmark_exactness"]);
   const knownSegmentTypes = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
   const knownPurposes = new Set(["main", "secondary", "accessory"]);
+  const knownProgressionLevers = new Set(["reps", "load", "sets", "rest", "density", "volume", "specific_volume", "hold", "deload"]);
   const slugPattern = /^[a-z][a-z0-9_]*$/;
 
   function isValidSimulationEntry(entry) {
@@ -281,6 +282,92 @@ export function validateCompiledConfig(config) {
           `builder.blockVariabilityDefaults["${blockKey}"] must be one of none|med|high`,
         );
       }
+    }
+  }
+
+  const progression = config?.progression;
+  if (!progression || typeof progression !== "object" || Array.isArray(progression)) {
+    details.push("progression must be a non-null object");
+  } else {
+    if (
+      progression.history !== undefined &&
+      (typeof progression.history !== "object" || progression.history === null || Array.isArray(progression.history))
+    ) {
+      details.push("progression.history must be an object when provided");
+    }
+    if (
+      progression.leverProfiles !== undefined &&
+      (typeof progression.leverProfiles !== "object" || progression.leverProfiles === null || Array.isArray(progression.leverProfiles))
+    ) {
+      details.push("progression.leverProfiles must be an object when provided");
+    } else if (progression.leverProfiles) {
+      for (const [profileName, profile] of Object.entries(progression.leverProfiles)) {
+        if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+          details.push(`progression.leverProfiles["${profileName}"] must be an object`);
+          continue;
+        }
+        if (profile.priority_order !== undefined) {
+          if (!Array.isArray(profile.priority_order) || profile.priority_order.length === 0) {
+            details.push(`progression.leverProfiles["${profileName}"].priority_order must be a non-empty array when provided`);
+          } else {
+            for (const lever of profile.priority_order) {
+              if (!knownProgressionLevers.has(String(lever))) {
+                details.push(`progression.leverProfiles["${profileName}"].priority_order contains unknown lever "${lever}"`);
+              }
+            }
+          }
+        }
+      }
+    }
+    if (
+      progression.slotProfileMap !== undefined &&
+      (typeof progression.slotProfileMap !== "object" || progression.slotProfileMap === null || Array.isArray(progression.slotProfileMap))
+    ) {
+      details.push("progression.slotProfileMap must be an object when provided");
+    } else if (progression.slotProfileMap) {
+      for (const [programType, purposeMap] of Object.entries(progression.slotProfileMap)) {
+        if (!purposeMap || typeof purposeMap !== "object" || Array.isArray(purposeMap)) {
+          details.push(`progression.slotProfileMap["${programType}"] must be an object`);
+          continue;
+        }
+        for (const [purpose, profileName] of Object.entries(purposeMap)) {
+          if (!knownPurposes.has(purpose)) {
+            details.push(`progression.slotProfileMap["${programType}"] contains unknown purpose "${purpose}"`);
+          }
+          if (typeof profileName !== "string" || !profileName.trim()) {
+            details.push(`progression.slotProfileMap["${programType}"]["${purpose}"] must be a non-empty string`);
+          } else if (
+            progression.leverProfiles &&
+            !Object.prototype.hasOwnProperty.call(progression.leverProfiles, profileName)
+          ) {
+            details.push(`progression.slotProfileMap["${programType}"]["${purpose}"] references missing lever profile "${profileName}"`);
+          }
+        }
+      }
+    }
+    if (
+      progression.loadIncrementProfiles !== undefined &&
+      (typeof progression.loadIncrementProfiles !== "object" || progression.loadIncrementProfiles === null || Array.isArray(progression.loadIncrementProfiles))
+    ) {
+      details.push("progression.loadIncrementProfiles must be an object when provided");
+    }
+    if (
+      progression.restProgressionProfiles !== undefined &&
+      (typeof progression.restProgressionProfiles !== "object" || progression.restProgressionProfiles === null || Array.isArray(progression.restProgressionProfiles))
+    ) {
+      details.push("progression.restProgressionProfiles must be an object when provided");
+    }
+    if (
+      progression.repProgressionProfiles !== undefined &&
+      (typeof progression.repProgressionProfiles !== "object" || progression.repProgressionProfiles === null || Array.isArray(progression.repProgressionProfiles))
+    ) {
+      details.push("progression.repProgressionProfiles must be an object when provided");
+    }
+    if (
+      progression.deloadRules !== undefined &&
+      (typeof progression.deloadRules !== "object" || progression.deloadRules === null || Array.isArray(progression.deloadRules))
+    ) {
+      details.push("progression.deloadRules must be an object when provided");
     }
   }
 

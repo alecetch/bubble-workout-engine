@@ -7,6 +7,7 @@ import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
 import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
+import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
@@ -81,6 +82,7 @@ export function createGenerateProgramV2Handler({
   buildInputs = buildInputsFromProfile,
   ensureCalendar = ensureProgramCalendarCoverage,
   emitPayload = importEmitterPayload,
+  progressionService = makeProgressionDecisionService(db),
 } = {}) {
   let cachedInjuryColumn = null;
   const getProfileByResolvedUser = getProfileByUser ?? getProfile;
@@ -540,6 +542,29 @@ export function createGenerateProgramV2Handler({
       [generation_run_id],
     );
     await ensureCalendar(db, created_program_id);
+
+    try {
+      // This generation-time pass is a non-fatal backstop, not the primary trigger.
+      // The intended canonical trigger for progression is PATCH /api/day/:program_day_id/complete
+      // once a day is marked completed and real history exists. Keeping this pass here lets us
+      // re-derive recommendations for regenerated programs or existing athletes who already have
+      // completed history, while still no-oping safely for brand-new programs with no history.
+      await db.query(
+        `UPDATE generation_run SET last_stage='progression', updated_at=now() WHERE id=$1`,
+        [generation_run_id],
+      );
+      await progressionService.applyProgressionRecommendations({
+        programId: created_program_id,
+        userId: pg_user_id,
+        programType,
+        fitnessRank: mappedFitnessRank,
+      });
+    } catch (progressionErr) {
+      req.log.warn(
+        { event: "pipeline.progression.error", err: progressionErr?.message, generation_run_id },
+        "progression recommendation pass failed (non-fatal)",
+      );
+    }
 
     // Phase 6: Mark generation_run complete
     await db.query(

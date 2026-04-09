@@ -3,6 +3,8 @@
 **Type:** Coaching design + architecture analysis
 **Status:** Analysis only — no implementation
 
+> **Relationship to enhanced progression spec:** This document covers **scheduled/structural deloads** (Layer A) — the week-level volume reduction driven by `progression_by_rank_json.deload` and applied by Step 03. The `docs/enhanced-progression-system-spec.md` extends this with **local exercise deloads** (Layer B) that are triggered by real logged performance data rather than by a fixed schedule. Both mechanisms coexist: scheduled global deloads continue to be handled by Step 03; per-exercise local deloads are handled by the new progression decision service. When both are active in the same week, Step 07 takes the lower of the two resulting set counts.
+
 ---
 
 ## Part 1 — Coaching assessment by program type

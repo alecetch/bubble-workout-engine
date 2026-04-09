@@ -243,6 +243,7 @@ test("dayFull attaches guideline loads when service returns them", async () => {
           exercise_name: "Back Squat",
           order_in_day: 1,
           is_loadable: true,
+          progression_outcome: null,
         }],
       },
     ]),
@@ -295,6 +296,7 @@ test("dayFull keeps returning 200 when guideline service throws", async () => {
           exercise_name: "Back Squat",
           order_in_day: 1,
           is_loadable: true,
+          progression_outcome: null,
         }],
       },
     ]),
@@ -316,4 +318,70 @@ test("dayFull keeps returning 200 when guideline service throws", async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body?.segments?.[0]?.items?.[0]?.guideline_load ?? null, null);
+});
+
+test("dayFull exposes progression recommendations when present on program exercises", async () => {
+  const handlers = createReadProgramHandlers({
+    db: mockPool([
+      {
+        rowCount: 1,
+        rows: [{
+          program_day_id: VALID_UUID,
+          day_label: "Day 1",
+          day_type: "strength",
+          session_duration_mins: 50,
+          hero_image_key: null,
+          hero_image_url: null,
+          client_profile_id: VALID_UUID,
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          block_order: 1,
+          segment_order_in_block: 1,
+          segment_type: "single",
+          segment_title: "Main lift",
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          exercise_id: "bb_back_squat",
+          exercise_name: "Back Squat",
+          order_in_day: 1,
+          is_loadable: true,
+          progression_outcome: "increase_load",
+          progression_primary_lever: "load",
+          progression_confidence: "high",
+          progression_source: "exact_history",
+          progression_reasoning_json: ["Recent exact history hit the current rep target with acceptable RIR."],
+          recommended_load_kg: 105,
+          recommended_reps_target: null,
+          recommended_sets: null,
+          recommended_rest_seconds: null,
+        }],
+      },
+    ]),
+    guidelineLoadService: {
+      async annotateExercisesWithGuidelineLoads({ exercises }) {
+        return exercises;
+      },
+    },
+  });
+  const req = {
+    request_id: "t",
+    params: { program_day_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.dayFull(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.segments?.[0]?.items?.[0]?.progression_recommendation?.outcome, "increase_load");
+  assert.equal(res.body?.segments?.[0]?.items?.[0]?.progression_recommendation?.recommended_load_kg, 105);
 });

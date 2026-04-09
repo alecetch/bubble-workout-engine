@@ -90,7 +90,13 @@ export function validateStep(step: OnboardingStep, draft: OnboardingDraft): {
   fieldErrors: FieldErrors;
 } {
   const fieldErrors =
-    step === 1 ? validateStep1(draft) : step === 2 ? validateStep2(draft) : validateStep3(draft);
+    step === 1
+      ? validateStep1(draft)
+      : step === 2
+        ? validateStep2(draft)
+        : step === "2b"
+          ? {}
+          : validateStep3(draft);
 
   return {
     isValid: Object.keys(fieldErrors).length === 0,

@@ -5,6 +5,7 @@ export type SegmentLogRow = {
   programExerciseId: string;
   weightKg: number | null;
   repsCompleted: number | null;
+  rirActual: number | null;
   orderIndex: number;
 };
 
@@ -18,6 +19,7 @@ export type SaveSegmentLogPayload = {
     orderIndex: number;
     weightKg: number | null;
     repsCompleted: number | null;
+    rirActual: number | null;
   }>;
 };
 
@@ -42,6 +44,7 @@ export async function getSegmentExerciseLogs(params: {
         programExerciseId: String(row.program_exercise_id ?? ""),
         weightKg: row.weight_kg != null ? Number(row.weight_kg) : null,
         repsCompleted: row.reps_completed != null ? Number(row.reps_completed) : null,
+        rirActual: row.rir_actual != null ? Number(row.rir_actual) : null,
         orderIndex: Number(row.order_index ?? 0),
       };
     });
@@ -63,6 +66,7 @@ export async function saveSegmentExerciseLogs(
         order_index: r.orderIndex,
         weight_kg: r.weightKg,
         reps_completed: r.repsCompleted,
+        rir_actual: r.rirActual ?? null,
       })),
   });
 }

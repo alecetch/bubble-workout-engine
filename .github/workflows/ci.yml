@@ -64,3 +64,11 @@ jobs:
           JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
           JWT_ISSUER: workout-engine-ci
         run: npm test -- --test-concurrency=1
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Run mobile Tier 1 unit tests
+        working-directory: mobile
+        run: npm test

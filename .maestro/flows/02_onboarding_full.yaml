@@ -1,0 +1,43 @@
+appId: com.bubbleworkout.mobile
+---
+- tapOn:
+    text: "Hypertrophy"
+- tapOn:
+    text: "Intermediate"
+- tapOn:
+    text: "No known issues"
+- tapOn:
+    text: "Continue"
+
+- tapOn:
+    text: "Commercial Gym"
+- tapOn:
+    text: "Continue"
+
+- tapOn:
+    text: "Skip this step"
+- tapOn:
+    text: "Continue"
+
+- tapOn:
+    text: "Mon"
+- tapOn:
+    text: "Wed"
+- tapOn:
+    text: "Fri"
+- tapOn:
+    text: "50 minutes"
+- tapOn:
+    id: "input-height"
+- inputText: "178"
+- tapOn:
+    id: "input-weight"
+- inputText: "80"
+- tapOn:
+    text: "Male"
+- tapOn:
+    text: "25-34"
+- tapOn:
+    text: "Generate my program"
+
+- assertVisible: "Week 1"

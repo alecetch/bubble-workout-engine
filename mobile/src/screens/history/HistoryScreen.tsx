@@ -353,6 +353,8 @@ export function HistoryScreen(): React.JSX.Element {
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          textContentType="none"
+          autoComplete="off"
           style={styles.exerciseInput}
         />
 

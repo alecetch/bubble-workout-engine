@@ -189,6 +189,13 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
       weekPhaseConfig: pgcRow?.week_phase_config_json ?? {},
       totalWeeksDefault: pgcRow?.total_weeks_default ?? 4,
       applyToPurposes: pgcJson?.progression?.apply_to_purposes ?? ["main", "secondary", "accessory"],
+      history: pgcJson?.progression?.history ?? {},
+      leverProfiles: pgcJson?.progression?.lever_profiles ?? {},
+      slotProfileMap: pgcJson?.progression?.slot_profile_map ?? {},
+      loadIncrementProfiles: pgcJson?.progression?.load_increment_profiles ?? {},
+      restProgressionProfiles: pgcJson?.progression?.rest_progression_profiles ?? {},
+      repProgressionProfiles: pgcJson?.progression?.rep_progression_profiles ?? {},
+      deloadRules: pgcJson?.progression?.deload_rules ?? {},
     },
     raw: {
       programGenerationConfigRow: pgcRow,
