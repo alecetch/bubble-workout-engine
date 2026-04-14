@@ -65,6 +65,7 @@ test("handler uses required filters, user scope, ASC series ordering, and exact 
   const req = {
     auth: { user_id: "user-123" },
     params: { exerciseId: "bb_back_squat" },
+    query: { window: "all" },
     headers: {},
   };
   const res = createMockRes();
@@ -78,7 +79,7 @@ test("handler uses required filters, user scope, ASC series ordering, and exact 
   assert.ok(queries[0].text.includes("pd.is_completed = TRUE"));
   assert.ok(queries[0].text.includes("l.is_draft = FALSE"));
   assert.ok(queries[0].text.includes("pe.exercise_id = $2"));
-  assert.ok(queries[0].text.includes("ORDER BY pd.scheduled_date DESC"));
+  assert.ok(queries[0].text.includes("ORDER BY daily.date DESC"));
   assert.ok(queries[0].text.includes("LIMIT 180"));
 
   assert.ok(queries[1].text.includes("WHERE p.user_id = $1"));
@@ -93,12 +94,13 @@ test("handler uses required filters, user scope, ASC series ordering, and exact 
     exerciseId: "bb_back_squat",
     exerciseName: "Barbell Back Squat",
     series: [
-      { date: "2026-02-25", topWeightKg: 100, tonnage: 900, topReps: 5 },
-      { date: "2026-02-28", topWeightKg: 110, tonnage: 880, topReps: 3 },
+      { date: "2026-02-25", topWeightKg: 100, tonnage: 900, topReps: 5, estimatedE1rmKg: null, decisionOutcome: null, decisionPrimaryLever: null },
+      { date: "2026-02-28", topWeightKg: 110, tonnage: 880, topReps: 3, estimatedE1rmKg: null, decisionOutcome: null, decisionPrimaryLever: null },
     ],
     summary: {
       lastPerformed: "2026-02-28",
       bestWeightKg: 110,
+      bestEstimatedE1rmKg: null,
       sessionsCount: 2,
     },
   });
@@ -217,6 +219,7 @@ test("falls back to exerciseId name and empty/null summary when no data", async 
     summary: {
       lastPerformed: null,
       bestWeightKg: null,
+      bestEstimatedE1rmKg: null,
       sessionsCount: 0,
     },
   });
