@@ -2,10 +2,10 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { HistoryStackNavigator, type HistoryStackParamList } from "./HistoryStackNavigator";
 import { OnboardingNavigator, type OnboardingStackParamList } from "./OnboardingNavigator";
 import { ProgramsStackNavigator, type ProgramsStackParamList } from "./ProgramsStackNavigator";
 import { TodayScreen } from "../screens/today/TodayScreen";
-import { HistoryScreen } from "../screens/history/HistoryScreen";
 import { SettingsScreen } from "../screens/settings/SettingsScreen";
 import type { AppEntryRoute } from "../state/session/sessionStore";
 import { colors } from "../theme/colors";
@@ -14,7 +14,7 @@ export type RootTabParamList = {
   HomeTab: NavigatorScreenParams<OnboardingStackParamList> | undefined;
   ProgramsTab: NavigatorScreenParams<ProgramsStackParamList> | undefined;
   TodayTab: undefined;
-  HistoryTab: undefined;
+  HistoryTab: NavigatorScreenParams<HistoryStackParamList> | undefined;
   SettingsTab: undefined;
 };
 
@@ -56,7 +56,7 @@ export function AppTabs({ homeInitialRoute }: AppTabsProps): React.JSX.Element {
       </Tab.Screen>
       <Tab.Screen name="ProgramsTab" component={ProgramsStackNavigator} options={{ title: "Programs" }} />
       <Tab.Screen name="TodayTab" component={TodayScreen} options={{ title: "Today" }} />
-      <Tab.Screen name="HistoryTab" component={HistoryScreen} options={{ title: "History" }} />
+      <Tab.Screen name="HistoryTab" component={HistoryStackNavigator} options={{ title: "History" }} />
       <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: "Settings" }} />
     </Tab.Navigator>
   );

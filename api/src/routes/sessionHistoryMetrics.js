@@ -218,7 +218,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         SELECT
           weeks.week_start,
           series.region,
-          COALESCE(SUM(series.volume_load), 0) AS volume_load
+          COALESCE(SUM(wl.volume_load), 0) AS volume_load
         FROM weeks
         JOIN (
           SELECT 'upper'::text AS region

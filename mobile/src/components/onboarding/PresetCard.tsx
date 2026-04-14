@@ -1,12 +1,5 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { PressableScale } from "../interaction/PressableScale";
 import { hapticLight } from "../interaction/haptics";
 import { colors } from "../../theme/colors";
@@ -22,23 +15,7 @@ type PresetCardProps = {
   onHelpPress?: () => void;
 };
 
-const DURATION_MS = 180;
-
 export function PresetCard({ title, description, selected, onPress, onHelpPress }: PresetCardProps): React.JSX.Element {
-  const progress = useSharedValue(selected ? 1 : 0);
-
-  useEffect(() => {
-    progress.value = withTiming(selected ? 1 : 0, {
-      duration: DURATION_MS,
-      easing: Easing.out(Easing.ease),
-    });
-  }, [progress, selected]);
-
-  const accentStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 1], [0, 1]),
-    width: interpolate(progress.value, [0, 1], [0, 4]),
-  }));
-
   const handlePress = async (): Promise<void> => {
     await hapticLight();
     onPress();
@@ -51,7 +28,7 @@ export function PresetCard({ title, description, selected, onPress, onHelpPress 
         void handlePress();
       }}
     >
-      <Animated.View style={[styles.accentBar, accentStyle]} />
+      {selected ? <View style={styles.accentBar} /> : null}
       <View style={styles.content}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{title}</Text>
@@ -84,6 +61,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(59,130,246,0.16)",
   },
   accentBar: {
+    width: 4,
     backgroundColor: colors.accent,
   },
   content: {

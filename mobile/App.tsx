@@ -3,8 +3,6 @@ import React from "react";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
-import { AuthNavigator } from "./src/navigation/AuthNavigator";
-import { AppTabs } from "./src/navigation/AppTabs";
 import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 
@@ -32,12 +30,30 @@ const appTheme: Theme = {
 export default function App(): React.JSX.Element {
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const entryRoute = useSessionStore((state) => state.entryRoute);
+  const AuthModule = React.useMemo(
+    () =>
+      !isAuthenticated
+        ? (require("./src/navigation/AuthNavigator") as typeof import("./src/navigation/AuthNavigator"))
+        : null,
+    [isAuthenticated],
+  );
+  const AppTabsModule = React.useMemo(
+    () =>
+      isAuthenticated
+        ? (require("./src/navigation/AppTabs") as typeof import("./src/navigation/AppTabs"))
+        : null,
+    [isAuthenticated],
+  );
 
   return (
     <QueryClientProvider client={queryClient}>
       <NavigationContainer theme={appTheme}>
         <StatusBar style="light" />
-        {isAuthenticated ? <AppTabs homeInitialRoute={entryRoute} /> : <AuthNavigator />}
+        {isAuthenticated ? (
+          AppTabsModule ? <AppTabsModule.AppTabs homeInitialRoute={entryRoute} /> : null
+        ) : (
+          AuthModule ? <AuthModule.AuthNavigator /> : null
+        )}
       </NavigationContainer>
     </QueryClientProvider>
   );

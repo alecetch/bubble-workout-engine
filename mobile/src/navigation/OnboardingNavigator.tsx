@@ -1,16 +1,18 @@
 import React from "react";
+import { StyleSheet, Text, View } from "react-native";
 import {
   createNativeStackNavigator,
   type NativeStackNavigationOptions,
 } from "@react-navigation/native-stack";
 import { OnboardingEntry } from "../screens/onboarding/OnboardingEntry";
 import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
-import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
+import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
-import { ProgramDashboardScreen } from "../screens/program/ProgramDashboardScreen";
-import { ProgramDayScreen } from "../screens/program/ProgramDayScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
+import { colors } from "../theme/colors";
+import { spacing } from "../theme/spacing";
+import { typography } from "../theme/typography";
 
 export type OnboardingStackParamList = {
   OnboardingEntry: undefined;
@@ -39,6 +41,15 @@ type OnboardingNavigatorProps = {
   initialRouteName?: keyof OnboardingStackParamList;
 };
 
+function OnboardingPlaceholderScreen(): React.JSX.Element {
+  return (
+    <View style={styles.root}>
+      <Text style={styles.title}>Home Placeholder</Text>
+      <Text style={styles.body}>Onboarding navigator is mounted; real screens are temporarily removed.</Text>
+    </View>
+  );
+}
+
 export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: OnboardingNavigatorProps): React.JSX.Element {
   return (
     <Stack.Navigator
@@ -53,8 +64,26 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="Step2bBaselineLoads" component={Step2bBaselineLoadsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
-      <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreen} options={stepTransitionOptions} />
-      <Stack.Screen name="ProgramDay" component={ProgramDayScreen} options={stepTransitionOptions} />
     </Stack.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  title: {
+    color: colors.textPrimary,
+    ...typography.h2,
+  },
+  body: {
+    color: colors.textSecondary,
+    ...typography.body,
+    textAlign: "center",
+  },
+});

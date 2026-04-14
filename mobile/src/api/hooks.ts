@@ -47,6 +47,7 @@ import {
   searchExercises,
   type ExerciseSummaryResponse,
   type ExerciseHistoryResponse,
+  type ExerciseHistoryWindow,
   type ExerciseSearchItem,
   type LoggedExerciseItem,
   type HistoryOverviewResponse,
@@ -298,10 +299,14 @@ export function useExerciseSearch(q: string, userId?: string): UseQueryResult<Ex
   });
 }
 
-export function useExerciseHistory(exerciseId: string | null, userId?: string): UseQueryResult<ExerciseHistoryResponse> {
+export function useExerciseHistory(
+  exerciseId: string | null,
+  window: ExerciseHistoryWindow = "12w",
+  userId?: string,
+): UseQueryResult<ExerciseHistoryResponse> {
   return useQuery({
-    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), userId ?? null],
-    queryFn: () => fetchExerciseHistory(exerciseId as string, userId),
+    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), window, userId ?? null],
+    queryFn: () => fetchExerciseHistory(exerciseId as string, window, userId),
     enabled: Boolean(exerciseId),
     staleTime: HISTORY_STALE_MS,
   });
