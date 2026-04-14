@@ -35,16 +35,35 @@ function makeReq(body) {
 }
 
 function stubDb(equipmentSlugs = [], exerciseRows = [], repRuleRows = []) {
+  const query = async (sql, params = []) => {
+    if (sql.includes("equipment_items")) return { rows: equipmentSlugs.map((s) => ({ exercise_slug: s })) };
+    if (sql.includes("exercise_catalogue")) return { rows: exerciseRows };
+    if (sql.includes("program_rep_rule")) return { rows: repRuleRows };
+    if (sql.includes("program_generation_config")) {
+      return {
+        rows: [{
+          config_key: `${params[0] ?? "hypertrophy"}_default_v1`,
+          is_active: true,
+          program_generation_config_json: {},
+          program_type: params[0] ?? "hypertrophy",
+          progression_by_rank_json: {
+            intermediate: {
+              evidence_requirement_multiplier: 1,
+              rir_progress_gate_offset: 0,
+              load_increment_scale: 1,
+            },
+          },
+          schema_version: 1,
+        }],
+      };
+    }
+    return { rows: [] };
+  };
   const client = {
-    query: async (sql) => {
-      if (sql.includes("equipment_items")) return { rows: equipmentSlugs.map((s) => ({ exercise_slug: s })) };
-      if (sql.includes("exercise_catalogue")) return { rows: exerciseRows };
-      if (sql.includes("program_rep_rule")) return { rows: repRuleRows };
-      return { rows: [] };
-    },
+    query,
     release: () => {},
   };
-  return { connect: async () => client };
+  return { connect: async () => client, query };
 }
 
 function makeBuildInputsResult() {
@@ -161,7 +180,7 @@ test("ALL_PROGRAM_TYPES includes all 4 types", () => {
 
 test("buildPreviewInputs assembles shared preview inputs", async () => {
   const exerciseRows = [
-    { exercise_id: "ex-1", name: "Squat" },
+    { exercise_id: "ex-1", name: "Squat", load_estimation_metadata: { estimation_family: "squat" } },
     { exercise_id: "ex-2", name: "Row" },
   ];
   const repRuleRows = [{ rule_id: "rule-1", program_type: "hypertrophy" }];
@@ -180,10 +199,12 @@ test("buildPreviewInputs assembles shared preview inputs", async () => {
   assert.deepEqual(result.equipmentSlugs, ["barbell"]);
   assert.deepEqual(result.allowedIds, ["ex-1"]);
   assert.equal(result.exerciseNameMap["ex-1"], "Squat");
+  assert.equal(result.estimationFamilyByExerciseId["ex-1"], "squat");
   assert.equal(result.repRuleMap["rule-1"].program_type, "hypertrophy");
   assert.equal(result.pipelineRequest.allowed_ids_csv, "ex-1");
   assert.equal(buildInputsCalls.length, 1);
-  assert.deepEqual(buildInputsCalls[0][1], [exerciseRows[0]]);
+  assert.deepEqual(buildInputsCalls[0][1], exerciseRows);
+  assert.deepEqual(result.inputs.allowed_exercise_ids, ["ex-1"]);
 });
 
 test("shapeToCsvRows returns empty array for failed preview", () => {
@@ -441,12 +462,14 @@ test("createPreviewHandler meta includes allowed_exercise_count and equipment_sl
 
 test("createPreviewHandler pipeline request uses correct allowed_ids_csv", async () => {
   let capturedRequest;
+  let capturedInputs;
   const handler = createPreviewHandler({
     db: stubDb(["barbell"], []),
     getAllowed: async () => ["ex-10", "ex-20"],
     buildInputs: () => makeBuildInputsResult(),
-    pipeline: async ({ request }) => {
+    pipeline: async ({ request, inputs }) => {
       capturedRequest = request;
+      capturedInputs = inputs;
       return { program: { weeks: [] }, debug: {} };
     },
   });
@@ -454,6 +477,181 @@ test("createPreviewHandler pipeline request uses correct allowed_ids_csv", async
   await handler(makeReq({ fitness_rank: 0, equipment_preset: "no_equipment", program_types: ["hypertrophy"] }), res);
   assert.equal(capturedRequest.allowed_ids_csv, "ex-10,ex-20");
   assert.equal(capturedRequest.fitness_rank, 0);
+  assert.deepEqual(capturedInputs.allowed_exercise_ids, ["ex-10", "ex-20"]);
+});
+
+test("createPreviewHandler uses real profile when client_profile_id is supplied", async () => {
+  let buildInputsProfile = null;
+  let capturedRequest = null;
+  const profile = {
+    id: "cp-1",
+    fitnessLevel: "advanced",
+    equipmentPreset: "commercial_gym",
+    equipmentItemCodes: ["barbell", "leg_press"],
+    injuryFlags: ["knee_issues"],
+    preferredDays: ["Tue", "Thu", "Sat"],
+    minutesPerSession: 60,
+    goals: ["hypertrophy"],
+    programType: "hypertrophy",
+  };
+  const handler = createPreviewHandler({
+    db: stubDb([], []),
+    getProfile: async (profileId) => {
+      assert.equal(profileId, "cp-1");
+      return profile;
+    },
+    getAllowed: async (_client, filters) => {
+      assert.equal(filters.fitness_rank, 2);
+      assert.deepEqual(filters.equipment_items_slugs, ["barbell", "leg_press"]);
+      assert.deepEqual(filters.injury_flags_slugs, ["knee_issues"]);
+      return ["leg_press"];
+    },
+    buildInputs: (incomingProfile) => {
+      buildInputsProfile = incomingProfile;
+      return makeBuildInputsResult();
+    },
+    pipeline: async ({ request }) => {
+      capturedRequest = request;
+      return { program: { weeks: [] }, debug: {} };
+    },
+  });
+  const res = mockRes();
+
+  await handler(makeReq({ client_profile_id: "cp-1", program_types: ["hypertrophy"] }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.preview_context.mode, "real_profile");
+  assert.equal(res.body.preview_context.profile_id, "cp-1");
+  assert.equal(buildInputsProfile.minutesPerSession, 60);
+  assert.deepEqual(buildInputsProfile.preferredDays, ["tue", "thu", "sat"]);
+  assert.deepEqual(buildInputsProfile.equipmentItemCodes, ["barbell", "leg_press"]);
+  assert.equal(capturedRequest.duration_mins, 60);
+  assert.equal(capturedRequest.days_per_week, 3);
+  assert.equal(capturedRequest.fitness_rank, 2);
+  assert.equal(capturedRequest.preferred_days_json, "tue,thu,sat");
+});
+
+test("createPreviewHandler uses real profile when user_id is supplied", async () => {
+  let calledUserId = null;
+  const handler = createPreviewHandler({
+    db: stubDb([], []),
+    getProfileByUser: async (userId) => {
+      calledUserId = userId;
+      return {
+        id: "cp-2",
+        fitnessLevel: "intermediate",
+        equipmentPreset: "minimal_equipment",
+        equipmentItemCodes: ["dumbbells"],
+        injuryFlags: [],
+        preferredDays: ["Mon", "Wed"],
+        minutesPerSession: 40,
+      };
+    },
+    getAllowed: async () => [],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({ program: { weeks: [] }, debug: {} }),
+  });
+  const res = mockRes();
+
+  await handler(makeReq({ user_id: "user-123", program_types: ["hypertrophy"] }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(calledUserId, "user-123");
+  assert.equal(res.body.preview_context.mode, "real_profile");
+  assert.equal(res.body.preview_context.profile_id, "cp-2");
+});
+
+test("createPreviewHandler returns 404 when requested real profile is missing", async () => {
+  const handler = createPreviewHandler({
+    db: stubDb([], []),
+    getProfile: async () => null,
+    getAllowed: async () => [],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({ program: { weeks: [] }, debug: {} }),
+  });
+  const res = mockRes();
+
+  await handler(makeReq({ client_profile_id: "missing-profile", program_types: ["hypertrophy"] }), res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.body.error, "Client profile not found");
+});
+
+test("createPreviewHandler reports synthetic mode when no real profile identifiers are supplied", async () => {
+  const handler = createPreviewHandler({
+    db: stubDb(["barbell"], []),
+    getAllowed: async () => [],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({ program: { weeks: [] }, debug: {} }),
+  });
+  const res = mockRes();
+
+  await handler(makeReq({ fitness_rank: 1, equipment_preset: "commercial_gym", program_types: ["hypertrophy"] }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.preview_context.mode, "synthetic");
+  assert.equal(res.body.preview_context.profile_id, null);
+});
+
+test("POST /preview/generate includes progression_preview when anchor_lifts are supplied", async () => {
+  const handler = createPreviewHandler({
+    db: stubDb(["barbell"], [
+      {
+        exercise_id: "bb_back_squat",
+        name: "Back Squat",
+        is_loadable: true,
+        equipment_items_slugs: ["barbell"],
+        load_estimation_metadata: { estimation_family: "squat" },
+      },
+    ]),
+    getAllowed: async () => ["bb_back_squat"],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({
+      program: {
+        weeks: [{
+          week_index: 1,
+          days: [{
+            day_index: 1,
+            segments: [{
+              purpose: "main",
+              segment_type: "single",
+              items: [{
+                ex_id: "bb_back_squat",
+                reps_prescribed: "5",
+                rir_target: 2,
+              }],
+            }],
+          }],
+        }],
+      },
+      debug: {},
+    }),
+  });
+  const res = mockRes();
+  await handler(makeReq({
+    fitness_rank: 1,
+    equipment_preset: "commercial_gym",
+    program_types: ["strength"],
+    anchor_lifts: [{ estimationFamily: "squat", loadKg: 100, reps: 5, rir: 2 }],
+  }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(Array.isArray(res.body.progression_preview.strength));
+  assert.ok(res.body.progression_preview.strength.some((entry) => entry.outcome));
+});
+
+test("POST /preview/generate returns empty progression_preview when no anchor_lifts", async () => {
+  const handler = createPreviewHandler({
+    db: stubDb(["barbell"], []),
+    getAllowed: async () => [],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({ program: { weeks: [] }, debug: {} }),
+  });
+  const res = mockRes();
+  await handler(makeReq({ fitness_rank: 1, equipment_preset: "commercial_gym", program_types: ["strength"] }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body.progression_preview, {});
 });
 
 test("createExportHandler returns 400 for invalid field_set", async () => {

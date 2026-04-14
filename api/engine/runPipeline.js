@@ -2,7 +2,7 @@
 //
 // DROP-IN REPLACEMENT
 // Steps:
-// 01 build -> 02 segment -> 03 progression -> 04 rep rules -> 05 narration -> 06 emitter (rows)
+// 01 build -> 02 segment -> 03 progression -> 04 rep rules -> 07 exercise overrides -> 05 narration -> 06 emitter (rows)
 
 import { buildProgramFromDefinition } from "./steps/01_buildProgramFromDefinition.js";
 import { segmentProgram } from "./steps/02_segmentProgram.js";
@@ -10,9 +10,11 @@ import { applyProgression } from "./steps/03_applyProgression.js";
 import { applyRepRules } from "./steps/04_applyRepRules.js";
 import { applyNarration } from "./steps/05_applyNarration.js";
 import { emitPlanRows } from "./steps/06_emitPlan.js";
+import { applyExerciseProgressionOverrides } from "./steps/07_applyExerciseProgressionOverrides.js";
 import { fetchActiveMediaAssets } from "../src/services/mediaAssets.js";
 import { fetchActiveNarrationTemplates } from "../src/services/narrationTemplates.js";
 import { fetchActiveRepRules } from "../src/services/repRules.js";
+import { rankKey } from "../src/services/progressionDecisionService.js";
 import { resolveHeroMediaRow, toHeroMediaObject, dayFocusSlug } from "./resolveHeroMedia.js";
 import { resolveCompiledConfig } from "./resolveCompiledConfig.js";
 import { validateCompiledConfig } from "./configValidation.js";
@@ -80,11 +82,18 @@ function hardcodedProgramGenerationConfigRow(programType, schemaVersion) {
   };
 }
 
-export async function runPipeline({ inputs, programType, request, db }) {
+export async function runPipeline({ inputs, programType, request, db, userId }) {
   const dbClient = db || pool;
   const schemaVersion = 1;
   const compiledConfig = await resolveCompiledConfig(dbClient, { programType, schemaVersion, request });
   validateCompiledConfig(compiledConfig);
+  const pgcSelectedRow =
+    compiledConfig.raw.programGenerationConfigRow ??
+    hardcodedProgramGenerationConfigRow(programType, schemaVersion);
+  const pgcJson = safeJsonParseMaybe(pgcSelectedRow?.program_generation_config_json, {});
+  const progressionJson = safeJsonParseMaybe(pgcJson?.progression, {});
+  const decisionEngineVersion = progressionJson?.decision_engine_version ?? "v1";
+  const layerCEnabled = decisionEngineVersion === "v2" && !!userId;
 
   // ── Media assets (fetched once; no per-day queries) ──────────────────
   let mediaAssets = [];
@@ -105,6 +114,29 @@ export async function runPipeline({ inputs, programType, request, db }) {
   }
   if (!process.env.S3_PUBLIC_BASE_URL) {
     mediaNotes.push("S3_PUBLIC_BASE_URL not set; heroMedia.image_url will be a relative key");
+  }
+
+  let progressionStateMap = new Map();
+  let progressionStateSource = "none";
+  if (layerCEnabled) {
+    try {
+      const psResult = await dbClient.query(
+        `SELECT exercise_id, purpose, current_load_kg_override, current_rep_target_override,
+                current_set_override, current_rest_sec_override, last_outcome, confidence
+         FROM exercise_progression_state
+         WHERE user_id = $1 AND program_type = $2`,
+        [userId, programType],
+      );
+      for (const row of psResult.rows ?? []) {
+        if (!row?.exercise_id) continue;
+        // Key by exercise_id::purpose so that the same exercise used in different
+        // roles (e.g. main vs accessory) carries independent progression state.
+        progressionStateMap.set(`${row.exercise_id}::${row.purpose ?? ""}`, row);
+      }
+      progressionStateSource = `db:${progressionStateMap.size} rows`;
+    } catch (err) {
+      progressionStateSource = `error:${err?.message || String(err)}`;
+    }
   }
 
   // Step 1
@@ -142,9 +174,6 @@ export async function runPipeline({ inputs, programType, request, db }) {
 
   let configSource = compiledConfig.source;
   const step3Notes = [];
-  const pgcSelectedRow =
-    compiledConfig.raw.programGenerationConfigRow ??
-    hardcodedProgramGenerationConfigRow(programType, schemaVersion);
   const programGenerationConfigs = [pgcSelectedRow];
   if (configSource === "hardcoded") {
     step3Notes.push("Using hardcoded progression defaults (DB and request config unavailable)");
@@ -197,6 +226,31 @@ export async function runPipeline({ inputs, programType, request, db }) {
     step4.debug.template = step4.debug.template || {};
     step4.debug.template.notes = Array.isArray(step4.debug.template.notes) ? step4.debug.template.notes : [];
     step4.debug.template.notes.push(step4FallbackNote);
+  }
+
+  const progressionByRank = safeJsonParseMaybe(pgcSelectedRow?.progression_by_rank_json, {});
+  const deloadCfg = progressionByRank?.[rankKey(fitnessRank)]?.deload ?? null;
+  const deloadWeekIndex = deloadCfg?.week ? Number(deloadCfg.week) : null;
+
+  let step7 = {
+    program: step4.program,
+    debug: {
+      skipped: layerCEnabled ? "no_progression_state" : "layer_c_disabled",
+      source: progressionStateSource,
+      progression_state_source: progressionStateSource,
+      decision_engine_version: decisionEngineVersion,
+    },
+  };
+  if (layerCEnabled && progressionStateMap.size > 0) {
+    step7 = applyExerciseProgressionOverrides({
+      program: step4.program,
+      progressionStateMap,
+      deloadWeekIndex,
+    });
+    step7.debug = step7.debug || {};
+    step7.debug.source = progressionStateSource;
+    step7.debug.progression_state_source = progressionStateSource;
+    step7.debug.decision_engine_version = decisionEngineVersion;
   }
 
   // Step 5 (narration)
@@ -266,7 +320,7 @@ export async function runPipeline({ inputs, programType, request, db }) {
   }
 
   const step5 = await applyNarration({
-    program: step4.program,
+    program: step7.program,
     narrationTemplates,
     narrationTemplatesJson,
     narrationSource,
@@ -346,6 +400,7 @@ export async function runPipeline({ inputs, programType, request, db }) {
         step2: step2.debug,
         step3: step3.debug,
         step4: step4.debug,
+        step7: step7.debug,
         step5: step5.debug,
         step6: step6.debug,
       },
@@ -356,6 +411,7 @@ export async function runPipeline({ inputs, programType, request, db }) {
       step2: step2.debug,
       step3: step3.debug,
       step4: step4.debug,
+      step7: step7.debug,
       step5: step5.debug,
       step6: step6.debug,
     },

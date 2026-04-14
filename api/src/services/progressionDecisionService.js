@@ -674,3 +674,5 @@ export function makeProgressionDecisionService(db) {
     },
   };
 }
+
+export { buildDecision, loadProgressionConfig, rankKey, resolveProfileName };

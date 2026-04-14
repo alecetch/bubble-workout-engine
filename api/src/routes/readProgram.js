@@ -3,6 +3,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { makeGuidelineLoadService } from "../services/guidelineLoadService.js";
+import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
@@ -67,13 +68,19 @@ function mapError(err) {
 
 export function createReadProgramHandlers(options = pool) {
   const resolved = options && typeof options.connect === "function"
-    ? { db: options, guidelineLoadService: makeGuidelineLoadService(options) }
+    ? {
+        db: options,
+        guidelineLoadService: makeGuidelineLoadService(options),
+        progressionDecisionService: makeProgressionDecisionService(options),
+      }
     : {
         db: options?.db ?? pool,
         guidelineLoadService: options?.guidelineLoadService ?? makeGuidelineLoadService(options?.db ?? pool),
+        progressionDecisionService: options?.progressionDecisionService ?? makeProgressionDecisionService(options?.db ?? pool),
       };
   const db = resolved.db;
   const guidelineLoadService = resolved.guidelineLoadService;
+  const progressionDecisionService = resolved.progressionDecisionService;
 
   function toAuthUserId(req) {
     return safeString(req.auth?.user_id) || safeString(req.auth?.userId);
@@ -555,28 +562,63 @@ export function createReadProgramHandlers(options = pool) {
     try {
       requireUuid(program_day_id, "program_day_id");
 
+      let user_id = "";
       const client = await db.connect();
       try {
         // Accept identity from body (PATCH) or query (fallback).
-        const user_id = resolveUserId(req);
+        user_id = resolveUserId(req);
 
-      const r = await client.query(
-        `UPDATE program_day pd
-         SET is_completed = $3
-         FROM program p
-         WHERE pd.id = $1
-           AND p.id = pd.program_id
-           AND p.user_id = $2
-         RETURNING pd.id`,
-        [program_day_id, user_id, Boolean(is_completed)],
-      );
+        const r = await client.query(
+          `UPDATE program_day pd
+           SET is_completed = $3
+           FROM program p
+           WHERE pd.id = $1
+             AND p.id = pd.program_id
+             AND p.user_id = $2
+           RETURNING pd.id`,
+          [program_day_id, user_id, Boolean(is_completed)],
+        );
 
-      if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
-
-        return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
+        if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
       } finally {
         client.release();
       }
+
+      if (Boolean(is_completed)) {
+        // Fire-and-forget Layer B backstop. The intended primary trigger remains
+        // PATCH /api/day/:program_day_id/complete; this path must never delay the response.
+        db.query(
+          `SELECT
+             p.id AS program_id,
+             p.program_type,
+             cp.fitness_rank
+           FROM program_day pd
+           JOIN program p
+             ON p.id = pd.program_id
+           LEFT JOIN client_profile cp
+             ON cp.user_id = p.user_id
+           WHERE pd.id = $1`,
+          [program_day_id],
+        )
+          .then((meta) => {
+            const row = meta?.rows?.[0];
+            if (!row?.program_id) return null;
+            return progressionDecisionService.applyProgressionRecommendations({
+              programId: row.program_id,
+              userId: user_id,
+              programType: row.program_type,
+              fitnessRank: row.fitness_rank ?? 1,
+            });
+          })
+          .catch((err) => {
+            req.log?.warn(
+              { event: "progression.layer_b.error", err: err?.message, program_day_id },
+              "Layer B progression decision failed (non-blocking)",
+            );
+          });
+      }
+
+      return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
     } catch (err) {
       const mapped = mapError(err);
       return res.status(mapped.status).json({

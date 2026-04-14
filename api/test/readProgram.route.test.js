@@ -21,14 +21,20 @@ function mockRes() {
 
 function mockPool(responses) {
   let i = 0;
+  function nextResponse() {
+    const response = responses[i++];
+    if (!response) throw new Error(`Unexpected DB call at index ${i - 1}`);
+    if (response instanceof Error) throw response;
+    return response;
+  }
   return {
+    async query(_sql, _params) {
+      return nextResponse();
+    },
     async connect() {
       return {
         async query(_sql, _params) {
-          const response = responses[i++];
-          if (!response) throw new Error(`Unexpected DB call at index ${i - 1}`);
-          if (response instanceof Error) throw response;
-          return response;
+          return nextResponse();
         },
         release() {},
       };
@@ -195,6 +201,46 @@ test("dayComplete day not found or access denied returns 404", async () => {
 
   assert.equal(res.statusCode, 404);
   assert.equal(res.body?.code, "not_found");
+});
+
+test("dayComplete returns 200 while Layer B progression runs non-blocking", async () => {
+  const calls = [];
+  const progressionDecisionService = {
+    async applyProgressionRecommendations(args) {
+      calls.push(args);
+      return { decisions: [] };
+    },
+  };
+  const handlers = createReadProgramHandlers({
+    db: mockPool([
+      { rowCount: 1, rows: [{ id: VALID_UUID }] },
+      { rowCount: 1, rows: [{ program_id: VALID_UUID, program_type: "strength", fitness_rank: 2 }] },
+    ]),
+    progressionDecisionService,
+  });
+  const req = {
+    request_id: "t",
+    params: { program_day_id: VALID_UUID },
+    query: {},
+    body: {},
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.dayComplete(req, res);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.ok, true);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], {
+    programId: VALID_UUID,
+    userId: USER_UUID,
+    programType: "strength",
+    fitnessRank: 2,
+  });
 });
 
 test("dayFull attaches guideline loads when service returns them", async () => {
