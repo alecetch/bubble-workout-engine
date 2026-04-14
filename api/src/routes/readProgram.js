@@ -2,6 +2,8 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { makeGuidelineLoadService } from "../services/guidelineLoadService.js";
+import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
@@ -64,7 +66,22 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-export function createReadProgramHandlers(db = pool) {
+export function createReadProgramHandlers(options = pool) {
+  const resolved = options && typeof options.connect === "function"
+    ? {
+        db: options,
+        guidelineLoadService: makeGuidelineLoadService(options),
+        progressionDecisionService: makeProgressionDecisionService(options),
+      }
+    : {
+        db: options?.db ?? pool,
+        guidelineLoadService: options?.guidelineLoadService ?? makeGuidelineLoadService(options?.db ?? pool),
+        progressionDecisionService: options?.progressionDecisionService ?? makeProgressionDecisionService(options?.db ?? pool),
+      };
+  const db = resolved.db;
+  const guidelineLoadService = resolved.guidelineLoadService;
+  const progressionDecisionService = resolved.progressionDecisionService;
+
   function toAuthUserId(req) {
     return safeString(req.auth?.user_id) || safeString(req.auth?.userId);
   }
@@ -285,6 +302,7 @@ export function createReadProgramHandlers(db = pool) {
           d.block_format_finisher_text,
           d.is_completed,
           d.has_activity,
+          p.client_profile_id,
           d.hero_media_id,
           ma.image_key  AS hero_image_key,
           ma.image_url  AS hero_image_url
@@ -360,6 +378,15 @@ export function createReadProgramHandlers(db = pool) {
           intensity_prescription,
           tempo,
           rest_seconds,
+          progression_outcome,
+          progression_primary_lever,
+          progression_confidence,
+          progression_source,
+          progression_reasoning_json,
+          recommended_load_kg,
+          recommended_reps_target,
+          recommended_sets,
+          recommended_rest_seconds,
           notes,
           is_loadable,
           coaching_cues_json,
@@ -372,9 +399,41 @@ export function createReadProgramHandlers(db = pool) {
         [program_day_id],
       );
 
+      let resolvedClientProfileId = day.client_profile_id ?? null;
+      if (!resolvedClientProfileId) {
+        const profileR = await client.query(
+          `
+          SELECT id
+          FROM client_profile
+          WHERE user_id = $1
+          ORDER BY updated_at DESC
+          LIMIT 1
+          `,
+          [user_id],
+        );
+        resolvedClientProfileId = profileR.rows[0]?.id ?? null;
+      }
+
+      let annotatedExercises = exR.rows;
+      if (resolvedClientProfileId) {
+        try {
+          annotatedExercises = await guidelineLoadService.annotateExercisesWithGuidelineLoads({
+            exercises: exR.rows,
+            clientProfileId: resolvedClientProfileId,
+            userId: user_id,
+            programType: day.day_type,
+          });
+        } catch (guidelineErr) {
+          req.log.warn(
+            { event: "read_program.guideline_load.warning", err: guidelineErr?.message },
+            "guideline load annotation failed; returning day without guideline loads",
+          );
+        }
+      }
+
       // Group exercises by segment id.
       const itemsBySegmentId = new Map();
-      for (const ex of exR.rows) {
+      for (const ex of annotatedExercises) {
         const key = ex.workout_segment_id;
         if (!key) continue; // Should not happen in current importer.
         if (!itemsBySegmentId.has(key)) itemsBySegmentId.set(key, []);
@@ -384,11 +443,73 @@ export function createReadProgramHandlers(db = pool) {
       const segments = segR.rows.map((seg) => ({
         ...seg,
         segment_type_label: segmentTypeLabel(seg.segment_type),
-        items: itemsBySegmentId.get(seg.workout_segment_id) || [],
+        items: (itemsBySegmentId.get(seg.workout_segment_id) || []).map((item) => {
+          const {
+            progression_outcome,
+            progression_primary_lever,
+            progression_confidence,
+            progression_source,
+            progression_reasoning_json,
+            recommended_load_kg,
+            recommended_reps_target,
+            recommended_sets,
+            recommended_rest_seconds,
+            ...rest
+          } = item;
+          return {
+            ...rest,
+            progression_recommendation: progression_outcome
+              ? {
+                  outcome: progression_outcome,
+                  primary_lever: progression_primary_lever,
+                  confidence: progression_confidence,
+                  source: progression_source,
+                  reasoning: Array.isArray(progression_reasoning_json)
+                    ? progression_reasoning_json
+                    : [],
+                  recommended_load_kg: recommended_load_kg == null ? null : Number(recommended_load_kg),
+                  recommended_reps_target: recommended_reps_target == null ? null : Number(recommended_reps_target),
+                  recommended_sets: recommended_sets == null ? null : Number(recommended_sets),
+                  recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
+                }
+              : null,
+          };
+        }),
       }));
 
       // Optionally surface unassigned exercises if any exist.
-      const unassigned = exR.rows.filter((x) => !x.workout_segment_id);
+      const unassigned = annotatedExercises
+        .filter((x) => !x.workout_segment_id)
+        .map((item) => {
+          const {
+            progression_outcome,
+            progression_primary_lever,
+            progression_confidence,
+            progression_source,
+            progression_reasoning_json,
+            recommended_load_kg,
+            recommended_reps_target,
+            recommended_sets,
+            recommended_rest_seconds,
+            ...rest
+          } = item;
+          return {
+            ...rest,
+            progression_recommendation: progression_outcome
+              ? {
+                  outcome: progression_outcome,
+                  primary_lever: progression_primary_lever,
+                  confidence: progression_confidence,
+                  source: progression_source,
+                  reasoning: Array.isArray(progression_reasoning_json) ? progression_reasoning_json : [],
+                  recommended_load_kg: recommended_load_kg == null ? null : Number(recommended_load_kg),
+                  recommended_reps_target: recommended_reps_target == null ? null : Number(recommended_reps_target),
+                  recommended_sets: recommended_sets == null ? null : Number(recommended_sets),
+                  recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
+                }
+              : null,
+          };
+        });
       if (unassigned.length) {
         segments.push({
           workout_segment_id: null,
@@ -441,28 +562,63 @@ export function createReadProgramHandlers(db = pool) {
     try {
       requireUuid(program_day_id, "program_day_id");
 
+      let user_id = "";
       const client = await db.connect();
       try {
         // Accept identity from body (PATCH) or query (fallback).
-        const user_id = resolveUserId(req);
+        user_id = resolveUserId(req);
 
-      const r = await client.query(
-        `UPDATE program_day pd
-         SET is_completed = $3
-         FROM program p
-         WHERE pd.id = $1
-           AND p.id = pd.program_id
-           AND p.user_id = $2
-         RETURNING pd.id`,
-        [program_day_id, user_id, Boolean(is_completed)],
-      );
+        const r = await client.query(
+          `UPDATE program_day pd
+           SET is_completed = $3
+           FROM program p
+           WHERE pd.id = $1
+             AND p.id = pd.program_id
+             AND p.user_id = $2
+           RETURNING pd.id`,
+          [program_day_id, user_id, Boolean(is_completed)],
+        );
 
-      if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
-
-        return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
+        if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
       } finally {
         client.release();
       }
+
+      if (Boolean(is_completed)) {
+        // Fire-and-forget Layer B backstop. The intended primary trigger remains
+        // PATCH /api/day/:program_day_id/complete; this path must never delay the response.
+        db.query(
+          `SELECT
+             p.id AS program_id,
+             p.program_type,
+             cp.fitness_rank
+           FROM program_day pd
+           JOIN program p
+             ON p.id = pd.program_id
+           LEFT JOIN client_profile cp
+             ON cp.user_id = p.user_id
+           WHERE pd.id = $1`,
+          [program_day_id],
+        )
+          .then((meta) => {
+            const row = meta?.rows?.[0];
+            if (!row?.program_id) return null;
+            return progressionDecisionService.applyProgressionRecommendations({
+              programId: row.program_id,
+              userId: user_id,
+              programType: row.program_type,
+              fitnessRank: row.fitness_rank ?? 1,
+            });
+          })
+          .catch((err) => {
+            req.log?.warn(
+              { event: "progression.layer_b.error", err: err?.message, program_day_id },
+              "Layer B progression decision failed (non-blocking)",
+            );
+          });
+      }
+
+      return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
     } catch (err) {
       const mapped = mapError(err);
       return res.status(mapped.status).json({

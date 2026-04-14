@@ -7,6 +7,8 @@ none. The `hypertrophyParity` and `strengthGeneration` tests exercise these step
 indirectly, but a structural bug in 01 or 02 would produce a wrong-shaped program with no
 CI signal.
 
+> **Note:** This prompt covers Steps 01–03 only. Step 07 (`07_applyExerciseProgressionOverrides`) is a planned step that applies athlete-specific progression overrides after emission. Its test plan is specified separately in `docs/enhanced-progression-system-spec.md §12`.
+
 ---
 
 ## Context for Codex

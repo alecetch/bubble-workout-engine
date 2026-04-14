@@ -279,6 +279,43 @@ test("applyNarration segment template tie-break uses lower priority number", asy
   assert.equal(mainSingle?.narration?.title, "Priority 1 Title");
 });
 
+test("applyNarration treats null priority as lower priority than explicit priority 1", async () => {
+  const out = await applyNarration({
+    program: makeProgram(),
+    narrationTemplates: [
+      {
+        template_id: "segment_title_null_priority",
+        scope: "segment",
+        field: "SEGMENT_TITLE",
+        purpose: "main",
+        segment_type: "single",
+        priority: null,
+        text_pool_json: ["Null Priority Title"],
+      },
+      {
+        template_id: "segment_title_priority_1",
+        scope: "segment",
+        field: "SEGMENT_TITLE",
+        purpose: "main",
+        segment_type: "single",
+        priority: 1,
+        text_pool_json: ["Explicit Priority 1 Title"],
+      },
+    ],
+    narrationSource: "db",
+    narrationTemplatesJson: null,
+    programGenerationConfigJson: makePgcJson(),
+    fitnessRank: 1,
+    programLength: 4,
+    catalogJson: makeCatalogJson(),
+    cooldownSeconds: 120,
+  });
+
+  const mainSingle = findMainSingleSegment(out.program);
+  assert.equal(out.debug.ok, true);
+  assert.equal(mainSingle?.narration?.title, "Explicit Priority 1 Title");
+});
+
 test("applyNarration exposes SEGMENT_INDEX and SEGMENT_LETTER tokens for segment titles", async () => {
   const out = await applyNarration({
     program: {

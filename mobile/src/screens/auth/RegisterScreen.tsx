@@ -125,7 +125,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
-            textContentType="emailAddress"
+            autoComplete="username"
+            textContentType="username"
             returnKeyType="next"
             onSubmitEditing={() => passwordRef.current?.focus()}
             placeholder="you@example.com"
@@ -153,7 +154,9 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
+              autoComplete="new-password"
               textContentType="newPassword"
+              passwordRules="minlength: 8;"
               returnKeyType="next"
               onSubmitEditing={() => confirmPasswordRef.current?.focus()}
               placeholder="Create password"
@@ -193,7 +196,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
-              textContentType="newPassword"
+              autoComplete="off"
+              textContentType="none"
               returnKeyType="go"
               onSubmitEditing={() => void handleSubmit()}
               placeholder="Re-enter password"

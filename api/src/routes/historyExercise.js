@@ -2,29 +2,17 @@ import express from "express";
 import { pool } from "../db.js";
 import { userAuth } from "../middleware/chains.js";
 
-const SQL_EXERCISE_SERIES = `
-SELECT
-  pd.scheduled_date AS date,
-  MAX(l.weight_kg) AS top_weight_kg,
-  MAX(l.reps_completed) FILTER (WHERE l.weight_kg IS NOT NULL) AS top_reps,
-  SUM(l.weight_kg * l.reps_completed) AS tonnage
-FROM segment_exercise_log l
-JOIN program p ON p.id = l.program_id
-JOIN program_day pd ON pd.id = l.program_day_id
-JOIN program_exercise pe ON pe.id = l.program_exercise_id
-WHERE p.user_id = $1
-  AND pd.is_completed = TRUE
-  AND l.is_draft = FALSE
-  AND pe.exercise_id = $2
-GROUP BY pd.scheduled_date
-ORDER BY pd.scheduled_date DESC
-LIMIT 180;
-`;
+const WINDOW_DAYS_BY_KEY = {
+  "4w": 28,
+  "8w": 56,
+  "12w": 84,
+};
 
 const SQL_EXERCISE_SUMMARY = `
 SELECT
   MAX(pd.scheduled_date) AS last_performed,
   MAX(l.weight_kg) AS best_weight_kg,
+  MAX(l.estimated_1rm_kg) AS best_estimated_e1rm_kg,
   COUNT(DISTINCT pd.id) AS sessions_count
 FROM segment_exercise_log l
 JOIN program p ON p.id = l.program_id
@@ -52,6 +40,79 @@ SELECT COALESCE(
   $2
 ) AS exercise_name;
 `;
+
+function resolveWindowKey(rawValue) {
+  const text = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "";
+  if (text === "4w" || text === "8w" || text === "12w" || text === "all") return text;
+  return "12w";
+}
+
+function resolveIncludeDecisions(rawValue) {
+  if (typeof rawValue !== "string") return true;
+  return rawValue.trim().toLowerCase() !== "false";
+}
+
+function buildSeriesQuery({ includeDecisions, windowKey }) {
+  const params = ["$1", "$2"];
+  let windowClause = "";
+  if (windowKey !== "all") {
+    params.push(`$${params.length + 1}`);
+    windowClause = `\n  AND pd.scheduled_date >= CURRENT_DATE - (${params[2]} - 1)`;
+  }
+
+  const decisionColumns = includeDecisions
+    ? `,
+  decision.decision_outcome,
+  decision.primary_lever AS decision_primary_lever`
+    : `,
+  NULL::text AS decision_outcome,
+  NULL::text AS decision_primary_lever`;
+
+  const decisionJoin = includeDecisions
+    ? `
+LEFT JOIN LATERAL (
+  SELECT
+    epd.decision_outcome,
+    epd.primary_lever
+  FROM exercise_progression_decision epd
+  WHERE epd.user_id = $1
+    AND epd.exercise_id = daily.exercise_id
+    AND epd.created_at::date <= daily.date
+  ORDER BY epd.created_at DESC
+  LIMIT 1
+) decision ON TRUE`
+    : "";
+
+  return `
+WITH daily AS (
+  SELECT
+    pd.scheduled_date AS date,
+    pe.exercise_id,
+    MAX(l.weight_kg) AS top_weight_kg,
+    MAX(l.reps_completed) FILTER (WHERE l.weight_kg IS NOT NULL) AS top_reps,
+    SUM(l.weight_kg * l.reps_completed) AS tonnage,
+    MAX(l.estimated_1rm_kg) AS estimated_e1rm_kg
+  FROM segment_exercise_log l
+  JOIN program p ON p.id = l.program_id
+  JOIN program_day pd ON pd.id = l.program_day_id
+  JOIN program_exercise pe ON pe.id = l.program_exercise_id
+  WHERE p.user_id = $1
+    AND pd.is_completed = TRUE
+    AND l.is_draft = FALSE
+    AND pe.exercise_id = $2${windowClause}
+  GROUP BY pd.scheduled_date, pe.exercise_id
+)
+SELECT
+  daily.date,
+  daily.top_weight_kg,
+  daily.top_reps,
+  daily.tonnage,
+  daily.estimated_e1rm_kg${decisionColumns}
+FROM daily${decisionJoin}
+ORDER BY daily.date DESC
+LIMIT 180;
+`;
+}
 
 function asString(value, fallback = "") {
   if (typeof value === "string") return value;
@@ -87,6 +148,9 @@ function mapSeriesRow(row) {
     topWeightKg: toFiniteNumberOrNull(row.top_weight_kg),
     tonnage: toFiniteNumberOrNull(row.tonnage),
     topReps: toFiniteNumberOrNull(row.top_reps),
+    estimatedE1rmKg: toFiniteNumberOrNull(row.estimated_e1rm_kg),
+    decisionOutcome: asString(row.decision_outcome || "", "") || null,
+    decisionPrimaryLever: asString(row.decision_primary_lever || "", "") || null,
   };
 }
 
@@ -94,6 +158,7 @@ function mapSummaryRow(row) {
   return {
     lastPerformed: row?.last_performed == null ? null : toDateOnly(row.last_performed),
     bestWeightKg: toFiniteNumberOrNull(row?.best_weight_kg),
+    bestEstimatedE1rmKg: toFiniteNumberOrNull(row?.best_estimated_e1rm_kg),
     sessionsCount: Number.isFinite(Number(row?.sessions_count)) ? Number(row.sessions_count) : 0,
   };
 }
@@ -110,6 +175,8 @@ export function createHistoryExerciseHandler(db = pool) {
     }
 
     const exerciseId = typeof req.params?.exerciseId === "string" ? req.params.exerciseId.trim() : "";
+    const windowKey = resolveWindowKey(req.query?.window);
+    const includeDecisions = resolveIncludeDecisions(req.query?.include_decisions);
     if (!exerciseId) {
       return res.status(400).json({
         ok: false,
@@ -119,8 +186,11 @@ export function createHistoryExerciseHandler(db = pool) {
     }
 
     try {
+      const seriesQuery = buildSeriesQuery({ includeDecisions, windowKey });
+      const seriesParams =
+        windowKey === "all" ? [authUserId, exerciseId] : [authUserId, exerciseId, WINDOW_DAYS_BY_KEY[windowKey]];
       const [seriesResult, summaryResult, nameResult] = await Promise.all([
-        db.query(SQL_EXERCISE_SERIES, [authUserId, exerciseId]),
+        db.query(seriesQuery, seriesParams),
         db.query(SQL_EXERCISE_SUMMARY, [authUserId, exerciseId]),
         db.query(SQL_EXERCISE_NAME, [authUserId, exerciseId]),
       ]);

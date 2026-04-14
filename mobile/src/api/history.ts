@@ -70,6 +70,9 @@ export type ExerciseHistoryPoint = {
   topWeightKg: number | null;
   tonnage: number | null;
   topReps: number | null;
+  estimatedE1rmKg: number | null;
+  decisionOutcome: string | null;
+  decisionPrimaryLever: string | null;
 };
 
 export type ExerciseHistoryResponse = {
@@ -79,9 +82,12 @@ export type ExerciseHistoryResponse = {
   summary: {
     lastPerformed: string | null;
     bestWeightKg: number | null;
+    bestEstimatedE1rmKg: number | null;
     sessionsCount: number;
   };
 };
+
+export type ExerciseHistoryWindow = "4w" | "8w" | "12w" | "all";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -242,11 +248,15 @@ function normalizeExerciseHistory(raw: unknown): ExerciseHistoryResponse {
         topWeightKg: asNullableNumber(row.topWeightKg ?? row.top_weight_kg),
         tonnage: asNullableNumber(row.tonnage),
         topReps: asNullableNumber(row.topReps ?? row.top_reps),
+        estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg ?? row.estimated_e1rm_kg),
+        decisionOutcome: asNullableString(row.decisionOutcome ?? row.decision_outcome),
+        decisionPrimaryLever: asNullableString(row.decisionPrimaryLever ?? row.decision_primary_lever),
       };
     }),
     summary: {
       lastPerformed: summaryRaw.lastPerformed == null ? null : toDateOnly(summaryRaw.lastPerformed),
       bestWeightKg: asNullableNumber(summaryRaw.bestWeightKg ?? summaryRaw.best_weight_kg),
+      bestEstimatedE1rmKg: asNullableNumber(summaryRaw.bestEstimatedE1rmKg ?? summaryRaw.best_estimated_e1rm_kg),
       sessionsCount: asNumber(summaryRaw.sessionsCount ?? summaryRaw.sessions_count, 0),
     },
   };

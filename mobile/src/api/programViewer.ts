@@ -61,6 +61,7 @@ export type ProgramDayFullResponse = {
     postSegmentRestSec?: number;
     exercises: Array<{
       id?: string;
+      exerciseId?: string;
       name: string;
       sets?: number | null;
       reps?: string | null;
@@ -71,6 +72,15 @@ export type ProgramDayFullResponse = {
       notes?: string | null;
       equipment?: string[] | null;
       isLoadable?: boolean | null;
+      guidelineLoad?: {
+        value: number;
+        unit: string;
+        confidence: "low" | "medium" | "high";
+        confidenceScore?: number;
+        source?: string;
+        reasoning?: string[];
+        set1Rule?: string;
+      } | null;
     }>;
   }>;
 };
@@ -274,6 +284,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
 
           return {
             id: asString(rawExercise.program_exercise_id ?? rawExercise.id),
+            exerciseId: asString(rawExercise.exercise_id ?? rawExercise.exerciseId),
             name:
               asString(rawExercise.name) ??
               asString(rawExercise.exercise_name ?? rawExercise.exerciseName) ??
@@ -293,6 +304,28 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
                   .map(asString)
                   .filter((value): value is string => Boolean(value)),
             isLoadable: asNullableBoolean(rawExercise.is_loadable ?? rawExercise.isLoadable),
+            guidelineLoad: rawExercise.guideline_load == null
+              ? rawExercise.guideline_load === null
+                ? null
+                : undefined
+              : (() => {
+                  const guideline = asObject(rawExercise.guideline_load);
+                  const confidence = asString(guideline.confidence);
+                  if (!confidence) return undefined;
+                  return {
+                    value: asNumber(guideline.value) ?? 0,
+                    unit: asString(guideline.unit) ?? "kg",
+                    confidence: confidence as "low" | "medium" | "high",
+                    confidenceScore: asNumber(
+                      guideline.confidence_score ?? guideline.confidenceScore,
+                    ),
+                    source: asString(guideline.source),
+                    reasoning: asArray(guideline.reasoning)
+                      .map(asString)
+                      .filter((value): value is string => Boolean(value)),
+                    set1Rule: asString(guideline.set_1_rule ?? guideline.set1Rule),
+                  };
+                })(),
           };
         }),
       };

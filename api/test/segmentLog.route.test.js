@@ -162,6 +162,107 @@ test("postSegmentLog non-UUID program_exercise_id in rows returns 400", async ()
   assert.equal(res.statusCode, 400);
 });
 
+test("postSegmentLog invalid rir_actual returns 400", async () => {
+  const handlers = createSegmentLogHandlers(mockPool([]));
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, rir_actual: 5 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body?.error ?? "", /rir_actual/i);
+});
+
+test("postSegmentLog accepts rir_actual of 0", async () => {
+  const queries = [];
+  const handlers = createSegmentLogHandlers({
+    async connect() {
+      return {
+        async query(sql, params) {
+          queries.push({ sql, params });
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) {
+            return { rows: [], rowCount: 1 };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  });
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: 100, reps_completed: 5, rir_actual: 0 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+
+  assert.equal(res.statusCode, 200);
+  const insertCall = queries.find((call) => call.sql.includes("INSERT INTO segment_exercise_log"));
+  assert.equal(insertCall.params[8], 0);
+});
+
+test("postSegmentLog accepts rir_actual of 3", async () => {
+  const queries = [];
+  const handlers = createSegmentLogHandlers({
+    async connect() {
+      return {
+        async query(sql, params) {
+          queries.push({ sql, params });
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) {
+            return { rows: [], rowCount: 1 };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  });
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: 100, reps_completed: 5, rir_actual: 3 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+
+  assert.equal(res.statusCode, 200);
+  const insertCall = queries.find((call) => call.sql.includes("INSERT INTO segment_exercise_log"));
+  assert.equal(insertCall.params[8], 3);
+});
+
 test("postSegmentLog missing user identity returns 400", async () => {
   const handlers = createSegmentLogHandlers(mockPool([]));
   const req = {
@@ -221,4 +322,84 @@ test("getSegmentLog non-UUID workout_segment_id returns 400", async () => {
   await handlers.getSegmentLog(req, res);
 
   assert.equal(res.statusCode, 400);
+});
+
+test("postSegmentLog persists rir_actual when provided", async () => {
+  const queries = [];
+  const handlers = createSegmentLogHandlers({
+    async connect() {
+      return {
+        async query(sql, params) {
+          queries.push({ sql, params });
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) {
+            return { rows: [], rowCount: 1 };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  });
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: 100, reps_completed: 5, rir_actual: 2 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+
+  assert.equal(res.statusCode, 200);
+  const insertCall = queries.find((call) => call.sql.includes("INSERT INTO segment_exercise_log"));
+  assert.equal(insertCall.params[8], 2);
+});
+
+test("postSegmentLog stores null rir_actual when omitted", async () => {
+  const queries = [];
+  const handlers = createSegmentLogHandlers({
+    async connect() {
+      return {
+        async query(sql, params) {
+          queries.push({ sql, params });
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) {
+            return { rows: [], rowCount: 1 };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  });
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: 100, reps_completed: 5 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+
+  assert.equal(res.statusCode, 200);
+  const insertCall = queries.find((call) => call.sql.includes("INSERT INTO segment_exercise_log"));
+  assert.equal(insertCall.params[8], null);
 });

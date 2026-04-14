@@ -25,7 +25,6 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
 
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
-  const setDraft = useOnboardingStore((state) => state.setDraft);
   const setIdentity = useOnboardingStore((state) => state.setIdentity);
 
   const meQuery = useMe();
@@ -50,22 +49,6 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
     linkClientProfileMutation.isPending ||
     (Boolean(profileId) && profileQuery.isLoading);
 
-  // DEBUG: remove once boot hang is resolved
-  console.log("[boot:render]", {
-    meLoading: meQuery.isLoading,
-    meSuccess: meQuery.isSuccess,
-    meError: meQuery.isError,
-    clientProfileId: meQuery.data?.clientProfileId ?? null,
-    refLoading: referenceDataQuery.isLoading,
-    refSuccess: referenceDataQuery.isSuccess,
-    createPending: createClientProfileMutation.isPending,
-    linkPending: linkClientProfileMutation.isPending,
-    profileId: profileId ?? null,
-    profileLoading: profileQuery.isLoading,
-    profileHasData: !!profileQuery.data,
-    isAnyLoading,
-  });
-
   const queryErrorMessage = useMemo(() => {
     const err = fatalError || meQuery.error?.message || referenceDataQuery.error?.message || profileQuery.error?.message;
     return err ?? null;
@@ -73,19 +56,12 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
   const apiDiagnostics = useMemo(() => getApiDiagnostics(), [queryErrorMessage]);
 
   const bootstrapProfileIfNeeded = useCallback(async (): Promise<void> => {
-    // DEBUG: remove once boot hang is resolved
-    console.log("[boot:bootstrap-fn]", {
-      hasData: !!meQuery.data,
-      clientProfileId: meQuery.data?.clientProfileId ?? null,
-      alreadyBootstrapping: bootstrappingRef.current,
-    });
     if (!meQuery.data) return;
     if (meQuery.data.clientProfileId) return;
     if (bootstrappingRef.current) return;
 
     bootstrappingRef.current = true;
     try {
-      console.log("[boot:bootstrap-fn] → POST /client-profiles");
       const createdProfileId =
         createdProfileIdRef.current ??
         (
@@ -95,14 +71,10 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
         ).id;
 
       createdProfileIdRef.current = createdProfileId;
-      console.log("[boot:bootstrap-fn] → PATCH /users/me", { createdProfileId });
       await linkClientProfileMutation.mutateAsync({ clientProfileId: createdProfileId });
-      console.log("[boot:bootstrap-fn] → refetch /me");
       await meQuery.refetch();
-      console.log("[boot:bootstrap-fn] done");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to bootstrap client profile.";
-      console.log("[boot:bootstrap-fn] ERROR", message);
       setFatalError(message);
     } finally {
       bootstrappingRef.current = false;
@@ -118,8 +90,6 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
   }, [meQuery.data?.clientProfileId, meQuery.data?.id, setIdentity]);
 
   useEffect(() => {
-    // DEBUG: remove once boot hang is resolved
-    console.log("[boot:bootstrap-effect]", { meIsError: meQuery.isError, meIsSuccess: meQuery.isSuccess });
     if (meQuery.isError) {
       setFatalError(meQuery.error?.message ?? "Failed to load /me.");
       return;
@@ -131,19 +101,10 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
   }, [bootstrapProfileIfNeeded, meQuery.error?.message, meQuery.isError, meQuery.isSuccess]);
 
   useEffect(() => {
-    // DEBUG: remove once boot hang is resolved
-    console.log("[boot:hydrate-effect]", {
-      alreadyHydrated: hydratedRef.current,
-      meSuccess: meQuery.isSuccess,
-      refSuccess: referenceDataQuery.isSuccess,
-      profileId: profileId ?? null,
-      profileHasData: !!profileQuery.data,
-    });
     if (hydratedRef.current) return;
     if (!meQuery.isSuccess || !referenceDataQuery.isSuccess) return;
     if (!profileId || !profileQuery.data) return;
 
-    console.log("[boot:hydrate-effect] ALL CONDITIONS MET — hydrating");
     resetFromProfile(profileQuery.data);
 
     const hydratedDraft = getOnboardingDraft();
@@ -151,15 +112,16 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
 
     hydratedRef.current = true;
 
-    // DEBUG: remove once boot hang is resolved
-    console.log("[boot:navigate]", { resumeStep });
-
     if (resumeStep === 1) {
       navigation.replace("Step1Goals");
       return;
     }
     if (resumeStep === 2) {
       navigation.replace("Step2Equipment");
+      return;
+    }
+    if (resumeStep === "2b") {
+      navigation.replace("Step2bBaselineLoads");
       return;
     }
     if (resumeStep === 3) {
@@ -179,7 +141,6 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
     profileQuery.data,
     referenceDataQuery.isSuccess,
     resetFromProfile,
-    setDraft,
   ]);
 
   const handleRetry = useCallback(async (): Promise<void> => {

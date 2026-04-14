@@ -6,6 +6,7 @@ import {
 import { OnboardingEntry } from "../screens/onboarding/OnboardingEntry";
 import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
 import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
+import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
 import { ProgramDashboardScreen } from "../screens/program/ProgramDashboardScreen";
 import { ProgramDayScreen } from "../screens/program/ProgramDayScreen";
@@ -15,6 +16,7 @@ export type OnboardingStackParamList = {
   OnboardingEntry: undefined;
   Step1Goals: undefined;
   Step2Equipment: undefined;
+  Step2bBaselineLoads: undefined;
   Step3Schedule: undefined;
   ProgramReview: undefined;
   ProgramDashboard: {
@@ -48,6 +50,7 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="OnboardingEntry" component={OnboardingEntry} />
       <Stack.Screen name="Step1Goals" component={Step1GoalsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step2Equipment" component={Step2EquipmentScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="Step2bBaselineLoads" component={Step2bBaselineLoadsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreen} options={stepTransitionOptions} />

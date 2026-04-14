@@ -169,6 +169,7 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     source,
     builder: {
       dayTemplates: builderDayTemplates,
+      dayTemplatesByDpw: pgcJson?.builder?.day_templates_by_dpw ?? null,
       setsByDuration: pgcJson?.builder?.sets_by_duration ?? null,
       blockBudget: pgcJson?.builder?.block_budget ?? null,
       slotDefaults: pgcJson?.builder?.slot_defaults ?? {},
@@ -188,6 +189,13 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
       weekPhaseConfig: pgcRow?.week_phase_config_json ?? {},
       totalWeeksDefault: pgcRow?.total_weeks_default ?? 4,
       applyToPurposes: pgcJson?.progression?.apply_to_purposes ?? ["main", "secondary", "accessory"],
+      history: pgcJson?.progression?.history ?? {},
+      leverProfiles: pgcJson?.progression?.lever_profiles ?? {},
+      slotProfileMap: pgcJson?.progression?.slot_profile_map ?? {},
+      loadIncrementProfiles: pgcJson?.progression?.load_increment_profiles ?? {},
+      restProgressionProfiles: pgcJson?.progression?.rest_progression_profiles ?? {},
+      repProgressionProfiles: pgcJson?.progression?.rep_progression_profiles ?? {},
+      deloadRules: pgcJson?.progression?.deload_rules ?? {},
     },
     raw: {
       programGenerationConfigRow: pgcRow,

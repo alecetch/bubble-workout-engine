@@ -54,13 +54,16 @@ The React Native mobile app lives in a separate repository and integrates entire
 |  - POST /admin/exercise-catalogue/session/*                   |
 |                                                               |
 |  Engine                                                       |
-|  - runPipeline -> steps 01..06 -> emitted rows               |
+|  - runPipeline -> steps 01..07 -> emitted rows               |
 |                                                               |
 |  Services                                                     |
 |  - buildInputsFromDevProfile (pipeline input assembly)        |
 |  - importEmitterService (transactional ingest + idempotency)  |
 |  - calendarCoverage, mediaAssets, narrationTemplates,         |
 |    programGenerationConfig, repRules                          |
+|  - progressionHistoryService (workout history for decisions)  |
+|  - progressionDecisionService (lever selection + state)       |
+|  - progressionSeedService (baseline load cold-start)          |
 +--------------------------+------------------------------------+
                            |
                            | pg (pool)
@@ -76,8 +79,10 @@ The React Native mobile app lives in a separate repository and integrates entire
 | - media_assets                                   |
 | - program_generation_config                      |
 | - program_rep_rule, narration_template           |
-| - segment_exercise_log, estimated_1rm            |
+| - segment_exercise_log (+ rir_actual), estimated_1rm |
 | - password_reset_token                           |
+| - exercise_progression_state (planned)           |
+| - exercise_progression_decision (planned)        |
 +--------------------------+-----------------------+
                            ^
                            | Flyway migrate
@@ -101,7 +106,7 @@ URL assembled at read time: image_key + S3_PUBLIC_BASE_URL
 - Registers all route modules.
 - Serves static media assets from `/app/assets/media-assets`.
 - Exposes `GET /health`.
-- Provides `GET /reference-data` (equipment items + config lookup for mobile onboarding screens).
+- Provides `GET /reference-data` (equipment items, equipment presets, and `anchorExercises[]` — anchor-eligible exercises filtered by estimation family and sorted by priority for the Step 2b baseline loads onboarding screen).
 
 ### Database access
 `api/src/db.js` — exports a shared `pg.Pool` configured by env vars.
@@ -124,7 +129,7 @@ Route module files (`api/src/routes/`):
 |---|---|---|
 | `generateProgramV2.js` | `POST /api/generate-plan-v2` | Full generation + persist flow (see §4) |
 | `importEmitter.js` | `POST /api/import/emitter` | Raw emitter row ingest (for external callers) |
-| `readProgram.js` | `GET /api/program/:id/overview`, `GET /api/day/:id/full`, `PATCH /api/day/:id/complete` | Program + day read views and day completion |
+| `readProgram.js` | `GET /api/program/:id/overview`, `GET /api/day/:id/full`, `PATCH /api/day/:id/complete` | Program + day read views and day completion. `GET /api/day/:id/full` includes a `guidelineLoad` field on each exercise (value, unit, confidence, reasoning) computed from anchor lifts at read time. |
 | `debugAllowedExercises.js` | `GET /api/client_profile/:id/allowed_exercises` | Debug: exercise filtering by profile |
 | `segmentLog.js` | `GET /api/segment-log`, `POST /api/segment-log` | Workout set logging |
 | `loggedExercises.js` | `GET /api/logged-exercises` | Per-exercise log history |
@@ -156,6 +161,9 @@ Route module files (`api/src/routes/`):
 | `narrationTemplates.js` | Fetches active `narration_template` rows (per-week programme text templates). |
 | `mediaAssets.js` | Fetches active `media_assets` rows (hero images for programs and days). |
 | `calendarCoverage.js` | Ensures `program_calendar` rows cover all scheduled days after generation. |
+| `progressionDecisionService.js` | Resolves lever profiles from config, scores readiness from history, selects one progression lever, persists state and audit rows. Factory: `makeProgressionDecisionService(db)`. |
+| `anchorLiftService.js` | Persists and retrieves anchor lift entries from onboarding (baseline load cold-start). |
+| `guidelineLoadService.js` | Computes guideline starting load for a program exercise from anchor lifts and estimation family config. |
 
 ---
 
@@ -217,6 +225,11 @@ Step 03 — applyProgression                 [api/engine/steps/03_applyProgressi
   │           Phases: BASELINE → BUILD → BUILD → CONSOLIDATE (configurable).
   │           Each week contains week_index, phase_label, and days[] (deep copies of
   │           template days with adjusted set counts per the progression schedule).
+  │           Scheduled deload weeks apply set_multiplier and rir_bump.
+  │
+  │  Note:    Layer A structural progression only — rank-based set/round increments and
+  │           scheduled deloads. Does NOT use workout logs or athlete performance history.
+  │           Athlete-responsive progression is handled by Steps B/C (see §3.1 and Step 07).
   │
   ▼
 Step 04 — applyRepRules                    [api/engine/steps/04_applyRepRules.js]
@@ -246,20 +259,93 @@ Step 05 — applyNarration                   [api/engine/steps/05_applyNarration
   │
   ▼
 Step 06 — emitPlan                         [api/engine/steps/06_emitPlan.js]
+  │
+  │  Inputs:  Narration-enriched program, catalog_json (for warmup hook timing fallback),
+  │           anchor_day_ms, preferred_days_json, timing knobs (all optional).
+  │
+  │  Output:  rows[] — pipe-delimited strings in the emitter format:
+  │           PRG|…   (1 row,  9 cols)  — program header
+  │           WEEK|…  (n rows, 4 cols)  — one per week
+  │           DAY|…   (n rows, 14 cols) — one per training day
+  │           SEG|…   (n rows, 20 cols) — one per workout segment (col 19 = post_segment_rest_sec)
+  │           EX|…    (n rows, 26 cols) — one per exercise in a segment
+  │
+  │           Scheduled dates derived from preferred_days_json + anchor_day_ms.
+  │           Segment durations computed from rep/set/tempo math + warmup/cooldown allocations.
+  │
+  ▼
+Step 07 — applyExerciseProgressionOverrides  [api/engine/steps/07_applyExerciseProgressionOverrides.js]  *(planned)*
 
-  Inputs:  Narration-enriched program, catalog_json (for warmup hook timing fallback),
-           anchor_day_ms, preferred_days_json, timing knobs (all optional).
+  Inputs:  Emitted plan (output of Step 06), progressionStateByKey map (persisted
+           exercise_progression_state rows fetched for this user + program_type).
 
-  Output:  rows[] — pipe-delimited strings in the emitter format:
-           PRG|…   (1 row,  9 cols)  — program header
-           WEEK|…  (n rows, 4 cols)  — one per week
-           DAY|…   (n rows, 14 cols) — one per training day
-           SEG|…   (n rows, 20 cols) — one per workout segment (col 19 = post_segment_rest_sec)
-           EX|…    (n rows, 26 cols) — one per exercise in a segment
+  Output:  Modified emitted plan with athlete-specific load / rep / set / rest overrides
+           applied to individual exercises.
 
-           Scheduled dates derived from preferred_days_json + anchor_day_ms.
-           Segment durations computed from rep/set/tempo math + warmup/cooldown allocations.
+           Rules:
+           - Matches each program_exercise to its progression_key (exercise:{uuid}).
+           - Applies recommended_load_delta_kg, recommended_rep_delta, recommended_set_delta,
+             recommended_rest_delta_sec from the persisted decision.
+           - On load increase: also applies the rep reset delta (resets reps to bottom of range).
+           - Suppresses progression outcomes (increase_load, increase_reps, etc.) during
+             scheduled deload weeks; replaces them with hold.
+           - When both a local deload and Step 03 structural deload are active, takes the
+             lower of the two resulting set counts.
+           - Emits progression_override_debug annotations on each affected exercise.
+           - Makes no changes (graceful no-op) when no state row exists for an exercise.
+
+  Note:    Layer C in the three-layer progression architecture. Requires decision_engine_version
+           "v2" in the config; skips silently for "v1" configs.
 ```
+
+### Progression Architecture
+
+The engine uses a three-layer progression model. See `docs/enhanced-progression-system-spec.md` for the full spec.
+
+#### Layer A — Structural progression (Step 03, existing)
+
+Week-level set/round increments and scheduled deloads driven by `progression_by_rank_json` and `week_phase_config_json`. Runs unconditionally. Does not use logged history.
+
+#### Layer B — Athlete-specific progression decisions (progression services, implemented)
+
+A dedicated service (`progressionDecisionService`) runs after a session is completed (`program_day.is_completed → TRUE`). It:
+
+1. Gathers recent workout history for each completed exercise via `progressionHistoryService`.
+2. Resolves the `lever_profile` for the exercise from `slot_profile_map[programType][purpose]` inside `program_generation_config_json.progression`.
+3. Applies RIR gate, evidence thresholds, and rank scaling.
+4. Selects one primary lever: `increase_load`, `increase_reps`, `increase_sets`, `reduce_rest`, `hold`, or `deload_local`.
+5. Persists the decision to `exercise_progression_state` (current state) and `exercise_progression_decision` (append-only audit).
+
+Key constraints: only one lever advances per decision; RIR is the primary gate (with 1RM trend as proxy when RIR is absent); deload is checked before any progression lever; `hold` is a normal valid outcome.
+
+#### Layer C — Override application (Step 07, in progress)
+
+A new pipeline step reads the persisted progression state for the user and applies load/rep/set/rest overrides to the emitted plan before it is saved. Step 07 runs after Step 06 and respects scheduled deload weeks.
+
+#### Progression activation
+
+Layer B/C is activated by setting `decision_engine_version: "v2"` inside `program_generation_config_json.progression`. Configs without this field default to `"v1"` (Layer A only). This allows a controlled rollout per program type.
+
+#### Lever priority by program type
+
+| Program type | Priority order |
+|---|---|
+| hypertrophy (main) | reps → load → sets → hold → deload |
+| strength (main) | load → reps → hold → deload |
+| conditioning | rest → volume → hold → deload |
+| hyrox | rest → volume → load → hold → deload |
+
+#### Load increment resolution
+
+Increments are config-driven, not global. Resolution order:
+1. `implement_increment_overrides[implement]` (e.g. sled_push, dumbbell, cable)
+2. `load_increment_profiles[profile].bands` — load-band-specific increment
+3. Scaled by `progression_by_rank_json[rank].load_increment_scale`
+4. Rounded to nearest available increment; scaled-to-zero increments use the smallest available
+
+Advanced/elite athletes use smaller increment scale factors and require more historical evidence before progressing.
+
+---
 
 ### Config-driven multi-type support
 
@@ -312,12 +398,24 @@ compiledConfig
 │       ├── purpose                  "main" | "secondary" | "accessory"
 │       └── post_segment_rest_sec    Optional inter-block rest (seconds); used by Hyrox
 │
-└── progression        — Controls Step 03 (which segments receive weekly set increments)
-    └── apply_to_purposes     Array of purposes that receive progression
-                              e.g. ["main", "secondary", "accessory"]
+└── progression        — Controls Step 03 (Layer A) and Layer B/C decision engine
+    ├── apply_to_purposes     Array of purposes that receive progression
+    │                         e.g. ["main", "secondary", "accessory"]
+    ├── decision_engine_version  "v1" (default) = Layer A only; "v2" = all three layers
+    ├── history               Lookback window config and history filter settings
+    ├── outcomes              Multi-lever permission flags
+    ├── lever_profiles        Named profiles (one per program_type × purpose combination)
+    │   └── {profile_name}    priority_order, rest_strategy, load/rep/set/deload profile refs
+    ├── slot_profile_map      Maps programType → purpose → lever_profile name
+    ├── slot_profile_fallback Profile to use when slot_profile_map lookup fails
+    ├── load_increment_profiles  Named increment configs with load-band arrays
+    ├── implement_increment_overrides  Per-implement increment and rounding overrides
+    ├── rest_progression_profiles  Named rest step/minimum/gate configs
+    ├── rep_progression_profiles   Named rep mode configs (double_progression, tight_strength)
+    └── deload_rules          Named deload trigger + response configs
 ```
 
-The top-level `progression_by_rank_json` and `week_phase_config_json` columns on the config row control the numeric set-increment schedule and phase sequence respectively (see §3 Step 03).
+The top-level `progression_by_rank_json` column controls both Layer A (existing `max_extra_sets`, `weekly_set_step`, `deload`) and Layer B rank scaling (new: `evidence_requirement_multiplier`, `rir_progress_gate_offset`, `load_increment_scale`, `set_progression_enabled`, `rest_reduction_aggressiveness`). The `week_phase_config_json` column controls phase sequence and labels (see §3 Step 03).
 
 ### Where to tune program behaviour
 
@@ -334,8 +432,15 @@ The top-level `progression_by_rank_json` and `week_phase_config_json` columns on
 | Change whether a block is singles, supersets, or giant sets | `segmentation.block_semantics.<letter>.preferred_segment_type` |
 | Add inter-block rest (e.g. Hyrox station rest) | `segmentation.block_semantics.<letter>.post_segment_rest_sec` |
 | Add a new program type | New seed row in `R__seed_program_generation_config.sql` |
-| Change weekly set progression steps | `progression_by_rank_json` (per fitness rank) |
+| Change weekly set progression steps | `progression_by_rank_json[rank].max_extra_sets` / `weekly_set_step` |
 | Change phase sequence or labels | `week_phase_config_json.default_phase_sequence` |
+| Enable athlete-responsive progression (Layer B/C) | Set `progression.decision_engine_version: "v2"` in the config |
+| Change lever priority order for a program type | `progression.lever_profiles[name].priority_order` |
+| Change how much evidence is required before progressing | `progression_by_rank_json[rank].evidence_requirement_multiplier` |
+| Change load increment size | `progression.load_increment_profiles[name].bands` or `implement_increment_overrides` |
+| Change RIR gate strictness per rank | `progression_by_rank_json[rank].rir_progress_gate_offset` (negative = stricter) |
+| Change local deload response | `progression.deload_rules[name].response` |
+| Disable set progression for a rank | `progression_by_rank_json[rank].set_progression_enabled: false` |
 
 All changes to a seed file are picked up automatically the next time Flyway runs (repeatable migrations — `R__*.sql` — re-execute whenever their checksum changes).
 
@@ -498,7 +603,8 @@ After V23 (equipment-aware variants), **A and B slots have zero coverage gaps** 
 1. Mobile app calls `POST /api/client-profiles` with profile fields (equipment, fitness rank, injury flags, goals).
 2. API normalises option slugs and upserts `client_profile` linked to `app_user` via `clientProfileService.upsertProfile`.
 3. Profile can be updated via `PATCH /api/client-profiles/:id` (e.g. after onboarding step changes).
-4. Profile becomes canonical in Postgres — it is the sole input source for generation.
+4. For non-beginner users, onboarding includes Step 2b (`Step2bBaselineLoadsScreen`) which captures recent working weights for key estimation families (squat, hinge, horizontal press, vertical press, horizontal pull, vertical pull). These are saved as `anchorLifts[]` on the profile and used by `guidelineLoadService` to compute starting load suggestions on the day screen.
+5. Profile becomes canonical in Postgres — it is the sole input source for generation.
 
 ### Program type resolution
 `generateProgramV2.js` resolves `programType` in priority order:
@@ -526,8 +632,14 @@ After V23 (equipment-aware variants), **A and B slots have zero coverage gaps** 
 
 ### Workout logging
 1. Mobile app calls `POST /api/segment-log` during a session.
-2. API upserts `segment_exercise_log` rows with sets/reps/weight.
+2. API upserts `segment_exercise_log` rows with sets/reps/weight and `rir_actual` (already supported since V1).
 3. History and PR endpoints read back from these logs.
+
+### Progression decision (planned — Layer B)
+1. When a session is completed, the route that sets `program_day.is_completed = TRUE` calls `progressionDecisionService` as a post-commit side effect.
+2. The service gathers recent history, resolves the lever profile, applies the RIR gate, and selects one progression lever per exercise.
+3. Results are persisted to `exercise_progression_state` (current state, upserted) and `exercise_progression_decision` (append-only audit log).
+4. On the next call to `POST /api/generate-plan-v2`, Step 07 reads the persisted state and applies per-exercise overrides to the emitted prescription.
 
 ### Read path
 1. Mobile app calls overview/day read routes.
@@ -575,6 +687,12 @@ Migrations in `migrations/` define schema evolution via Flyway.
 | V27–V33 | (Various schema additions — equipment, auth, profile fields) |
 | V34 | Change `fk_program_user` and `fk_log_user` FK constraints to `ON DELETE CASCADE` (enables hard-delete of `app_user` without FK violations) |
 | V35 | Add `password_reset_token` table: `id`, `user_id` (FK → `app_user` CASCADE), `code_hash`, `expires_at`, `used_at`, `created_at` |
+| V36–V57 | Various exercise catalogue, coaching fields, and onboarding enhancements (see migration files) |
+| V58 | Add `program_exercise` progression fields (`prescribed_load_kg`, `prescribed_reps_min/max`, `progression_key`) |
+| V59 | Create `exercise_progression_state` — one row per user + progression_key + program_type; holds current load/rep/set/rest overrides, last outcome, streak counters, confidence |
+| V60 | Create `exercise_progression_decision` — append-only audit log of Layer B progression decisions (outcome, lever, deltas, evidence summary, context JSON) |
+| V61 | Seed progression profiles into `program_generation_config` |
+| V54–V57 | `client_anchor_lift` table, anchor lift columns on `client_profile`, load estimation metadata on `exercise_catalogue`, `exercise_load_estimation_family_config` table |
 
 ### Repeatable migrations (`R__*.sql`)
 Seed data, re-applied whenever the file checksum changes:
@@ -609,7 +727,7 @@ Seed data, re-applied whenever the file checksum changes:
 - Postgres: Fly managed Postgres.
 - Media assets: served from `/app/assets/media-assets` (volume-mounted).
 - CI/CD: Two GitHub Actions workflows:
-  - **`ci.yml`** — runs on every push and PR to `main`. Spins up a Postgres 16 service container, runs Flyway migrations, then `npm test -- --test-concurrency=1` with all integration tests enabled (no skips). PRs cannot be merged if any test fails.
+  - **`ci.yml`** — runs on every push and PR to `main`. Spins up a Postgres 16 service container, runs Flyway migrations, then `npm test -- --test-concurrency=1` with all integration tests enabled (no skips). After the API tests pass, runs `npm ci` + `npm test` in `mobile/` for the Tier 1 pure-logic mobile test suite. PRs cannot be merged if any test fails.
   - **`fly-deploy.yml`** — runs on push to `main` after CI passes. Runs `qa:seeds` smoke check then deploys to Fly.
 
 ### Key environment variables
@@ -651,10 +769,21 @@ Step 06 emits pipe-delimited strings (`PRG|WEEK|DAY|SEG|EX`) that are parsed and
 ### 6. Config-driven multi-type pipeline
 Steps 01 and 02 are fully generic. Program-type behaviour (day templates, exercise slot definitions, block grouping semantics, set counts, progression) is driven entirely by the `program_generation_config_json` JSONB column. Adding a new program type requires only a new seed row — no code changes. The `compiledConfig` object is assembled and validated once in `runPipeline.js`, then threaded through all dependent steps. See §3 for the full config schema.
 
-### 7. Known technical debt
+### 7. Three-layer progression model
+
+Progression is divided into three layers with explicit responsibility boundaries:
+
+- **Layer A** — structural, deterministic, week-based. Runs inside the generation pipeline (Step 03). Uses only `progression_by_rank_json` and `week_phase_config_json`. No workout logs.
+- **Layer B** — athlete-specific, performance-based. Runs as a post-session side effect when `program_day.is_completed → TRUE`. Uses logged sets, reps, weight, and RIR. Selects one progression lever at a time. Persists state and an audit log.
+- **Layer C** — prescription application. Runs as Step 07 in the pipeline after Step 06 (emit). Reads persisted Layer B decisions and applies overrides to the generated prescription.
+
+This separation keeps the generation pipeline deterministic and independently testable, while enabling athlete-responsive adaptation that is auditable and explainable.
+
+### 8. Known technical debt
 - **`bubble_*` column names** — legacy from old Bubble.io integration; `app_user.bubble_user_id` and `client_profile.bubble_client_profile_id` could be renamed to generic external-ID fields. Deferred — ticket at `docs/ticket-rename-bubble-user-id.md`.
 - **Route-level JSON middleware** — some routes mount `express.json()` despite a global parser already being present in `server.js`. Low risk, cosmetic cleanup only.
-- **Error alerting** — production errors are discovered by users, not alerts. Fly.io health check (`/health`, every 10s) covers total outages; 5xx route errors are not alerted. Sentry integration is planned — ticket at `docs/ticket-sentry-error-tracking.md`.
+- **Mobile `MODULE_TYPELESS_PACKAGE_JSON` warning** — `mobile/package.json` does not declare `"type": "module"`, producing Node warnings during the Tier 1 test run. Harmless today but indicates a packaging misconfiguration. Fix: add `"type": "module"`. Tracked in `docs/ticket-maturity-9.md`.
+- **Mobile Tier 2 tests not yet implemented** — component-level and hook tests (Jest + `@testing-library/react-native`) are specified but blocked on peer-resolution of the Jest stack with React 19. Tracked in `docs/ticket-maturity-9.md`.
 
 ---
 
@@ -771,8 +900,10 @@ All 299 tests pass in CI (`ci.yml`) with a real Postgres 16 instance. Zero tests
 ### Known acceptable gaps
 - **Admin routes** (`adminNarration`, `adminConfigs`, `adminCoverage`, `adminObservability`) — no unit tests. Admin panel is internal-only; breakage is visible immediately and not user-facing.
 - **`prsFeed`, `sessionHistoryMetrics`, `loggedExercises`** — no route tests. Read-only, low-complexity endpoints; breakage is detectable via manual smoke test.
+- **Progression services and Step 07** — not yet built. Test plan is in `docs/enhanced-progression-system-spec.md §12`.
 
 ### Deferred roadmap
+- Enhanced progression system (Layers B + C) — `docs/enhanced-progression-system-spec.md`
 - Sentry error tracking — `docs/ticket-sentry-error-tracking.md`
 - `bubble_user_id` → `user_key` rename — `docs/ticket-rename-bubble-user-id.md`
 

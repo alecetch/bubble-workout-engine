@@ -28,7 +28,15 @@ type LogSegmentModalProps = {
   onSave: () => void;
 };
 
-type InputState = { weight: string; reps: string };
+type InputState = { weight: string; reps: string; rirActual: number | null };
+
+const EFFORT_OPTIONS = [
+  { label: "4+", value: 4, caption: "Could do 4 or more reps" },
+  { label: "3", value: 3, caption: "Could do 3 more reps" },
+  { label: "2", value: 2, caption: "Could do 2 more reps" },
+  { label: "1", value: 1, caption: "Could do 1 more rep" },
+  { label: "0", value: 0, caption: "Could do no more reps" },
+] as const;
 
 function parseWeightPrefill(intensity: string | null | undefined): string {
   const v = parseFloat((intensity ?? "").trim());
@@ -61,9 +69,13 @@ export function LogSegmentModal({
   onSave,
 }: LogSegmentModalProps): React.JSX.Element {
   const [inputMap, setInputMap] = useState<Record<string, InputState>>({});
+  const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
 
   const exercises = segment?.exercises ?? [];
   const loadableExercises = exercises.filter((ex) => ex.isLoadable === true);
+  const activeExercise = loadableExercises.find((ex) => ex.id === activeExerciseId) ?? null;
+  const activeEffort = activeExerciseId ? (inputMap[activeExerciseId]?.rirActual ?? null) : null;
+  const activeEffortCaption = EFFORT_OPTIONS.find((option) => option.value === activeEffort)?.caption ?? null;
 
   // exercise.id is program_exercise.id — the DB primary key for this exercise row
   const existingLogsQuery = useSegmentExerciseLogs(
@@ -86,6 +98,7 @@ export function LogSegmentModal({
       initial[key] = {
         weight: parseWeightPrefill(ex.intensity),
         reps: parseRepsPrefill(ex.reps),
+        rirActual: null,
       };
     }
 
@@ -95,9 +108,11 @@ export function LogSegmentModal({
       if (!initial[key]) continue;
       if (row.weightKg != null) initial[key].weight = String(row.weightKg);
       if (row.repsCompleted != null) initial[key].reps = String(row.repsCompleted);
+      if (row.rirActual != null) initial[key].rirActual = row.rirActual;
     }
 
     setInputMap(initial);
+    setActiveExerciseId(null);
   }, [visible, segment?.id, existingLogsQuery.data]);
 
   const handleSave = (): void => {
@@ -106,7 +121,7 @@ export function LogSegmentModal({
     const rows = exercises.map((ex, index) => {
       const isLoadable = ex.isLoadable === true;
       const key = ex.id ?? "";
-      const inputs = inputMap[key] ?? { weight: "", reps: "" };
+      const inputs = inputMap[key] ?? { weight: "", reps: "", rirActual: null };
       const wRaw = parseFloat(inputs.weight);
       const rRaw = parseInt(inputs.reps, 10);
       return {
@@ -114,6 +129,7 @@ export function LogSegmentModal({
         orderIndex: index + 1,
         weightKg: isLoadable && Number.isFinite(wRaw) && wRaw > 0 ? wRaw : null,
         repsCompleted: isLoadable && Number.isInteger(rRaw) && rRaw > 0 ? rRaw : null,
+        rirActual: isLoadable ? inputs.rirActual ?? null : null,
       };
     });
 
@@ -182,7 +198,7 @@ export function LogSegmentModal({
                 <Text style={styles.sectionLabel}>ACTUAL</Text>
                 {loadableExercises.map((ex) => {
                   const key = ex.id ?? "";
-                  const inputs = inputMap[key] ?? { weight: "", reps: "" };
+                  const inputs = inputMap[key] ?? { weight: "", reps: "", rirActual: null };
                   return (
                     <View key={key} style={styles.actualRow}>
                       <Text style={styles.actualName} numberOfLines={2} ellipsizeMode="tail">
@@ -192,6 +208,7 @@ export function LogSegmentModal({
                         <View style={styles.inputGroup}>
                           <TextInput
                             value={inputs.weight}
+                            onFocus={() => setActiveExerciseId(key)}
                             onChangeText={(v) => {
                               // Digits + at most one decimal point
                               const sanitized = v
@@ -199,10 +216,12 @@ export function LogSegmentModal({
                                 .replace(/^(\d*\.?\d*).*$/, "$1");
                               setInputMap((m) => ({
                                 ...m,
-                                [key]: { ...(m[key] ?? { reps: "" }), weight: sanitized },
+                                [key]: { ...(m[key] ?? { reps: "", rirActual: null }), weight: sanitized },
                               }));
                             }}
                             keyboardType="decimal-pad"
+                            textContentType="none"
+                            autoComplete="off"
                             placeholder="kg"
                             placeholderTextColor={colors.textSecondary}
                             style={styles.input}
@@ -213,15 +232,18 @@ export function LogSegmentModal({
                         <View style={styles.inputGroup}>
                           <TextInput
                             value={inputs.reps}
+                            onFocus={() => setActiveExerciseId(key)}
                             onChangeText={(v) => {
                               // Digits only
                               const sanitized = v.replace(/[^0-9]/g, "");
                               setInputMap((m) => ({
                                 ...m,
-                                [key]: { ...(m[key] ?? { weight: "" }), reps: sanitized },
+                                [key]: { ...(m[key] ?? { weight: "", rirActual: null }), reps: sanitized },
                               }));
                             }}
                             keyboardType="numeric"
+                            textContentType="none"
+                            autoComplete="off"
                             placeholder="reps"
                             placeholderTextColor={colors.textSecondary}
                             style={styles.input}
@@ -233,6 +255,61 @@ export function LogSegmentModal({
                     </View>
                   );
                 })}
+
+                <View style={styles.effortCard}>
+                  <Text style={styles.effortTitle}>Rate Your Last Set</Text>
+                  <Text style={styles.effortPrompt}>How many more reps could you do?</Text>
+                  {activeExercise ? (
+                    <Text style={styles.effortActiveExercise} numberOfLines={1}>
+                      Applying to {activeExercise.name}
+                    </Text>
+                  ) : (
+                    <Text style={styles.effortHint}>Enter your set first to rate effort.</Text>
+                  )}
+                  <View style={styles.effortButtonRow}>
+                    {EFFORT_OPTIONS.map((option) => {
+                      const selected = activeEffort === option.value;
+                      const disabled = !activeExerciseId;
+                      return (
+                        <PressableScale
+                          key={option.label}
+                          onPress={() => {
+                            if (!activeExerciseId) return;
+                            setInputMap((current) => ({
+                              ...current,
+                              [activeExerciseId]: {
+                                ...(current[activeExerciseId] ?? { weight: "", reps: "", rirActual: null }),
+                                rirActual: option.value,
+                              },
+                            }));
+                          }}
+                          disabled={disabled}
+                          style={[
+                            styles.effortButton,
+                            disabled && styles.effortButtonDisabled,
+                            selected && styles.effortButtonSelected,
+                          ]}
+                          accessibilityLabel={option.caption}
+                        >
+                          <Text
+                            style={[
+                              styles.effortButtonLabel,
+                              disabled && styles.effortButtonLabelDisabled,
+                              selected && styles.effortButtonLabelSelected,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </PressableScale>
+                      );
+                    })}
+                  </View>
+                  {activeEffortCaption ? (
+                    <Text style={styles.effortCaption}>{activeEffortCaption}</Text>
+                  ) : (
+                    <Text style={styles.effortCaptionPlaceholder}>No effort selected yet.</Text>
+                  )}
+                </View>
               </>
             ) : null}
 
@@ -343,6 +420,73 @@ const styles = StyleSheet.create({
   inputUnit: {
     color: colors.textSecondary,
     ...typography.label,
+  },
+  effortCard: {
+    marginTop: spacing.sm,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  effortTitle: {
+    color: colors.textPrimary,
+    ...typography.h3,
+  },
+  effortPrompt: {
+    color: colors.textPrimary,
+    ...typography.body,
+  },
+  effortHint: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  effortActiveExercise: {
+    color: colors.accent,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  effortButtonRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
+  },
+  effortButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  effortButtonSelected: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+  },
+  effortButtonDisabled: {
+    opacity: 0.45,
+  },
+  effortButtonLabel: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "700",
+  },
+  effortButtonLabelSelected: {
+    color: colors.textPrimary,
+  },
+  effortButtonLabelDisabled: {
+    color: colors.textSecondary,
+  },
+  effortCaption: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  effortCaptionPlaceholder: {
+    color: colors.textSecondary,
+    ...typography.small,
+    opacity: 0.8,
   },
   actions: {
     flexDirection: "row",

@@ -41,6 +41,29 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function asString(value, fallback = "") {
+  if (typeof value === "string") return value;
+  if (value == null) return fallback;
+  return String(value);
+}
+
+function mapWeeklyVolumeRows(rows) {
+  const grouped = { upper: [], lower: [], full: [] };
+
+  for (const row of rows ?? []) {
+    const weekStart = asString(row.week_start).slice(0, 10);
+    const volumeLoad = asNumber(row.volume_load, 0);
+    const region = asString(row.region);
+    if (!weekStart) continue;
+
+    if (region === "upper" || region === "lower" || region === "full") {
+      grouped[region].push({ weekStart, volumeLoad });
+    }
+  }
+
+  return grouped;
+}
+
 sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => {
   const { request_id } = req;
 
@@ -165,6 +188,55 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
           throw err;
         });
 
+      const weeklyVolumeByRegionQuery = client.query(
+        `
+        WITH weeks AS (
+          SELECT generate_series(
+            date_trunc('week', CURRENT_DATE)::date - INTERVAL '7 weeks',
+            date_trunc('week', CURRENT_DATE)::date,
+            INTERVAL '1 week'
+          )::date AS week_start
+        ),
+        weekly_logs AS (
+          SELECT
+            date_trunc('week', pd.scheduled_date)::date AS week_start,
+            ec.strength_primary_region AS region,
+            SUM(sel.weight_kg * sel.reps_completed) AS volume_load
+          FROM segment_exercise_log sel
+          JOIN program_day pd ON pd.id = sel.program_day_id
+          JOIN program p ON p.id = sel.program_id
+          JOIN program_exercise pe ON pe.id = sel.program_exercise_id
+          LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
+          WHERE p.user_id = $1
+            AND pd.is_completed = TRUE
+            AND sel.is_draft = FALSE
+            AND sel.weight_kg IS NOT NULL
+            AND sel.reps_completed IS NOT NULL
+            AND pd.scheduled_date >= date_trunc('week', CURRENT_DATE)::date - INTERVAL '7 weeks'
+          GROUP BY date_trunc('week', pd.scheduled_date)::date, ec.strength_primary_region
+        )
+        SELECT
+          weeks.week_start,
+          series.region,
+          COALESCE(SUM(series.volume_load), 0) AS volume_load
+        FROM weeks
+        JOIN (
+          SELECT 'upper'::text AS region
+          UNION ALL SELECT 'lower'::text
+          UNION ALL SELECT 'full'::text
+        ) series ON TRUE
+        LEFT JOIN weekly_logs wl
+          ON wl.week_start = weeks.week_start
+          AND (
+            (series.region IN ('upper', 'lower') AND wl.region = series.region)
+            OR (series.region = 'full')
+          )
+        GROUP BY weeks.week_start, series.region
+        ORDER BY weeks.week_start ASC, series.region ASC
+        `,
+        [user_id],
+      );
+
       const [
         dayStreakResult,
         consistency28dResult,
@@ -172,6 +244,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         strengthByRegionResult,
         sessionsCountResult,
         programmesCompletedResult,
+        weeklyVolumeByRegionResult,
       ] = await Promise.all([
         dayStreakQuery,
         consistency28dQuery,
@@ -179,6 +252,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         strengthByRegionQuery,
         sessionsCountQuery,
         programmesCompletedQuery,
+        weeklyVolumeByRegionQuery,
       ]);
 
       let dayStreak = 0;
@@ -198,7 +272,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
       const bestByRegion = new Map();
       const prevBestByRegion = new Map();
       for (const row of strengthByRegionResult.rows) {
-        const region = s(row.region);
+        const region = asString(row.region);
         if (!region) continue;
 
         const currentBest = asNumber(row.current_best, NaN);
@@ -246,6 +320,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         volume28d,
         strengthUpper28d: buildStrengthRegionMetric("upper"),
         strengthLower28d: buildStrengthRegionMetric("lower"),
+        weeklyVolumeByRegion8w: mapWeeklyVolumeRows(weeklyVolumeByRegionResult.rows),
         sessionsCount: asNumber(sessionsCountResult.rows[0]?.count, 0),
         programmesCompleted: asNumber(programmesCompletedResult.rows[0]?.count, 0),
       });

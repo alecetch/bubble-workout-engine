@@ -225,7 +225,14 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
         equipmentItemCodes: draft.selectedEquipmentCodes,
         onboardingStepCompleted: draft.onboardingStepCompleted < 2 ? 2 : draft.onboardingStepCompleted,
       });
-      navigation.replace("Step3Schedule");
+      const fitnessLevel = String(draft.fitnessLevel ?? "").toLowerCase();
+      const isNonBeginner =
+        fitnessLevel === "intermediate" || fitnessLevel === "advanced" || fitnessLevel === "elite";
+      if (isNonBeginner) {
+        navigation.replace("Step2bBaselineLoads");
+      } else {
+        navigation.replace("Step3Schedule");
+      }
     } catch {
       setPrefillError("Unable to save this step. Please try again.");
       await hapticHeavy();
@@ -333,6 +340,8 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
                 onChangeText={setSearch}
                 placeholder="Search equipment"
                 placeholderTextColor={colors.textSecondary}
+                textContentType="none"
+                autoComplete="off"
                 style={styles.searchInput}
               />
 

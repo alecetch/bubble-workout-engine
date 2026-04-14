@@ -47,6 +47,11 @@
     .type-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
     .type-panel { display: none; padding: 14px; }
     .type-panel.active { display: block; }
+    .sub-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+    .sub-tab { padding: 5px 14px; cursor: pointer; border: none; background: transparent; color: var(--muted); font-size: 12px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    .sub-panel { display: none; }
+    .sub-panel.active { display: block; }
 
     /* Program */
     .prog-hdr { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
@@ -136,6 +141,19 @@
     <input id="token-input" type="password" placeholder="x-internal-token" style="width:170px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
   </div>
 
+  <div class="ctrl-group">
+    <span class="ctrl-label">Profile</span>
+    <input id="client-profile-id-input" type="text" placeholder="client_profile_id" style="width:150px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+    <input id="user-id-input" type="text" placeholder="user_id" style="width:130px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">Live compare</span>
+    <input id="live-program-id-input" type="text" placeholder="generated program_id" style="width:185px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+    <button id="load-live-slot-btn" class="secondary">Load live A:squat</button>
+    <span id="live-slot-status" style="font-size:12px"></span>
+  </div>
+
   <div class="sep"></div>
 
   <div class="ctrl-group">
@@ -192,11 +210,52 @@
     </label>
   </div>
   <div class="sep"></div>
+  <details id="anchor-lifts-section" style="font-size:12px">
+    <summary style="cursor:pointer;color:var(--muted);padding:2px 0">Anchor lifts (for progression)</summary>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 8px;margin-top:6px;min-width:420px">
+      <span style="color:var(--muted)">Squat</span>
+      <input type="number" data-family="squat" data-field="kg" placeholder="kg" style="width:64px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <input type="number" data-family="squat" data-field="reps" placeholder="reps" style="width:48px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <span style="color:var(--muted)">Hinge</span>
+      <input type="number" data-family="hinge" data-field="kg" placeholder="kg" style="width:64px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <input type="number" data-family="hinge" data-field="reps" placeholder="reps" style="width:48px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <span style="color:var(--muted)">Horiz. Press</span>
+      <input type="number" data-family="horizontal_press" data-field="kg" placeholder="kg" style="width:64px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <input type="number" data-family="horizontal_press" data-field="reps" placeholder="reps" style="width:48px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <span style="color:var(--muted)">Vert. Press</span>
+      <input type="number" data-family="vertical_press" data-field="kg" placeholder="kg" style="width:64px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <input type="number" data-family="vertical_press" data-field="reps" placeholder="reps" style="width:48px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <span style="color:var(--muted)">Horiz. Pull</span>
+      <input type="number" data-family="horizontal_pull" data-field="kg" placeholder="kg" style="width:64px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <input type="number" data-family="horizontal_pull" data-field="reps" placeholder="reps" style="width:48px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <span style="color:var(--muted)">Vert. Pull</span>
+      <input type="number" data-family="vertical_pull" data-field="kg" placeholder="kg" style="width:64px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+      <input type="number" data-family="vertical_pull" data-field="reps" placeholder="reps" style="width:48px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+    </div>
+  </details>
+  <div class="sep"></div>
   <button id="generate-btn">Generate All</button>
   <span id="gen-status" style="font-size:12px"></span>
+  <div class="sep"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Export</span>
+    <select id="export-scope" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px">
+      <option value="current">Current selection</option>
+      <option value="all_ranks">All fitness levels</option>
+      <option value="all_presets">All equipment presets</option>
+      <option value="all_types">All program types</option>
+      <option value="full_matrix">Full matrix (slow)</option>
+    </select>
+    <select id="export-format" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px">
+      <option value="core">Core</option>
+    </select>
+    <button id="export-btn" class="secondary">Export CSV</button>
+    <span id="export-status" style="font-size:12px"></span>
+  </div>
 </div>
 
 <div id="meta-bar" class="meta-bar hidden"></div>
+<div id="live-slot-panel" style="padding:10px 14px 0"></div>
 
 <div class="type-tabs" id="type-tabs" style="display:none">
   <button class="type-tab active" data-type="hypertrophy">Hypertrophy</button>
@@ -216,6 +275,9 @@
 const STORAGE_KEY = "admin_preview_token";
 const SHOW_NARRATION_KEY = "admin_preview_show_narration";
 const SHOW_DEBUG_KEY = "admin_preview_show_debug";
+const CLIENT_PROFILE_ID_KEY = "admin_preview_client_profile_id";
+const USER_ID_KEY = "admin_preview_user_id";
+const LIVE_PROGRAM_ID_KEY = "admin_preview_live_program_id";
 const previewState = { lastData: null };
 
 function getToken() {
@@ -227,6 +289,24 @@ const _saved = sessionStorage.getItem(STORAGE_KEY);
 if (_saved) document.getElementById("token-input").value = _saved;
 document.getElementById("token-input").addEventListener("change", () => {
   sessionStorage.setItem(STORAGE_KEY, getToken());
+});
+const clientProfileIdInputEl = document.getElementById("client-profile-id-input");
+const userIdInputEl = document.getElementById("user-id-input");
+const liveProgramIdInputEl = document.getElementById("live-program-id-input");
+const savedClientProfileId = sessionStorage.getItem(CLIENT_PROFILE_ID_KEY);
+const savedUserId = sessionStorage.getItem(USER_ID_KEY);
+const savedLiveProgramId = sessionStorage.getItem(LIVE_PROGRAM_ID_KEY);
+if (savedClientProfileId) clientProfileIdInputEl.value = savedClientProfileId;
+if (savedUserId) userIdInputEl.value = savedUserId;
+if (savedLiveProgramId) liveProgramIdInputEl.value = savedLiveProgramId;
+clientProfileIdInputEl.addEventListener("change", () => {
+  sessionStorage.setItem(CLIENT_PROFILE_ID_KEY, clientProfileIdInputEl.value.trim());
+});
+userIdInputEl.addEventListener("change", () => {
+  sessionStorage.setItem(USER_ID_KEY, userIdInputEl.value.trim());
+});
+liveProgramIdInputEl.addEventListener("change", () => {
+  sessionStorage.setItem(LIVE_PROGRAM_ID_KEY, liveProgramIdInputEl.value.trim());
 });
 const narrationToggleEl = document.getElementById("show-narration-toggle");
 if (sessionStorage.getItem(SHOW_NARRATION_KEY) === "0") {
@@ -386,12 +466,84 @@ function renderSlotDebug(item, seg, day, slotDebug, repRuleMap) {
   return `<pre class="slot-dbg">${esc(lines.join("\n"))}</pre>`;
 }
 
+function renderLiveSlotDebugCard(data) {
+  if (!data?.slot_debug) {
+    return `<div class="panel-empty" style="text-align:left;padding:12px">No stored slot debug found for ${esc(data?.slot ?? "A:squat")} on day ${esc(String(data?.day_index ?? 1))}.</div>`;
+  }
+
+  const slotDebug = data.slot_debug;
+  const ranked = Array.isArray(slotDebug.ranked_candidates) ? slotDebug.ranked_candidates : [];
+  const rankedText = ranked.length
+    ? ranked
+      .map((cand, index) => `${index + 1}. #${cand.exercise_id} ${cand.exercise_name} | score=${cand.score} | mp=${cand.mp || "-"} | sw=${cand.sw || "-"} | sw2=${cand.sw2 || "-"}`)
+      .join("\n")
+    : "none";
+
+  const lines = [
+    `run_id: ${data.run_id || "-"}`,
+    `program_id: ${data.program_id || "-"}`,
+    `created_at: ${data.created_at || "-"}`,
+    `status: ${data.status || "-"} | last_stage=${data.last_stage || "-"}`,
+    `equipment_profile: ${data.equipment_profile || "-"} | fill_failed=${data.fill_failed ?? "-"}`,
+    `slot: ${slotDebug.slot || data.slot || "-"} | day_index=${slotDebug.day_index || data.day_index || "-"}`,
+    `selected: ${slotDebug.selected_exercise_id ? `#${slotDebug.selected_exercise_id} ${slotDebug.selected_exercise_name || ""}` : "none"}`,
+    `selection_path: ${slotDebug.selected_attempt_label || "-"}`,
+    "ranked_matches:",
+    rankedText,
+  ];
+
+  return `
+    <div class="prog-hdr" style="margin-top:10px">
+      <h2>Live Generation Slot Debug</h2>
+      <p class="prog-summary">Stored Day 1 / A:squat debug from the latest generation_run for this program.</p>
+      <pre class="slot-dbg">${esc(lines.join("\n"))}</pre>
+    </div>`;
+}
+
 function buildCompactPrescriptionText(item) {
   const base = String(item?.reps_prescribed || "").trim();
   if (!base) return "";
   const unit = String(item?.reps_unit || "reps").trim().toLowerCase();
   if (!unit || unit === "reps") return `${base} reps`;
   return base;
+}
+
+function buildProgressionKey(dayIndex, exerciseId) {
+  return `${String(dayIndex ?? "")}|${String(exerciseId ?? "")}`;
+}
+
+function buildProgressionMap(decisions) {
+  const map = new Map();
+  for (const decision of decisions ?? []) {
+    map.set(buildProgressionKey(decision.day, decision.exercise_id), decision);
+  }
+  return map;
+}
+
+function formatProgressionRecommendation(decision) {
+  if (!decision || !decision.outcome || decision.skipped_reason) return "";
+  if (decision.recommended_load_kg != null) return `${decision.recommended_load_kg} kg`;
+  if (decision.recommended_reps_target != null) return `${decision.recommended_reps_target} reps`;
+  return "";
+}
+
+function renderProgressionHint(decision) {
+  if (!decision) return "";
+  if (decision.skipped_reason) {
+    return `<div class="nar" style="color:var(--muted)"><span class="nar-k">progression:</span> ${esc(decision.skipped_reason)}</div>`;
+  }
+  if (!decision.outcome) return "";
+  const outcomeClass = decision.outcome === "increase_load" || decision.outcome === "increase_reps"
+    ? "ok"
+    : decision.outcome === "deload_local"
+      ? "err"
+      : "warn";
+  const recommendation = formatProgressionRecommendation(decision);
+  const summary = [
+    `<span class="${outcomeClass}" style="font-weight:600">${esc(decision.outcome)}</span>`,
+    recommendation ? `→ ${esc(recommendation)}` : "",
+  ].filter(Boolean).join(" ");
+  return `<div class="nar"><span class="nar-k">progression:</span> ${summary}</div>`;
 }
 
 function renderItem(item, nameMap, ctx) {
@@ -414,12 +566,14 @@ function renderItem(item, nameMap, ctx) {
     parts.push(metaText);
   }
   const slotDebug = ctx?.slotDebugMap?.get(`${ctx?.day?.day_index}|${item.slot ?? ""}`) ?? null;
+  const progressionDecision = ctx?.progressionMap?.get(buildProgressionKey(ctx?.day?.day_index, item.ex_id)) ?? null;
   return `
     <div class="item">
       <div class="item-main">
         <span class="ex-name">${esc(name)}</span>
         <span class="ex-meta">${esc(parts.join(" · "))}</span>
       </div>
+      ${renderProgressionHint(progressionDecision)}
       ${showNarrationEnabled() ? `<div class="item-nar">${renderNar(item.narration)}</div>` : ""}
       ${renderSlotDebug(item, ctx?.seg, ctx?.day, slotDebug, ctx?.repRuleMap)}
     </div>`;
@@ -488,7 +642,7 @@ function renderWeek(wk, programNarration, nameMap, ctx) {
     </details>`;
 }
 
-function renderProgram(type, preview, meta) {
+function renderProgram(type, preview, meta, progressionData = []) {
   if (!preview.ok) {
     return `<div class="panel-err">Pipeline error for ${esc(type)}: ${esc(preview.error)}</div>`;
   }
@@ -503,6 +657,7 @@ function renderProgram(type, preview, meta) {
   const narSource = debug?.step5?.source ?? "";
   const weeks = program.weeks ?? [];
   const slotDebugMap = buildSlotDebugMap(debug);
+  const progressionMap = buildProgressionMap(progressionData);
 
   const badges = [
     configKey ? `<span class="badge">${esc(configKey)}</span>` : "",
@@ -520,7 +675,7 @@ function renderProgram(type, preview, meta) {
       <div class="prog-meta">${badges}</div>
     </div>
     <div class="weeks">
-      ${weeks.map(w => renderWeek(w, program.narration, nameMap, { slotDebugMap, repRuleMap })).join("")}
+      ${weeks.map(w => renderWeek(w, program.narration, nameMap, { slotDebugMap, repRuleMap, progressionMap })).join("")}
       ${!weeks.length ? `<div class="panel-empty">No weeks in program output</div>` : ""}
     </div>
     <details class="dbg">
@@ -531,11 +686,125 @@ function renderProgram(type, preview, meta) {
 
 // ── Generate ──────────────────────────────────────────────────────────────────
 
+function renderProgressionTab(decisions) {
+  if (!decisions || decisions.length === 0) {
+    return `<div class="panel-empty">No progression decisions — add anchor lifts above and regenerate.</div>`;
+  }
+
+  const rows = decisions.map(d => {
+    if (!d.outcome || d.skipped_reason) {
+      return `<tr>
+        <td>${esc(d.exercise_name)}</td>
+        <td>Day ${esc(String(d.day ?? ""))}</td>
+        <td>${esc(d.family ?? "—")}</td>
+        <td>—</td><td>—</td><td>—</td><td>—</td>
+        <td style="color:var(--muted);font-style:italic">${esc(d.skipped_reason ?? "")}</td>
+      </tr>`;
+    }
+    const outcomeClass = d.outcome === "increase_load" || d.outcome === "increase_reps" ? "ok"
+      : d.outcome === "deload_local" ? "err"
+      : "warn";
+    const recommendation = d.recommended_load_kg != null ? `${d.recommended_load_kg} kg`
+      : d.recommended_reps_target != null ? `${d.recommended_reps_target} reps`
+      : "—";
+    return `<tr>
+      <td>${esc(d.exercise_name)}</td>
+      <td>Day ${esc(String(d.day ?? ""))}</td>
+      <td>${esc(d.family ?? "—")}</td>
+      <td>${esc(d.prescribed_reps ?? "")}</td>
+      <td>${esc(String(d.anchor_load_kg ?? "—"))}</td>
+      <td class="${outcomeClass}" style="font-weight:600">${esc(d.outcome)}</td>
+      <td>${esc(recommendation)}</td>
+      <td style="color:var(--muted);font-size:11px">${esc((d.reasons ?? []).join(" "))}</td>
+    </tr>`;
+  });
+
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);text-align:left">
+        <th style="padding:4px 8px">Exercise</th>
+        <th>Day</th>
+        <th>Family</th>
+        <th>Prescribed</th>
+        <th>Anchor (kg)</th>
+        <th>Outcome</th>
+        <th>Recommended</th>
+        <th>Reason</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.join("")}
+    </tbody>
+  </table>`;
+}
+
+function renderProgramWithTabs(type, preview, meta, progressionData) {
+  if (!preview?.ok) {
+    return renderProgram(type, preview, meta, progressionData);
+  }
+  const panelId = `prog-panel-${type}-${Date.now()}`;
+  return `
+    <div class="sub-tabs">
+      <button class="sub-tab active" data-panel="${panelId}-program">Program</button>
+      <button class="sub-tab" data-panel="${panelId}-progression">Progression</button>
+    </div>
+    <div id="${panelId}-program" class="sub-panel active">
+      ${renderProgram(type, preview, meta, progressionData)}
+    </div>
+    <div id="${panelId}-progression" class="sub-panel">
+      ${renderProgressionTab(progressionData)}
+    </div>`;
+}
+
+function wireSubTabs(panel) {
+  panel.querySelectorAll(".sub-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      panel.querySelectorAll(".sub-tab").forEach(t => t.classList.remove("active"));
+      panel.querySelectorAll(".sub-panel").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById(tab.dataset.panel)?.classList.add("active");
+    });
+  });
+}
+
+async function loadLiveSlotDebug() {
+  const statusEl = document.getElementById("live-slot-status");
+  const panelEl = document.getElementById("live-slot-panel");
+  const programId = liveProgramIdInputEl.value.trim();
+  sessionStorage.setItem(LIVE_PROGRAM_ID_KEY, programId);
+
+  if (!programId) {
+    statusEl.textContent = "Enter a program_id";
+    panelEl.innerHTML = "";
+    return;
+  }
+
+  statusEl.textContent = "Loading...";
+  try {
+    const res = await fetch(`/admin/preview/live-slot-debug?program_id=${encodeURIComponent(programId)}&day_index=1&slot=${encodeURIComponent("A:squat")}`, {
+      headers: { "x-internal-token": getToken() },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+    panelEl.innerHTML = renderLiveSlotDebugCard(data);
+    statusEl.textContent = "Loaded";
+  } catch (err) {
+    panelEl.innerHTML = `<div class="panel-err">${esc(err.message || "Failed to load live slot debug.")}</div>`;
+    statusEl.textContent = "Error";
+  } finally {
+    setTimeout(() => { statusEl.textContent = ""; }, 2500);
+  }
+}
+
 document.getElementById("generate-btn").addEventListener("click", async () => {
   const statusEl = document.getElementById("gen-status");
   const tabsEl = document.getElementById("type-tabs");
   statusEl.innerHTML = `<span class="spinner"></span>Generating…`;
   if (getToken()) sessionStorage.setItem(STORAGE_KEY, getToken());
+  const clientProfileId = clientProfileIdInputEl.value.trim();
+  const userId = userIdInputEl.value.trim();
+  if (clientProfileId) sessionStorage.setItem(CLIENT_PROFILE_ID_KEY, clientProfileId);
+  if (userId) sessionStorage.setItem(USER_ID_KEY, userId);
 
   const body = {
     fitness_rank: Number(selectedVal("rank-btns")),
@@ -543,6 +812,19 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
     days_per_week: Number(selectedVal("dpw-btns")),
     duration_mins: Number(selectedVal("dur-btns")),
   };
+  if (clientProfileId) body.client_profile_id = clientProfileId;
+  if (!clientProfileId && userId) body.user_id = userId;
+  const anchorLifts = [];
+  document.querySelectorAll("#anchor-lifts-section [data-family][data-field='kg']").forEach(kgInput => {
+    const family = kgInput.dataset.family;
+    const repsInput = document.querySelector(`#anchor-lifts-section [data-family="${family}"][data-field="reps"]`);
+    const loadKg = parseFloat(kgInput.value);
+    const reps = parseInt(repsInput?.value ?? "", 10);
+    if (Number.isFinite(loadKg) && loadKg > 0 && Number.isFinite(reps) && reps > 0) {
+      anchorLifts.push({ estimationFamily: family, loadKg, reps, rir: 2 });
+    }
+  });
+  if (anchorLifts.length > 0) body.anchor_lifts = anchorLifts;
 
   let data;
   try {
@@ -573,12 +855,15 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
 
   previewState.lastData = data;
   const meta = data.meta ?? {};
+  const previewContext = data.preview_context ?? {};
   const previews = data.previews ?? {};
 
   // Meta bar
   const metaBar = document.getElementById("meta-bar");
   metaBar.classList.remove("hidden");
   metaBar.innerHTML = [
+    ["mode", previewContext.mode ?? "synthetic"],
+    ["profile", previewContext.profile_id ?? (previewContext.requested_user_id ?? "—")],
     ["fitness", `${meta.fitness_level} (rank ${meta.fitness_rank})`],
     ["preset", meta.equipment_preset],
     ["equipment", `${meta.equipment_slugs?.length ?? 0} items`],
@@ -594,13 +879,84 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
     if (!preview) {
       panel.innerHTML = `<div class="panel-empty">Not generated</div>`;
     } else {
-      panel.innerHTML = renderProgram(type, preview, meta);
+      panel.innerHTML = renderProgramWithTabs(type, preview, meta, data.progression_preview?.[type] ?? []);
+      wireSubTabs(panel);
     }
   }
 
   tabsEl.style.display = "";
   statusEl.textContent = "Done";
   setTimeout(() => { statusEl.textContent = ""; }, 2000);
+});
+
+document.getElementById("load-live-slot-btn").addEventListener("click", () => {
+  void loadLiveSlotDebug();
+});
+
+document.getElementById("export-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("export-status");
+  statusEl.textContent = "Exporting...";
+
+  const scope = document.getElementById("export-scope").value;
+  const fieldSet = document.getElementById("export-format").value;
+
+  const currentRank = Number(selectedVal("rank-btns"));
+  const currentPreset = selectedVal("preset-btns");
+  const currentDpw = Number(selectedVal("dpw-btns"));
+  const currentDur = Number(selectedVal("dur-btns"));
+
+  const ALL_RANKS = [0, 1, 2, 3];
+  const ALL_PRESETS = ["no_equipment", "minimal_equipment", "decent_home_gym", "commercial_gym", "crossfit_hyrox_gym"];
+  const ALL_TYPES = ["hypertrophy", "strength", "conditioning", "hyrox"];
+
+  let fitnessRanks;
+  let equipmentPresets;
+  let programTypes;
+  switch (scope) {
+    case "all_ranks":
+      fitnessRanks = ALL_RANKS; equipmentPresets = [currentPreset]; programTypes = ALL_TYPES; break;
+    case "all_presets":
+      fitnessRanks = [currentRank]; equipmentPresets = ALL_PRESETS; programTypes = ALL_TYPES; break;
+    case "all_types":
+      fitnessRanks = [currentRank]; equipmentPresets = [currentPreset]; programTypes = ALL_TYPES; break;
+    case "full_matrix":
+      fitnessRanks = ALL_RANKS; equipmentPresets = ALL_PRESETS; programTypes = ALL_TYPES; break;
+    default:
+      fitnessRanks = [currentRank]; equipmentPresets = [currentPreset]; programTypes = ALL_TYPES; break;
+  }
+
+  try {
+    const res = await fetch("/admin/preview/export-csv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-token": getToken() },
+      body: JSON.stringify({
+        fitness_ranks: fitnessRanks,
+        equipment_presets: equipmentPresets,
+        program_types: programTypes,
+        days_per_week: currentDpw,
+        duration_mins: currentDur,
+        field_set: fieldSet,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error ?? `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `preview-export-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    statusEl.textContent = "Downloaded";
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+  } finally {
+    setTimeout(() => { statusEl.textContent = ""; }, 3000);
+  }
 });
 
 function rerenderPreviewPanels() {
@@ -614,7 +970,8 @@ function rerenderPreviewPanels() {
     if (!preview) {
       panel.innerHTML = `<div class="panel-empty">Not generated</div>`;
     } else {
-      panel.innerHTML = renderProgram(type, preview, meta);
+      panel.innerHTML = renderProgramWithTabs(type, preview, meta, data.progression_preview?.[type] ?? []);
+      wireSubTabs(panel);
     }
   }
 }

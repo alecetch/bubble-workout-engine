@@ -270,7 +270,15 @@
       const STORAGE_KEY = "admin_internal_api_token";
       const DURATIONS = ["40", "50", "60"];
       const BLOCKS = ["A", "B", "C", "D"];
-      const REQUIRE_PREF_OPTIONS = ["", "strength_main", "hypertrophy_secondary"];
+      const REQUIRE_PREF_OPTIONS = [
+        "",
+        "strength_main",
+        "strength_secondary",
+        "strength_accessory",
+        "hypertrophy_main",
+        "hypertrophy_secondary",
+        "hypertrophy_accessory",
+      ];
       const SEGMENT_TYPES = ["single", "superset", "giant_set"];
       const PURPOSE_TYPES = ["main", "secondary", "accessory"];
       const RANKS = ["beginner", "intermediate", "advanced", "elite"];
@@ -459,6 +467,35 @@
           )
           .join("");
 
+        const dpwByDpw = root.builder.day_templates_by_dpw || {};
+        const dpwMatrixHtml = (() => {
+          if (!dayTemplates.length) return '<p class="editor-empty">Add day templates first.</p>';
+          const colHeaders = dayTemplates.map((dt, i) => {
+            const key = dt?.day_key || `day${i + 1}`;
+            const focus = dt?.focus || "";
+            return `<th style="text-align:center"><span>${escapeHtml(focus)}</span><br><span style="color:#888;font-size:0.8em">${escapeHtml(key)}</span></th>`;
+          }).join("");
+          const rows = Array.from({length: 6}, (_, ri) => {
+            const dpw = ri + 1;
+            const selected = dpwByDpw[String(dpw)] || [];
+            const cells = dayTemplates.map((dt, ci) => {
+              const key = dt?.day_key || `day${ci + 1}`;
+              const checked = selected.includes(key) ? "checked" : "";
+              return `<td style="text-align:center"><input type="checkbox" data-dpw="${dpw}" data-day-key="${escapeHtml(key)}" ${checked} /></td>`;
+            }).join("");
+            const unchecked = !selected.length;
+            const fallbackNote = unchecked ? `<span style="color:#888;font-size:0.8em"> — using default (first N)</span>` : "";
+            return `<tr><td><strong>${dpw}</strong>${fallbackNote}</td>${cells}</tr>`;
+          }).join("");
+          return `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>DPW</th>${colHeaders}</tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>`;
+        })();
+
         const slotRowsHtml = (selectedDay?.ordered_slots || [])
           .map((slot, idx) => {
             const reqPref = slot.requirePref ?? "";
@@ -610,6 +647,12 @@
                   `
                   : `<div class="editor-empty">No day templates. Add one.</div>`
               }
+              <details open style="margin-top:1rem">
+                <summary>Day selection by days/week</summary>
+                <div class="section-body">
+                  ${dpwMatrixHtml}
+                </div>
+              </details>
             </div>
           </details>
 
@@ -707,6 +750,19 @@
             };
           });
         }
+
+        // DPW matrix → builder.day_templates_by_dpw
+        const dpwMap = {};
+        document.querySelectorAll('input[data-dpw][data-day-key]').forEach((cb) => {
+          const dpw = cb.dataset.dpw;
+          if (!dpwMap[dpw]) dpwMap[dpw] = [];
+          if (cb.checked) dpwMap[dpw].push(cb.dataset.dayKey);
+        });
+        const dpwResult = {};
+        Object.keys(dpwMap).forEach((dpw) => {
+          if (dpwMap[dpw].length > 0) dpwResult[dpw] = dpwMap[dpw];
+        });
+        root.builder.day_templates_by_dpw = Object.keys(dpwResult).length ? dpwResult : undefined;
 
         const semRows = Array.from(document.querySelectorAll("#semantics-tbody tr[data-sem-letter]"));
         const nextSem = {};

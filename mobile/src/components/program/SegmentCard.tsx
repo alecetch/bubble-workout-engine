@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { PressableScale } from "../interaction/PressableScale";
+import { GuidelineLoadHint } from "./GuidelineLoadHint";
 import { PremiumTimer } from "../timers/PremiumTimer";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -128,6 +129,9 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
                           <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
                           <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
                         </View>
+                      ) : null}
+                      {!isLogged && exercise.guidelineLoad != null && exercise.guidelineLoad.value > 0 ? (
+                        <GuidelineLoadHint guidelineLoad={exercise.guidelineLoad} />
                       ) : null}
                     </View>
                   );

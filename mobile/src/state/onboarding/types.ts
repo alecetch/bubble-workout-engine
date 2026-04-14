@@ -9,6 +9,47 @@ export type GoalType = (typeof GOAL_TYPES)[number];
 
 export type EquipmentPreset = string;
 
+export type AnchorLiftEntry = {
+  estimationFamily: string;
+  exerciseId: string | null;
+  loadKg: number | null;
+  reps: number | null;
+  rir: number | null;
+  skipped: boolean;
+};
+
+export const ESTIMATION_FAMILIES = [
+  "squat",
+  "hinge",
+  "horizontal_press",
+  "vertical_press",
+  "horizontal_pull",
+  "vertical_pull",
+] as const;
+
+export type EstimationFamily = (typeof ESTIMATION_FAMILIES)[number];
+
+export const ESTIMATION_FAMILY_LABELS: Record<EstimationFamily, string> = {
+  squat: "Squat",
+  hinge: "Hinge (Deadlift / RDL)",
+  horizontal_press: "Horizontal Press (Bench / Push)",
+  vertical_press: "Vertical Press (Overhead)",
+  horizontal_pull: "Horizontal Pull (Row)",
+  vertical_pull: "Vertical Pull (Pulldown / Pull-up)",
+};
+
+export type RirOption = {
+  label: string;
+  value: number;
+};
+
+export const RIR_OPTIONS: RirOption[] = [
+  { label: "Max effort (0 RIR)", value: 0 },
+  { label: "Hard (~1 RIR)", value: 1 },
+  { label: "Moderate (~2-3 RIR)", value: 2.5 },
+  { label: "Easy (4+ RIR)", value: 4 },
+];
+
 export const FITNESS_LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"] as const;
 export type FitnessLevel = (typeof FITNESS_LEVELS)[number];
 
@@ -53,14 +94,17 @@ export type OnboardingDraft = {
   minutesPerSession: MinutesPerSession | null;
   sex: Sex | null;
   ageRange: AgeRange | null;
+  anchorLifts: AnchorLiftEntry[];
+  anchorLiftsSkipped: boolean;
   onboardingStepCompleted: 0 | 1 | 2 | 3;
 };
 
-export type OnboardingStep = 1 | 2 | 3;
+export type OnboardingStep = 1 | 2 | "2b" | 3;
 
 export type StepAttemptedState = {
   step1: boolean;
   step2: boolean;
+  step2b: boolean;
   step3: boolean;
 };
 
@@ -86,5 +130,7 @@ export const DEFAULT_ONBOARDING_DRAFT: OnboardingDraft = {
   minutesPerSession: null,
   sex: null,
   ageRange: null,
+  anchorLifts: [],
+  anchorLiftsSkipped: false,
   onboardingStepCompleted: 0,
 };

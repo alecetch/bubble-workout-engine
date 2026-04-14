@@ -110,22 +110,12 @@ export function dayHasRealExercise(blocks) {
 
 export function isConditioning(ex) {
   const mp = toStr(ex.mp).toLowerCase();
-  const sw = toStr(ex.sw).toLowerCase();
-  const sw2 = toStr(ex.sw2).toLowerCase();
-  const name = toStr(ex.n).toLowerCase();
+  const pref = Array.isArray(ex?.pref) ? ex.pref.map((value) => toStr(value).toLowerCase()) : [];
 
   if (mp === "conditioning" || mp === "cardio" || mp === "locomotion") return true;
-  if (sw.indexOf("engine") >= 0 || sw2.indexOf("engine") >= 0) return true;
-
-  if (
-    name.indexOf("bike") >= 0 ||
-    name.indexOf("row") >= 0 ||
-    name.indexOf("ski") >= 0 ||
-    name.indexOf("run") >= 0
-  ) {
-    return true;
-  }
-  if (name.indexOf("air bike") >= 0) return true;
+  if (pref.includes("conditioning_main")) return true;
+  if (pref.includes("hyrox_station")) return true;
+  if (pref.includes("hyrox_buy_in")) return true;
 
   return false;
 }

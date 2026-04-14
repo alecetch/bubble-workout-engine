@@ -68,6 +68,65 @@ test("validateCompiledConfig does not throw for valid hypertrophy config", () =>
   assert.doesNotThrow(() => validateCompiledConfig(cfg));
 });
 
+test("validateCompiledConfig accepts optional progression decision config blocks", () => {
+  const cfg = makeValidConfig();
+  cfg.progression.history = { lookback_exposures_exact: 3 };
+  cfg.progression.leverProfiles = {
+    hypertrophy_main: {
+      priority_order: ["reps", "load", "hold", "deload"],
+    },
+  };
+  cfg.progression.slotProfileMap = {
+    hypertrophy: { main: "hypertrophy_main" },
+  };
+  cfg.progression.loadIncrementProfiles = {
+    compound_moderate: {
+      bands: [{ min_load_kg: 0, increment_kg: 2.5 }],
+    },
+  };
+  cfg.progression.restProgressionProfiles = {
+    conditioning_density: {
+      rest_step_sec: 10,
+    },
+  };
+  cfg.progression.repProgressionProfiles = {
+    double_progression_main: {
+      mode: "within_range_then_load",
+    },
+  };
+  cfg.progression.deloadRules = {
+    standard_local: {
+      underperformance_exposure_threshold: 2,
+    },
+  };
+  assert.doesNotThrow(() => validateCompiledConfig(cfg));
+});
+
+test("validateCompiledConfig catches unknown progression lever", () => {
+  const cfg = makeValidConfig();
+  cfg.progression.leverProfiles = {
+    hypertrophy_main: {
+      priority_order: ["wizard_mode"],
+    },
+  };
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes('unknown lever "wizard_mode"')));
+});
+
+test("validateCompiledConfig catches missing lever profile reference in slotProfileMap", () => {
+  const cfg = makeValidConfig();
+  cfg.progression.leverProfiles = {
+    hypertrophy_accessory: {
+      priority_order: ["reps", "hold"],
+    },
+  };
+  cfg.progression.slotProfileMap = {
+    hypertrophy: { main: "hypertrophy_main" },
+  };
+  const err = expectValidationError(cfg);
+  assert.ok(err.details.some((d) => d.includes('references missing lever profile "hypertrophy_main"')));
+});
+
 test("validateCompiledConfig accepts lowercase slug focus values", () => {
   const cfg = makeValidConfig();
   cfg.builder.dayTemplates[0].focus = "simulation";

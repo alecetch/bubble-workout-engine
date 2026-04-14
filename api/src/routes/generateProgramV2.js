@@ -7,6 +7,7 @@ import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
 import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
+import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
@@ -81,8 +82,10 @@ export function createGenerateProgramV2Handler({
   buildInputs = buildInputsFromProfile,
   ensureCalendar = ensureProgramCalendarCoverage,
   emitPayload = importEmitterPayload,
+  progressionService = makeProgressionDecisionService(db),
 } = {}) {
   let cachedInjuryColumn = null;
+  let cachedHasProgramTypeColumn = null;
   const getProfileByResolvedUser = getProfileByUser ?? getProfile;
 
   async function resolveInjuryColumn(client) {
@@ -109,6 +112,42 @@ export function createGenerateProgramV2Handler({
     }
 
     throw new Error("client_profile missing injury flags column (injury_flags_slugs or injury_flags)");
+  }
+
+  async function ensureProgramTypeColumn(client, log) {
+    if (cachedHasProgramTypeColumn != null) return cachedHasProgramTypeColumn;
+
+    const hasColumnQuery = `
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'program'
+        AND column_name = 'program_type'
+      LIMIT 1
+    `;
+
+    const readHasColumn = async () => {
+      const result = await client.query(hasColumnQuery);
+      return result.rowCount > 0;
+    };
+
+    if (await readHasColumn()) {
+      cachedHasProgramTypeColumn = true;
+      return true;
+    }
+
+    try {
+      await client.query(`ALTER TABLE program ADD COLUMN IF NOT EXISTS program_type TEXT NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_program_program_type ON program (user_id, program_type)`);
+    } catch (err) {
+      log?.warn?.(
+        { event: "schema.program_type.ensure_failed", err: err?.message, code: err?.code },
+        "Unable to add missing program.program_type column",
+      );
+    }
+
+    cachedHasProgramTypeColumn = await readHasColumn();
+    return cachedHasProgramTypeColumn;
   }
 
   return async function generateProgramV2Handler(req, res) {
@@ -190,6 +229,7 @@ export function createGenerateProgramV2Handler({
   try {
     setupClient = await db.connect();
     await setupClient.query("BEGIN");
+    await ensureProgramTypeColumn(setupClient, req.log);
 
     // Phase 1a: Resolve app_user.
     // JWT-registered users send their app_user.id (a UUID) as user_id.
@@ -271,6 +311,8 @@ export function createGenerateProgramV2Handler({
         movement_class,
         movement_pattern_primary,
         is_loadable,
+        strength_equivalent,
+        min_fitness_rank,
         complexity_rank,
         density_rating,
         equipment_json,
@@ -364,13 +406,18 @@ export function createGenerateProgramV2Handler({
   }
 
   try {
+    const hasProgramTypeColumn = await ensureProgramTypeColumn(db, req.log);
+
     // Phase 3: Run pipeline
     await db.query(
       `UPDATE generation_run SET last_stage='pipeline', updated_at=now() WHERE id=$1`,
       [generation_run_id],
     );
 
-    const inputs = buildInputs(devProfile, exerciseRows);
+    const inputs = {
+      ...buildInputs(devProfile, exerciseRows),
+      allowed_exercise_ids: allowedIds.map((id) => String(id)),
+    };
     const allowed_ids_csv = allowedIds.join(",");
 
     req.log.info({
@@ -387,6 +434,7 @@ export function createGenerateProgramV2Handler({
       db,
       inputs,
       programType,
+      userId: user_id,
       request: {
         anchor_date_ms,
         allowed_ids_csv,
@@ -473,37 +521,47 @@ export function createGenerateProgramV2Handler({
     const programSummary = prgData.program_summary
       || `Auto-generated ${programType} program.`;
 
+    const programUpdateAssignments = [
+      "program_title = $1",
+      "program_summary = $2",
+      "weeks_count = $3",
+      "days_per_week = $4",
+      "program_outline_json = $5::jsonb",
+      "start_date = $6::date",
+      "start_offset_days = $7",
+      "start_weekday = $8",
+      "preferred_days_sorted_json = $9::jsonb",
+      "hero_media_id = $10",
+      "status = 'active'",
+      "is_ready = true",
+      "updated_at = now()",
+    ];
+    const programUpdateParams = [
+      programTitle,
+      programSummary,
+      prgData.weeks_count ?? 1,
+      prgData.days_per_week ?? daysPerWeek,
+      JSON.stringify(prgData.program_outline_json ?? {}),
+      prgData.start_date ?? anchorDate,
+      prgData.start_offset_days ?? 0,
+      prgData.start_weekday ?? "",
+      JSON.stringify(prgData.preferred_days_sorted_json ?? []),
+      pipelineOut?.program?.hero_media_id ?? null,
+    ];
+
+    if (hasProgramTypeColumn) {
+      programUpdateAssignments.push(`program_type = $${programUpdateParams.length + 1}`);
+      programUpdateParams.push(programType);
+    }
+    programUpdateParams.push(created_program_id);
+
     await db.query(
       `
       UPDATE program SET
-        program_title = $1,
-        program_summary = $2,
-        weeks_count = $3,
-        days_per_week = $4,
-        program_outline_json = $5::jsonb,
-        start_date = $6::date,
-        start_offset_days = $7,
-        start_weekday = $8,
-        preferred_days_sorted_json = $9::jsonb,
-        hero_media_id = $10,
-        status = 'active',
-        is_ready = true,
-        updated_at = now()
-      WHERE id = $11
+        ${programUpdateAssignments.join(",\n        ")}
+      WHERE id = $${programUpdateParams.length}
       `,
-      [
-        programTitle,
-        programSummary,
-        prgData.weeks_count ?? 1,
-        prgData.days_per_week ?? daysPerWeek,
-        JSON.stringify(prgData.program_outline_json ?? {}),
-        prgData.start_date ?? anchorDate,
-        prgData.start_offset_days ?? 0,
-        prgData.start_weekday ?? "",
-        JSON.stringify(prgData.preferred_days_sorted_json ?? []),
-        pipelineOut?.program?.hero_media_id ?? null,
-        created_program_id,
-      ],
+      programUpdateParams,
     );
 
     // Phase 5c: day hero_media_id
@@ -540,6 +598,29 @@ export function createGenerateProgramV2Handler({
       [generation_run_id],
     );
     await ensureCalendar(db, created_program_id);
+
+    try {
+      // This generation-time pass is a non-fatal backstop, not the primary trigger.
+      // The intended canonical trigger for progression is PATCH /api/day/:program_day_id/complete
+      // once a day is marked completed and real history exists. Keeping this pass here lets us
+      // re-derive recommendations for regenerated programs or existing athletes who already have
+      // completed history, while still no-oping safely for brand-new programs with no history.
+      await db.query(
+        `UPDATE generation_run SET last_stage='progression', updated_at=now() WHERE id=$1`,
+        [generation_run_id],
+      );
+      await progressionService.applyProgressionRecommendations({
+        programId: created_program_id,
+        userId: pg_user_id,
+        programType,
+        fitnessRank: mappedFitnessRank,
+      });
+    } catch (progressionErr) {
+      req.log.warn(
+        { event: "pipeline.progression.error", err: progressionErr?.message, generation_run_id },
+        "progression recommendation pass failed (non-fatal)",
+      );
+    }
 
     // Phase 6: Mark generation_run complete
     await db.query(

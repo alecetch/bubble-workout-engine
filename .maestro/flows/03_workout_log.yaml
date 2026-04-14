@@ -1,0 +1,32 @@
+appId: com.bubbleworkout.mobile
+---
+- launchApp
+
+- tapOn:
+    text: "Today"
+
+- tapOn:
+    id: "day-card-0"
+
+- assertVisible: "Log"
+
+- tapOn:
+    text: "Log"
+    index: 0
+
+- tapOn:
+    id: "set-reps-0"
+- inputText: "8"
+- tapOn:
+    id: "set-weight-0"
+- inputText: "80"
+
+- tapOn:
+    text: "Save"
+
+- tapOn:
+    text: "Complete workout"
+- tapOn:
+    text: "Confirm"
+
+- assertVisible: "Well done"
