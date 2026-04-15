@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { PressableScale } from "../interaction/PressableScale";
 import { GuidelineLoadHint } from "./GuidelineLoadHint";
+import { AdaptationChip } from "./AdaptationChip";
 import { PremiumTimer } from "../timers/PremiumTimer";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -17,6 +18,11 @@ type SegmentCardProps = {
   segment: Segment;
   isLogged: boolean;
   onLogSegment: (segment: Segment) => void;
+  onViewDecisionHistory?: (
+    exerciseId: string,
+    exerciseName: string,
+    programExerciseId: string,
+  ) => void;
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
@@ -38,7 +44,12 @@ function roundToNearestMinute(seconds: number | null): number | null {
     : Math.floor(seconds / 60) * 60;
 }
 
-export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProps): React.JSX.Element {
+export function SegmentCard({
+  segment,
+  isLogged,
+  onLogSegment,
+  onViewDecisionHistory,
+}: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
     rounds: segment.rounds,
@@ -132,6 +143,21 @@ export function SegmentCard({ segment, isLogged, onLogSegment }: SegmentCardProp
                       ) : null}
                       {!isLogged && exercise.guidelineLoad != null && exercise.guidelineLoad.value > 0 ? (
                         <GuidelineLoadHint guidelineLoad={exercise.guidelineLoad} />
+                      ) : null}
+                      {exercise.adaptationDecision ? (
+                        <AdaptationChip
+                          decision={exercise.adaptationDecision}
+                          onViewHistory={
+                            onViewDecisionHistory && exercise.id
+                              ? () =>
+                                  onViewDecisionHistory(
+                                    exercise.exerciseId ?? exercise.id ?? "",
+                                    exercise.name,
+                                    exercise.id ?? "",
+                                  )
+                              : undefined
+                          }
+                        />
                       ) : null}
                     </View>
                   );

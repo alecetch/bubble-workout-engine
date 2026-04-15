@@ -28,6 +28,7 @@ import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogu
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
+import { adminProgressionSandboxRouter } from "./src/routes/adminProgressionSandbox.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { authRouter } from "./src/routes/auth.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
@@ -265,6 +266,7 @@ app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res
 app.get("/admin/rep-rules", adminCspMiddleware, (_req, res) => sendAdminPage(res, "rep-rules.html"));
 app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
 app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
+app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "progression-sandbox.html"));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -684,6 +686,7 @@ app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminSyncRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
+app.use("/admin", ...adminOnly, adminProgressionSandboxRouter);
 app.use("/admin", ...adminOnly, adminUsersRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);

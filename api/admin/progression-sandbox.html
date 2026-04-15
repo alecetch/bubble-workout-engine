@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Progression Sandbox</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --border: #d9e2ec;
+      --text: #102a43;
+      --muted: #627d98;
+      --primary: #1769aa;
+      --primary-2: #0f4f80;
+      --danger: #c62828;
+      --warn: #b26a00;
+      --ok: #1b7f3b;
+      --shadow: 0 6px 18px rgba(16, 42, 67, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    .header { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 16px; background: rgba(246,248,251,0.96); border-bottom: 1px solid var(--border); backdrop-filter: blur(8px); }
+    .header h1 { margin: 0 10px 0 0; font-size: 18px; }
+    .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+    .nav a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 6px 8px; border-radius: 8px; }
+    .nav a.active, .nav a:hover { background: #e8f1f8; color: var(--primary-2); }
+    .ctrl-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .ctrl-label { font-size: 12px; color: var(--muted); }
+    .page { padding: 16px; display: grid; grid-template-columns: minmax(360px, 520px) minmax(380px, 1fr); gap: 16px; align-items: start; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; }
+    .card h2 { margin: 0 0 12px; font-size: 16px; }
+    .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; color: var(--muted); }
+    .field input, .field select { width: 100%; padding: 9px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text); }
+    .toggle-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .toggle-row .label { width: 100%; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+    .btn, button { appearance: none; border: 1px solid var(--border); background: #fff; color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+    .btn.active { background: #e8f1f8; border-color: #9cc4e4; color: var(--primary-2); font-weight: 600; }
+    .btn.primary, button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn.primary:hover, button.primary:hover { background: var(--primary-2); border-color: var(--primary-2); }
+    .btn.secondary, button.secondary { background: #fff; }
+    .btn.full, button.full { width: 100%; justify-content: center; }
+    .history-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+    .history-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fbfdff; }
+    .section-label { font-size: 12px; color: var(--muted); margin-top: 14px; }
+    .preset-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+    .error-box { border: 1px solid #ef9a9a; background: #fff5f5; color: var(--danger); border-radius: 10px; padding: 12px; }
+    .muted-box { border: 1px dashed var(--border); background: #fcfdff; color: var(--muted); border-radius: 10px; padding: 12px; }
+    .badge-lg { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; text-transform: lowercase; }
+    .badge-ok { background: #e6f4ea; color: var(--ok); }
+    .badge-warn { background: #fff4e5; color: var(--warn); }
+    .badge-hold { background: #eef2f6; color: #486581; }
+    .badge-muted { background: #f4f7fb; color: var(--muted); }
+    .result-block { margin-top: 14px; }
+    .result-block h3 { margin: 0 0 8px; font-size: 13px; }
+    .result-line { font-size: 14px; margin: 8px 0; }
+    .result-list { margin: 8px 0 0 18px; padding: 0; }
+    .result-list li { margin: 6px 0; }
+    details { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: #fcfdff; }
+    details + details { margin-top: 10px; }
+    details > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .status { font-size: 12px; color: var(--muted); min-height: 18px; margin-top: 10px; }
+    @media (max-width: 980px) {
+      .page { grid-template-columns: 1fr; }
+      .field-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Progression Sandbox</h1>
+    <div class="nav">
+      <a href="/admin-ui/index.html">Config Editor</a>
+      <a href="/admin/coverage">Coverage</a>
+      <a href="/admin/health">Health</a>
+      <a href="/admin/exercises">Exercises</a>
+      <a href="/admin/narration">Narration</a>
+      <a href="/admin/rep-rules">Rep Rules</a>
+      <a href="/admin/observability">Observability</a>
+      <a href="/admin/preview">Preview</a>
+      <a href="/admin/progression-sandbox" class="active">Progression Sandbox</a>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Token</span>
+      <input id="token-input" type="password" placeholder="x-internal-token" style="width:180px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
+    </div>
+  </div>
+
+  <div class="page">
+    <section class="card">
+      <h2>Inputs</h2>
+
+      <div class="toggle-row">
+        <div class="label">Program Type</div>
+        <button class="btn active" data-group="program-type" data-value="strength">strength</button>
+        <button class="btn" data-group="program-type" data-value="hypertrophy">hypertrophy</button>
+        <button class="btn" data-group="program-type" data-value="conditioning">conditioning</button>
+        <button class="btn" data-group="program-type" data-value="hyrox">hyrox</button>
+      </div>
+
+      <div class="toggle-row">
+        <div class="label">Fitness Rank</div>
+        <button class="btn" data-group="fitness-rank" data-value="0">0 (beginner)</button>
+        <button class="btn active" data-group="fitness-rank" data-value="1">1 (intermediate)</button>
+        <button class="btn" data-group="fitness-rank" data-value="2">2 (advanced)</button>
+        <button class="btn" data-group="fitness-rank" data-value="3">3 (elite)</button>
+      </div>
+
+      <div class="field-grid">
+        <div class="field">
+          <label for="purpose-input">Purpose</label>
+          <select id="purpose-input">
+            <option value="main">main</option>
+            <option value="secondary">secondary</option>
+            <option value="accessory">accessory</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="exercise-id-input">Exercise ID</label>
+          <input id="exercise-id-input" type="text" placeholder="bb_back_squat - optional, for is_loadable lookup" />
+        </div>
+        <div class="field">
+          <label for="reps-input">Reps Prescribed</label>
+          <input id="reps-input" type="text" placeholder="4-6" value="4-6" />
+        </div>
+        <div class="field">
+          <label for="intensity-input">Intensity Prescription</label>
+          <input id="intensity-input" type="text" placeholder="2 RIR" value="2 RIR" />
+        </div>
+      </div>
+
+      <div class="section-label">Performance history (most recent first)</div>
+      <div id="history-list" class="history-list"></div>
+      <div class="ctrl-group" style="margin-top:10px">
+        <button id="add-history-btn" class="secondary">+ Add exposure</button>
+      </div>
+
+      <div class="section-label">Presets</div>
+      <div class="ctrl-group" style="margin-top:8px">
+        <button id="preset-improving" class="secondary">Improving (strength)</button>
+        <button id="preset-plateau" class="secondary">Plateau</button>
+        <button id="preset-declining" class="secondary">Declining</button>
+      </div>
+      <p class="preset-note">For hypertrophy, change program type and reps to 8-12. The engine may return <code>increase_reps</code> instead of <code>increase_load</code> if reps have not reached the top of the range.</p>
+
+      <div class="status" id="form-status"></div>
+      <button id="evaluate-btn" class="primary full">Evaluate</button>
+    </section>
+
+    <section class="card">
+      <h2>Results</h2>
+      <div id="results-panel" class="muted-box">Run an evaluation to inspect the progression decision engine response.</div>
+    </section>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "admin_progression_sandbox_token";
+    const tokenInput = document.getElementById("token-input");
+    const savedToken = sessionStorage.getItem(STORAGE_KEY);
+    if (savedToken) tokenInput.value = savedToken;
+    tokenInput.addEventListener("change", () => sessionStorage.setItem(STORAGE_KEY, tokenInput.value.trim()));
+
+    function esc(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function selectedValue(group) {
+      return document.querySelector(`[data-group="${group}"].active`)?.dataset.value ?? "";
+    }
+
+    function setActive(group, value) {
+      document.querySelectorAll(`[data-group="${group}"]`).forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.value === String(value));
+      });
+    }
+
+    document.querySelectorAll("[data-group]").forEach((btn) => {
+      btn.addEventListener("click", () => setActive(btn.dataset.group, btn.dataset.value));
+    });
+
+    function makeHistoryRow(entry = {}) {
+      const row = document.createElement("div");
+      row.className = "history-row";
+      row.innerHTML = `
+        <div class="field">
+          <label>weight_kg</label>
+          <input type="number" step="0.5" data-field="weight_kg" placeholder="100" value="${esc(entry.weight_kg ?? "")}" />
+        </div>
+        <div class="field">
+          <label>reps_completed</label>
+          <input type="number" step="1" data-field="reps_completed" placeholder="6" value="${esc(entry.reps_completed ?? "")}" />
+        </div>
+        <div class="field">
+          <label>rir_actual</label>
+          <input type="number" step="0.5" data-field="rir_actual" placeholder="2" value="${esc(entry.rir_actual ?? "")}" />
+        </div>
+        <button class="secondary" type="button" data-action="remove-row">×</button>
+      `;
+      row.querySelector('[data-action="remove-row"]').addEventListener("click", () => {
+        const list = document.getElementById("history-list");
+        if (list.children.length <= 1) return;
+        row.remove();
+      });
+      return row;
+    }
+
+    function replaceHistory(entries) {
+      const list = document.getElementById("history-list");
+      list.innerHTML = "";
+      (entries ?? []).forEach((entry) => list.appendChild(makeHistoryRow(entry)));
+      if (list.children.length === 0) list.appendChild(makeHistoryRow());
+    }
+
+    function collectHistory() {
+      return [...document.querySelectorAll(".history-row")].map((row) => ({
+        weight_kg: Number(row.querySelector('[data-field="weight_kg"]').value),
+        reps_completed: Number(row.querySelector('[data-field="reps_completed"]').value),
+        rir_actual: row.querySelector('[data-field="rir_actual"]').value === ""
+          ? null
+          : Number(row.querySelector('[data-field="rir_actual"]').value),
+      }));
+    }
+
+    function outcomeBadge(outcome) {
+      if (outcome === "increase_load" || outcome === "increase_reps") return "badge-lg badge-ok";
+      if (outcome === "deload_local") return "badge-lg badge-warn";
+      if (outcome === "hold") return "badge-lg badge-hold";
+      return "badge-lg badge-muted";
+    }
+
+    function renderError(message) {
+      document.getElementById("results-panel").innerHTML = `<div class="error-box">${esc(message)}</div>`;
+    }
+
+    function renderResult(data) {
+      if (!data?.ok) {
+        renderError(data?.error ?? "Request failed.");
+        return;
+      }
+
+      const recommendationLines = [];
+      if (data.recommended_load_kg != null) {
+        recommendationLines.push(`<div class="result-line">Recommended load: <strong>${esc(String(data.recommended_load_kg))} kg</strong></div>`);
+      }
+      if (data.recommended_reps_target != null) {
+        recommendationLines.push(`<div class="result-line">Recommended reps target: <strong>${esc(String(data.recommended_reps_target))}</strong></div>`);
+      }
+
+      const reasons = Array.isArray(data.reasons) && data.reasons.length
+        ? `<ul class="result-list">${data.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul>`
+        : `<div class="muted-box">No reasons returned.</div>`;
+
+      const evidence = data.evidence ?? {};
+      document.getElementById("results-panel").innerHTML = `
+        <div class="${outcomeBadge(data.outcome)}">${esc(data.outcome ?? "not_applicable")}</div>
+        ${recommendationLines.join("") || `<div class="result-line">No concrete recommendation fields were returned.</div>`}
+        <div class="result-block">
+          <h3>Confidence</h3>
+          <div class="result-line">${esc(data.confidence ?? "—")} ${data.confidence_score != null ? `(${esc(String(data.confidence_score))})` : ""}</div>
+        </div>
+        <div class="result-block">
+          <h3>Reasons</h3>
+          ${reasons}
+        </div>
+        <details open class="result-block">
+          <summary>Evidence</summary>
+          <table>
+            <tbody>
+              <tr><th>Exposures considered</th><td>${esc(String(evidence.exposures_considered ?? "—"))}</td></tr>
+              <tr><th>Successful exposures</th><td>${esc(String(evidence.successful_exposures ?? "—"))}</td></tr>
+              <tr><th>Underperformance exposures</th><td>${esc(String(evidence.underperformance_exposures ?? "—"))}</td></tr>
+              <tr><th>Latest weight</th><td>${evidence.latest_weight_kg != null ? `${esc(String(evidence.latest_weight_kg))} kg` : "—"}</td></tr>
+              <tr><th>Latest reps</th><td>${esc(String(evidence.latest_reps ?? "—"))}</td></tr>
+              <tr><th>Latest RIR</th><td>${esc(String(evidence.latest_rir ?? "—"))}</td></tr>
+              <tr><th>Target rep range</th><td>${evidence.target_low != null || evidence.target_high != null ? `${esc(String(evidence.target_low ?? "—"))} – ${esc(String(evidence.target_high ?? "—"))}` : "—"}</td></tr>
+              <tr><th>Target RIR</th><td>${esc(String(evidence.target_rir ?? "—"))}</td></tr>
+              <tr><th>Required RIR (with rank offset)</th><td>${esc(String(evidence.required_rir ?? "—"))}</td></tr>
+            </tbody>
+          </table>
+        </details>
+        <details class="result-block">
+          <summary>Config Used</summary>
+          <table>
+            <tbody>
+              <tr><th>Profile name</th><td>${esc(data.config_used?.profile_name ?? "—")}</td></tr>
+              <tr><th>Rank key</th><td>${esc(data.config_used?.rank_key ?? "—")}</td></tr>
+            </tbody>
+          </table>
+        </details>
+      `;
+    }
+
+    function applyPreset(preset) {
+      setActive("program-type", preset.program_type);
+      setActive("fitness-rank", preset.fitness_rank);
+      document.getElementById("purpose-input").value = preset.purpose;
+      document.getElementById("reps-input").value = preset.reps_prescribed;
+      document.getElementById("intensity-input").value = preset.intensity_prescription;
+      document.getElementById("exercise-id-input").value = preset.exercise_id ?? "";
+      replaceHistory(preset.history);
+    }
+
+    async function evaluate() {
+      const resultsPanel = document.getElementById("results-panel");
+      const formStatus = document.getElementById("form-status");
+      formStatus.textContent = "Evaluating…";
+      resultsPanel.innerHTML = `<div class="muted-box">Running progression decision…</div>`;
+
+      const body = {
+        program_type: selectedValue("program-type"),
+        fitness_rank: Number(selectedValue("fitness-rank")),
+        purpose: document.getElementById("purpose-input").value,
+        reps_prescribed: document.getElementById("reps-input").value.trim(),
+        intensity_prescription: document.getElementById("intensity-input").value.trim(),
+        exercise_id: document.getElementById("exercise-id-input").value.trim(),
+        history: collectHistory(),
+      };
+
+      try {
+        const res = await fetch("/admin/progression-sandbox/evaluate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-token": tokenInput.value.trim(),
+          },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          renderError(data?.error ?? `HTTP ${res.status}`);
+        } else {
+          renderResult(data);
+        }
+      } catch (_err) {
+        renderError("Unable to evaluate progression sandbox request.");
+      } finally {
+        formStatus.textContent = "";
+      }
+    }
+
+    document.getElementById("add-history-btn").addEventListener("click", () => {
+      document.getElementById("history-list").appendChild(makeHistoryRow());
+    });
+    document.getElementById("evaluate-btn").addEventListener("click", () => { void evaluate(); });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        const target = event.target;
+        if (target && (target.tagName === "INPUT" || target.tagName === "SELECT")) {
+          event.preventDefault();
+          void evaluate();
+        }
+      }
+    });
+
+    document.getElementById("preset-improving").addEventListener("click", () => applyPreset({
+      program_type: "strength",
+      fitness_rank: "1",
+      purpose: "main",
+      reps_prescribed: "4-6",
+      intensity_prescription: "2 RIR",
+      exercise_id: "bb_back_squat",
+      history: [
+        { weight_kg: 100, reps_completed: 6, rir_actual: 3 },
+        { weight_kg: 100, reps_completed: 6, rir_actual: 2.5 },
+      ],
+    }));
+    document.getElementById("preset-plateau").addEventListener("click", () => applyPreset({
+      program_type: "strength",
+      fitness_rank: "1",
+      purpose: "main",
+      reps_prescribed: "4-6",
+      intensity_prescription: "2 RIR",
+      exercise_id: "bb_back_squat",
+      history: [
+        { weight_kg: 100, reps_completed: 5, rir_actual: 2 },
+        { weight_kg: 100, reps_completed: 5, rir_actual: 2 },
+      ],
+    }));
+    document.getElementById("preset-declining").addEventListener("click", () => applyPreset({
+      program_type: "strength",
+      fitness_rank: "1",
+      purpose: "main",
+      reps_prescribed: "4-6",
+      intensity_prescription: "2 RIR",
+      exercise_id: "bb_back_squat",
+      history: [
+        { weight_kg: 100, reps_completed: 3, rir_actual: 0.5 },
+        { weight_kg: 100, reps_completed: 3, rir_actual: 0 },
+      ],
+    }));
+
+    replaceHistory([
+      { weight_kg: 100, reps_completed: 6, rir_actual: 3 },
+      { weight_kg: 100, reps_completed: 6, rir_actual: 2.5 },
+    ]);
+  </script>
+</body>
+</html>

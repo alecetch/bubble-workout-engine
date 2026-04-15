@@ -40,6 +40,43 @@ export type ProgramOverviewResponse = {
   };
 };
 
+export type AdaptationDecision = {
+  outcome: string;
+  primaryLever: string | null;
+  confidence: string | null;
+  recommendedLoadKg: number | null;
+  recommendedLoadDeltaKg: number | null;
+  recommendedRepsTarget: number | null;
+  recommendedRepDelta: number | null;
+  displayChip: string;
+  displayDetail: string | null;
+  decidedAt: string;
+};
+
+export type DecisionHistoryItem = {
+  id: string;
+  weekNumber: number | null;
+  dayNumber: number | null;
+  scheduledDate: string | null;
+  outcome: string;
+  primaryLever: string | null;
+  confidence: string | null;
+  recommendedLoadKg: number | null;
+  recommendedLoadDeltaKg: number | null;
+  recommendedRepsTarget: number | null;
+  recommendedRepDelta: number | null;
+  displayLabel: string;
+  displayReason: string | null;
+  evidence: Record<string, unknown>;
+  decidedAt: string;
+};
+
+export type DecisionHistoryResponse = {
+  exerciseName: string;
+  totalDecisions: number;
+  decisions: DecisionHistoryItem[];
+};
+
 export type ProgramDayFullResponse = {
   day: {
     id: string;
@@ -81,6 +118,7 @@ export type ProgramDayFullResponse = {
         reasoning?: string[];
         set1Rule?: string;
       } | null;
+      adaptationDecision?: AdaptationDecision | null;
     }>;
   }>;
 };
@@ -122,6 +160,32 @@ function asNullableBoolean(value: unknown): boolean | null | undefined {
   if (value === null) return null;
   if (typeof value === "boolean") return value;
   return undefined;
+}
+
+function normalizeAdaptationDecision(raw: unknown): AdaptationDecision | null {
+  if (raw == null) return null;
+  const r = asObject(raw);
+  const outcome = asString(r.outcome ?? r.decision_outcome);
+  if (!outcome) return null;
+
+  return {
+    outcome,
+    primaryLever: asNullableString(r.primary_lever ?? r.primaryLever) ?? null,
+    confidence: asNullableString(r.confidence) ?? null,
+    recommendedLoadKg: asNullableNumber(r.recommended_load_kg ?? r.recommendedLoadKg) ?? null,
+    recommendedLoadDeltaKg: asNullableNumber(
+      r.recommended_load_delta_kg ?? r.recommendedLoadDeltaKg,
+    ) ?? null,
+    recommendedRepsTarget: asNullableNumber(
+      r.recommended_reps_target ?? r.recommendedRepsTarget,
+    ) ?? null,
+    recommendedRepDelta: asNullableNumber(
+      r.recommended_rep_delta ?? r.recommendedRepDelta,
+    ) ?? null,
+    displayChip: asString(r.display_chip ?? r.displayChip) ?? outcome,
+    displayDetail: asNullableString(r.display_detail ?? r.displayDetail) ?? null,
+    decidedAt: asString(r.decided_at ?? r.decidedAt) ?? "",
+  };
 }
 
 function toIsoDate(value: unknown): string | undefined {
@@ -326,6 +390,9 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
                     set1Rule: asString(guideline.set_1_rule ?? guideline.set1Rule),
                   };
                 })(),
+            adaptationDecision: normalizeAdaptationDecision(
+              rawExercise.adaptation_decision ?? rawExercise.adaptationDecision ?? null,
+            ),
           };
         }),
       };
@@ -368,4 +435,48 @@ export async function getProgramDayFull(
   const path = `/api/day/${encodeURIComponent(programDayId)}/full${queryString ? `?${queryString}` : ""}`;
   const response = await authGetJson<unknown>(path);
   return normalizeProgramDayFull(response);
+}
+
+export async function fetchDecisionHistory(
+  programExerciseId: string,
+  opts: ViewerIdentityOptions & { limit?: number; offset?: number },
+): Promise<DecisionHistoryResponse> {
+  const params = buildIdentityQuery(opts);
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  if (opts.offset != null) params.set("offset", String(opts.offset));
+  const queryString = params.toString();
+  const path = `/api/program-exercise/${encodeURIComponent(programExerciseId)}/decision-history${queryString ? `?${queryString}` : ""}`;
+  const raw = await authGetJson<unknown>(path);
+  const root = asObject(raw);
+
+  return {
+    exerciseName: asString(root.exercise_name ?? root.exerciseName) ?? programExerciseId,
+    totalDecisions: asNumber(root.total_decisions ?? root.totalDecisions) ?? 0,
+    decisions: asArray(root.decisions).map((item) => {
+      const r = asObject(item);
+      return {
+        id: asString(r.id) ?? "",
+        weekNumber: asNullableNumber(r.week_number ?? r.weekNumber) ?? null,
+        dayNumber: asNullableNumber(r.day_number ?? r.dayNumber) ?? null,
+        scheduledDate: asNullableString(r.scheduled_date ?? r.scheduledDate) ?? null,
+        outcome: asString(r.outcome) ?? "hold",
+        primaryLever: asNullableString(r.primary_lever ?? r.primaryLever) ?? null,
+        confidence: asNullableString(r.confidence) ?? null,
+        recommendedLoadKg: asNullableNumber(r.recommended_load_kg ?? r.recommendedLoadKg) ?? null,
+        recommendedLoadDeltaKg: asNullableNumber(
+          r.recommended_load_delta_kg ?? r.recommendedLoadDeltaKg,
+        ) ?? null,
+        recommendedRepsTarget: asNullableNumber(
+          r.recommended_reps_target ?? r.recommendedRepsTarget,
+        ) ?? null,
+        recommendedRepDelta: asNullableNumber(
+          r.recommended_rep_delta ?? r.recommendedRepDelta,
+        ) ?? null,
+        displayLabel: asString(r.display_label ?? r.displayLabel) ?? "",
+        displayReason: asNullableString(r.display_reason ?? r.displayReason) ?? null,
+        evidence: asObject(r.evidence),
+        decidedAt: asString(r.decided_at ?? r.decidedAt) ?? "",
+      };
+    }),
+  };
 }

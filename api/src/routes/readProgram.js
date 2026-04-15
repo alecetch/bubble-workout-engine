@@ -34,6 +34,33 @@ const SEGMENT_TYPE_LABELS = {
   cooldown: "Cool-down",
 };
 
+const OUTCOME_CHIP = {
+  increase_load: "Load increased ↑",
+  increase_reps: "Reps progressing ↑",
+  increase_sets: "Sets increasing ↑",
+  reduce_rest: "Rest reduced ↓",
+  hold: "Holding steady",
+  deload_local: "Deload this week",
+};
+
+const OUTCOME_DETAIL_FALLBACK = {
+  increase_load: "Your recent sessions hit the rep target comfortably - load has been increased.",
+  increase_reps: "You are ready to push further into the rep range before the next load jump.",
+  increase_sets: "Volume is increasing this session.",
+  reduce_rest: "Rest periods are tightening as conditioning improves.",
+  hold: "The current prescription stays the same - more data needed before changing.",
+  deload_local: "Recent sessions showed signs of fatigue or underperformance - load is reduced to recover.",
+};
+
+const DECISION_HISTORY_LABEL_PHRASE = {
+  increase_load: (delta) => (delta != null ? `Added ${Math.abs(delta)} kg` : "Load increased"),
+  increase_reps: () => "Rep target increased",
+  increase_sets: () => "Set added",
+  reduce_rest: () => "Rest reduced",
+  hold: () => "Held steady",
+  deload_local: () => "Load reduced (deload)",
+};
+
 export function segmentTypeLabel(segment_type) {
   return SEGMENT_TYPE_LABELS[safeString(segment_type)] ?? safeString(segment_type);
 }
@@ -50,6 +77,93 @@ export function parseEquipmentSlugs(rows) {
     }
   }
   return uniq(slugs);
+}
+
+function normalizeDecisionSentence(value) {
+  const trimmed = safeString(value);
+  if (!trimmed) return null;
+  let sentence = trimmed;
+  if (!sentence.endsWith(".")) sentence += ".";
+  if (sentence.length > 160) {
+    sentence = `${sentence.slice(0, 157).replace(/\s+\S*$/, "")}...`;
+  }
+  return sentence;
+}
+
+function extractDecisionReasons(decisionContext) {
+  try {
+    const ctx = typeof decisionContext === "object" && decisionContext !== null
+      ? decisionContext
+      : JSON.parse(String(decisionContext ?? "{}"));
+    return Array.isArray(ctx.reasons) ? ctx.reasons : [];
+  } catch {
+    return [];
+  }
+}
+
+function extractDecisionEvidence(raw) {
+  try {
+    const value = typeof raw === "object" && raw !== null
+      ? raw
+      : JSON.parse(String(raw ?? "{}"));
+    return value && typeof value === "object" ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+export function buildAdaptationDecision(row) {
+  if (!row) return null;
+  const outcome = safeString(row.decision_outcome);
+  if (!outcome) return null;
+
+  const reasons = extractDecisionReasons(row.decision_context_json);
+  const displayDetail = normalizeDecisionSentence(reasons[0])
+    ?? OUTCOME_DETAIL_FALLBACK[outcome]
+    ?? null;
+
+  return {
+    outcome,
+    primary_lever: safeString(row.primary_lever),
+    confidence: safeString(row.confidence),
+    recommended_load_kg: row.recommended_load_kg != null ? Number(row.recommended_load_kg) : null,
+    recommended_load_delta_kg: row.recommended_load_delta_kg != null ? Number(row.recommended_load_delta_kg) : null,
+    recommended_reps_target: row.recommended_reps_target != null ? Number(row.recommended_reps_target) : null,
+    recommended_rep_delta: row.recommended_rep_delta != null ? Number(row.recommended_rep_delta) : null,
+    display_chip: OUTCOME_CHIP[outcome] ?? outcome,
+    display_detail: displayDetail,
+    decided_at: row.decided_at instanceof Date ? row.decided_at.toISOString() : String(row.decided_at ?? ""),
+  };
+}
+
+function buildDecisionHistoryItem(row) {
+  const outcome = safeString(row.decision_outcome) ?? "hold";
+  const delta = row.recommended_load_delta_kg != null ? Number(row.recommended_load_delta_kg) : null;
+  const phraseBuilder = DECISION_HISTORY_LABEL_PHRASE[outcome] ?? (() => outcome);
+  const phrase = phraseBuilder(delta);
+  const weekNumber = row.week_number ?? null;
+  const reasons = extractDecisionReasons(row.decision_context_json);
+  const displayReason = normalizeDecisionSentence(reasons[0])
+    ?? OUTCOME_DETAIL_FALLBACK[outcome]
+    ?? null;
+
+  return {
+    id: row.id,
+    week_number: weekNumber,
+    day_number: row.day_number ?? null,
+    scheduled_date: row.scheduled_date ? String(row.scheduled_date).slice(0, 10) : null,
+    outcome,
+    primary_lever: safeString(row.primary_lever),
+    confidence: safeString(row.confidence),
+    recommended_load_kg: row.recommended_load_kg != null ? Number(row.recommended_load_kg) : null,
+    recommended_load_delta_kg: delta,
+    recommended_reps_target: row.recommended_reps_target != null ? Number(row.recommended_reps_target) : null,
+    recommended_rep_delta: row.recommended_rep_delta != null ? Number(row.recommended_rep_delta) : null,
+    display_label: weekNumber != null ? `Week ${weekNumber} - ${phrase}` : phrase,
+    display_reason: displayReason,
+    evidence: extractDecisionEvidence(row.evidence_summary_json),
+    decided_at: row.decided_at instanceof Date ? row.decided_at.toISOString() : String(row.decided_at ?? ""),
+  };
 }
 
 function mapError(err) {
@@ -399,6 +513,37 @@ export function createReadProgramHandlers(options = pool) {
         [program_day_id],
       );
 
+      const programExerciseIds = exR.rows
+        .map((row) => row.program_exercise_id)
+        .filter((value) => Boolean(safeString(value)));
+
+      let decisionByPeId = new Map();
+      if (programExerciseIds.length > 0) {
+        const decisionRows = await client.query(
+          `
+          SELECT DISTINCT ON (epd.program_exercise_id)
+            epd.program_exercise_id,
+            epd.decision_outcome,
+            epd.primary_lever,
+            epd.confidence,
+            epd.recommended_load_kg,
+            epd.recommended_load_delta_kg,
+            epd.recommended_reps_target,
+            epd.recommended_rep_delta,
+            epd.decision_context_json,
+            epd.created_at AS decided_at
+          FROM exercise_progression_decision epd
+          WHERE epd.program_exercise_id = ANY($1::uuid[])
+            AND epd.user_id = $2
+          ORDER BY epd.program_exercise_id, epd.created_at DESC
+          `,
+          [programExerciseIds, user_id],
+        );
+        decisionByPeId = new Map(
+          decisionRows.rows.map((row) => [row.program_exercise_id, row]),
+        );
+      }
+
       let resolvedClientProfileId = day.client_profile_id ?? null;
       if (!resolvedClientProfileId) {
         const profileR = await client.query(
@@ -473,6 +618,9 @@ export function createReadProgramHandlers(options = pool) {
                   recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
                 }
               : null,
+            adaptation_decision: buildAdaptationDecision(
+              decisionByPeId.get(item.program_exercise_id) ?? null,
+            ),
           };
         }),
       }));
@@ -508,6 +656,9 @@ export function createReadProgramHandlers(options = pool) {
                   recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
                 }
               : null,
+            adaptation_decision: buildAdaptationDecision(
+              decisionByPeId.get(item.program_exercise_id) ?? null,
+            ),
           };
         });
       if (unassigned.length) {
@@ -631,7 +782,104 @@ export function createReadProgramHandlers(options = pool) {
     }
   }
 
-  return { programOverview, dayFull, dayComplete };
+  async function exerciseDecisionHistory(req, res) {
+    const { request_id } = req;
+
+    try {
+      const programExerciseId = requireUuid(req.params.program_exercise_id, "program_exercise_id");
+      const user_id = resolveUserId(req);
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit ?? "20", 10) || 20));
+      const offset = Math.max(0, parseInt(req.query.offset ?? "0", 10) || 0);
+
+      const ownerR = await db.query(
+        `
+        SELECT pe.id
+        FROM program_exercise pe
+        JOIN program p ON p.id = pe.program_id
+        WHERE pe.id = $1 AND p.user_id = $2
+        LIMIT 1
+        `,
+        [programExerciseId, user_id],
+      );
+
+      if (ownerR.rowCount === 0) {
+        return res.status(403).json({ ok: false, request_id, error: "not_found_or_forbidden" });
+      }
+
+      const [countR, rowsR, nameR] = await Promise.all([
+        db.query(
+          `SELECT COUNT(*)::int AS total
+           FROM exercise_progression_decision
+           WHERE program_exercise_id = $1 AND user_id = $2`,
+          [programExerciseId, user_id],
+        ),
+        db.query(
+          `
+          SELECT
+            epd.id,
+            epd.decision_outcome,
+            epd.primary_lever,
+            epd.confidence,
+            epd.recommended_load_kg,
+            epd.recommended_load_delta_kg,
+            epd.recommended_reps_target,
+            epd.recommended_rep_delta,
+            epd.evidence_summary_json,
+            epd.decision_context_json,
+            epd.created_at AS decided_at,
+            pd.week_number,
+            pd.day_number,
+            pd.scheduled_date,
+            pe.exercise_id
+          FROM exercise_progression_decision epd
+          LEFT JOIN program_day pd ON pd.id = epd.program_day_id
+          LEFT JOIN program_exercise pe ON pe.id = epd.program_exercise_id
+          WHERE epd.program_exercise_id = $1 AND epd.user_id = $2
+          ORDER BY epd.created_at DESC
+          LIMIT $3 OFFSET $4
+          `,
+          [programExerciseId, user_id, limit, offset],
+        ),
+        db.query(
+          `SELECT
+             COALESCE(
+               (SELECT ec.name
+                FROM exercise_catalogue ec
+                JOIN program_exercise pe ON pe.exercise_id = ec.exercise_id
+                WHERE pe.id = $1
+                LIMIT 1),
+               (SELECT pe.exercise_name FROM program_exercise pe WHERE pe.id = $1 LIMIT 1),
+               $1
+             ) AS exercise_name,
+             (SELECT pe.exercise_id FROM program_exercise pe WHERE pe.id = $1 LIMIT 1) AS exercise_id`,
+          [programExerciseId],
+        ),
+      ]);
+
+      const total = countR.rows[0]?.total ?? 0;
+      const exerciseName = nameR.rows[0]?.exercise_name ?? programExerciseId;
+      const exerciseId = nameR.rows[0]?.exercise_id ?? null;
+
+      return res.json({
+        ok: true,
+        exercise_id: exerciseId,
+        exercise_name: exerciseName,
+        total_decisions: total,
+        decisions: rowsR.rows.map(buildDecisionHistoryItem),
+      });
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
+    }
+  }
+
+  return { programOverview, dayFull, dayComplete, exerciseDecisionHistory };
 }
 
 const handlers = createReadProgramHandlers();
@@ -648,3 +896,9 @@ readProgramRouter.get("/day/:program_day_id/full", handlers.dayFull);
 // ---- PATCH /api/day/:program_day_id/complete ----
 // Marks (or unmarks) a program day as completed.
 readProgramRouter.patch("/day/:program_day_id/complete", handlers.dayComplete);
+
+// ---- GET /api/program-exercise/:program_exercise_id/decision-history ----
+readProgramRouter.get(
+  "/program-exercise/:program_exercise_id/decision-history",
+  handlers.exerciseDecisionHistory,
+);

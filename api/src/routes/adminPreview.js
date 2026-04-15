@@ -4,13 +4,8 @@ import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
+import { computeGuidelineLoadFromAnchors } from "../services/guidelineLoadService.js";
 import { publicInternalError } from "../utils/publicError.js";
-import {
-  buildDecision,
-  loadProgressionConfig,
-  rankKey,
-  resolveProfileName,
-} from "../services/progressionDecisionService.js";
 
 export const adminPreviewRouter = express.Router();
 
@@ -184,6 +179,7 @@ export async function buildPreviewInputs(
   let allowedIds;
   let exerciseRows;
   let repRuleRows;
+  let familyFactors;
   try {
     client = await db.connect();
 
@@ -236,6 +232,17 @@ export async function buildPreviewInputs(
        ORDER BY rule_id ASC`,
     );
     repRuleRows = repRuleR.rows;
+
+    const familyConfigR = await client.query(
+      `SELECT source_family, target_family, cross_family_factor
+       FROM exercise_load_estimation_family_config`,
+    );
+    familyFactors = new Map(
+      (familyConfigR.rows ?? []).map((r) => [
+        `${r.source_family}->${r.target_family}`,
+        Number(r.cross_family_factor) || 1,
+      ]),
+    );
   } finally {
     client?.release();
   }
@@ -289,6 +296,7 @@ export async function buildPreviewInputs(
     exerciseNameMap,
     estimationFamilyByExerciseId,
     repRuleMap,
+    familyFactors,
     synthProfile,
     inputs,
     pipelineRequest,
@@ -462,12 +470,12 @@ export function createPreviewHandler({
       }
     }
 
-    const progressionPreviews = {};
+    const startingLoads = {};
 
     if (anchorLifts.length > 0) {
-      const anchorByFamily = Object.fromEntries(
+      const anchorsByFamily = new Map(
         anchorLifts
-          .filter((a) => a.estimationFamily && a.loadKg != null && a.reps != null)
+          .filter((a) => a.estimationFamily && a.loadKg != null)
           .map((a) => [String(a.estimationFamily), a]),
       );
 
@@ -475,8 +483,6 @@ export function createPreviewHandler({
         const preview = previews[programType];
         if (!preview?.ok) continue;
 
-        const { config, rankOverrides } = await loadProgressionConfig(db, programType);
-        const rankOverride = rankOverrides?.[rankKey(fitnessRank)] ?? {};
         const week1 = (preview.program?.weeks ?? []).find((w) => w.week_index === 1);
         if (!week1) continue;
 
@@ -485,68 +491,57 @@ export function createPreviewHandler({
           for (const seg of (day.segments ?? [])) {
             for (const item of (seg.items ?? [])) {
               const exerciseId = String(item.ex_id ?? "");
-              const family = cached.estimationFamilyByExerciseId?.[exerciseId];
-              const anchor = family ? anchorByFamily[family] : null;
+              const exerciseName = cached.exerciseNameMap[exerciseId] ?? exerciseId;
+              const exerciseRow = cached.exerciseRows.find((r) => String(r.exercise_id) === exerciseId) ?? null;
 
-              if (!anchor) {
-                decisions.push({
-                  exercise_id: exerciseId,
-                  exercise_name: cached.exerciseNameMap[exerciseId] ?? exerciseId,
-                  day: day.day_index,
-                  family: family ?? null,
-                  anchor_load_kg: null,
-                  outcome: null,
-                  skipped_reason: family ? "no anchor provided for this family" : "no estimation family on exercise",
-                });
+              const base = {
+                exercise_id: exerciseId,
+                exercise_name: exerciseName,
+                day: day.day_index,
+                purpose: seg.purpose ?? "main",
+                prescribed_reps: item.reps_prescribed ?? "",
+                intensity_prescription: item.intensity_prescription
+                  ?? (item.rir_target != null ? `${item.rir_target} RIR` : ""),
+              };
+
+              if (!exerciseRow?.is_loadable) {
+                decisions.push({ ...base, guideline_load_kg: null, skipped_reason: "not_loadable" });
                 continue;
               }
 
-              const syntheticHistory = [
-                { log_id: "synthetic-1", weight_kg: anchor.loadKg, reps_completed: anchor.reps, rir_actual: anchor.rir ?? 2 },
-                { log_id: "synthetic-2", weight_kg: anchor.loadKg, reps_completed: anchor.reps, rir_actual: anchor.rir ?? 2 },
-              ];
+              const meta = exerciseRow?.load_estimation_metadata;
+              if (!meta?.estimation_family) {
+                decisions.push({ ...base, guideline_load_kg: null, skipped_reason: "no_estimation_family" });
+                continue;
+              }
 
-              const exerciseRow = cached.exerciseRows.find((r) => String(r.exercise_id) === exerciseId) ?? {};
-              const row = {
-                exercise_id: exerciseId,
-                purpose: seg.purpose ?? "main",
-                reps_prescribed: item.reps_prescribed ?? "",
-                intensity_prescription: item.intensity ?? item.intensity_prescription ?? (item.rir_target != null ? `${item.rir_target} RIR` : ""),
-                is_loadable: exerciseRow.is_loadable ?? true,
-                equipment_items_slugs: exerciseRow.equipment_items_slugs ?? [],
-              };
-
-              const profileName = resolveProfileName(config, programType, row.purpose);
-              const profile = config.lever_profiles?.[profileName] ?? {};
-              const decision = buildDecision({
-                row,
+              const result = computeGuidelineLoadFromAnchors({
+                exerciseItem: item,
+                exerciseRow,
+                anchorsByFamily,
+                familyFactors: cached.familyFactors,
                 programType,
-                profileName,
-                profile,
-                rankOverride,
-                history: syntheticHistory,
-                config,
               });
 
-              decisions.push({
-                exercise_id: exerciseId,
-                exercise_name: cached.exerciseNameMap[exerciseId] ?? exerciseId,
-                day: day.day_index,
-                family,
-                prescribed_reps: item.reps_prescribed ?? "",
-                anchor_load_kg: anchor.loadKg,
-                outcome: decision?.outcome ?? "not_applicable",
-                primary_lever: decision?.primary_lever ?? null,
-                recommended_load_kg: decision?.recommended_load_kg ?? null,
-                recommended_reps_target: decision?.recommended_reps_target ?? null,
-                confidence: decision?.confidence ?? null,
-                reasons: decision?.reasons ?? [],
-              });
+              if (!result) {
+                decisions.push({ ...base, guideline_load_kg: null, skipped_reason: "no_anchor_match" });
+              } else {
+                decisions.push({
+                  ...base,
+                  guideline_load_kg: result.guideline_load_kg,
+                  unit: result.unit,
+                  confidence: result.confidence,
+                  source: result.source,
+                  reasoning: result.reasoning,
+                  set_1_rule: result.set_1_rule,
+                  skipped_reason: null,
+                });
+              }
             }
           }
         }
 
-        progressionPreviews[programType] = decisions;
+        startingLoads[programType] = decisions;
       }
     }
 
@@ -562,7 +557,7 @@ export function createPreviewHandler({
       meta: buildPreviewMeta(fitnessRank, equipmentPreset, daysPerWeek, durationMins, cached),
       preview_context: previewContext,
       previews,
-      progression_preview: progressionPreviews,
+      starting_loads: startingLoads,
     });
   };
 }

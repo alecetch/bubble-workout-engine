@@ -9,6 +9,7 @@ import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
+import { ExerciseDecisionHistoryScreen } from "../screens/program/ExerciseDecisionHistoryScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
 import { colors } from "../theme/colors";
 import { spacing } from "../theme/spacing";
@@ -26,6 +27,10 @@ export type OnboardingStackParamList = {
   } | undefined;
   ProgramDay: {
     programDayId: string;
+  };
+  ExerciseDecisionHistory: {
+    programExerciseId: string;
+    exerciseName: string;
   };
 };
 
@@ -64,6 +69,7 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="Step2bBaselineLoads" component={Step2bBaselineLoadsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="ExerciseDecisionHistory" component={ExerciseDecisionHistoryScreen} />
     </Stack.Navigator>
   );
 }

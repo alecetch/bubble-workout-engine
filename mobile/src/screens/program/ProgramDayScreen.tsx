@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useProgramDayFull, useMarkDayComplete } from "../../api/hooks";
 import { HeroHeader } from "../../components/program/HeroHeader";
 import { LogSegmentModal } from "../../components/program/LogSegmentModal";
@@ -14,6 +15,7 @@ import { SegmentCard } from "../../components/program/SegmentCard";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { hapticLight, hapticMedium } from "../../components/interaction/haptics";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
+import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import {
@@ -44,6 +46,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
+  const nav = navigation as unknown as NativeStackNavigationProp<ProgramsStackParamList>;
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -153,6 +156,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             segment={segment}
             isLogged={Boolean(segmentLogs[segment.id])}
             onLogSegment={() => setActiveSegmentId(segment.id)}
+            onViewDecisionHistory={(_exerciseId, exerciseName, programExerciseId) => {
+              nav.navigate("ExerciseDecisionHistory", {
+                programExerciseId,
+                exerciseName,
+              });
+            }}
           />
         ))}
       </ScrollView>
