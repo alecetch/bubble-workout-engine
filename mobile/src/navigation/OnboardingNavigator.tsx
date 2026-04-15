@@ -8,6 +8,7 @@ import { OnboardingEntry } from "../screens/onboarding/OnboardingEntry";
 import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
+import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
 import { ExerciseDecisionHistoryScreen } from "../screens/program/ExerciseDecisionHistoryScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
