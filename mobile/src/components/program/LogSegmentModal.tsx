@@ -11,6 +11,11 @@ import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { useSegmentExerciseLogs, useSaveSegmentLogs } from "../../api/hooks";
 import type { SaveSegmentLogPayload } from "../../api/segmentLog";
 import { PressableScale } from "../interaction/PressableScale";
+import {
+  buildInitialSetInputMap,
+  buildSegmentLogRows,
+  type SetInputState,
+} from "./sessionUxLogic";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -28,8 +33,6 @@ type LogSegmentModalProps = {
   onSave: () => void;
 };
 
-type InputState = { weight: string; reps: string; rirActual: number | null };
-
 const EFFORT_OPTIONS = [
   { label: "4+", value: 4, caption: "Could do 4 or more reps" },
   { label: "3", value: 3, caption: "Could do 3 more reps" },
@@ -37,27 +40,6 @@ const EFFORT_OPTIONS = [
   { label: "1", value: 1, caption: "Could do 1 more rep" },
   { label: "0", value: 0, caption: "Could do no more reps" },
 ] as const;
-
-function parseWeightPrefill(intensity: string | null | undefined): string {
-  const v = parseFloat((intensity ?? "").trim());
-  return Number.isFinite(v) && v > 0 ? String(v) : "";
-}
-
-function parseRepsPrefill(reps: string | null | undefined): string {
-  const raw = (reps ?? "").trim();
-  if (/^\d+$/.test(raw)) {
-    const v = parseInt(raw, 10);
-    return v >= 1 ? String(v) : "10";
-  }
-  // Allow whitespace around dash/en-dash, match anywhere in the string
-  const rangeMatch = raw.match(/(\d+)\s*[–\-]\s*(\d+)/);
-  if (rangeMatch) {
-    const lo = parseInt(rangeMatch[1], 10);
-    const hi = parseInt(rangeMatch[2], 10);
-    return String(Math.round((lo + hi) / 2));
-  }
-  return "10";
-}
 
 export function LogSegmentModal({
   visible,
@@ -68,71 +50,34 @@ export function LogSegmentModal({
   onClose,
   onSave,
 }: LogSegmentModalProps): React.JSX.Element {
-  const [inputMap, setInputMap] = useState<Record<string, InputState>>({});
-  const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
+  const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
+  const [activeKey, setActiveKey] = useState<{ exerciseId: string; setIndex: number } | null>(null);
 
   const exercises = segment?.exercises ?? [];
   const loadableExercises = exercises.filter((ex) => ex.isLoadable === true);
-  const activeExercise = loadableExercises.find((ex) => ex.id === activeExerciseId) ?? null;
-  const activeEffort = activeExerciseId ? (inputMap[activeExerciseId]?.rirActual ?? null) : null;
+  const activeExercise = loadableExercises.find((ex) => ex.id === activeKey?.exerciseId) ?? null;
+  const activeEffort = activeKey
+    ? (inputMap[activeKey.exerciseId]?.[activeKey.setIndex]?.rirActual ?? null)
+    : null;
   const activeEffortCaption = EFFORT_OPTIONS.find((option) => option.value === activeEffort)?.caption ?? null;
 
-  // exercise.id is program_exercise.id — the DB primary key for this exercise row
   const existingLogsQuery = useSegmentExerciseLogs(
     segment?.id ?? null,
     programDayId,
     { userId },
   );
-
   const saveMutation = useSaveSegmentLogs();
 
-  // Build prefill map from plan defaults, then overlay existing DB logs
   useEffect(() => {
     if (!visible || !segment) return;
-
-    const initial: Record<string, InputState> = {};
-
-    for (const ex of exercises) {
-      if (ex.isLoadable !== true) continue;
-      const key = ex.id ?? "";
-      initial[key] = {
-        weight: parseWeightPrefill(ex.intensity),
-        reps: parseRepsPrefill(ex.reps),
-        rirActual: null,
-      };
-    }
-
-    const existingRows = existingLogsQuery.data ?? [];
-    for (const row of existingRows) {
-      const key = row.programExerciseId;
-      if (!initial[key]) continue;
-      if (row.weightKg != null) initial[key].weight = String(row.weightKg);
-      if (row.repsCompleted != null) initial[key].reps = String(row.repsCompleted);
-      if (row.rirActual != null) initial[key].rirActual = row.rirActual;
-    }
-
-    setInputMap(initial);
-    setActiveExerciseId(null);
-  }, [visible, segment?.id, existingLogsQuery.data]);
+    setInputMap(buildInitialSetInputMap(exercises, existingLogsQuery.data ?? []));
+    setActiveKey(null);
+  }, [visible, segment?.id, existingLogsQuery.data, exercises]);
 
   const handleSave = (): void => {
     if (!segment) return;
 
-    const rows = exercises.map((ex, index) => {
-      const isLoadable = ex.isLoadable === true;
-      const key = ex.id ?? "";
-      const inputs = inputMap[key] ?? { weight: "", reps: "", rirActual: null };
-      const wRaw = parseFloat(inputs.weight);
-      const rRaw = parseInt(inputs.reps, 10);
-      return {
-        programExerciseId: key,
-        orderIndex: index + 1,
-        weightKg: isLoadable && Number.isFinite(wRaw) && wRaw > 0 ? wRaw : null,
-        repsCompleted: isLoadable && Number.isInteger(rRaw) && rRaw > 0 ? rRaw : null,
-        rirActual: isLoadable ? inputs.rirActual ?? null : null,
-      };
-    });
-
+    const rows = buildSegmentLogRows(exercises, inputMap);
     const payload: SaveSegmentLogPayload = {
       userId,
       programId,
@@ -160,18 +105,15 @@ export function LogSegmentModal({
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.card}>
-
-            {/* Header */}
             <Text style={styles.title}>Log Segment</Text>
             <Text style={styles.segmentName}>{segment?.segmentName ?? "Segment"}</Text>
 
-            {/* PLANNED section */}
             <Text style={styles.sectionLabel}>PLANNED</Text>
             <View style={styles.plannedList}>
               {exercises.map((ex, index) => {
                 const metaParts = [
                   ex.sets != null ? `${ex.sets} sets` : null,
-                  ex.reps ? `× ${ex.reps}` : null,
+                  ex.reps ? `x ${ex.reps}` : null,
                   ex.intensity ? `• ${ex.intensity}` : null,
                 ]
                   .filter(Boolean)
@@ -189,69 +131,90 @@ export function LogSegmentModal({
               })}
             </View>
 
-            {/* Divider */}
             <View style={styles.divider} />
 
-            {/* ACTUAL section — only if loadable exercises exist */}
             {loadableExercises.length > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>ACTUAL</Text>
                 {loadableExercises.map((ex) => {
                   const key = ex.id ?? "";
-                  const inputs = inputMap[key] ?? { weight: "", reps: "", rirActual: null };
+                  const sets = inputMap[key] ?? [{ weight: "", reps: "", rirActual: null }];
                   return (
                     <View key={key} style={styles.actualRow}>
                       <Text style={styles.actualName} numberOfLines={2} ellipsizeMode="tail">
                         {ex.name}
                       </Text>
-                      <View style={styles.inputsRow}>
-                        <View style={styles.inputGroup}>
-                          <TextInput
-                            value={inputs.weight}
-                            onFocus={() => setActiveExerciseId(key)}
-                            onChangeText={(v) => {
-                              // Digits + at most one decimal point
-                              const sanitized = v
-                                .replace(/[^0-9.]/g, "")
-                                .replace(/^(\d*\.?\d*).*$/, "$1");
-                              setInputMap((m) => ({
-                                ...m,
-                                [key]: { ...(m[key] ?? { reps: "", rirActual: null }), weight: sanitized },
-                              }));
-                            }}
-                            keyboardType="decimal-pad"
-                            textContentType="none"
-                            autoComplete="off"
-                            placeholder="kg"
-                            placeholderTextColor={colors.textSecondary}
-                            style={styles.input}
-                            accessibilityLabel={`${ex.name} weight in kg`}
-                          />
-                          <Text style={styles.inputUnit}>kg</Text>
+                      {sets.map((set, i) => (
+                        <View key={i} style={styles.setRow}>
+                          <Text style={styles.setLabel}>Set {i + 1}</Text>
+                          <View style={styles.inputsRow}>
+                            <View style={styles.inputGroup}>
+                              <TextInput
+                                value={set.weight}
+                                onFocus={() => setActiveKey({ exerciseId: key, setIndex: i })}
+                                onChangeText={(v) => {
+                                  const sanitized = v
+                                    .replace(/[^0-9.]/g, "")
+                                    .replace(/^(\d*\.?\d*).*$/, "$1");
+                                  setInputMap((current) => {
+                                    const prev = current[key] ?? [];
+                                    const next = [...prev];
+                                    next[i] = { ...(next[i] ?? { reps: "", rirActual: null }), weight: sanitized };
+                                    return { ...current, [key]: next };
+                                  });
+                                }}
+                                keyboardType="decimal-pad"
+                                textContentType="none"
+                                autoComplete="off"
+                                placeholder="kg"
+                                placeholderTextColor={colors.textSecondary}
+                                style={styles.input}
+                                accessibilityLabel={`${ex.name} set ${i + 1} weight in kg`}
+                              />
+                              <Text style={styles.inputUnit}>kg</Text>
+                            </View>
+                            <View style={styles.inputGroup}>
+                              <TextInput
+                                value={set.reps}
+                                onFocus={() => setActiveKey({ exerciseId: key, setIndex: i })}
+                                onChangeText={(v) => {
+                                  const sanitized = v.replace(/[^0-9]/g, "");
+                                  setInputMap((current) => {
+                                    const prev = current[key] ?? [];
+                                    const next = [...prev];
+                                    next[i] = { ...(next[i] ?? { weight: "", rirActual: null }), reps: sanitized };
+                                    return { ...current, [key]: next };
+                                  });
+                                }}
+                                keyboardType="numeric"
+                                textContentType="none"
+                                autoComplete="off"
+                                placeholder="reps"
+                                placeholderTextColor={colors.textSecondary}
+                                style={styles.input}
+                                accessibilityLabel={`${ex.name} set ${i + 1} reps completed`}
+                              />
+                              <Text style={styles.inputUnit}>reps</Text>
+                            </View>
+                          </View>
+                          {i === 0 && sets.length > 1 ? (
+                            <PressableScale
+                              style={styles.fillDownButton}
+                              onPress={() => {
+                                setInputMap((current) => {
+                                  const prev = current[key] ?? [];
+                                  const filled = prev.map((row, rowIndex) =>
+                                    rowIndex === 0 ? row : { ...row, weight: prev[0].weight, reps: prev[0].reps },
+                                  );
+                                  return { ...current, [key]: filled };
+                                });
+                              }}
+                            >
+                              <Text style={styles.fillDownLabel}>Fill down</Text>
+                            </PressableScale>
+                          ) : null}
                         </View>
-                        <View style={styles.inputGroup}>
-                          <TextInput
-                            value={inputs.reps}
-                            onFocus={() => setActiveExerciseId(key)}
-                            onChangeText={(v) => {
-                              // Digits only
-                              const sanitized = v.replace(/[^0-9]/g, "");
-                              setInputMap((m) => ({
-                                ...m,
-                                [key]: { ...(m[key] ?? { weight: "", rirActual: null }), reps: sanitized },
-                              }));
-                            }}
-                            keyboardType="numeric"
-                            textContentType="none"
-                            autoComplete="off"
-                            placeholder="reps"
-                            placeholderTextColor={colors.textSecondary}
-                            style={styles.input}
-                            accessibilityLabel={`${ex.name} reps completed`}
-                          />
-                          <Text style={styles.inputUnit}>reps</Text>
-                        </View>
-                      </View>
+                      ))}
                     </View>
                   );
                 })}
@@ -269,19 +232,21 @@ export function LogSegmentModal({
                   <View style={styles.effortButtonRow}>
                     {EFFORT_OPTIONS.map((option) => {
                       const selected = activeEffort === option.value;
-                      const disabled = !activeExerciseId;
+                      const disabled = !activeKey;
                       return (
                         <PressableScale
                           key={option.label}
                           onPress={() => {
-                            if (!activeExerciseId) return;
-                            setInputMap((current) => ({
-                              ...current,
-                              [activeExerciseId]: {
-                                ...(current[activeExerciseId] ?? { weight: "", reps: "", rirActual: null }),
+                            if (!activeKey) return;
+                            setInputMap((current) => {
+                              const prev = current[activeKey.exerciseId] ?? [];
+                              const next = [...prev];
+                              next[activeKey.setIndex] = {
+                                ...(next[activeKey.setIndex] ?? { weight: "", reps: "", rirActual: null }),
                                 rirActual: option.value,
-                              },
-                            }));
+                              };
+                              return { ...current, [activeKey.exerciseId]: next };
+                            });
                           }}
                           disabled={disabled}
                           style={[
@@ -313,7 +278,6 @@ export function LogSegmentModal({
               </>
             ) : null}
 
-            {/* Actions */}
             {saveMutation.isError ? (
               <Text style={styles.errorText}>Save failed. Please try again.</Text>
             ) : null}
@@ -327,11 +291,10 @@ export function LogSegmentModal({
                 disabled={saveMutation.isPending}
               >
                 <Text style={styles.primaryLabel}>
-                  {saveMutation.isPending ? "Saving…" : "Save"}
+                  {saveMutation.isPending ? "Saving..." : "Save"}
                 </Text>
               </PressableScale>
             </View>
-
           </View>
         </ScrollView>
       </View>
@@ -394,6 +357,13 @@ const styles = StyleSheet.create({
   actualRow: {
     gap: spacing.xs,
   },
+  setRow: {
+    gap: spacing.xs,
+  },
+  setLabel: {
+    color: colors.textSecondary,
+    ...typography.label,
+  },
   actualName: {
     color: colors.textPrimary,
     ...typography.body,
@@ -420,6 +390,16 @@ const styles = StyleSheet.create({
   inputUnit: {
     color: colors.textSecondary,
     ...typography.label,
+  },
+  fillDownButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+  },
+  fillDownLabel: {
+    color: colors.accent,
+    ...typography.small,
+    fontWeight: "600",
   },
   effortCard: {
     marginTop: spacing.sm,

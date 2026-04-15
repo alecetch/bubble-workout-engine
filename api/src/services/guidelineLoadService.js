@@ -112,6 +112,90 @@ function parseMetadata(row) {
   };
 }
 
+/**
+ * Pure computation: estimate a starting load for one exercise given in-memory anchor lifts.
+ * Mirrors the math inside annotateExercisesWithGuidelineLoads without any DB calls.
+ */
+export function computeGuidelineLoadFromAnchors({
+  exerciseItem,
+  exerciseRow,
+  anchorsByFamily,
+  familyFactors,
+  programType,
+}) {
+  if (!exerciseRow?.is_loadable) return null;
+  const meta = parseMetadata(exerciseRow);
+  if (meta.not_estimatable || !meta.estimation_family) return null;
+
+  let chosenAnchor = anchorsByFamily.get(meta.estimation_family) ?? null;
+  let source = chosenAnchor ? "same_family" : null;
+  let crossFamilyFactor = 1;
+
+  if (!chosenAnchor) {
+    for (const [anchorFamily, anchorData] of anchorsByFamily) {
+      const key = `${anchorFamily}->${meta.estimation_family}`;
+      if (familyFactors.has(key)) {
+        chosenAnchor = anchorData;
+        crossFamilyFactor = familyFactors.get(key) ?? 1;
+        source = "cross_family";
+        break;
+      }
+    }
+  }
+
+  if (!chosenAnchor || chosenAnchor.loadKg == null) return null;
+
+  const targetReps = midpoint(exerciseItem.reps_prescribed, 10);
+  const intensityStr = exerciseItem.intensity_prescription
+    ?? (exerciseItem.rir_target != null ? `${exerciseItem.rir_target} RIR` : "");
+  const targetRir = parseTargetRir(intensityStr, 2);
+  const anchorReps = toNumber(chosenAnchor.reps, 8);
+  const anchorRir = toNumber(chosenAnchor.rir, 2);
+
+  const normalized = normalizeAnchorLoad({
+    anchorLoad: toNumber(chosenAnchor.loadKg, 0),
+    anchorReps,
+    targetReps,
+    anchorRir,
+    targetRir,
+  });
+
+  const conversionFactor = (meta.family_conversion_factor || 1) * crossFamilyFactor;
+  const unilateralFactor = meta.is_unilateral ? (meta.unilateral_factor || 0.5) : 1;
+  const tempoFactor = parseTempoFactor(exerciseItem.tempo_prescribed);
+  const programFactor = computeProgramFactor(programType);
+  const rawValue = normalized * conversionFactor * unilateralFactor * tempoFactor * programFactor;
+  const increment = inferIncrement(meta, exerciseRow.exercise_id);
+  const roundedValue = floorToIncrement(rawValue, increment);
+
+  if (!(roundedValue > 0)) return null;
+
+  let confidenceScore = source === "same_family" ? 35 : 10;
+  confidenceScore += chosenAnchor.rir != null ? 15 : 5;
+  const confidence = confidenceBand(confidenceScore);
+
+  const reasoning = [];
+  if (source === "same_family") {
+    reasoning.push(`Estimated from your ${meta.estimation_family.replace(/_/g, " ")} anchor lift.`);
+  } else {
+    reasoning.push("Estimated from a related anchor family using conservative cross-family conversion.");
+  }
+  if (tempoFactor < 1) {
+    reasoning.push("Tempo prescription reduced the suggested load slightly.");
+  }
+
+  const unit = meta.unit || (meta.is_unilateral ? "kg_per_hand" : "kg");
+
+  return {
+    guideline_load_kg: roundedValue,
+    unit,
+    confidence,
+    source,
+    reasoning,
+    set_1_rule: buildSet1Rule(confidence),
+  };
+}
+
 export function makeGuidelineLoadService(db) {
   async function annotateExercisesWithGuidelineLoads({
     exercises = [],
@@ -126,7 +210,7 @@ export function makeGuidelineLoadService(db) {
 
     const profileResult = await db.query(
       `
-      SELECT fitness_rank, anchor_lifts_skipped, anchor_lifts_collected_at
+      SELECT fitness_rank, fitness_level_slug, anchor_lifts_skipped, anchor_lifts_collected_at
       FROM client_profile
       WHERE id = $1
       LIMIT 1
@@ -134,7 +218,7 @@ export function makeGuidelineLoadService(db) {
       [clientProfileId],
     );
     const profile = profileResult.rows[0];
-    if (!profile || Number(profile.fitness_rank ?? 0) < 1 || profile.anchor_lifts_skipped) {
+    if (!profile || Number(profile.fitness_rank ?? 0) < 1) {
       return baseExercises;
     }
 
@@ -143,7 +227,7 @@ export function makeGuidelineLoadService(db) {
       return baseExercises;
     }
 
-    const [targetResult, anchorResult, familyConfigResult] = await Promise.all([
+    const [targetResult, anchorResult, familyConfigResult, rankDefaultResult] = await Promise.all([
       db.query(
         `
         SELECT
@@ -175,6 +259,12 @@ export function makeGuidelineLoadService(db) {
         FROM exercise_load_estimation_family_config
         `,
       ),
+      db.query(
+        `
+        SELECT estimation_family, rank_default_loads_json, default_unit
+        FROM exercise_estimation_family_rank_defaults
+        `,
+      ),
     ]);
 
     const targets = new Map(
@@ -193,14 +283,17 @@ export function makeGuidelineLoadService(db) {
       meta: parseMetadata(row),
     }));
 
-    if (anchors.length === 0) {
-      return baseExercises;
-    }
-
     const familyFactors = new Map(
       familyConfigResult.rows.map((row) => [
         `${row.source_family}->${row.target_family}`,
         toNumber(row.cross_family_factor, 1),
+      ]),
+    );
+
+    const rankDefaults = new Map(
+      rankDefaultResult.rows.map((row) => [
+        row.estimation_family,
+        { loads: row.rank_default_loads_json ?? {}, unit: row.default_unit ?? "kg" },
       ]),
     );
 
@@ -253,6 +346,33 @@ export function makeGuidelineLoadService(db) {
       }
 
       if (!chosenAnchor || chosenAnchor.load_kg == null) {
+        const rankDefault = rankDefaults.get(target.estimation_family);
+        const validFitnessLevels = new Set(["beginner", "intermediate", "advanced", "elite"]);
+        const fitnessLevelSlug = validFitnessLevels.has(String(profile.fitness_level_slug ?? "").trim())
+          ? String(profile.fitness_level_slug).trim()
+          : "beginner";
+        if (rankDefault && rankDefault.loads[fitnessLevelSlug] != null) {
+          const defaultLoad = Number(rankDefault.loads[fitnessLevelSlug]);
+          const increment = inferIncrement(target, exercise.exercise_id);
+          const roundedValue = floorToIncrement(defaultLoad, increment);
+          if (roundedValue > 0) {
+            return {
+              ...exercise,
+              guideline_load: {
+                value: roundedValue,
+                unit: rankDefault.unit,
+                confidence: "low",
+                confidence_score: 5,
+                source: "rank_default",
+                reasoning: [
+                  `Estimated from conservative ${fitnessLevelSlug} defaults for the ${target.estimation_family.replace(/_/g, " ")} family.`,
+                  "Use set 1 to calibrate before continuing.",
+                ],
+                set_1_rule: buildSet1Rule("low"),
+              },
+            };
+          }
+        }
         return exercise;
       }
 

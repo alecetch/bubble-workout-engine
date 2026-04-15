@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useProgramOverview } from "../../api/hooks";
+import { useActivePrograms, useProgramOverview } from "../../api/hooks";
 import type { RootTabParamList } from "../../navigation/AppTabs";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
@@ -20,9 +20,12 @@ export function TodayScreen(): React.JSX.Element {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const userId = useSessionStore((state) => state.userId) ?? undefined;
   const activeProgramId = useSessionStore((state) => state.activeProgramId);
+  const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
   const hasNavigatedRef = useRef<string | null>(null);
+  const activeProgramsQuery = useActivePrograms();
+  const resolvedProgramId = activeProgramId ?? activeProgramsQuery.data?.primary_program_id ?? null;
 
-  const overviewQuery = useProgramOverview(activeProgramId ?? "", { userId });
+  const overviewQuery = useProgramOverview(resolvedProgramId ?? "", { userId });
   const calendarDays = overviewQuery.data?.calendarDays ?? [];
   const todayIso = useMemo(() => toLocalIsoDate(new Date()), []);
 
@@ -44,17 +47,27 @@ export function TodayScreen(): React.JSX.Element {
   );
 
   useEffect(() => {
-    if (!activeProgramId || !targetProgramDayId) return;
-    const navigationKey = `${activeProgramId}:${targetProgramDayId}`;
+    if (!resolvedProgramId || !targetProgramDayId) return;
+    const navigationKey = `${resolvedProgramId}:${targetProgramDayId}`;
     if (hasNavigatedRef.current === navigationKey) return;
     hasNavigatedRef.current = navigationKey;
+    setActiveProgramId(resolvedProgramId);
     navigation.navigate("ProgramsTab", {
       screen: "ProgramDay",
       params: { programDayId: targetProgramDayId },
     });
-  }, [activeProgramId, navigation, targetProgramDayId]);
+  }, [navigation, resolvedProgramId, setActiveProgramId, targetProgramDayId]);
 
-  if (!activeProgramId) {
+  if (!resolvedProgramId && activeProgramsQuery.isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.accent} size="large" />
+        <Text style={styles.subtitle}>Loading today&apos;s workout...</Text>
+      </View>
+    );
+  }
+
+  if (!resolvedProgramId) {
     return (
       <View style={styles.centered}>
         <Text style={styles.title}>No Active Program</Text>
@@ -88,7 +101,7 @@ export function TodayScreen(): React.JSX.Element {
           onPress={() =>
             navigation.navigate("ProgramsTab", {
               screen: "ProgramDashboard",
-              params: { programId: activeProgramId },
+              params: { programId: resolvedProgramId },
             })
           }
         >

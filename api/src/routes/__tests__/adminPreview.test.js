@@ -34,11 +34,12 @@ function makeReq(body) {
   return { body };
 }
 
-function stubDb(equipmentSlugs = [], exerciseRows = [], repRuleRows = []) {
+function stubDb(equipmentSlugs = [], exerciseRows = [], repRuleRows = [], familyFactorRows = []) {
   const query = async (sql, params = []) => {
     if (sql.includes("equipment_items")) return { rows: equipmentSlugs.map((s) => ({ exercise_slug: s })) };
     if (sql.includes("exercise_catalogue")) return { rows: exerciseRows };
     if (sql.includes("program_rep_rule")) return { rows: repRuleRows };
+    if (sql.includes("exercise_load_estimation_family_config")) return { rows: familyFactorRows };
     if (sql.includes("program_generation_config")) {
       return {
         rows: [{
@@ -205,6 +206,7 @@ test("buildPreviewInputs assembles shared preview inputs", async () => {
   assert.equal(buildInputsCalls.length, 1);
   assert.deepEqual(buildInputsCalls[0][1], exerciseRows);
   assert.deepEqual(result.inputs.allowed_exercise_ids, ["ex-1"]);
+  assert.ok(result.familyFactors instanceof Map);
 });
 
 test("shapeToCsvRows returns empty array for failed preview", () => {
@@ -593,7 +595,7 @@ test("createPreviewHandler reports synthetic mode when no real profile identifie
   assert.equal(res.body.preview_context.profile_id, null);
 });
 
-test("POST /preview/generate includes progression_preview when anchor_lifts are supplied", async () => {
+test("POST /preview/generate includes starting_loads when anchor_lifts match exercise family", async () => {
   const handler = createPreviewHandler({
     db: stubDb(["barbell"], [
       {
@@ -636,11 +638,146 @@ test("POST /preview/generate includes progression_preview when anchor_lifts are 
   }), res);
 
   assert.equal(res.statusCode, 200);
-  assert.ok(Array.isArray(res.body.progression_preview.strength));
-  assert.ok(res.body.progression_preview.strength.some((entry) => entry.outcome));
+  assert.ok(Array.isArray(res.body.starting_loads.strength));
+  const match = res.body.starting_loads.strength.find((entry) => entry.exercise_id === "bb_back_squat");
+  assert.ok(match);
+  assert.ok(match.guideline_load_kg > 0);
+  assert.equal(match.confidence, "medium");
+  assert.equal(match.source, "same_family");
+  assert.ok(Array.isArray(match.reasoning));
+  assert.ok(match.set_1_rule);
 });
 
-test("POST /preview/generate returns empty progression_preview when no anchor_lifts", async () => {
+test("POST /preview/generate skips cleanly when no matching anchor family exists", async () => {
+  const handler = createPreviewHandler({
+    db: stubDb(["barbell"], [
+      {
+        exercise_id: "bb_back_squat",
+        name: "Back Squat",
+        is_loadable: true,
+        equipment_items_slugs: ["barbell"],
+        load_estimation_metadata: { estimation_family: "squat" },
+      },
+    ]),
+    getAllowed: async () => ["bb_back_squat"],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({
+      program: {
+        weeks: [{
+          week_index: 1,
+          days: [{
+            day_index: 1,
+            segments: [{
+              purpose: "main",
+              segment_type: "single",
+              items: [{ ex_id: "bb_back_squat", reps_prescribed: "5", rir_target: 2 }],
+            }],
+          }],
+        }],
+      },
+      debug: {},
+    }),
+  });
+  const res = mockRes();
+
+  await handler(makeReq({
+    fitness_rank: 1,
+    equipment_preset: "commercial_gym",
+    program_types: ["strength"],
+    anchor_lifts: [{ estimationFamily: "hinge", loadKg: 100, reps: 5, rir: 2 }],
+  }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.starting_loads.strength[0].skipped_reason, "no_anchor_match");
+});
+
+test("POST /preview/generate marks non-loadable exercises as skipped in starting_loads", async () => {
+  const handler = createPreviewHandler({
+    db: stubDb(["mat"], [
+      {
+        exercise_id: "dead_bug",
+        name: "Dead Bug",
+        is_loadable: false,
+        equipment_items_slugs: [],
+        load_estimation_metadata: { estimation_family: "core" },
+      },
+    ]),
+    getAllowed: async () => ["dead_bug"],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({
+      program: {
+        weeks: [{
+          week_index: 1,
+          days: [{
+            day_index: 1,
+            segments: [{
+              purpose: "accessory",
+              segment_type: "single",
+              items: [{ ex_id: "dead_bug", reps_prescribed: "10-12", rir_target: 2 }],
+            }],
+          }],
+        }],
+      },
+      debug: {},
+    }),
+  });
+  const res = mockRes();
+
+  await handler(makeReq({
+    fitness_rank: 1,
+    equipment_preset: "commercial_gym",
+    program_types: ["strength"],
+    anchor_lifts: [{ estimationFamily: "squat", loadKg: 100, reps: 5, rir: 2 }],
+  }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.starting_loads.strength[0].skipped_reason, "not_loadable");
+});
+
+test("POST /preview/generate marks exercises without estimation family as skipped in starting_loads", async () => {
+  const handler = createPreviewHandler({
+    db: stubDb(["barbell"], [
+      {
+        exercise_id: "bb_back_squat",
+        name: "Back Squat",
+        is_loadable: true,
+        equipment_items_slugs: ["barbell"],
+        load_estimation_metadata: {},
+      },
+    ]),
+    getAllowed: async () => ["bb_back_squat"],
+    buildInputs: () => makeBuildInputsResult(),
+    pipeline: async () => ({
+      program: {
+        weeks: [{
+          week_index: 1,
+          days: [{
+            day_index: 1,
+            segments: [{
+              purpose: "main",
+              segment_type: "single",
+              items: [{ ex_id: "bb_back_squat", reps_prescribed: "5", rir_target: 2 }],
+            }],
+          }],
+        }],
+      },
+      debug: {},
+    }),
+  });
+  const res = mockRes();
+
+  await handler(makeReq({
+    fitness_rank: 1,
+    equipment_preset: "commercial_gym",
+    program_types: ["strength"],
+    anchor_lifts: [{ estimationFamily: "squat", loadKg: 100, reps: 5, rir: 2 }],
+  }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.starting_loads.strength[0].skipped_reason, "no_estimation_family");
+});
+
+test("POST /preview/generate returns empty starting_loads when no anchor_lifts", async () => {
   const handler = createPreviewHandler({
     db: stubDb(["barbell"], []),
     getAllowed: async () => [],
@@ -651,7 +788,7 @@ test("POST /preview/generate returns empty progression_preview when no anchor_li
   await handler(makeReq({ fitness_rank: 1, equipment_preset: "commercial_gym", program_types: ["strength"] }), res);
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body.progression_preview, {});
+  assert.deepEqual(res.body.starting_loads, {});
 });
 
 test("createExportHandler returns 400 for invalid field_set", async () => {

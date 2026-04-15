@@ -317,11 +317,18 @@ export async function searchExercises(q: string, userId?: string): Promise<Exerc
   return normalizeExerciseSearch(raw);
 }
 
-export async function fetchExerciseHistory(exerciseId: string, userId?: string): Promise<ExerciseHistoryResponse> {
+export async function fetchExerciseHistory(
+  exerciseId: string,
+  window: ExerciseHistoryWindow = "12w",
+  userId?: string,
+): Promise<ExerciseHistoryResponse> {
   const params = new URLSearchParams();
+  params.set("window", window);
+  params.set("include_decisions", "true");
   if (userId) params.set("user_id", userId);
-  const qs = params.toString();
-  const raw = await authGetJson<unknown>(`/api/v1/history/exercise/${encodeURIComponent(exerciseId)}${qs ? `?${qs}` : ""}`);
+  const raw = await authGetJson<unknown>(
+    `/api/v1/history/exercise/${encodeURIComponent(exerciseId)}?${params.toString()}`,
+  );
   return normalizeExerciseHistory(raw);
 }
 
@@ -329,6 +336,17 @@ export type SessionHistoryStrengthRegion = {
   exerciseName: string;
   bestE1rmKg: number;
   trendPct: number | null;
+};
+
+export type WeeklyVolumePoint = {
+  weekStart: string;
+  volumeLoad: number;
+};
+
+export type WeeklyVolumeByRegion8w = {
+  upper: WeeklyVolumePoint[];
+  lower: WeeklyVolumePoint[];
+  full: WeeklyVolumePoint[];
 };
 
 export type SessionHistoryMetrics = {
@@ -343,6 +361,7 @@ export type SessionHistoryMetrics = {
   strengthLower28d: SessionHistoryStrengthRegion | null;
   sessionsCount: number;
   programmesCompleted: number;
+  weeklyVolumeByRegion8w: WeeklyVolumeByRegion8w;
 };
 
 export type HeaviestLift = {
@@ -361,6 +380,8 @@ export type PrsFeedRow = {
   estimatedE1rmKg: number | null;
   date: string;
   region: string;
+  shareLabel: string | null;
+  milestoneType: string | null;
 };
 
 export type PrsFeedResponse = {
@@ -401,7 +422,24 @@ function normalizeSessionHistoryStrengthRegion(raw: unknown): SessionHistoryStre
   };
 }
 
-function normalizeSessionHistoryMetrics(raw: unknown): SessionHistoryMetrics {
+export function normalizeWeeklyVolumePoint(raw: unknown): WeeklyVolumePoint {
+  const row = asObject(raw);
+  return {
+    weekStart: toDateOnly(row.weekStart),
+    volumeLoad: asNumber(row.volumeLoad, 0),
+  };
+}
+
+export function normalizeWeeklyVolumeByRegion(raw: unknown): WeeklyVolumeByRegion8w {
+  const root = asObject(raw);
+  return {
+    upper: asArray(root.upper).map(normalizeWeeklyVolumePoint),
+    lower: asArray(root.lower).map(normalizeWeeklyVolumePoint),
+    full: asArray(root.full).map(normalizeWeeklyVolumePoint),
+  };
+}
+
+export function normalizeSessionHistoryMetrics(raw: unknown): SessionHistoryMetrics {
   const root = asObject(raw);
   const consistency28d = asObject(root.consistency28d);
   return {
@@ -416,6 +454,7 @@ function normalizeSessionHistoryMetrics(raw: unknown): SessionHistoryMetrics {
     strengthLower28d: normalizeSessionHistoryStrengthRegion(root.strengthLower28d),
     sessionsCount: asNumber(root.sessionsCount, 0),
     programmesCompleted: asNumber(root.programmesCompleted, 0),
+    weeklyVolumeByRegion8w: normalizeWeeklyVolumeByRegion(root.weeklyVolumeByRegion8w),
   };
 }
 
@@ -447,6 +486,8 @@ function normalizePrsFeed(raw: unknown): PrsFeedResponse {
       estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg),
       date: toDateOnly(row.date),
       region: asString(row.region),
+      shareLabel: asNullableString(row.shareLabel),
+      milestoneType: asNullableString(row.milestoneType),
     };
   });
 

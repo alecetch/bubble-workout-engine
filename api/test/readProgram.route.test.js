@@ -292,6 +292,7 @@ test("dayFull attaches guideline loads when service returns them", async () => {
           progression_outcome: null,
         }],
       },
+      { rowCount: 0, rows: [] },
     ]),
     guidelineLoadService,
   });
@@ -345,6 +346,7 @@ test("dayFull keeps returning 200 when guideline service throws", async () => {
           progression_outcome: null,
         }],
       },
+      { rowCount: 0, rows: [] },
     ]),
     guidelineLoadService: {
       async annotateExercisesWithGuidelineLoads() {
@@ -410,6 +412,7 @@ test("dayFull exposes progression recommendations when present on program exerci
           recommended_rest_seconds: null,
         }],
       },
+      { rowCount: 0, rows: [] },
     ]),
     guidelineLoadService: {
       async annotateExercisesWithGuidelineLoads({ exercises }) {

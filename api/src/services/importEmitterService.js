@@ -608,6 +608,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
         `
         INSERT INTO program_calendar_day (
           program_id,
+          user_id,
           program_week_id,
           program_day_id,
           week_number,
@@ -618,10 +619,11 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
           is_training_day,
           program_day_key
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,true,$9)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9,true,$10)
         `,
         [
           program_id,
+          payload.user_id,
           program_week_id,
           program_day_id,
           d.week_number,

@@ -19,6 +19,15 @@ import {
 import { getEquipmentItemsForPreset, type EquipmentItemsForPresetResponse } from "./equipmentPresets";
 import { getMe, linkClientProfileToMe, type MeResponse } from "./me";
 import {
+  fetchActivePrograms,
+  fetchCombinedCalendar,
+  fetchSessionsByDate,
+  setPrimaryProgram,
+  type ActiveProgramsResponse,
+  type CombinedCalendarResponse,
+  type SessionsByDateResponse,
+} from "./activePrograms";
+import {
   getProgramDayFull,
   getProgramOverview,
   markProgramDayComplete,
@@ -47,6 +56,7 @@ import {
   searchExercises,
   type ExerciseSummaryResponse,
   type ExerciseHistoryResponse,
+  type ExerciseHistoryWindow,
   type ExerciseSearchItem,
   type LoggedExerciseItem,
   type HistoryOverviewResponse,
@@ -75,6 +85,8 @@ export const queryKeys = {
     ["programDayFull", programDayId, opts.userId ?? null] as const,
   historyOverview: ["historyOverview"] as const,
   historyPrograms: ["historyPrograms"] as const,
+  activePrograms: ["activePrograms"] as const,
+  combinedCalendar: ["combinedCalendar"] as const,
   historyTimeline: ["historyTimeline"] as const,
   historyPersonalRecords: ["historyPersonalRecords"] as const,
   exerciseSearch: (q: string) => ["exerciseSearch", q] as const,
@@ -199,6 +211,48 @@ export function useProgramDayFull(
   });
 }
 
+export function useActivePrograms(): UseQueryResult<ActiveProgramsResponse> {
+  return useQuery({
+    queryKey: queryKeys.activePrograms,
+    queryFn: fetchActivePrograms,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useCombinedCalendar(from?: string, to?: string): UseQueryResult<CombinedCalendarResponse> {
+  return useQuery({
+    queryKey: [...queryKeys.combinedCalendar, from ?? null, to ?? null],
+    queryFn: () => fetchCombinedCalendar(from, to),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSessionsByDate(
+  scheduledDate: string | null,
+): UseQueryResult<SessionsByDateResponse> {
+  return useQuery({
+    queryKey: ["sessionsByDate", scheduledDate ?? null],
+    queryFn: () => fetchSessionsByDate(scheduledDate as string),
+    enabled: Boolean(scheduledDate),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSetPrimaryProgram(): UseMutationResult<
+  { ok: boolean; primary_program_id: string },
+  Error,
+  string
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setPrimaryProgram,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+    },
+  });
+}
+
 const HISTORY_STALE_MS = 5 * 60 * 1000; // 5 minutes — history changes only after workout completion
 
 export function useHistoryOverview(userId?: string): UseQueryResult<HistoryOverviewResponse> {
@@ -298,10 +352,14 @@ export function useExerciseSearch(q: string, userId?: string): UseQueryResult<Ex
   });
 }
 
-export function useExerciseHistory(exerciseId: string | null, userId?: string): UseQueryResult<ExerciseHistoryResponse> {
+export function useExerciseHistory(
+  exerciseId: string | null,
+  window: ExerciseHistoryWindow = "12w",
+  userId?: string,
+): UseQueryResult<ExerciseHistoryResponse> {
   return useQuery({
-    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), userId ?? null],
-    queryFn: () => fetchExerciseHistory(exerciseId as string, userId),
+    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), window, userId ?? null],
+    queryFn: () => fetchExerciseHistory(exerciseId as string, window, userId),
     enabled: Boolean(exerciseId),
     staleTime: HISTORY_STALE_MS,
   });
@@ -321,6 +379,9 @@ export function useMarkDayComplete(): UseMutationResult<
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPrograms });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPersonalRecords });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+      void queryClient.invalidateQueries({ queryKey: ["sessionsByDate"] });
       void queryClient.invalidateQueries({ queryKey: ["sessionHistoryMetrics"] });
       void queryClient.invalidateQueries({ queryKey: ["prsFeed"] });
     },

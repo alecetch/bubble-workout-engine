@@ -1,11 +1,18 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { ProgramHubScreen } from "../screens/program/ProgramHubScreen";
 import { ProgramDashboardScreen } from "../screens/program/ProgramDashboardScreen";
 import { ProgramDayScreen } from "../screens/program/ProgramDayScreen";
+import { ExerciseDecisionHistoryScreen } from "../screens/program/ExerciseDecisionHistoryScreen";
 
 export type ProgramsStackParamList = {
+  ProgramHub: undefined;
   ProgramDashboard: { programId?: string } | undefined;
   ProgramDay: { programDayId: string };
+  ExerciseDecisionHistory: {
+    programExerciseId: string;
+    exerciseName: string;
+  };
 };
 
 const Stack = createNativeStackNavigator<ProgramsStackParamList>();
@@ -13,13 +20,15 @@ const Stack = createNativeStackNavigator<ProgramsStackParamList>();
 export function ProgramsStackNavigator(): React.JSX.Element {
   return (
     <Stack.Navigator
-      initialRouteName="ProgramDashboard"
+      initialRouteName="ProgramHub"
       screenOptions={{
         headerShown: false,
       }}
     >
+      <Stack.Screen name="ProgramHub" component={ProgramHubScreen} />
       <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreen} />
       <Stack.Screen name="ProgramDay" component={ProgramDayScreen} />
+      <Stack.Screen name="ExerciseDecisionHistory" component={ExerciseDecisionHistoryScreen} />
     </Stack.Navigator>
   );
 }

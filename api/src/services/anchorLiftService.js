@@ -1,5 +1,18 @@
 import { RequestValidationError, safeString } from "../utils/validate.js";
 
+const SOURCE_PRIORITY = {
+  manual: 4,
+  manual_update: 4,
+  fitness_test: 3,
+  history_import: 2,
+  onboarding: 1,
+  skipped: 0,
+};
+
+function sourcePriority(src) {
+  return SOURCE_PRIORITY[src] ?? 1;
+}
+
 function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -18,6 +31,7 @@ function normalizeAnchorLiftInput(value) {
     rir: toNumber(value.rir),
     skipped: Boolean(value.skipped),
     source: safeString(value.source) || null,
+    sourceDetailJson: (value.sourceDetailJson ?? value.source_detail_json) || {},
   };
 }
 
@@ -80,6 +94,20 @@ export function makeAnchorLiftService(db) {
         }
       }
 
+      const incomingSource = lift.source || (lift.skipped ? "skipped" : "onboarding");
+      const incomingPriority = sourcePriority(incomingSource);
+      const existingR = await db.query(
+        `SELECT source
+         FROM client_anchor_lift
+         WHERE client_profile_id = $1
+           AND estimation_family = $2`,
+        [clientProfileId, estimationFamily],
+      );
+      const existingSource = existingR.rows[0]?.source ?? null;
+      if (existingSource && sourcePriority(existingSource) > incomingPriority) {
+        continue;
+      }
+
       const result = await db.query(
         `
         INSERT INTO client_anchor_lift (
@@ -90,9 +118,10 @@ export function makeAnchorLiftService(db) {
           reps,
           rir,
           skipped,
-          source
+          source,
+          source_detail_json
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (client_profile_id, estimation_family)
         DO UPDATE SET
           exercise_id = EXCLUDED.exercise_id,
@@ -101,6 +130,7 @@ export function makeAnchorLiftService(db) {
           rir = EXCLUDED.rir,
           skipped = EXCLUDED.skipped,
           source = EXCLUDED.source,
+          source_detail_json = EXCLUDED.source_detail_json,
           updated_at = now()
         RETURNING *
         `,
@@ -112,7 +142,8 @@ export function makeAnchorLiftService(db) {
           lift.skipped ? null : lift.reps,
           lift.skipped ? null : lift.rir,
           lift.skipped,
-          lift.source || (lift.skipped ? "skipped" : "onboarding"),
+          incomingSource,
+          JSON.stringify(lift.sourceDetailJson ?? {}),
         ],
       );
       saved.push(result.rows[0]);

@@ -135,6 +135,7 @@
     <a href="/admin/rep-rules">Rep Rules</a>
     <a href="/admin/observability">Observability</a>
     <a href="/admin/preview" class="active">Preview</a>
+    <a href="/admin/progression-sandbox">Progression Sandbox</a>
   </div>
   <div class="ctrl-group">
     <span class="ctrl-label">Token</span>
@@ -211,7 +212,7 @@
   </div>
   <div class="sep"></div>
   <details id="anchor-lifts-section" style="font-size:12px">
-    <summary style="cursor:pointer;color:var(--muted);padding:2px 0">Anchor lifts (for progression)</summary>
+    <summary style="cursor:pointer;color:var(--muted);padding:2px 0">Anchor lifts (starting load estimation)</summary>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 8px;margin-top:6px;min-width:420px">
       <span style="color:var(--muted)">Squat</span>
       <input type="number" data-family="squat" data-field="kg" placeholder="kg" style="width:64px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
@@ -508,43 +509,6 @@ function buildCompactPrescriptionText(item) {
   return base;
 }
 
-function buildProgressionKey(dayIndex, exerciseId) {
-  return `${String(dayIndex ?? "")}|${String(exerciseId ?? "")}`;
-}
-
-function buildProgressionMap(decisions) {
-  const map = new Map();
-  for (const decision of decisions ?? []) {
-    map.set(buildProgressionKey(decision.day, decision.exercise_id), decision);
-  }
-  return map;
-}
-
-function formatProgressionRecommendation(decision) {
-  if (!decision || !decision.outcome || decision.skipped_reason) return "";
-  if (decision.recommended_load_kg != null) return `${decision.recommended_load_kg} kg`;
-  if (decision.recommended_reps_target != null) return `${decision.recommended_reps_target} reps`;
-  return "";
-}
-
-function renderProgressionHint(decision) {
-  if (!decision) return "";
-  if (decision.skipped_reason) {
-    return `<div class="nar" style="color:var(--muted)"><span class="nar-k">progression:</span> ${esc(decision.skipped_reason)}</div>`;
-  }
-  if (!decision.outcome) return "";
-  const outcomeClass = decision.outcome === "increase_load" || decision.outcome === "increase_reps"
-    ? "ok"
-    : decision.outcome === "deload_local"
-      ? "err"
-      : "warn";
-  const recommendation = formatProgressionRecommendation(decision);
-  const summary = [
-    `<span class="${outcomeClass}" style="font-weight:600">${esc(decision.outcome)}</span>`,
-    recommendation ? `→ ${esc(recommendation)}` : "",
-  ].filter(Boolean).join(" ");
-  return `<div class="nar"><span class="nar-k">progression:</span> ${summary}</div>`;
-}
 
 function renderItem(item, nameMap, ctx) {
   const name = nameMap[String(item.ex_id)] ?? `#${item.ex_id}`;
@@ -566,14 +530,12 @@ function renderItem(item, nameMap, ctx) {
     parts.push(metaText);
   }
   const slotDebug = ctx?.slotDebugMap?.get(`${ctx?.day?.day_index}|${item.slot ?? ""}`) ?? null;
-  const progressionDecision = ctx?.progressionMap?.get(buildProgressionKey(ctx?.day?.day_index, item.ex_id)) ?? null;
   return `
     <div class="item">
       <div class="item-main">
         <span class="ex-name">${esc(name)}</span>
         <span class="ex-meta">${esc(parts.join(" · "))}</span>
       </div>
-      ${renderProgressionHint(progressionDecision)}
       ${showNarrationEnabled() ? `<div class="item-nar">${renderNar(item.narration)}</div>` : ""}
       ${renderSlotDebug(item, ctx?.seg, ctx?.day, slotDebug, ctx?.repRuleMap)}
     </div>`;
@@ -642,7 +604,7 @@ function renderWeek(wk, programNarration, nameMap, ctx) {
     </details>`;
 }
 
-function renderProgram(type, preview, meta, progressionData = []) {
+function renderProgram(type, preview, meta) {
   if (!preview.ok) {
     return `<div class="panel-err">Pipeline error for ${esc(type)}: ${esc(preview.error)}</div>`;
   }
@@ -657,7 +619,6 @@ function renderProgram(type, preview, meta, progressionData = []) {
   const narSource = debug?.step5?.source ?? "";
   const weeks = program.weeks ?? [];
   const slotDebugMap = buildSlotDebugMap(debug);
-  const progressionMap = buildProgressionMap(progressionData);
 
   const badges = [
     configKey ? `<span class="badge">${esc(configKey)}</span>` : "",
@@ -675,7 +636,7 @@ function renderProgram(type, preview, meta, progressionData = []) {
       <div class="prog-meta">${badges}</div>
     </div>
     <div class="weeks">
-      ${weeks.map(w => renderWeek(w, program.narration, nameMap, { slotDebugMap, repRuleMap, progressionMap })).join("")}
+      ${weeks.map(w => renderWeek(w, program.narration, nameMap, { slotDebugMap, repRuleMap })).join("")}
       ${!weeks.length ? `<div class="panel-empty">No weeks in program output</div>` : ""}
     </div>
     <details class="dbg">
@@ -686,73 +647,63 @@ function renderProgram(type, preview, meta, progressionData = []) {
 
 // ── Generate ──────────────────────────────────────────────────────────────────
 
-function renderProgressionTab(decisions) {
+function renderStartingLoadsTab(decisions) {
   if (!decisions || decisions.length === 0) {
-    return `<div class="panel-empty">No progression decisions — add anchor lifts above and regenerate.</div>`;
+    return `<div class="panel-empty">No starting load estimates — add anchor lifts above and regenerate.</div>`;
   }
-
   const rows = decisions.map(d => {
-    if (!d.outcome || d.skipped_reason) {
+    if (d.skipped_reason) {
       return `<tr>
-        <td>${esc(d.exercise_name)}</td>
-        <td>Day ${esc(String(d.day ?? ""))}</td>
-        <td>${esc(d.family ?? "—")}</td>
-        <td>—</td><td>—</td><td>—</td><td>—</td>
-        <td style="color:var(--muted);font-style:italic">${esc(d.skipped_reason ?? "")}</td>
+        <td>${esc(d.exercise_name ?? d.exercise_id)}</td>
+        <td>${esc(String(d.day ?? ""))}</td>
+        <td>${esc(d.purpose ?? "")}</td>
+        <td>${esc(d.prescribed_reps ?? "")}</td>
+        <td colspan="4" style="color:var(--muted);font-style:italic">${esc(d.skipped_reason)}</td>
       </tr>`;
     }
-    const outcomeClass = d.outcome === "increase_load" || d.outcome === "increase_reps" ? "ok"
-      : d.outcome === "deload_local" ? "err"
-      : "warn";
-    const recommendation = d.recommended_load_kg != null ? `${d.recommended_load_kg} kg`
-      : d.recommended_reps_target != null ? `${d.recommended_reps_target} reps`
-      : "—";
     return `<tr>
-      <td>${esc(d.exercise_name)}</td>
-      <td>Day ${esc(String(d.day ?? ""))}</td>
-      <td>${esc(d.family ?? "—")}</td>
+      <td>${esc(d.exercise_name ?? d.exercise_id)}</td>
+      <td>${esc(String(d.day ?? ""))}</td>
+      <td>${esc(d.purpose ?? "")}</td>
       <td>${esc(d.prescribed_reps ?? "")}</td>
-      <td>${esc(String(d.anchor_load_kg ?? "—"))}</td>
-      <td class="${outcomeClass}" style="font-weight:600">${esc(d.outcome)}</td>
-      <td>${esc(recommendation)}</td>
-      <td style="color:var(--muted);font-size:11px">${esc((d.reasons ?? []).join(" "))}</td>
+      <td><strong>${esc(String(d.guideline_load_kg ?? "—"))}</strong> ${esc(d.unit ?? "kg")}</td>
+      <td class="${d.confidence === "high" ? "ok" : d.confidence === "low" ? "err" : "warn"}">${esc(d.confidence ?? "")}</td>
+      <td>${esc(d.source ?? "")}</td>
+      <td style="font-size:11px;color:var(--muted)">${(d.reasoning ?? []).map(r => esc(r)).join(" ")}</td>
     </tr>`;
   });
-
   return `<table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead>
-      <tr style="border-bottom:2px solid var(--border);text-align:left">
+      <tr style="text-align:left;border-bottom:1px solid var(--border)">
         <th style="padding:4px 8px">Exercise</th>
-        <th>Day</th>
-        <th>Family</th>
-        <th>Prescribed</th>
-        <th>Anchor (kg)</th>
-        <th>Outcome</th>
-        <th>Recommended</th>
-        <th>Reason</th>
+        <th style="padding:4px 8px">Day</th>
+        <th style="padding:4px 8px">Purpose</th>
+        <th style="padding:4px 8px">Prescribed</th>
+        <th style="padding:4px 8px">Guideline Load</th>
+        <th style="padding:4px 8px">Confidence</th>
+        <th style="padding:4px 8px">Source</th>
+        <th style="padding:4px 8px">Reasoning</th>
       </tr>
     </thead>
-    <tbody>
-      ${rows.join("")}
-    </tbody>
+    <tbody>${rows.join("")}</tbody>
   </table>`;
 }
 
 function renderProgramWithTabs(type, preview, meta, progressionData) {
   if (!preview?.ok) {
-    return renderProgram(type, preview, meta, progressionData);
+    return renderProgram(type, preview, meta);
   }
   const panelId = `prog-panel-${type}-${Date.now()}`;
   return `
     <div class="sub-tabs">
       <button class="sub-tab active" data-panel="${panelId}-program">Program</button>
-      <button class="sub-tab" data-panel="${panelId}-progression">Progression</button>
+      <button class="sub-tab" data-panel="${panelId}-starting-loads">Starting Loads</button>
     </div>
     <div id="${panelId}-program" class="sub-panel active">
-      ${renderProgram(type, preview, meta, progressionData)}
+      ${renderProgram(type, preview, meta)}
     </div>
-    <div id="${panelId}-progression" class="sub-panel">
-      ${renderProgressionTab(progressionData)}
+    <div id="${panelId}-starting-loads" class="sub-panel">
+      ${renderStartingLoadsTab(progressionData)}
     </div>`;
 }
 
@@ -879,7 +830,7 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
     if (!preview) {
       panel.innerHTML = `<div class="panel-empty">Not generated</div>`;
     } else {
-      panel.innerHTML = renderProgramWithTabs(type, preview, meta, data.progression_preview?.[type] ?? []);
+      panel.innerHTML = renderProgramWithTabs(type, preview, meta, data.starting_loads?.[type] ?? []);
       wireSubTabs(panel);
     }
   }
@@ -970,7 +921,7 @@ function rerenderPreviewPanels() {
     if (!preview) {
       panel.innerHTML = `<div class="panel-empty">Not generated</div>`;
     } else {
-      panel.innerHTML = renderProgramWithTabs(type, preview, meta, data.progression_preview?.[type] ?? []);
+      panel.innerHTML = renderProgramWithTabs(type, preview, meta, data.starting_loads?.[type] ?? []);
       wireSubTabs(panel);
     }
   }
@@ -987,3 +938,4 @@ debugToggleEl.addEventListener("change", () => {
 </script>
 </body>
 </html>
+
