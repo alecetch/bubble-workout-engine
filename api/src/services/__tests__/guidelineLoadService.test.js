@@ -3,10 +3,16 @@ import assert from "node:assert/strict";
 import { makeGuidelineLoadService } from "../guidelineLoadService.js";
 
 function createGuidelineDb({
-  profile = { fitness_rank: 1, anchor_lifts_skipped: false, anchor_lifts_collected_at: null },
+  profile = {
+    fitness_rank: 1,
+    fitness_level_slug: "beginner",
+    anchor_lifts_skipped: false,
+    anchor_lifts_collected_at: null,
+  },
   targets = [],
   anchors = [],
   familyConfigs = [],
+  rankDefaults = [],
   history = [],
 } = {}) {
   return {
@@ -22,6 +28,9 @@ function createGuidelineDb({
       }
       if (sql.includes("FROM exercise_load_estimation_family_config")) {
         return { rows: familyConfigs };
+      }
+      if (sql.includes("FROM exercise_estimation_family_rank_defaults")) {
+        return { rows: rankDefaults };
       }
       if (sql.includes("FROM segment_exercise_log")) {
         return { rows: history };
@@ -229,4 +238,129 @@ test("conditioning program type applies a conservative factor", async () => {
   });
 
   assert.equal(exercise.guideline_load?.value, 87.5);
+});
+
+test("rank_default fallback is used when no anchor and no logged history exist", async () => {
+  const service = makeGuidelineLoadService(createGuidelineDb({
+    profile: {
+      fitness_rank: 2,
+      fitness_level_slug: "intermediate",
+      anchor_lifts_skipped: true,
+      anchor_lifts_collected_at: null,
+    },
+    targets: [
+      targetRow("bb_back_squat", {
+        estimation_family: "squat",
+        family_conversion_factor: 1,
+        rounding_increment_kg: 2.5,
+      }),
+    ],
+    rankDefaults: [
+      {
+        estimation_family: "squat",
+        rank_default_loads_json: { beginner: 40, intermediate: 80, advanced: 110, elite: 140 },
+        default_unit: "kg",
+      },
+    ],
+  }));
+
+  const [exercise] = await service.annotateExercisesWithGuidelineLoads({
+    exercises: [{
+      exercise_id: "bb_back_squat",
+      reps_prescribed: "5",
+      intensity_prescription: "2 RIR",
+      tempo: "2-0-1-0",
+      is_loadable: true,
+    }],
+    clientProfileId: "profile-1",
+    userId: "user-1",
+    programType: "strength",
+  });
+
+  assert.equal(exercise.guideline_load?.source, "rank_default");
+  assert.equal(exercise.guideline_load?.confidence, "low");
+  assert.equal(exercise.guideline_load?.value, 80);
+});
+
+test("anchor data still beats rank_default fallback", async () => {
+  const service = makeGuidelineLoadService(createGuidelineDb({
+    profile: {
+      fitness_rank: 2,
+      fitness_level_slug: "intermediate",
+      anchor_lifts_skipped: false,
+      anchor_lifts_collected_at: null,
+    },
+    targets: [
+      targetRow("bb_back_squat", {
+        estimation_family: "squat",
+        family_conversion_factor: 1,
+        rounding_increment_kg: 2.5,
+      }),
+    ],
+    anchors: [
+      anchorRow({ family: "squat", exerciseId: "bb_back_squat", loadKg: 100, reps: 5, rir: 2 }),
+    ],
+    rankDefaults: [
+      {
+        estimation_family: "squat",
+        rank_default_loads_json: { beginner: 40, intermediate: 80, advanced: 110, elite: 140 },
+        default_unit: "kg",
+      },
+    ],
+  }));
+
+  const [exercise] = await service.annotateExercisesWithGuidelineLoads({
+    exercises: [{
+      exercise_id: "bb_back_squat",
+      reps_prescribed: "5",
+      intensity_prescription: "2 RIR",
+      tempo: "2-0-1-0",
+      is_loadable: true,
+    }],
+    clientProfileId: "profile-1",
+    userId: "user-1",
+    programType: "strength",
+  });
+
+  assert.equal(exercise.guideline_load?.source, "same_exercise");
+  assert.equal(exercise.guideline_load?.value, 100);
+});
+
+test("non-estimatable exercises still return null even with rank defaults configured", async () => {
+  const service = makeGuidelineLoadService(createGuidelineDb({
+    profile: {
+      fitness_rank: 2,
+      fitness_level_slug: "intermediate",
+      anchor_lifts_skipped: false,
+      anchor_lifts_collected_at: null,
+    },
+    targets: [
+      targetRow("air_bike", {
+        estimation_family: "conditioning",
+        not_estimatable: true,
+      }),
+    ],
+    rankDefaults: [
+      {
+        estimation_family: "conditioning",
+        rank_default_loads_json: { beginner: 1, intermediate: 2 },
+        default_unit: "kg",
+      },
+    ],
+  }));
+
+  const [exercise] = await service.annotateExercisesWithGuidelineLoads({
+    exercises: [{
+      exercise_id: "air_bike",
+      reps_prescribed: "10",
+      intensity_prescription: "",
+      tempo: "",
+      is_loadable: true,
+    }],
+    clientProfileId: "profile-1",
+    userId: "user-1",
+    programType: "conditioning",
+  });
+
+  assert.equal(exercise.guideline_load, null);
 });

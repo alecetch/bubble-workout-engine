@@ -3,6 +3,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { makeGuidelineLoadService } from "../services/guidelineLoadService.js";
+import { makeNotificationService } from "../services/notificationService.js";
 import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -186,15 +187,18 @@ export function createReadProgramHandlers(options = pool) {
         db: options,
         guidelineLoadService: makeGuidelineLoadService(options),
         progressionDecisionService: makeProgressionDecisionService(options),
+        notificationService: makeNotificationService(options),
       }
     : {
         db: options?.db ?? pool,
         guidelineLoadService: options?.guidelineLoadService ?? makeGuidelineLoadService(options?.db ?? pool),
         progressionDecisionService: options?.progressionDecisionService ?? makeProgressionDecisionService(options?.db ?? pool),
+        notificationService: options?.notificationService ?? makeNotificationService(options?.db ?? pool),
       };
   const db = resolved.db;
   const guidelineLoadService = resolved.guidelineLoadService;
   const progressionDecisionService = resolved.progressionDecisionService;
+  const notificationService = resolved.notificationService;
 
   function toAuthUserId(req) {
     return safeString(req.auth?.user_id) || safeString(req.auth?.userId);
@@ -751,15 +755,45 @@ export function createReadProgramHandlers(options = pool) {
            WHERE pd.id = $1`,
           [program_day_id],
         )
-          .then((meta) => {
+          .then(async (meta) => {
             const row = meta?.rows?.[0];
             if (!row?.program_id) return null;
-            return progressionDecisionService.applyProgressionRecommendations({
+            const decisionResult = await progressionDecisionService.applyProgressionRecommendations({
               programId: row.program_id,
               userId: user_id,
               programType: row.program_type,
               fitnessRank: row.fitness_rank ?? 1,
             });
+
+            const hasDeload = decisionResult?.decisions?.some((decision) => decision.outcome === "deload_local");
+            if (!hasDeload) return decisionResult;
+
+            const prefR = await db.query(
+              `SELECT deload_notification_enabled
+               FROM notification_preference
+               WHERE user_id = $1`,
+              [user_id],
+            ).catch(() => ({ rows: [] }));
+            const deloadEnabled = prefR.rows[0]?.deload_notification_enabled ?? true;
+            if (!deloadEnabled) return decisionResult;
+
+            await notificationService.send({
+              userId: user_id,
+              title: "Easy week incoming",
+              body: "Your body showed signs of fatigue - your program has been adjusted to help you recover.",
+              data: { event: "deload", programDayId: program_day_id },
+              emailSubject: "Recovery week - your program adjusted",
+              emailText: [
+                "Easy week ahead.",
+                "",
+                "Based on your recent sessions, your program has been adjusted to reduce load on some exercises.",
+                "This is a normal and necessary part of long-term progress.",
+                "",
+                "Open the app to see what changed.",
+              ].join("\n"),
+            });
+
+            return decisionResult;
           })
           .catch((err) => {
             req.log?.warn(

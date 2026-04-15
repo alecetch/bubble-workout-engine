@@ -259,6 +259,24 @@ export function createGenerateProgramV2Handler({
       pg_user_id = userR.rows[0].id;
     }
 
+    const sameTypeR = await setupClient.query(
+      `SELECT id
+       FROM program
+       WHERE user_id = $1
+         AND program_type = $2
+         AND status = 'active'
+       LIMIT 1`,
+      [pg_user_id, programType],
+    );
+    if (sameTypeR.rowCount > 0) {
+      await setupClient.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        code: "conflict_active_program_same_type",
+        error: `You already have an active ${programType} program. Archive it before generating a new one.`,
+      });
+    }
+
     // Phase 1b: Refresh client_profile from the current API profile shape
     const injuryColumn = await resolveInjuryColumn(setupClient);
     await setupClient.query(
@@ -521,6 +539,54 @@ export function createGenerateProgramV2Handler({
     const programSummary = prgData.program_summary
       || `Auto-generated ${programType} program.`;
 
+    const conflictR = await db.query(
+      `
+      SELECT
+        pcd_new.scheduled_date::text AS conflict_date,
+        ep.program_type AS existing_type
+      FROM program_calendar_day pcd_new
+      JOIN program_calendar_day pcd_existing
+        ON pcd_existing.user_id = pcd_new.user_id
+       AND pcd_existing.scheduled_date = pcd_new.scheduled_date
+       AND pcd_existing.is_training_day = TRUE
+       AND pcd_existing.program_id <> pcd_new.program_id
+      JOIN program ep
+        ON ep.id = pcd_existing.program_id
+       AND ep.status = 'active'
+      WHERE pcd_new.program_id = $1
+        AND pcd_new.is_training_day = TRUE
+      ORDER BY pcd_new.scheduled_date
+      `,
+      [created_program_id],
+    );
+
+    if (conflictR.rowCount > 0) {
+      const conflictDates = [...new Set(conflictR.rows.map((row) => row.conflict_date))];
+      const existingTypes = [...new Set(conflictR.rows.map((row) => row.existing_type).filter(Boolean))];
+      await markFailed("schedule_conflict");
+      return res.status(409).json({
+        ok: false,
+        code: "schedule_conflict",
+        error: "The new program overlaps with existing active sessions.",
+        details: {
+          conflict_dates: conflictDates,
+          existing_program_types: existingTypes,
+          suggestion: "Choose different preferred days or archive an active program first.",
+        },
+      });
+    }
+
+    const hasPrimaryR = await db.query(
+      `SELECT id
+       FROM program
+       WHERE user_id = $1
+         AND status = 'active'
+         AND is_primary = TRUE
+       LIMIT 1`,
+      [pg_user_id],
+    );
+    const isPrimary = hasPrimaryR.rowCount === 0;
+
     const programUpdateAssignments = [
       "program_title = $1",
       "program_summary = $2",
@@ -534,6 +600,7 @@ export function createGenerateProgramV2Handler({
       "hero_media_id = $10",
       "status = 'active'",
       "is_ready = true",
+      "is_primary = $11",
       "updated_at = now()",
     ];
     const programUpdateParams = [
@@ -547,6 +614,7 @@ export function createGenerateProgramV2Handler({
       prgData.start_weekday ?? "",
       JSON.stringify(prgData.preferred_days_sorted_json ?? []),
       pipelineOut?.program?.hero_media_id ?? null,
+      isPrimary,
     ];
 
     if (hasProgramTypeColumn) {

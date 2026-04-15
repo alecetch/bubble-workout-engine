@@ -17,8 +17,12 @@ import { createHistoryOverviewHandler, historyOverviewRouter } from "./src/route
 import { createHistoryPersonalRecordsHandler, historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
 import { createHistoryExerciseHandler, historyExerciseRouter } from "./src/routes/historyExercise.js";
 import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.js";
+import { activeProgramsRouter } from "./src/routes/activePrograms.js";
+import { notificationPreferencesRouter } from "./src/routes/notificationPreferences.js";
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
+import { workoutRemindersRouter } from "./src/routes/workoutReminders.js";
+import { trainingHistoryImportRouter } from "./src/routes/trainingHistoryImport.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
@@ -29,15 +33,17 @@ import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
 import { adminProgressionSandboxRouter } from "./src/routes/adminProgressionSandbox.js";
+import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { authRouter } from "./src/routes/auth.js";
+import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
 import { requireAuth } from "./src/middleware/requireAuth.js";
-import { adminOnly, userAuth } from "./src/middleware/chains.js";
+import { adminOnly, internalApi, userAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
@@ -646,14 +652,20 @@ app.patch("/users/me", requireAuth, handleUsersMe);
 
 // Auth routes must be mounted before any /api router that applies requireAuth globally.
 app.use("/api/auth", authRouter);
+app.use("/api", notificationPreferencesRouter);
+app.use("/api", activeProgramsRouter);
+app.use("/api/coach", coachPortalRouter);
+app.use("/api/import", trainingHistoryImportRouter);
 
 // Mount routers.
 // IMPORTANT: /api/admin mounts must come before the broad /api mounts below.
 // Broad /api routers (segmentLog, readProgram, etc.) apply router-level requireAuth
 // to every /api/* request that reaches them, which intercepts /api/admin/* calls
 // before they can reach the internal-token–guarded admin routers.
+app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
+app.use("/api", ...internalApi, workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
 app.use("/api", programExerciseRouter);

@@ -210,7 +210,7 @@ export function makeGuidelineLoadService(db) {
 
     const profileResult = await db.query(
       `
-      SELECT fitness_rank, anchor_lifts_skipped, anchor_lifts_collected_at
+      SELECT fitness_rank, fitness_level_slug, anchor_lifts_skipped, anchor_lifts_collected_at
       FROM client_profile
       WHERE id = $1
       LIMIT 1
@@ -218,7 +218,7 @@ export function makeGuidelineLoadService(db) {
       [clientProfileId],
     );
     const profile = profileResult.rows[0];
-    if (!profile || Number(profile.fitness_rank ?? 0) < 1 || profile.anchor_lifts_skipped) {
+    if (!profile || Number(profile.fitness_rank ?? 0) < 1) {
       return baseExercises;
     }
 
@@ -227,7 +227,7 @@ export function makeGuidelineLoadService(db) {
       return baseExercises;
     }
 
-    const [targetResult, anchorResult, familyConfigResult] = await Promise.all([
+    const [targetResult, anchorResult, familyConfigResult, rankDefaultResult] = await Promise.all([
       db.query(
         `
         SELECT
@@ -259,6 +259,12 @@ export function makeGuidelineLoadService(db) {
         FROM exercise_load_estimation_family_config
         `,
       ),
+      db.query(
+        `
+        SELECT estimation_family, rank_default_loads_json, default_unit
+        FROM exercise_estimation_family_rank_defaults
+        `,
+      ),
     ]);
 
     const targets = new Map(
@@ -277,14 +283,17 @@ export function makeGuidelineLoadService(db) {
       meta: parseMetadata(row),
     }));
 
-    if (anchors.length === 0) {
-      return baseExercises;
-    }
-
     const familyFactors = new Map(
       familyConfigResult.rows.map((row) => [
         `${row.source_family}->${row.target_family}`,
         toNumber(row.cross_family_factor, 1),
+      ]),
+    );
+
+    const rankDefaults = new Map(
+      rankDefaultResult.rows.map((row) => [
+        row.estimation_family,
+        { loads: row.rank_default_loads_json ?? {}, unit: row.default_unit ?? "kg" },
       ]),
     );
 
@@ -337,6 +346,33 @@ export function makeGuidelineLoadService(db) {
       }
 
       if (!chosenAnchor || chosenAnchor.load_kg == null) {
+        const rankDefault = rankDefaults.get(target.estimation_family);
+        const validFitnessLevels = new Set(["beginner", "intermediate", "advanced", "elite"]);
+        const fitnessLevelSlug = validFitnessLevels.has(String(profile.fitness_level_slug ?? "").trim())
+          ? String(profile.fitness_level_slug).trim()
+          : "beginner";
+        if (rankDefault && rankDefault.loads[fitnessLevelSlug] != null) {
+          const defaultLoad = Number(rankDefault.loads[fitnessLevelSlug]);
+          const increment = inferIncrement(target, exercise.exercise_id);
+          const roundedValue = floorToIncrement(defaultLoad, increment);
+          if (roundedValue > 0) {
+            return {
+              ...exercise,
+              guideline_load: {
+                value: roundedValue,
+                unit: rankDefault.unit,
+                confidence: "low",
+                confidence_score: 5,
+                source: "rank_default",
+                reasoning: [
+                  `Estimated from conservative ${fitnessLevelSlug} defaults for the ${target.estimation_family.replace(/_/g, " ")} family.`,
+                  "Use set 1 to calibrate before continuing.",
+                ],
+                set_1_rule: buildSet1Rule("low"),
+              },
+            };
+          }
+        }
         return exercise;
       }
 

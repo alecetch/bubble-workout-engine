@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { makeNotificationService } from "../services/notificationService.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
@@ -45,7 +46,7 @@ export function compute1rmKg(weightKg, repsCompleted, region) {
   return Number(epley.toFixed(2));
 }
 
-export function createSegmentLogHandlers(db = pool) {
+export function createSegmentLogHandlers(db = pool, notificationService = null) {
   function resolveUserId(req) {
     const userId = safeString(req.auth?.user_id);
     if (userId) return userId;
@@ -175,6 +176,109 @@ export function createSegmentLogHandlers(db = pool) {
         }
 
         await client.query("COMMIT");
+        if (notificationService) {
+          const exerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
+          (async () => {
+            try {
+              const prefR = await db.query(
+                `SELECT pr_notification_enabled
+                 FROM notification_preference
+                 WHERE user_id = $1`,
+                [user_id],
+              );
+              const prEnabled = prefR.rows[0]?.pr_notification_enabled ?? true;
+              if (!prEnabled) return;
+
+              const prR = await db.query(
+                `
+                WITH new_rows AS (
+                  SELECT
+                    pe.exercise_id,
+                    COALESCE(ec.name, pe.exercise_name) AS exercise_name,
+                    MAX(sel.estimated_1rm_kg) AS new_e1rm
+                  FROM segment_exercise_log sel
+                  JOIN program_exercise pe
+                    ON pe.id = sel.program_exercise_id
+                  LEFT JOIN exercise_catalogue ec
+                    ON ec.exercise_id = pe.exercise_id
+                  WHERE sel.user_id = $1
+                    AND sel.program_day_id = $2
+                    AND sel.program_exercise_id = ANY($3::uuid[])
+                    AND sel.is_draft = FALSE
+                    AND sel.estimated_1rm_kg IS NOT NULL
+                  GROUP BY pe.exercise_id, COALESCE(ec.name, pe.exercise_name)
+                ),
+                prev_best AS (
+                  SELECT
+                    pe.exercise_id,
+                    MAX(sel.estimated_1rm_kg) AS prev_e1rm
+                  FROM segment_exercise_log sel
+                  JOIN program_exercise pe
+                    ON pe.id = sel.program_exercise_id
+                  JOIN program p
+                    ON p.id = sel.program_id
+                  WHERE p.user_id = $1
+                    AND sel.program_day_id <> $2
+                    AND sel.is_draft = FALSE
+                    AND sel.estimated_1rm_kg IS NOT NULL
+                  GROUP BY pe.exercise_id
+                )
+                SELECT
+                  nr.exercise_id,
+                  nr.exercise_name,
+                  nr.new_e1rm,
+                  pb.prev_e1rm
+                FROM new_rows nr
+                LEFT JOIN prev_best pb
+                  USING (exercise_id)
+                WHERE nr.new_e1rm > COALESCE(pb.prev_e1rm, 0)
+                `,
+                [user_id, program_day_id, exerciseIds],
+              );
+
+              const prs = prR.rows;
+              if (prs.length === 0) return;
+
+              if (prs.length === 1) {
+                const pr = prs[0];
+                const e1rm = Number(pr.new_e1rm).toFixed(1);
+                await notificationService.send({
+                  userId: user_id,
+                  title: "New PR!",
+                  body: `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exercise_name}.`,
+                  data: { event: "pr", exerciseId: pr.exercise_id, e1rmKg: Number(pr.new_e1rm) },
+                  emailSubject: `New PR - ${pr.exercise_name}`,
+                  emailText: [
+                    "Personal record!",
+                    "",
+                    `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exercise_name}.`,
+                    "",
+                    "Keep it up.",
+                  ].join("\n"),
+                });
+                return;
+              }
+
+              await notificationService.send({
+                userId: user_id,
+                title: "New PRs!",
+                body: `You set ${prs.length} personal records this session.`,
+                data: { event: "pr_multi", count: prs.length },
+                emailSubject: `${prs.length} new PRs this session`,
+                emailText: [
+                  "Personal records!",
+                  "",
+                  `You set ${prs.length} PRs this session:`,
+                  ...prs.map((pr) => `  * ${pr.exercise_name}: ${Number(pr.new_e1rm).toFixed(1)} kg`),
+                  "",
+                  "Keep it up.",
+                ].join("\n"),
+              });
+            } catch (notificationErr) {
+              console.warn("[segmentLog] PR notification error:", notificationErr?.message);
+            }
+          })();
+        }
         return res.json({ saved: rows.length });
       } catch (err) {
         try {
@@ -201,7 +305,7 @@ export function createSegmentLogHandlers(db = pool) {
   return { getSegmentLog, postSegmentLog };
 }
 
-const handlers = createSegmentLogHandlers();
+const handlers = createSegmentLogHandlers(pool, makeNotificationService(pool));
 segmentLogRouter.use(requireAuth);
 
 segmentLogRouter.get("/segment-log", handlers.getSegmentLog);

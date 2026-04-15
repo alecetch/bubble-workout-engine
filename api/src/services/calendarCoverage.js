@@ -26,6 +26,7 @@ export async function ensureProgramCalendarCoverage(pool, programId) {
     `
     INSERT INTO program_calendar_day (
       program_id,
+      user_id,
       program_week_id,
       program_day_id,
       week_number,
@@ -38,6 +39,7 @@ export async function ensureProgramCalendarCoverage(pool, programId) {
     )
     SELECT
       p.id                                                              AS program_id,
+      p.user_id                                                         AS user_id,
       NULL::uuid                                                        AS program_week_id,
       NULL::uuid                                                        AS program_day_id,
       (gs.n / 7 + 1)::int                                              AS week_number,

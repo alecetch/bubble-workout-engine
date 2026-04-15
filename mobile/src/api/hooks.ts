@@ -19,6 +19,15 @@ import {
 import { getEquipmentItemsForPreset, type EquipmentItemsForPresetResponse } from "./equipmentPresets";
 import { getMe, linkClientProfileToMe, type MeResponse } from "./me";
 import {
+  fetchActivePrograms,
+  fetchCombinedCalendar,
+  fetchSessionsByDate,
+  setPrimaryProgram,
+  type ActiveProgramsResponse,
+  type CombinedCalendarResponse,
+  type SessionsByDateResponse,
+} from "./activePrograms";
+import {
   getProgramDayFull,
   getProgramOverview,
   markProgramDayComplete,
@@ -76,6 +85,8 @@ export const queryKeys = {
     ["programDayFull", programDayId, opts.userId ?? null] as const,
   historyOverview: ["historyOverview"] as const,
   historyPrograms: ["historyPrograms"] as const,
+  activePrograms: ["activePrograms"] as const,
+  combinedCalendar: ["combinedCalendar"] as const,
   historyTimeline: ["historyTimeline"] as const,
   historyPersonalRecords: ["historyPersonalRecords"] as const,
   exerciseSearch: (q: string) => ["exerciseSearch", q] as const,
@@ -197,6 +208,48 @@ export function useProgramDayFull(
     queryKey: queryKeys.programDayFull(programDayId, opts),
     queryFn: () => getProgramDayFull(programDayId, opts),
     enabled: Boolean(programDayId && opts.userId),
+  });
+}
+
+export function useActivePrograms(): UseQueryResult<ActiveProgramsResponse> {
+  return useQuery({
+    queryKey: queryKeys.activePrograms,
+    queryFn: fetchActivePrograms,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useCombinedCalendar(from?: string, to?: string): UseQueryResult<CombinedCalendarResponse> {
+  return useQuery({
+    queryKey: [...queryKeys.combinedCalendar, from ?? null, to ?? null],
+    queryFn: () => fetchCombinedCalendar(from, to),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSessionsByDate(
+  scheduledDate: string | null,
+): UseQueryResult<SessionsByDateResponse> {
+  return useQuery({
+    queryKey: ["sessionsByDate", scheduledDate ?? null],
+    queryFn: () => fetchSessionsByDate(scheduledDate as string),
+    enabled: Boolean(scheduledDate),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSetPrimaryProgram(): UseMutationResult<
+  { ok: boolean; primary_program_id: string },
+  Error,
+  string
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setPrimaryProgram,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+    },
   });
 }
 
@@ -326,6 +379,9 @@ export function useMarkDayComplete(): UseMutationResult<
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPrograms });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPersonalRecords });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+      void queryClient.invalidateQueries({ queryKey: ["sessionsByDate"] });
       void queryClient.invalidateQueries({ queryKey: ["sessionHistoryMetrics"] });
       void queryClient.invalidateQueries({ queryKey: ["prsFeed"] });
     },

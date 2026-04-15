@@ -39,7 +39,14 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const programId = route.params?.programId ?? null;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
+  const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
   const userId = sessionUserId ?? onboardingUserId ?? undefined;
+
+  useEffect(() => {
+    if (programId) {
+      setActiveProgramId(programId);
+    }
+  }, [programId, setActiveProgramId]);
 
   // ── UI state (user interactions only) ────────────────────────────────────
   //

@@ -11,6 +11,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useProgramDayFull, useMarkDayComplete } from "../../api/hooks";
 import { HeroHeader } from "../../components/program/HeroHeader";
 import { LogSegmentModal } from "../../components/program/LogSegmentModal";
+import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
+import { computeSessionStatsFromSegments } from "../../components/program/sessionUxLogic";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { hapticLight, hapticMedium } from "../../components/interaction/haptics";
@@ -18,6 +20,7 @@ import type { OnboardingStackParamList } from "../../navigation/OnboardingNaviga
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { useTimerStore } from "../../state/timer/useTimerStore";
 import {
   getSegmentLog,
   getWorkoutComplete,
@@ -45,6 +48,8 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [summaryVisible, setSummaryVisible] = useState(false);
+  const [prHits] = useState<string[]>([]);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
   const nav = navigation as unknown as NativeStackNavigationProp<ProgramsStackParamList>;
 
@@ -104,11 +109,15 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   );
 
   const handleCompleteWorkout = async (): Promise<void> => {
+    await hapticMedium();
+    setSummaryVisible(true);
+  };
+
+  const handleSummaryDismiss = async (): Promise<void> => {
+    setSummaryVisible(false);
     await setWorkoutComplete(programDayId, true);
     setWorkoutCompleteState(true);
-    setConfirmationText("Workout marked complete.");
     markDayComplete.mutate({ programDayId, isCompleted: true, userId });
-    await hapticMedium();
   };
 
   const handleUndoComplete = async (): Promise<void> => {
@@ -140,6 +149,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }
 
   const day = dayQuery.data.day;
+
+  function computeSessionStats(): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
+    // TODO: replace this estimate with exact logged set data if we later lift save payloads into screen state.
+    return computeSessionStatsFromSegments(orderedSegments, segmentLogs);
+  }
 
   return (
     <View style={styles.root}>
@@ -203,10 +217,23 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             setSegmentLogs((current) => ({ ...current, [activeSegment.id]: entry }));
             // Write to AsyncStorage so the isLogged badge persists after app restart.
             void setSegmentLog(programDayId, activeSegment.id, {});
+            const maxRest = Math.max(
+              0,
+              ...(activeSegment.exercises ?? []).map((ex) => (ex.restSeconds as number | null | undefined) ?? 0),
+            );
+            if (maxRest > 0) {
+              useTimerStore.getState().startRest(activeSegment.id);
+            }
           }
           setActiveSegmentId(null);
           void hapticLight();
         }}
+      />
+      <SessionSummaryModal
+        visible={summaryVisible}
+        {...computeSessionStats()}
+        prHits={prHits}
+        onDismiss={() => { void handleSummaryDismiss(); }}
       />
     </View>
   );
