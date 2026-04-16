@@ -3,6 +3,8 @@ import {
 } from "./programGenerationConfig.js";
 
 function toNumber(value, fallback = null) {
+  if (value == null) return fallback;
+  if (typeof value === "string" && value.trim() === "") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -302,6 +304,7 @@ function buildDecision({
       outcome = "increase_reps";
       primaryLever = "reps";
       recommendedRepsTarget = targetHigh;
+      recommendedLoadKg = baselineLoad;
       reasons.push("Load increase is not yet justified, but recent performance suggests a rep target increase is appropriate.");
     } else {
       reasons.push("Recent exact history does not yet justify a progression change.");
@@ -317,6 +320,7 @@ function buildDecision({
       outcome = "increase_reps";
       primaryLever = "reps";
       recommendedRepsTarget = Math.min(targetHigh, latestReps + 1);
+      recommendedLoadKg = baselineLoad;
       reasons.push("Recent exact history supports pushing reps upward within the current range before increasing load.");
     } else {
       reasons.push("Recent exact history suggests the current prescription should hold for now.");
@@ -372,6 +376,7 @@ export function makeProgressionDecisionService(db) {
     userId,
     programType,
     fitnessRank = 1,
+    completedProgramDayId = null,
   }) {
     if (!programId || !userId || !programType) {
       return { decisions: [], updated: 0 };
@@ -416,6 +421,11 @@ export function makeProgressionDecisionService(db) {
       return { decisions: [], updated: 0 };
     }
 
+    const completedGlobalDayIndex =
+      completedProgramDayId == null
+        ? null
+        : rows.find((row) => row.program_day_id === completedProgramDayId)?.global_day_index ?? null;
+
     const exerciseIds = [...new Set(rows.map((row) => row.exercise_id).filter(Boolean))];
     const historyResult = await db.query(
       `
@@ -449,6 +459,14 @@ export function makeProgressionDecisionService(db) {
     }
 
     const decisionByKey = new Map();
+    const targetByKey = new Map();
+
+    for (const row of rows) {
+      const key = `${row.exercise_id}::${row.purpose}`;
+      if (!targetByKey.has(key)) targetByKey.set(key, []);
+      targetByKey.get(key).push(row);
+    }
+
     for (const row of rows) {
       const key = `${row.exercise_id}::${row.purpose}`;
       if (decisionByKey.has(key)) continue;
@@ -464,10 +482,18 @@ export function makeProgressionDecisionService(db) {
         config,
       });
       if (decision) {
+        const candidateTargets = targetByKey.get(key) ?? [];
+        const targetRows =
+          completedGlobalDayIndex == null
+            ? candidateTargets
+            : candidateTargets.filter((candidate) => candidate.global_day_index > completedGlobalDayIndex);
+        const primaryTargetRow = targetRows[0] ?? null;
+        if (!primaryTargetRow) continue;
         decisionByKey.set(key, {
           ...decision,
-          target_program_exercise_id: row.program_exercise_id,
-          target_program_day_id: row.program_day_id,
+          target_program_exercise_ids: targetRows.map((target) => target.program_exercise_id),
+          target_program_exercise_id: primaryTargetRow.program_exercise_id,
+          target_program_day_id: primaryTargetRow.program_day_id,
         });
       }
     }
@@ -585,10 +611,10 @@ export function makeProgressionDecisionService(db) {
           recommended_reps_target = $8,
           recommended_sets = $9,
           recommended_rest_seconds = $10
-        WHERE id = $1
+        WHERE id = ANY($1::uuid[])
         `,
         [
-          decision.target_program_exercise_id,
+          decision.target_program_exercise_ids,
           decision.outcome,
           decision.primary_lever,
           decision.confidence,

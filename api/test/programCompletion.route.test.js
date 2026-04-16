@@ -4,7 +4,9 @@ import {
   buildReEnrollmentOptions,
   confidenceLabel,
   createProgramCompletionHandlers,
+  normalizeLifecycleStatus,
   suggestNextRank,
+  toEndCheckPayload,
 } from "../src/routes/programCompletion.js";
 
 function mockRes() {
@@ -62,6 +64,38 @@ test("buildReEnrollmentOptions always includes same_settings and change_goals", 
   ]);
 });
 
+test("normalizeLifecycleStatus collapses completed vs in-progress values", () => {
+  assert.equal(normalizeLifecycleStatus("completed"), "completed");
+  assert.equal(normalizeLifecycleStatus("active"), "in_progress");
+  assert.equal(normalizeLifecycleStatus(null), "in_progress");
+});
+
+test("toEndCheckPayload derives can_complete_with_skips only at end of block", () => {
+  assert.deepEqual(
+    toEndCheckPayload({
+      program_id: VALID_UUID,
+      program_title: "Block",
+      lifecycle_status: "active",
+      completed_mode: null,
+      total_days: 8,
+      completed_days: 6,
+      missed_workouts_count: 2,
+      is_last_scheduled_day_complete: true,
+    }),
+    {
+      program_id: VALID_UUID,
+      program_title: "Block",
+      lifecycle_status: "in_progress",
+      completed_mode: null,
+      total_days: 8,
+      completed_days: 6,
+      missed_workouts_count: 2,
+      is_last_scheduled_day_complete: true,
+      can_complete_with_skips: true,
+    },
+  );
+});
+
 test("completionSummary returns shaped response for owned program", async () => {
   const handlers = createProgramCompletionHandlers(mockDb([
     {
@@ -73,6 +107,11 @@ test("completionSummary returns shaped response for owned program", async () => 
         weeks_count: 12,
         total_days: 3,
         completed_days: 2,
+        missed_workouts_count: 1,
+        is_last_scheduled_day_complete: false,
+        lifecycle_status: "active",
+        completed_mode: null,
+        completed_at: null,
         completion_ratio: 2 / 3,
         exercises_progressed: 1,
         exercises_tracked: 2,
@@ -110,6 +149,9 @@ test("completionSummary returns shaped response for owned program", async () => 
   assert.equal(res.body?.program_type, "strength");
   assert.equal(res.body?.days_completed, 2);
   assert.equal(res.body?.days_total, 3);
+  assert.equal(res.body?.missed_workouts_count, 1);
+  assert.equal(res.body?.lifecycle_status, "in_progress");
+  assert.equal(res.body?.completed_mode, null);
   assert.equal(res.body?.completion_ratio, 2 / 3);
   assert.equal(res.body?.exercises_progressed, 1);
   assert.equal(res.body?.exercises_tracked, 2);
@@ -138,6 +180,11 @@ test("completionSummary suggests next rank when progression is strong enough", a
         weeks_count: 8,
         total_days: 6,
         completed_days: 6,
+        missed_workouts_count: 0,
+        is_last_scheduled_day_complete: true,
+        lifecycle_status: "completed",
+        completed_mode: "as_scheduled",
+        completed_at: "2026-04-16T12:00:00.000Z",
         completion_ratio: 1,
         exercises_progressed: 4,
         exercises_tracked: 6,
@@ -179,6 +226,11 @@ test("completionSummary handles null program_type gracefully", async () => {
         weeks_count: 4,
         total_days: 3,
         completed_days: 2,
+        missed_workouts_count: 1,
+        is_last_scheduled_day_complete: false,
+        lifecycle_status: "active",
+        completed_mode: null,
+        completed_at: null,
         completion_ratio: 2 / 3,
         exercises_progressed: 7,
         exercises_tracked: 10,
@@ -223,6 +275,108 @@ test("completionSummary returns 404 for unknown program", async () => {
 
   assert.equal(res.statusCode, 404);
   assert.equal(res.body?.code, "not_found");
+});
+
+test("endCheck returns skip-aware end-of-block state", async () => {
+  const handlers = createProgramCompletionHandlers(mockDb([
+    {
+      rowCount: 1,
+      rows: [{
+        program_id: VALID_UUID,
+        program_title: "Block",
+        lifecycle_status: "active",
+        completed_mode: null,
+        total_days: 8,
+        completed_days: 6,
+        missed_workouts_count: 2,
+        is_last_scheduled_day_complete: true,
+      }],
+    },
+  ]));
+  const req = {
+    request_id: "t",
+    params: { program_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.endCheck(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.can_complete_with_skips, true);
+  assert.equal(res.body?.missed_workouts_count, 2);
+  assert.equal(res.body?.lifecycle_status, "in_progress");
+});
+
+test("completeProgram accepts with_skips after the final scheduled day is complete", async () => {
+  const calls = [];
+  const handlers = createProgramCompletionHandlers({
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (calls.length === 1) {
+        return {
+          rowCount: 1,
+          rows: [{
+            program_id: VALID_UUID,
+            program_title: "Block",
+            lifecycle_status: "active",
+            completed_mode: null,
+            total_days: 8,
+            completed_days: 6,
+            missed_workouts_count: 2,
+            is_last_scheduled_day_complete: true,
+          }],
+        };
+      }
+      if (calls.length === 2) {
+        return { rowCount: 1, rows: [] };
+      }
+      throw new Error("Unexpected DB call");
+    },
+  });
+  const req = {
+    request_id: "t",
+    params: { program_id: VALID_UUID },
+    body: { mode: "with_skips" },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.completeProgram(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.completed_mode, "with_skips");
+  assert.match(calls[1].sql, /status = 'completed'/);
+});
+
+test("completeProgram rejects with_skips before the final scheduled day is complete", async () => {
+  const handlers = createProgramCompletionHandlers(mockDb([
+    {
+      rowCount: 1,
+      rows: [{
+        program_id: VALID_UUID,
+        program_title: "Block",
+        lifecycle_status: "active",
+        completed_mode: null,
+        total_days: 8,
+        completed_days: 6,
+        missed_workouts_count: 2,
+        is_last_scheduled_day_complete: false,
+      }],
+    },
+  ]));
+  const req = {
+    request_id: "t",
+    params: { program_id: VALID_UUID },
+    body: { mode: "with_skips" },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.completeProgram(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body?.code, "validation_error");
 });
 
 test("completionSummary returns 400 for invalid UUID", async () => {

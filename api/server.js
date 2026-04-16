@@ -43,7 +43,7 @@ import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
 import { requireAuth } from "./src/middleware/requireAuth.js";
-import { adminOnly, internalApi, userAuth } from "./src/middleware/chains.js";
+import { adminOnly, userAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
@@ -665,7 +665,7 @@ app.use("/api/import", trainingHistoryImportRouter);
 app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
-app.use("/api", ...internalApi, workoutRemindersRouter);
+app.use("/api", workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
 app.use("/api", programExerciseRouter);

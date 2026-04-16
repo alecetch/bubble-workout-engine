@@ -27,7 +27,7 @@ function formatValue(value: string | number | null | undefined): string {
   return String(value);
 }
 
-export function ProgramReviewScreen({ navigation }: Props): React.JSX.Element {
+export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Element {
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
   const setIdentity = useOnboardingStore((state) => state.setIdentity);
   const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
@@ -50,15 +50,16 @@ export function ProgramReviewScreen({ navigation }: Props): React.JSX.Element {
 
   useEffect(() => {
     if (!profileQuery.data) return;
+    if (route.params?.preserveDraft) return;
     resetFromProfile(profileQuery.data);
-  }, [profileQuery.data, resetFromProfile]);
+  }, [profileQuery.data, resetFromProfile, route.params?.preserveDraft]);
 
   const loadError = useMemo(() => {
     return meQuery.error?.message ?? profileQuery.error?.message ?? null;
   }, [meQuery.error?.message, profileQuery.error?.message]);
 
   const handleEdit = (target: EditTarget): void => {
-    if (profileQuery.data) {
+    if (profileQuery.data && !route.params?.preserveDraft) {
       resetFromProfile(profileQuery.data);
     }
     navigation.navigate(target);

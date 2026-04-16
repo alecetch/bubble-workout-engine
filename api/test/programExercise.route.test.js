@@ -48,7 +48,9 @@ test("swapOptions returns candidates and excludes current or already-used exerci
           exercise_id: "bb_back_squat",
           exercise_name: "Back Squat",
           original_exercise_id: null,
-          progression_key: null,
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 1,
         }],
         rowCount: 1,
       },
@@ -119,6 +121,9 @@ test("swapOptions returns empty array when no candidates exist", async () => {
           program_day_id: VALID_UUID,
           program_id: VALID_UUID,
           exercise_id: "bb_back_squat",
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 1,
         }],
         rowCount: 1,
       },
@@ -187,7 +192,9 @@ test("applySwap updates exercise and clears progression fields", async () => {
           exercise_id: "bb_back_squat",
           exercise_name: "Back Squat",
           original_exercise_id: null,
-          progression_key: "slot-a",
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 1,
         }],
         rowCount: 1,
       },
@@ -206,7 +213,13 @@ test("applySwap updates exercise and clears progression fields", async () => {
         }],
         rowCount: 1,
       },
-      { rows: [{ id: VALID_UUID, original_exercise_id: "bb_back_squat" }], rowCount: 1 },
+      {
+        rows: [
+          { id: VALID_UUID, original_exercise_id: "bb_back_squat" },
+          { id: "33333333-3333-4333-8333-333333333333", original_exercise_id: "bb_back_squat" },
+        ],
+        rowCount: 2,
+      },
     ], calls),
     getAllowed: async () => ["safety_bar_squat"],
   });
@@ -226,7 +239,13 @@ test("applySwap updates exercise and clears progression fields", async () => {
   const updateCall = calls.find((call) => call.sql.includes("UPDATE program_exercise"));
   assert.match(updateCall.sql, /recommended_load_kg = NULL/);
   assert.match(updateCall.sql, /progression_outcome = NULL/);
-  assert.match(updateCall.sql, /prescribed_load_kg = NULL/);
+  assert.match(updateCall.sql, /global_day_index >=/);
+  assert.match(updateCall.sql, /order_in_day =/);
+  assert.equal(updateCall.params[9], VALID_UUID);
+  assert.equal(updateCall.params[10], "main_lift");
+  assert.equal(updateCall.params[11], 1);
+  assert.equal(updateCall.params[12], "bb_back_squat");
+  assert.equal(updateCall.params[14], 1);
 });
 
 test("applySwap preserves original_exercise_id on second swap", async () => {
@@ -240,7 +259,9 @@ test("applySwap preserves original_exercise_id on second swap", async () => {
           exercise_id: "front_squat",
           exercise_name: "Front Squat",
           original_exercise_id: "bb_back_squat",
-          progression_key: "slot-a",
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 8,
         }],
         rowCount: 1,
       },
@@ -288,7 +309,9 @@ test("applySwap rejects exercise not in allowed set", async () => {
           exercise_id: "bb_back_squat",
           exercise_name: "Back Squat",
           original_exercise_id: null,
-          progression_key: null,
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 1,
         }],
         rowCount: 1,
       },

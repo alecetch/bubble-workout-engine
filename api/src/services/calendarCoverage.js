@@ -20,40 +20,73 @@
 // Must be called AFTER importEmitterPayload commits AND AFTER the program row
 // has been updated with its final start_date and weeks_count.
 
+import { programCalendarDayHasUserIdColumn } from "./programCalendarDaySchema.js";
+
 export async function ensureProgramCalendarCoverage(pool, programId) {
+  const hasProgramCalendarDayUserId = await programCalendarDayHasUserIdColumn(pool);
   // Fill every missing date in the program window with a recovery row.
   await pool.query(
-    `
-    INSERT INTO program_calendar_day (
-      program_id,
-      user_id,
-      program_week_id,
-      program_day_id,
-      week_number,
-      scheduled_offset_days,
-      scheduled_weekday,
-      scheduled_date,
-      global_day_index,
-      is_training_day,
-      program_day_key
-    )
-    SELECT
-      p.id                                                              AS program_id,
-      p.user_id                                                         AS user_id,
-      NULL::uuid                                                        AS program_week_id,
-      NULL::uuid                                                        AS program_day_id,
-      (gs.n / 7 + 1)::int                                              AS week_number,
-      gs.n                                                             AS scheduled_offset_days,
-      to_char(p.start_date + gs.n, 'dy')                               AS scheduled_weekday,
-      p.start_date + gs.n                                              AS scheduled_date,
-      (gs.n + 1)::int                                                  AS global_day_index,
-      false                                                            AS is_training_day,
-      'recovery:' || p.id::text || ':' || (p.start_date + gs.n)::text AS program_day_key
-    FROM program p
-    CROSS JOIN generate_series(0, p.weeks_count * 7 - 1) AS gs(n)
-    WHERE p.id = $1::uuid
-    ON CONFLICT (program_id, scheduled_date) DO NOTHING
-    `,
+    hasProgramCalendarDayUserId
+      ? `
+        INSERT INTO program_calendar_day (
+          program_id,
+          user_id,
+          program_week_id,
+          program_day_id,
+          week_number,
+          scheduled_offset_days,
+          scheduled_weekday,
+          scheduled_date,
+          global_day_index,
+          is_training_day,
+          program_day_key
+        )
+        SELECT
+          p.id                                                              AS program_id,
+          p.user_id                                                         AS user_id,
+          NULL::uuid                                                        AS program_week_id,
+          NULL::uuid                                                        AS program_day_id,
+          (gs.n / 7 + 1)::int                                              AS week_number,
+          gs.n                                                             AS scheduled_offset_days,
+          to_char(p.start_date + gs.n, 'dy')                               AS scheduled_weekday,
+          p.start_date + gs.n                                              AS scheduled_date,
+          (gs.n + 1)::int                                                  AS global_day_index,
+          false                                                            AS is_training_day,
+          'recovery:' || p.id::text || ':' || (p.start_date + gs.n)::text AS program_day_key
+        FROM program p
+        CROSS JOIN generate_series(0, p.weeks_count * 7 - 1) AS gs(n)
+        WHERE p.id = $1::uuid
+        ON CONFLICT (program_id, scheduled_date) DO NOTHING
+        `
+      : `
+        INSERT INTO program_calendar_day (
+          program_id,
+          program_week_id,
+          program_day_id,
+          week_number,
+          scheduled_offset_days,
+          scheduled_weekday,
+          scheduled_date,
+          global_day_index,
+          is_training_day,
+          program_day_key
+        )
+        SELECT
+          p.id                                                              AS program_id,
+          NULL::uuid                                                        AS program_week_id,
+          NULL::uuid                                                        AS program_day_id,
+          (gs.n / 7 + 1)::int                                              AS week_number,
+          gs.n                                                             AS scheduled_offset_days,
+          to_char(p.start_date + gs.n, 'dy')                               AS scheduled_weekday,
+          p.start_date + gs.n                                              AS scheduled_date,
+          (gs.n + 1)::int                                                  AS global_day_index,
+          false                                                            AS is_training_day,
+          'recovery:' || p.id::text || ':' || (p.start_date + gs.n)::text AS program_day_key
+        FROM program p
+        CROSS JOIN generate_series(0, p.weeks_count * 7 - 1) AS gs(n)
+        WHERE p.id = $1::uuid
+        ON CONFLICT (program_id, scheduled_date) DO NOTHING
+        `,
     [programId],
   );
 

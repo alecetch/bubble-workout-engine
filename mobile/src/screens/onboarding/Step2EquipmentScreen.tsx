@@ -20,6 +20,29 @@ import type { OnboardingStackParamList } from "../../navigation/OnboardingNaviga
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Step2Equipment">;
 
+type EquipmentCatalogItem = {
+  code: string;
+  label: string;
+  category: string | null;
+};
+
+function dedupeEquipmentItems(items: EquipmentCatalogItem[]): EquipmentCatalogItem[] {
+  const byCode = new Map<string, EquipmentCatalogItem>();
+  items.forEach((item) => {
+    const existing = byCode.get(item.code);
+    if (!existing) {
+      byCode.set(item.code, item);
+      return;
+    }
+    byCode.set(item.code, {
+      code: existing.code,
+      label: existing.label || item.label,
+      category: existing.category ?? item.category,
+    });
+  });
+  return Array.from(byCode.values());
+}
+
 // Manual test:
 // 1) Open Step2Equipment -> presets load from API.
 // 2) Select preset -> items load from /equipment-items.
@@ -62,12 +85,6 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
     [referenceDataQuery.data?.equipmentPresets],
   );
 
-  type EquipmentCatalogItem = {
-    code: string;
-    label: string;
-    category: string | null;
-  };
-
   const fullCatalogItems = useMemo<EquipmentCatalogItem[] | null>(() => {
     const raw = referenceDataQuery.data as unknown as Record<string, unknown> | undefined;
     const maybeItems = raw?.equipmentItems ?? raw?.equipment_items;
@@ -83,16 +100,17 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
         return { code, label, category };
       })
       .filter((item): item is EquipmentCatalogItem => Boolean(item));
-    return mapped.length > 0 ? mapped : null;
+    const deduped = dedupeEquipmentItems(mapped);
+    return deduped.length > 0 ? deduped : null;
   }, [referenceDataQuery.data]);
 
   const presetItems = useMemo<EquipmentCatalogItem[]>(
     () =>
-      (equipmentItemsQuery.data?.items ?? []).map((item) => ({
+      dedupeEquipmentItems((equipmentItemsQuery.data?.items ?? []).map((item) => ({
         code: item.code,
         label: item.label,
         category: item.category,
-      })),
+      }))),
     [equipmentItemsQuery.data?.items],
   );
 

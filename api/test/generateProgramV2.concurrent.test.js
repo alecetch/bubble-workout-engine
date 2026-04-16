@@ -106,6 +106,9 @@ test("generate-plan-v2 sets new different-type program as secondary when primary
       if (sql.includes("INSERT INTO program (")) {
         return { rows: [{ id: "new-program" }], rowCount: 1 };
       }
+      if (sql.includes("DELETE FROM program_calendar_day")) {
+        return { rows: [], rowCount: 0 };
+      }
       if (sql.includes("INSERT INTO generation_run")) {
         return { rows: [{ id: "run-1" }], rowCount: 1 };
       }
@@ -120,6 +123,9 @@ test("generate-plan-v2 sets new different-type program as secondary when primary
     async query(sql, params) {
       directCalls.push({ sql, params });
       if (sql.includes("information_schema.columns") && sql.includes("column_name = 'program_type'")) {
+        return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      }
+      if (sql.includes("information_schema.columns") && sql.includes("column_name = 'is_primary'")) {
         return { rows: [{ "?column?": 1 }], rowCount: 1 };
       }
       if (sql.includes("UPDATE generation_run SET last_stage='pipeline'")) return { rows: [], rowCount: 1 };
@@ -187,4 +193,115 @@ test("generate-plan-v2 sets new different-type program as secondary when primary
   const programUpdateCall = directCalls.find((call) => call.sql.includes("UPDATE program SET"));
   assert.ok(programUpdateCall);
   assert.equal(programUpdateCall.params.includes(false), true);
+});
+
+test("generate-plan-v2 clears completed program calendar rows before importing a new plan", async () => {
+  const setupCalls = [];
+  const setupClient = {
+    async query(sql, params) {
+      setupCalls.push({ sql, params });
+      if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+      if (sql.includes("information_schema.columns") && sql.includes("column_name = 'program_type'")) {
+        return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      }
+      if (sql.includes("INSERT INTO app_user")) {
+        return { rows: [{ id: "user-uuid" }], rowCount: 1 };
+      }
+      if (sql.includes("SELECT column_name") && sql.includes("injury_flags")) {
+        return { rows: [{ column_name: "injury_flags" }], rowCount: 1 };
+      }
+      if (sql.includes("SELECT id") && sql.includes("program_type")) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes("UPDATE client_profile")) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes("FROM exercise_catalogue")) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes("INSERT INTO program (")) {
+        return { rows: [{ id: "new-program" }], rowCount: 1 };
+      }
+      if (sql.includes("DELETE FROM program_calendar_day")) {
+        return { rows: [], rowCount: 3 };
+      }
+      if (sql.includes("INSERT INTO generation_run")) {
+        return { rows: [{ id: "run-1" }], rowCount: 1 };
+      }
+      throw new Error(`Unexpected setup SQL: ${sql}`);
+    },
+    release() {},
+  };
+  const db = {
+    async connect() {
+      return setupClient;
+    },
+    async query(sql) {
+      if (sql.includes("information_schema.columns") && sql.includes("column_name = 'program_type'")) {
+        return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      }
+      if (sql.includes("UPDATE generation_run SET")) return { rows: [], rowCount: 1 };
+      if (sql.includes("SELECT pcd_new.scheduled_date::text AS conflict_date")) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes("SELECT id") && sql.includes("is_primary = TRUE")) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes("UPDATE program SET")) return { rows: [], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const handler = createGenerateProgramV2Handler({
+    db,
+    getProfileByUser: async () => baseProfile(),
+    getAllowed: async () => [],
+    buildInputs: () => ({}),
+    pipeline: async () => ({
+      rows: [{
+        row_type: "PRG",
+        program_title: "Strength Program",
+        program_summary: "Summary",
+        weeks_count: 1,
+        days_per_week: 3,
+        program_outline_json: {},
+        start_date: "2026-05-01",
+        start_offset_days: 0,
+        start_weekday: "thu",
+        preferred_days_sorted_json: ["mon", "wed", "fri"],
+      }],
+      program: { weeks: [], hero_media_id: null },
+      debug: { step1: {}, step5: {}, step6: {} },
+    }),
+    emitPayload: async () => ({
+      counts: { days: 0 },
+      idempotent: false,
+      prg_data: {
+        program_title: "Strength Program",
+        program_summary: "Summary",
+        weeks_count: 1,
+        days_per_week: 3,
+        program_outline_json: {},
+        start_date: "2026-05-01",
+        start_offset_days: 0,
+        start_weekday: "thu",
+        preferred_days_sorted_json: ["mon", "wed", "fri"],
+      },
+    }),
+    ensureCalendar: async () => {},
+    progressionService: { async applyProgressionRecommendations() { return null; } },
+  });
+  const req = {
+    request_id: "req-3",
+    body: { user_id: "subject-3", programType: "strength", anchor_date_ms: Date.now() },
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+  };
+  const res = mockRes();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  const cleanupCall = setupCalls.find((call) => call.sql.includes("DELETE FROM program_calendar_day"));
+  assert.ok(cleanupCall);
+  assert.match(cleanupCall.sql, /'completed'/);
 });

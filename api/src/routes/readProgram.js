@@ -763,6 +763,7 @@ export function createReadProgramHandlers(options = pool) {
               userId: user_id,
               programType: row.program_type,
               fitnessRank: row.fitness_rank ?? 1,
+              completedProgramDayId: program_day_id,
             });
 
             const hasDeload = decisionResult?.decisions?.some((decision) => decision.outcome === "deload_local");

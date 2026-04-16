@@ -80,6 +80,7 @@ export type DecisionHistoryResponse = {
 export type ProgramDayFullResponse = {
   day: {
     id: string;
+    programId?: string;
     label?: string;
     type?: string;
     sessionDuration?: number;
@@ -117,6 +118,17 @@ export type ProgramDayFullResponse = {
         source?: string;
         reasoning?: string[];
         set1Rule?: string;
+      } | null;
+      progressionRecommendation?: {
+        outcome: string;
+        primaryLever: string | null;
+        confidence: string | null;
+        source: string | null;
+        reasoning: string[];
+        recommendedLoadKg: number | null;
+        recommendedRepsTarget: number | null;
+        recommendedSets: number | null;
+        recommendedRestSeconds: number | null;
       } | null;
       adaptationDecision?: AdaptationDecision | null;
     }>;
@@ -255,7 +267,9 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       scheduledDate,
       scheduledWeekday: asNullableString(day.scheduled_weekday ?? day.scheduledWeekday),
       programDayId: asNullableString(day.program_day_id ?? day.programDayId),
-      status: asNullableString(day.status),
+      status:
+        asNullableString(day.status) ??
+        ((day.is_completed ?? day.isCompleted) === true ? "complete" : "scheduled"),
       weekNumber: asNullableNumber(day.week_number ?? day.weekNumber),
       // Default true: legacy rows without the field are training days.
       isTrainingDay: asNullableBoolean(day.is_training_day ?? day.isTrainingDay) ?? true,
@@ -311,6 +325,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
   return {
     day: {
       id: dayId,
+      programId: asString(rawDay.program_id ?? rawDay.programId),
       label: asString(rawDay.day_label ?? rawDay.label),
       type: asString(rawDay.day_type ?? rawDay.type),
       sessionDuration: asNumber(
@@ -388,6 +403,41 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
                       .map(asString)
                       .filter((value): value is string => Boolean(value)),
                     set1Rule: asString(guideline.set_1_rule ?? guideline.set1Rule),
+                  };
+                })(),
+            progressionRecommendation: rawExercise.progression_recommendation == null
+              ? rawExercise.progression_recommendation === null
+                ? null
+                : undefined
+              : (() => {
+                  const recommendation = asObject(rawExercise.progression_recommendation);
+                  const outcome = asString(recommendation.outcome);
+                  if (!outcome) return undefined;
+                  return {
+                    outcome,
+                    primaryLever: asNullableString(
+                      recommendation.primary_lever ?? recommendation.primaryLever,
+                    ) ?? null,
+                    confidence: asNullableString(recommendation.confidence) ?? null,
+                    source: asNullableString(recommendation.source) ?? null,
+                    reasoning: asArray(
+                      recommendation.reasoning ?? recommendation.reasoning_json,
+                    )
+                      .map(asString)
+                      .filter((value): value is string => Boolean(value)),
+                    recommendedLoadKg: asNullableNumber(
+                      recommendation.recommended_load_kg ?? recommendation.recommendedLoadKg,
+                    ) ?? null,
+                    recommendedRepsTarget: asNullableNumber(
+                      recommendation.recommended_reps_target ?? recommendation.recommendedRepsTarget,
+                    ) ?? null,
+                    recommendedSets: asNullableNumber(
+                      recommendation.recommended_sets ?? recommendation.recommendedSets,
+                    ) ?? null,
+                    recommendedRestSeconds: asNullableNumber(
+                      recommendation.recommended_rest_seconds ??
+                        recommendation.recommendedRestSeconds,
+                    ) ?? null,
                   };
                 })(),
             adaptationDecision: normalizeAdaptationDecision(

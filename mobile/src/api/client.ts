@@ -80,12 +80,20 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
   }
 
   // TODO: Inject auth header/token when auth strategy is defined.
-  const response = await fetch(url, {
-    method,
-    headers: requestHeaders,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: requestHeaders,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`[api] network failure ${method} ${url}`, message);
+    apiDiagnostics.lastErrorMessage = message;
+    throw error;
+  }
 
   console.log(`[api] response ${method} ${url} ${response.status}`);
 

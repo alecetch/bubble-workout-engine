@@ -6,11 +6,12 @@ import {
 } from "@react-navigation/native-stack";
 import { OnboardingEntry } from "../screens/onboarding/OnboardingEntry";
 import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
-import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
 import { ExerciseDecisionHistoryScreen } from "../screens/program/ExerciseDecisionHistoryScreen";
+import { ProgramCompleteScreen } from "../screens/program/ProgramCompleteScreen";
+import { ProgramEndCheckScreen } from "../screens/program/ProgramEndCheckScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
 import { colors } from "../theme/colors";
 import { spacing } from "../theme/spacing";
@@ -22,7 +23,15 @@ export type OnboardingStackParamList = {
   Step2Equipment: undefined;
   Step2bBaselineLoads: undefined;
   Step3Schedule: undefined;
-  ProgramReview: undefined;
+  ProgramReview: {
+    preserveDraft?: boolean;
+  } | undefined;
+  ProgramEndCheck: {
+    programId: string;
+  };
+  ProgramComplete: {
+    programId: string;
+  };
   ProgramDashboard: {
     programId?: string;
   } | undefined;
@@ -69,6 +78,8 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="Step2Equipment" component={Step2EquipmentScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step2bBaselineLoads" component={Step2bBaselineLoadsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="ProgramEndCheck" component={ProgramEndCheckScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="ProgramComplete" component={ProgramCompleteScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ExerciseDecisionHistory" component={ExerciseDecisionHistoryScreen} />
     </Stack.Navigator>

@@ -1,5 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
+import { requireInternalToken } from "../middleware/auth.js";
 import { makeNotificationService } from "../services/notificationService.js";
 
 export const workoutRemindersRouter = express.Router();
@@ -99,4 +100,4 @@ export function createWorkoutRemindersHandler(
 }
 
 const handler = createWorkoutRemindersHandler(pool);
-workoutRemindersRouter.post("/internal/send-workout-reminders", handler);
+workoutRemindersRouter.post("/internal/send-workout-reminders", requireInternalToken, handler);

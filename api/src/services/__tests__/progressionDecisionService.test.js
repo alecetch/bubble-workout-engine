@@ -220,7 +220,7 @@ test("applyProgressionRecommendations updates program exercises and persists dec
   assert.ok(db.calls.some((call) => call.sql.includes("INSERT INTO exercise_progression_decision")));
 });
 
-test("applyProgressionRecommendations clears stale progression fields and updates only the first matching exposure", async () => {
+test("applyProgressionRecommendations clears stale progression fields and updates all future matching exposures", async () => {
   const calls = [];
   const db = {
     async query(sql, params) {
@@ -294,6 +294,25 @@ test("applyProgressionRecommendations clears stale progression fields and update
               movement_class: "compound",
               movement_pattern_primary: "squat",
             },
+            {
+              program_exercise_id: "pe-3",
+              program_day_id: "pd-3",
+              exercise_id: "bb_back_squat",
+              exercise_name: "Back Squat",
+              purpose: "main",
+              sets_prescribed: 4,
+              reps_prescribed: "5",
+              reps_unit: "reps",
+              intensity_prescription: "~2 RIR",
+              rest_seconds: 180,
+              is_loadable: true,
+              week_number: 3,
+              day_number: 1,
+              global_day_index: 15,
+              equipment_items_slugs: ["barbell"],
+              movement_class: "compound",
+              movement_pattern_primary: "squat",
+            },
           ],
         };
       }
@@ -322,6 +341,7 @@ test("applyProgressionRecommendations clears stale progression fields and update
     userId: "user-1",
     programType: "strength",
     fitnessRank: 1,
+    completedProgramDayId: "pd-1",
   });
 
   assert.equal(result.updated, 1);
@@ -329,9 +349,10 @@ test("applyProgressionRecommendations clears stale progression fields and update
   assert.ok(clearCall);
   const updateCalls = calls.filter((call) => call.sql.includes("UPDATE program_exercise"));
   assert.equal(updateCalls.length, 2);
-  const targetedUpdate = updateCalls.find((call) => call.params?.[0] === "pe-1");
+  const targetedUpdate = updateCalls.find((call) => Array.isArray(call.params?.[0]));
   assert.ok(targetedUpdate);
-  assert.equal(updateCalls.some((call) => call.params?.[0] === "pe-2"), false);
+  assert.deepEqual(targetedUpdate.params[0], ["pe-2", "pe-3"]);
+  assert.equal(updateCalls.some((call) => call.params?.[0] === "pe-1"), false);
 });
 
 test("applyProgressionRecommendations does not borrow history from a different purpose", async () => {
@@ -415,4 +436,220 @@ test("applyProgressionRecommendations does not borrow history from a different p
 
   assert.equal(result.updated, 0);
   assert.equal(result.decisions.length, 0);
+});
+
+test("applyProgressionRecommendations seeds all matching occurrences in a newly generated program", async () => {
+  const calls = [];
+  const db = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql.includes("FROM program_generation_config")) {
+        return {
+          rows: [{
+            config_key: "hypertrophy_default_v1",
+            program_generation_config_json: {
+              progression: {
+                lever_profiles: {
+                  hypertrophy_main: {
+                    priority_order: ["reps", "load", "hold", "deload"],
+                    load_increment_profile: "compound_moderate",
+                    deload_profile: "standard_local",
+                  },
+                },
+                slot_profile_map: {
+                  hypertrophy: { main: "hypertrophy_main" },
+                },
+              },
+            },
+            progression_by_rank_json: {
+              intermediate: {
+                evidence_requirement_multiplier: 1,
+                rir_progress_gate_offset: 0,
+                load_increment_scale: 1,
+              },
+            },
+          }],
+        };
+      }
+      if (sql.includes("FROM program_exercise pe") && sql.includes("JOIN program_day pd")) {
+        return {
+          rows: [
+            {
+              program_exercise_id: "pe-1",
+              program_day_id: "pd-1",
+              exercise_id: "bb_back_squat",
+              exercise_name: "Back Squat",
+              purpose: "main",
+              sets_prescribed: 5,
+              reps_prescribed: "8-10",
+              reps_unit: "reps",
+              intensity_prescription: "~2 RIR",
+              rest_seconds: 180,
+              is_loadable: true,
+              week_number: 1,
+              day_number: 1,
+              global_day_index: 1,
+              equipment_items_slugs: ["barbell"],
+              movement_class: "compound",
+              movement_pattern_primary: "squat",
+            },
+            {
+              program_exercise_id: "pe-2",
+              program_day_id: "pd-2",
+              exercise_id: "bb_back_squat",
+              exercise_name: "Back Squat",
+              purpose: "main",
+              sets_prescribed: 5,
+              reps_prescribed: "8-10",
+              reps_unit: "reps",
+              intensity_prescription: "~2 RIR",
+              rest_seconds: 180,
+              is_loadable: true,
+              week_number: 2,
+              day_number: 1,
+              global_day_index: 8,
+              equipment_items_slugs: ["barbell"],
+              movement_class: "compound",
+              movement_pattern_primary: "squat",
+            },
+          ],
+        };
+      }
+      if (sql.includes("FROM segment_exercise_log sel")) {
+        return {
+          rows: [
+            {
+              log_id: "log-1",
+              exercise_id: "bb_back_squat",
+              purpose: "main",
+              weight_kg: 100,
+              reps_completed: 9,
+              rir_actual: 2,
+              exposure_date: "2026-04-01",
+            },
+          ],
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const service = makeProgressionDecisionService(db);
+  const result = await service.applyProgressionRecommendations({
+    programId: "program-2",
+    userId: "user-1",
+    programType: "hypertrophy",
+    fitnessRank: 1,
+  });
+
+  assert.equal(result.updated, 1);
+  const targetedUpdate = calls.find((call) => call.sql.includes("WHERE id = ANY($1::uuid[])"));
+  assert.ok(targetedUpdate);
+  assert.deepEqual(targetedUpdate.params[0], ["pe-1", "pe-2"]);
+  const decisionInsert = calls.find((call) => call.sql.includes("INSERT INTO exercise_progression_decision"));
+  assert.ok(decisionInsert);
+  assert.equal(decisionInsert.params[3], "pe-1");
+});
+
+test("blank RIR rows are not treated as zero and do not trigger a false deload", async () => {
+  const db = {
+    async query(sql) {
+      if (sql.includes("FROM program_generation_config")) {
+        return {
+          rows: [{
+            config_key: "hypertrophy_default_v1",
+            program_generation_config_json: {
+              progression: {
+                lever_profiles: {
+                  hypertrophy_main: {
+                    priority_order: ["reps", "load", "hold", "deload"],
+                    load_increment_profile: "compound_moderate",
+                    deload_profile: "standard_local",
+                  },
+                },
+                slot_profile_map: {
+                  hypertrophy: { main: "hypertrophy_main" },
+                },
+              },
+            },
+            progression_by_rank_json: {
+              intermediate: {
+                evidence_requirement_multiplier: 1,
+                rir_progress_gate_offset: 0,
+                load_increment_scale: 1,
+              },
+            },
+          }],
+        };
+      }
+      if (sql.includes("FROM program_exercise pe") && sql.includes("JOIN program_day pd")) {
+        return {
+          rows: [
+            {
+              program_exercise_id: "pe-1",
+              program_day_id: "pd-1",
+              exercise_id: "leg_press",
+              exercise_name: "Leg Press",
+              purpose: "main",
+              sets_prescribed: 5,
+              reps_prescribed: "6-10",
+              reps_unit: "reps",
+              intensity_prescription: "~2 RIR",
+              rest_seconds: 120,
+              is_loadable: true,
+              week_number: 1,
+              day_number: 1,
+              global_day_index: 1,
+              equipment_items_slugs: ["machine"],
+              movement_class: "compound",
+              movement_pattern_primary: "squat",
+            },
+            {
+              program_exercise_id: "pe-2",
+              program_day_id: "pd-2",
+              exercise_id: "leg_press",
+              exercise_name: "Leg Press",
+              purpose: "main",
+              sets_prescribed: 5,
+              reps_prescribed: "6-10",
+              reps_unit: "reps",
+              intensity_prescription: "~2 RIR",
+              rest_seconds: 120,
+              is_loadable: true,
+              week_number: 2,
+              day_number: 1,
+              global_day_index: 8,
+              equipment_items_slugs: ["machine"],
+              movement_class: "compound",
+              movement_pattern_primary: "squat",
+            },
+          ],
+        };
+      }
+      if (sql.includes("FROM segment_exercise_log sel")) {
+        return {
+          rows: [
+            { log_id: "log-5", exercise_id: "leg_press", purpose: "main", weight_kg: 115, reps_completed: 8, rir_actual: 3, exposure_date: "2026-04-16" },
+            { log_id: "log-4", exercise_id: "leg_press", purpose: "main", weight_kg: 115, reps_completed: 8, rir_actual: null, exposure_date: "2026-04-16" },
+            { log_id: "log-3", exercise_id: "leg_press", purpose: "main", weight_kg: 115, reps_completed: 8, rir_actual: null, exposure_date: "2026-04-16" },
+          ],
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const service = makeProgressionDecisionService(db);
+  const result = await service.applyProgressionRecommendations({
+    programId: "program-1",
+    userId: "user-1",
+    programType: "hypertrophy",
+    fitnessRank: 1,
+    completedProgramDayId: "pd-1",
+  });
+
+  assert.equal(result.updated, 1);
+  assert.equal(result.decisions[0].outcome, "increase_reps");
+  assert.equal(result.decisions[0].evidence.latest_rir, 3);
+  assert.equal(result.decisions[0].evidence.underperformance_exposures, 0);
 });

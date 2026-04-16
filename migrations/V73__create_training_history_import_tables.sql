@@ -46,23 +46,3 @@ CREATE INDEX IF NOT EXISTS idx_eia_lookup
   ON exercise_import_alias (source_app, source_name_normalized)
   WHERE is_active = TRUE;
 
-INSERT INTO exercise_import_alias (source_app, source_name_normalized, exercise_id, estimation_family)
-VALUES
-  ('hevy', 'barbell back squat', 'bb_back_squat', 'squat'),
-  ('hevy', 'barbell squat', 'bb_back_squat', 'squat'),
-  ('hevy', 'squat (barbell)', 'bb_back_squat', 'squat'),
-  ('hevy', 'barbell deadlift', 'bb_conventional_deadlift', 'hinge'),
-  ('hevy', 'deadlift (barbell)', 'bb_conventional_deadlift', 'hinge'),
-  ('hevy', 'romanian deadlift', NULL, 'hinge'),
-  ('hevy', 'barbell bench press', 'bb_bench_press_flat', 'horizontal_push'),
-  ('hevy', 'bench press (barbell)', 'bb_bench_press_flat', 'horizontal_push'),
-  ('hevy', 'incline bench press', NULL, 'horizontal_push'),
-  ('hevy', 'overhead press (barbell)', NULL, 'vertical_push'),
-  ('hevy', 'barbell overhead press', NULL, 'vertical_push'),
-  ('hevy', 'ohp', NULL, 'vertical_push'),
-  ('hevy', 'barbell row', NULL, 'horizontal_pull'),
-  ('hevy', 'bent over row (barbell)', NULL, 'horizontal_pull'),
-  ('hevy', 'pull up', NULL, 'vertical_pull'),
-  ('hevy', 'pull-up', NULL, 'vertical_pull'),
-  ('hevy', 'lat pulldown', NULL, 'vertical_pull')
-ON CONFLICT (source_app, source_name_normalized) DO NOTHING;

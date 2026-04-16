@@ -23,6 +23,9 @@ SELECT
   p.weeks_count,
   p.days_per_week,
   p.start_date,
+  p.status AS lifecycle_status,
+  p.completed_mode,
+  p.completed_at,
   cp.fitness_rank,
   cp.fitness_level_slug,
   cp.main_goals_slugs AS goals,
@@ -32,6 +35,21 @@ SELECT
   cp.equipment_preset_slug,
   COUNT(pd.id) AS total_days,
   COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE) AS completed_days,
+  COUNT(pd.id) FILTER (
+    WHERE pd.is_completed = FALSE
+      AND pd.global_day_index < (
+        SELECT MAX(pd2.global_day_index)
+        FROM program_day pd2
+        WHERE pd2.program_id = p.id
+      )
+  ) AS missed_workouts_count,
+  COALESCE((
+    SELECT pd3.is_completed
+    FROM program_day pd3
+    WHERE pd3.program_id = p.id
+    ORDER BY pd3.global_day_index DESC
+    LIMIT 1
+  ), FALSE) AS is_last_scheduled_day_complete,
   CASE WHEN COUNT(pd.id) = 0 THEN 0
        ELSE (COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE))::float / COUNT(pd.id)
   END AS completion_ratio,
@@ -86,6 +104,37 @@ ORDER BY pe.exercise_id, best_weight_kg DESC
 LIMIT 10
 `;
 
+const SQL_END_CHECK = `
+SELECT
+  p.id AS program_id,
+  p.program_title,
+  p.status AS lifecycle_status,
+  p.completed_mode,
+  COUNT(pd.id) AS total_days,
+  COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE) AS completed_days,
+  COUNT(pd.id) FILTER (
+    WHERE pd.is_completed = FALSE
+      AND pd.global_day_index < (
+        SELECT MAX(pd2.global_day_index)
+        FROM program_day pd2
+        WHERE pd2.program_id = p.id
+      )
+  ) AS missed_workouts_count,
+  COALESCE((
+    SELECT pd3.is_completed
+    FROM program_day pd3
+    WHERE pd3.program_id = p.id
+    ORDER BY pd3.global_day_index DESC
+    LIMIT 1
+  ), FALSE) AS is_last_scheduled_day_complete
+FROM program p
+JOIN program_day pd
+  ON pd.program_id = p.id
+WHERE p.id = $1
+  AND p.user_id = $2
+GROUP BY p.id
+`;
+
 function mapError(err) {
   if (err instanceof RequestValidationError || err instanceof NotFoundError) {
     return {
@@ -100,6 +149,7 @@ function mapError(err) {
     if (err.code === "23503") return { status: 400, code: "foreign_key_violation", message: "Invalid reference" };
     if (err.code === "23505") return { status: 409, code: "unique_violation", message: "Duplicate conflict" };
     if (err.code === "42P01") return { status: 500, code: "schema_missing", message: "Required table is missing; run migrations" };
+    if (err.code === "42703") return { status: 500, code: "schema_missing", message: "Required column is missing; run migrations" };
   }
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
@@ -117,6 +167,16 @@ function asString(value, fallback = "") {
   if (typeof value === "string") return value;
   if (value == null) return fallback;
   return String(value);
+}
+
+function asNullableString(value) {
+  if (value == null) return null;
+  const text = asString(value).trim();
+  return text || null;
+}
+
+function asBoolean(value) {
+  return value === true;
 }
 
 function confidenceLabel(score) {
@@ -160,11 +220,54 @@ function buildReEnrollmentOptions(currentRank, suggestedRank) {
   return options;
 }
 
+function normalizeLifecycleStatus(status) {
+  const normalized = asString(status).trim().toLowerCase();
+  return normalized === "completed" ? "completed" : "in_progress";
+}
+
+function normalizeCompletedMode(mode) {
+  const normalized = asString(mode).trim().toLowerCase();
+  if (normalized === "as_scheduled" || normalized === "with_skips") return normalized;
+  return null;
+}
+
+function toEndCheckPayload(row) {
+  const lifecycleStatus = normalizeLifecycleStatus(row.lifecycle_status);
+  const completedMode = normalizeCompletedMode(row.completed_mode);
+  const totalDays = toFiniteNumber(row.total_days, 0);
+  const completedDays = toFiniteNumber(row.completed_days, 0);
+  const missedWorkoutsCount = toFiniteNumber(row.missed_workouts_count, 0);
+  const isLastScheduledDayComplete = asBoolean(row.is_last_scheduled_day_complete);
+
+  return {
+    program_id: asString(row.program_id),
+    program_title: asString(row.program_title),
+    lifecycle_status: lifecycleStatus,
+    completed_mode: completedMode,
+    total_days: totalDays,
+    completed_days: completedDays,
+    missed_workouts_count: missedWorkoutsCount,
+    is_last_scheduled_day_complete: isLastScheduledDayComplete,
+    can_complete_with_skips:
+      lifecycleStatus !== "completed" &&
+      isLastScheduledDayComplete &&
+      missedWorkoutsCount > 0,
+  };
+}
+
 export function createProgramCompletionHandlers(db = pool) {
   function resolveUserId(req) {
     const userId = safeString(req.auth?.user_id) || safeString(req.auth?.userId);
     if (userId) return userId;
     throw new RequestValidationError("Missing authenticated user context");
+  }
+
+  async function loadEndCheck(programId, userId) {
+    const result = await db.query(SQL_END_CHECK, [programId, userId]);
+    if (result.rowCount === 0) {
+      throw new NotFoundError("Program not found");
+    }
+    return toEndCheckPayload(result.rows[0]);
   }
 
   async function completionSummary(req, res) {
@@ -203,6 +306,11 @@ export function createProgramCompletionHandlers(db = pool) {
         weeks_completed: toFiniteNumber(row.weeks_count, 0),
         days_completed: toFiniteNumber(row.completed_days, 0),
         days_total: toFiniteNumber(row.total_days, 0),
+        missed_workouts_count: toFiniteNumber(row.missed_workouts_count, 0),
+        is_last_scheduled_day_complete: asBoolean(row.is_last_scheduled_day_complete),
+        lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
+        completed_mode: normalizeCompletedMode(row.completed_mode),
+        completed_at: row.completed_at ?? null,
         completion_ratio: toFiniteNumber(row.completion_ratio, 0),
         exercises_progressed: exercisesProgressed,
         exercises_tracked: exercisesTracked,
@@ -237,11 +345,97 @@ export function createProgramCompletionHandlers(db = pool) {
     }
   }
 
-  return { completionSummary };
+  async function endCheck(req, res) {
+    const { request_id } = req;
+    const program_id = safeString(req.params.program_id);
+
+    try {
+      requireUuid(program_id, "program_id");
+      const userId = resolveUserId(req);
+      const payload = await loadEndCheck(program_id, userId);
+      return res.json({ ok: true, ...payload });
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
+    }
+  }
+
+  async function completeProgram(req, res) {
+    const { request_id } = req;
+    const program_id = safeString(req.params.program_id);
+
+    try {
+      requireUuid(program_id, "program_id");
+      const userId = resolveUserId(req);
+      const mode = safeString(req.body?.mode);
+      if (mode !== "as_scheduled" && mode !== "with_skips") {
+        throw new RequestValidationError("mode must be 'as_scheduled' or 'with_skips'");
+      }
+
+      const endCheckPayload = await loadEndCheck(program_id, userId);
+      if (endCheckPayload.lifecycle_status === "completed") {
+        return res.json({
+          ok: true,
+          program_id,
+          lifecycle_status: "completed",
+          completed_mode: endCheckPayload.completed_mode,
+        });
+      }
+
+      if (mode === "as_scheduled" && endCheckPayload.completed_days < endCheckPayload.total_days) {
+        throw new RequestValidationError("Program is not fully complete yet");
+      }
+
+      if (mode === "with_skips" && !endCheckPayload.can_complete_with_skips) {
+        throw new RequestValidationError("Program cannot be completed with skips yet");
+      }
+
+      await db.query(
+        `
+        UPDATE program
+        SET
+          status = 'completed',
+          completed_mode = $3,
+          completed_at = now(),
+          is_primary = FALSE,
+          updated_at = now()
+        WHERE id = $1
+          AND user_id = $2
+        `,
+        [program_id, userId, mode],
+      );
+
+      return res.json({
+        ok: true,
+        program_id,
+        lifecycle_status: "completed",
+        completed_mode: mode,
+      });
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
+    }
+  }
+
+  return { completionSummary, endCheck, completeProgram };
 }
 
 const handlers = createProgramCompletionHandlers();
 programCompletionRouter.use(requireAuth);
 programCompletionRouter.get("/program/:program_id/completion-summary", handlers.completionSummary);
+programCompletionRouter.get("/program/:program_id/end-check", handlers.endCheck);
+programCompletionRouter.post("/program/:program_id/complete", handlers.completeProgram);
 
-export { confidenceLabel, suggestNextRank, buildReEnrollmentOptions };
+export { confidenceLabel, suggestNextRank, buildReEnrollmentOptions, toEndCheckPayload, normalizeLifecycleStatus };

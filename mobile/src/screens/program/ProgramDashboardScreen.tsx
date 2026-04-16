@@ -10,7 +10,7 @@ import { DayPreviewCard } from "../../components/program/DayPreviewCard";
 import { HeroHeader } from "../../components/program/HeroHeader";
 import { WeekPillStrip, type WeekStatus } from "../../components/program/WeekPillStrip";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useDayPreview, useProgramOverview } from "../../api/hooks";
+import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -75,6 +75,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   // Independent cache entry keyed by [programId, programDayId].
   // Falls back to overview.selectedDayPreview while loading.
   const overviewQuery = useProgramOverview(programId ?? "", { userId });
+  const endCheckQuery = useProgramEndCheck(programId);
   const overview = overviewQuery.data;
   const calendarDays = overview?.calendarDays ?? [];
   const weeks = overview?.weeks ?? [];
@@ -278,6 +279,9 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   }
 
   const weekItems = weekNumbers.map((weekNumber) => ({ weekNumber }));
+  const endCheck = endCheckQuery.data;
+  const showCompletionBanner = endCheck?.lifecycleStatus === "completed";
+  const showEndCheckBanner = endCheck?.canCompleteWithSkips === true;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -286,6 +290,28 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         summary={overview.program.summary}
         heroMedia={overview.program.heroMedia}
       />
+
+      {showCompletionBanner ? (
+        <PressableScale
+          style={styles.completionBanner}
+          onPress={() => navigation.navigate("ProgramComplete", { programId })}
+        >
+          <Text style={styles.completionBannerTitle}>Program complete</Text>
+          <Text style={styles.completionBannerCopy}>View your summary and start the next block.</Text>
+        </PressableScale>
+      ) : null}
+
+      {showEndCheckBanner ? (
+        <PressableScale
+          style={styles.completionBanner}
+          onPress={() => navigation.navigate("ProgramEndCheck", { programId })}
+        >
+          <Text style={styles.completionBannerTitle}>End of block reached</Text>
+          <Text style={styles.completionBannerCopy}>
+            {endCheck?.missedWorkoutsCount ?? 0} missed workout{(endCheck?.missedWorkoutsCount ?? 0) === 1 ? "" : "s"} remain. Finish them or move on.
+          </Text>
+        </PressableScale>
+      ) : null}
 
       <WeekPillStrip
         weeks={weekItems}
@@ -370,5 +396,21 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",
+  },
+  completionBanner: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  completionBannerTitle: {
+    color: colors.textPrimary,
+    ...typography.h3,
+  },
+  completionBannerCopy: {
+    color: colors.textSecondary,
+    ...typography.body,
   },
 });

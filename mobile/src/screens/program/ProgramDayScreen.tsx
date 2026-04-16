@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   ScrollView,
@@ -8,16 +9,19 @@ import {
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useProgramDayFull, useMarkDayComplete } from "../../api/hooks";
 import { HeroHeader } from "../../components/program/HeroHeader";
+import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { LogSegmentModal } from "../../components/program/LogSegmentModal";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
-import { computeSessionStatsFromSegments } from "../../components/program/sessionUxLogic";
+import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { hapticLight, hapticMedium } from "../../components/interaction/haptics";
+import { getProgramEndCheck } from "../../api/programCompletion";
+import { queryKeys, useCompleteProgram, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
+import type { SaveSegmentLogPayload } from "../../api/segmentLog";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { useTimerStore } from "../../state/timer/useTimerStore";
@@ -40,17 +44,24 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
   const userId = sessionUserId ?? onboardingUserId ?? undefined;
-  const programId = useSessionStore((state) => state.activeProgramId) ?? "";
+  const activeProgramId = useSessionStore((state) => state.activeProgramId);
 
   const dayQuery = useProgramDayFull(programDayId, { userId });
   const markDayComplete = useMarkDayComplete();
+  const completeProgram = useCompleteProgram();
+  const queryClient = useQueryClient();
   const [segmentLogs, setSegmentLogs] = useState<Record<string, SegmentLogEntry>>({});
+  const [segmentLogRows, setSegmentLogRows] = useState<Record<string, SaveSegmentLogPayload["rows"]>>({});
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [swapSheetVisible, setSwapSheetVisible] = useState(false);
+  const [swapTargetProgramExerciseId, setSwapTargetProgramExerciseId] = useState<string | null>(null);
+  const [swapTargetExerciseName, setSwapTargetExerciseName] = useState<string | null>(null);
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [prHits] = useState<string[]>([]);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
+  const programId = dayQuery.data?.day?.programId ?? activeProgramId ?? "";
   const nav = navigation as unknown as NativeStackNavigationProp<ProgramsStackParamList>;
 
   useLayoutEffect(() => {
@@ -108,6 +119,18 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     [activeSegmentId, orderedSegments],
   );
 
+  function openSwapSheet(programExerciseId: string, exerciseName: string): void {
+    setSwapTargetProgramExerciseId(programExerciseId);
+    setSwapTargetExerciseName(exerciseName);
+    setSwapSheetVisible(true);
+  }
+
+  function closeSwapSheet(): void {
+    setSwapSheetVisible(false);
+    setSwapTargetProgramExerciseId(null);
+    setSwapTargetExerciseName(null);
+  }
+
   const handleCompleteWorkout = async (): Promise<void> => {
     await hapticMedium();
     setSummaryVisible(true);
@@ -115,16 +138,47 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
 
   const handleSummaryDismiss = async (): Promise<void> => {
     setSummaryVisible(false);
-    await setWorkoutComplete(programDayId, true);
-    setWorkoutCompleteState(true);
-    markDayComplete.mutate({ programDayId, isCompleted: true, userId });
+    try {
+      await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId });
+      await setWorkoutComplete(programDayId, true);
+      setWorkoutCompleteState(true);
+      setConfirmationText(null);
+
+      if (!programId || !userId) return;
+
+      const endCheck = await queryClient.fetchQuery({
+        queryKey: queryKeys.programEndCheck(programId),
+        queryFn: () => getProgramEndCheck(programId),
+      });
+
+      if (endCheck.lifecycleStatus === "completed") {
+        nav.navigate("ProgramComplete", { programId });
+        return;
+      }
+
+      if (endCheck.isLastScheduledDayComplete && endCheck.missedWorkoutsCount === 0) {
+        await completeProgram.mutateAsync({ programId, mode: "as_scheduled" });
+        nav.navigate("ProgramComplete", { programId });
+        return;
+      }
+
+      if (endCheck.canCompleteWithSkips) {
+        nav.navigate("ProgramEndCheck", { programId });
+      }
+    } catch (error) {
+      setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
+    }
   };
 
   const handleUndoComplete = async (): Promise<void> => {
-    await setWorkoutComplete(programDayId, false);
-    setWorkoutCompleteState(false);
-    setConfirmationText("Workout completion cleared.");
-    markDayComplete.mutate({ programDayId, isCompleted: false, userId });
+    try {
+      await markDayComplete.mutateAsync({ programDayId, isCompleted: false, userId });
+      await setWorkoutComplete(programDayId, false);
+      setWorkoutCompleteState(false);
+      setConfirmationText("Workout completion cleared.");
+    } catch (error) {
+      setConfirmationText(error instanceof Error ? error.message : "Unable to undo completion.");
+    }
   };
 
   if (dayQuery.isLoading) {
@@ -151,8 +205,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const day = dayQuery.data.day;
 
   function computeSessionStats(): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
-    // TODO: replace this estimate with exact logged set data if we later lift save payloads into screen state.
-    return computeSessionStatsFromSegments(orderedSegments, segmentLogs);
+    return computeSessionStatsFromLoggedRows(segmentLogRows);
   }
 
   return (
@@ -170,6 +223,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             segment={segment}
             isLogged={Boolean(segmentLogs[segment.id])}
             onLogSegment={() => setActiveSegmentId(segment.id)}
+            onSwapExercise={openSwapSheet}
             onViewDecisionHistory={(_exerciseId, exerciseName, programExerciseId) => {
               nav.navigate("ExerciseDecisionHistory", {
                 programExerciseId,
@@ -211,10 +265,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         programId={programId}
         userId={userId}
         onClose={() => setActiveSegmentId(null)}
-        onSave={() => {
+        onSave={(rows) => {
           if (activeSegment) {
             const entry: SegmentLogEntry = { updatedAt: new Date().toISOString() };
             setSegmentLogs((current) => ({ ...current, [activeSegment.id]: entry }));
+            setSegmentLogRows((current) => ({ ...current, [activeSegment.id]: rows }));
             // Write to AsyncStorage so the isLogged badge persists after app restart.
             void setSegmentLog(programDayId, activeSegment.id, {});
             const maxRest = Math.max(
@@ -227,6 +282,18 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
           }
           setActiveSegmentId(null);
           void hapticLight();
+        }}
+      />
+      <ExerciseSwapSheet
+        visible={swapSheetVisible}
+        programExerciseId={swapTargetProgramExerciseId}
+        currentExerciseName={swapTargetExerciseName}
+        programDayId={programDayId}
+        userId={userId}
+        onClose={closeSwapSheet}
+        onSwapApplied={() => {
+          closeSwapSheet();
+          void dayQuery.refetch();
         }}
       />
       <SessionSummaryModal

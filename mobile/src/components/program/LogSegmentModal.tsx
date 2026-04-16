@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
   ScrollView,
@@ -30,7 +30,7 @@ type LogSegmentModalProps = {
   programId: string;
   userId?: string;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (rows: SaveSegmentLogPayload["rows"]) => void;
 };
 
 const EFFORT_OPTIONS = [
@@ -40,6 +40,18 @@ const EFFORT_OPTIONS = [
   { label: "1", value: 1, caption: "Could do 1 more rep" },
   { label: "0", value: 0, caption: "Could do no more reps" },
 ] as const;
+
+function getDefaultActiveKey(
+  exercises: Segment["exercises"],
+): { exerciseId: string; setIndex: number } | null {
+  const firstLoadable = exercises.find((exercise) => exercise.isLoadable === true && exercise.id);
+  if (!firstLoadable?.id) return null;
+  const setCount = Math.max(1, Number(firstLoadable.sets ?? 1) || 1);
+  return {
+    exerciseId: firstLoadable.id,
+    setIndex: setCount - 1,
+  };
+}
 
 export function LogSegmentModal({
   visible,
@@ -52,6 +64,7 @@ export function LogSegmentModal({
 }: LogSegmentModalProps): React.JSX.Element {
   const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
   const [activeKey, setActiveKey] = useState<{ exerciseId: string; setIndex: number } | null>(null);
+  const initializedSegmentIdRef = useRef<string | null>(null);
 
   const exercises = segment?.exercises ?? [];
   const loadableExercises = exercises.filter((ex) => ex.isLoadable === true);
@@ -67,17 +80,30 @@ export function LogSegmentModal({
     { userId },
   );
   const saveMutation = useSaveSegmentLogs();
+  const defaultActiveKey = getDefaultActiveKey(loadableExercises);
 
   useEffect(() => {
-    if (!visible || !segment) return;
+    if (!visible) {
+      if (initializedSegmentIdRef.current !== null) {
+        initializedSegmentIdRef.current = null;
+        setInputMap({});
+        setActiveKey(null);
+      }
+      return;
+    }
+    if (!segment) return;
+    if (initializedSegmentIdRef.current === segment.id) return;
+    if (existingLogsQuery.isLoading && !existingLogsQuery.data) return;
     setInputMap(buildInitialSetInputMap(exercises, existingLogsQuery.data ?? []));
-    setActiveKey(null);
-  }, [visible, segment?.id, existingLogsQuery.data, exercises]);
+    setActiveKey(defaultActiveKey);
+    initializedSegmentIdRef.current = segment.id;
+  }, [visible, segment?.id, existingLogsQuery.isLoading, existingLogsQuery.data, exercises, defaultActiveKey]);
 
   const handleSave = (): void => {
     if (!segment) return;
 
     const rows = buildSegmentLogRows(exercises, inputMap);
+    console.log("[LogSegmentModal] save rows", JSON.stringify(rows));
     const payload: SaveSegmentLogPayload = {
       userId,
       programId,
@@ -88,7 +114,7 @@ export function LogSegmentModal({
 
     saveMutation.mutate(payload, {
       onSuccess: () => {
-        onSave();
+        onSave(rows);
         onClose();
       },
       onError: (err) => {
@@ -232,21 +258,23 @@ export function LogSegmentModal({
                   <View style={styles.effortButtonRow}>
                     {EFFORT_OPTIONS.map((option) => {
                       const selected = activeEffort === option.value;
-                      const disabled = !activeKey;
+                      const effortTarget = activeKey ?? defaultActiveKey;
+                      const disabled = !effortTarget;
                       return (
                         <PressableScale
                           key={option.label}
                           onPress={() => {
-                            if (!activeKey) return;
+                            if (!effortTarget) return;
                             setInputMap((current) => {
-                              const prev = current[activeKey.exerciseId] ?? [];
+                              const prev = current[effortTarget.exerciseId] ?? [];
                               const next = [...prev];
-                              next[activeKey.setIndex] = {
-                                ...(next[activeKey.setIndex] ?? { weight: "", reps: "", rirActual: null }),
+                              next[effortTarget.setIndex] = {
+                                ...(next[effortTarget.setIndex] ?? { weight: "", reps: "", rirActual: null }),
                                 rirActual: option.value,
                               };
-                              return { ...current, [activeKey.exerciseId]: next };
+                              return { ...current, [effortTarget.exerciseId]: next };
                             });
+                            setActiveKey(effortTarget);
                           }}
                           disabled={disabled}
                           style={[
@@ -256,15 +284,26 @@ export function LogSegmentModal({
                           ]}
                           accessibilityLabel={option.caption}
                         >
-                          <Text
-                            style={[
-                              styles.effortButtonLabel,
-                              disabled && styles.effortButtonLabelDisabled,
-                              selected && styles.effortButtonLabelSelected,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
+                          <View style={styles.effortButtonContent}>
+                            <Text
+                              style={[
+                                styles.effortButtonLabel,
+                                disabled && styles.effortButtonLabelDisabled,
+                                selected && styles.effortButtonLabelSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.effortButtonCaption,
+                                disabled && styles.effortButtonCaptionDisabled,
+                                selected && styles.effortButtonCaptionSelected,
+                              ]}
+                            >
+                              {option.caption}
+                            </Text>
+                          </View>
                         </PressableScale>
                       );
                     })}
@@ -428,18 +467,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   effortButtonRow: {
-    flexDirection: "row",
+    flexDirection: "column",
     gap: spacing.xs,
   },
   effortButton: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: radii.pill,
+    width: "100%",
+    minHeight: 64,
+    borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     justifyContent: "center",
+  },
+  effortButtonContent: {
+    gap: 2,
   },
   effortButtonSelected: {
     borderColor: colors.accent,
@@ -453,11 +496,23 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: "700",
   },
+  effortButtonCaption: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
   effortButtonLabelSelected: {
     color: colors.textPrimary,
   },
   effortButtonLabelDisabled: {
     color: colors.textSecondary,
+  },
+  effortButtonCaptionSelected: {
+    color: colors.textPrimary,
+    opacity: 0.9,
+  },
+  effortButtonCaptionDisabled: {
+    color: colors.textSecondary,
+    opacity: 0.85,
   },
   effortCaption: {
     color: colors.textSecondary,

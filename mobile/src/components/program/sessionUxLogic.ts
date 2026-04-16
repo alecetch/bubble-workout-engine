@@ -3,7 +3,12 @@ import type { SaveSegmentLogPayload, SegmentLogRow } from "../../api/segmentLog"
 
 export type GuidelinePrefillExercise = {
   guidelineLoad?: { value?: number | string | null } | null;
+  progressionRecommendation?: {
+    recommendedLoadKg?: number | null;
+    recommendedRepsTarget?: number | null;
+  } | null;
   intensity?: string | null;
+  reps?: string | null;
 };
 
 export type SetInputState = {
@@ -35,7 +40,23 @@ export function parseRepsPrefill(reps: string | null | undefined): string {
   return "10";
 }
 
+export function repsPrefill(ex: GuidelinePrefillExercise): string {
+  const recommendedRepsTarget = ex.progressionRecommendation?.recommendedRepsTarget;
+  if (
+    recommendedRepsTarget != null &&
+    Number.isFinite(Number(recommendedRepsTarget)) &&
+    Number(recommendedRepsTarget) > 0
+  ) {
+    return String(Number(recommendedRepsTarget));
+  }
+  return parseRepsPrefill(ex.reps);
+}
+
 export function guidelinePrefill(ex: GuidelinePrefillExercise): string {
+  const recommendedLoadKg = ex.progressionRecommendation?.recommendedLoadKg;
+  if (recommendedLoadKg != null && Number.isFinite(Number(recommendedLoadKg)) && Number(recommendedLoadKg) > 0) {
+    return String(Number(recommendedLoadKg));
+  }
   const glv = ex.guidelineLoad?.value;
   if (glv != null && Number.isFinite(Number(glv)) && Number(glv) > 0) {
     return String(Number(glv));
@@ -58,7 +79,7 @@ export function buildInitialSetInputMap(
     const key = ex.id ?? "";
     const setCount = getExerciseSetCount(ex);
     const prefillWeight = guidelinePrefill(ex);
-    const prefillReps = parseRepsPrefill(ex.reps);
+    const prefillReps = repsPrefill(ex);
     initial[key] = Array.from({ length: setCount }, () => ({
       weight: prefillWeight,
       reps: prefillReps,
@@ -136,6 +157,34 @@ export function computeSessionStatsFromSegments(
       }
     }
   }
+
+  return {
+    totalVolumeKg,
+    totalSets,
+    exerciseCount: exerciseIds.size,
+  };
+}
+
+export function computeSessionStatsFromLoggedRows(
+  rowsBySegment: Record<string, SaveSegmentLogPayload["rows"]>,
+): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
+  let totalVolumeKg = 0;
+  let totalSets = 0;
+  const exerciseIds = new Set<string>();
+
+  Object.values(rowsBySegment).forEach((rows) => {
+    rows.forEach((row) => {
+      const weightKg = Number(row.weightKg ?? 0);
+      const repsCompleted = Number(row.repsCompleted ?? 0);
+      totalSets += 1;
+      if (row.programExerciseId) {
+        exerciseIds.add(row.programExerciseId);
+      }
+      if (weightKg > 0 && repsCompleted > 0) {
+        totalVolumeKg += weightKg * repsCompleted;
+      }
+    });
+  });
 
   return {
     totalVolumeKg,

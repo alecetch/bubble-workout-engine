@@ -127,7 +127,9 @@ export function createProgramExerciseHandlers(options = pool) {
         pe.exercise_id,
         pe.exercise_name,
         pe.original_exercise_id,
-        pe.progression_key
+        pe.purpose,
+        pe.order_in_day,
+        pd.global_day_index
       FROM program_exercise pe
       JOIN program_day pd
         ON pd.id = pe.program_day_id
@@ -390,9 +392,20 @@ export function createProgramExerciseHandlers(options = pool) {
             recommended_load_kg = NULL,
             recommended_reps_target = NULL,
             recommended_sets = NULL,
-            recommended_rest_seconds = NULL,
-            prescribed_load_kg = NULL
-          WHERE id = $10
+            recommended_rest_seconds = NULL
+          WHERE program_id = $10
+            AND purpose = $11
+            AND order_in_day = $12
+            AND exercise_id = $13
+            AND (
+              id = $14
+              OR program_day_id IN (
+                SELECT id
+                FROM program_day
+                WHERE program_id = $10
+                  AND global_day_index >= $15
+              )
+            )
           RETURNING id, original_exercise_id
           `,
           [
@@ -405,7 +418,12 @@ export function createProgramExerciseHandlers(options = pool) {
             replacement.logging_guidance ?? "",
             current.exercise_id,
             reason,
+            current.program_id,
+            current.purpose,
+            current.order_in_day,
+            current.exercise_id,
             program_exercise_id,
+            current.global_day_index,
           ],
         );
         if (updateResult.rowCount === 0) {

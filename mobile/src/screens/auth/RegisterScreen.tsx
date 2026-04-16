@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiRegister, type AuthTokens } from "../../api/authApi";
 import { ApiError } from "../../api/client";
-import { getClientProfile } from "../../api/clientProfiles";
+import { createClientProfile, getClientProfile } from "../../api/clientProfiles";
 import { saveTokens } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { AuthStackParamList } from "../../navigation/AuthNavigator";
@@ -39,6 +39,17 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
   const confirmPasswordRef = useRef<TextInput>(null);
   const prevPasswordLenRef = useRef(0);
   const prevConfirmLenRef = useRef(0);
+
+  const resolveClientProfile = async (clientProfileId: string | null | undefined) => {
+    if (clientProfileId) {
+      try {
+        return await getClientProfile(clientProfileId);
+      } catch {
+        // Fall through and recreate if the referenced profile is missing/inaccessible.
+      }
+    }
+    return createClientProfile({});
+  };
 
   const handleSubmit = async (): Promise<void> => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -91,18 +102,19 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
     }
 
     try {
-      const profile = await getClientProfile(result.client_profile_id);
+      const profile = await resolveClientProfile(result.client_profile_id);
+      const resolvedClientProfileId = profile.id;
       const entryRoute = isOnboardingComplete(profile) ? "ProgramReview" : "OnboardingEntry";
 
       queryClient.setQueryData(["me"], {
         id: result.user_id,
-        clientProfileId: result.client_profile_id,
+        clientProfileId: resolvedClientProfileId,
       });
-      queryClient.setQueryData(["clientProfile", result.client_profile_id], profile);
+      queryClient.setQueryData(["clientProfile", resolvedClientProfileId], profile);
 
       resetFromProfile(profile);
-      setIdentity({ userId: result.user_id, clientProfileId: result.client_profile_id });
-      setSession({ userId: result.user_id, clientProfileId: result.client_profile_id, entryRoute });
+      setIdentity({ userId: result.user_id, clientProfileId: resolvedClientProfileId });
+      setSession({ userId: result.user_id, clientProfileId: resolvedClientProfileId, entryRoute });
     } catch (error) {
       console.error("[RegisterScreen] post-registration profile fetch failed:", error);
       navigation.navigate("Login");

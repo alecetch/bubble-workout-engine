@@ -18,6 +18,10 @@ type SegmentCardProps = {
   segment: Segment;
   isLogged: boolean;
   onLogSegment: (segment: Segment) => void;
+  onSwapExercise?: (
+    programExerciseId: string,
+    exerciseName: string,
+  ) => void;
   onViewDecisionHistory?: (
     exerciseId: string,
     exerciseName: string,
@@ -48,6 +52,7 @@ export function SegmentCard({
   segment,
   isLogged,
   onLogSegment,
+  onSwapExercise,
   onViewDecisionHistory,
 }: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
@@ -75,6 +80,31 @@ export function SegmentCard({
     if (withRest.length === 0) return null;
     return Math.max(...withRest);
   }, [exercises]);
+
+  function recommendedLoadHintForExercise(
+    exercise: Segment["exercises"][number],
+  ): Segment["exercises"][number]["guidelineLoad"] | null {
+    const recommendedLoadKg = exercise.progressionRecommendation?.recommendedLoadKg;
+    if (recommendedLoadKg != null && recommendedLoadKg > 0) {
+      const rawConfidence = String(exercise.progressionRecommendation?.confidence ?? "").toLowerCase();
+      const confidence =
+        rawConfidence === "high" || rawConfidence === "medium" || rawConfidence === "low"
+          ? rawConfidence
+          : "medium";
+      return {
+        value: recommendedLoadKg,
+        unit: "kg",
+        confidence,
+        source: exercise.progressionRecommendation?.source ?? "progression_recommendation",
+        reasoning: exercise.progressionRecommendation?.reasoning ?? [],
+        set1Rule: "Based on your last performance, this is the proposed load for this session.",
+      };
+    }
+    if (exercise.guidelineLoad != null && exercise.guidelineLoad.value > 0) {
+      return exercise.guidelineLoad;
+    }
+    return null;
+  }
 
   return (
     <View style={styles.card}>
@@ -141,9 +171,18 @@ export function SegmentCard({
                           <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
                         </View>
                       ) : null}
-                      {!isLogged && exercise.guidelineLoad != null && exercise.guidelineLoad.value > 0 ? (
-                        <GuidelineLoadHint guidelineLoad={exercise.guidelineLoad} />
+                      {!isLogged && onSwapExercise && exercise.id ? (
+                        <PressableScale
+                          style={styles.swapLink}
+                          onPress={() => onSwapExercise(exercise.id ?? "", exercise.name)}
+                        >
+                          <Text style={styles.swapLinkLabel}>Swap exercise</Text>
+                        </PressableScale>
                       ) : null}
+                      {!isLogged ? (() => {
+                        const loadHint = recommendedLoadHintForExercise(exercise);
+                        return loadHint ? <GuidelineLoadHint guidelineLoad={loadHint} /> : null;
+                      })() : null}
                       {exercise.adaptationDecision ? (
                         <AdaptationChip
                           decision={exercise.adaptationDecision}
@@ -309,6 +348,13 @@ const styles = StyleSheet.create({
   },
   exerciseMeta: {
     color: colors.textSecondary,
+    ...typography.small,
+  },
+  swapLink: {
+    alignSelf: "flex-start",
+  },
+  swapLinkLabel: {
+    color: colors.accent,
     ...typography.small,
   },
   restRow: {

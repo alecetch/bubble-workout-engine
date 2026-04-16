@@ -1,6 +1,7 @@
 // api/src/services/importEmitterService.js
 import { createHash } from "node:crypto";
 import logger from "../utils/logger.js";
+import { programCalendarDayHasUserIdColumn } from "./programCalendarDaySchema.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EXPECTED_COLS = {
@@ -399,6 +400,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
   if (!client || typeof client.query !== "function") {
     throw new Error("importEmitterPayload requires a pg Pool or pg Client");
   }
+  const hasProgramCalendarDayUserId = await programCalendarDayHasUserIdColumn(client);
 
   try {
     logger.info({ event: "import_emitter.started",
@@ -604,36 +606,67 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
       const program_day_id = r.rows[0].id;
       dayIdByKey.set(d.program_day_key, program_day_id);
 
-      await client.query(
-        `
-        INSERT INTO program_calendar_day (
-          program_id,
-          user_id,
-          program_week_id,
-          program_day_id,
-          week_number,
-          scheduled_offset_days,
-          scheduled_weekday,
-          scheduled_date,
-          global_day_index,
-          is_training_day,
-          program_day_key
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9,true,$10)
-        `,
-        [
-          program_id,
-          payload.user_id,
-          program_week_id,
-          program_day_id,
-          d.week_number,
-          d.scheduled_offset_days,
-          d.scheduled_weekday,
-          scheduled_date,
-          d.global_day_index,
-          d.program_day_key,
-        ],
-      );
+      if (hasProgramCalendarDayUserId) {
+        await client.query(
+          `
+          INSERT INTO program_calendar_day (
+            program_id,
+            user_id,
+            program_week_id,
+            program_day_id,
+            week_number,
+            scheduled_offset_days,
+            scheduled_weekday,
+            scheduled_date,
+            global_day_index,
+            is_training_day,
+            program_day_key
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9,true,$10)
+          `,
+          [
+            program_id,
+            payload.user_id,
+            program_week_id,
+            program_day_id,
+            d.week_number,
+            d.scheduled_offset_days,
+            d.scheduled_weekday,
+            scheduled_date,
+            d.global_day_index,
+            d.program_day_key,
+          ],
+        );
+      } else {
+        await client.query(
+          `
+          INSERT INTO program_calendar_day (
+            program_id,
+            program_week_id,
+            program_day_id,
+            week_number,
+            scheduled_offset_days,
+            scheduled_weekday,
+            scheduled_date,
+            global_day_index,
+            is_training_day,
+            program_day_key
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,true,$9)
+          `,
+          [
+            program_id,
+            program_week_id,
+            program_day_id,
+            d.week_number,
+            d.scheduled_offset_days,
+            d.scheduled_weekday,
+            scheduled_date,
+            d.global_day_index,
+            d.program_day_key,
+          ],
+        );
+      }
     }
 
     const segmentIdByDayAndKey = new Map();

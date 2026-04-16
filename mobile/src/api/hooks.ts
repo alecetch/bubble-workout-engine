@@ -37,11 +37,24 @@ import {
   type ViewerIdentityOptions,
 } from "./programViewer";
 import {
+  completeProgram,
+  getProgramEndCheck,
+  getProgramCompletionSummary,
+  type ProgramEndCheck,
+  type ProgramCompletionSummary,
+} from "./programCompletion";
+import {
   getSegmentExerciseLogs,
   saveSegmentExerciseLogs,
   type SegmentLogRow,
   type SaveSegmentLogPayload,
 } from "./segmentLog";
+import {
+  applyExerciseSwap,
+  getExerciseSwapOptions,
+  type ApplyExerciseSwapResponse,
+  type ExerciseSwapOptionsResponse,
+} from "./programExercise";
 import { getReferenceData, type ReferenceDataResponse } from "./referenceData";
 import {
   fetchExerciseHistory,
@@ -93,6 +106,12 @@ export const queryKeys = {
   exerciseHistory: (exerciseId: string) => ["exerciseHistory", exerciseId] as const,
   segmentExerciseLogs: (workoutSegmentId: string, programDayId: string) =>
     ["segmentExerciseLogs", workoutSegmentId, programDayId] as const,
+  exerciseSwapOptions: (programExerciseId: string) =>
+    ["exerciseSwapOptions", programExerciseId] as const,
+  programCompletionSummary: (programId: string) =>
+    ["programCompletionSummary", programId] as const,
+  programEndCheck: (programId: string) =>
+    ["programEndCheck", programId] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -208,6 +227,26 @@ export function useProgramDayFull(
     queryKey: queryKeys.programDayFull(programDayId, opts),
     queryFn: () => getProgramDayFull(programDayId, opts),
     enabled: Boolean(programDayId && opts.userId),
+  });
+}
+
+export function useProgramCompletionSummary(
+  programId: string | null,
+): UseQueryResult<ProgramCompletionSummary> {
+  return useQuery({
+    queryKey: queryKeys.programCompletionSummary(programId ?? ""),
+    queryFn: () => getProgramCompletionSummary(programId as string),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useProgramEndCheck(
+  programId: string | null,
+): UseQueryResult<ProgramEndCheck> {
+  return useQuery({
+    queryKey: queryKeys.programEndCheck(programId ?? ""),
+    queryFn: () => getProgramEndCheck(programId as string),
+    enabled: Boolean(programId),
   });
 }
 
@@ -375,6 +414,11 @@ export function useMarkDayComplete(): UseMutationResult<
     mutationFn: ({ programDayId, isCompleted, userId }) =>
       markProgramDayComplete(programDayId, isCompleted, { userId }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+      void queryClient.invalidateQueries({ queryKey: ["dayPreview"] });
+      void queryClient.invalidateQueries({ queryKey: ["programDayFull"] });
+      void queryClient.invalidateQueries({ queryKey: ["programCompletionSummary"] });
+      void queryClient.invalidateQueries({ queryKey: ["programEndCheck"] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyOverview });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPrograms });
@@ -403,6 +447,62 @@ export function useSegmentExerciseLogs(
       }),
     enabled: Boolean(workoutSegmentId && programDayId),
     staleTime: 0,
+  });
+}
+
+export function useCompleteProgram(): UseMutationResult<
+  { ok: boolean; programId: string; lifecycleStatus: "in_progress" | "completed"; completedMode: "as_scheduled" | "with_skips" | null },
+  Error,
+  { programId: string; mode: "as_scheduled" | "with_skips" }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ programId, mode }) => completeProgram(programId, mode),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.programCompletionSummary(variables.programId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.programEndCheck(variables.programId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+      void queryClient.invalidateQueries({ queryKey: ["sessionsByDate"] });
+      void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+    },
+  });
+}
+
+export function useExerciseSwapOptions(
+  programExerciseId: string | null,
+): UseQueryResult<ExerciseSwapOptionsResponse> {
+  return useQuery({
+    queryKey: queryKeys.exerciseSwapOptions(programExerciseId ?? ""),
+    queryFn: () => getExerciseSwapOptions(programExerciseId as string),
+    enabled: Boolean(programExerciseId),
+    staleTime: 0,
+  });
+}
+
+export function useApplyExerciseSwap(): UseMutationResult<
+  ApplyExerciseSwapResponse,
+  Error,
+  {
+    programExerciseId: string;
+    exerciseId: string;
+    reason?: string | null;
+    programDayId: string;
+    userId?: string;
+  }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ programExerciseId, exerciseId, reason }) =>
+      applyExerciseSwap(programExerciseId, { exerciseId, reason }),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.programDayFull(variables.programDayId, { userId: variables.userId }),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.exerciseSwapOptions(variables.programExerciseId),
+      });
+    },
   });
 }
 

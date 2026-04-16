@@ -1,6 +1,24 @@
 ALTER TABLE program
   ADD COLUMN IF NOT EXISTS is_primary BOOLEAN NOT NULL DEFAULT FALSE;
 
+WITH ranked_duplicates AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY user_id, program_type
+      ORDER BY created_at DESC, id DESC
+    ) AS duplicate_rank
+  FROM program
+  WHERE status = 'active'
+    AND program_type IS NOT NULL
+)
+UPDATE program p
+SET status = 'archived',
+    updated_at = now()
+FROM ranked_duplicates d
+WHERE p.id = d.id
+  AND d.duplicate_rank > 1;
+
 UPDATE program p
 SET is_primary = TRUE
 FROM (

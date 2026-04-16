@@ -5,16 +5,39 @@ import {
   buildSegmentLogRows,
   computeSessionStatsFromSegments,
   guidelinePrefill,
-} from "./sessionUxLogic.ts";
+  repsPrefill,
+} from "./sessionUxLogic";
 
-test("guidelinePrefill prefers guideline load when present", () => {
-  assert.equal(guidelinePrefill({ guidelineLoad: { value: 80 }, intensity: "RPE 7" }), "80");
+test("guidelinePrefill prefers progression load over guideline load when both are present", () => {
+  assert.equal(
+    guidelinePrefill({
+      guidelineLoad: { value: 80 },
+      progressionRecommendation: { recommendedLoadKg: 100 },
+      intensity: "RPE 7",
+    }),
+    "100",
+  );
 });
 
 test("guidelinePrefill falls back appropriately", () => {
   assert.equal(guidelinePrefill({ guidelineLoad: null, intensity: "70" }), "70");
   assert.equal(guidelinePrefill({ guidelineLoad: { value: 0 }, intensity: "50" }), "50");
   assert.equal(guidelinePrefill({ guidelineLoad: null, intensity: "RPE 7-8" }), "");
+});
+
+test("guidelinePrefill prefers progression load when guideline load is absent", () => {
+  assert.equal(
+    guidelinePrefill({ guidelineLoad: null, progressionRecommendation: { recommendedLoadKg: 115 } }),
+    "115",
+  );
+});
+
+test("repsPrefill prefers progression recommendation when present", () => {
+  assert.equal(
+    repsPrefill({ reps: "6-10", progressionRecommendation: { recommendedRepsTarget: 9 } }),
+    "9",
+  );
+  assert.equal(repsPrefill({ reps: "6-10" }), "8");
 });
 
 test("buildInitialSetInputMap creates per-set state and overlays existing logs by order index", () => {
@@ -27,6 +50,17 @@ test("buildInitialSetInputMap creates per-set state and overlays existing logs b
       intensity: "RPE 7",
       isLoadable: true,
       guidelineLoad: { value: 85, unit: "kg", confidence: "medium" },
+      progressionRecommendation: {
+        outcome: "increase_reps",
+        primaryLever: "reps",
+        confidence: "high",
+        source: "progression_recommendation",
+        reasoning: [],
+        recommendedLoadKg: 100,
+        recommendedRepsTarget: 6,
+        recommendedSets: null,
+        recommendedRestSeconds: null,
+      },
     }],
     [{
       programExerciseId: "pe-1",
@@ -38,7 +72,8 @@ test("buildInitialSetInputMap creates per-set state and overlays existing logs b
   );
 
   assert.equal(inputMap["pe-1"].length, 3);
-  assert.equal(inputMap["pe-1"][0].weight, "85");
+  assert.equal(inputMap["pe-1"][0].weight, "100");
+  assert.equal(inputMap["pe-1"][0].reps, "6");
   assert.equal(inputMap["pe-1"][1].weight, "90");
   assert.equal(inputMap["pe-1"][1].reps, "4");
   assert.equal(inputMap["pe-1"][1].rirActual, 1);

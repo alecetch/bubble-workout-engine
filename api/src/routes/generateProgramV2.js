@@ -8,6 +8,8 @@ import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
 import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
 import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
+import { programCalendarDayHasUserIdColumn } from "../services/programCalendarDaySchema.js";
+import { programHasIsPrimaryColumn } from "../services/programSchema.js";
 import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
@@ -375,6 +377,17 @@ export function createGenerateProgramV2Handler({
     );
     created_program_id = programR.rows[0].id;
 
+    await setupClient.query(
+      `
+      DELETE FROM program_calendar_day pcd
+      USING program p
+      WHERE pcd.program_id = p.id
+        AND p.user_id = $1
+        AND p.status IN ('failed', 'generating', 'archived', 'completed')
+      `,
+      [pg_user_id],
+    );
+
     // Phase 2b: Pre-create generation_run
     const runR = await setupClient.query(
       `
@@ -539,24 +552,45 @@ export function createGenerateProgramV2Handler({
     const programSummary = prgData.program_summary
       || `Auto-generated ${programType} program.`;
 
+    const hasProgramCalendarDayUserId = await programCalendarDayHasUserIdColumn(db);
     const conflictR = await db.query(
-      `
-      SELECT
-        pcd_new.scheduled_date::text AS conflict_date,
-        ep.program_type AS existing_type
-      FROM program_calendar_day pcd_new
-      JOIN program_calendar_day pcd_existing
-        ON pcd_existing.user_id = pcd_new.user_id
-       AND pcd_existing.scheduled_date = pcd_new.scheduled_date
-       AND pcd_existing.is_training_day = TRUE
-       AND pcd_existing.program_id <> pcd_new.program_id
-      JOIN program ep
-        ON ep.id = pcd_existing.program_id
-       AND ep.status = 'active'
-      WHERE pcd_new.program_id = $1
-        AND pcd_new.is_training_day = TRUE
-      ORDER BY pcd_new.scheduled_date
-      `,
+      hasProgramCalendarDayUserId
+        ? `
+          SELECT
+            pcd_new.scheduled_date::text AS conflict_date,
+            ep.program_type AS existing_type
+          FROM program_calendar_day pcd_new
+          JOIN program_calendar_day pcd_existing
+            ON pcd_existing.user_id = pcd_new.user_id
+           AND pcd_existing.scheduled_date = pcd_new.scheduled_date
+           AND pcd_existing.is_training_day = TRUE
+           AND pcd_existing.program_id <> pcd_new.program_id
+          JOIN program ep
+            ON ep.id = pcd_existing.program_id
+           AND ep.status = 'active'
+          WHERE pcd_new.program_id = $1
+            AND pcd_new.is_training_day = TRUE
+          ORDER BY pcd_new.scheduled_date
+          `
+        : `
+          SELECT
+            pcd_new.scheduled_date::text AS conflict_date,
+            ep.program_type AS existing_type
+          FROM program_calendar_day pcd_new
+          JOIN program p_new
+            ON p_new.id = pcd_new.program_id
+          JOIN program_calendar_day pcd_existing
+            ON pcd_existing.scheduled_date = pcd_new.scheduled_date
+           AND pcd_existing.is_training_day = TRUE
+           AND pcd_existing.program_id <> pcd_new.program_id
+          JOIN program ep
+            ON ep.id = pcd_existing.program_id
+           AND ep.status = 'active'
+           AND ep.user_id = p_new.user_id
+          WHERE pcd_new.program_id = $1
+            AND pcd_new.is_training_day = TRUE
+          ORDER BY pcd_new.scheduled_date
+          `,
       [created_program_id],
     );
 
@@ -576,16 +610,20 @@ export function createGenerateProgramV2Handler({
       });
     }
 
-    const hasPrimaryR = await db.query(
-      `SELECT id
-       FROM program
-       WHERE user_id = $1
-         AND status = 'active'
-         AND is_primary = TRUE
-       LIMIT 1`,
-      [pg_user_id],
-    );
-    const isPrimary = hasPrimaryR.rowCount === 0;
+    const hasProgramIsPrimaryColumn = await programHasIsPrimaryColumn(db);
+    let isPrimary = true;
+    if (hasProgramIsPrimaryColumn) {
+      const hasPrimaryR = await db.query(
+        `SELECT id
+         FROM program
+         WHERE user_id = $1
+           AND status = 'active'
+           AND is_primary = TRUE
+         LIMIT 1`,
+        [pg_user_id],
+      );
+      isPrimary = hasPrimaryR.rowCount === 0;
+    }
 
     const programUpdateAssignments = [
       "program_title = $1",
@@ -600,7 +638,6 @@ export function createGenerateProgramV2Handler({
       "hero_media_id = $10",
       "status = 'active'",
       "is_ready = true",
-      "is_primary = $11",
       "updated_at = now()",
     ];
     const programUpdateParams = [
@@ -614,8 +651,12 @@ export function createGenerateProgramV2Handler({
       prgData.start_weekday ?? "",
       JSON.stringify(prgData.preferred_days_sorted_json ?? []),
       pipelineOut?.program?.hero_media_id ?? null,
-      isPrimary,
     ];
+
+    if (hasProgramIsPrimaryColumn) {
+      programUpdateAssignments.splice(programUpdateAssignments.length - 1, 0, `is_primary = $${programUpdateParams.length + 1}`);
+      programUpdateParams.push(isPrimary);
+    }
 
     if (hasProgramTypeColumn) {
       programUpdateAssignments.push(`program_type = $${programUpdateParams.length + 1}`);
