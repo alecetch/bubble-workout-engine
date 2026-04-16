@@ -94,6 +94,7 @@ function makeClient() {
       calls.push({ sql, params });
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 1 };
+      if (sql.includes("information_schema.columns")) return { rows: [{ "1": 1 }], rowCount: 1 };
       if (sql.includes("SELECT COUNT(*) AS cnt FROM program_week")) return { rows: [{ cnt: "0" }], rowCount: 1 };
       if (sql.includes("INSERT INTO program_week")) return { rows: [{ id: `w${++weekId}` }], rowCount: 1 };
       if (sql.includes("INSERT INTO program_day")) return { rows: [{ id: `d${++dayId}` }], rowCount: 1 };

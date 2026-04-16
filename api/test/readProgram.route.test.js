@@ -240,6 +240,7 @@ test("dayComplete returns 200 while Layer B progression runs non-blocking", asyn
     userId: USER_UUID,
     programType: "strength",
     fitnessRank: 2,
+    completedProgramDayId: VALID_UUID,
   });
 });
 

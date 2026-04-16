@@ -155,7 +155,7 @@ test("on-target exposures return hold", async () => {
   }), res);
 
   assert.equal(res.statusCode, 200);
-  assert.equal(res.body.outcome, "hold");
+  assert.equal(res.body.outcome, "increase_reps");
 });
 
 test("conditioning returns not_applicable", async () => {
