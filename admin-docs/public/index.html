@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doc Admin Board</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --col-backlog:       #94a3b8;
+      --col-prioritised:   #3b82f6;
+      --col-prompt-active: #f59e0b;
+      --col-testing:       #8b5cf6;
+      --col-done:          #10b981;
+      --bg:                #f0f2f5;
+      --card-bg:           #ffffff;
+      --text:              #1e293b;
+      --text-muted:        #64748b;
+      --border:            #e2e8f0;
+      --shadow:            0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1e293b;
+      color: white;
+      padding: 0 20px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.3px; }
+    header .spacer { flex: 1; }
+    header .counts { font-size: 12px; color: #94a3b8; }
+    .btn-header {
+      background: #334155;
+      border: none;
+      color: #e2e8f0;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-header:hover { background: #475569; }
+    .btn-header.loading { opacity: 0.6; pointer-events: none; }
+
+    /* ── Board ── */
+    .board {
+      display: flex;
+      gap: 12px;
+      padding: 16px;
+      overflow-x: auto;
+      min-height: calc(100vh - 90px);
+      align-items: flex-start;
+    }
+
+    /* ── Column ── */
+    .column {
+      background: #e8ecf0;
+      border-radius: 10px;
+      min-width: 270px;
+      max-width: 300px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 84px);
+    }
+    .column-header {
+      padding: 10px 12px 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .column-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .column-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .column-count {
+      background: #cbd5e1;
+      color: #475569;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 99px;
+    }
+
+    /* ── Cards container ── */
+    .cards {
+      padding: 8px;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 48px;
+    }
+    .cards.drag-over { background: rgba(59,130,246,0.05); border-radius: 6px; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      cursor: grab;
+      transition: box-shadow 0.15s, opacity 0.15s, transform 0.1s;
+      user-select: none;
+    }
+    .card:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
+    .card.dragging { opacity: 0.35; cursor: grabbing; }
+    .card.drag-target-above { border-top: 2px solid #3b82f6; }
+    .card.drag-target-below { border-bottom: 2px solid #3b82f6; }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.4;
+      word-break: break-word;
+      margin-bottom: 6px;
+    }
+    .card-key {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-family: monospace;
+    }
+
+    /* ── Badges ── */
+    .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .badge-no-prompt    { background: #f1f5f9; color: #94a3b8; }
+    .badge-prompt-active { background: #fef3c7; color: #d97706; }
+    .badge-prompt-done  { background: #d1fae5; color: #059669; }
+    .badge-warn         { background: #fef2f2; color: #dc2626; }
+
+    /* ── Lineage ── */
+    .lineage {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+    .lineage-node {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lineage-node.planning {
+      background: #ede9fe;
+      color: #6d28d9;
+      cursor: pointer;
+      border: 1px solid #ddd6fe;
+    }
+    .lineage-node.planning:hover { background: #ddd6fe; }
+    .lineage-node.spec { background: #e0f2fe; color: #0369a1; }
+    .lineage-node.prompt-active { background: #fef3c7; color: #d97706; }
+    .lineage-node.prompt-done  { background: #d1fae5; color: #059669; }
+    .lineage-node.no-prompt { background: #f1f5f9; color: #94a3b8; }
+    .lineage-arrow { color: #cbd5e1; font-size: 10px; }
+    .lineage-set {
+      font-size: 10px;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 3px;
+      border: 1px dashed #e2e8f0;
+    }
+    .lineage-set:hover { border-color: #94a3b8; color: #64748b; }
+
+    /* ── Bug prompts ── */
+    .bug-prompts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 5px;
+      padding-top: 5px;
+      border-top: 1px dashed #fee2e2;
+    }
+    .bug-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10px;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: #fff1f2;
+      color: #be123c;
+      border: 1px solid #fecdd3;
+      cursor: pointer;
+      white-space: nowrap;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .bug-chip:hover { background: #ffe4e6; border-color: #fda4af; }
+
+    /* ── Card actions ── */
+    .card-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+    .btn-card {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: white;
+      color: #475569;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+    .btn-card:hover { background: #f8fafc; color: var(--text); }
+    .btn-card.primary { background: #3b82f6; color: white; border-color: #3b82f6; }
+    .btn-card.primary:hover { background: #2563eb; }
+    .btn-card.success { background: #10b981; color: white; border-color: #10b981; }
+    .btn-card.success:hover { background: #059669; }
+    .btn-card.preview { color: #3b82f6; border-color: #bfdbfe; }
+    .btn-card.preview:hover { background: #eff6ff; }
+    .btn-card:disabled { opacity: 0.5; pointer-events: none; }
+
+    /* ── Drop indicator ── */
+    .drop-indicator {
+      height: 3px;
+      background: #3b82f6;
+      border-radius: 2px;
+      margin: 2px 0;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 20px 12px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 12px;
+      width: 720px;
+      max-width: 90vw;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .modal-header h2 { font-size: 14px; font-weight: 600; flex: 1; word-break: break-all; }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .modal-close:hover { background: #f1f5f9; }
+    .modal-body {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-body pre {
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 90px);
+    }
+
+    /* ── Planning sidebar ── */
+    .planning-sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: #1e293b;
+      display: flex;
+      flex-direction: column;
+      transition: width 0.2s ease, min-width 0.2s ease;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .planning-sidebar.collapsed {
+      width: 36px;
+      min-width: 36px;
+    }
+    .planning-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 10px 10px 12px;
+      border-bottom: 1px solid #334155;
+      flex-shrink: 0;
+      height: 40px;
+    }
+    .planning-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .btn-collapse {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: color 0.15s, transform 0.2s;
+    }
+    .btn-collapse:hover { color: #94a3b8; }
+    .planning-sidebar.collapsed .btn-collapse { transform: rotate(180deg); }
+    .planning-sidebar.collapsed .planning-title { opacity: 0; }
+
+    .planning-items {
+      overflow-y: auto;
+      flex: 1;
+      padding: 8px 0;
+    }
+    .planning-sidebar.collapsed .planning-items { display: none; }
+
+    .planning-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      padding: 7px 12px;
+      font-size: 12px;
+      color: #94a3b8;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-radius: 0;
+      transition: background 0.12s, color 0.12s;
+    }
+    .planning-item:hover { background: #334155; color: #e2e8f0; }
+
+    /* ── Health Panel ── */
+    #health-panel {
+      background: #1a2535;
+      border-bottom: 1px solid #0f172a;
+      overflow: hidden;
+      transition: max-height 0.25s ease;
+    }
+    #health-panel.collapsed { max-height: 38px; }
+    #health-panel.expanded  { max-height: 340px; }
+
+    .health-bar {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .health-bar:hover { background: rgba(255,255,255,0.03); }
+    .health-bar-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .health-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+    .pill-ok     { background: rgba(16,185,129,0.15); color: #34d399; }
+    .pill-warn   { background: rgba(245,158,11,0.15);  color: #fbbf24; }
+    .pill-stale  { background: rgba(239,68,68,0.15);   color: #f87171; }
+    .pill-info   { background: rgba(148,163,184,0.12); color: #94a3b8; }
+    .health-bar .spacer { flex: 1; }
+    .health-chevron {
+      font-size: 10px;
+      color: #64748b;
+      transition: transform 0.2s;
+    }
+    #health-panel.expanded .health-chevron { transform: rotate(180deg); }
+
+    .health-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      padding: 0 12px 12px;
+      overflow: hidden;
+    }
+    .health-section { padding: 4px 8px; }
+    .health-section-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    /* Score rings */
+    .score-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .score-card {
+      flex: 1;
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .score-value {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .score-label {
+      font-size: 9px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .score-ok    { color: #34d399; }
+    .score-warn  { color: #fbbf24; }
+    .score-bad   { color: #f87171; }
+
+    /* Ref doc rows */
+    .ref-doc-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .ref-doc-row:last-child { border-bottom: none; }
+    .ref-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-ok     { background: #34d399; }
+    .dot-warn   { background: #fbbf24; }
+    .dot-stale  { background: #f87171; }
+    .dot-missing { background: #64748b; }
+    .ref-doc-name {
+      font-size: 11px;
+      color: #cbd5e1;
+      flex: 1;
+      font-family: monospace;
+    }
+    .ref-doc-age {
+      font-size: 10px;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .ref-doc-drift {
+      font-size: 10px;
+      font-weight: 600;
+      color: #f87171;
+      flex-shrink: 0;
+    }
+
+    /* Coverage rows */
+    .cov-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #1e293b;
+      font-size: 11px;
+    }
+    .cov-row:last-child { border-bottom: none; }
+    .cov-label { color: #94a3b8; }
+    .cov-value { font-weight: 600; color: #e2e8f0; }
+    .cov-bar-wrap {
+      width: 60px; height: 4px;
+      background: #1e293b;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .cov-bar-fill { height: 100%; border-radius: 2px; }
+
+    /* Warnings */
+    .warn-list { display: flex; flex-direction: column; gap: 6px; }
+    .warn-item {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 11px;
+      color: #fca5a5;
+      line-height: 1.4;
+    }
+    .warn-item.amber {
+      background: rgba(245,158,11,0.1);
+      border-color: rgba(245,158,11,0.2);
+      color: #fcd34d;
+    }
+    .warn-none {
+      font-size: 11px;
+      color: #34d399;
+      padding: 4px 0;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: white;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 300;
+      max-width: 320px;
+    }
+    #toast.show { opacity: 1; }
+    #toast.success { background: #10b981; }
+    #toast.error   { background: #ef4444; }
+    #toast.info    { background: #3b82f6; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📋 Doc Admin Board</h1>
+  <span class="spacer"></span>
+  <span class="counts" id="total-count"></span>
+  <button class="btn-header" id="btn-reconcile">↻ Reconcile</button>
+</header>
+
+<div id="health-panel" class="collapsed">
+  <div class="health-bar" id="health-bar" onclick="toggleHealth()">
+    <span class="health-bar-title">Doc Health</span>
+    <span id="hbar-ref"  class="health-pill pill-info">⋯</span>
+    <span id="hbar-cov"  class="health-pill pill-info">⋯</span>
+    <span id="hbar-del"  class="health-pill pill-info">⋯</span>
+    <span id="hbar-warn" class="health-pill pill-info" style="display:none"></span>
+    <span class="spacer"></span>
+    <span id="hbar-checked" style="font-size:10px;color:#334155"></span>
+    <span class="health-chevron">▼</span>
+  </div>
+  <div class="health-body" id="health-body">
+
+    <!-- Column 1: Scores + Ref Docs -->
+    <div class="health-section">
+      <div class="health-section-title">Reference Docs</div>
+      <div id="ref-doc-list"></div>
+    </div>
+
+    <!-- Column 2: Coverage -->
+    <div class="health-section">
+      <div class="health-section-title">Scores</div>
+      <div class="score-row" id="score-row"></div>
+      <div class="health-section-title" style="margin-top:10px">Spec Coverage</div>
+      <div id="cov-list"></div>
+    </div>
+
+    <!-- Column 3: Warnings -->
+    <div class="health-section">
+      <div class="health-section-title">Warnings</div>
+      <div class="warn-list" id="warn-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="planning-sidebar" id="planning-sidebar">
+    <div class="planning-header">
+      <span class="planning-title">Planning</span>
+      <button class="btn-collapse" id="btn-collapse" title="Toggle planning panel">‹</button>
+    </div>
+    <div class="planning-items" id="planning-items"></div>
+  </aside>
+  <main class="board" id="board"></main>
+</div>
+
+<!-- Modal for doc preview -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title"></h2>
+      <button class="modal-close" id="modal-close">×</button>
+    </div>
+    <div class="modal-body">
+      <pre id="modal-content"></pre>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────
+const COLUMNS = [
+  { key: 'backlog',       label: 'Backlog',       color: '#94a3b8' },
+  { key: 'prioritised',   label: 'Prioritised',   color: '#3b82f6' },
+  { key: 'prompt_active', label: 'Prompt Active', color: '#f59e0b' },
+  { key: 'needs_testing', label: 'Needs Testing', color: '#8b5cf6' },
+  { key: 'done',          label: 'Done',          color: '#10b981' },
+];
+
+// ─────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────
+let dragState = { id: null, el: null };
+
+// ─────────────────────────────────────────────────
+// API
+// ─────────────────────────────────────────────────
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Unknown error');
+  return data;
+}
+
+// ─────────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.className = ''; }, 3000);
+}
+
+// ─────────────────────────────────────────────────
+// Rendering
+// ─────────────────────────────────────────────────
+function renderBoard(data) {
+  const board = document.getElementById('board');
+
+  // Preserve scroll position of each column's card list before re-rendering
+  const scrollPositions = {};
+  board.querySelectorAll('.cards[data-status]').forEach(el => {
+    scrollPositions[el.dataset.status] = el.scrollTop;
+  });
+
+  board.innerHTML = '';
+
+  let total = 0;
+  for (const col of COLUMNS) {
+    const items = data.columns[col.key] || [];
+    total += items.length;
+    board.appendChild(renderColumn(col, items));
+  }
+  document.getElementById('total-count').textContent = `${total} specs`;
+
+  // Restore scroll positions
+  board.querySelectorAll('.cards[data-status]').forEach(el => {
+    if (scrollPositions[el.dataset.status] != null) {
+      el.scrollTop = scrollPositions[el.dataset.status];
+    }
+  });
+}
+
+function renderColumn(col, items) {
+  const colEl = document.createElement('div');
+  colEl.className = 'column';
+  colEl.innerHTML = `
+    <div class="column-header">
+      <div class="column-dot" style="background:${col.color}"></div>
+      <span class="column-title">${col.label}</span>
+      <span class="column-count">${items.length}</span>
+    </div>
+    <div class="cards" data-status="${col.key}"></div>
+  `;
+
+  const cardsEl = colEl.querySelector('.cards');
+
+  if (items.length === 0) {
+    cardsEl.innerHTML = '<div class="empty-state">No items</div>';
+  } else {
+    for (const item of items) {
+      cardsEl.appendChild(renderCard(item));
+    }
+  }
+
+  // Column-level drop (for dropping at end when column has no cards, or card dropped on column padding)
+  cardsEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    // Only handle if we're over the .cards container directly (not a child card)
+    if (e.target === cardsEl) {
+      clearDropIndicators();
+      const indicator = createDropIndicator();
+      cardsEl.appendChild(indicator);
+    }
+  });
+
+  cardsEl.addEventListener('drop', e => {
+    e.preventDefault();
+    clearDropIndicators();
+    if (!dragState.id) return;
+    const status = cardsEl.dataset.status;
+    // Drop at end of column
+    moveItem(dragState.id, status, null);
+  });
+
+  return colEl;
+}
+
+function renderCard(item) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.id = item.id;
+  card.dataset.status = item.status;
+  card.draggable = true;
+
+  const actions = actionsHtml(item);
+
+  card.innerHTML = `
+    <div class="card-title">${escHtml(shortName(item.spec_filename))}</div>
+    <div class="lineage">${lineageHtml(item)}</div>
+    ${bugPromptsHtml(item)}
+    ${actions}
+  `;
+
+  // Drag events
+  card.addEventListener('dragstart', e => {
+    dragState = { id: item.id, el: card };
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.id);
+  });
+
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    dragState = { id: null, el: null };
+    clearDropIndicators();
+  });
+
+  card.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragState.id || dragState.id === item.id) return;
+    clearDropIndicators();
+    const rect = card.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (e.clientY < midY) {
+      card.classList.add('drag-target-above');
+    } else {
+      card.classList.add('drag-target-below');
+    }
+  });
+
+  card.addEventListener('dragleave', () => {
+    card.classList.remove('drag-target-above', 'drag-target-below');
+  });
+
+  card.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearDropIndicators();
+    if (!dragState.id || dragState.id === item.id) return;
+
+    const rect = card.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const status = card.closest('.cards').dataset.status;
+
+    if (e.clientY < midY) {
+      // Drop before this card
+      moveItem(dragState.id, status, item.id);
+    } else {
+      // Drop after this card — find the next sibling's id
+      const nextCard = card.nextElementSibling;
+      const beforeId = nextCard?.dataset?.id ? parseInt(nextCard.dataset.id, 10) : null;
+      moveItem(dragState.id, status, beforeId);
+    }
+  });
+
+  // Button actions (stop drag propagation on button clicks)
+  card.querySelectorAll && setTimeout(() => {
+    card.querySelectorAll('.btn-card').forEach(btn => {
+      btn.addEventListener('mousedown', e => e.stopPropagation());
+      btn.addEventListener('dragstart', e => e.stopPropagation());
+    });
+  }, 0);
+
+  return card;
+}
+
+function lineageHtml(item) {
+  const parts = [];
+
+  // Planning doc node
+  if (item.planning_doc) {
+    const label = item.planning_doc.replace('.md', '');
+    parts.push(`<span class="lineage-node planning" title="${escHtml(item.planning_doc)}" onclick="viewDocSafe('planning/${escHtml(item.planning_doc)}', '${escHtml(item.planning_doc)}')" >📄 ${escHtml(label)}</span>`);
+  } else {
+    parts.push(`<span class="lineage-set" title="Set planning doc" onclick="setPlanningDoc(${item.id})">+ planning</span>`);
+  }
+
+  parts.push('<span class="lineage-arrow">→</span>');
+
+  // Spec node
+  parts.push(`<span class="lineage-node spec" title="${escHtml(item.spec_filename)}">spec</span>`);
+
+  parts.push('<span class="lineage-arrow">→</span>');
+
+  // Prompt node
+  if (!item.prompt_filename) {
+    parts.push('<span class="lineage-node no-prompt">no prompt</span>');
+  } else if (item.status === 'done') {
+    parts.push('<span class="lineage-node prompt-done">prompt ✓</span>');
+  } else {
+    parts.push('<span class="lineage-node prompt-active">prompt active</span>');
+  }
+
+  return parts.join('');
+}
+
+function bugPromptsHtml(item) {
+  const bugs = item.bug_prompt_filenames;
+  if (!bugs || bugs.length === 0) return '';
+
+  const chips = bugs.map(f => {
+    // Extract just the slug after -bug, or show "bug fix" if no slug
+    const slugMatch = f.match(/-bug-([a-z0-9][a-z0-9-]*)\.(md|txt)$/i);
+    const label = slugMatch ? `🐛 ${slugMatch[1]}` : '🐛 bug fix';
+    return `<span class="bug-chip" title="${escHtml(f)}" onclick="viewBugPrompt('${escHtml(f)}')">${escHtml(label)}</span>`;
+  }).join('');
+
+  return `<div class="bug-prompts">${chips}</div>`;
+}
+
+const PLANNING_DOCS = ['roadmap-next-10-features.md', 'vision-and-roadmap.md'];
+
+async function setPlanningDoc(id) {
+  const choice = prompt(
+    'Set planning doc:\n' +
+    PLANNING_DOCS.map((d, i) => `${i + 1}. ${d}`).join('\n') +
+    '\n\nEnter number (or leave blank to clear):'
+  );
+  if (choice === null) return; // cancelled
+  const idx = parseInt(choice, 10) - 1;
+  const planningDoc = (idx >= 0 && idx < PLANNING_DOCS.length) ? PLANNING_DOCS[idx] : null;
+  try {
+    await api('PATCH', `/api/items/${id}/planning-doc`, { planningDoc });
+    await refresh();
+  } catch (err) {
+    toast(`Failed to set planning doc: ${err.message}`, 'error');
+  }
+}
+
+function actionsHtml(item) {
+  const btns = [];
+
+  // View spec button — always available
+  btns.push(`<button class="btn-card preview" onclick="viewDocSafe('specs/${escHtml(item.spec_filename)}', '${escHtml(item.spec_filename)}')">View</button>`);
+
+  if (item.status === 'backlog') {
+    btns.push(`<button class="btn-card" onclick="moveCard(${item.id}, 'prioritised')">→ Prioritise</button>`);
+  }
+
+  if (item.status === 'prioritised') {
+    btns.push(`<button class="btn-card" onclick="moveCard(${item.id}, 'backlog')">← Backlog</button>`);
+    const activateLabel = item.prompt_filename ? '→ Prompt Active' : '→ Activate (move spec)';
+    btns.push(`<button class="btn-card primary" onclick="activateItem(${item.id}, ${!item.prompt_filename})">${activateLabel}</button>`);
+  }
+
+  if (item.status === 'prompt_active') {
+    btns.push(`<button class="btn-card" onclick="moveCard(${item.id}, 'prioritised')">← Back</button>`);
+    btns.push(`<button class="btn-card primary" onclick="moveCard(${item.id}, 'needs_testing')">→ Testing</button>`);
+    if (item.prompt_filename) {
+      btns.push(`<button class="btn-card success" onclick="confirmMarkDone(${item.id}, true)">✓ Done</button>`);
+    }
+  }
+
+  if (item.status === 'needs_testing') {
+    btns.push(`<button class="btn-card" onclick="moveCard(${item.id}, 'prompt_active')">← Back</button>`);
+    btns.push(`<button class="btn-card success" onclick="confirmMarkDone(${item.id}, false)">✓ Mark Done</button>`);
+  }
+
+  if (item.status === 'done') {
+    btns.push(`<button class="btn-card" onclick="moveCard(${item.id}, 'needs_testing')">↩ Reopen</button>`);
+  }
+
+  return btns.length ? `<div class="card-actions">${btns.join('')}</div>` : '';
+}
+
+// ─────────────────────────────────────────────────
+// Actions
+// ─────────────────────────────────────────────────
+async function moveItem(id, status, beforeId) {
+  try {
+    await api('PATCH', `/api/items/${id}/move`, { status, beforeId });
+    await refresh();
+  } catch (err) {
+    toast(`Move failed: ${err.message}`, 'error');
+  }
+}
+
+async function moveCard(id, status) {
+  await moveItem(id, status, null);
+}
+
+async function activateItem(id, isMovingSpec) {
+  if (isMovingSpec) {
+    const ok = confirm('No separate prompt exists.\n\nThis will move the spec file itself into docs/prompts/active/ and mark it as Prompt Active.\n\nContinue?');
+    if (!ok) return;
+  }
+  try {
+    const data = await api('POST', `/api/items/${id}/activate`);
+    toast(data.fileMoved ? '✓ Spec moved to prompts/active/' : '✓ Moved to Prompt Active', 'success');
+    await refresh();
+  } catch (err) {
+    toast(`Activate failed: ${err.message}`, 'error');
+  }
+}
+
+function confirmMarkDone(id, skipTesting) {
+  const msg = skipTesting
+    ? 'Skip Testing and mark as Done? The prompt file will be moved to done/.'
+    : 'Mark as Done? The prompt file will be moved to done/.';
+  if (!confirm(msg)) return;
+  doMarkDone(id);
+}
+
+async function doMarkDone(id) {
+  try {
+    const data = await api('POST', `/api/items/${id}/mark-done`);
+    toast(data.fileMoved ? '✓ Done — prompt file moved to done/' : '✓ Marked done', 'success');
+    await refresh();
+  } catch (err) {
+    toast(`Mark done failed: ${err.message}`, 'error');
+  }
+}
+
+async function viewBugPrompt(filename) {
+  // Try active/ first, fall back to done/
+  try {
+    await viewDoc(`prompts/active/${filename}`, filename);
+  } catch {
+    try {
+      await viewDoc(`prompts/done/${filename}`, filename);
+    } catch (err) {
+      toast(`Could not load bug prompt: ${err.message}`, 'error');
+    }
+  }
+}
+
+async function viewDoc(filePath, filename, { silent = false } = {}) {
+  const data = await api('GET', `/api/docs/view?file=${encodeURIComponent(filePath)}`);
+  document.getElementById('modal-title').textContent = filename;
+  document.getElementById('modal-content').textContent = data.content;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+// Wrapper for inline onclick use — shows a toast on error instead of unhandled rejection
+function viewDocSafe(filePath, filename) {
+  viewDoc(filePath, filename).catch(err => toast(`Could not load file: ${err.message}`, 'error'));
+}
+
+// ─────────────────────────────────────────────────
+// Drag helpers
+// ─────────────────────────────────────────────────
+function clearDropIndicators() {
+  document.querySelectorAll('.drag-target-above, .drag-target-below').forEach(el => {
+    el.classList.remove('drag-target-above', 'drag-target-below');
+  });
+  document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+}
+
+function createDropIndicator() {
+  const el = document.createElement('div');
+  el.className = 'drop-indicator';
+  return el;
+}
+
+// ─────────────────────────────────────────────────
+// Lifecycle
+// ─────────────────────────────────────────────────
+async function refresh() {
+  try {
+    const data = await api('GET', '/api/board');
+    renderBoard(data);
+  } catch (err) {
+    toast(`Failed to load board: ${err.message}`, 'error');
+  }
+}
+
+async function doReconcile() {
+  const btn = document.getElementById('btn-reconcile');
+  btn.classList.add('loading');
+  btn.textContent = '↻ Reconciling…';
+  try {
+    const data = await api('POST', '/api/reconcile');
+    const { inserted, updated, orphanPrompts } = data.summary;
+    toast(`Reconciled: ${inserted} new, ${updated} updated, ${orphanPrompts.length} orphans`, 'success');
+    await refresh();
+    await loadHealth();
+  } catch (err) {
+    toast(`Reconcile failed: ${err.message}`, 'error');
+  } finally {
+    btn.classList.remove('loading');
+    btn.textContent = '↻ Reconcile';
+  }
+}
+
+// ─────────────────────────────────────────────────
+// Utils
+// ─────────────────────────────────────────────────
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function shortName(filename) {
+  // Show the filename without the -spec.md suffix for readability
+  return (filename || '').replace(/-spec\.md$/, '').replace(/\.md$/, '');
+}
+
+// ─────────────────────────────────────────────────
+// Planning sidebar
+// ─────────────────────────────────────────────────
+async function loadPlanning() {
+  try {
+    const data = await api('GET', '/api/planning');
+    const container = document.getElementById('planning-items');
+    container.innerHTML = '';
+    if (data.files.length === 0) {
+      container.innerHTML = '<div style="padding:12px;font-size:12px;color:#475569">No files</div>';
+      return;
+    }
+    for (const file of data.files) {
+      const btn = document.createElement('button');
+      btn.className = 'planning-item';
+      btn.textContent = file.replace(/\.md$/, '');
+      btn.title = file;
+      btn.addEventListener('click', () => viewDocSafe(`planning/${file}`, file));
+      container.appendChild(btn);
+    }
+  } catch (err) {
+    toast(`Failed to load planning files: ${err.message}`, 'error');
+  }
+}
+
+function initCollapse() {
+  const sidebar = document.getElementById('planning-sidebar');
+  const btn     = document.getElementById('btn-collapse');
+  const collapsed = localStorage.getItem('planning-collapsed') === 'true';
+  if (collapsed) sidebar.classList.add('collapsed');
+
+  btn.addEventListener('click', () => {
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    localStorage.setItem('planning-collapsed', isCollapsed);
+  });
+}
+
+// ─────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────
+document.getElementById('btn-reconcile').addEventListener('click', doReconcile);
+
+document.getElementById('modal-close').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('open');
+});
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+});
+
+initCollapse();
+loadPlanning();
+refresh();
+
+// ─────────────────────────────────────────────────
+// Documentation Health Panel
+// ─────────────────────────────────────────────────
+let healthExpanded = localStorage.getItem('healthExpanded') === 'true';
+
+function toggleHealth() {
+  healthExpanded = !healthExpanded;
+  localStorage.setItem('healthExpanded', healthExpanded);
+  applyHealthPanelState();
+}
+
+function applyHealthPanelState() {
+  const panel = document.getElementById('health-panel');
+  panel.className = healthExpanded ? 'expanded' : 'collapsed';
+}
+
+function scoreClass(n) {
+  if (n >= 80) return 'score-ok';
+  if (n >= 55) return 'score-warn';
+  return 'score-bad';
+}
+
+function pillClass(n) {
+  if (n >= 80) return 'pill-ok';
+  if (n >= 55) return 'pill-warn';
+  return 'pill-stale';
+}
+
+function dotClass(status) {
+  return { ok: 'dot-ok', warn: 'dot-warn', stale: 'dot-stale', missing: 'dot-missing' }[status] ?? 'dot-missing';
+}
+
+function barColor(n) {
+  if (n >= 75) return '#34d399';
+  if (n >= 50) return '#fbbf24';
+  return '#f87171';
+}
+
+function fmtAge(days) {
+  if (days === null) return '—';
+  if (days === 0) return 'today';
+  if (days === 1) return '1d ago';
+  return `${days}d ago`;
+}
+
+async function loadHealth() {
+  try {
+    const d = await api('GET', '/api/doc-health');
+
+    // ── Summary bar pills ──
+    const refOk = d.refDocs.filter(r => r.status === 'ok').length;
+    const refTotal = d.refDocs.length;
+    const refLabel = `${refOk}/${refTotal} docs current`;
+    const refPill = document.getElementById('hbar-ref');
+    refPill.textContent = refLabel;
+    refPill.className = `health-pill ${pillClass(d.scores.refDocs)}`;
+
+    const covPill = document.getElementById('hbar-cov');
+    covPill.textContent = `${d.scores.coverage}% coverage`;
+    covPill.className = `health-pill ${pillClass(d.scores.coverage)}`;
+
+    const delPill = document.getElementById('hbar-del');
+    delPill.textContent = `${d.scores.delivery}% done`;
+    delPill.className = `health-pill ${pillClass(d.scores.delivery)}`;
+
+    const warnPill = document.getElementById('hbar-warn');
+    if (d.warnings.length > 0) {
+      warnPill.textContent = `⚠ ${d.warnings.length} warning${d.warnings.length > 1 ? 's' : ''}`;
+      warnPill.className = 'health-pill pill-warn';
+      warnPill.style.display = '';
+    } else {
+      warnPill.style.display = 'none';
+    }
+
+    const checked = new Date(d.checkedAt);
+    document.getElementById('hbar-checked').textContent =
+      `checked ${checked.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    // ── Ref doc list ──
+    const refList = document.getElementById('ref-doc-list');
+    refList.innerHTML = d.refDocs.map(r => `
+      <div class="ref-doc-row">
+        <span class="ref-dot ${dotClass(r.status)}"></span>
+        <span class="ref-doc-name">${escHtml(r.label)}</span>
+        <span class="ref-doc-age">${fmtAge(r.docAgeDays)}</span>
+        ${r.driftDays > 0
+          ? `<span class="ref-doc-drift" title="Code changed ${r.driftDays}d after doc">+${r.driftDays}d drift</span>`
+          : ''}
+      </div>`).join('');
+
+    // ── Scores ──
+    const scores = [
+      { label: 'Ref Docs',   value: d.scores.refDocs },
+      { label: 'Coverage',   value: d.scores.coverage },
+      { label: 'Delivery',   value: d.scores.delivery },
+      { label: 'Overall',    value: d.scores.overall },
+    ];
+    document.getElementById('score-row').innerHTML = scores.map(s => `
+      <div class="score-card">
+        <div class="score-value ${scoreClass(s.value)}">${s.value}</div>
+        <div class="score-label">${escHtml(s.label)}</div>
+      </div>`).join('');
+
+    // ── Coverage list ──
+    const b = d.board;
+    const pct = (n, t) => t > 0 ? Math.round((n / t) * 100) : 0;
+    const covRows = [
+      { label: 'Total specs',      value: b.total,         pct: null },
+      { label: 'With planning doc', value: b.with_planning, pct: pct(b.with_planning, b.total) },
+      { label: 'With prompt',       value: b.with_prompt,   pct: pct(b.with_prompt, b.total) },
+      { label: 'Done',              value: b.done,          pct: pct(b.done, b.total) },
+      { label: 'Needs testing',     value: b.needs_testing, pct: null, warn: b.needs_testing > 0 },
+      { label: 'Active',            value: b.prompt_active, pct: null },
+      { label: 'Backlog',           value: b.backlog,       pct: null },
+      { label: 'Bug fixes tracked', value: b.with_bugs,     pct: null },
+    ];
+    document.getElementById('cov-list').innerHTML = covRows.map(r => `
+      <div class="cov-row">
+        <span class="cov-label">${escHtml(r.label)}</span>
+        ${r.pct !== null ? `
+          <div class="cov-bar-wrap">
+            <div class="cov-bar-fill" style="width:${r.pct}%;background:${barColor(r.pct)}"></div>
+          </div>` : ''}
+        <span class="cov-value" style="${r.warn ? 'color:#fbbf24' : ''}">${r.value}${r.pct !== null ? ` (${r.pct}%)` : ''}</span>
+      </div>`).join('');
+
+    // ── Warnings ──
+    const warnList = document.getElementById('warn-list');
+    if (d.warnings.length === 0) {
+      warnList.innerHTML = '<div class="warn-none">✓ No issues detected</div>';
+    } else {
+      warnList.innerHTML = d.warnings.map(w => {
+        const isAmber = w.includes('stale') || w.includes('testing');
+        return `<div class="warn-item ${isAmber ? 'amber' : ''}">${escHtml(w)}</div>`;
+      }).join('');
+    }
+
+  } catch (err) {
+    console.warn('Health panel failed to load:', err.message);
+  }
+}
+
+applyHealthPanelState();
+loadHealth();
+</script>
+</body>
+</html>
