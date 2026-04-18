@@ -44,6 +44,35 @@ services:
       db:
         condition: service_healthy
 
+  doc-admin:
+    image: node:20
+    env_file:
+      - ./api/.env
+    working_dir: /app
+    volumes:
+      - ./admin-docs:/app
+      - ./docs:/docs
+      - doc_admin_node_modules:/app/node_modules
+    command: >
+      sh -lc "
+      export DOC_ADMIN_DB_URL=\"postgresql://$$POSTGRES_USER:$$POSTGRES_PASSWORD@db:5432/doc_admin\";
+      if [ ! -f node_modules/.package-lock.snapshot ] || ! cmp -s package-lock.json node_modules/.package-lock.snapshot; then
+        npm ci &&
+        cp package-lock.json node_modules/.package-lock.snapshot;
+      fi;
+      node server.js
+      "
+    environment:
+      DOC_ADMIN_PORT: 3001
+      DOCS_ROOT: /docs
+      PGHOST: db
+      PGPORT: 5432
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+
   flyway:
     image: flyway/flyway:12
     profiles: ["tools"]
@@ -140,3 +169,4 @@ volumes:
   pgdata:
   minio_data:
   api_node_modules:
+  doc_admin_node_modules:
