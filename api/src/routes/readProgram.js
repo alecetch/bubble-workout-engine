@@ -300,7 +300,7 @@ export function createReadProgramHandlers(options = pool) {
 
       // 4) Pick selected day:
       // - if selected_program_day_id provided, use it (but must belong to program)
-      // - otherwise pick earliest scheduled_date >= CURRENT_DATE; fallback to earliest overall
+      // - otherwise pick the earliest incomplete training day; fallback to earliest overall
       let selectedDayId = selected_program_day_id;
 
       if (!selectedDayId) {
@@ -310,8 +310,7 @@ export function createReadProgramHandlers(options = pool) {
           FROM program_day
           WHERE program_id = $1
           ORDER BY
-            CASE WHEN scheduled_date >= CURRENT_DATE THEN 0 ELSE 1 END,
-            scheduled_date ASC,
+            CASE WHEN is_completed = FALSE THEN 0 ELSE 1 END,
             global_day_index ASC
           LIMIT 1
           `,

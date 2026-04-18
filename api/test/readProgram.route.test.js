@@ -133,6 +133,68 @@ test("programOverview program not found returns 404", async () => {
   assert.equal(res.body?.code, "not_found");
 });
 
+test("programOverview defaults selected day to the earliest incomplete day", async () => {
+  const handlers = createReadProgramHandlers(mockPool([
+    {
+      rowCount: 1,
+      rows: [{
+        program_id: VALID_UUID,
+        title: "Program",
+        summary: "Summary",
+        hero_image_key: null,
+        hero_image_url: null,
+      }],
+    },
+    { rowCount: 1, rows: [{ week_number: 1, focus: "Base", notes: null }] },
+    {
+      rowCount: 2,
+      rows: [
+        {
+          id: "cal-1",
+          program_day_id: "33333333-3333-4333-8333-333333333333",
+          scheduled_date: "2026-04-01",
+          week_number: 1,
+          is_training_day: true,
+          is_completed: true,
+        },
+        {
+          id: "cal-2",
+          program_day_id: "44444444-4444-4444-8444-444444444444",
+          scheduled_date: "2026-04-03",
+          week_number: 1,
+          is_training_day: true,
+          is_completed: false,
+        },
+      ],
+    },
+    { rowCount: 1, rows: [{ program_day_id: "44444444-4444-4444-8444-444444444444" }] },
+    {
+      rowCount: 1,
+      rows: [{
+        program_day_id: "44444444-4444-4444-8444-444444444444",
+        program_id: VALID_UUID,
+        day_label: "Week 1 Day 2",
+        day_type: "strength",
+        session_duration_mins: 50,
+      }],
+    },
+    { rowCount: 0, rows: [] },
+  ]));
+  const req = {
+    request_id: "t",
+    params: { program_id: VALID_UUID },
+    query: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.programOverview(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.selected_day?.program_day_id, "44444444-4444-4444-8444-444444444444");
+});
+
 test("dayFull non-UUID program_day_id returns 400", async () => {
   const handlers = createReadProgramHandlers(mockPool([]));
   const req = {
