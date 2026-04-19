@@ -30,8 +30,8 @@ test("normalizeSessionHistoryMetrics includes weeklyVolumeByRegion8w", () => {
     dayStreak: 5,
     consistency28d: { completed: 8, scheduled: 12, rate: 0.67 },
     volume28d: 48000,
-    strengthUpper28d: null,
-    strengthLower28d: null,
+    strengthUpper28d: { exerciseId: "bench_press", exerciseName: "Bench Press", bestE1rmKg: 110, trendPct: 0.1 },
+    strengthLower28d: { exerciseId: "bb_back_squat", exerciseName: "Barbell Back Squat", bestE1rmKg: 150, trendPct: null },
     sessionsCount: 20,
     programmesCompleted: 2,
     weeklyVolumeByRegion8w: {
@@ -44,6 +44,8 @@ test("normalizeSessionHistoryMetrics includes weeklyVolumeByRegion8w", () => {
   const result = normalizeSessionHistoryMetrics(raw);
 
   assert.equal(result.dayStreak, 5);
+  assert.equal(result.strengthUpper28d?.exerciseId, "bench_press");
+  assert.equal(result.strengthLower28d?.exerciseId, "bb_back_squat");
   assert.equal(result.weeklyVolumeByRegion8w.upper[0].volumeLoad, 3000);
   assert.deepEqual(result.weeklyVolumeByRegion8w.lower, []);
   assert.equal(result.weeklyVolumeByRegion8w.full[0].weekStart, "2026-03-02");

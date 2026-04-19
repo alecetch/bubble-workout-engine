@@ -148,6 +148,7 @@ prsFeedRouter.get("/prs-feed", async (req, res) => {
       const heaviestResult = await client.query(
         `
         SELECT DISTINCT ON (ec.strength_primary_region)
+          pe.exercise_id,
           COALESCE(ec.name, pe.exercise_name) AS exercise_name,
           sel.weight_kg, sel.reps_completed, sel.estimated_1rm_kg, pd.scheduled_date,
           ec.strength_primary_region AS region
@@ -171,6 +172,7 @@ prsFeedRouter.get("/prs-feed", async (req, res) => {
         const region = row.region;
         if (region !== "upper" && region !== "lower") continue;
         heaviest[region] = {
+          exerciseId: row.exercise_id,
           exerciseName: row.exercise_name,
           weightKg: row.weight_kg == null ? null : Number(row.weight_kg),
           repsCompleted: row.reps_completed == null ? null : Number(row.reps_completed),
