@@ -64,6 +64,50 @@ function mapWeeklyVolumeRows(rows) {
   return grouped;
 }
 
+export function buildStrengthRegionMetricFromRows(rows, region) {
+  const bestByRegion = new Map();
+  const prevBestByRegion = new Map();
+
+  for (const row of rows ?? []) {
+    const rowRegion = asString(row.region);
+    if (!rowRegion) continue;
+
+    const currentBest = asNumber(row.current_best, NaN);
+    if (!Number.isFinite(currentBest)) continue;
+
+    const prevBest = asNumber(row.prev_best, NaN);
+    if (Number.isFinite(prevBest)) {
+      const existingPrev = prevBestByRegion.get(rowRegion);
+      if (!Number.isFinite(existingPrev) || prevBest > existingPrev) {
+        prevBestByRegion.set(rowRegion, prevBest);
+      }
+    }
+
+    if (!bestByRegion.has(rowRegion)) {
+      bestByRegion.set(rowRegion, {
+        exerciseId: asString(row.exercise_id),
+        exerciseName: row.exercise_name,
+        bestE1rmKg: currentBest,
+      });
+    }
+  }
+
+  const best = bestByRegion.get(region);
+  if (!best) return null;
+
+  const prevBest = prevBestByRegion.get(region);
+  const trendPct = Number.isFinite(prevBest) && prevBest !== 0
+    ? (best.bestE1rmKg - prevBest) / prevBest
+    : null;
+
+  return {
+    exerciseId: best.exerciseId,
+    exerciseName: best.exerciseName,
+    bestE1rmKg: best.bestE1rmKg,
+    trendPct,
+  };
+}
+
 sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => {
   const { request_id } = req;
 
@@ -116,6 +160,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         WITH current_period AS (
           SELECT
             ec.strength_primary_region AS region,
+            ec.exercise_id,
             COALESCE(ec.name, pe.exercise_name) AS exercise_name,
             MAX(sel.estimated_1rm_kg) AS best_e1rm
           FROM segment_exercise_log sel
@@ -127,11 +172,12 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
             AND sel.estimated_1rm_kg IS NOT NULL
             AND pd.scheduled_date >= CURRENT_DATE - 27
             AND ec.strength_primary_region IN ('upper','lower')
-          GROUP BY ec.strength_primary_region, COALESCE(ec.name, pe.exercise_name)
+          GROUP BY ec.strength_primary_region, ec.exercise_id, COALESCE(ec.name, pe.exercise_name)
         ),
         prev_period AS (
           SELECT
             ec.strength_primary_region AS region,
+            ec.exercise_id,
             COALESCE(ec.name, pe.exercise_name) AS exercise_name,
             MAX(sel.estimated_1rm_kg) AS best_e1rm
           FROM segment_exercise_log sel
@@ -143,12 +189,12 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
             AND sel.estimated_1rm_kg IS NOT NULL
             AND pd.scheduled_date BETWEEN CURRENT_DATE - 55 AND CURRENT_DATE - 28
             AND ec.strength_primary_region IN ('upper','lower')
-          GROUP BY ec.strength_primary_region, COALESCE(ec.name, pe.exercise_name)
+          GROUP BY ec.strength_primary_region, ec.exercise_id, COALESCE(ec.name, pe.exercise_name)
         )
-        SELECT c.region, c.exercise_name, c.best_e1rm AS current_best,
+        SELECT c.region, c.exercise_id, c.exercise_name, c.best_e1rm AS current_best,
                p.best_e1rm AS prev_best
         FROM current_period c
-        LEFT JOIN prev_period p ON p.region = c.region
+        LEFT JOIN prev_period p ON p.region = c.region AND p.exercise_id = c.exercise_id
         ORDER BY c.region, c.best_e1rm DESC
         `,
         [user_id],
@@ -269,47 +315,6 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
       const consistencyRate = consistencyScheduled > 0 ? consistencyCompleted / consistencyScheduled : 0;
       const volume28d = asNumber(volume28dResult.rows[0]?.volume, 0);
 
-      const bestByRegion = new Map();
-      const prevBestByRegion = new Map();
-      for (const row of strengthByRegionResult.rows) {
-        const region = asString(row.region);
-        if (!region) continue;
-
-        const currentBest = asNumber(row.current_best, NaN);
-        if (!Number.isFinite(currentBest)) continue;
-
-        const prevBest = asNumber(row.prev_best, NaN);
-        if (Number.isFinite(prevBest)) {
-          const existingPrev = prevBestByRegion.get(region);
-          if (!Number.isFinite(existingPrev) || prevBest > existingPrev) {
-            prevBestByRegion.set(region, prevBest);
-          }
-        }
-
-        if (!bestByRegion.has(region)) {
-          bestByRegion.set(region, {
-            exerciseName: row.exercise_name,
-            bestE1rmKg: currentBest,
-          });
-        }
-      }
-
-      function buildStrengthRegionMetric(region) {
-        const best = bestByRegion.get(region);
-        if (!best) return null;
-
-        const prevBest = prevBestByRegion.get(region);
-        const trendPct = Number.isFinite(prevBest) && prevBest !== 0
-          ? (best.bestE1rmKg - prevBest) / prevBest
-          : null;
-
-        return {
-          exerciseName: best.exerciseName,
-          bestE1rmKg: best.bestE1rmKg,
-          trendPct,
-        };
-      }
-
       return res.json({
         dayStreak,
         consistency28d: {
@@ -318,8 +323,8 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
           rate: consistencyRate,
         },
         volume28d,
-        strengthUpper28d: buildStrengthRegionMetric("upper"),
-        strengthLower28d: buildStrengthRegionMetric("lower"),
+        strengthUpper28d: buildStrengthRegionMetricFromRows(strengthByRegionResult.rows, "upper"),
+        strengthLower28d: buildStrengthRegionMetricFromRows(strengthByRegionResult.rows, "lower"),
         weeklyVolumeByRegion8w: mapWeeklyVolumeRows(weeklyVolumeByRegionResult.rows),
         sessionsCount: asNumber(sessionsCountResult.rows[0]?.count, 0),
         programmesCompleted: asNumber(programmesCompletedResult.rows[0]?.count, 0),

@@ -333,6 +333,7 @@ export async function fetchExerciseHistory(
 }
 
 export type SessionHistoryStrengthRegion = {
+  exerciseId: string;
   exerciseName: string;
   bestE1rmKg: number;
   trendPct: number | null;
@@ -365,6 +366,7 @@ export type SessionHistoryMetrics = {
 };
 
 export type HeaviestLift = {
+  exerciseId: string;
   exerciseName: string;
   weightKg: number;
   repsCompleted: number;
@@ -416,6 +418,7 @@ function normalizeSessionHistoryStrengthRegion(raw: unknown): SessionHistoryStre
   if (raw == null) return null;
   const row = asObject(raw);
   return {
+    exerciseId: asString(row.exerciseId),
     exerciseName: asString(row.exerciseName),
     bestE1rmKg: asNumber(row.bestE1rmKg, 0),
     trendPct: asNullableNumber(row.trendPct),
@@ -462,6 +465,7 @@ function normalizeHeaviestLift(raw: unknown): HeaviestLift | null {
   if (raw == null) return null;
   const row = asObject(raw);
   return {
+    exerciseId: asString(row.exerciseId),
     exerciseName: asString(row.exerciseName),
     weightKg: asNumber(row.weightKg, 0),
     repsCompleted: asNumber(row.repsCompleted, 0),

@@ -74,17 +74,24 @@ function buildBarChart(
 function StrengthCard({
   label,
   data,
+  onPress,
 }: {
   label: string;
   data: SessionHistoryStrengthRegion | null;
+  onPress?: (exerciseId: string, exerciseName: string) => void;
 }): React.JSX.Element {
   return (
-    <View style={styles.strengthCard}>
+    <PressableScale
+      style={styles.strengthCard}
+      onPress={data && onPress ? () => onPress(data.exerciseId, data.exerciseName) : undefined}
+      disabled={!data || !onPress}
+    >
       <Text style={styles.strengthCardRegion}>{label}</Text>
       {data ? (
         <>
           <Text style={styles.strengthCardExercise}>{data.exerciseName}</Text>
           <Text style={styles.strengthCardValue}>{data.bestE1rmKg.toFixed(1)} kg</Text>
+          <Text style={styles.strengthCardSubLabel}>Best e1RM</Text>
           {data.trendPct != null ? (
             <Text
               style={[
@@ -100,13 +107,13 @@ function StrengthCard({
       ) : (
         <Text style={styles.strengthCardEmpty}>No data</Text>
       )}
-    </View>
+    </PressableScale>
   );
 }
 
 export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element {
   const userId = useSessionStore((state) => state.userId) ?? undefined;
-  const [region, setRegion] = useState<RegionKey>("full");
+  const [region, setRegion] = useState<RegionKey>("upper");
   const chartWidth = Dimensions.get("window").width - spacing.lg * 2;
   const { data: metrics, isLoading, isError, refetch } = useSessionHistoryMetrics(userId);
   const seriesData = metrics?.weeklyVolumeByRegion8w?.[region] ?? [];
@@ -218,8 +225,20 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
         </View>
 
         <View style={styles.strengthRow}>
-          <StrengthCard label="Upper Body" data={metrics?.strengthUpper28d ?? null} />
-          <StrengthCard label="Lower Body" data={metrics?.strengthLower28d ?? null} />
+          <StrengthCard
+            label="Upper Body"
+            data={metrics?.strengthUpper28d ?? null}
+            onPress={(exerciseId, exerciseName) =>
+              navigation.navigate("ExerciseTrend", { exerciseId, exerciseName })
+            }
+          />
+          <StrengthCard
+            label="Lower Body"
+            data={metrics?.strengthLower28d ?? null}
+            onPress={(exerciseId, exerciseName) =>
+              navigation.navigate("ExerciseTrend", { exerciseId, exerciseName })
+            }
+          />
         </View>
 
         <View style={styles.streakRow}>
@@ -382,6 +401,10 @@ const styles = StyleSheet.create({
   strengthCardValue: {
     color: colors.textPrimary,
     ...typography.h3,
+  },
+  strengthCardSubLabel: {
+    color: colors.textSecondary,
+    ...typography.label,
   },
   strengthCardTrend: {
     ...typography.small,

@@ -232,6 +232,7 @@ export function HistoryScreen(): React.JSX.Element {
               ? `${metrics.strengthUpper28d.bestE1rmKg.toFixed(1)} kg`
               : "-"}
           </Text>
+          <Text style={styles.metricsGridSubLabel}>Best e1RM</Text>
           <Text style={styles.metricsGridSub}>{metrics?.strengthUpper28d?.exerciseName ?? "No upper data"}</Text>
           <Text style={styles.metricsGridTrend}>
             {metrics?.strengthUpper28d?.trendPct != null
@@ -247,6 +248,7 @@ export function HistoryScreen(): React.JSX.Element {
               ? `${metrics.strengthLower28d.bestE1rmKg.toFixed(1)} kg`
               : "-"}
           </Text>
+          <Text style={styles.metricsGridSubLabel}>Best e1RM</Text>
           <Text style={styles.metricsGridSub}>{metrics?.strengthLower28d?.exerciseName ?? "No lower data"}</Text>
           <Text style={styles.metricsGridTrend}>
             {metrics?.strengthLower28d?.trendPct != null
@@ -297,7 +299,18 @@ export function HistoryScreen(): React.JSX.Element {
       {prsFeed?.mode === "heaviest_28d" ? (
         prsFeed.heaviest?.upper || prsFeed.heaviest?.lower ? (
           <View style={styles.personalRecordsWrap}>
-            <View style={styles.prsFeedRow}>
+            <PressableScale
+              style={styles.prsFeedRow}
+              onPress={() =>
+                prsFeed.heaviest?.upper?.exerciseId
+                  ? navigation.navigate("ExerciseTrend", {
+                      exerciseId: prsFeed.heaviest.upper.exerciseId,
+                      exerciseName: prsFeed.heaviest.upper.exerciseName,
+                    })
+                  : undefined
+              }
+              disabled={!prsFeed.heaviest?.upper?.exerciseId}
+            >
               <View style={styles.personalRecordMain}>
                 <Text style={styles.prsFeedName}>{prsFeed.heaviest?.upper?.exerciseName ?? "No upper data"}</Text>
                 {prsFeed.heaviest?.upper ? (
@@ -310,8 +323,19 @@ export function HistoryScreen(): React.JSX.Element {
                 ) : null}
               </View>
               <Text style={styles.prsFeedDate}>Upper</Text>
-            </View>
-            <View style={styles.prsFeedRow}>
+            </PressableScale>
+            <PressableScale
+              style={styles.prsFeedRow}
+              onPress={() =>
+                prsFeed.heaviest?.lower?.exerciseId
+                  ? navigation.navigate("ExerciseTrend", {
+                      exerciseId: prsFeed.heaviest.lower.exerciseId,
+                      exerciseName: prsFeed.heaviest.lower.exerciseName,
+                    })
+                  : undefined
+              }
+              disabled={!prsFeed.heaviest?.lower?.exerciseId}
+            >
               <View style={styles.personalRecordMain}>
                 <Text style={styles.prsFeedName}>{prsFeed.heaviest?.lower?.exerciseName ?? "No lower data"}</Text>
                 {prsFeed.heaviest?.lower ? (
@@ -324,7 +348,7 @@ export function HistoryScreen(): React.JSX.Element {
                 ) : null}
               </View>
               <Text style={styles.prsFeedDate}>Lower</Text>
-            </View>
+            </PressableScale>
           </View>
         ) : (
           <View style={styles.emptyCard}>
@@ -553,6 +577,10 @@ const styles = StyleSheet.create({
   metricsGridValue: {
     color: colors.textPrimary,
     ...typography.h3,
+  },
+  metricsGridSubLabel: {
+    color: colors.textSecondary,
+    ...typography.label,
   },
   metricsGridSub: {
     color: colors.textSecondary,
