@@ -20,6 +20,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { buildChartPath, formatShortDate } from "./chartUtils";
 
 type Props = NativeStackScreenProps<HistoryStackParamList, "ExerciseTrend">;
 
@@ -31,14 +32,12 @@ const WINDOWS: { label: string; value: ExerciseHistoryWindow }[] = [
 ];
 
 const LEGEND_ITEMS = [
-  { label: "Increase load", outcome: "increase_load" },
-  { label: "Increase reps", outcome: "increase_reps" },
+  { label: "Increase", outcome: "increase_load" },
   { label: "Hold", outcome: "hold" },
   { label: "Deload", outcome: "deload_local" },
 ] as const;
 
 const CHART_HEIGHT = 220;
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function formatKg(value: number | null | undefined): string {
   if (!Number.isFinite(value)) return "n/a";
@@ -58,105 +57,6 @@ function decisionColor(outcome: string | null): string {
     default:
       return "transparent";
   }
-}
-
-function formatShortDate(isoDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
-  if (!match) return "";
-  const month = MONTH_LABELS[Number(match[2]) - 1];
-  const day = Number(match[3]);
-  if (!month || !Number.isFinite(day)) return "";
-  return `${month} ${day}`;
-}
-
-type ChartPoint = {
-  x: number;
-  y: number;
-  outcome: string | null;
-  date: string;
-};
-
-type ChartLayout = {
-  svgPath: string;
-  markers: { cx: number; cy: number; outcome: string | null }[];
-  points: ChartPoint[];
-  padding: { top: number; bottom: number; left: number; right: number };
-  plotW: number;
-  plotH: number;
-  minVal: number;
-  maxVal: number;
-};
-
-function buildChartPath(
-  series: ExerciseHistoryPoint[],
-  chartWidth: number,
-  chartHeight: number,
-): ChartLayout {
-  const valid = series.filter((point) => point.estimatedE1rmKg != null);
-  const padding = { top: 16, bottom: 32, left: 44, right: 8 };
-  const plotW = chartWidth - padding.left - padding.right;
-  const plotH = chartHeight - padding.top - padding.bottom;
-  if (valid.length === 0) {
-    return {
-      svgPath: "",
-      markers: [],
-      points: [],
-      padding,
-      plotW,
-      plotH,
-      minVal: 0,
-      maxVal: 0,
-    };
-  }
-
-  const values = valid.map((point) => point.estimatedE1rmKg as number);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
-  const range = maxVal - minVal || 1;
-
-  if (valid.length === 1) {
-    const cx = padding.left + plotW / 2;
-    const cy = padding.top + plotH / 2;
-    return {
-      svgPath: "",
-      markers: [{ cx, cy, outcome: valid[0].decisionOutcome }],
-      points: [{ x: cx, y: cy, outcome: valid[0].decisionOutcome, date: valid[0].date }],
-      padding,
-      plotW,
-      plotH,
-      minVal,
-      maxVal,
-    };
-  }
-
-  const toX = (index: number) => padding.left + (index / (valid.length - 1)) * plotW;
-  const toY = (value: number) => padding.top + plotH - ((value - minVal) / range) * plotH;
-
-  const points = valid.map((point, index) => ({
-    x: toX(index),
-    y: toY(point.estimatedE1rmKg as number),
-    outcome: point.decisionOutcome,
-    date: point.date,
-  }));
-
-  const svgPath = points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)},${point.y.toFixed(1)}`)
-    .join(" ");
-
-  return {
-    svgPath,
-    markers: points.map((point) => ({
-      cx: point.x,
-      cy: point.y,
-      outcome: point.outcome,
-    })),
-    points,
-    padding,
-    plotW,
-    plotH,
-    minVal,
-    maxVal,
-  };
 }
 
 export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Element {
@@ -247,8 +147,8 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
                   y1={padding.top}
                   x2={padding.left}
                   y2={padding.top + plotH}
-                  stroke={colors.border}
-                  strokeWidth={1}
+                  stroke={colors.textSecondary}
+                  strokeWidth={1.5}
                 />
                 <SvgText
                   x={padding.left - 4}
@@ -268,6 +168,14 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
                 >
                   {`${minVal.toFixed(0)} kg`}
                 </SvgText>
+                <Line
+                  x1={padding.left}
+                  y1={padding.top + plotH}
+                  x2={padding.left + (chartWidth - padding.left - padding.right)}
+                  y2={padding.top + plotH}
+                  stroke={colors.textSecondary}
+                  strokeWidth={1.5}
+                />
 
                 {svgPath ? (
                   <Path
@@ -286,21 +194,24 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
                   return <Circle key={index} cx={marker.cx} cy={marker.cy} r={5} fill={fill} />;
                 })}
 
+              </Svg>
+              <View style={[styles.axisLabelRow, { width: chartWidth }]}>
                 {points.map((point, index) =>
                   index % 2 === 0 ? (
-                    <SvgText
+                    <Text
                       key={`xlabel-${index}`}
-                      x={point.x}
-                      y={CHART_HEIGHT - 4}
-                      fill={colors.textSecondary}
-                      fontSize={9}
-                      textAnchor="middle"
+                      style={[
+                        styles.axisLabel,
+                        {
+                          left: point.x - 24,
+                        },
+                      ]}
                     >
                       {formatShortDate(point.date)}
-                    </SvgText>
+                    </Text>
                   ) : null,
                 )}
-              </Svg>
+              </View>
               <Text style={styles.chartSummary}>
                 {`${series.length} sessions logged. Best estimated 1RM: ${
                   data?.summary.bestEstimatedE1rmKg != null
@@ -428,6 +339,18 @@ const styles = StyleSheet.create({
   chartSummary: {
     color: colors.textSecondary,
     ...typography.small,
+  },
+  axisLabelRow: {
+    height: 18,
+    position: "relative",
+    marginTop: -8,
+  },
+  axisLabel: {
+    position: "absolute",
+    width: 48,
+    color: colors.textPrimary,
+    fontSize: 11,
+    textAlign: "center",
   },
   legendRow: {
     flexDirection: "row",

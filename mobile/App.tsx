@@ -6,6 +6,7 @@ import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { Platform } from "react-native";
 import { registerPushToken } from "./src/api/notifications";
+import { navigationRef } from "./src/navigation/navigationRef";
 import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 
@@ -38,6 +39,44 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+let pendingNotificationResponse: Notifications.NotificationResponse | null = null;
+
+function navigateFromNotificationResponse(response: Notifications.NotificationResponse | null): boolean {
+  if (!response || !navigationRef.isReady()) return false;
+
+  const data = (response.notification.request.content.data ?? {}) as Record<string, unknown>;
+  const event = typeof data.event === "string" ? data.event : null;
+  if (!event) return true;
+
+  if (event === "pr" || event === "pr_multi") {
+    navigationRef.navigate("HistoryTab", { screen: "HistoryMain" });
+    return true;
+  }
+
+  if ((event === "deload" || event === "reminder") && typeof data.programDayId === "string") {
+    navigationRef.navigate("ProgramsTab", {
+      screen: "ProgramDay",
+      params: { programDayId: data.programDayId },
+    });
+    return true;
+  }
+
+  return true;
+}
+
+function handleNotificationResponse(response: Notifications.NotificationResponse | null): void {
+  if (!navigateFromNotificationResponse(response)) {
+    pendingNotificationResponse = response;
+  }
+}
+
+function flushPendingNotificationResponse(): void {
+  if (!pendingNotificationResponse) return;
+  if (navigateFromNotificationResponse(pendingNotificationResponse)) {
+    pendingNotificationResponse = null;
+  }
+}
 
 export default function App(): React.JSX.Element {
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
@@ -82,9 +121,25 @@ export default function App(): React.JSX.Element {
     })();
   }, [isAuthenticated, userId]);
 
+  React.useEffect(() => {
+    void Notifications.getLastNotificationResponseAsync().then(handleNotificationResponse);
+
+    const sub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+    return () => sub.remove();
+  }, []);
+
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    flushPendingNotificationResponse();
+  }, [isAuthenticated]);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <NavigationContainer theme={appTheme}>
+      <NavigationContainer
+        theme={appTheme}
+        ref={navigationRef}
+        onReady={flushPendingNotificationResponse}
+      >
         <StatusBar style="light" />
         {isAuthenticated ? (
           AppTabsModule ? <AppTabsModule.AppTabs homeInitialRoute={entryRoute} /> : null

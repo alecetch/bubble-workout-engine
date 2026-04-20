@@ -63,7 +63,7 @@ function buildCoachDecisionItem(row) {
     outcome,
     confidence: safeString(row.confidence) || null,
     display_label: row.week_number != null
-      ? `Week ${row.week_number} - ${phraseBuilder(delta)}`
+      ? `Week ${row.week_number} \u2014 ${phraseBuilder(delta)}`
       : phraseBuilder(delta),
     display_reason: normalizeDecisionSentence(reasons[0]) ?? OUTCOME_DETAIL_FALLBACK[outcome] ?? null,
     decided_at: row.decided_at,
@@ -120,7 +120,24 @@ export function createCoachPortalHandlers(db = pool) {
         [req.auth.user_id],
       );
 
-      return res.json({ ok: true, clients: rows });
+      const clients = rows.map((row) => ({
+        client_user_id: row.client_user_id,
+        display_name: row.display_name,
+        active_program: row.program_id
+          ? {
+              program_id: row.program_id,
+              program_title: row.program_title,
+              program_type: row.program_type,
+              status: row.program_status,
+            }
+          : null,
+        last_session_date: row.last_session_date ?? null,
+        current_streak: 0,
+        has_active_override: row.has_active_override ?? false,
+        relationship_status: row.relationship_status,
+      }));
+
+      return res.json({ ok: true, clients });
     } catch (err) {
       return next(err);
     }
@@ -325,7 +342,8 @@ export function createCoachPortalHandlers(db = pool) {
            pd.week_number,
            pd.day_number,
            pd.is_completed,
-           pd.session_duration_mins
+           pd.session_duration_mins,
+           pd.updated_at AS completed_at
          FROM program_day pd
          JOIN program p
            ON p.id = pd.program_id

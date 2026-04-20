@@ -67,7 +67,13 @@ function HeroMediaThumb({
   return <Image source={{ uri }} style={thumbStyle} />;
 }
 
-function TimelineRow({ item }: { item: HistoryTimelineItem }): React.JSX.Element {
+function TimelineRow({
+  item,
+  onPressExercise,
+}: {
+  item: HistoryTimelineItem;
+  onPressExercise?: (exerciseId: string, exerciseName: string) => void;
+}): React.JSX.Element {
   return (
     <View style={styles.timelineCard}>
       <HeroMediaThumb uri={item.heroMediaId} compact />
@@ -76,9 +82,18 @@ function TimelineRow({ item }: { item: HistoryTimelineItem }): React.JSX.Element
         <Text style={styles.timelineLabel}>{item.dayLabel || "Session"}</Text>
         <Text style={styles.timelineMeta}>{item.durationMins} mins</Text>
         {item.highlight ? (
-          <Text style={styles.timelineHighlight}>
-            Max {item.highlight.value}kg - {item.highlight.exerciseName}
-          </Text>
+          <PressableScale
+            onPress={
+              item.highlight.exerciseId && onPressExercise
+                ? () => onPressExercise(item.highlight!.exerciseId, item.highlight!.exerciseName)
+                : undefined
+            }
+            disabled={!item.highlight.exerciseId || !onPressExercise}
+          >
+            <Text style={styles.timelineHighlight}>
+              Max {item.highlight.value}kg - {item.highlight.exerciseName}
+            </Text>
+          </PressableScale>
         ) : null}
       </View>
     </View>
@@ -456,7 +471,14 @@ export function HistoryScreen(): React.JSX.Element {
       contentContainerStyle={styles.content}
       data={timelineItems}
       keyExtractor={(item) => item.programDayId}
-      renderItem={({ item }) => <TimelineRow item={item} />}
+      renderItem={({ item }) => (
+        <TimelineRow
+          item={item}
+          onPressExercise={(exerciseId, exerciseName) =>
+            navigation.navigate("ExerciseTrend", { exerciseId, exerciseName })
+          }
+        />
+      )}
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
       ListEmptyComponent={

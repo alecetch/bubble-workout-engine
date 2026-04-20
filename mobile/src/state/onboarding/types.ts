@@ -16,6 +16,8 @@ export type AnchorLiftEntry = {
   reps: number | null;
   rir: number | null;
   skipped: boolean;
+  source?: string | null;
+  sourceDetailJson?: Record<string, unknown> | null;
 };
 
 export const ESTIMATION_FAMILIES = [

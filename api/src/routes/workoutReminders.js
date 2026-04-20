@@ -48,7 +48,7 @@ export function createWorkoutRemindersHandler(
             title: "Time to train",
             body: `Your ${dayLabel} session is ready. Get it done.`,
             data: { event: "reminder", programDayId: row.program_day_id },
-            emailSubject: `Your ${dayLabel} workout is ready`,
+            emailSubject: row.day_label ? `Your ${row.day_label} workout is ready` : "Your workout is ready",
             emailText: [
               `Time to train.`,
               ``,

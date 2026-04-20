@@ -224,3 +224,116 @@ test("falls back to exerciseId name and empty/null summary when no data", async 
     },
   });
 });
+
+test("series includes estimatedE1rmKg and decisionOutcome when the DB returns them", async () => {
+  let callCount = 0;
+  const db = {
+    async query() {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          rows: [
+            {
+              date: "2026-03-01",
+              top_weight_kg: "100",
+              top_reps: "5",
+              tonnage: "1000",
+              estimated_e1rm_kg: "115.5",
+              decision_outcome: "increase_load",
+              decision_primary_lever: "load",
+            },
+            {
+              date: "2026-03-08",
+              top_weight_kg: "105",
+              top_reps: "5",
+              tonnage: "1050",
+              estimated_e1rm_kg: "121.2",
+              decision_outcome: null,
+              decision_primary_lever: null,
+            },
+          ],
+        };
+      }
+      if (callCount === 2) {
+        return {
+          rows: [{ last_performed: "2026-03-08", best_weight_kg: "105", best_estimated_e1rm_kg: "121.2", sessions_count: "2" }],
+        };
+      }
+      return { rows: [{ exercise_name: "Barbell Squat" }] };
+    },
+  };
+
+  const handler = createHistoryExerciseHandler(db);
+  const res = createMockRes();
+  await handler(
+    { auth: { user_id: "user-1" }, params: { exerciseId: "bb_squat" }, query: { window: "all" }, headers: {} },
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.series[0].estimatedE1rmKg, 121.2);
+  assert.equal(res.body.series[0].decisionOutcome, null);
+  assert.equal(res.body.series[1].estimatedE1rmKg, 115.5);
+  assert.equal(res.body.series[1].decisionOutcome, "increase_load");
+  assert.equal(res.body.series[1].decisionPrimaryLever, "load");
+  assert.equal(res.body.summary.bestEstimatedE1rmKg, 121.2);
+});
+
+test("window parameter '4w' includes a date-filter clause in the series query", async () => {
+  let seriesQuery = "";
+  let seriesParams = [];
+  let callCount = 0;
+  const db = {
+    async query(text, params) {
+      callCount += 1;
+      if (callCount === 1) {
+        seriesQuery = text;
+        seriesParams = params;
+        return { rows: [] };
+      }
+      if (callCount === 2) {
+        return { rows: [{ last_performed: null, best_weight_kg: null, best_estimated_e1rm_kg: null, sessions_count: "0" }] };
+      }
+      return { rows: [{ exercise_name: "Squat" }] };
+    },
+  };
+
+  const handler = createHistoryExerciseHandler(db);
+  const res = createMockRes();
+  await handler(
+    { auth: { user_id: "user-1" }, params: { exerciseId: "bb_squat" }, query: { window: "4w" }, headers: {} },
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(seriesQuery.includes("CURRENT_DATE") && seriesQuery.includes("scheduled_date"));
+  assert.equal(seriesParams[2], 28);
+});
+
+test("invalid window value defaults to 12w (84 days)", async () => {
+  let capturedParams = [];
+  let callCount = 0;
+  const db = {
+    async query(_text, params) {
+      callCount += 1;
+      if (callCount === 1) {
+        capturedParams = params;
+        return { rows: [] };
+      }
+      if (callCount === 2) {
+        return { rows: [{ last_performed: null, best_weight_kg: null, best_estimated_e1rm_kg: null, sessions_count: "0" }] };
+      }
+      return { rows: [{ exercise_name: "Squat" }] };
+    },
+  };
+
+  const handler = createHistoryExerciseHandler(db);
+  const res = createMockRes();
+  await handler(
+    { auth: { user_id: "user-1" }, params: { exerciseId: "bb_squat" }, query: { window: "not_a_window" }, headers: {} },
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(capturedParams[2], 84);
+});

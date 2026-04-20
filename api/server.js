@@ -35,6 +35,7 @@ import { adminPreviewRouter } from "./src/routes/adminPreview.js";
 import { adminProgressionSandboxRouter } from "./src/routes/adminProgressionSandbox.js";
 import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
+import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
@@ -273,6 +274,7 @@ app.get("/admin/rep-rules", adminCspMiddleware, (_req, res) => sendAdminPage(res
 app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
 app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
 app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "progression-sandbox.html"));
+app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(res, "seed-history.html"));
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -700,6 +702,7 @@ app.use("/admin", ...adminOnly, adminSyncRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
 app.use("/admin", ...adminOnly, adminProgressionSandboxRouter);
 app.use("/admin", ...adminOnly, adminUsersRouter);
+app.use("/admin", ...adminOnly, adminSeedHistoryRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates

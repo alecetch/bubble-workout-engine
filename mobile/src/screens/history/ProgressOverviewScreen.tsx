@@ -241,6 +241,7 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
           />
         </View>
 
+        <Text style={styles.sectionTitle}>Activity Stats</Text>
         <View style={styles.streakRow}>
           <View style={styles.streakChip}>
             <Text style={styles.streakValue}>{metrics?.dayStreak ?? 0}</Text>
@@ -412,6 +413,10 @@ const styles = StyleSheet.create({
   strengthCardEmpty: {
     color: colors.textSecondary,
     ...typography.body,
+  },
+  sectionTitle: {
+    color: colors.textSecondary,
+    ...typography.label,
   },
   streakRow: {
     flexDirection: "row",

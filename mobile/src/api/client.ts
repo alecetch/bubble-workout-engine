@@ -270,6 +270,61 @@ export function authDeleteJson<T>(
   return authenticatedFetch<T>(path, { ...options, method: "DELETE" });
 }
 
+export async function authPostFormData<T>(
+  path: string,
+  body: FormData,
+  options: Omit<RequestOptions, "method" | "body" | "headers"> = {},
+): Promise<T> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
+    throw new ApiError(401, "Session expired", { code: "session_expired" });
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${API_BASE_URL}${normalizedPath}`;
+  apiDiagnostics.lastAttemptedUrl = url;
+
+  console.log(`[api] request POST ${url}`);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body,
+      signal: options.signal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`[api] network failure POST ${url}`, message);
+    apiDiagnostics.lastErrorMessage = message;
+    throw error;
+  }
+
+  console.log(`[api] response POST ${url} ${response.status}`);
+  const data = await parseResponseBody(response);
+
+  if (!response.ok) {
+    console.log(`[api] non-2xx body POST ${url}`, data);
+    const fallbackMessage = `Request failed (${response.status})`;
+    const messageFromBody =
+      typeof data === "object" && data !== null && "error" in data && typeof (data as { error: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : typeof data === "string"
+          ? data
+          : fallbackMessage;
+
+    apiDiagnostics.lastErrorMessage = messageFromBody;
+    throw new ApiError(response.status, messageFromBody, data);
+  }
+
+  apiDiagnostics.lastErrorMessage = null;
+  return data as T;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, headers, signal } = options;
   return apiFetch<T>(path, { method, body, headers, signal });

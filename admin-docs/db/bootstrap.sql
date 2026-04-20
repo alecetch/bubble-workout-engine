@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS admin_doc_board_items (
   -- convention: codex-prompts-{doc_key}-bug[-{slug}].md
   -- populated by reconcile(); empty = no bug fixes recorded
 
+  bug_prompt_done_filenames TEXT[] NOT NULL DEFAULT '{}',
+  -- subset of bug_prompt_filenames that have been marked done
+
   priority_rank   INTEGER     NOT NULL DEFAULT 0,
   -- lower rank = higher priority within the same status column
 
@@ -54,9 +57,11 @@ CREATE TABLE IF NOT EXISTS admin_doc_board_items (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Add bug_prompt_filenames to existing tables that predate this column
+-- Add columns to existing tables that predate them
 ALTER TABLE admin_doc_board_items
   ADD COLUMN IF NOT EXISTS bug_prompt_filenames TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE admin_doc_board_items
+  ADD COLUMN IF NOT EXISTS bug_prompt_done_filenames TEXT[] NOT NULL DEFAULT '{}';
 
 CREATE INDEX IF NOT EXISTS idx_board_status_rank
   ON admin_doc_board_items (status, priority_rank);

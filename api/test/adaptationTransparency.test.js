@@ -258,8 +258,8 @@ test("exerciseDecisionHistory returns newest-first paginated decisions", async (
   assert.equal(res.statusCode, 200);
   assert.equal(res.body?.exercise_name, "Back Squat");
   assert.equal(res.body?.total_decisions, 2);
-  assert.equal(res.body?.decisions?.[0]?.display_label, "Week 6 - Added 5 kg");
-  assert.equal(res.body?.decisions?.[1]?.display_label, "Week 5 - Held steady");
+  assert.equal(res.body?.decisions?.[0]?.display_label, "Week 6 — Added 5 kg");
+  assert.equal(res.body?.decisions?.[1]?.display_label, "Week 5 — Held steady");
 });
 
 test("exerciseDecisionHistory returns 403 for wrong user", async () => {

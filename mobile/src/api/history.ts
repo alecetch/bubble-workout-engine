@@ -42,6 +42,7 @@ export type HistoryTimelineItem = {
     | {
         value: number;
         exerciseName: string;
+        exerciseId: string;
       }
     | null;
 };
@@ -189,6 +190,7 @@ function normalizeTimeline(raw: unknown): HistoryTimelineResponse {
           : {
               value: asNumber(highlightRaw.value, 0),
               exerciseName: asString(highlightRaw.exerciseName),
+              exerciseId: asString(highlightRaw.exerciseId),
             },
     };
   });

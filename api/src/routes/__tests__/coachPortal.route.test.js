@@ -130,8 +130,45 @@ test("listClients returns only active linked athletes with expected summary fiel
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.clients.length, 1);
   assert.equal(res.body.clients[0].display_name, "Athlete One");
-  assert.equal(res.body.clients[0].program_id, UUIDS.program);
+  assert.deepEqual(res.body.clients[0].active_program, {
+    program_id: UUIDS.program,
+    program_title: "Strength",
+    program_type: "strength",
+    status: "active",
+  });
+  assert.equal(res.body.clients[0].current_streak, 0);
   assert.equal(res.body.clients[0].relationship_status, "active");
+});
+
+test("listClients returns active_program null when no active program exists", async () => {
+  const handlers = createCoachPortalHandlers({
+    async query() {
+      return {
+        rows: [
+          {
+            relationship_id: UUIDS.relationship,
+            client_user_id: UUIDS.client,
+            client_profile_id: "cp-1",
+            display_name: "Athlete One",
+            program_id: null,
+            program_title: null,
+            program_type: null,
+            program_status: null,
+            last_session_date: null,
+            has_active_override: false,
+            relationship_status: "active",
+          },
+        ],
+      };
+    },
+  });
+  const req = { auth: { user_id: UUIDS.coach } };
+  const res = mockRes();
+
+  await handlers.listClients(req, res, (err) => { throw err; });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.clients[0].active_program, null);
 });
 
 test("clientOverview returns client, active_program, and summary fields", async () => {
@@ -233,8 +270,38 @@ test("clientDecisions returns newest first and respects limit", async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.rows.length, 2);
   assert.equal(res.body.rows[0].id, UUIDS.decisionB);
+  assert.equal(res.body.rows[0].display_label, "Week 3 — Added 2.5 kg");
   assert.equal(captured[0].params[1], UUIDS.program);
   assert.equal(captured[0].params.includes(5), true);
+});
+
+test("recentSessions includes completed_at timestamp", async () => {
+  const handlers = createCoachPortalHandlers({
+    async query() {
+      return {
+        rows: [
+          {
+            id: "99999999-9999-4999-8999-999999999999",
+            program_id: UUIDS.program,
+            program_title: "Strength",
+            scheduled_date: "2026-04-12",
+            week_number: 3,
+            day_number: 1,
+            is_completed: true,
+            session_duration_mins: 60,
+            completed_at: "2026-04-12T10:00:00Z",
+          },
+        ],
+      };
+    },
+  });
+  const req = { params: { client_user_id: UUIDS.client }, query: { limit: "10" } };
+  const res = mockRes();
+
+  await handlers.recentSessions(req, res, (err) => { throw err; });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.sessions[0].completed_at, "2026-04-12T10:00:00Z");
 });
 
 test("createProgressionOverride returns 201 for valid next_session_load override", async () => {

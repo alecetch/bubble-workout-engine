@@ -160,7 +160,7 @@ function buildDecisionHistoryItem(row) {
     recommended_load_delta_kg: delta,
     recommended_reps_target: row.recommended_reps_target != null ? Number(row.recommended_reps_target) : null,
     recommended_rep_delta: row.recommended_rep_delta != null ? Number(row.recommended_rep_delta) : null,
-    display_label: weekNumber != null ? `Week ${weekNumber} - ${phrase}` : phrase,
+    display_label: weekNumber != null ? `Week ${weekNumber} \u2014 ${phrase}` : phrase,
     display_reason: displayReason,
     evidence: extractDecisionEvidence(row.evidence_summary_json),
     decided_at: row.decided_at instanceof Date ? row.decided_at.toISOString() : String(row.decided_at ?? ""),
@@ -780,9 +780,9 @@ export function createReadProgramHandlers(options = pool) {
             await notificationService.send({
               userId: user_id,
               title: "Easy week incoming",
-              body: "Your body showed signs of fatigue - your program has been adjusted to help you recover.",
+              body: "Your body showed signs of fatigue \u2014 your program has been adjusted to help you recover.",
               data: { event: "deload", programDayId: program_day_id },
-              emailSubject: "Recovery week - your program adjusted",
+              emailSubject: "Recovery week \u2014 your program adjusted",
               emailText: [
                 "Easy week ahead.",
                 "",

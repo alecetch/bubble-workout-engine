@@ -120,14 +120,17 @@ router.post('/:id/mark-done', async (req, res, next) => {
     }
   }
 
-  // Update DB — append item to end of 'done' column
+  // Update DB — append item to end of 'done' column, mark all bugs done
   try {
     const { rows: [{ max_rank }] } = await pool.query(
       "SELECT COALESCE(MAX(priority_rank), 0) AS max_rank FROM admin_doc_board_items WHERE status = 'done' AND id != $1",
       [id]
     );
     await pool.query(
-      "UPDATE admin_doc_board_items SET status = 'done', priority_rank = $1 WHERE id = $2",
+      `UPDATE admin_doc_board_items
+       SET status = 'done', priority_rank = $1,
+           bug_prompt_done_filenames = bug_prompt_filenames
+       WHERE id = $2`,
       [max_rank + 1, id]
     );
   } catch (err) {
@@ -206,6 +209,53 @@ router.post('/:id/activate', async (req, res, next) => {
     'SELECT * FROM admin_doc_board_items WHERE id = $1', [id]
   );
   res.json({ ok: true, item: updated, fileMoved: fileMoveResult?.moved ?? false });
+});
+
+/**
+ * POST /api/items/:id/toggle-bug
+ * Body: { filename } — basename of the bug prompt to toggle done/undone.
+ *
+ * Adds filename to bug_prompt_done_filenames if not present; removes it if present.
+ */
+router.post('/:id/toggle-bug', async (req, res, next) => {
+  const id = parseInt(req.params.id, 10);
+  const { filename } = req.body;
+
+  if (!filename || typeof filename !== 'string') {
+    return res.status(400).json({ ok: false, error: 'filename is required' });
+  }
+
+  try {
+    const { rows: [item] } = await pool.query(
+      'SELECT id, bug_prompt_filenames, bug_prompt_done_filenames FROM admin_doc_board_items WHERE id = $1', [id]
+    );
+    if (!item) return res.status(404).json({ ok: false, error: 'Item not found' });
+
+    const isDone = item.bug_prompt_done_filenames.includes(filename);
+    if (isDone) {
+      // Remove from done list
+      await pool.query(
+        'UPDATE admin_doc_board_items SET bug_prompt_done_filenames = array_remove(bug_prompt_done_filenames, $1) WHERE id = $2',
+        [filename, id]
+      );
+    } else {
+      // Add to done list (only if it exists in the bug list)
+      if (!item.bug_prompt_filenames.includes(filename)) {
+        return res.status(400).json({ ok: false, error: 'filename not in bug_prompt_filenames' });
+      }
+      await pool.query(
+        'UPDATE admin_doc_board_items SET bug_prompt_done_filenames = array_append(bug_prompt_done_filenames, $1) WHERE id = $2',
+        [filename, id]
+      );
+    }
+
+    const { rows: [updated] } = await pool.query(
+      'SELECT * FROM admin_doc_board_items WHERE id = $1', [id]
+    );
+    res.json({ ok: true, item: updated, wasDone: isDone, nowDone: !isDone });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
