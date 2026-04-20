@@ -32,8 +32,8 @@
       .control-grid.single { grid-template-columns: 1fr; }
       .control { display: grid; gap: 4px; }
       .control label { font-size: 12px; color: var(--muted); }
-      input, button { font: inherit; }
-      input { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; }
+      input, select, button { font: inherit; }
+      input, select { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; }
       button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 9px 14px; cursor: pointer; }
       button:disabled { opacity: 0.6; cursor: default; }
       .helper { font-size: 12px; color: var(--muted); }
@@ -80,6 +80,14 @@
         </div>
         <div class="control-grid" style="margin-top: 10px;">
           <div class="control">
+            <label for="mode">Seed mode</label>
+            <select id="mode">
+              <option value="robust" selected>Robust 12W history</option>
+              <option value="quick">Quick seed</option>
+            </select>
+            <div class="helper">Robust mode creates deterministic history for chart and metric QA.</div>
+          </div>
+          <div class="control">
             <label for="weeks">Weeks of history</label>
             <input id="weeks" type="number" min="4" max="24" value="12" />
           </div>
@@ -106,6 +114,7 @@
       const STORAGE_KEY = "admin_seed_history_token";
       const tokenInput = document.getElementById("tokenInput");
       const userIdInput = document.getElementById("userId");
+      const modeInput = document.getElementById("mode");
       const weeksInput = document.getElementById("weeks");
       const daysPerWeekInput = document.getElementById("daysPerWeek");
       const generateBtn = document.getElementById("generateBtn");
@@ -120,7 +129,7 @@
       function setLoading(isLoading) {
         generateBtn.disabled = isLoading;
         statusEl.className = "status";
-        statusEl.textContent = isLoading ? "Generating… (this takes ~10–20 seconds)" : "";
+        statusEl.textContent = isLoading ? "Generating... (this takes ~10-20 seconds)" : "";
       }
 
       function showResult(message, isError = false) {
@@ -130,6 +139,7 @@
 
       async function generate() {
         const userId = userIdInput.value.trim();
+        const mode = modeInput.value || "robust";
         const weeks = parseInt(weeksInput.value, 10) || 12;
         const daysPerWeek = parseInt(daysPerWeekInput.value, 10) || 3;
         const token = (tokenInput.value || sessionStorage.getItem(STORAGE_KEY) || "").trim();
@@ -147,15 +157,20 @@
               "Content-Type": "application/json",
               "x-internal-token": token,
             },
-            body: JSON.stringify({ userId, weeks, daysPerWeek }),
+            body: JSON.stringify({ userId, mode, weeks, daysPerWeek }),
           });
           const data = await res.json();
           if (data.ok) {
-          showResult(
-              `✓ Done in ${(data.runtimeMs / 1000).toFixed(1)}s\n` +
-              `User: ${data.userEmail || data.userId}\n` +
-              `Program ID: ${data.programId}\n` +
-              `${data.weeksGenerated} weeks | ${data.daysCompleted} days | ${data.logsInserted} sets | ${data.decisionsWritten} decisions`,
+            const anchorCoverage = data.anchorExerciseCoverage
+              ? "\nAnchor coverage: " + JSON.stringify(data.anchorExerciseCoverage)
+              : "";
+            showResult(
+              `Done in ${(data.runtimeMs / 1000).toFixed(1)}s\n` +
+                `Mode: ${data.mode || mode}\n` +
+                `User: ${data.userEmail || data.userId}\n` +
+                `Program ID: ${data.programId}\n` +
+                `${data.weeksGenerated} weeks | ${data.daysCompleted} days | ${data.logsInserted} sets | ${data.decisionsWritten} decisions` +
+                anchorCoverage,
               false,
             );
           } else {

@@ -306,7 +306,8 @@ test("window parameter '4w' includes a date-filter clause in the series query", 
   );
 
   assert.equal(res.statusCode, 200);
-  assert.ok(seriesQuery.includes("CURRENT_DATE") && seriesQuery.includes("scheduled_date"));
+  assert.ok(seriesQuery.includes("WHERE daily.date <= CURRENT_DATE"));
+  assert.ok(seriesQuery.includes("daily.date >= CURRENT_DATE - ($3 - 1)"));
   assert.equal(seriesParams[2], 28);
 });
 
@@ -336,4 +337,51 @@ test("invalid window value defaults to 12w (84 days)", async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(capturedParams[2], 84);
+});
+
+test("series decision markers prefer the matching program day and otherwise fall back deterministically", async () => {
+  let capturedSeriesQuery = "";
+  let callCount = 0;
+  const db = {
+    async query(text) {
+      callCount += 1;
+      if (callCount === 1) {
+        capturedSeriesQuery = text;
+        return {
+          rows: [
+            {
+              date: "2026-03-01",
+              top_weight_kg: "100",
+              top_reps: "5",
+              tonnage: "1000",
+              estimated_e1rm_kg: "115.5",
+              decision_outcome: "increase_load",
+              decision_primary_lever: "load",
+            },
+          ],
+        };
+      }
+      if (callCount === 2) {
+        return {
+          rows: [{ last_performed: "2026-03-01", best_weight_kg: "100", best_estimated_e1rm_kg: "115.5", sessions_count: "1" }],
+        };
+      }
+      return { rows: [{ exercise_name: "Barbell Squat" }] };
+    },
+  };
+
+  const handler = createHistoryExerciseHandler(db);
+  const res = createMockRes();
+  await handler(
+    { auth: { user_id: "user-1" }, params: { exerciseId: "bb_squat" }, query: { window: "12w" }, headers: {} },
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(capturedSeriesQuery.includes("pd.id AS program_day_id"));
+  assert.ok(capturedSeriesQuery.includes("epd.created_at::date <= daily.date"));
+  assert.ok(capturedSeriesQuery.includes("CASE WHEN epd.program_day_id = daily.program_day_id THEN 0 ELSE 1 END ASC"));
+  assert.ok(capturedSeriesQuery.includes("epd.created_at DESC"));
+  assert.ok(capturedSeriesQuery.includes("epd.id DESC"));
+  assert.equal(res.body.series[0].decisionOutcome, "increase_load");
 });

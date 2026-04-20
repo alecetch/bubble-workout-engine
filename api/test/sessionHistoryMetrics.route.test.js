@@ -160,3 +160,51 @@ test("computeDayStreak returns 0 when first row is incomplete", () => {
   ];
   assert.equal(computeDayStreak(rows), 0);
 });
+
+test("computeDayStreak ignores duplicate rows for the same activity date", () => {
+  const rows = [
+    { scheduled_date: "2026-04-18", is_completed: true },
+    { scheduled_date: "2026-04-18", is_completed: true },
+    { scheduled_date: "2026-04-17", is_completed: true },
+    { scheduled_date: "2026-04-16", is_completed: true },
+  ];
+  assert.equal(computeDayStreak(rows), 3);
+});
+
+test("handler returns sessionsCount28d separately from consistency", async () => {
+  let callCount = 0;
+  const db = {
+    async connect() {
+      return {
+        async query() {
+          callCount += 1;
+          const responses = [
+            {
+              rows: [
+                { scheduled_date: "2026-04-18", is_completed: true },
+                { scheduled_date: "2026-04-17", is_completed: true },
+              ],
+            },
+            { rows: [{ scheduled: "10", completed: "8" }] },
+            { rows: [{ volume: "50000" }] },
+            { rows: [] },
+            { rows: [{ count: "12" }] },
+            { rows: [{ count: "7" }] },
+            { rows: [{ count: "1" }] },
+            { rows: [] },
+          ];
+          return responses[callCount - 1] ?? { rows: [] };
+        },
+        release() {},
+      };
+    },
+  };
+
+  const handler = createSessionHistoryMetricsHandler(db);
+  const res = createMockRes();
+  await handler({ auth: { user_id: "user-1" }, request_id: "req-1" }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.consistency28d.completed, 8);
+  assert.equal(res.body.sessionsCount28d, 7);
+});

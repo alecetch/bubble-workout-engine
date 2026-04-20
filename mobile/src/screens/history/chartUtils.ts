@@ -21,10 +21,28 @@ export type ChartLayout = {
 };
 
 export function formatShortDate(isoDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
-  if (!match) return "";
-  const month = MONTH_LABELS[Number(match[2]) - 1];
-  const day = Number(match[3]);
+  const raw = String(isoDate).trim();
+  const normalized = raw.slice(0, 10);
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (isoMatch) {
+    const month = MONTH_LABELS[Number(isoMatch[2]) - 1];
+    const day = Number(isoMatch[3]);
+    if (!month || !Number.isFinite(day)) return "";
+    return `${month} ${day}`;
+  }
+
+  const shortMatch = /^(?:[A-Za-z]{3}\s+)?([A-Za-z]{3})\s+(\d{1,2})$/.exec(raw);
+  if (shortMatch) {
+    const month = MONTH_LABELS.find((label) => label.toLowerCase() === shortMatch[1].toLowerCase());
+    const day = Number(shortMatch[2]);
+    if (!month || !Number.isFinite(day)) return "";
+    return `${month} ${day}`;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const month = MONTH_LABELS[parsed.getMonth()];
+  const day = parsed.getDate();
   if (!month || !Number.isFinite(day)) return "";
   return `${month} ${day}`;
 }

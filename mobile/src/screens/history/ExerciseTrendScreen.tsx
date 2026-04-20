@@ -38,6 +38,13 @@ const LEGEND_ITEMS = [
 ] as const;
 
 const CHART_HEIGHT = 220;
+const CHART_CARD_HORIZONTAL_PADDING = spacing.md * 2;
+
+function shouldRenderAxisLabel(index: number, total: number): boolean {
+  if (total <= 1) return true;
+  if (index === 0 || index === total - 1) return true;
+  return index % 2 === 0;
+}
 
 function formatKg(value: number | null | undefined): string {
   if (!Number.isFinite(value)) return "n/a";
@@ -63,12 +70,23 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
   const { exerciseId, exerciseName } = route.params;
   const userId = useSessionStore((state) => state.userId) ?? undefined;
   const [window, setWindow] = useState<ExerciseHistoryWindow>("12w");
-  const chartWidth = Dimensions.get("window").width - spacing.lg * 2;
+  const chartWidth = Dimensions.get("window").width - spacing.lg * 2 - CHART_CARD_HORIZONTAL_PADDING;
   const { data, isLoading, isError, refetch } = useExerciseHistory(exerciseId, window, userId);
   const series = data?.series ?? [];
   const { svgPath, markers, points, padding, plotH, minVal, maxVal } = useMemo(
     () => buildChartPath(series, chartWidth, CHART_HEIGHT),
     [chartWidth, series],
+  );
+  const axisLabels = useMemo(
+    () =>
+      points
+        .map((point, index) => ({
+          key: `xlabel-${index}`,
+          label: formatShortDate(point.date),
+          show: shouldRenderAxisLabel(index, points.length),
+        }))
+        .filter((item) => item.show),
+    [points],
   );
 
   if (isLoading && !data) {
@@ -190,27 +208,23 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
 
                 {markers.map((marker, index) => {
                   const fill = decisionColor(marker.outcome);
-                  if (fill === "transparent") return null;
+                  if (fill === "transparent") {
+                    if (markers.length === 1) {
+                      return <Circle key={index} cx={marker.cx} cy={marker.cy} r={5} fill={colors.accent} />;
+                    }
+                    return null;
+                  }
                   return <Circle key={index} cx={marker.cx} cy={marker.cy} r={5} fill={fill} />;
                 })}
-
               </Svg>
-              <View style={[styles.axisLabelRow, { width: chartWidth }]}>
-                {points.map((point, index) =>
-                  index % 2 === 0 ? (
-                    <Text
-                      key={`xlabel-${index}`}
-                      style={[
-                        styles.axisLabel,
-                        {
-                          left: point.x - 24,
-                        },
-                      ]}
-                    >
-                      {formatShortDate(point.date)}
-                    </Text>
-                  ) : null,
-                )}
+              <View
+                style={styles.axisLabelRow}
+              >
+                {axisLabels.map((item) => (
+                  <Text key={item.key} style={styles.axisLabel} numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                ))}
               </View>
               <Text style={styles.chartSummary}>
                 {`${series.length} sessions logged. Best estimated 1RM: ${
@@ -341,15 +355,20 @@ const styles = StyleSheet.create({
     ...typography.small,
   },
   axisLabelRow: {
-    height: 18,
-    position: "relative",
-    marginTop: -8,
+    width: "100%",
+    minHeight: 28,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 0,
+    paddingLeft: spacing.xl,
+    paddingRight: spacing.xs,
   },
   axisLabel: {
-    position: "absolute",
-    width: 48,
+    flex: 1,
     color: colors.textPrimary,
     fontSize: 11,
+    fontWeight: "600",
     textAlign: "center",
   },
   legendRow: {

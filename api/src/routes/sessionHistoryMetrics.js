@@ -118,6 +118,8 @@ export function computeDayStreak(rows) {
     const rowDate = asString(row.scheduled_date).slice(0, 10);
     if (!rowDate) break;
 
+    if (prevDate === rowDate) continue;
+
     if (prevDate !== null) {
       const prev = new Date(`${prevDate}T00:00:00Z`);
       const curr = new Date(`${rowDate}T00:00:00Z`);
@@ -143,15 +145,15 @@ export function createSessionHistoryMetricsHandler(db = pool) {
 
       const dayStreakQuery = client.query(
         `
-        WITH activity_days AS (
+        WITH activity_sessions AS (
           SELECT
+            pd.id,
             CASE
               WHEN MAX((sel.created_at AT TIME ZONE 'UTC')::date) IS NOT NULL
                 AND pd.scheduled_date > MAX((sel.created_at AT TIME ZONE 'UTC')::date)
                 THEN MAX((sel.created_at AT TIME ZONE 'UTC')::date)
               ELSE pd.scheduled_date
-            END AS scheduled_date,
-            TRUE AS is_completed
+            END AS activity_date
           FROM program_day pd
           JOIN program p ON p.id = pd.program_id
           LEFT JOIN segment_exercise_log sel
@@ -161,6 +163,10 @@ export function createSessionHistoryMetricsHandler(db = pool) {
           WHERE p.user_id = $1
           GROUP BY pd.id, pd.scheduled_date, pd.is_completed
           HAVING pd.is_completed = TRUE OR COUNT(sel.id) > 0
+        ),
+        activity_days AS (
+          SELECT DISTINCT activity_date AS scheduled_date, TRUE AS is_completed
+          FROM activity_sessions
         )
         SELECT scheduled_date, is_completed
         FROM activity_days
@@ -312,6 +318,33 @@ export function createSessionHistoryMetricsHandler(db = pool) {
         [user_id],
       );
 
+      const sessionsCount28dQuery = client.query(
+        `
+        SELECT COUNT(*) AS count
+        FROM (
+          SELECT
+            pd.id,
+            CASE
+              WHEN MAX((sel.created_at AT TIME ZONE 'UTC')::date) IS NOT NULL
+                AND pd.scheduled_date > MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+                THEN MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+              ELSE pd.scheduled_date
+            END AS activity_date
+          FROM program_day pd
+          JOIN program p ON p.id = pd.program_id
+          LEFT JOIN segment_exercise_log sel
+            ON sel.program_day_id = pd.id
+            AND sel.program_id = pd.program_id
+            AND sel.is_draft = FALSE
+          WHERE p.user_id = $1
+          GROUP BY pd.id, pd.scheduled_date, pd.is_completed
+          HAVING pd.is_completed = TRUE OR COUNT(sel.id) > 0
+        ) activity_sessions
+        WHERE activity_date BETWEEN CURRENT_DATE - 27 AND CURRENT_DATE
+        `,
+        [user_id],
+      );
+
       const programmesCompletedQuery = client
         .query(
           `
@@ -412,6 +445,7 @@ export function createSessionHistoryMetricsHandler(db = pool) {
         volume28dResult,
         strengthByRegionResult,
         sessionsCountResult,
+        sessionsCount28dResult,
         programmesCompletedResult,
         weeklyVolumeByRegionResult,
       ] = await Promise.all([
@@ -420,6 +454,7 @@ export function createSessionHistoryMetricsHandler(db = pool) {
         volume28dQuery,
         strengthByRegionQuery,
         sessionsCountQuery,
+        sessionsCount28dQuery,
         programmesCompletedQuery,
         weeklyVolumeByRegionQuery,
       ]);
@@ -443,6 +478,7 @@ export function createSessionHistoryMetricsHandler(db = pool) {
           strengthLower28d: buildStrengthRegionMetricFromRows(strengthByRegionResult.rows, "lower"),
           weeklyVolumeByRegion8w: mapWeeklyVolumeRows(weeklyVolumeByRegionResult.rows),
           sessionsCount: asNumber(sessionsCountResult.rows[0]?.count, 0),
+          sessionsCount28d: asNumber(sessionsCount28dResult.rows[0]?.count, 0),
           programmesCompleted: asNumber(programmesCompletedResult.rows[0]?.count, 0),
         });
       } finally {
