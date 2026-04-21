@@ -20,6 +20,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { buildChartPath, formatShortDate } from "./chartUtils";
 
 type Props = NativeStackScreenProps<HistoryStackParamList, "ExerciseTrend">;
 
@@ -31,14 +32,19 @@ const WINDOWS: { label: string; value: ExerciseHistoryWindow }[] = [
 ];
 
 const LEGEND_ITEMS = [
-  { label: "Increase load", outcome: "increase_load" },
-  { label: "Increase reps", outcome: "increase_reps" },
+  { label: "Increase", outcome: "increase_load" },
   { label: "Hold", outcome: "hold" },
   { label: "Deload", outcome: "deload_local" },
 ] as const;
 
 const CHART_HEIGHT = 220;
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const CHART_CARD_HORIZONTAL_PADDING = spacing.md * 2;
+
+function shouldRenderAxisLabel(index: number, total: number): boolean {
+  if (total <= 1) return true;
+  if (index === 0 || index === total - 1) return true;
+  return index % 2 === 0;
+}
 
 function formatKg(value: number | null | undefined): string {
   if (!Number.isFinite(value)) return "n/a";
@@ -60,115 +66,27 @@ function decisionColor(outcome: string | null): string {
   }
 }
 
-function formatShortDate(isoDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
-  if (!match) return "";
-  const month = MONTH_LABELS[Number(match[2]) - 1];
-  const day = Number(match[3]);
-  if (!month || !Number.isFinite(day)) return "";
-  return `${month} ${day}`;
-}
-
-type ChartPoint = {
-  x: number;
-  y: number;
-  outcome: string | null;
-  date: string;
-};
-
-type ChartLayout = {
-  svgPath: string;
-  markers: { cx: number; cy: number; outcome: string | null }[];
-  points: ChartPoint[];
-  padding: { top: number; bottom: number; left: number; right: number };
-  plotW: number;
-  plotH: number;
-  minVal: number;
-  maxVal: number;
-};
-
-function buildChartPath(
-  series: ExerciseHistoryPoint[],
-  chartWidth: number,
-  chartHeight: number,
-): ChartLayout {
-  const valid = series.filter((point) => point.estimatedE1rmKg != null);
-  const padding = { top: 16, bottom: 32, left: 44, right: 8 };
-  const plotW = chartWidth - padding.left - padding.right;
-  const plotH = chartHeight - padding.top - padding.bottom;
-  if (valid.length === 0) {
-    return {
-      svgPath: "",
-      markers: [],
-      points: [],
-      padding,
-      plotW,
-      plotH,
-      minVal: 0,
-      maxVal: 0,
-    };
-  }
-
-  const values = valid.map((point) => point.estimatedE1rmKg as number);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
-  const range = maxVal - minVal || 1;
-
-  if (valid.length === 1) {
-    const cx = padding.left + plotW / 2;
-    const cy = padding.top + plotH / 2;
-    return {
-      svgPath: "",
-      markers: [{ cx, cy, outcome: valid[0].decisionOutcome }],
-      points: [{ x: cx, y: cy, outcome: valid[0].decisionOutcome, date: valid[0].date }],
-      padding,
-      plotW,
-      plotH,
-      minVal,
-      maxVal,
-    };
-  }
-
-  const toX = (index: number) => padding.left + (index / (valid.length - 1)) * plotW;
-  const toY = (value: number) => padding.top + plotH - ((value - minVal) / range) * plotH;
-
-  const points = valid.map((point, index) => ({
-    x: toX(index),
-    y: toY(point.estimatedE1rmKg as number),
-    outcome: point.decisionOutcome,
-    date: point.date,
-  }));
-
-  const svgPath = points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)},${point.y.toFixed(1)}`)
-    .join(" ");
-
-  return {
-    svgPath,
-    markers: points.map((point) => ({
-      cx: point.x,
-      cy: point.y,
-      outcome: point.outcome,
-    })),
-    points,
-    padding,
-    plotW,
-    plotH,
-    minVal,
-    maxVal,
-  };
-}
-
 export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Element {
   const { exerciseId, exerciseName } = route.params;
   const userId = useSessionStore((state) => state.userId) ?? undefined;
   const [window, setWindow] = useState<ExerciseHistoryWindow>("12w");
-  const chartWidth = Dimensions.get("window").width - spacing.lg * 2;
+  const chartWidth = Dimensions.get("window").width - spacing.lg * 2 - CHART_CARD_HORIZONTAL_PADDING;
   const { data, isLoading, isError, refetch } = useExerciseHistory(exerciseId, window, userId);
   const series = data?.series ?? [];
   const { svgPath, markers, points, padding, plotH, minVal, maxVal } = useMemo(
     () => buildChartPath(series, chartWidth, CHART_HEIGHT),
     [chartWidth, series],
+  );
+  const axisLabels = useMemo(
+    () =>
+      points
+        .map((point, index) => ({
+          key: `xlabel-${index}`,
+          label: formatShortDate(point.date),
+          show: shouldRenderAxisLabel(index, points.length),
+        }))
+        .filter((item) => item.show),
+    [points],
   );
 
   if (isLoading && !data) {
@@ -247,8 +165,8 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
                   y1={padding.top}
                   x2={padding.left}
                   y2={padding.top + plotH}
-                  stroke={colors.border}
-                  strokeWidth={1}
+                  stroke={colors.textSecondary}
+                  strokeWidth={1.5}
                 />
                 <SvgText
                   x={padding.left - 4}
@@ -268,6 +186,14 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
                 >
                   {`${minVal.toFixed(0)} kg`}
                 </SvgText>
+                <Line
+                  x1={padding.left}
+                  y1={padding.top + plotH}
+                  x2={padding.left + (chartWidth - padding.left - padding.right)}
+                  y2={padding.top + plotH}
+                  stroke={colors.textSecondary}
+                  strokeWidth={1.5}
+                />
 
                 {svgPath ? (
                   <Path
@@ -282,25 +208,24 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
 
                 {markers.map((marker, index) => {
                   const fill = decisionColor(marker.outcome);
-                  if (fill === "transparent") return null;
+                  if (fill === "transparent") {
+                    if (markers.length === 1) {
+                      return <Circle key={index} cx={marker.cx} cy={marker.cy} r={5} fill={colors.accent} />;
+                    }
+                    return null;
+                  }
                   return <Circle key={index} cx={marker.cx} cy={marker.cy} r={5} fill={fill} />;
                 })}
-
-                {points.map((point, index) =>
-                  index % 2 === 0 ? (
-                    <SvgText
-                      key={`xlabel-${index}`}
-                      x={point.x}
-                      y={CHART_HEIGHT - 4}
-                      fill={colors.textSecondary}
-                      fontSize={9}
-                      textAnchor="middle"
-                    >
-                      {formatShortDate(point.date)}
-                    </SvgText>
-                  ) : null,
-                )}
               </Svg>
+              <View
+                style={styles.axisLabelRow}
+              >
+                {axisLabels.map((item) => (
+                  <Text key={item.key} style={styles.axisLabel} numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                ))}
+              </View>
               <Text style={styles.chartSummary}>
                 {`${series.length} sessions logged. Best estimated 1RM: ${
                   data?.summary.bestEstimatedE1rmKg != null
@@ -428,6 +353,23 @@ const styles = StyleSheet.create({
   chartSummary: {
     color: colors.textSecondary,
     ...typography.small,
+  },
+  axisLabelRow: {
+    width: "100%",
+    minHeight: 28,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 0,
+    paddingLeft: spacing.xl,
+    paddingRight: spacing.xs,
+  },
+  axisLabel: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
   },
   legendRow: {
     flexDirection: "row",

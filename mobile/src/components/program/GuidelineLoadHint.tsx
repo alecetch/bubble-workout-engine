@@ -38,10 +38,17 @@ export function GuidelineLoadHint({ guidelineLoad }: GuidelineLoadHintProps): Re
   return (
     <View style={styles.container}>
       <PressableScale style={styles.trigger} onPress={() => setExpanded((current) => !current)}>
-        <View style={[styles.dot, confidenceDotStyle(guidelineLoad.confidence)]} />
-        <Text style={styles.summaryText}>
-          {`Suggested start: ${formatGuidelineValue(guidelineLoad)}  •  ${confidenceLabel(guidelineLoad.confidence)}`}
-        </Text>
+        <View style={styles.triggerRow}>
+          <View style={[styles.dot, confidenceDotStyle(guidelineLoad.confidence)]} />
+          <Text style={styles.summaryText}>
+            {`Suggested start: ${formatGuidelineValue(guidelineLoad)}  •  ${confidenceLabel(guidelineLoad.confidence)}`}
+          </Text>
+        </View>
+        {guidelineLoad.source === "rank_default" ? (
+          <View style={styles.defaultEstimateBadge}>
+            <Text style={styles.defaultEstimateText}>Default estimate</Text>
+          </View>
+        ) : null}
       </PressableScale>
 
       {expanded ? (
@@ -64,10 +71,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   trigger: {
+    gap: spacing.xs,
+    alignSelf: "flex-start",
+  },
+  triggerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    alignSelf: "flex-start",
   },
   dot: {
     width: 6,
@@ -87,6 +97,21 @@ const styles = StyleSheet.create({
   summaryText: {
     color: colors.textSecondary,
     ...typography.small,
+  },
+  defaultEstimateBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 2,
+  },
+  defaultEstimateText: {
+    color: "#92400E",
+    fontSize: 10,
+    fontWeight: "600",
   },
   detailCard: {
     borderRadius: radii.card,

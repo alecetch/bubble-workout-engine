@@ -222,6 +222,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             key={segment.id}
             segment={segment}
             isLogged={Boolean(segmentLogs[segment.id])}
+            exerciseSetCounts={segmentLogs[segment.id]?.exerciseSetCounts}
             onLogSegment={() => setActiveSegmentId(segment.id)}
             onSwapExercise={openSwapSheet}
             onViewDecisionHistory={(_exerciseId, exerciseName, programExerciseId) => {
@@ -267,11 +268,23 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         onClose={() => setActiveSegmentId(null)}
         onSave={(rows) => {
           if (activeSegment) {
-            const entry: SegmentLogEntry = { updatedAt: new Date().toISOString() };
+            const exerciseSetCounts = rows.reduce<Record<string, number>>((acc, row) => {
+              const hasSavedData =
+                row.weightKg != null ||
+                row.repsCompleted != null ||
+                row.rirActual != null;
+              if (!hasSavedData || !row.programExerciseId) return acc;
+              acc[row.programExerciseId] = (acc[row.programExerciseId] ?? 0) + 1;
+              return acc;
+            }, {});
+            const entry: SegmentLogEntry = {
+              updatedAt: new Date().toISOString(),
+              exerciseSetCounts,
+            };
             setSegmentLogs((current) => ({ ...current, [activeSegment.id]: entry }));
             setSegmentLogRows((current) => ({ ...current, [activeSegment.id]: rows }));
             // Write to AsyncStorage so the isLogged badge persists after app restart.
-            void setSegmentLog(programDayId, activeSegment.id, {});
+            void setSegmentLog(programDayId, activeSegment.id, { exerciseSetCounts });
             const maxRest = Math.max(
               0,
               ...(activeSegment.exercises ?? []).map((ex) => (ex.restSeconds as number | null | undefined) ?? 0),

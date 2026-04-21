@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { PressableScale } from "../interaction/PressableScale";
@@ -17,6 +17,7 @@ type Segment = ProgramDayFullResponse["segments"][number];
 type SegmentCardProps = {
   segment: Segment;
   isLogged: boolean;
+  exerciseSetCounts?: Record<string, number>;
   onLogSegment: (segment: Segment) => void;
   onSwapExercise?: (
     programExerciseId: string,
@@ -51,10 +52,12 @@ function roundToNearestMinute(seconds: number | null): number | null {
 export function SegmentCard({
   segment,
   isLogged,
+  exerciseSetCounts,
   onLogSegment,
   onSwapExercise,
   onViewDecisionHistory,
 }: SegmentCardProps): React.JSX.Element {
+  const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null);
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
     rounds: segment.rounds,
@@ -107,7 +110,10 @@ export function SegmentCard({
   }
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={() => setExpandedExerciseId(null)}
+    >
       <View style={styles.headerRow}>
         <View style={styles.headerCopy}>
           <Text style={styles.segmentName}>{segment.segmentName}</Text>
@@ -150,16 +156,46 @@ export function SegmentCard({
                   ]
                     .filter(Boolean)
                     .join(" ");
+                  const loggedSetCount = exercise.id ? Number(exerciseSetCounts?.[exercise.id] ?? 0) : 0;
+                  const hasLoggedSets = loggedSetCount > 0;
 
                   return (
                     <View key={exercise.id ?? `${segment.id}-exercise-${index}`} style={styles.exerciseRow}>
-                      <Text
-                        style={styles.exerciseName}
-                        numberOfLines={2}
-                        ellipsizeMode="tail"
-                      >
-                        {exercise.name}
-                      </Text>
+                      <View style={styles.exerciseHeaderRow}>
+                        <Text
+                          style={styles.exerciseName}
+                          numberOfLines={2}
+                          ellipsizeMode="tail"
+                        >
+                          {exercise.name}
+                        </Text>
+                        {hasLoggedSets ? (
+                          <View style={styles.exerciseLoggedBadge}>
+                            <Text style={styles.exerciseLoggedBadgeText}>
+                              Logged {loggedSetCount} set{loggedSetCount === 1 ? "" : "s"}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {exercise.adaptationDecision ? (
+                        <AdaptationChip
+                          decision={exercise.adaptationDecision}
+                          expanded={expandedExerciseId === exercise.id}
+                          onToggle={() =>
+                            setExpandedExerciseId((prev) => (prev === exercise.id ? null : exercise.id ?? null))
+                          }
+                          onViewHistory={
+                            onViewDecisionHistory && exercise.id
+                              ? () =>
+                                  onViewDecisionHistory(
+                                    exercise.exerciseId ?? exercise.id ?? "",
+                                    exercise.name,
+                                    exercise.id ?? "",
+                                  )
+                              : undefined
+                          }
+                        />
+                      ) : null}
                       {line2 ? (
                         <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
                           {line2}
@@ -183,21 +219,6 @@ export function SegmentCard({
                         const loadHint = recommendedLoadHintForExercise(exercise);
                         return loadHint ? <GuidelineLoadHint guidelineLoad={loadHint} /> : null;
                       })() : null}
-                      {exercise.adaptationDecision ? (
-                        <AdaptationChip
-                          decision={exercise.adaptationDecision}
-                          onViewHistory={
-                            onViewDecisionHistory && exercise.id
-                              ? () =>
-                                  onViewDecisionHistory(
-                                    exercise.exerciseId ?? exercise.id ?? "",
-                                    exercise.name,
-                                    exercise.id ?? "",
-                                  )
-                              : undefined
-                          }
-                        />
-                      ) : null}
                     </View>
                   );
                 })
@@ -229,11 +250,16 @@ export function SegmentCard({
       ) : null}
 
       {presentation.showLogButton ? (
-        <PressableScale style={styles.logButton} onPress={() => onLogSegment(segment)}>
-          <Text style={styles.logButtonLabel}>Log segment</Text>
+        <PressableScale
+          style={[styles.logButton, isLogged ? styles.logButtonLogged : null]}
+          onPress={() => onLogSegment(segment)}
+        >
+          <Text style={[styles.logButtonLabel, isLogged ? styles.logButtonLabelLogged : null]}>
+            {isLogged ? "Segment Logged" : "Log segment"}
+          </Text>
         </PressableScale>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -341,9 +367,29 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: 2,
   },
+  exerciseHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.xs,
+  },
   exerciseName: {
+    flex: 1,
     color: colors.textPrimary,
     ...typography.body,
+    fontWeight: "600",
+  },
+  exerciseLoggedBadge: {
+    borderRadius: radii.pill,
+    backgroundColor: "rgba(34,197,94,0.16)",
+    borderWidth: 1,
+    borderColor: colors.success,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+  },
+  exerciseLoggedBadgeText: {
+    color: colors.success,
+    ...typography.small,
     fontWeight: "600",
   },
   exerciseMeta: {
@@ -385,9 +431,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  logButtonLogged: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
   logButtonLabel: {
     color: colors.textPrimary,
     ...typography.small,
     fontWeight: "600",
+  },
+  logButtonLabelLogged: {
+    color: colors.textPrimary,
   },
 });

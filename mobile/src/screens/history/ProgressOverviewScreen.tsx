@@ -117,15 +117,15 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
   const chartWidth = Dimensions.get("window").width - spacing.lg * 2;
   const { data: metrics, isLoading, isError, refetch } = useSessionHistoryMetrics(userId);
   const seriesData = metrics?.weeklyVolumeByRegion8w?.[region] ?? [];
-  const nonZeroSeriesData = useMemo(
-    () => seriesData.filter((point) => point.volumeLoad > 0),
+  const activeWeeksCount = useMemo(
+    () => seriesData.filter((point) => point.volumeLoad > 0).length,
     [seriesData],
   );
-  const peakWeek = Math.max(...nonZeroSeriesData.map((point) => point.volumeLoad), 0);
+  const peakWeek = Math.max(...seriesData.map((point) => point.volumeLoad), 0);
   const hasMeaningfulVolume = peakWeek > 0;
   const { bars } = useMemo(
-    () => buildBarChart(hasMeaningfulVolume ? nonZeroSeriesData : [], chartWidth, CHART_HEIGHT),
-    [chartWidth, hasMeaningfulVolume, nonZeroSeriesData],
+    () => buildBarChart(hasMeaningfulVolume ? seriesData : [], chartWidth, CHART_HEIGHT),
+    [chartWidth, hasMeaningfulVolume, seriesData],
   );
 
   if (isLoading && !metrics) {
@@ -218,7 +218,7 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
                 )}
               </View>
               <Text style={styles.chartSummary}>
-                {`${nonZeroSeriesData.length} active weeks of data. Peak week: ${peakWeek.toLocaleString()} kg volume load.`}
+                {`${activeWeeksCount} active weeks of data. Peak week: ${peakWeek.toLocaleString()} kg volume load.`}
               </Text>
             </>
           )}
@@ -241,13 +241,14 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
           />
         </View>
 
+        <Text style={styles.sectionTitle}>Activity Stats</Text>
         <View style={styles.streakRow}>
           <View style={styles.streakChip}>
             <Text style={styles.streakValue}>{metrics?.dayStreak ?? 0}</Text>
             <Text style={styles.streakLabel}>Day streak</Text>
           </View>
           <View style={styles.streakChip}>
-            <Text style={styles.streakValue}>{metrics?.consistency28d?.completed ?? 0}</Text>
+            <Text style={styles.streakValue}>{metrics?.sessionsCount28d ?? 0}</Text>
             <Text style={styles.streakLabel}>Sessions (28d)</Text>
           </View>
           <View style={styles.streakChip}>
@@ -412,6 +413,10 @@ const styles = StyleSheet.create({
   strengthCardEmpty: {
     color: colors.textSecondary,
     ...typography.body,
+  },
+  sectionTitle: {
+    color: colors.textSecondary,
+    ...typography.label,
   },
   streakRow: {
     flexDirection: "row",

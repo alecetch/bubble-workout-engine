@@ -75,7 +75,7 @@ export function SessionPickerSheet({
                   <Text style={styles.completedBadge}>Completed</Text>
                 ) : null}
               </View>
-              {item.is_primary_program ? <Text style={styles.primaryIndicator}>*</Text> : null}
+              {item.is_primary_program ? <Text style={styles.primaryIndicator}>★</Text> : null}
             </TouchableOpacity>
           )}
         />

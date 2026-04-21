@@ -221,8 +221,17 @@
       max-width: 180px;
       overflow: hidden;
       text-overflow: ellipsis;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
     .bug-chip:hover { background: #ffe4e6; border-color: #fda4af; }
+    .bug-chip.done {
+      background: #d1fae5;
+      color: #065f46;
+      border-color: #6ee7b7;
+      text-decoration: line-through;
+      opacity: 0.8;
+    }
+    .bug-chip.done:hover { background: #a7f3d0; border-color: #34d399; opacity: 1; }
 
     /* ── Card actions ── */
     .card-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
@@ -892,11 +901,15 @@ function bugPromptsHtml(item) {
   const bugs = item.bug_prompt_filenames;
   if (!bugs || bugs.length === 0) return '';
 
+  const done = new Set(item.bug_prompt_done_filenames || []);
+
   const chips = bugs.map(f => {
-    // Extract just the slug after -bug, or show "bug fix" if no slug
     const slugMatch = f.match(/-bug-([a-z0-9][a-z0-9-]*)\.(md|txt)$/i);
     const label = slugMatch ? `🐛 ${slugMatch[1]}` : '🐛 bug fix';
-    return `<span class="bug-chip" title="${escHtml(f)}" onclick="viewBugPrompt('${escHtml(f)}')">${escHtml(label)}</span>`;
+    const isDone = done.has(f);
+    const doneClass = isDone ? ' done' : '';
+    const doneTitle = isDone ? ' (click to reopen)' : ' (click to mark done)';
+    return `<span class="bug-chip${doneClass}" title="${escHtml(f)}${doneTitle}" onclick="toggleBugDone(event, ${item.id}, '${escHtml(f)}')">${escHtml(label)}</span>`;
   }).join('');
 
   return `<div class="bug-prompts">${chips}</div>`;
@@ -1002,6 +1015,22 @@ async function doMarkDone(id) {
     await refresh();
   } catch (err) {
     toast(`Mark done failed: ${err.message}`, 'error');
+  }
+}
+
+async function toggleBugDone(event, itemId, filename) {
+  // Ctrl/Cmd+click or right-click → view the file instead
+  if (event.ctrlKey || event.metaKey) {
+    event.preventDefault();
+    await viewBugPrompt(filename);
+    return;
+  }
+  try {
+    const data = await api('POST', `/api/items/${itemId}/toggle-bug`, { filename });
+    toast(data.nowDone ? '🐛 Bug marked done' : '↩ Bug reopened', data.nowDone ? 'success' : 'info');
+    await refresh();
+  } catch (err) {
+    toast(`Toggle failed: ${err.message}`, 'error');
   }
 }
 

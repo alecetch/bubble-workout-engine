@@ -21,12 +21,12 @@ function createDb({ aliases = [], importId = "import-1", getImportRow = null, sa
       if (sql.includes("FROM exercise_import_alias")) {
         return { rows: aliases };
       }
-      if (sql.includes("INSERT INTO training_history_import")) {
-        return { rows: [{ id: importId }] };
-      }
       if (sql.includes("INSERT INTO training_history_import_row")) {
         traces.push(params);
         return { rows: [] };
+      }
+      if (sql.includes("INSERT INTO training_history_import")) {
+        return { rows: [{ id: importId }] };
       }
       if (sql.includes("UPDATE training_history_import")) {
         return { rows: [] };
@@ -72,7 +72,7 @@ test("valid Hevy CSV derives anchors and completes import", async () => {
       {
         source_name_normalized: "barbell bench press",
         exercise_id: "bb_bench_press_flat",
-        estimation_family: "horizontal_push",
+        estimation_family: "horizontal_press",
       },
     ],
   });
@@ -91,6 +91,9 @@ test("valid Hevy CSV derives anchors and completes import", async () => {
   assert.equal(result.status, "completed");
   assert.equal(result.derived_anchor_lifts.length, 2);
   assert.equal(result.derived_anchor_lifts[0].source, "history_import");
+  assert.ok("family_slug" in result.derived_anchor_lifts[0]);
+  assert.ok("weight_kg" in result.derived_anchor_lifts[0]);
+  assert.ok("exercise_name" in result.derived_anchor_lifts[0]);
 });
 
 test("malformed CSV missing Hevy headers throws csv_parse_error", async () => {
@@ -147,7 +150,7 @@ test("rows older than 90 days are excluded but boundary rows are included", asyn
   });
 
   assert.equal(result.status, "completed");
-  assert.equal(result.derived_anchor_lifts[0].load_kg, 100);
+  assert.equal(result.derived_anchor_lifts[0].weight_kg, 100);
 });
 
 test("best-working-set heuristic excludes zero-weight and out-of-range reps", async () => {
@@ -174,7 +177,7 @@ test("best-working-set heuristic excludes zero-weight and out-of-range reps", as
     clientProfileId: "profile-1",
   });
 
-  assert.equal(result.derived_anchor_lifts[0].load_kg, 110);
+  assert.equal(result.derived_anchor_lifts[0].weight_kg, 110);
   assert.equal(result.derived_anchor_lifts[0].reps, 5);
 });
 
@@ -221,4 +224,31 @@ test("getImport returns a user-scoped import record", async () => {
   const record = await service.getImport("import-1", "user-1");
   assert.equal(record.id, "import-1");
   assert.equal(record.status, "completed");
+});
+
+test("best working set row is flagged with is_best_set trace metadata", async () => {
+  const db = createDb({
+    aliases: [
+      {
+        source_name_normalized: "barbell back squat",
+        exercise_id: "bb_back_squat",
+        estimation_family: "squat",
+      },
+    ],
+  });
+  const service = makeTrainingHistoryImportService(db, { now: () => new Date("2026-04-15T12:00:00Z") });
+
+  await service.processHevyCsv({
+    csvBuffer: csv([
+      "Date,Workout Name,Exercise Name,Set Order,Weight,Reps",
+      "2026-04-10,Day 1,Barbell Back Squat,1,100,8",
+      "2026-04-11,Day 1,Barbell Back Squat,1,110,5",
+    ]),
+    userId: "user-1",
+    clientProfileId: "profile-1",
+  });
+
+  assert.equal(db.traces.length, 2);
+  assert.equal(db.traces[0][9], false);
+  assert.equal(db.traces[1][9], true);
 });

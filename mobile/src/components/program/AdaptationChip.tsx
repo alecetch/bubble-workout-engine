@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { AdaptationDecision } from "../../api/programViewer";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -27,12 +27,12 @@ const SEMANTIC_COLORS: Record<ChipSemantic, { bg: string; text: string; border: 
 
 type Props = {
   decision: AdaptationDecision;
+  expanded: boolean;
+  onToggle: () => void;
   onViewHistory?: () => void;
 };
 
-export function AdaptationChip({ decision, onViewHistory }: Props): React.JSX.Element | null {
-  const [expanded, setExpanded] = useState(false);
-
+export function AdaptationChip({ decision, expanded, onToggle, onViewHistory }: Props): React.JSX.Element | null {
   if (HIDDEN_OUTCOMES.has(decision.outcome)) return null;
 
   const semantic = OUTCOME_SEMANTIC[decision.outcome] ?? "info";
@@ -41,7 +41,7 @@ export function AdaptationChip({ decision, onViewHistory }: Props): React.JSX.El
   return (
     <View style={styles.wrapper}>
       <PressableScale
-        onPress={() => setExpanded((current) => !current)}
+        onPress={onToggle}
         style={[styles.chip, { backgroundColor: palette.bg, borderColor: palette.border }]}
         accessibilityLabel={`Adaptation: ${decision.displayChip}. Tap to expand.`}
       >
@@ -49,19 +49,21 @@ export function AdaptationChip({ decision, onViewHistory }: Props): React.JSX.El
       </PressableScale>
 
       {expanded ? (
-        <View style={styles.detail}>
-          {decision.displayDetail ? <Text style={styles.detailText}>{decision.displayDetail}</Text> : null}
-          {decision.confidence ? (
-            <Text style={styles.confidenceText}>
-              Confidence: {decision.confidence.charAt(0).toUpperCase() + decision.confidence.slice(1)}
-            </Text>
-          ) : null}
-          {onViewHistory ? (
-            <PressableScale onPress={onViewHistory} style={styles.historyLink}>
-              <Text style={styles.historyLinkText}>View full history -&gt;</Text>
-            </PressableScale>
-          ) : null}
-        </View>
+        <Pressable onPress={() => {}}>
+          <View style={styles.detail}>
+            {decision.displayDetail ? <Text style={styles.detailText}>{decision.displayDetail}</Text> : null}
+            {decision.confidence ? (
+              <Text style={styles.confidenceText}>
+                Confidence: {decision.confidence.charAt(0).toUpperCase() + decision.confidence.slice(1)}
+              </Text>
+            ) : null}
+            {onViewHistory ? (
+              <PressableScale onPress={onViewHistory} style={styles.historyLink}>
+                <Text style={styles.historyLinkText}>View full history →</Text>
+              </PressableScale>
+            ) : null}
+          </View>
+        </Pressable>
       ) : null}
     </View>
   );

@@ -141,6 +141,13 @@ export function makeTrainingHistoryImportService(db, options = {}) {
       });
     }
 
+    const bestSetKeys = new Set();
+    for (const [family, rows] of byFamily) {
+      const best = pickBestWorkingSet(rows);
+      if (!best) continue;
+      bestSetKeys.add(`${family}|${best.performed_at}|${best.weight_kg}|${best.reps}`);
+    }
+
     const derivedAnchors = [];
     for (const [family, rows] of byFamily) {
       const best = pickBestWorkingSet(rows);
@@ -148,6 +155,7 @@ export function makeTrainingHistoryImportService(db, options = {}) {
       derivedAnchors.push({
         estimationFamily: family,
         exerciseId: best.mapped_exercise_id,
+        exerciseName: best.raw_exercise_name,
         loadKg: best.weight_kg,
         reps: best.reps,
         rir: null,
@@ -197,8 +205,8 @@ export function makeTrainingHistoryImportService(db, options = {}) {
           await db.query(
             `INSERT INTO training_history_import_row
                (import_id, raw_exercise_name, mapped_exercise_id, mapped_estimation_family,
-                weight_kg, reps, performed_at, mapping_confidence, warning_code)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                weight_kg, reps, performed_at, mapping_confidence, warning_code, is_best_set)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
             [
               importId,
               trace.raw_exercise_name,
@@ -209,6 +217,10 @@ export function makeTrainingHistoryImportService(db, options = {}) {
               trace.performed_at,
               trace.mapping_confidence,
               trace.warning_code,
+              trace.mapped_estimation_family != null &&
+                bestSetKeys.has(
+                  `${trace.mapped_estimation_family}|${trace.performed_at}|${trace.weight_kg}|${trace.reps}`,
+                ),
             ],
           );
         }
@@ -224,6 +236,13 @@ export function makeTrainingHistoryImportService(db, options = {}) {
       derived_anchors: derivedAnchors.length,
       saved_anchors: savedAnchors.length,
       warnings,
+      derived_anchor_lifts_snapshot: derivedAnchors.map((anchor) => ({
+        family_slug: anchor.estimationFamily,
+        exercise_name: anchor.exerciseName ?? null,
+        weight_kg: anchor.loadKg,
+        reps: anchor.reps,
+        source: anchor.source,
+      })),
     };
 
     await db.query(
@@ -239,9 +258,9 @@ export function makeTrainingHistoryImportService(db, options = {}) {
       import_id: importId,
       status: importStatus,
       derived_anchor_lifts: derivedAnchors.map((anchor) => ({
-        estimation_family: anchor.estimationFamily,
-        exercise_id: anchor.exerciseId,
-        load_kg: anchor.loadKg,
+        family_slug: anchor.estimationFamily,
+        exercise_name: anchor.exerciseName ?? null,
+        weight_kg: anchor.loadKg,
         reps: anchor.reps,
         source: anchor.source,
       })),

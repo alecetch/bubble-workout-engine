@@ -2,6 +2,7 @@ type SegmentLogPayload = {
   rounds?: number;
   load?: number;
   notes?: string;
+  exerciseSetCounts?: Record<string, number>;
 };
 
 export type SegmentLogEntry = SegmentLogPayload & {

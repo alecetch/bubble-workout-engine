@@ -104,7 +104,18 @@ trainingHistoryImportRouter.get(
       if (!record) {
         return res.status(404).json({ ok: false, error: "Import not found." });
       }
-      return res.json({ ok: true, import: record });
+      const summary = record.summary_json ?? {};
+      return res.json({
+        ok: true,
+        import_id: record.id,
+        status: record.status,
+        source_app: record.source_app,
+        row_count: summary.total_rows ?? 0,
+        derived_anchor_count: summary.derived_anchors ?? 0,
+        derived_anchor_lifts: summary.derived_anchor_lifts_snapshot ?? [],
+        warnings: summary.warnings ?? [],
+        imported_at: record.completed_at ?? record.created_at,
+      });
     } catch (err) {
       return next(err);
     }

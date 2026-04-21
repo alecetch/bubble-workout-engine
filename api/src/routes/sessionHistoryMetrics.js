@@ -47,7 +47,7 @@ function asString(value, fallback = "") {
   return String(value);
 }
 
-function mapWeeklyVolumeRows(rows) {
+export function mapWeeklyVolumeRows(rows) {
   const grouped = { upper: [], lower: [], full: [] };
 
   for (const row of rows ?? []) {
@@ -108,34 +108,115 @@ export function buildStrengthRegionMetricFromRows(rows, region) {
   };
 }
 
-sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => {
-  const { request_id } = req;
+export function computeDayStreak(rows) {
+  let dayStreak = 0;
+  let prevDate = null;
 
-  try {
-    const client = await pool.connect();
+  for (const row of rows ?? []) {
+    if (row.is_completed !== true) break;
+
+    const rowDate = asString(row.scheduled_date).slice(0, 10);
+    if (!rowDate) break;
+
+    if (prevDate === rowDate) continue;
+
+    if (prevDate !== null) {
+      const prev = new Date(`${prevDate}T00:00:00Z`);
+      const curr = new Date(`${rowDate}T00:00:00Z`);
+      const diffDays = Math.round((prev.getTime() - curr.getTime()) / 86400000);
+      if (diffDays !== 1) break;
+    }
+
+    dayStreak += 1;
+    prevDate = rowDate;
+  }
+
+  return dayStreak;
+}
+
+export function createSessionHistoryMetricsHandler(db = pool) {
+  return async function sessionHistoryMetricsHandler(req, res) {
+    const { request_id } = req;
+
     try {
+      const client = typeof db.connect === "function" ? await db.connect() : db;
+      try {
       const user_id = resolveUserId(req);
 
       const dayStreakQuery = client.query(
         `
+        WITH activity_sessions AS (
+          SELECT
+            pd.id,
+            CASE
+              WHEN MAX((sel.created_at AT TIME ZONE 'UTC')::date) IS NOT NULL
+                AND pd.scheduled_date > MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+                THEN MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+              ELSE pd.scheduled_date
+            END AS activity_date
+          FROM program_day pd
+          JOIN program p ON p.id = pd.program_id
+          LEFT JOIN segment_exercise_log sel
+            ON sel.program_day_id = pd.id
+            AND sel.program_id = pd.program_id
+            AND sel.is_draft = FALSE
+          WHERE p.user_id = $1
+          GROUP BY pd.id, pd.scheduled_date, pd.is_completed
+          HAVING pd.is_completed = TRUE OR COUNT(sel.id) > 0
+        ),
+        activity_days AS (
+          SELECT DISTINCT activity_date AS scheduled_date, TRUE AS is_completed
+          FROM activity_sessions
+        )
         SELECT scheduled_date, is_completed
-        FROM program_day pd
-        JOIN program p ON p.id = pd.program_id
-        WHERE p.user_id = $1 AND pd.scheduled_date <= CURRENT_DATE
-        ORDER BY pd.scheduled_date DESC
+        FROM activity_days
+        WHERE scheduled_date <= CURRENT_DATE
+        ORDER BY scheduled_date DESC
         `,
         [user_id],
       );
 
       const consistency28dQuery = client.query(
         `
+        WITH activity_days AS (
+          SELECT
+            pd.id,
+            CASE
+              WHEN MAX((sel.created_at AT TIME ZONE 'UTC')::date) IS NOT NULL
+                AND pd.scheduled_date > MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+                THEN MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+              ELSE pd.scheduled_date
+            END AS activity_date
+          FROM program_day pd
+          JOIN program p ON p.id = pd.program_id
+          LEFT JOIN segment_exercise_log sel
+            ON sel.program_day_id = pd.id
+            AND sel.program_id = pd.program_id
+            AND sel.is_draft = FALSE
+          WHERE p.user_id = $1
+          GROUP BY pd.id, pd.scheduled_date, pd.is_completed
+          HAVING pd.is_completed = TRUE OR COUNT(sel.id) > 0
+        ),
+        scheduled_days AS (
+          SELECT DISTINCT pd.id
+          FROM program_day pd
+          JOIN program p ON p.id = pd.program_id
+          LEFT JOIN segment_exercise_log sel
+            ON sel.program_day_id = pd.id
+            AND sel.program_id = pd.program_id
+            AND sel.is_draft = FALSE
+          WHERE p.user_id = $1
+            AND (
+              pd.scheduled_date BETWEEN CURRENT_DATE - 27 AND CURRENT_DATE
+              OR (
+                pd.scheduled_date > CURRENT_DATE
+                AND (sel.created_at AT TIME ZONE 'UTC')::date BETWEEN CURRENT_DATE - 27 AND CURRENT_DATE
+              )
+            )
+        )
         SELECT
-          COUNT(*) AS scheduled,
-          COUNT(*) FILTER (WHERE is_completed = TRUE) AS completed
-        FROM program_day pd
-        JOIN program p ON p.id = pd.program_id
-        WHERE p.user_id = $1
-          AND pd.scheduled_date BETWEEN CURRENT_DATE - 27 AND CURRENT_DATE
+          (SELECT COUNT(*) FROM scheduled_days) AS scheduled,
+          (SELECT COUNT(*) FROM activity_days WHERE activity_date BETWEEN CURRENT_DATE - 27 AND CURRENT_DATE) AS completed
         `,
         [user_id],
       );
@@ -150,7 +231,13 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
           AND sel.is_draft = FALSE
           AND sel.weight_kg IS NOT NULL
           AND sel.reps_completed IS NOT NULL
-          AND pd.scheduled_date >= CURRENT_DATE - 27
+          AND (
+            CASE
+              WHEN pd.scheduled_date > (sel.created_at AT TIME ZONE 'UTC')::date
+                THEN (sel.created_at AT TIME ZONE 'UTC')::date
+              ELSE pd.scheduled_date
+            END
+          ) >= CURRENT_DATE - 27
         `,
         [user_id],
       );
@@ -170,7 +257,13 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
           JOIN program p ON p.id = sel.program_id
           WHERE p.user_id = $1
             AND sel.estimated_1rm_kg IS NOT NULL
-            AND pd.scheduled_date >= CURRENT_DATE - 27
+            AND (
+              CASE
+                WHEN pd.scheduled_date > (sel.created_at AT TIME ZONE 'UTC')::date
+                  THEN (sel.created_at AT TIME ZONE 'UTC')::date
+                ELSE pd.scheduled_date
+              END
+            ) >= CURRENT_DATE - 27
             AND ec.strength_primary_region IN ('upper','lower')
           GROUP BY ec.strength_primary_region, ec.exercise_id, COALESCE(ec.name, pe.exercise_name)
         ),
@@ -187,7 +280,13 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
           JOIN program p ON p.id = sel.program_id
           WHERE p.user_id = $1
             AND sel.estimated_1rm_kg IS NOT NULL
-            AND pd.scheduled_date BETWEEN CURRENT_DATE - 55 AND CURRENT_DATE - 28
+            AND (
+              CASE
+                WHEN pd.scheduled_date > (sel.created_at AT TIME ZONE 'UTC')::date
+                  THEN (sel.created_at AT TIME ZONE 'UTC')::date
+                ELSE pd.scheduled_date
+              END
+            ) BETWEEN CURRENT_DATE - 55 AND CURRENT_DATE - 28
             AND ec.strength_primary_region IN ('upper','lower')
           GROUP BY ec.strength_primary_region, ec.exercise_id, COALESCE(ec.name, pe.exercise_name)
         )
@@ -203,9 +302,45 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
       const sessionsCountQuery = client.query(
         `
         SELECT COUNT(*) AS count
-        FROM program_day pd
-        JOIN program p ON p.id = pd.program_id
-        WHERE p.user_id = $1 AND pd.is_completed = TRUE
+        FROM (
+          SELECT pd.id
+          FROM program_day pd
+          JOIN program p ON p.id = pd.program_id
+          LEFT JOIN segment_exercise_log sel
+            ON sel.program_day_id = pd.id
+            AND sel.program_id = pd.program_id
+            AND sel.is_draft = FALSE
+          WHERE p.user_id = $1
+          GROUP BY pd.id, pd.is_completed
+          HAVING pd.is_completed = TRUE OR COUNT(sel.id) > 0
+        ) activity_sessions
+        `,
+        [user_id],
+      );
+
+      const sessionsCount28dQuery = client.query(
+        `
+        SELECT COUNT(*) AS count
+        FROM (
+          SELECT
+            pd.id,
+            CASE
+              WHEN MAX((sel.created_at AT TIME ZONE 'UTC')::date) IS NOT NULL
+                AND pd.scheduled_date > MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+                THEN MAX((sel.created_at AT TIME ZONE 'UTC')::date)
+              ELSE pd.scheduled_date
+            END AS activity_date
+          FROM program_day pd
+          JOIN program p ON p.id = pd.program_id
+          LEFT JOIN segment_exercise_log sel
+            ON sel.program_day_id = pd.id
+            AND sel.program_id = pd.program_id
+            AND sel.is_draft = FALSE
+          WHERE p.user_id = $1
+          GROUP BY pd.id, pd.scheduled_date, pd.is_completed
+          HAVING pd.is_completed = TRUE OR COUNT(sel.id) > 0
+        ) activity_sessions
+        WHERE activity_date BETWEEN CURRENT_DATE - 27 AND CURRENT_DATE
         `,
         [user_id],
       );
@@ -245,7 +380,14 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         ),
         weekly_logs AS (
           SELECT
-            date_trunc('week', pd.scheduled_date)::date AS week_start,
+            date_trunc(
+              'week',
+              CASE
+                WHEN pd.scheduled_date > (sel.created_at AT TIME ZONE 'UTC')::date
+                  THEN (sel.created_at AT TIME ZONE 'UTC')::date
+                ELSE pd.scheduled_date
+              END
+            )::date AS week_start,
             ec.strength_primary_region AS region,
             SUM(sel.weight_kg * sel.reps_completed) AS volume_load
           FROM segment_exercise_log sel
@@ -254,12 +396,26 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
           JOIN program_exercise pe ON pe.id = sel.program_exercise_id
           LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
           WHERE p.user_id = $1
-            AND pd.is_completed = TRUE
             AND sel.is_draft = FALSE
             AND sel.weight_kg IS NOT NULL
             AND sel.reps_completed IS NOT NULL
-            AND pd.scheduled_date >= date_trunc('week', CURRENT_DATE)::date - INTERVAL '7 weeks'
-          GROUP BY date_trunc('week', pd.scheduled_date)::date, ec.strength_primary_region
+            AND (
+              CASE
+                WHEN pd.scheduled_date > (sel.created_at AT TIME ZONE 'UTC')::date
+                  THEN (sel.created_at AT TIME ZONE 'UTC')::date
+                ELSE pd.scheduled_date
+              END
+            ) >= date_trunc('week', CURRENT_DATE)::date - INTERVAL '7 weeks'
+          GROUP BY
+            date_trunc(
+              'week',
+              CASE
+                WHEN pd.scheduled_date > (sel.created_at AT TIME ZONE 'UTC')::date
+                  THEN (sel.created_at AT TIME ZONE 'UTC')::date
+                ELSE pd.scheduled_date
+              END
+            )::date,
+            ec.strength_primary_region
         )
         SELECT
           weeks.week_start,
@@ -289,6 +445,7 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         volume28dResult,
         strengthByRegionResult,
         sessionsCountResult,
+        sessionsCount28dResult,
         programmesCompletedResult,
         weeklyVolumeByRegionResult,
       ] = await Promise.all([
@@ -297,49 +454,47 @@ sessionHistoryMetricsRouter.get("/session-history-metrics", async (req, res) => 
         volume28dQuery,
         strengthByRegionQuery,
         sessionsCountQuery,
+        sessionsCount28dQuery,
         programmesCompletedQuery,
         weeklyVolumeByRegionQuery,
       ]);
 
-      let dayStreak = 0;
-      for (const row of dayStreakResult.rows) {
-        if (row.is_completed === true) {
-          dayStreak += 1;
-        } else {
-          break;
-        }
-      }
+      const dayStreak = computeDayStreak(dayStreakResult.rows);
 
       const consistencyScheduled = asNumber(consistency28dResult.rows[0]?.scheduled, 0);
       const consistencyCompleted = asNumber(consistency28dResult.rows[0]?.completed, 0);
       const consistencyRate = consistencyScheduled > 0 ? consistencyCompleted / consistencyScheduled : 0;
       const volume28d = asNumber(volume28dResult.rows[0]?.volume, 0);
 
-      return res.json({
-        dayStreak,
-        consistency28d: {
-          completed: consistencyCompleted,
-          scheduled: consistencyScheduled,
-          rate: consistencyRate,
-        },
-        volume28d,
-        strengthUpper28d: buildStrengthRegionMetricFromRows(strengthByRegionResult.rows, "upper"),
-        strengthLower28d: buildStrengthRegionMetricFromRows(strengthByRegionResult.rows, "lower"),
-        weeklyVolumeByRegion8w: mapWeeklyVolumeRows(weeklyVolumeByRegionResult.rows),
-        sessionsCount: asNumber(sessionsCountResult.rows[0]?.count, 0),
-        programmesCompleted: asNumber(programmesCompletedResult.rows[0]?.count, 0),
+        return res.json({
+          dayStreak,
+          consistency28d: {
+            completed: consistencyCompleted,
+            scheduled: consistencyScheduled,
+            rate: consistencyRate,
+          },
+          volume28d,
+          strengthUpper28d: buildStrengthRegionMetricFromRows(strengthByRegionResult.rows, "upper"),
+          strengthLower28d: buildStrengthRegionMetricFromRows(strengthByRegionResult.rows, "lower"),
+          weeklyVolumeByRegion8w: mapWeeklyVolumeRows(weeklyVolumeByRegionResult.rows),
+          sessionsCount: asNumber(sessionsCountResult.rows[0]?.count, 0),
+          sessionsCount28d: asNumber(sessionsCount28dResult.rows[0]?.count, 0),
+          programmesCompleted: asNumber(programmesCompletedResult.rows[0]?.count, 0),
+        });
+      } finally {
+        if (typeof client.release === "function") client.release();
+      }
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
       });
-    } finally {
-      client.release();
     }
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-      details: mapped.details,
-    });
-  }
-});
+  };
+}
+
+sessionHistoryMetricsRouter.get("/session-history-metrics", createSessionHistoryMetricsHandler(pool));

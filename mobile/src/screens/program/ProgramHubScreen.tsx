@@ -2,6 +2,7 @@ import React from "react";
 import {
   ActivityIndicator,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -116,6 +117,7 @@ export function ProgramHubScreen({ navigation }: Props): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [pickerDate, setPickerDate] = React.useState("");
   const [pickerSessions, setPickerSessions] = React.useState<SessionsByDateItem[]>([]);
+  const [makePrimaryError, setMakePrimaryError] = React.useState<string | null>(null);
 
   const activeProgramsQuery = useQuery({
     queryKey: ["activePrograms"],
@@ -138,10 +140,17 @@ export function ProgramHubScreen({ navigation }: Props): React.JSX.Element {
 
   const makePrimaryMutation = useMutation({
     mutationFn: setPrimaryProgram,
+    onMutate: () => {
+      setMakePrimaryError(null);
+    },
     onSuccess: (_data, programId) => {
+      setMakePrimaryError(null);
       setActiveProgramId(programId);
       void queryClient.invalidateQueries({ queryKey: ["activePrograms"] });
       void queryClient.invalidateQueries({ queryKey: ["combinedCalendar"] });
+    },
+    onError: () => {
+      setMakePrimaryError("Could not update primary program. Please try again.");
     },
   });
 
@@ -209,12 +218,22 @@ export function ProgramHubScreen({ navigation }: Props): React.JSX.Element {
   const { programs, today_sessions } = activeProgramsQuery.data;
 
   return (
-    <>
+    <View style={styles.flexContainer}>
       <FlatList
-        style={styles.container}
+        style={styles.flex}
         contentContainerStyle={styles.content}
         data={programs}
         keyExtractor={(item) => item.program_id}
+        refreshControl={
+          <RefreshControl
+            refreshing={activeProgramsQuery.isRefetching || combinedCalendarQuery.isRefetching}
+            onRefresh={() => {
+              void activeProgramsQuery.refetch();
+              void combinedCalendarQuery.refetch();
+            }}
+            tintColor={colors.accent}
+          />
+        }
         ListHeaderComponent={
           <>
             {today_sessions.length > 0 ? (
@@ -250,6 +269,11 @@ export function ProgramHubScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.emptyText}>No active programs. Generate one to get started.</Text>
         }
       />
+      {makePrimaryError ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{makePrimaryError}</Text>
+        </View>
+      ) : null}
       <SessionPickerSheet
         visible={pickerOpen}
         scheduledDate={pickerDate}
@@ -257,12 +281,13 @@ export function ProgramHubScreen({ navigation }: Props): React.JSX.Element {
         onSelectSession={handleSelectPickerSession}
         onClose={() => setPickerOpen(false)}
       />
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  flexContainer: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
   content: { padding: 16, gap: 12 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   section: { marginBottom: 16 },
@@ -309,4 +334,12 @@ const styles = StyleSheet.create({
   emptyText: { color: colors.textSecondary, textAlign: "center", marginTop: 32 },
   errorText: { color: colors.textSecondary, marginBottom: 12 },
   retryText: { color: colors.accent },
+  errorBanner: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#FECACA",
+  },
+  errorBannerText: { color: "#991B1B", fontSize: 14, textAlign: "center" },
 });

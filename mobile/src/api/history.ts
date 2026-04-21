@@ -42,6 +42,7 @@ export type HistoryTimelineItem = {
     | {
         value: number;
         exerciseName: string;
+        exerciseId: string;
       }
     | null;
 };
@@ -189,6 +190,7 @@ function normalizeTimeline(raw: unknown): HistoryTimelineResponse {
           : {
               value: asNumber(highlightRaw.value, 0),
               exerciseName: asString(highlightRaw.exerciseName),
+              exerciseId: asString(highlightRaw.exerciseId),
             },
     };
   });
@@ -361,6 +363,7 @@ export type SessionHistoryMetrics = {
   strengthUpper28d: SessionHistoryStrengthRegion | null;
   strengthLower28d: SessionHistoryStrengthRegion | null;
   sessionsCount: number;
+  sessionsCount28d: number;
   programmesCompleted: number;
   weeklyVolumeByRegion8w: WeeklyVolumeByRegion8w;
 };
@@ -456,6 +459,7 @@ export function normalizeSessionHistoryMetrics(raw: unknown): SessionHistoryMetr
     strengthUpper28d: normalizeSessionHistoryStrengthRegion(root.strengthUpper28d),
     strengthLower28d: normalizeSessionHistoryStrengthRegion(root.strengthLower28d),
     sessionsCount: asNumber(root.sessionsCount, 0),
+    sessionsCount28d: asNumber(root.sessionsCount28d, 0),
     programmesCompleted: asNumber(root.programmesCompleted, 0),
     weeklyVolumeByRegion8w: normalizeWeeklyVolumeByRegion(root.weeklyVolumeByRegion8w),
   };

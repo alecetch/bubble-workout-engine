@@ -54,10 +54,10 @@ function resolveIncludeDecisions(rawValue) {
 
 function buildSeriesQuery({ includeDecisions, windowKey }) {
   const params = ["$1", "$2"];
-  let windowClause = "";
+  let windowClause = "\nWHERE daily.date <= CURRENT_DATE";
   if (windowKey !== "all") {
     params.push(`$${params.length + 1}`);
-    windowClause = `\n  AND pd.scheduled_date >= CURRENT_DATE - (${params[2]} - 1)`;
+    windowClause += `\n  AND daily.date >= CURRENT_DATE - (${params[2]} - 1)`;
   }
 
   const decisionColumns = includeDecisions
@@ -78,7 +78,10 @@ LEFT JOIN LATERAL (
   WHERE epd.user_id = $1
     AND epd.exercise_id = daily.exercise_id
     AND epd.created_at::date <= daily.date
-  ORDER BY epd.created_at DESC
+  ORDER BY
+    CASE WHEN epd.program_day_id = daily.program_day_id THEN 0 ELSE 1 END ASC,
+    epd.created_at DESC,
+    epd.id DESC
   LIMIT 1
 ) decision ON TRUE`
     : "";
@@ -86,7 +89,13 @@ LEFT JOIN LATERAL (
   return `
 WITH daily AS (
   SELECT
-    pd.scheduled_date AS date,
+    pd.id AS program_day_id,
+    CASE
+      WHEN MAX((l.created_at AT TIME ZONE 'UTC')::date) IS NOT NULL
+        AND pd.scheduled_date > MAX((l.created_at AT TIME ZONE 'UTC')::date)
+        THEN MAX((l.created_at AT TIME ZONE 'UTC')::date)
+      ELSE pd.scheduled_date
+    END AS date,
     pe.exercise_id,
     MAX(l.weight_kg) AS top_weight_kg,
     MAX(l.reps_completed) FILTER (WHERE l.weight_kg IS NOT NULL) AS top_reps,
@@ -99,8 +108,8 @@ WITH daily AS (
   WHERE p.user_id = $1
     AND pd.is_completed = TRUE
     AND l.is_draft = FALSE
-    AND pe.exercise_id = $2${windowClause}
-  GROUP BY pd.scheduled_date, pe.exercise_id
+    AND pe.exercise_id = $2
+  GROUP BY pd.id, pd.scheduled_date, pe.exercise_id
 )
 SELECT
   daily.date,
@@ -108,7 +117,7 @@ SELECT
   daily.top_reps,
   daily.tonnage,
   daily.estimated_e1rm_kg${decisionColumns}
-FROM daily${decisionJoin}
+FROM daily${decisionJoin}${windowClause}
 ORDER BY daily.date DESC
 LIMIT 180;
 `;

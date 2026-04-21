@@ -62,23 +62,24 @@ export function LogSegmentModal({
   onClose,
   onSave,
 }: LogSegmentModalProps): React.JSX.Element {
+  const existingLogsQuery = useSegmentExerciseLogs(
+    segment?.id ?? null,
+    programDayId,
+    { userId },
+  );
   const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
   const [activeKey, setActiveKey] = useState<{ exerciseId: string; setIndex: number } | null>(null);
   const initializedSegmentIdRef = useRef<string | null>(null);
 
   const exercises = segment?.exercises ?? [];
   const loadableExercises = exercises.filter((ex) => ex.isLoadable === true);
+  const existingRows = existingLogsQuery.data ?? [];
   const activeExercise = loadableExercises.find((ex) => ex.id === activeKey?.exerciseId) ?? null;
   const activeEffort = activeKey
     ? (inputMap[activeKey.exerciseId]?.[activeKey.setIndex]?.rirActual ?? null)
     : null;
   const activeEffortCaption = EFFORT_OPTIONS.find((option) => option.value === activeEffort)?.caption ?? null;
 
-  const existingLogsQuery = useSegmentExerciseLogs(
-    segment?.id ?? null,
-    programDayId,
-    { userId },
-  );
   const saveMutation = useSaveSegmentLogs();
   const defaultActiveKey = getDefaultActiveKey(loadableExercises);
 
@@ -94,10 +95,10 @@ export function LogSegmentModal({
     if (!segment) return;
     if (initializedSegmentIdRef.current === segment.id) return;
     if (existingLogsQuery.isLoading && !existingLogsQuery.data) return;
-    setInputMap(buildInitialSetInputMap(exercises, existingLogsQuery.data ?? []));
+    setInputMap(buildInitialSetInputMap(exercises, existingRows));
     setActiveKey(defaultActiveKey);
     initializedSegmentIdRef.current = segment.id;
-  }, [visible, segment?.id, existingLogsQuery.isLoading, existingLogsQuery.data, exercises, defaultActiveKey]);
+  }, [visible, segment?.id, existingLogsQuery.isLoading, existingRows, exercises, defaultActiveKey]);
 
   const handleSave = (): void => {
     if (!segment) return;
@@ -133,6 +134,14 @@ export function LogSegmentModal({
           <View style={styles.card}>
             <Text style={styles.title}>Log Segment</Text>
             <Text style={styles.segmentName}>{segment?.segmentName ?? "Segment"}</Text>
+            {existingRows.length > 0 ? (
+              <View style={styles.savedBanner}>
+                <Text style={styles.savedBannerTitle}>Saved workout data loaded</Text>
+                <Text style={styles.savedBannerBody}>
+                  Fields marked as saved came from your last logged entry, not from the prefill.
+                </Text>
+              </View>
+            ) : null}
 
             <Text style={styles.sectionLabel}>PLANNED</Text>
             <View style={styles.plannedList}>
@@ -172,7 +181,16 @@ export function LogSegmentModal({
                       </Text>
                       {sets.map((set, i) => (
                         <View key={i} style={styles.setRow}>
-                          <Text style={styles.setLabel}>Set {i + 1}</Text>
+                          <View style={styles.setLabelRow}>
+                            <Text style={styles.setLabel}>Set {i + 1}</Text>
+                            {existingRows.some(
+                              (row) => row.programExerciseId === key && (row.orderIndex ?? 0) === i + 1,
+                            ) ? (
+                              <View style={styles.savedSetBadge}>
+                                <Text style={styles.savedSetBadgeText}>Saved</Text>
+                              </View>
+                            ) : null}
+                          </View>
                           <View style={styles.inputsRow}>
                             <View style={styles.inputGroup}>
                               <TextInput
@@ -399,9 +417,45 @@ const styles = StyleSheet.create({
   setRow: {
     gap: spacing.xs,
   },
+  setLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.xs,
+  },
   setLabel: {
     color: colors.textSecondary,
     ...typography.label,
+  },
+  savedBanner: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(34,197,94,0.08)",
+    padding: spacing.sm,
+    gap: 2,
+  },
+  savedBannerTitle: {
+    color: colors.success,
+    ...typography.label,
+    fontWeight: "700",
+  },
+  savedBannerBody: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  savedSetBadge: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(34,197,94,0.16)",
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+  },
+  savedSetBadgeText: {
+    color: colors.success,
+    ...typography.small,
+    fontWeight: "600",
   },
   actualName: {
     color: colors.textPrimary,

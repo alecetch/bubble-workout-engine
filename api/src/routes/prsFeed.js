@@ -36,7 +36,7 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-function mapPrRow(row) {
+export function mapPrRow(row) {
   const date = row.scheduled_date?.slice?.(0, 10) ?? row.scheduled_date;
   return {
     exerciseId: row.exercise_id,
@@ -51,7 +51,7 @@ function mapPrRow(row) {
   };
 }
 
-function buildGroupedByDate(rows) {
+export function buildGroupedByDate(rows) {
   const groups = [];
   let current = null;
 

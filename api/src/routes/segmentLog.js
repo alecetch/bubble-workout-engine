@@ -247,7 +247,7 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
                   title: "New PR!",
                   body: `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exercise_name}.`,
                   data: { event: "pr", exerciseId: pr.exercise_id, e1rmKg: Number(pr.new_e1rm) },
-                  emailSubject: `New PR - ${pr.exercise_name}`,
+                  emailSubject: `New PR \u2014 ${pr.exercise_name}`,
                   emailText: [
                     "Personal record!",
                     "",
