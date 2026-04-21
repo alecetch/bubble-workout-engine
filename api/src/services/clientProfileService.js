@@ -17,6 +17,7 @@ const profileFieldToColumn = new Map([
   ["onboardingStepCompleted", "onboarding_step_completed"],
   ["onboardingCompletedAt", "onboarding_completed_at"],
   ["programType", "program_type_slug"],
+  ["preferredUnit", "preferred_unit"],
   ["anchorLiftsSkipped", "anchor_lifts_skipped"],
   ["anchorLiftsCollectedAt", "anchor_lifts_collected_at"],
 ]);
@@ -165,6 +166,7 @@ export function toApiShape(row) {
     onboardingStepCompleted: row.onboarding_step_completed ?? 0,
     onboardingCompletedAt: row.onboarding_completed_at ?? null,
     programType: row.program_type_slug ?? null,
+    preferredUnit: row.preferred_unit ?? "kg",
     anchorLiftsSkipped: row.anchor_lifts_skipped ?? false,
     anchorLiftsCollectedAt: row.anchor_lifts_collected_at ?? null,
   };

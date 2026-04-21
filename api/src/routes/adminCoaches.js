@@ -131,6 +131,30 @@ export function createAdminCoachesHandlers(db = pool) {
     }
   }
 
+  async function listRelationships(_req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT
+           cc.id,
+           cc.coach_user_id,
+           coach.email AS coach_email,
+           cc.client_user_id,
+           client.email AS client_email,
+           cc.status,
+           cc.created_at,
+           cc.accepted_at,
+           cc.revoked_at
+         FROM coach_client cc
+         JOIN app_user coach ON coach.id = cc.coach_user_id
+         JOIN app_user client ON client.id = cc.client_user_id
+         ORDER BY cc.created_at DESC`,
+      );
+      return res.json({ ok: true, relationships: rows });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
   async function coachActivity(req, res, next) {
     try {
       const coachUserId = requireUuid(req.params.coach_user_id, "coach_user_id");
@@ -163,6 +187,7 @@ export function createAdminCoachesHandlers(db = pool) {
     patchUserRole,
     linkCoachClient,
     revokeCoachClient,
+    listRelationships,
     coachActivity,
   };
 }
@@ -171,6 +196,7 @@ export const adminCoachesRouter = express.Router();
 const handlers = createAdminCoachesHandlers();
 
 adminCoachesRouter.get("/coaches", adminOnly, handlers.listCoaches);
+adminCoachesRouter.get("/coach-clients", adminOnly, handlers.listRelationships);
 adminCoachesRouter.patch("/users/:user_id/role", adminOnly, handlers.patchUserRole);
 adminCoachesRouter.post(
   "/coaches/:coach_user_id/clients/:client_user_id/link",

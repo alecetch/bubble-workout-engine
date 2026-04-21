@@ -19,6 +19,7 @@ import { createHistoryExerciseHandler, historyExerciseRouter } from "./src/route
 import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.js";
 import { activeProgramsRouter } from "./src/routes/activePrograms.js";
 import { notificationPreferencesRouter } from "./src/routes/notificationPreferences.js";
+import { accountSettingsRouter } from "./src/routes/accountSettings.js";
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { workoutRemindersRouter } from "./src/routes/workoutReminders.js";
@@ -170,6 +171,7 @@ const profilePatchKeys = [
   "onboardingStepCompleted",
   "onboardingCompletedAt",
   "programType",
+  "preferredUnit",
   "anchorLiftsSkipped",
   "anchorLiftsCollectedAt",
   "anchorLifts",
@@ -275,6 +277,13 @@ app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage
 app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
 app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "progression-sandbox.html"));
 app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(res, "seed-history.html"));
+app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
+app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
+// /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
+app.get("/admin/users", (req, res, next) => {
+  if (req.headers["x-internal-token"] || req.headers["x-engine-key"]) return next();
+  adminCspMiddleware(req, res, () => sendAdminPage(res, "users.html"));
+});
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -618,6 +627,7 @@ const handleUsersMe = async (req, res) => {
   const userId = req.auth.user_id;
   try {
     const clientProfileId = (req.body?.clientProfileId ?? "").toString().trim();
+    const preferredUnit = typeof req.body?.preferredUnit === "string" ? req.body.preferredUnit.trim().toLowerCase() : null;
     if (clientProfileId) {
       await pool.query(
         `
@@ -628,9 +638,26 @@ const handleUsersMe = async (req, res) => {
         [userId, clientProfileId],
       );
     }
+    if (preferredUnit !== null) {
+      if (preferredUnit !== "kg" && preferredUnit !== "lbs") {
+        return res.status(400).json({
+          ok: false,
+          code: "validation_error",
+          error: "preferredUnit must be one of: kg, lbs",
+        });
+      }
+      await pool.query(
+        `
+        UPDATE client_profile
+        SET preferred_unit = $2, updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId, preferredUnit],
+      );
+    }
     const profileResult = await pool.query(
       `
-      SELECT id
+      SELECT id, preferred_unit
       FROM client_profile
       WHERE user_id = $1
       LIMIT 1
@@ -640,6 +667,7 @@ const handleUsersMe = async (req, res) => {
     return res.status(200).json({
       id: userId,
       clientProfileId: profileResult.rows[0]?.id ?? null,
+      preferredUnit: profileResult.rows[0]?.preferred_unit ?? "kg",
     });
   } catch (err) {
     req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");
@@ -654,19 +682,20 @@ app.patch("/users/me", requireAuth, handleUsersMe);
 
 // Auth routes must be mounted before any /api router that applies requireAuth globally.
 app.use("/api/auth", authRouter);
-app.use("/api", notificationPreferencesRouter);
-app.use("/api", activeProgramsRouter);
-app.use("/api/coach", coachPortalRouter);
-app.use("/api/import", trainingHistoryImportRouter);
 
-// Mount routers.
-// IMPORTANT: /api/admin mounts must come before the broad /api mounts below.
-// Broad /api routers (segmentLog, readProgram, etc.) apply router-level requireAuth
-// to every /api/* request that reaches them, which intercepts /api/admin/* calls
-// before they can reach the internal-token–guarded admin routers.
+// IMPORTANT: /api/admin mounts must come before ALL broad /api mounts — including
+// notificationPreferencesRouter and activeProgramsRouter which apply router-level
+// requireAuth globally and would intercept /api/admin/* calls before they reach the
+// internal-token–guarded admin routers.
 app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
+
+app.use("/api", notificationPreferencesRouter);
+app.use("/api", accountSettingsRouter);
+app.use("/api", activeProgramsRouter);
+app.use("/api/coach", coachPortalRouter);
+app.use("/api/import", trainingHistoryImportRouter);
 app.use("/api", workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
