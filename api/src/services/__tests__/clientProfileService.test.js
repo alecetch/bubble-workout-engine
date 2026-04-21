@@ -55,6 +55,7 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
     onboardingStepCompleted: 3,
     onboardingCompletedAt: "2026-01-01T00:00:00Z",
     programType: "strength",
+    preferredUnit: "kg",
     anchorLiftsSkipped: false,
     anchorLiftsCollectedAt: null,
   });
@@ -72,6 +73,7 @@ test("toApiShape applies null/empty defaults for missing fields", () => {
   assert.equal(result.fitnessLevel, null);
   assert.equal(result.equipmentPreset, null);
   assert.equal(result.programType, null);
+  assert.equal(result.preferredUnit, "kg");
 });
 
 test("upsertUser returns { id } from RETURNING row", async () => {
