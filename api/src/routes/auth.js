@@ -1,7 +1,9 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { randomInt } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { pool } from "../db.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 import { loginUser, logoutUser, refreshTokens, registerUser } from "../services/authService.js";
 import { hashCode, sendPasswordResetEmail } from "../services/emailService.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -15,6 +17,46 @@ const credentialLimiter = rateLimit({
 });
 
 export const authRouter = express.Router();
+
+export function createChangePasswordHandler(db = pool) {
+  return async function changePassword(req, res) {
+    const { currentPassword, newPassword } = req.body ?? {};
+    try {
+      if (!currentPassword || typeof currentPassword !== "string") {
+        return res.status(400).json({ ok: false, code: "validation_error", error: "currentPassword is required." });
+      }
+      if (!newPassword || typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 72) {
+        return res.status(400).json({ ok: false, code: "validation_error", error: "newPassword must be 8-72 characters." });
+      }
+
+      const userId = req.auth?.user_id;
+      const { rows } = await db.query(
+        "SELECT password_hash FROM app_user WHERE id = $1 LIMIT 1",
+        [userId],
+      );
+      if (!rows.length || !rows[0].password_hash) {
+        return res.status(400).json({ ok: false, code: "validation_error", error: "Account does not use password login." });
+      }
+
+      const valid = await bcrypt.compare(currentPassword, rows[0].password_hash);
+      if (!valid) {
+        return res.status(401).json({ ok: false, code: "invalid_credentials", error: "Current password is incorrect." });
+      }
+
+      const newHash = await bcrypt.hash(newPassword, 12);
+      await db.query(
+        "UPDATE app_user SET password_hash = $1, updated_at = now() WHERE id = $2",
+        [newHash, userId],
+      );
+      await db.query("DELETE FROM auth_refresh_token WHERE user_id = $1", [userId]);
+
+      return res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ event: "auth.change_password.error", err: err?.message });
+      return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+    }
+  };
+}
 
 authRouter.post("/register", credentialLimiter, async (req, res) => {
   const { email, password } = req.body ?? {};
@@ -166,6 +208,8 @@ authRouter.post("/reset-password", resetLimiter, async (req, res) => {
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
   }
 });
+
+authRouter.post("/change-password", credentialLimiter, requireAuth, createChangePasswordHandler());
 
 authRouter.post("/logout", async (req, res) => {
   const refreshToken = req.body?.refresh_token;

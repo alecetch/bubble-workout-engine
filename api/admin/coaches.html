@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coach Management</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --danger: #dc3545;
+        --ok: #0f766e;
+        --warning: #b45309;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 22px; }
+      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
+      .nav a:hover { text-decoration: underline; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+      .controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 240px; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, button, select { font: inherit; }
+      input, select { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .danger-btn { border-color: var(--danger); background: var(--danger); }
+      .secondary-btn { border-color: var(--border); background: var(--panel); color: var(--text); }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); }
+      .section-status { font-size: 13px; margin-top: 8px; }
+      .section-status.ok { color: var(--ok); }
+      .section-status.err { color: var(--danger); }
+      .table-wrap { overflow: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ecf0f4; padding: 8px 10px; text-align: left; font-size: 13px; vertical-align: middle; }
+      th { background: #f9fbfd; font-weight: 600; white-space: nowrap; }
+      tr:hover td { background: #f5f8ff; }
+      .mono { font-family: Consolas, monospace; font-size: 12px; }
+      .muted { color: var(--muted); }
+      .empty { color: var(--muted); font-style: italic; padding: 12px; text-align: center; }
+      .chip { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+      .chip-ok { background: #d1fae5; color: var(--ok); }
+      .chip-warn { background: #fef3c7; color: var(--warning); }
+      .chip-muted { background: #f3f4f6; color: var(--muted); }
+      .chip-blue { background: #dbeafe; color: #1d4ed8; }
+      .count-badge { display: inline-block; min-width: 22px; text-align: center; background: #e5e7eb; border-radius: 999px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .spinner { width: 28px; height: 28px; border: 3px solid #e5e7eb; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 16px auto; }
+
+      /* Inline form rows */
+      .inline-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f3f4f6; }
+      .inline-form .control { min-width: 200px; }
+      .inline-form .control label { font-size: 12px; color: var(--muted); font-weight: 600; display: block; margin-bottom: 4px; }
+
+      /* Section header row */
+      .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+      .section-title { margin: 0; font-size: 15px; font-weight: 700; }
+
+      /* Filter row */
+      .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
+      .filter-row select { font-size: 13px; padding: 6px 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <!-- Header / Nav -->
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">Coach Management</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/coverage">Coverage</a>
+            <a href="/admin/health">Health</a>
+            <a href="/admin/exercises">Exercises</a>
+            <a href="/admin/narration">Narration</a>
+            <a href="/admin/rep-rules">Rep Rules</a>
+            <a href="/admin/observability">Observability</a>
+            <a href="/admin/preview">Preview</a>
+            <a href="/admin/seed-history">Seed History</a>
+            <a href="/admin/progression-sandbox">Progression Sandbox</a>
+            <a href="/admin/users">Users</a>
+            <a href="/admin/coaches" class="active">Coaches</a>
+            <a href="/admin/coach-portal">Coach Portal</a>
+            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
+            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <button id="load-btn" type="button">Load</button>
+        </div>
+        <div id="main-status" class="status"></div>
+      </section>
+
+      <!-- Section 1: Coach Accounts -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">
+            Coach Accounts
+            <span id="coach-count" class="count-badge muted" style="margin-left:6px">—</span>
+          </h2>
+          <button id="refresh-coaches-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">↻ Refresh</button>
+        </div>
+        <div id="coaches-spinner" class="spinner" style="display:none"></div>
+        <div class="table-wrap">
+          <div id="coaches-table" class="empty">Enter your token and click Load.</div>
+        </div>
+
+        <!-- Promote form -->
+        <div class="inline-form">
+          <div class="control">
+            <label for="promote-id-input">Email address to promote to coach</label>
+            <input id="promote-id-input" type="text" placeholder="user@example.com" style="width:320px; font-size:13px;" />
+          </div>
+          <button id="promote-btn" type="button">Promote to Coach</button>
+        </div>
+        <div id="promote-status" class="section-status"></div>
+      </section>
+
+      <!-- Section 2: Relationships -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">
+            Relationships
+            <span id="rel-count" class="count-badge muted" style="margin-left:6px">—</span>
+          </h2>
+          <button id="refresh-rels-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">↻ Refresh</button>
+        </div>
+        <div class="filter-row">
+          <div>
+            <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">Coach</label>
+            <select id="rel-coach-filter"><option value="">All Coaches</option></select>
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">Status</label>
+            <select id="rel-status-filter">
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="revoked">Revoked</option>
+            </select>
+          </div>
+        </div>
+        <div id="rels-spinner" class="spinner" style="display:none"></div>
+        <div class="table-wrap">
+          <div id="rels-table" class="empty">Load coaches first to view relationships.</div>
+        </div>
+        <div id="revoke-status" class="section-status"></div>
+      </section>
+
+      <!-- Section 3: Link coach to athlete -->
+      <section class="section">
+        <h2 class="section-title" style="margin-bottom:12px;">Link Coach to Athlete</h2>
+        <div class="controls" style="align-items:flex-end">
+          <div class="control">
+            <label for="link-coach-input">Coach email</label>
+            <input id="link-coach-input" type="text" placeholder="coach@example.com" style="width:300px; font-size:13px;" />
+          </div>
+          <div class="control">
+            <label for="link-athlete-input">Athlete email</label>
+            <input id="link-athlete-input" type="text" placeholder="athlete@example.com" style="width:300px; font-size:13px;" />
+          </div>
+          <button id="link-btn" type="button">Link</button>
+        </div>
+        <div id="link-status" class="section-status"></div>
+      </section>
+
+      <!-- Section 4: Coach activity -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">Recent Override Activity</h2>
+        </div>
+        <div class="filter-row">
+          <div>
+            <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">View activity for coach</label>
+            <select id="activity-coach-select" style="min-width:220px">
+              <option value="">— select coach —</option>
+            </select>
+          </div>
+          <button id="load-activity-btn" type="button" class="secondary-btn" style="font-size:12px; padding:6px 10px;">Load Activity</button>
+        </div>
+        <div id="activity-spinner" class="spinner" style="display:none"></div>
+        <div class="table-wrap">
+          <div id="activity-table" class="empty">Select a coach and click Load Activity.</div>
+        </div>
+      </section>
+
+    </div><!-- /page -->
+
+    <script type="module">
+      // ─── Utilities ─────────────────────────────────────────────────────────────
+
+      function esc(v) {
+        return String(v ?? "")
+          .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return '<span class="muted">—</span>';
+        return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      }
+
+      function trunc(str, n) {
+        const s = String(str ?? "");
+        return s.length > n ? s.slice(0, n - 1) + "…" : s;
+      }
+
+      function autoHide(el, ms = 4000) {
+        setTimeout(() => { el.textContent = ""; el.className = el.className.replace(/ ok| err/g, "").trim(); }, ms);
+      }
+
+      function setStatus(el, msg, kind = "") {
+        el.textContent = msg;
+        el.className = el.className.replace(/ ok| err/g, "").trim() + (kind ? ` ${kind}` : "");
+        if (kind === "ok") autoHide(el);
+      }
+
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      const STORAGE_KEY = "admin_coaches_token";
+      const tokenInput = document.getElementById("token-input");
+      tokenInput.value = sessionStorage.getItem(STORAGE_KEY) || "";
+      tokenInput.addEventListener("change", () => sessionStorage.setItem(STORAGE_KEY, tokenInput.value.trim()));
+
+      function token() {
+        return (tokenInput.value || sessionStorage.getItem(STORAGE_KEY) || "").trim();
+      }
+
+      async function apiFetch(path, opts = {}) {
+        const res = await fetch(path, {
+          ...opts,
+          headers: { "x-internal-token": token(), "Content-Type": "application/json", ...(opts.headers || {}) },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
+        return data;
+      }
+
+      // ─── State ─────────────────────────────────────────────────────────────────
+
+      let coaches = [];
+      let allRelationships = [];
+
+      // ─── Section 1: Coach Accounts ─────────────────────────────────────────────
+
+      function renderCoachesTable() {
+        const el = document.getElementById("coaches-table");
+        document.getElementById("coach-count").textContent = coaches.length;
+        if (coaches.length === 0) {
+          el.innerHTML = '<div class="empty">No coach accounts found.</div>';
+          return;
+        }
+        const rows = coaches.map((c) => `
+          <tr data-coach-id="${esc(c.id)}">
+            <td class="mono">${esc(c.email)}</td>
+            <td><span class="chip chip-blue">coach</span></td>
+            <td><span class="count-badge">${c.active_client_count ?? 0}</span></td>
+            <td>${fmtDate(c.created_at)}</td>
+            <td class="mono" style="font-size:11px; color:var(--muted)">${esc(c.id)}</td>
+            <td>
+              <button class="danger-btn demote-btn" data-id="${esc(c.id)}" data-email="${esc(c.email)}"
+                type="button" style="font-size:12px; padding:4px 10px;">Revoke Coach</button>
+            </td>
+          </tr>`).join("");
+        el.innerHTML = `
+          <table>
+            <thead><tr>
+              <th scope="col">Email</th><th scope="col">Role</th>
+              <th scope="col">Active clients</th><th scope="col">Created</th>
+              <th scope="col">User ID</th><th scope="col"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+        el.querySelectorAll(".demote-btn").forEach((btn) => {
+          btn.addEventListener("click", () => demoteCoach(btn.dataset.id, btn.dataset.email));
+        });
+      }
+
+      async function demoteCoach(id, email) {
+        if (!confirm(`Demote ${email} back to athlete?\n\nThis removes their coach access immediately.`)) return;
+        try {
+          await apiFetch(`/api/admin/users/${encodeURIComponent(id)}/role`, {
+            method: "PATCH", body: JSON.stringify({ role: "athlete" }),
+          });
+          coaches = coaches.filter((c) => c.id !== id);
+          renderCoachesTable();
+          refreshCoachFilters();
+          setStatus(document.getElementById("main-status"), `${email} demoted to athlete.`, "ok");
+        } catch (err) {
+          setStatus(document.getElementById("main-status"), "Demote failed: " + err.message, "err");
+        }
+      }
+
+      async function loadCoaches() {
+        if (!token()) { setStatus(document.getElementById("main-status"), "Enter your internal API token first.", "err"); return; }
+        document.getElementById("load-btn").disabled = true;
+        document.getElementById("coaches-spinner").style.display = "block";
+        document.getElementById("coaches-table").innerHTML = "";
+        setStatus(document.getElementById("main-status"), "Loading…", "");
+        try {
+          const data = await apiFetch("/api/admin/coaches");
+          coaches = data.coaches || [];
+          renderCoachesTable();
+          refreshCoachFilters();
+          await loadAllRelationships();
+          setStatus(document.getElementById("main-status"), `Loaded ${coaches.length} coach(es).`, "ok");
+        } catch (err) {
+          setStatus(document.getElementById("main-status"), "Failed: " + err.message, "err");
+          document.getElementById("coaches-table").innerHTML = '<div class="empty">Failed to load coaches.</div>';
+        } finally {
+          document.getElementById("coaches-spinner").style.display = "none";
+          document.getElementById("load-btn").disabled = false;
+        }
+      }
+
+      document.getElementById("load-btn").addEventListener("click", loadCoaches);
+      document.getElementById("refresh-coaches-btn").addEventListener("click", loadCoaches);
+
+      // Promote form
+      document.getElementById("promote-btn").addEventListener("click", async () => {
+        const raw = document.getElementById("promote-id-input").value.trim();
+        const statusEl = document.getElementById("promote-status");
+        if (!raw) { setStatus(statusEl, "Enter an email address.", "err"); return; }
+
+        const btn = document.getElementById("promote-btn");
+        btn.disabled = true;
+
+        try {
+          // Resolve email → UUID via the users list
+          let userId;
+          setStatus(statusEl, "Looking up user…", "");
+          const usersData = await apiFetch("/admin/users");
+          const match = (usersData.users || []).find(
+            (u) => (u.email || "").toLowerCase() === raw.toLowerCase()
+          );
+          if (!match) {
+            setStatus(statusEl, `No account found for "${raw}".`, "err");
+            return;
+          }
+          userId = match.id;
+
+          const data = await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}/role`, {
+            method: "PATCH", body: JSON.stringify({ role: "coach" }),
+          });
+          setStatus(statusEl, `${data.user?.email || raw} promoted to coach.`, "ok");
+          document.getElementById("promote-id-input").value = "";
+          await loadCoaches();
+        } catch (err) {
+          setStatus(statusEl, "Promote failed: " + err.message, "err");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      // ─── Section 2: Relationships ──────────────────────────────────────────────
+
+      async function loadAllRelationships() {
+        document.getElementById("rels-spinner").style.display = "block";
+        document.getElementById("rels-table").innerHTML = "";
+        allRelationships = [];
+        try {
+          const data = await apiFetch("/api/admin/coach-clients");
+          allRelationships = data.relationships || [];
+          renderRelationshipsTable();
+          refreshCoachFilters();
+        } catch (err) {
+          document.getElementById("rels-table").innerHTML = `<div class="empty">Failed to load relationships: ${esc(err.message)}</div>`;
+        } finally {
+          document.getElementById("rels-spinner").style.display = "none";
+        }
+      }
+
+      function refreshCoachFilters() {
+        const coachFilter = document.getElementById("rel-coach-filter");
+        const activitySel = document.getElementById("activity-coach-select");
+        const prev = coachFilter.value;
+        coachFilter.innerHTML = '<option value="">All Coaches</option>' +
+          coaches.map((c) => `<option value="${esc(c.id)}">${esc(c.email)}</option>`).join("");
+        coachFilter.value = prev;
+
+        const prevActivity = activitySel.value;
+        activitySel.innerHTML = '<option value="">— select coach —</option>' +
+          coaches.map((c) => `<option value="${esc(c.id)}">${esc(c.email)}</option>`).join("");
+        activitySel.value = prevActivity;
+      }
+
+      function getFilteredRelationships() {
+        const coachId = document.getElementById("rel-coach-filter").value;
+        const status = document.getElementById("rel-status-filter").value;
+        return allRelationships.filter((r) => {
+          if (coachId && r.coach_user_id !== coachId) return false;
+          if (status && r.status !== status) return false;
+          return true;
+        });
+      }
+
+      function statusChip(status) {
+        const map = { active: "chip-ok", pending: "chip-warn", revoked: "chip-muted" };
+        return `<span class="chip ${map[status] ?? "chip-muted"}">${esc(status)}</span>`;
+      }
+
+      function renderRelationshipsTable() {
+        const el = document.getElementById("rels-table");
+        const rows = getFilteredRelationships();
+        document.getElementById("rel-count").textContent = allRelationships.length;
+        if (rows.length === 0) {
+          el.innerHTML = '<div class="empty">No relationships found.</div>';
+          return;
+        }
+        const tableRows = rows.map((r) => {
+          const isRevoked = r.status === "revoked";
+          return `<tr>
+            <td class="mono">${esc(r.coach_email)}</td>
+            <td class="mono">${esc(r.client_email || "—")}</td>
+            <td>${statusChip(r.status)}</td>
+            <td>${fmtDate(r.created_at)}</td>
+            <td>${fmtDate(r.accepted_at)}</td>
+            <td>${fmtDate(r.revoked_at)}</td>
+            <td>
+              <button class="danger-btn revoke-rel-btn"
+                data-coach-id="${esc(r.coach_user_id)}"
+                data-client-id="${esc(r.client_user_id)}"
+                data-coach-email="${esc(r.coach_email)}"
+                data-client-label="${esc(r.client_email || "this athlete")}"
+                type="button"
+                style="font-size:12px; padding:4px 10px;"
+                ${isRevoked ? "disabled" : ""}>Revoke</button>
+            </td>
+          </tr>`;
+        }).join("");
+        el.innerHTML = `
+          <table>
+            <thead><tr>
+              <th scope="col">Coach</th><th scope="col">Athlete</th><th scope="col">Status</th>
+              <th scope="col">Linked at</th><th scope="col">Accepted at</th>
+              <th scope="col">Revoked at</th><th scope="col"></th>
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>`;
+        el.querySelectorAll(".revoke-rel-btn").forEach((btn) => {
+          btn.addEventListener("click", () =>
+            revokeRelationship(btn.dataset.coachId, btn.dataset.clientId, btn.dataset.coachEmail, btn.dataset.clientLabel)
+          );
+        });
+      }
+
+      async function revokeRelationship(coachId, clientId, coachEmail, clientLabel) {
+        if (!confirm(`Revoke access for ${clientLabel} from coach ${coachEmail}?\n\nThis removes coach access immediately.`)) return;
+        const statusEl = document.getElementById("revoke-status");
+        try {
+          await apiFetch(`/api/admin/coaches/${encodeURIComponent(coachId)}/clients/${encodeURIComponent(clientId)}/link`, { method: "DELETE" });
+          setStatus(statusEl, `Revoked relationship between ${coachEmail} and ${clientLabel}.`, "ok");
+          await loadAllRelationships();
+        } catch (err) {
+          setStatus(statusEl, "Revoke failed: " + err.message, "err");
+        }
+      }
+
+      document.getElementById("refresh-rels-btn").addEventListener("click", loadAllRelationships);
+      document.getElementById("rel-coach-filter").addEventListener("change", renderRelationshipsTable);
+      document.getElementById("rel-status-filter").addEventListener("change", renderRelationshipsTable);
+
+      // ─── Section 3: Link ────────────────────────────────────────────────────────
+
+      document.getElementById("link-btn").addEventListener("click", async () => {
+        const coachEmail = document.getElementById("link-coach-input").value.trim();
+        const athleteEmail = document.getElementById("link-athlete-input").value.trim();
+        const statusEl = document.getElementById("link-status");
+
+        if (!coachEmail) { setStatus(statusEl, "Enter a coach email address.", "err"); return; }
+        if (!athleteEmail) { setStatus(statusEl, "Enter an athlete email address.", "err"); return; }
+
+        const btn = document.getElementById("link-btn");
+        btn.disabled = true;
+        try {
+          setStatus(statusEl, "Looking up users…", "");
+          const usersData = await apiFetch("/admin/users");
+          const users = usersData.users || [];
+
+          const coachUser = users.find((u) => (u.email || "").toLowerCase() === coachEmail.toLowerCase());
+          if (!coachUser) { setStatus(statusEl, `No account found for coach "${coachEmail}".`, "err"); return; }
+
+          const athleteUser = users.find((u) => (u.email || "").toLowerCase() === athleteEmail.toLowerCase());
+          if (!athleteUser) { setStatus(statusEl, `No account found for athlete "${athleteEmail}".`, "err"); return; }
+
+          await apiFetch(`/api/admin/coaches/${encodeURIComponent(coachUser.id)}/clients/${encodeURIComponent(athleteUser.id)}/link`, { method: "POST" });
+          setStatus(statusEl, `Linked ${coachEmail} → ${athleteEmail}.`, "ok");
+          document.getElementById("link-coach-input").value = "";
+          document.getElementById("link-athlete-input").value = "";
+          await loadAllRelationships();
+        } catch (err) {
+          let msg = "Link failed: " + err.message;
+          if (err.status === 409) msg = "This relationship already exists and is active or pending.";
+          setStatus(statusEl, msg, "err");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      // ─── Section 4: Activity ────────────────────────────────────────────────────
+
+      document.getElementById("load-activity-btn").addEventListener("click", async () => {
+        const coachId = document.getElementById("activity-coach-select").value;
+        const tableEl = document.getElementById("activity-table");
+        if (!coachId) { tableEl.innerHTML = '<div class="empty">Select a coach first.</div>'; return; }
+        document.getElementById("activity-spinner").style.display = "block";
+        tableEl.innerHTML = "";
+        try {
+          const data = await apiFetch(`/api/admin/coaches/${encodeURIComponent(coachId)}/activity`);
+          const overrides = data.overrides || data.recent_overrides || [];
+          if (overrides.length === 0) {
+            tableEl.innerHTML = '<div class="empty">No override activity for this coach.</div>';
+          } else {
+            const kindChip = (kind) => {
+              const map = { next_session_load: ["chip-blue", "Load"], next_session_reps: ["chip-blue", "Reps"], next_session_hold: ["chip-muted", "Hold"] };
+              const [cls, label] = map[kind] ?? ["chip-muted", esc(kind)];
+              return `<span class="chip ${cls}">${label}</span>`;
+            };
+            const statusChipFn = (s) => {
+              const map = { pending: "chip-blue", consumed: "chip-ok", revoked: "chip-muted" };
+              return `<span class="chip ${map[s] ?? "chip-muted"}">${esc(s)}</span>`;
+            };
+            const rows = overrides.map((o) => `<tr>
+              <td>${esc(o.client_display_name || o.client_email || o.client_user_id || "—")}</td>
+              <td>${esc(o.exercise_name || o.exercise_id || "—")}</td>
+              <td>${kindChip(o.override_kind)}</td>
+              <td>${statusChipFn(o.status)}</td>
+              <td title="${esc(o.reason_text || "")}" class="muted" style="font-style:italic">${esc(trunc(o.reason_text || "—", 40))}</td>
+              <td class="muted" style="font-size:12px; white-space:nowrap">${fmtDate(o.created_at)}</td>
+            </tr>`).join("");
+            tableEl.innerHTML = `
+              <table>
+                <thead><tr>
+                  <th scope="col">Athlete</th><th scope="col">Exercise</th>
+                  <th scope="col">Kind</th><th scope="col">Status</th>
+                  <th scope="col">Reason</th><th scope="col">Created</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>`;
+          }
+        } catch (err) {
+          tableEl.innerHTML = `<div class="empty">Failed to load activity: ${esc(err.message)}</div>`;
+        } finally {
+          document.getElementById("activity-spinner").style.display = "none";
+        }
+      });
+    </script>
+  </body>
+</html>

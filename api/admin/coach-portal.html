@@ -1,0 +1,1049 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coach Portal</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --danger: #dc3545;
+        --ok: #0f766e;
+        --warning: #b45309;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 22px; }
+      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
+      .nav a:hover { text-decoration: underline; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+      .controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, button, select, textarea { font: inherit; }
+      input, select, textarea { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .danger-btn { border-color: var(--danger); background: var(--danger); }
+      .secondary-btn { border-color: var(--border); background: var(--panel); color: var(--text); }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); }
+      .table-wrap { overflow: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ecf0f4; padding: 8px 10px; text-align: left; font-size: 13px; vertical-align: middle; }
+      th { background: #f9fbfd; font-weight: 600; white-space: nowrap; }
+      tr:hover td { background: #f5f8ff; }
+      .mono { font-family: Consolas, monospace; font-size: 12px; }
+      .muted { color: var(--muted); }
+      .empty { color: var(--muted); font-style: italic; padding: 20px; text-align: center; }
+      .chip { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+      .chip-ok { background: #d1fae5; color: var(--ok); }
+      .chip-warn { background: #fef3c7; color: var(--warning); }
+      .chip-muted { background: #f3f4f6; color: var(--muted); }
+      .chip-danger { background: #fee2e2; color: var(--danger); }
+      .chip-blue { background: #dbeafe; color: #1d4ed8; }
+      .count-badge { display: inline-block; min-width: 22px; text-align: center; background: #e5e7eb; border-radius: 999px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+
+      /* Spinner */
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .spinner { width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 20px auto; }
+      .loading-wrap { display: flex; justify-content: center; align-items: center; padding: 24px; }
+
+      /* Portal layout */
+      #portal-layout { display: grid; grid-template-columns: 320px 1fr; gap: 12px; align-items: start; }
+      @media (max-width: 900px) { #portal-layout { grid-template-columns: 1fr; } }
+
+      /* Client cards */
+      #client-list-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+      .client-card {
+        border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+        margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      }
+      .client-card:hover { border-color: #93c5fd; background: #f8faff; }
+      .client-card.selected { border-color: var(--primary); background: #eff6ff; }
+      .client-card-name { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+      .client-card-program { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+      .client-card-meta { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+      .client-card-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+
+      /* Detail panel */
+      #detail-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-height: 400px; }
+      #detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 360px; color: var(--muted); }
+      #detail-empty svg { margin-bottom: 12px; opacity: 0.3; }
+
+      /* Detail header */
+      .detail-header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+      .detail-name { font-size: 24px; font-weight: 700; margin: 0 0 6px; }
+      .detail-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .detail-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+      /* Tabs */
+      .tab-bar { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 16px; }
+      .tab-btn {
+        padding: 8px 16px; font-size: 14px; background: none; border: none; border-bottom: 2px solid transparent;
+        margin-bottom: -2px; cursor: pointer; color: var(--muted); font-weight: 500;
+      }
+      .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+      .tab-btn:hover:not(.active) { color: var(--text); }
+      .tab-content { display: none; }
+      .tab-content.active { display: block; }
+
+      /* Overview metric cards */
+      .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+      @media (max-width: 600px) { .metric-grid { grid-template-columns: 1fr; } }
+      .metric-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+      .metric-card-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+      .metric-card-value { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+      .metric-card-sub { font-size: 12px; color: var(--muted); }
+      .progress-bar-wrap { background: #e5e7eb; border-radius: 3px; height: 6px; margin-top: 8px; overflow: hidden; }
+      .progress-bar-fill { height: 100%; background: var(--primary); border-radius: 3px; transition: width 0.4s; }
+
+      /* Quick decisions */
+      .quick-decisions-title { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+      .quick-decision-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+      .quick-decision-row:last-child { border-bottom: none; }
+      .quick-decision-exercise { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .quick-decision-date { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+      /* Decision filters */
+      .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
+      .filter-row select, .filter-row input { font-size: 13px; padding: 6px 8px; }
+
+      /* Override form */
+      .override-form { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
+      .override-form-title { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+      .form-row { display: grid; gap: 6px; margin-bottom: 12px; }
+      .form-row label { font-size: 12px; font-weight: 600; color: var(--muted); }
+      .radio-group { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+      .radio-option { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+      .radio-option input[type="radio"] { cursor: pointer; }
+      textarea { width: 100%; resize: vertical; }
+      .char-counter { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+      .form-status { font-size: 13px; margin-top: 8px; }
+      .form-status.ok { color: var(--ok); }
+      .form-status.err { color: var(--danger); }
+
+      /* Sub-section heading */
+      .sub-title { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <!-- Header / Nav -->
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">Coach Portal</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/coverage">Coverage</a>
+            <a href="/admin/health">Health</a>
+            <a href="/admin/exercises">Exercises</a>
+            <a href="/admin/narration">Narration</a>
+            <a href="/admin/rep-rules">Rep Rules</a>
+            <a href="/admin/observability">Observability</a>
+            <a href="/admin/preview">Preview</a>
+            <a href="/admin/seed-history">Seed History</a>
+            <a href="/admin/progression-sandbox">Progression Sandbox</a>
+            <a href="/admin/users">Users</a>
+            <a href="/admin/coaches">Coaches</a>
+            <a href="/admin/coach-portal" class="active">Coach Portal</a>
+            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
+            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
+          </div>
+        </div>
+
+        <!-- Auth section -->
+        <div id="auth-section">
+          <div class="controls">
+            <div class="control">
+              <label for="email-input">Email</label>
+              <input id="email-input" type="email" placeholder="coach@example.com" style="width:220px" />
+            </div>
+            <div class="control">
+              <label for="password-input">Password</label>
+              <input id="password-input" type="password" placeholder="Password" style="width:180px" />
+            </div>
+            <button id="connect-btn" type="button">Sign in</button>
+          </div>
+          <div id="auth-status" class="status"></div>
+        </div>
+
+        <!-- Connected header (hidden until auth) -->
+        <div id="connected-header" style="display:none">
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span id="connected-label" style="font-size:13px; color:var(--ok); font-weight:600"></span>
+            <button id="disconnect-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 10px;">Disconnect</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Portal (hidden until auth) -->
+      <div id="portal" style="display:none">
+        <div id="portal-layout">
+          <!-- Left: client list -->
+          <div id="client-list-panel">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+              <h2 style="margin:0; font-size:15px; font-weight:700;">
+                My Athletes
+                <span id="client-count" class="count-badge" style="margin-left:6px;">—</span>
+              </h2>
+              <button id="refresh-clients-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">↻ Refresh</button>
+            </div>
+            <div id="client-list-loading" class="loading-wrap" style="display:none"><div class="spinner"></div></div>
+            <div id="client-list-content">
+              <div class="empty">Connecting…</div>
+            </div>
+          </div>
+
+          <!-- Right: detail panel -->
+          <div id="detail-panel">
+            <div id="detail-empty">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+              </svg>
+              <p style="margin:0; font-size:14px;">Select an athlete to view their training details</p>
+            </div>
+            <div id="detail-content" style="display:none">
+              <div class="detail-header">
+                <h2 class="detail-name" id="d-name">—</h2>
+                <div class="detail-meta" id="d-meta"></div>
+                <div class="detail-rel" id="d-rel"></div>
+              </div>
+              <div class="tab-bar">
+                <button class="tab-btn active" data-tab="overview">Overview</button>
+                <button class="tab-btn" data-tab="sessions">Recent Sessions</button>
+                <button class="tab-btn" data-tab="decisions">Decisions</button>
+                <button class="tab-btn" data-tab="overrides">Overrides</button>
+              </div>
+
+              <!-- Overview Tab -->
+              <div class="tab-content active" id="tab-overview">
+                <div id="overview-loading" class="loading-wrap" style="display:none"><div class="spinner"></div></div>
+                <div id="overview-content">
+                  <div class="metric-grid">
+                    <div class="metric-card">
+                      <div class="metric-card-title">Active Program</div>
+                      <div id="ov-program-title" class="metric-card-value" style="font-size:15px;">—</div>
+                      <div id="ov-program-meta" class="metric-card-sub"></div>
+                      <div id="ov-progress-wrap" class="progress-bar-wrap" style="display:none">
+                        <div id="ov-progress-fill" class="progress-bar-fill" style="width:0%"></div>
+                      </div>
+                    </div>
+                    <div class="metric-card">
+                      <div class="metric-card-title">Training Snapshot</div>
+                      <div id="ov-streak" class="metric-card-value">—</div>
+                      <div id="ov-completion" class="metric-card-sub"></div>
+                      <div id="ov-last-session" class="metric-card-sub"></div>
+                    </div>
+                  </div>
+                  <div id="ov-quick-decisions">
+                    <div class="quick-decisions-title">Recent Progression Decisions</div>
+                    <div id="ov-decisions-list"><div class="empty">No decisions yet.</div></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sessions Tab -->
+              <div class="tab-content" id="tab-sessions">
+                <div id="sessions-loading" class="loading-wrap" style="display:none"><div class="spinner"></div></div>
+                <div id="sessions-content">
+                  <div class="table-wrap">
+                    <div id="sessions-table-body" class="empty">Select an athlete to load sessions.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Decisions Tab -->
+              <div class="tab-content" id="tab-decisions">
+                <div class="filter-row">
+                  <div>
+                    <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">Program</label>
+                    <select id="dec-program-filter"><option value="">All Programs</option></select>
+                  </div>
+                  <div>
+                    <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">Exercise</label>
+                    <input id="dec-exercise-filter" type="text" placeholder="Filter by exercise…" style="width:180px" />
+                  </div>
+                  <div>
+                    <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">Limit</label>
+                    <select id="dec-limit">
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </div>
+                  <button id="dec-load-btn" type="button" class="secondary-btn" style="font-size:12px; padding:6px 10px;">Load</button>
+                </div>
+                <div id="decisions-loading" class="loading-wrap" style="display:none"><div class="spinner"></div></div>
+                <div id="decisions-content">
+                  <div class="table-wrap">
+                    <div id="decisions-table-body" class="empty">Load decisions above.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Overrides Tab -->
+              <div class="tab-content" id="tab-overrides">
+                <!-- Create override form -->
+                <div class="override-form">
+                  <div class="override-form-title">Create Override</div>
+                  <div class="form-row">
+                    <label for="ov-exercise-select">Exercise</label>
+                    <select id="ov-exercise-select">
+                      <option value="">— select exercise —</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label>Override kind</label>
+                    <div class="radio-group">
+                      <label class="radio-option">
+                        <input type="radio" name="override-kind" value="next_session_load" />
+                        Adjust next session load
+                      </label>
+                      <label class="radio-option">
+                        <input type="radio" name="override-kind" value="next_session_reps" />
+                        Adjust next session rep target
+                      </label>
+                      <label class="radio-option">
+                        <input type="radio" name="override-kind" value="next_session_hold" />
+                        Hold current prescription
+                      </label>
+                    </div>
+                  </div>
+                  <div id="ov-payload-section" style="display:none">
+                    <div class="form-row" id="ov-load-row" style="display:none">
+                      <label for="ov-load-input">Target load (kg)</label>
+                      <input id="ov-load-input" type="number" step="0.5" min="0" placeholder="e.g. 85.0" style="width:160px" />
+                    </div>
+                    <div class="form-row" id="ov-reps-row" style="display:none">
+                      <label for="ov-reps-input">Target reps</label>
+                      <input id="ov-reps-input" type="number" step="1" min="1" max="30" placeholder="e.g. 8" style="width:120px" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label for="ov-reason-input">Reason <span class="muted">(optional)</span></label>
+                    <textarea id="ov-reason-input" rows="2" placeholder="Note for your own records (e.g. 'reduce jump to stabilise technique')" maxlength="280"></textarea>
+                    <div class="char-counter"><span id="ov-reason-count">0</span> / 280</div>
+                  </div>
+                  <button id="ov-submit-btn" type="button" disabled>Create Override</button>
+                  <div id="ov-form-status" class="form-status"></div>
+                </div>
+
+                <!-- Override history -->
+                <div>
+                  <div class="sub-title">
+                    Override History
+                    <button id="ov-history-refresh" type="button" class="secondary-btn" style="font-size:11px; padding:2px 8px; margin-left:8px;">↻</button>
+                  </div>
+                  <div id="overrides-loading" class="loading-wrap" style="display:none"><div class="spinner"></div></div>
+                  <div class="table-wrap">
+                    <div id="overrides-table-body" class="empty">Select an athlete to load overrides.</div>
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- /detail-content -->
+          </div><!-- /detail-panel -->
+        </div><!-- /portal-layout -->
+      </div><!-- /portal -->
+    </div><!-- /page -->
+
+    <script type="module">
+      // ─── Utilities ─────────────────────────────────────────────────────────────
+
+      function esc(v) {
+        return String(v ?? "")
+          .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return "—";
+        return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      }
+
+      function trunc(str, n) {
+        const s = String(str ?? "");
+        return s.length > n ? s.slice(0, n - 1) + "…" : s;
+      }
+
+      function autoHide(el, ms = 4000) {
+        setTimeout(() => { el.textContent = ""; el.className = "status"; }, ms);
+      }
+
+      function setStatus(el, msg, kind = "") {
+        el.textContent = msg;
+        el.className = `status ${kind}`.trim();
+        if (kind === "ok") autoHide(el);
+      }
+
+      function setFormStatus(el, msg, kind = "") {
+        el.textContent = msg;
+        el.className = `form-status ${kind}`.trim();
+        if (kind === "ok") autoHide(el);
+      }
+
+      function outcomeChip(outcome) {
+        const map = {
+          increase_load: ["chip-ok", "Load ↑"],
+          increase_reps: ["chip-ok", "Reps ↑"],
+          increase_sets: ["chip-ok", "Sets ↑"],
+          hold: ["chip-muted", "Hold"],
+          deload_local: ["chip-warn", "Deload"],
+          reduce_rest: ["chip-blue", "Rest ↓"],
+        };
+        const [cls, label] = map[outcome] ?? ["chip-muted", esc(outcome)];
+        return `<span class="chip ${cls}">${label}</span>`;
+      }
+
+      function overrideStatusChip(status) {
+        const map = { pending: "chip-blue", consumed: "chip-ok", revoked: "chip-muted" };
+        return `<span class="chip ${map[status] ?? "chip-muted"}">${esc(status)}</span>`;
+      }
+
+      function overrideKindChip(kind) {
+        const map = { next_session_load: ["chip-blue", "Load"], next_session_reps: ["chip-blue", "Reps"], next_session_hold: ["chip-muted", "Hold"] };
+        const [cls, label] = map[kind] ?? ["chip-muted", esc(kind)];
+        return `<span class="chip ${cls}">${label}</span>`;
+      }
+
+      function payloadSummary(kind, payload) {
+        try {
+          const p = typeof payload === "object" ? payload : JSON.parse(payload ?? "{}");
+          if (kind === "next_session_load" && p.recommended_load_kg != null) return `→ ${p.recommended_load_kg} kg`;
+          if (kind === "next_session_reps" && p.target_reps != null) return `→ ${p.target_reps} reps`;
+          if (kind === "next_session_hold") return "Hold";
+        } catch { /* ignore */ }
+        return "—";
+      }
+
+      const STORAGE_KEY = "coach_portal_jwt";
+
+      // ─── Auth state ────────────────────────────────────────────────────────────
+
+      let _jwt = sessionStorage.getItem(STORAGE_KEY) || "";
+      let _connectedEmail = "";
+      let _currentClientId = null;
+      let _clients = [];
+      let _clientPrograms = {};
+      let _clientDecisions = {};
+
+      const emailInput = document.getElementById("email-input");
+      const passwordInput = document.getElementById("password-input");
+      const connectBtn = document.getElementById("connect-btn");
+      const disconnectBtn = document.getElementById("disconnect-btn");
+      const authStatus = document.getElementById("auth-status");
+      const authSection = document.getElementById("auth-section");
+      const connectedHeader = document.getElementById("connected-header");
+      const connectedLabel = document.getElementById("connected-label");
+      const portalEl = document.getElementById("portal");
+
+      async function coachFetch(path, opts = {}) {
+        const res = await fetch(path, {
+          ...opts,
+          headers: {
+            "Authorization": `Bearer ${_jwt}`,
+            "Content-Type": "application/json",
+            ...(opts.headers || {}),
+          },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
+        return data;
+      }
+
+      async function connect() {
+        connectBtn.disabled = true;
+        setStatus(authStatus, "Signing in…", "");
+        try {
+          const email = emailInput.value.trim();
+          const password = passwordInput.value;
+          if (!email || !password) {
+            setStatus(authStatus, "Enter your email and password.", "err");
+            return;
+          }
+          const loginRes = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const loginData = await loginRes.json().catch(() => ({}));
+          if (!loginRes.ok) {
+            const msg = loginData.code === "invalid_credentials"
+              ? "Incorrect email or password."
+              : (loginData.error || `Sign-in failed (HTTP ${loginRes.status})`);
+            setStatus(authStatus, msg, "err");
+            return;
+          }
+          _jwt = loginData.access_token;
+          if (!_jwt) {
+            setStatus(authStatus, "Sign-in failed: no token returned.", "err");
+            return;
+          }
+          _connectedEmail = email;
+          sessionStorage.setItem(STORAGE_KEY, _jwt);
+          passwordInput.value = "";
+
+          const data = await coachFetch("/api/coach/clients");
+          _clients = sortClients(data.clients || []);
+          showPortal();
+          renderClientList();
+        } catch (err) {
+          console.error("[coach-portal] connect error:", err);
+          setStatus(authStatus, "Sign-in failed: " + (err.message || "unknown error"), "err");
+        } finally {
+          connectBtn.disabled = false;
+        }
+      }
+
+      function showPortal() {
+        authSection.style.display = "none";
+        connectedLabel.textContent = `${_connectedEmail} · ${_clients.length} athlete${_clients.length !== 1 ? "s" : ""}`;
+        connectedHeader.style.display = "block";
+        portalEl.style.display = "block";
+      }
+
+      function disconnect() {
+        _jwt = "";
+        _connectedEmail = "";
+        _currentClientId = null;
+        _clients = [];
+        sessionStorage.removeItem(STORAGE_KEY);
+        emailInput.value = "";
+        passwordInput.value = "";
+        authSection.style.display = "block";
+        connectedHeader.style.display = "none";
+        portalEl.style.display = "none";
+        setStatus(authStatus, "", "");
+      }
+
+      connectBtn.addEventListener("click", connect);
+      disconnectBtn.addEventListener("click", disconnect);
+      passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });
+
+      // Auto-connect if JWT cached from previous session
+      if (_jwt) {
+        coachFetch("/api/coach/clients").then((data) => {
+          _clients = sortClients(data.clients || []);
+          showPortal();
+          renderClientList();
+        }).catch((err) => {
+          console.warn("[coach-portal] auto-connect failed, clearing token:", err.message);
+          // Token expired or invalid — show login form
+          sessionStorage.removeItem(STORAGE_KEY);
+          _jwt = "";
+          authSection.style.display = "block";
+          connectedHeader.style.display = "none";
+          portalEl.style.display = "none";
+        });
+      }
+
+      // ─── Client list ───────────────────────────────────────────────────────────
+
+      function daysSince(iso) {
+        if (!iso) return Infinity;
+        return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+      }
+
+      function sortClients(clients) {
+        return [...clients].sort((a, b) => {
+          const aAlert = alertScore(a);
+          const bAlert = alertScore(b);
+          if (bAlert !== aAlert) return bAlert - aAlert;
+          const an = (a.display_name || "").toLowerCase();
+          const bn = (b.display_name || "").toLowerCase();
+          return an < bn ? -1 : an > bn ? 1 : 0;
+        });
+      }
+
+      function alertScore(c) {
+        let s = 0;
+        if (daysSince(c.last_session_date) > 7) s += 2;
+        if (c.has_active_override) s += 1;
+        return s;
+      }
+
+      function renderClientList() {
+        const count = document.getElementById("client-count");
+        const content = document.getElementById("client-list-content");
+        count.textContent = _clients.length;
+        if (_clients.length === 0) {
+          content.innerHTML = '<div class="empty">No linked athletes.</div>';
+          return;
+        }
+        content.innerHTML = _clients.map((c) => {
+          const lastDays = daysSince(c.last_session_date);
+          const badges = [];
+          if (lastDays > 7) badges.push(`<span class="chip chip-warn">⚠ No recent session</span>`);
+          if (c.has_active_override) badges.push(`<span class="chip chip-blue">⏳ Override pending</span>`);
+
+          const streak = Number(c.current_streak || 0);
+          const streakHtml = streak > 0 ? `<span style="font-size:12px">🔥 ${streak}-day streak</span>` : "";
+
+          const lastHtml = c.last_session_date
+            ? `Last session: ${fmtDate(c.last_session_date)}`
+            : `<em>No sessions yet</em>`;
+
+          const progHtml = c.active_program
+            ? esc(c.active_program.program_title)
+            : '<em class="muted">No active program</em>';
+
+          return `
+            <div class="client-card${_currentClientId === c.client_user_id ? " selected" : ""}"
+                 data-id="${esc(c.client_user_id)}">
+              <div class="client-card-name">${esc(c.display_name || "Athlete")}</div>
+              <div class="client-card-program">${progHtml}</div>
+              <div class="client-card-meta">${lastHtml}${streakHtml ? " · " + streakHtml : ""}</div>
+              ${badges.length ? `<div class="client-card-badges">${badges.join("")}</div>` : ""}
+            </div>`;
+        }).join("");
+
+        content.querySelectorAll(".client-card").forEach((card) => {
+          card.addEventListener("click", () => selectClient(card.dataset.id));
+        });
+      }
+
+      document.getElementById("refresh-clients-btn").addEventListener("click", async () => {
+        const loading = document.getElementById("client-list-loading");
+        const content = document.getElementById("client-list-content");
+        loading.style.display = "flex";
+        content.style.display = "none";
+        try {
+          const data = await coachFetch("/api/coach/clients");
+          _clients = sortClients(data.clients || []);
+          renderClientList();
+        } catch (err) {
+          document.getElementById("client-list-content").innerHTML = `<div class="empty">Failed: ${esc(err.message)}</div>`;
+        } finally {
+          loading.style.display = "none";
+          content.style.display = "block";
+        }
+      });
+
+      // ─── Client selection & detail ─────────────────────────────────────────────
+
+      async function selectClient(clientId) {
+        _currentClientId = clientId;
+        renderClientList(); // update selected state
+
+        const client = _clients.find((c) => c.client_user_id === clientId);
+        const detailEmpty = document.getElementById("detail-empty");
+        const detailContent = document.getElementById("detail-content");
+        detailEmpty.style.display = "none";
+        detailContent.style.display = "block";
+
+        // Header
+        document.getElementById("d-name").textContent = client?.display_name || "Athlete";
+        const metaEl = document.getElementById("d-meta");
+        const relEl = document.getElementById("d-rel");
+        metaEl.innerHTML = "";
+        relEl.textContent = "Relationship: Active";
+        if (client) {
+          // We'll fill meta from overview
+        }
+
+        // Activate overview tab, load data
+        activateTab("overview");
+        loadOverview(clientId);
+        // Preload programs for decision filter
+        loadClientPrograms(clientId);
+      }
+
+      // ─── Tabs ──────────────────────────────────────────────────────────────────
+
+      function activateTab(tabName) {
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.tab === tabName);
+        });
+        document.querySelectorAll(".tab-content").forEach((el) => {
+          el.classList.toggle("active", el.id === `tab-${tabName}`);
+        });
+      }
+
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (!_currentClientId) return;
+          const tab = btn.dataset.tab;
+          activateTab(tab);
+          if (tab === "sessions") loadSessions(_currentClientId);
+          if (tab === "decisions") loadDecisions(_currentClientId);
+          if (tab === "overrides") {
+            loadOverrideHistory(_currentClientId);
+            loadExercisesForOverrideForm(_currentClientId);
+          }
+        });
+      });
+
+      // ─── Overview tab ──────────────────────────────────────────────────────────
+
+      async function loadOverview(clientId) {
+        const loading = document.getElementById("overview-loading");
+        const content = document.getElementById("overview-content");
+        loading.style.display = "flex";
+        content.style.display = "none";
+        try {
+          const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/overview`);
+
+          // Meta chips
+          const metaEl = document.getElementById("d-meta");
+          const chips = [];
+          if (data.client?.fitness_level_slug) chips.push(`<span class="chip chip-muted">${esc(data.client.fitness_level_slug)}</span>`);
+          (data.client?.goals || []).forEach((g) => chips.push(`<span class="chip chip-blue">${esc(g)}</span>`));
+          metaEl.innerHTML = chips.join(" ");
+
+          // Program card
+          const prog = data.active_program;
+          if (prog) {
+            document.getElementById("ov-program-title").textContent = prog.program_title || "—";
+            const wk = prog.weeks_count ? `${prog.weeks_count} wks` : "";
+            const dpw = prog.days_per_week ? `${prog.days_per_week}×/wk` : "";
+            document.getElementById("ov-program-meta").innerHTML =
+              `<span class="chip chip-blue" style="margin-right:4px">${esc(prog.program_type || "")}</span>${esc([wk, dpw].filter(Boolean).join(" · "))}`;
+            const ratio = data.summary?.completion_ratio;
+            if (ratio != null) {
+              const wrap = document.getElementById("ov-progress-wrap");
+              wrap.style.display = "block";
+              document.getElementById("ov-progress-fill").style.width = `${Math.round(ratio * 100)}%`;
+            }
+          } else {
+            document.getElementById("ov-program-title").textContent = "No active program";
+            document.getElementById("ov-program-meta").textContent = "";
+          }
+
+          // Snapshot card
+          const summary = data.summary || {};
+          const streak = Number(summary.current_streak || 0);
+          document.getElementById("ov-streak").textContent = streak > 0 ? `🔥 ${streak}-day streak` : "No active streak";
+          const pct = summary.completion_ratio != null ? `${Math.round(summary.completion_ratio * 100)}% completion` : "";
+          document.getElementById("ov-completion").textContent = pct;
+          document.getElementById("ov-last-session").textContent = summary.last_session_date
+            ? `Last session: ${fmtDate(summary.last_session_date)}`
+            : "No sessions yet";
+
+          // Quick decisions
+          await loadQuickDecisions(clientId);
+        } catch (err) {
+          content.innerHTML = `<div class="empty">Failed to load overview: ${esc(err.message)}</div>`;
+        } finally {
+          loading.style.display = "none";
+          content.style.display = "block";
+        }
+      }
+
+      async function loadQuickDecisions(clientId) {
+        const listEl = document.getElementById("ov-decisions-list");
+        try {
+          const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/decisions?limit=3`);
+          const rows = data.rows || [];
+          if (rows.length === 0) {
+            listEl.innerHTML = '<div class="empty">No progression decisions recorded yet.</div>';
+            return;
+          }
+          listEl.innerHTML = rows.map((r) => `
+            <div class="quick-decision-row">
+              <span class="quick-decision-exercise">${esc(r.exercise_name || r.exercise_id)}</span>
+              ${outcomeChip(r.outcome)}
+              <span class="quick-decision-date">${fmtDate(r.decided_at)}</span>
+            </div>`).join("");
+        } catch {
+          listEl.innerHTML = '<div class="empty">Could not load decisions.</div>';
+        }
+      }
+
+      // ─── Sessions tab ──────────────────────────────────────────────────────────
+
+      async function loadSessions(clientId) {
+        if (_currentClientId !== clientId) return;
+        const loading = document.getElementById("sessions-loading");
+        const body = document.getElementById("sessions-table-body");
+        loading.style.display = "flex";
+        body.innerHTML = "";
+        try {
+          const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/recent-sessions`);
+          const sessions = data.sessions || data.rows || [];
+          if (sessions.length === 0) {
+            body.innerHTML = '<div class="empty">No sessions logged yet.</div>';
+          } else {
+            const rows = sessions.map((s) => {
+              const prCount = s.pr_count ?? s.prs ?? 0;
+              return `<tr>
+                <td>${fmtDate(s.scheduled_date || s.date)}</td>
+                <td>${esc(s.day_label || s.day_title || (s.day_number ?? "—"))}</td>
+                <td>${s.exercises_logged ?? s.exercise_count ?? "—"}</td>
+                <td>${s.total_volume_kg ? s.total_volume_kg + " kg" : "—"}</td>
+                <td>${prCount > 0 ? `<span class="chip chip-ok">${prCount} PR${prCount !== 1 ? "s" : ""}</span>` : "—"}</td>
+              </tr>`;
+            }).join("");
+            body.innerHTML = `
+              <table>
+                <thead><tr>
+                  <th scope="col">Date</th><th scope="col">Day</th>
+                  <th scope="col">Exercises logged</th><th scope="col">Volume</th><th scope="col">PRs</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>`;
+          }
+        } catch (err) {
+          const msg = err.status === 403 ? "Access denied — this athlete may not be linked to your account." : err.message;
+          body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px" onclick="loadSessions('${esc(clientId)}')">Retry</button></div>`;
+        } finally {
+          loading.style.display = "none";
+        }
+      }
+
+      // ─── Decisions tab ─────────────────────────────────────────────────────────
+
+      async function loadClientPrograms(clientId) {
+        try {
+          const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/programs`);
+          _clientPrograms[clientId] = data.programs || [];
+          refreshProgramFilter(clientId);
+        } catch { /* non-fatal */ }
+      }
+
+      function refreshProgramFilter(clientId) {
+        if (_currentClientId !== clientId) return;
+        const sel = document.getElementById("dec-program-filter");
+        const progs = _clientPrograms[clientId] || [];
+        const existing = sel.value;
+        sel.innerHTML = '<option value="">All Programs</option>' +
+          progs.map((p) => `<option value="${esc(p.program_id)}">${esc(p.program_title || p.program_id)}</option>`).join("");
+        sel.value = existing;
+      }
+
+      async function loadDecisions(clientId) {
+        if (_currentClientId !== clientId) return;
+        const loading = document.getElementById("decisions-loading");
+        const body = document.getElementById("decisions-table-body");
+        loading.style.display = "flex";
+        body.innerHTML = "";
+        const programId = document.getElementById("dec-program-filter").value;
+        const limit = document.getElementById("dec-limit").value;
+        const exerciseFilter = document.getElementById("dec-exercise-filter").value.trim().toLowerCase();
+
+        let url = `/api/coach/clients/${encodeURIComponent(clientId)}/decisions?limit=${limit}`;
+        if (programId) url += `&program_id=${encodeURIComponent(programId)}`;
+
+        try {
+          const data = await coachFetch(url);
+          let rows = data.rows || [];
+          _clientDecisions[clientId] = rows;
+          if (exerciseFilter) rows = rows.filter((r) => (r.exercise_name || "").toLowerCase().includes(exerciseFilter));
+          renderDecisionsTable(rows, body);
+        } catch (err) {
+          const msg = err.status === 403 ? "Access denied — this athlete may not be linked to your account." : err.message;
+          body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px" onclick="loadDecisions('${esc(clientId)}')">Retry</button></div>`;
+        } finally {
+          loading.style.display = "none";
+        }
+      }
+
+      function renderDecisionsTable(rows, body) {
+        if (rows.length === 0) {
+          body.innerHTML = '<div class="empty">No progression decisions recorded yet.</div>';
+          return;
+        }
+        const tableRows = rows.map((r) => {
+          const wd = r.week_number != null ? `W${r.week_number} D${r.day_number ?? "?"}` : "—";
+          const reason = trunc(r.display_reason || "", 60);
+          const progTitle = trunc(r.program_title || "", 24);
+          return `<tr>
+            <td><strong>${esc(r.exercise_name || r.exercise_id)}</strong></td>
+            <td title="${esc(r.program_title || "")}" class="muted">${esc(progTitle)}</td>
+            <td class="mono" style="font-size:12px">${esc(wd)}</td>
+            <td>${outcomeChip(r.outcome)}</td>
+            <td class="muted" style="font-size:12px">${esc(r.confidence || "—")}</td>
+            <td title="${esc(r.display_reason || "")}" class="muted" style="font-style:italic">${esc(reason)}</td>
+            <td class="muted" style="font-size:12px; white-space:nowrap">${fmtDate(r.decided_at)}</td>
+          </tr>`;
+        }).join("");
+        body.innerHTML = `
+          <table>
+            <thead><tr>
+              <th scope="col">Exercise</th><th scope="col">Program</th><th scope="col">Week/Day</th>
+              <th scope="col">Outcome</th><th scope="col">Confidence</th>
+              <th scope="col">Reason</th><th scope="col">Date</th>
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>`;
+      }
+
+      document.getElementById("dec-load-btn").addEventListener("click", () => {
+        if (_currentClientId) loadDecisions(_currentClientId);
+      });
+
+      document.getElementById("dec-exercise-filter").addEventListener("input", () => {
+        if (!_currentClientId) return;
+        const rows = _clientDecisions[_currentClientId] || [];
+        const filter = document.getElementById("dec-exercise-filter").value.trim().toLowerCase();
+        const filtered = filter ? rows.filter((r) => (r.exercise_name || "").toLowerCase().includes(filter)) : rows;
+        renderDecisionsTable(filtered, document.getElementById("decisions-table-body"));
+      });
+
+      // ─── Overrides tab ─────────────────────────────────────────────────────────
+
+      async function loadExercisesForOverrideForm(clientId) {
+        if (_currentClientId !== clientId) return;
+        const sel = document.getElementById("ov-exercise-select");
+        sel.innerHTML = '<option value="">— select exercise —</option>';
+        try {
+          const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/decisions?limit=100`);
+          const rows = data.rows || [];
+          const seen = new Map();
+          rows.forEach((r) => {
+            if (!seen.has(r.exercise_id)) seen.set(r.exercise_id, r);
+          });
+          seen.forEach((r) => {
+            const opt = document.createElement("option");
+            opt.value = JSON.stringify({ exercise_id: r.exercise_id, program_exercise_id: r.program_exercise_id });
+            opt.textContent = r.exercise_name || r.exercise_id;
+            sel.appendChild(opt);
+          });
+        } catch { /* non-fatal */ }
+      }
+
+      // Kind radio → show/hide payload fields
+      document.querySelectorAll('input[name="override-kind"]').forEach((radio) => {
+        radio.addEventListener("change", () => updateOverrideKindUI());
+      });
+
+      function updateOverrideKindUI() {
+        const kind = document.querySelector('input[name="override-kind"]:checked')?.value;
+        const payloadSection = document.getElementById("ov-payload-section");
+        const loadRow = document.getElementById("ov-load-row");
+        const repsRow = document.getElementById("ov-reps-row");
+        payloadSection.style.display = kind ? "block" : "none";
+        loadRow.style.display = kind === "next_session_load" ? "grid" : "none";
+        repsRow.style.display = kind === "next_session_reps" ? "grid" : "none";
+        updateOverrideSubmitBtn();
+      }
+
+      function updateOverrideSubmitBtn() {
+        const exerciseSel = document.getElementById("ov-exercise-select");
+        const kind = document.querySelector('input[name="override-kind"]:checked')?.value;
+        document.getElementById("ov-submit-btn").disabled = !exerciseSel.value || !kind;
+      }
+
+      document.getElementById("ov-exercise-select").addEventListener("change", updateOverrideSubmitBtn);
+
+      const reasonInput = document.getElementById("ov-reason-input");
+      const reasonCount = document.getElementById("ov-reason-count");
+      reasonInput.addEventListener("input", () => { reasonCount.textContent = reasonInput.value.length; });
+
+      document.getElementById("ov-submit-btn").addEventListener("click", async () => {
+        const exerciseRaw = document.getElementById("ov-exercise-select").value;
+        const kind = document.querySelector('input[name="override-kind"]:checked')?.value;
+        const formStatus = document.getElementById("ov-form-status");
+        const submitBtn = document.getElementById("ov-submit-btn");
+
+        let exerciseData;
+        try { exerciseData = JSON.parse(exerciseRaw); } catch { return; }
+
+        let payload = {};
+        if (kind === "next_session_load") {
+          const v = parseFloat(document.getElementById("ov-load-input").value);
+          if (isNaN(v) || v <= 0) { setFormStatus(formStatus, "Enter a valid load (kg).", "err"); return; }
+          payload = { recommended_load_kg: v };
+        } else if (kind === "next_session_reps") {
+          const v = parseInt(document.getElementById("ov-reps-input").value, 10);
+          if (isNaN(v) || v < 1 || v > 30) { setFormStatus(formStatus, "Enter valid reps (1–30).", "err"); return; }
+          payload = { target_reps: v };
+        }
+
+        const body = {
+          program_exercise_id: exerciseData.program_exercise_id,
+          override_kind: kind,
+          override_payload: payload,
+        };
+        const reason = reasonInput.value.trim();
+        if (reason) body.reason_text = reason;
+
+        submitBtn.disabled = true;
+        setFormStatus(formStatus, "Creating override…", "");
+        try {
+          await coachFetch(`/api/coach/clients/${encodeURIComponent(_currentClientId)}/progression-override`, {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          setFormStatus(formStatus, "Override created successfully.", "ok");
+          // Reset form
+          document.getElementById("ov-exercise-select").value = "";
+          document.querySelectorAll('input[name="override-kind"]').forEach((r) => { r.checked = false; });
+          document.getElementById("ov-load-input").value = "";
+          document.getElementById("ov-reps-input").value = "";
+          reasonInput.value = "";
+          reasonCount.textContent = "0";
+          updateOverrideKindUI();
+          // Reload override history and client list (badge update)
+          loadOverrideHistory(_currentClientId);
+          refreshClientBadges();
+        } catch (err) {
+          setFormStatus(formStatus, "Error: " + err.message, "err");
+        } finally {
+          updateOverrideSubmitBtn();
+        }
+      });
+
+      async function loadOverrideHistory(clientId) {
+        if (_currentClientId !== clientId) return;
+        const loading = document.getElementById("overrides-loading");
+        const body = document.getElementById("overrides-table-body");
+        loading.style.display = "flex";
+        body.innerHTML = "";
+        try {
+          const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/progression-overrides`);
+          const overrides = data.overrides || data.rows || [];
+          if (overrides.length === 0) {
+            body.innerHTML = '<div class="empty">No overrides created yet.</div>';
+          } else {
+            const rows = overrides.map((o) => `<tr>
+              <td>${esc(o.exercise_name || o.exercise_id)}</td>
+              <td>${overrideKindChip(o.override_kind)}</td>
+              <td>${esc(payloadSummary(o.override_kind, o.override_payload_json))}</td>
+              <td title="${esc(o.reason_text || "")}" class="muted" style="font-style:italic">${esc(trunc(o.reason_text || "—", 40))}</td>
+              <td>${overrideStatusChip(o.status)}</td>
+              <td class="muted" style="font-size:12px; white-space:nowrap">${fmtDate(o.created_at)}</td>
+            </tr>`).join("");
+            body.innerHTML = `
+              <table>
+                <thead><tr>
+                  <th scope="col">Exercise</th><th scope="col">Kind</th><th scope="col">Payload</th>
+                  <th scope="col">Reason</th><th scope="col">Status</th><th scope="col">Created</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>`;
+          }
+        } catch (err) {
+          const msg = err.status === 403 ? "Access denied." : err.message;
+          body.innerHTML = `<div class="empty">${esc(msg)}</div>`;
+        } finally {
+          loading.style.display = "none";
+        }
+      }
+
+      document.getElementById("ov-history-refresh").addEventListener("click", () => {
+        if (_currentClientId) loadOverrideHistory(_currentClientId);
+      });
+
+      async function refreshClientBadges() {
+        try {
+          const data = await coachFetch("/api/coach/clients");
+          _clients = sortClients(data.clients || []);
+          renderClientList();
+          connectedLabel.textContent = `Connected · ${_clients.length} athlete${_clients.length !== 1 ? "s" : ""}`;
+        } catch { /* non-fatal */ }
+      }
+    </script>
+  </body>
+</html>

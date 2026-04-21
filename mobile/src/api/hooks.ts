@@ -80,6 +80,11 @@ import {
   type PrsFeedResponse,
   type SessionHistoryMetrics,
 } from "./history";
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationPreferences,
+} from "./notifications";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
 export const queryKeys = {
@@ -112,6 +117,7 @@ export const queryKeys = {
     ["programCompletionSummary", programId] as const,
   programEndCheck: (programId: string) =>
     ["programEndCheck", programId] as const,
+  notificationPreferences: ["notificationPreferences"] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -356,6 +362,41 @@ export function usePrsFeed(userId?: string): UseQueryResult<PrsFeedResponse> {
     queryFn: () => getPrsFeed(userId),
     enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
+  });
+}
+
+export function useNotificationPreferences(): UseQueryResult<NotificationPreferences> {
+  return useQuery({
+    queryKey: queryKeys.notificationPreferences,
+    queryFn: getNotificationPreferences,
+  });
+}
+
+export function useUpdateNotificationPreferences(): UseMutationResult<
+  NotificationPreferences,
+  Error,
+  Partial<NotificationPreferences>,
+  { prev?: NotificationPreferences }
+> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (patch) => updateNotificationPreferences(patch),
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.notificationPreferences });
+      const prev = queryClient.getQueryData<NotificationPreferences>(queryKeys.notificationPreferences);
+      queryClient.setQueryData<NotificationPreferences | undefined>(
+        queryKeys.notificationPreferences,
+        (old) => (old ? { ...old, ...patch } : old),
+      );
+      return { prev };
+    },
+    onError: (_error, _patch, context) => {
+      queryClient.setQueryData(queryKeys.notificationPreferences, context?.prev);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notificationPreferences });
+    },
   });
 }
 

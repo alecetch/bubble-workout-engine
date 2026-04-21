@@ -1,17 +1,193 @@
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { useQueryClient } from "@tanstack/react-query";
+import React, { useMemo, useState } from "react";
+import {
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { deleteAccount, getAccountInfo } from "../../api/accountApi";
 import { apiLogout } from "../../api/authApi";
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationPreferences,
+} from "../../api/notifications";
+import { getPreferredUnit } from "../../api/profileApi";
 import { clearTokens, getRefreshToken } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 
-export function SettingsScreen(): React.JSX.Element {
+type Props = NativeStackScreenProps<SettingsStackParamList, "Settings">;
+
+const NOTIFICATION_ROWS = [
+  {
+    key: "prNotificationEnabled" as const,
+    label: "PR Notifications",
+    description: "Get notified when you set a new personal record.",
+  },
+  {
+    key: "deloadNotificationEnabled" as const,
+    label: "Recovery Notifications",
+    description: "Get notified when your program adjusts for recovery.",
+  },
+  {
+    key: "reminderEnabled" as const,
+    label: "Workout Reminder",
+    description: "Daily reminder when a training session is scheduled.",
+  },
+];
+
+function formatReminderTimeLabel(time: string): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) return time;
+  const hour24 = Number(match[1]);
+  const minute = match[2];
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${minute} ${suffix}`;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <Text style={styles.sectionLabel}>{children}</Text>;
+}
+
+function SkeletonRows({ count }: { count: number }): React.JSX.Element {
+  return (
+    <>
+      {Array.from({ length: count }, (_, index) => (
+        <View
+          key={`settings-skeleton-${count}-${index}`}
+          testID="settings-skeleton-row"
+          style={[styles.row, styles.skeletonRow, index < count - 1 ? styles.rowDivider : null]}
+        />
+      ))}
+    </>
+  );
+}
+
+function RetryRow({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}): React.JSX.Element {
+  return (
+    <PressableScale accessibilityLabel={label} style={styles.retryRow} onPress={onPress}>
+      <Text style={styles.retryText}>{label}</Text>
+    </PressableScale>
+  );
+}
+
+function SettingsRow({
+  label,
+  description,
+  value,
+  onPress,
+  destructive = false,
+  showChevron = false,
+  showDivider = false,
+  children,
+}: {
+  label: string;
+  description?: string;
+  value?: string;
+  onPress?: () => void;
+  destructive?: boolean;
+  showChevron?: boolean;
+  showDivider?: boolean;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  const content = (
+    <View style={[styles.row, showDivider ? styles.rowDivider : null]}>
+      <View style={styles.rowText}>
+        <Text style={[styles.rowLabel, destructive ? styles.destructiveLabel : null]}>{label}</Text>
+        {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
+      </View>
+      {value ? <Text style={styles.rowValue}>{value}</Text> : null}
+      {children}
+      {showChevron ? <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} /> : null}
+    </View>
+  );
+
+  if (!onPress) return content;
+
+  return (
+    <PressableScale accessibilityLabel={label} onPress={onPress}>
+      {content}
+    </PressableScale>
+  );
+}
+
+export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
   const clearSession = useSessionStore((state) => state.clearSession);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [notifSaveError, setNotifSaveError] = useState<string | null>(null);
+  const [dangerError, setDangerError] = useState<string | null>(null);
+
+  const notifQuery = useQuery({
+    queryKey: ["notificationPreferences"],
+    queryFn: getNotificationPreferences,
+  });
+  const accountQuery = useQuery({
+    queryKey: ["accountInfo"],
+    queryFn: getAccountInfo,
+  });
+  const preferredUnitQuery = useQuery({
+    queryKey: ["preferredUnit"],
+    queryFn: getPreferredUnit,
+  });
+
+  const notifMutation = useMutation({
+    mutationFn: (patch: Partial<NotificationPreferences>) => updateNotificationPreferences(patch),
+    onMutate: async (patch) => {
+      setNotifSaveError(null);
+      await queryClient.cancelQueries({ queryKey: ["notificationPreferences"] });
+      const prev = queryClient.getQueryData<NotificationPreferences>(["notificationPreferences"]);
+      queryClient.setQueryData<NotificationPreferences | undefined>(
+        ["notificationPreferences"],
+        (old) => (old ? { ...old, ...patch } : old),
+      );
+      return { prev };
+    },
+    onError: (_err, _patch, context) => {
+      if (context?.prev) {
+        queryClient.setQueryData(["notificationPreferences"], context.prev);
+      }
+      setNotifSaveError("Couldn't save. Check your connection.");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notificationPreferences"] });
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: async () => {
+      await clearTokens();
+      clearSession();
+      void queryClient.clear();
+    },
+    onError: () => {
+      setDeleteModalVisible(false);
+      setDangerError("Couldn't delete account. Try again.");
+    },
+  });
+
+  const reminderTimeLabel = useMemo(() => {
+    return notifQuery.data ? formatReminderTimeLabel(notifQuery.data.reminderTimeLocalHhmm) : "";
+  }, [notifQuery.data]);
 
   const handleLogout = async (): Promise<void> => {
     const refreshToken = await getRefreshToken();
@@ -25,48 +201,325 @@ export function SettingsScreen(): React.JSX.Element {
     void queryClient.clear();
   };
 
+  const handleNotificationToggle = (
+    key: (typeof NOTIFICATION_ROWS)[number]["key"],
+    value: boolean,
+  ): void => {
+    notifMutation.mutate({ [key]: value });
+  };
+
   return (
-    <View style={styles.root}>
-      <Text style={styles.title}>Settings</Text>
-      <Text style={styles.subtitle}>Account and app preferences will appear here.</Text>
-      <PressableScale style={styles.logoutButton} onPress={() => void handleLogout()}>
-        <Text style={styles.logoutLabel}>Log out</Text>
-      </PressableScale>
-    </View>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Settings</Text>
+
+        <View style={styles.section}>
+          <SectionLabel>NOTIFICATIONS</SectionLabel>
+          <View style={styles.sectionCard}>
+            {notifQuery.isLoading ? <SkeletonRows count={3} /> : null}
+            {notifQuery.isError ? (
+              <RetryRow
+                label="Couldn't load notification settings - tap to retry"
+                onPress={() => void notifQuery.refetch()}
+              />
+            ) : null}
+            {notifQuery.data ? (
+              <>
+                {NOTIFICATION_ROWS.map((row, index) => {
+                  const currentValue = notifQuery.data?.[row.key] ?? false;
+                  const showDivider =
+                    index < NOTIFICATION_ROWS.length - 1 || Boolean(notifQuery.data?.reminderEnabled);
+                  return (
+                    <PressableScale
+                      key={row.key}
+                      accessibilityLabel={row.label}
+                      disabled={notifMutation.isPending}
+                      onPress={() => handleNotificationToggle(row.key, !currentValue)}
+                    >
+                      <View style={[styles.row, showDivider ? styles.rowDivider : null]}>
+                        <View style={styles.rowText}>
+                          <Text style={styles.rowLabel}>{row.label}</Text>
+                          <Text style={styles.rowDescription}>{row.description}</Text>
+                        </View>
+                        <Switch
+                          accessibilityLabel={row.label}
+                          value={currentValue}
+                          onValueChange={(nextValue) => handleNotificationToggle(row.key, nextValue)}
+                          disabled={notifMutation.isPending}
+                          trackColor={{ false: colors.border, true: colors.accent }}
+                          thumbColor={colors.textPrimary}
+                        />
+                      </View>
+                    </PressableScale>
+                  );
+                })}
+                {notifQuery.data.reminderEnabled ? (
+                  <SettingsRow
+                    label="Reminder Time"
+                    value={reminderTimeLabel}
+                    onPress={() =>
+                      navigation.navigate("NotificationTime", {
+                        currentTime: notifQuery.data?.reminderTimeLocalHhmm ?? "08:00",
+                      })
+                    }
+                    showChevron
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </View>
+          {notifSaveError ? <Text style={styles.inlineError}>{notifSaveError}</Text> : null}
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>ACCOUNT</SectionLabel>
+          <View style={styles.sectionCard}>
+            {accountQuery.isLoading ? <SkeletonRows count={2} /> : null}
+            {accountQuery.isError ? (
+              <RetryRow
+                label="Couldn't load account settings - tap to retry"
+                onPress={() => void accountQuery.refetch()}
+              />
+            ) : null}
+            {accountQuery.data ? (
+              <>
+                <SettingsRow
+                  label="Name"
+                  value={accountQuery.data.displayName ?? "Not set"}
+                  onPress={() =>
+                    navigation.navigate("AccountName", {
+                      currentName: accountQuery.data?.displayName ?? null,
+                    })
+                  }
+                  showChevron
+                  showDivider
+                />
+                <SettingsRow label="Email" value={accountQuery.data.email} showDivider />
+                <SettingsRow
+                  label="Change Password"
+                  onPress={() => navigation.navigate("ChangePassword")}
+                  showChevron
+                />
+              </>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>PREFERENCES</SectionLabel>
+          <View style={styles.sectionCard}>
+            {preferredUnitQuery.isLoading ? <SkeletonRows count={1} /> : null}
+            {preferredUnitQuery.isError ? (
+              <RetryRow
+                label="Couldn't load preferences - tap to retry"
+                onPress={() => void preferredUnitQuery.refetch()}
+              />
+            ) : null}
+            {preferredUnitQuery.data ? (
+              <SettingsRow
+                label="Units"
+                value={preferredUnitQuery.data}
+                onPress={() =>
+                  navigation.navigate("UnitPicker", {
+                    currentUnit: preferredUnitQuery.data ?? "kg",
+                  })
+                }
+                showChevron
+              />
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>DANGER ZONE</SectionLabel>
+          <View style={styles.sectionCard}>
+            <SettingsRow
+              label="Log Out"
+              destructive
+              onPress={() => void handleLogout()}
+              showDivider
+            />
+            <SettingsRow
+              label="Delete Account"
+              destructive
+              onPress={() => {
+                setDangerError(null);
+                setDeleteModalVisible(true);
+              }}
+            />
+          </View>
+          {dangerError ? <Text style={styles.inlineError}>{dangerError}</Text> : null}
+        </View>
+      </ScrollView>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={deleteModalVisible}
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete account</Text>
+            <Text style={styles.modalBody}>
+              This will permanently delete your account, all training history, and all program data.
+              This cannot be undone.
+            </Text>
+            <PressableScale
+              style={styles.modalSecondaryButton}
+              disabled={deleteAccountMutation.isPending}
+              onPress={() => setDeleteModalVisible(false)}
+            >
+              <Text style={styles.modalSecondaryLabel}>Cancel</Text>
+            </PressableScale>
+            <PressableScale
+              style={styles.modalDangerButton}
+              disabled={deleteAccountMutation.isPending}
+              onPress={() => deleteAccountMutation.mutate()}
+            >
+              <Text style={styles.modalDangerLabel}>
+                {deleteAccountMutation.isPending ? "Deleting..." : "Delete my account"}
+              </Text>
+            </PressableScale>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   root: {
     flex: 1,
     backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    gap: spacing.xs,
+  },
+  content: {
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
   },
   title: {
     color: colors.textPrimary,
     ...typography.h2,
+    paddingHorizontal: spacing.md,
   },
-  subtitle: {
+  section: {
+    gap: spacing.sm,
+  },
+  sectionLabel: {
     color: colors.textSecondary,
-    ...typography.body,
-    textAlign: "center",
+    ...typography.label,
+    textTransform: "uppercase",
+    paddingHorizontal: spacing.md,
   },
-  logoutButton: {
-    minHeight: 48,
-    minWidth: 160,
-    borderRadius: 999,
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    marginHorizontal: spacing.md,
+    overflow: "hidden",
+  },
+  row: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  rowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  rowText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  rowLabel: {
+    color: colors.textPrimary,
+    ...typography.body,
+  },
+  destructiveLabel: {
+    color: colors.error,
+  },
+  rowDescription: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  rowValue: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  skeletonRow: {
+    opacity: 0.4,
+    backgroundColor: colors.textSecondary,
+  },
+  retryRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  retryText: {
+    color: colors.error,
+    ...typography.small,
+  },
+  inlineError: {
+    color: colors.error,
+    ...typography.small,
+    paddingHorizontal: spacing.md,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.72)",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.lg,
   },
-  logoutLabel: {
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalTitle: {
+    color: colors.textPrimary,
+    ...typography.h3,
+  },
+  modalBody: {
+    color: colors.textSecondary,
+    ...typography.small,
+    lineHeight: 20,
+  },
+  modalSecondaryButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  modalSecondaryLabel: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "600",
+  },
+  modalDangerButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  modalDangerLabel: {
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",

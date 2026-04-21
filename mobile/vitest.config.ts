@@ -9,7 +9,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     // Tier 2: component tests only — Tier 1 uses node:test (*.test.ts)
-    include: ["src/**/*.component.test.{ts,tsx}"],
+    include: ["src/**/*.component.test.{ts,tsx}", "src/**/__tests__/**/*.test.tsx"],
   },
   resolve: {
     alias: {
