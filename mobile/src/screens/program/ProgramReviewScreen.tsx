@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useClientProfile, useMe } from "../../api/hooks";
+import { useActivePrograms, useClientProfile, useMe } from "../../api/hooks";
 import { extractProgramId, generateProgram } from "../../api/program";
 import { getEngineKeyStatus } from "../../api/config";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
@@ -35,6 +35,8 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? null;
   const profileQuery = useClientProfile(profileId);
+  const activeProgramsQuery = useActivePrograms();
+  const hasActiveProgram = (activeProgramsQuery.data?.programs?.length ?? 0) > 0;
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -143,6 +145,13 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
 
   return (
     <View style={styles.root}>
+      {hasActiveProgram ? (
+        <View style={styles.activeProgramBanner}>
+          <Text style={styles.activeProgramBannerText}>
+            You already have an active program. Generating a new one will replace it.
+          </Text>
+        </View>
+      ) : null}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Program Review</Text>
         <Text style={styles.subtitle}>Review your setup before generating a program.</Text>
@@ -249,13 +258,39 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
       </ScrollView>
 
       <View style={styles.footer}>
-        <PressableScale
-          style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
-          onPress={() => void handleGenerate()}
-          disabled={isGenerating}
-        >
-          <Text style={styles.generateLabel}>{isGenerating ? "Generating..." : "Generate Program"}</Text>
-        </PressableScale>
+        {hasActiveProgram ? (
+          <>
+            <PressableScale
+              style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
+              onPress={() => {
+                const parent = navigation.getParent();
+                if (parent) {
+                  (parent as any).navigate("TodayTab" as never);
+                }
+              }}
+              disabled={isGenerating}
+            >
+              <Text style={styles.generateLabel}>View Today&apos;s Workout</Text>
+            </PressableScale>
+            <PressableScale
+              style={styles.generateSecondary}
+              onPress={() => void handleGenerate()}
+              disabled={isGenerating}
+            >
+              <Text style={styles.generateSecondaryLabel}>
+                {isGenerating ? "Generating..." : "Generate a new program"}
+              </Text>
+            </PressableScale>
+          </>
+        ) : (
+          <PressableScale
+            style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
+            onPress={() => void handleGenerate()}
+            disabled={isGenerating}
+          >
+            <Text style={styles.generateLabel}>{isGenerating ? "Generating..." : "Generate Program"}</Text>
+          </PressableScale>
+        )}
       </View>
 
       {isGenerating ? (
@@ -419,6 +454,18 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
     backgroundColor: colors.background,
   },
+  generateSecondary: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  generateSecondaryLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
   generateButton: {
     minHeight: 52,
     borderRadius: 999,
@@ -434,6 +481,20 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "700",
+  },
+  activeProgramBanner: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+  },
+  activeProgramBannerText: {
+    color: colors.textSecondary,
+    ...typography.small,
+    textAlign: "center",
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
