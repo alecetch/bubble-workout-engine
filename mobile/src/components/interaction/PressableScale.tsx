@@ -14,6 +14,7 @@ type PressableScaleProps = {
   onLongPress?: (event: GestureResponderEvent) => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  containerStyle?: StyleProp<ViewStyle>;
   hitSlop?: PressableProps["hitSlop"];
   accessibilityLabel?: string;
 };
@@ -28,6 +29,7 @@ export function PressableScale({
   onLongPress,
   disabled = false,
   style,
+  containerStyle,
   hitSlop,
   accessibilityLabel,
 }: PressableScaleProps): React.JSX.Element {
@@ -39,6 +41,7 @@ export function PressableScale({
       hitSlop={hitSlop}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
+      style={containerStyle}
     >
       <View style={style}>{children}</View>
     </Pressable>
