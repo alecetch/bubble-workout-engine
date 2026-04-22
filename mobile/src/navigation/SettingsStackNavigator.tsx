@@ -11,7 +11,7 @@ export type SettingsStackParamList = {
   AccountName: { currentName: string | null };
   ChangePassword: undefined;
   NotificationTime: { currentTime: string };
-  UnitPicker: { currentUnit: "kg" | "lbs" };
+  UnitPicker: { currentUnit: "kg" | "lbs"; currentHeightUnit: "cm" | "ft" };
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
