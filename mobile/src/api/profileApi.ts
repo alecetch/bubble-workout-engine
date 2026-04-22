@@ -18,3 +18,19 @@ export async function updatePreferredUnit(unit: "kg" | "lbs"): Promise<void> {
     { preferredUnit: unit },
   );
 }
+
+export async function getPreferredHeightUnit(): Promise<"cm" | "ft"> {
+  const me = await getMe();
+  if (!me.clientProfileId) {
+    return "cm";
+  }
+  const profile = await getClientProfile(me.clientProfileId);
+  return profile.preferredHeightUnit === "ft" ? "ft" : "cm";
+}
+
+export async function updatePreferredHeightUnit(unit: "cm" | "ft"): Promise<void> {
+  await authPatchJson<unknown, { preferredHeightUnit: "cm" | "ft" }>(
+    "/api/users/me",
+    { preferredHeightUnit: unit },
+  );
+}
