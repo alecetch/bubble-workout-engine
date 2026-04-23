@@ -26,9 +26,9 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
@@ -50,7 +50,7 @@ jobs:
             -locations=filesystem:/flyway/sql \
             migrate
 
-      - name: Run tests
+      - name: Run API tests
         working-directory: api
         env:
           PGHOST: 127.0.0.1
@@ -63,11 +63,16 @@ jobs:
           ENGINE_KEY: ci-test-key
           JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
           JWT_ISSUER: workout-engine-ci
+          REVENUECAT_WEBHOOK_SECRET: ci-test-webhook-secret
         run: npm test -- --test-concurrency=1
 
       - name: Install mobile dependencies
         working-directory: mobile
         run: npm ci
+
+      - name: TypeScript check (mobile)
+        working-directory: mobile
+        run: npx tsc --noEmit
 
       - name: Run mobile Tier 1 unit tests
         working-directory: mobile

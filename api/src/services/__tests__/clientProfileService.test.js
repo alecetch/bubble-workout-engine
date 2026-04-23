@@ -34,6 +34,7 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
     onboarding_step_completed: 3,
     onboarding_completed_at: "2026-01-01T00:00:00Z",
     program_type_slug: "strength",
+    preferred_height_unit: "cm",
   };
 
   assert.deepEqual(toApiShape(row), {
@@ -56,6 +57,7 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
     onboardingCompletedAt: "2026-01-01T00:00:00Z",
     programType: "strength",
     preferredUnit: "kg",
+    preferredHeightUnit: "cm",
     anchorLiftsSkipped: false,
     anchorLiftsCollectedAt: null,
   });
@@ -74,6 +76,7 @@ test("toApiShape applies null/empty defaults for missing fields", () => {
   assert.equal(result.equipmentPreset, null);
   assert.equal(result.programType, null);
   assert.equal(result.preferredUnit, "kg");
+  assert.equal(result.preferredHeightUnit, "cm");
 });
 
 test("upsertUser returns { id } from RETURNING row", async () => {

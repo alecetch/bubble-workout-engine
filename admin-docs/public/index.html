@@ -183,8 +183,10 @@
     }
     .lineage-node.planning:hover { background: #ddd6fe; }
     .lineage-node.spec { background: #e0f2fe; color: #0369a1; }
-    .lineage-node.prompt-active { background: #fef3c7; color: #d97706; }
-    .lineage-node.prompt-done  { background: #d1fae5; color: #059669; }
+    .lineage-node.prompt-active { background: #fef3c7; color: #d97706; cursor: pointer; border: 1px solid #fde68a; }
+    .lineage-node.prompt-active:hover { background: #fde68a; }
+    .lineage-node.prompt-done  { background: #d1fae5; color: #059669; cursor: pointer; border: 1px solid #6ee7b7; }
+    .lineage-node.prompt-done:hover { background: #a7f3d0; }
     .lineage-node.no-prompt { background: #f1f5f9; color: #94a3b8; }
     .lineage-arrow { color: #cbd5e1; font-size: 10px; }
     .lineage-set {
@@ -889,9 +891,9 @@ function lineageHtml(item) {
   if (!item.prompt_filename) {
     parts.push('<span class="lineage-node no-prompt">no prompt</span>');
   } else if (item.status === 'done') {
-    parts.push('<span class="lineage-node prompt-done">prompt ✓</span>');
+    parts.push(`<span class="lineage-node prompt-done" title="View prompt: ${escHtml(item.prompt_filename)}" onclick="viewDocSafe('prompts/done/${escHtml(item.prompt_filename)}', '${escHtml(item.prompt_filename)}')">prompt ✓</span>`);
   } else {
-    parts.push('<span class="lineage-node prompt-active">prompt active</span>');
+    parts.push(`<span class="lineage-node prompt-active" title="View prompt: ${escHtml(item.prompt_filename)}" onclick="viewDocSafe('prompts/active/${escHtml(item.prompt_filename)}', '${escHtml(item.prompt_filename)}')">prompt active</span>`);
   }
 
   return parts.join('');
@@ -952,6 +954,9 @@ function actionsHtml(item) {
 
   if (item.status === 'prompt_active') {
     btns.push(`<button class="btn-card" onclick="moveCard(${item.id}, 'prioritised')">← Back</button>`);
+    if (item.prompt_filename) {
+      btns.push(`<button class="btn-card preview" onclick="viewDocSafe('prompts/active/${escHtml(item.prompt_filename)}', '${escHtml(item.prompt_filename)}')">📄 Prompt</button>`);
+    }
     btns.push(`<button class="btn-card primary" onclick="moveCard(${item.id}, 'needs_testing')">→ Testing</button>`);
     if (item.prompt_filename) {
       btns.push(`<button class="btn-card success" onclick="confirmMarkDone(${item.id}, true)">✓ Done</button>`);

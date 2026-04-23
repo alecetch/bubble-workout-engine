@@ -3,7 +3,7 @@ import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from "react-n
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { updatePreferredUnit } from "../../api/profileApi";
+import { updatePreferredHeightUnit, updatePreferredUnit } from "../../api/profileApi";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
 import { colors } from "../../theme/colors";
@@ -12,20 +12,35 @@ import { typography } from "../../theme/typography";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "UnitPicker">;
 
-const OPTIONS = [
-  { value: "kg" as const, label: "kg - Kilograms" },
-  { value: "lbs" as const, label: "lbs - Pounds" },
+const WEIGHT_OPTIONS: { value: "kg" | "lbs"; label: string }[] = [
+  { value: "kg", label: "kg — Kilograms" },
+  { value: "lbs", label: "lbs — Pounds" },
+];
+
+const HEIGHT_OPTIONS: { value: "cm" | "ft"; label: string }[] = [
+  { value: "cm", label: "cm — Centimetres" },
+  { value: "ft", label: "ft — Feet & inches" },
 ];
 
 export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+
+  const weightMutation = useMutation({
     mutationFn: (unit: "kg" | "lbs") => updatePreferredUnit(unit),
     onSuccess: (_result, unit) => {
       queryClient.setQueryData(["preferredUnit"], unit);
-      navigation.goBack();
     },
   });
+
+  const heightMutation = useMutation({
+    mutationFn: (unit: "cm" | "ft") => updatePreferredHeightUnit(unit),
+    onSuccess: (_result, unit) => {
+      queryClient.setQueryData(["preferredHeightUnit"], unit);
+    },
+  });
+
+  const currentUnit = route.params.currentUnit;
+  const currentHeightUnit = route.params.currentHeightUnit;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -34,18 +49,20 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
           <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
         </PressableScale>
         <Text style={styles.title}>Units</Text>
+
+        <Text style={styles.sectionLabel}>WEIGHT</Text>
         <View style={styles.card}>
-          {OPTIONS.map((option, index) => {
-            const selected = route.params.currentUnit === option.value;
+          {WEIGHT_OPTIONS.map((option, index) => {
+            const selected = currentUnit === option.value;
             return (
               <PressableScale
                 key={option.value}
-                disabled={mutation.isPending}
-                onPress={() => mutation.mutate(option.value)}
+                disabled={weightMutation.isPending}
+                onPress={() => weightMutation.mutate(option.value)}
               >
-                <View style={[styles.row, index < OPTIONS.length - 1 ? styles.rowDivider : null]}>
+                <View style={[styles.row, index < WEIGHT_OPTIONS.length - 1 ? styles.rowDivider : null]}>
                   <Text style={styles.rowLabel}>{option.label}</Text>
-                  {mutation.isPending && selected ? (
+                  {weightMutation.isPending && selected ? (
                     <ActivityIndicator color={colors.accent} />
                   ) : (
                     <Ionicons
@@ -59,8 +76,36 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
             );
           })}
         </View>
+
+        <Text style={styles.sectionLabel}>HEIGHT</Text>
+        <View style={styles.card}>
+          {HEIGHT_OPTIONS.map((option, index) => {
+            const selected = currentHeightUnit === option.value;
+            return (
+              <PressableScale
+                key={option.value}
+                disabled={heightMutation.isPending}
+                onPress={() => heightMutation.mutate(option.value)}
+              >
+                <View style={[styles.row, index < HEIGHT_OPTIONS.length - 1 ? styles.rowDivider : null]}>
+                  <Text style={styles.rowLabel}>{option.label}</Text>
+                  {heightMutation.isPending && selected ? (
+                    <ActivityIndicator color={colors.accent} />
+                  ) : (
+                    <Ionicons
+                      name={selected ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={selected ? colors.accent : colors.textSecondary}
+                    />
+                  )}
+                </View>
+              </PressableScale>
+            );
+          })}
+        </View>
+
         <Text style={styles.note}>
-          Changing units affects new entries only. Historical loads remain unchanged.
+          Changing units affects how new values are entered. Stored data is not converted.
         </Text>
       </View>
     </SafeAreaView>
@@ -77,7 +122,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.lg,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   backButton: {
     width: 40,
@@ -86,10 +131,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface,
+    marginBottom: spacing.xs,
   },
   title: {
     color: colors.textPrimary,
     ...typography.h3,
+    marginBottom: spacing.xs,
+  },
+  sectionLabel: {
+    color: colors.textSecondary,
+    ...typography.label,
+    textTransform: "uppercase",
+    marginTop: spacing.sm,
   },
   card: {
     backgroundColor: colors.surface,
@@ -118,5 +171,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
     lineHeight: 20,
+    marginTop: spacing.xs,
   },
 });
