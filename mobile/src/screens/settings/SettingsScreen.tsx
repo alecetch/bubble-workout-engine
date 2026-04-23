@@ -21,7 +21,7 @@ import {
   updateNotificationPreferences,
   type NotificationPreferences,
 } from "../../api/notifications";
-import { getPreferredUnit } from "../../api/profileApi";
+import { getPreferredHeightUnit, getPreferredUnit } from "../../api/profileApi";
 import { clearTokens, getRefreshToken } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { logOutPurchases } from "../../lib/purchases";
@@ -156,6 +156,10 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const preferredUnitQuery = useQuery({
     queryKey: ["preferredUnit"],
     queryFn: getPreferredUnit,
+  });
+  const preferredHeightUnitQuery = useQuery({
+    queryKey: ["preferredHeightUnit"],
+    queryFn: getPreferredHeightUnit,
   });
 
   const notifMutation = useMutation({
@@ -346,20 +350,26 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
         <View style={styles.section}>
           <SectionLabel>PREFERENCES</SectionLabel>
           <View style={styles.sectionCard}>
-            {preferredUnitQuery.isLoading ? <SkeletonRows count={1} /> : null}
-            {preferredUnitQuery.isError ? (
+            {preferredUnitQuery.isLoading || preferredHeightUnitQuery.isLoading ? (
+              <SkeletonRows count={1} />
+            ) : null}
+            {preferredUnitQuery.isError || preferredHeightUnitQuery.isError ? (
               <RetryRow
                 label="Couldn't load preferences - tap to retry"
-                onPress={() => void preferredUnitQuery.refetch()}
+                onPress={() => {
+                  void preferredUnitQuery.refetch();
+                  void preferredHeightUnitQuery.refetch();
+                }}
               />
             ) : null}
-            {preferredUnitQuery.data ? (
+            {preferredUnitQuery.data && preferredHeightUnitQuery.data ? (
               <SettingsRow
                 label="Units"
-                value={preferredUnitQuery.data}
+                value={`${preferredUnitQuery.data} · ${preferredHeightUnitQuery.data}`}
                 onPress={() =>
                   navigation.navigate("UnitPicker", {
                     currentUnit: preferredUnitQuery.data ?? "kg",
+                    currentHeightUnit: preferredHeightUnitQuery.data ?? "cm",
                   })
                 }
                 showChevron

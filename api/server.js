@@ -630,6 +630,7 @@ const handleUsersMe = async (req, res) => {
   try {
     const clientProfileId = (req.body?.clientProfileId ?? "").toString().trim();
     const preferredUnit = typeof req.body?.preferredUnit === "string" ? req.body.preferredUnit.trim().toLowerCase() : null;
+    const preferredHeightUnit = typeof req.body?.preferredHeightUnit === "string" ? req.body.preferredHeightUnit.trim().toLowerCase() : null;
     if (clientProfileId) {
       await pool.query(
         `
@@ -657,9 +658,26 @@ const handleUsersMe = async (req, res) => {
         [userId, preferredUnit],
       );
     }
+    if (preferredHeightUnit !== null) {
+      if (preferredHeightUnit !== "cm" && preferredHeightUnit !== "ft") {
+        return res.status(400).json({
+          ok: false,
+          code: "validation_error",
+          error: "preferredHeightUnit must be one of: cm, ft",
+        });
+      }
+      await pool.query(
+        `
+        UPDATE client_profile
+        SET preferred_height_unit = $2, updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId, preferredHeightUnit],
+      );
+    }
     const profileResult = await pool.query(
       `
-      SELECT id, preferred_unit
+      SELECT id, preferred_unit, preferred_height_unit
       FROM client_profile
       WHERE user_id = $1
       LIMIT 1
@@ -670,6 +688,7 @@ const handleUsersMe = async (req, res) => {
       id: userId,
       clientProfileId: profileResult.rows[0]?.id ?? null,
       preferredUnit: profileResult.rows[0]?.preferred_unit ?? "kg",
+      preferredHeightUnit: profileResult.rows[0]?.preferred_height_unit ?? "cm",
     });
   } catch (err) {
     req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");

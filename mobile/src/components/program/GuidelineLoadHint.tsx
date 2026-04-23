@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { PressableScale } from "../interaction/PressableScale";
+import { formatGuidelineValue } from "./guidelineLoadFormat";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -15,12 +16,7 @@ type GuidelineLoadHintProps = {
   guidelineLoad: GuidelineLoad;
 };
 
-function formatGuidelineValue(guidelineLoad: GuidelineLoad): string {
-  if (guidelineLoad.unit === "bodyweight") return "Bodyweight";
-  if (guidelineLoad.unit === "kg_per_hand") return `${guidelineLoad.value} kg / hand`;
-  if (guidelineLoad.unit === "kg_per_side") return `${guidelineLoad.value} kg / side`;
-  return `${guidelineLoad.value} kg`;
-}
+export { formatGuidelineValue } from "./guidelineLoadFormat";
 
 function confidenceLabel(confidence: GuidelineLoad["confidence"]): string {
   return `${confidence.charAt(0).toUpperCase()}${confidence.slice(1)} confidence`;
