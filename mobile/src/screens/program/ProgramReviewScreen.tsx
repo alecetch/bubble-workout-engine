@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useClientProfile, useMe } from "../../api/hooks";
+import { useClientProfile, useEntitlement, useMe } from "../../api/hooks";
 import { extractProgramId, generateProgram } from "../../api/program";
 import { getEngineKeyStatus } from "../../api/config";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
@@ -37,6 +37,7 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   const profileQuery = useClientProfile(profileId);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const entitlementQuery = useEntitlement();
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
 
@@ -68,6 +69,11 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   const handleGenerate = async (): Promise<void> => {
     if (!meQuery.data?.id || !profileId) {
       setGenerationError("Unable to generate: missing user profile link.");
+      return;
+    }
+    const isActive = entitlementQuery.data?.is_active ?? true;
+    if (entitlementQuery.isSuccess && !isActive) {
+      navigation.navigate("Paywall");
       return;
     }
 
@@ -146,6 +152,20 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Program Review</Text>
         <Text style={styles.subtitle}>Review your setup before generating a program.</Text>
+        {entitlementQuery.data?.trial_days_remaining != null &&
+        entitlementQuery.data.trial_days_remaining <= 3 &&
+        entitlementQuery.data.subscription_status === "trialing" ? (
+          <PressableScale
+            style={styles.trialBanner}
+            onPress={() => navigation.navigate("Paywall")}
+          >
+            <Text style={styles.trialBannerText}>
+              {entitlementQuery.data.trial_days_remaining === 0
+                ? "Your trial expires today - subscribe to keep your progress."
+                : `${entitlementQuery.data.trial_days_remaining} day${entitlementQuery.data.trial_days_remaining === 1 ? "" : "s"} left in your trial.`}
+            </Text>
+          </PressableScale>
+        ) : null}
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -326,6 +346,19 @@ const styles = StyleSheet.create({
   subtitle: {
     color: colors.textSecondary,
     ...typography.body,
+  },
+  trialBanner: {
+    borderRadius: radii.card,
+    backgroundColor: "rgba(250,204,21,0.12)",
+    borderWidth: 1,
+    borderColor: colors.warning,
+    padding: spacing.md,
+  },
+  trialBannerText: {
+    color: colors.warning,
+    ...typography.small,
+    fontWeight: "600",
+    textAlign: "center",
   },
   card: {
     backgroundColor: colors.surface,

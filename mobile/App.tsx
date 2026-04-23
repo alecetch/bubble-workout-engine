@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { Platform } from "react-native";
+import { configurePurchases } from "./src/lib/purchases";
 import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
 import { useSessionStore } from "./src/state/session/sessionStore";
@@ -120,6 +121,11 @@ export default function App(): React.JSX.Element {
       }
     })();
   }, [isAuthenticated, userId]);
+
+  React.useEffect(() => {
+    const key = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ?? "";
+    configurePurchases(key);
+  }, []);
 
   React.useEffect(() => {
     void Notifications.getLastNotificationResponseAsync().then(handleNotificationResponse);

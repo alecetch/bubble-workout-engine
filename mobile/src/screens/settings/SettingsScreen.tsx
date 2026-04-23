@@ -10,9 +10,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { deleteAccount, getAccountInfo } from "../../api/accountApi";
 import { apiLogout } from "../../api/authApi";
+import { useEntitlement } from "../../api/hooks";
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -21,8 +24,11 @@ import {
 import { getPreferredUnit } from "../../api/profileApi";
 import { clearTokens, getRefreshToken } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { logOutPurchases } from "../../lib/purchases";
+import type { RootTabParamList } from "../../navigation/AppTabs";
 import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { radii } from "../../theme/components";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
@@ -132,6 +138,9 @@ function SettingsRow({
 export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
   const clearSession = useSessionStore((state) => state.clearSession);
+  const tabNavigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+  const entitlementQuery = useEntitlement();
+  const ent = entitlementQuery.data;
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [notifSaveError, setNotifSaveError] = useState<string | null>(null);
   const [dangerError, setDangerError] = useState<string | null>(null);
@@ -197,6 +206,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
       });
     }
     await clearTokens();
+    logOutPurchases();
     clearSession();
     void queryClient.clear();
   };
@@ -212,6 +222,34 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.root} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Settings</Text>
+
+        {ent ? (
+          <View style={styles.section}>
+            <SectionLabel>SUBSCRIPTION</SectionLabel>
+            <View style={settingsStyles.subscriptionCard}>
+              <Text style={settingsStyles.subscriptionLabel}>Subscription</Text>
+              <Text style={settingsStyles.subscriptionStatus}>
+                {ent.subscription_status === "trialing"
+                  ? `Free trial - ${ent.trial_days_remaining ?? 0} day${ent.trial_days_remaining !== 1 ? "s" : ""} remaining`
+                  : ent.subscription_status === "active"
+                    ? "Active subscription"
+                    : ent.subscription_status === "cancelled"
+                      ? "Cancelled - active until expiry"
+                      : "Trial ended"}
+              </Text>
+              {!ent.is_active ? (
+                <PressableScale
+                  style={settingsStyles.subscribeButton}
+                  onPress={() =>
+                    tabNavigation.navigate("HomeTab", { screen: "Paywall" } as never)
+                  }
+                >
+                  <Text style={settingsStyles.subscribeLabel}>Subscribe</Text>
+                </PressableScale>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <SectionLabel>NOTIFICATIONS</SectionLabel>
@@ -523,5 +561,43 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",
+  },
+});
+
+const settingsStyles = StyleSheet.create({
+  subscriptionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.xs,
+    width: "100%",
+    marginHorizontal: spacing.md,
+  },
+  subscriptionLabel: {
+    color: colors.textSecondary,
+    ...typography.label,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  subscriptionStatus: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "600",
+  },
+  subscribeButton: {
+    marginTop: spacing.xs,
+    minHeight: 40,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+  },
+  subscribeLabel: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "700",
   },
 });

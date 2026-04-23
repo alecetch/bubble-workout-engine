@@ -93,8 +93,20 @@ export async function registerUser(db, { email, password }) {
   );
   const clientProfileId = profileResult.rows[0].id;
   const { accessToken, refreshToken } = await issueTokenPair(db, userId, clientProfileId);
+  const subResult = await db.query(
+    "SELECT subscription_status, trial_expires_at FROM app_user WHERE id = $1",
+    [userId],
+  );
+  const { subscription_status, trial_expires_at } = subResult.rows[0] ?? {};
 
-  return { accessToken, refreshToken, userId, clientProfileId };
+  return {
+    accessToken,
+    refreshToken,
+    userId,
+    clientProfileId,
+    subscriptionStatus: subscription_status,
+    trialExpiresAt: trial_expires_at,
+  };
 }
 
 export async function loginUser(db, { email, password }) {
@@ -133,8 +145,20 @@ export async function loginUser(db, { email, password }) {
 
   const clientProfileId = profileResult.rows[0]?.id ?? null;
   const { accessToken, refreshToken } = await issueTokenPair(db, userRow.id, clientProfileId);
+  const subResult = await db.query(
+    "SELECT subscription_status, trial_expires_at FROM app_user WHERE id = $1",
+    [userRow.id],
+  );
+  const { subscription_status, trial_expires_at } = subResult.rows[0] ?? {};
 
-  return { accessToken, refreshToken, userId: userRow.id, clientProfileId };
+  return {
+    accessToken,
+    refreshToken,
+    userId: userRow.id,
+    clientProfileId,
+    subscriptionStatus: subscription_status,
+    trialExpiresAt: trial_expires_at,
+  };
 }
 
 export async function refreshTokens(db, { refreshToken }) {

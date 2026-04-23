@@ -68,6 +68,8 @@ authRouter.post("/register", credentialLimiter, async (req, res) => {
       refresh_token: result.refreshToken,
       user_id: result.userId,
       client_profile_id: result.clientProfileId,
+      subscription_status: result.subscriptionStatus,
+      trial_expires_at: result.trialExpiresAt,
     });
   } catch (err) {
     if (err.code === "validation_error") {
@@ -91,6 +93,8 @@ authRouter.post("/login", credentialLimiter, async (req, res) => {
       refresh_token: result.refreshToken,
       user_id: result.userId,
       client_profile_id: result.clientProfileId,
+      subscription_status: result.subscriptionStatus,
+      trial_expires_at: result.trialExpiresAt,
     });
   } catch (err) {
     if (err.code === "validation_error") {

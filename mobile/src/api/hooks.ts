@@ -85,6 +85,7 @@ import {
   updateNotificationPreferences,
   type NotificationPreferences,
 } from "./notifications";
+import { getEntitlement, type EntitlementResponse } from "./entitlement";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
 export const queryKeys = {
@@ -118,6 +119,7 @@ export const queryKeys = {
   programEndCheck: (programId: string) =>
     ["programEndCheck", programId] as const,
   notificationPreferences: ["notificationPreferences"] as const,
+  entitlement: ["entitlement"] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -369,6 +371,15 @@ export function useNotificationPreferences(): UseQueryResult<NotificationPrefere
   return useQuery({
     queryKey: queryKeys.notificationPreferences,
     queryFn: getNotificationPreferences,
+  });
+}
+
+export function useEntitlement(): UseQueryResult<EntitlementResponse> {
+  return useQuery({
+    queryKey: queryKeys.entitlement,
+    queryFn: getEntitlement,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 }
 
