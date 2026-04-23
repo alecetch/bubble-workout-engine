@@ -39,6 +39,7 @@ const EXCLUDED_MOVEMENT_CLASSES = new Set(["cardio", "conditioning", "locomotion
 const JSONB_FIELDS = new Set([
   "contraindications_json", "equipment_json", "preferred_in_json",
   "target_regions_json", "warmup_hooks", "coaching_cues_json",
+  "technique_execution_json", "technique_mistakes_json",
 ]);
 const ARRAY_FIELDS = new Set(["contraindications_slugs", "equipment_items_slugs"]);
 const VALID_MOVEMENT_CLASSES = new Set([
@@ -105,6 +106,8 @@ function buildInsertSql(exercise) {
     "load_guidance", "logging_guidance",
     "swap_group_id_1", "swap_group_id_2", "target_regions_json", "warmup_hooks",
     "slug", "creator", "strength_primary_region", "strength_equivalent",
+    "technique_cue", "technique_setup",
+    "technique_execution_json", "technique_mistakes_json", "technique_video_url",
   ];
   const vals = COLS.map(k => {
     const v = exercise[k];
@@ -129,6 +132,10 @@ function normalizeExerciseName(value) {
     .trim();
 }
 
+function normaliseId(id) {
+  return String(id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function findExerciseNameConflict(exercises, candidateName, candidateExerciseId, options = {}) {
   const { allowSameId = false, ignoreArchived = true } = options;
   const normalized = normalizeExerciseName(candidateName);
@@ -138,6 +145,28 @@ function findExerciseNameConflict(exercises, candidateName, candidateExerciseId,
     if (ignoreArchived && ex.is_archived) continue;
     if (allowSameId && ex.exercise_id === candidateExerciseId) continue;
     if (normalizeExerciseName(ex.name) === normalized) {
+      return {
+        exercise_id: ex.exercise_id,
+        name: ex.name,
+      };
+    }
+  }
+  return null;
+}
+
+export function findExerciseIdAlias(exercises, candidateId, options = {}) {
+  const { ignoreArchived = true } = options;
+  const normalized = normaliseId(candidateId);
+  if (!normalized) return null;
+  for (const ex of exercises || []) {
+    if (!ex) continue;
+    if (ignoreArchived && ex.is_archived) continue;
+    if (ex.exercise_id === candidateId) continue;
+    const existing = normaliseId(ex.exercise_id);
+    const similar = existing === normalized
+      || normalized.startsWith(existing)
+      || existing.startsWith(normalized);
+    if (similar) {
       return {
         exercise_id: ex.exercise_id,
         name: ex.name,
@@ -949,6 +978,13 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
               error: `Exercise name '${row.name}' duplicates existing exercise '${nameConflict.exercise_id}'. Amend exercise_id/name instead of creating a duplicate.`,
             });
           } else {
+            const idAlias = findExerciseIdAlias(state.exercises, row.exercise_id);
+            if (idAlias) {
+              warnings.push({
+                row: row._line,
+                message: `exercise_id '${row.exercise_id}' appears to be an alias of existing exercise '${idAlias.exercise_id}' ("${idAlias.name}"). Consider using the canonical ID instead.`,
+              });
+            }
             validRows.push(row);
           }
         }
@@ -992,6 +1028,11 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
         preferred_in_json: toJson(row.preferred_in_json),
         load_guidance: row.load_guidance || null,
         logging_guidance: row.logging_guidance || null,
+        technique_cue: row.technique_cue || null,
+        technique_setup: row.technique_setup || null,
+        technique_execution_json: toJson(row.technique_execution_json),
+        technique_mistakes_json: toJson(row.technique_mistakes_json),
+        technique_video_url: row.technique_video_url || null,
         swap_group_id_1: row.swap_group_id_1 || null,
         swap_group_id_2: row.swap_group_id_2 || null,
         target_regions_json: toJson(row.target_regions_json),
@@ -1026,6 +1067,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", as
     const state = await getFullState();
     const targetExerciseId = String(changes.exercise_id || exercise_id || "").trim();
     const targetName = String(changes.name || "").trim();
+    const warnings = [];
 
     if (action === "new" || action === "clone") {
       if (state.exercises.some((ex) => ex.exercise_id === targetExerciseId)) {
@@ -1040,6 +1082,12 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", as
           ok: false,
           error: `Exercise name '${targetName}' duplicates existing exercise '${nameConflict.exercise_id}'. Amend exercise_id/name instead of creating a duplicate.`,
         });
+      }
+      const idAlias = findExerciseIdAlias(state.exercises, targetExerciseId);
+      if (idAlias) {
+        warnings.push(
+          `exercise_id "${targetExerciseId}" appears to be an alias of existing exercise "${idAlias.exercise_id}" ("${idAlias.name}"). Consider using the existing ID instead.`
+        );
       }
     }
 
@@ -1090,7 +1138,15 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", as
     });
 
     const sessionSql = _pending.map((p, i) => `-- [${i + 1}] ${p.action}: ${p.exercise_id}\n${p.sql}`).join("\n\n");
-    return res.json({ ok: true, pending_count: _pending.length, session_sql_preview: sessionSql });
+    const queued = _pending.length;
+    return res.json({
+      ok: true,
+      pending_count: queued,
+      queued,
+      item: _pending.at(-1) ?? null,
+      warnings,
+      session_sql_preview: sessionSql,
+    });
   } catch (err) {
     return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
