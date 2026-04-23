@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -48,10 +49,9 @@ function getDefaultActiveKey(
 ): { exerciseId: string; setIndex: number } | null {
   const firstLoadable = exercises.find((exercise) => exercise.isLoadable === true && exercise.id);
   if (!firstLoadable?.id) return null;
-  const setCount = Math.max(1, Number(firstLoadable.sets ?? 1) || 1);
   return {
     exerciseId: firstLoadable.id,
-    setIndex: setCount - 1,
+    setIndex: 0,
   };
 }
 
@@ -77,6 +77,13 @@ export function LogSegmentModal({
   const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
   const [activeKey, setActiveKey] = useState<{ exerciseId: string; setIndex: number } | null>(null);
   const initializedSegmentIdRef = useRef<string | null>(null);
+  const rememberedActiveKeyBySegmentRef = useRef<
+    Record<string, { exerciseId: string; setIndex: number }>
+  >({});
+  const [fillDownPrompted, setFillDownPrompted] = useState<Record<string, boolean>>({});
+  const [autoFillDownEnabled, setAutoFillDownEnabled] = useState<Record<string, boolean>>({});
+  const [pendingFillDownPrompt, setPendingFillDownPrompt] = useState<Record<string, boolean>>({});
+  const focusedInputKeyRef = useRef<string | null>(null);
   const restEntry = useTimerStore(
     (state) => (segment?.id ? (state.entries[segment.id] ?? null) : null),
   );
@@ -100,6 +107,10 @@ export function LogSegmentModal({
         initializedSegmentIdRef.current = null;
         setInputMap({});
         setActiveKey(null);
+        setFillDownPrompted({});
+        setAutoFillDownEnabled({});
+        setPendingFillDownPrompt({});
+        focusedInputKeyRef.current = null;
       }
       return;
     }
@@ -107,7 +118,7 @@ export function LogSegmentModal({
     if (initializedSegmentIdRef.current === segment.id) return;
     if (existingLogsQuery.isLoading && !existingLogsQuery.data) return;
     setInputMap(buildInitialSetInputMap(exercises, existingRows));
-    setActiveKey(defaultActiveKey);
+    setActiveKey(rememberedActiveKeyBySegmentRef.current[segment.id] ?? defaultActiveKey);
     initializedSegmentIdRef.current = segment.id;
   }, [visible, segment?.id, existingLogsQuery.isLoading, existingRows, exercises, defaultActiveKey]);
 
@@ -132,7 +143,12 @@ export function LogSegmentModal({
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [restEntry?.restElapsedSeconds, restEntry?.restIsRunning, restEntry?.restStartedAtMs, restEntry?.restTotalSeconds]);
+  }, [
+    restEntry?.restElapsedSeconds,
+    restEntry?.restIsRunning,
+    restEntry?.restStartedAtMs,
+    restEntry?.restTotalSeconds,
+  ]);
 
   const showRestStrip =
     restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
@@ -164,6 +180,56 @@ export function LogSegmentModal({
         console.error("[LogSegmentModal] save failed", err);
       },
     });
+  };
+
+  const maybePromptFillDown = (exerciseId: string, setCount: number): void => {
+    if (setCount <= 1 || fillDownPrompted[exerciseId]) return;
+    setFillDownPrompted((current) => ({ ...current, [exerciseId]: true }));
+    setPendingFillDownPrompt((current) => ({ ...current, [exerciseId]: false }));
+    Alert.alert("Apply to all sets?", undefined, [
+      {
+        text: "No",
+        style: "cancel",
+      },
+      {
+        text: "Yes",
+        onPress: () => {
+          setAutoFillDownEnabled((current) => ({ ...current, [exerciseId]: true }));
+          setInputMap((current) => {
+            const prev = current[exerciseId] ?? [];
+            if (prev.length <= 1) return current;
+            const filled = prev.map((row, rowIndex) =>
+              rowIndex === 0 ? row : { ...row, weight: prev[0].weight, reps: prev[0].reps },
+            );
+            return { ...current, [exerciseId]: filled };
+          });
+        },
+      },
+    ]);
+  };
+
+  const handleInputFocus = (
+    exerciseId: string,
+    setIndex: number,
+    field: "weight" | "reps",
+  ): void => {
+    const nextFocusKey = `${exerciseId}:${setIndex}:${field}`;
+    const previousFocusKey = focusedInputKeyRef.current;
+    focusedInputKeyRef.current = nextFocusKey;
+    setActiveKey({ exerciseId, setIndex });
+    if (segment?.id) {
+      rememberedActiveKeyBySegmentRef.current[segment.id] = { exerciseId, setIndex };
+    }
+
+    const pendingExerciseId = Object.keys(pendingFillDownPrompt).find(
+      (key) => pendingFillDownPrompt[key],
+    );
+    if (pendingExerciseId && previousFocusKey && previousFocusKey !== nextFocusKey) {
+      maybePromptFillDown(
+        pendingExerciseId,
+        (inputMap[pendingExerciseId] ?? []).length,
+      );
+    }
   };
 
   return (
@@ -274,10 +340,17 @@ export function LogSegmentModal({
                             ) : null}
                           </View>
                           <View style={styles.inputsRow}>
-                            <View style={styles.inputGroup}>
+                            <View
+                              style={[
+                                styles.inputGroup,
+                                activeKey?.exerciseId === key &&
+                                  activeKey?.setIndex === i &&
+                                  styles.inputGroupHighlighted,
+                              ]}
+                            >
                               <TextInput
                                 value={set.weight}
-                                onFocus={() => setActiveKey({ exerciseId: key, setIndex: i })}
+                                onFocus={() => handleInputFocus(key, i, "weight")}
                                 onChangeText={(v) => {
                                   const sanitized = v
                                     .replace(/[^0-9.]/g, "")
@@ -286,8 +359,19 @@ export function LogSegmentModal({
                                     const prev = current[key] ?? [];
                                     const next = [...prev];
                                     next[i] = { ...(next[i] ?? { reps: "", rirActual: null }), weight: sanitized };
+                                    if (i === 0 && autoFillDownEnabled[key] && next.length > 1) {
+                                      for (let rowIndex = 1; rowIndex < next.length; rowIndex += 1) {
+                                        next[rowIndex] = {
+                                          ...(next[rowIndex] ?? { weight: "", reps: "", rirActual: null }),
+                                          weight: sanitized,
+                                        };
+                                      }
+                                    }
                                     return { ...current, [key]: next };
                                   });
+                                  if (i === 0 && sanitized.trim().length > 0) {
+                                    setPendingFillDownPrompt((current) => ({ ...current, [key]: true }));
+                                  }
                                 }}
                                 keyboardType="decimal-pad"
                                 textContentType="none"
@@ -299,18 +383,36 @@ export function LogSegmentModal({
                               />
                               <Text style={styles.inputSuffix}>kg</Text>
                             </View>
-                            <View style={styles.inputGroup}>
+                            <View
+                              style={[
+                                styles.inputGroup,
+                                activeKey?.exerciseId === key &&
+                                  activeKey?.setIndex === i &&
+                                  styles.inputGroupHighlighted,
+                              ]}
+                            >
                               <TextInput
                                 value={set.reps}
-                                onFocus={() => setActiveKey({ exerciseId: key, setIndex: i })}
+                                onFocus={() => handleInputFocus(key, i, "reps")}
                                 onChangeText={(v) => {
                                   const sanitized = v.replace(/[^0-9]/g, "");
                                   setInputMap((current) => {
                                     const prev = current[key] ?? [];
                                     const next = [...prev];
                                     next[i] = { ...(next[i] ?? { weight: "", rirActual: null }), reps: sanitized };
+                                    if (i === 0 && autoFillDownEnabled[key] && next.length > 1) {
+                                      for (let rowIndex = 1; rowIndex < next.length; rowIndex += 1) {
+                                        next[rowIndex] = {
+                                          ...(next[rowIndex] ?? { weight: "", reps: "", rirActual: null }),
+                                          reps: sanitized,
+                                        };
+                                      }
+                                    }
                                     return { ...current, [key]: next };
                                   });
+                                  if (i === 0 && sanitized.trim().length > 0) {
+                                    setPendingFillDownPrompt((current) => ({ ...current, [key]: true }));
+                                  }
                                 }}
                                 keyboardType="numeric"
                                 textContentType="none"
@@ -346,6 +448,7 @@ export function LogSegmentModal({
                       return (
                         <PressableScale
                           key={option.label}
+                          containerStyle={styles.effortButtonContainer}
                           onPress={() => {
                             if (!effortTarget) return;
                             setInputMap((current) => {
@@ -513,12 +616,15 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   setRow: {
-    gap: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   setLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
+    flexShrink: 0,
   },
   setLabel: {
     color: colors.textSecondary,
@@ -562,6 +668,7 @@ const styles = StyleSheet.create({
   inputsRow: {
     flexDirection: "row",
     gap: spacing.sm,
+    flex: 1,
   },
   inputGroup: {
     flex: 1,
@@ -573,11 +680,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     overflow: "hidden",
   },
+  inputGroupHighlighted: {
+    borderColor: "#ffffff",
+  },
   inputField: {
     flex: 1,
     minHeight: 44,
-    color: colors.textPrimary,
     paddingHorizontal: spacing.md,
+    color: colors.textPrimary,
     ...typography.body,
   },
   inputSuffix: {
@@ -593,7 +703,6 @@ const styles = StyleSheet.create({
   fillDownLabel: {
     color: colors.accent,
     ...typography.small,
-    fontWeight: "600",
   },
   effortCard: {
     marginTop: spacing.sm,
@@ -601,7 +710,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
-    padding: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
     gap: spacing.sm,
   },
   effortHeader: {
@@ -624,10 +734,11 @@ const styles = StyleSheet.create({
   },
   effortButtonRow: {
     flexDirection: "row",
+    alignItems: "stretch",
+    width: "100%",
     gap: spacing.xs,
   },
   effortButton: {
-    flex: 1,
     minHeight: 44,
     borderRadius: radii.card,
     borderWidth: 1,
@@ -635,6 +746,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
+  },
+  effortButtonContainer: {
+    flex: 1,
   },
   effortButtonSelected: {
     borderColor: colors.accent,
