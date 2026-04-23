@@ -5,6 +5,8 @@ export type AuthTokens = {
   refresh_token: string;
   user_id: string;
   client_profile_id: string;
+  subscription_status?: string;
+  trial_expires_at?: string | null;
 };
 
 export type RefreshResponse = {

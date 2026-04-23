@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiLogin } from "../../api/authApi";
 import { ApiError } from "../../api/client";
 import { createClientProfile, getClientProfile } from "../../api/clientProfiles";
+import { logInPurchases } from "../../lib/purchases";
 import { saveTokens } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { AuthStackParamList } from "../../navigation/AuthNavigator";
@@ -75,7 +76,14 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
       resetFromProfile(profile);
       setIdentity({ userId: result.user_id, clientProfileId: resolvedClientProfileId });
-      setSession({ userId: result.user_id, clientProfileId: resolvedClientProfileId, entryRoute });
+      logInPurchases(result.user_id);
+      setSession({
+        userId: result.user_id,
+        clientProfileId: resolvedClientProfileId,
+        entryRoute,
+        subscriptionStatus: result.subscription_status,
+        trialExpiresAt: result.trial_expires_at ?? null,
+      });
     } catch (error) {
       console.error("[LoginScreen] sign-in failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
       if (error instanceof ApiError && error.status === 401) {

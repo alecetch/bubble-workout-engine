@@ -10,6 +10,7 @@ import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
 import { ExerciseDecisionHistoryScreen } from "../screens/program/ExerciseDecisionHistoryScreen";
+import { PaywallScreen } from "../screens/paywall/PaywallScreen";
 import { ProgramCompleteScreen } from "../screens/program/ProgramCompleteScreen";
 import { ProgramEndCheckScreen } from "../screens/program/ProgramEndCheckScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
@@ -26,6 +27,7 @@ export type OnboardingStackParamList = {
   ProgramReview: {
     preserveDraft?: boolean;
   } | undefined;
+  Paywall: undefined;
   ProgramEndCheck: {
     programId: string;
   };
@@ -81,6 +83,7 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="ProgramEndCheck" component={ProgramEndCheckScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramComplete" component={ProgramCompleteScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="Paywall" component={PaywallScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ExerciseDecisionHistory" component={ExerciseDecisionHistoryScreen} />
     </Stack.Navigator>
   );

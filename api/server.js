@@ -20,6 +20,8 @@ import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.
 import { activeProgramsRouter } from "./src/routes/activePrograms.js";
 import { notificationPreferencesRouter } from "./src/routes/notificationPreferences.js";
 import { accountSettingsRouter } from "./src/routes/accountSettings.js";
+import { userEntitlementRouter } from "./src/routes/userEntitlement.js";
+import { webhookRevenuecatRouter } from "./src/routes/webhookRevenuecat.js";
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { workoutRemindersRouter } from "./src/routes/workoutReminders.js";
@@ -710,6 +712,9 @@ app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 
+// RevenueCat webhook uses a shared secret header, not user JWT auth.
+app.use("/api", webhookRevenuecatRouter);
+
 app.use("/api", notificationPreferencesRouter);
 app.use("/api", accountSettingsRouter);
 app.use("/api", activeProgramsRouter);
@@ -736,6 +741,7 @@ app.use(historyOverviewRouter); // → GET /v1/history/overview
 app.use(historyPersonalRecordsRouter); // → GET /v1/history/personal-records
 app.use(historyExerciseRouter); // → GET /v1/history/exercise/:exerciseId
 
+app.use("/api", ...userAuth, userEntitlementRouter);
 app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);

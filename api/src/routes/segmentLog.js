@@ -1,5 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
+import { requireEntitlement } from "../middleware/requireEntitlement.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { makeNotificationService } from "../services/notificationService.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -308,5 +309,5 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
 const handlers = createSegmentLogHandlers(pool, makeNotificationService(pool));
 segmentLogRouter.use(requireAuth);
 
-segmentLogRouter.get("/segment-log", handlers.getSegmentLog);
-segmentLogRouter.post("/segment-log", handlers.postSegmentLog);
+segmentLogRouter.get("/segment-log", requireEntitlement, handlers.getSegmentLog);
+segmentLogRouter.post("/segment-log", requireEntitlement, handlers.postSegmentLog);

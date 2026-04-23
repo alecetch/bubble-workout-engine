@@ -9,7 +9,16 @@ type SessionState = {
   clientProfileId: string | null;
   activeProgramId: string | null;
   entryRoute: AppEntryRoute;
-  setSession: (payload: { userId: string; clientProfileId: string; entryRoute: AppEntryRoute }) => void;
+  subscriptionStatus: "trialing" | "active" | "expired" | "cancelled" | null;
+  trialExpiresAt: string | null;
+  setSession: (payload: {
+    userId: string;
+    clientProfileId: string;
+    entryRoute: AppEntryRoute;
+    subscriptionStatus?: string;
+    trialExpiresAt?: string | null;
+  }) => void;
+  setEntitlement: (status: string, trialExpiresAt: string | null) => void;
   setActiveProgramId: (programId: string | null) => void;
   clearSession: () => void;
 };
@@ -20,16 +29,26 @@ const defaultSession = {
   clientProfileId: null,
   activeProgramId: null,
   entryRoute: "OnboardingEntry" as AppEntryRoute,
+  subscriptionStatus: null as SessionState["subscriptionStatus"],
+  trialExpiresAt: null as string | null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
   ...defaultSession,
-  setSession: ({ userId, clientProfileId, entryRoute }) => {
+  setSession: ({ userId, clientProfileId, entryRoute, subscriptionStatus, trialExpiresAt }) => {
     set({
       isAuthenticated: true,
       userId,
       clientProfileId,
       entryRoute,
+      subscriptionStatus: (subscriptionStatus ?? null) as SessionState["subscriptionStatus"],
+      trialExpiresAt: trialExpiresAt ?? null,
+    });
+  },
+  setEntitlement: (status, trialExpiresAt) => {
+    set({
+      subscriptionStatus: status as SessionState["subscriptionStatus"],
+      trialExpiresAt,
     });
   },
   setActiveProgramId: (programId) => {
