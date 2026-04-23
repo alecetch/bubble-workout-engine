@@ -6,6 +6,7 @@ export type ClientProfileServer = OnboardingDraft & {
   userId: string;
   onboardingCompletedAt?: string | null;
   preferredUnit?: "kg" | "lbs" | null;
+  preferredHeightUnit?: "cm" | "ft" | null;
 };
 
 export type CreateClientProfileInput = Partial<Omit<ClientProfileServer, "id" | "userId">>;
