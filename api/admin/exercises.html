@@ -121,6 +121,7 @@
     .f textarea { resize: vertical; min-height: 52px; font-size: 12px; }
     .check-row { display: flex; align-items: center; gap: 8px; padding-top: 4px; flex-wrap: wrap; }
     .err-msg { font-size: 12px; color: var(--danger); }
+    .warn-msg { font-size: 12px; color: var(--warn); white-space: pre-wrap; }
 
     /* Impact panel inside drawer */
     #impact-panel { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px; font-size: 12px; }
@@ -462,6 +463,7 @@
           <label for="f-exercise_id">Exercise ID *</label>
           <input id="f-exercise_id" type="text" placeholder="e.g. barbell_squat" />
           <span id="exercise-id-was" hidden style="font-size:11px;color:var(--muted);margin-top:2px;display:block"></span>
+          <span id="exercise-id-warning" class="warn-msg" hidden></span>
         </div>
         <div class="f">
           <label for="f-name">Name *</label>
@@ -583,6 +585,15 @@
       <div class="f"><label for="f-coaching_cues_json">Coaching Cues JSON</label><textarea id="f-coaching_cues_json" rows="3" placeholder='["Stay tall", "Short quick steps"]'></textarea></div>
       <div class="f"><label for="f-load_guidance">Load Guidance</label><textarea id="f-load_guidance" rows="3"></textarea></div>
       <div class="f"><label for="f-logging_guidance">Logging Guidance</label><textarea id="f-logging_guidance" rows="3"></textarea></div>
+    </fieldset>
+
+    <fieldset class="fg">
+      <legend>Technique</legend>
+      <div class="f"><label for="f-technique_cue">Technique Cue</label><input id="f-technique_cue" type="text" maxlength="40" /></div>
+      <div class="f"><label for="f-technique_setup">Setup Notes</label><textarea id="f-technique_setup" rows="3"></textarea></div>
+      <div class="f"><label for="f-technique_execution_json">Execution Steps JSON</label><textarea id="f-technique_execution_json" rows="4" placeholder='["Step 1", "Step 2"]'></textarea></div>
+      <div class="f"><label for="f-technique_mistakes_json">Common Mistakes JSON</label><textarea id="f-technique_mistakes_json" rows="3" placeholder='["Mistake 1"]'></textarea></div>
+      <div class="f"><label for="f-technique_video_url">Technique Video URL</label><input id="f-technique_video_url" type="url" /></div>
     </fieldset>
 
     <!-- Impact preview -->
@@ -745,6 +756,24 @@ function authH() {
 function setStatus(msg, cls = "") {
   const el = document.getElementById("status");
   el.textContent = msg; el.className = cls;
+}
+
+function clearExerciseIdWarning() {
+  const el = document.getElementById("exercise-id-warning");
+  if (!el) return;
+  el.hidden = true;
+  el.textContent = "";
+}
+
+function showWarning(msg) {
+  const el = document.getElementById("exercise-id-warning");
+  if (!el) return;
+  if (!msg) {
+    clearExerciseIdWarning();
+    return;
+  }
+  el.textContent = msg;
+  el.hidden = false;
 }
 
 async function apiFetch(path, opts = {}) {
@@ -1320,6 +1349,7 @@ const FIELDS = [
   "target_regions_json","warmup_hooks","preferred_in_json",
   "contraindications_slugs","contraindications_json","coaching_cues_json",
   "load_guidance","logging_guidance",
+  "technique_cue","technique_setup","technique_execution_json","technique_mistakes_json","technique_video_url",
 ];
 
 function fEl(id) { return document.getElementById(`f-${id}`); }
@@ -1328,6 +1358,8 @@ const JSON_TEXTAREA_FIELDS = new Set([
   "contraindications_json",
   "target_regions_json",
   "warmup_hooks",
+  "technique_execution_json",
+  "technique_mistakes_json",
 ]);
 function setFV(id, value) {
   if (id === "preferred_in_json") { setPrefTags(Array.isArray(value) ? value : []); return; }
@@ -1354,6 +1386,7 @@ function clearForm() {
     if (el.type === "checkbox") el.checked = false; else el.value = "";
   });
   fEl("min_fitness_rank").value = "0";
+  clearExerciseIdWarning();
 }
 
 function openNewDrawer() {
@@ -1362,6 +1395,8 @@ function openNewDrawer() {
   document.getElementById("clone-btn").style.display = "none";
   document.getElementById("drawer-delete-btn").style.display = "none";
   fEl("exercise_id").readOnly = false;
+  fEl("exercise_id").style.opacity = "1";
+  fEl("exercise_id").style.cursor = "text";
   clearForm();
   updateIdWasIndicator();
   openDrawer();
@@ -1371,6 +1406,10 @@ function openNewDrawer() {
 async function onNameInput() {
   const name = fEl("name").value;
   if (!name) return;
+  if (drawerMode === "edit") {
+    updateIdWasIndicator();
+    return;
+  }
   try {
     const d = await apiFetch(`${BASE}/generate-id`, { method: "POST", body: JSON.stringify({ name }) });
     if (d.exercise_id) {
@@ -1400,16 +1439,20 @@ function openEditDrawer(id) {
   document.getElementById("clone-btn").style.display = "";
   document.getElementById("drawer-delete-btn").style.display = "";
   fEl("exercise_id").readOnly = true;
+  fEl("exercise_id").style.opacity = "0.6";
+  fEl("exercise_id").style.cursor = "not-allowed";
   FIELDS.forEach(key => setFV(key, ex[key] ?? null));
   setFV("equipment_items_slugs", ex.equipment_items_slugs ?? []);
   setFV("contraindications_slugs", (ex.contraindications_slugs ?? []).join(", "));
-  onNameInput(); // auto-sync exercise_id from current name, show "was:" if different
+  updateIdWasIndicator();
+  clearExerciseIdWarning();
   openDrawer();
   scheduleImpactPreview();
 }
 
-// Auto-generate exercise_id from name in both new and edit modes
+// Auto-generate exercise_id from name while creating/cloning only.
 fEl("name").addEventListener("input", onNameInput);
+fEl("exercise_id").addEventListener("input", clearExerciseIdWarning);
 
 // Wire all fields to trigger impact preview on change
 FIELDS.filter(id => !["exercise_id"].includes(id)).forEach(id => {
@@ -1490,6 +1533,11 @@ function collectPayload() {
     coaching_cues_json: toJson(getFV("coaching_cues_json")),
     load_guidance: getFV("load_guidance") || null,
     logging_guidance: getFV("logging_guidance") || null,
+    technique_cue: getFV("technique_cue") || null,
+    technique_setup: getFV("technique_setup") || null,
+    technique_execution_json: toJson(getFV("technique_execution_json")),
+    technique_mistakes_json: toJson(getFV("technique_mistakes_json")),
+    technique_video_url: getFV("technique_video_url") || null,
     equipment_items_slugs: _eqSlugs,
     contraindications_slugs: toArr(getFV("contraindications_slugs")),
     equipment_json: _eqSlugs,
@@ -1502,6 +1550,7 @@ function collectPayload() {
 
 async function queueChange() {
   document.getElementById("drawer-err").textContent = "";
+  clearExerciseIdWarning();
   const payload = collectPayload();
   if (!payload.exercise_id) { document.getElementById("drawer-err").textContent = "Exercise ID required."; return; }
   if (!payload.name) { document.getElementById("drawer-err").textContent = "Name required."; return; }
@@ -1512,11 +1561,18 @@ async function queueChange() {
     // In edit mode use the original editingId for the WHERE clause; new exercise_id lives in changes.
     // If the ID hasn't changed, remove it from changes to keep the generated SQL clean.
     const queueId = drawerMode === "edit" ? editingId : payload.exercise_id;
-    if (drawerMode === "edit" && payload.exercise_id === editingId) delete payload.exercise_id;
-    await apiFetch(`${BASE}/session/queue-change`, {
+    if (drawerMode === "edit") delete payload.exercise_id;
+    const result = await apiFetch(`${BASE}/session/queue-change`, {
       method: "POST",
       body: JSON.stringify({ action: drawerMode, exercise_id: queueId, changes: payload }),
     });
+    if (result.warnings && result.warnings.length > 0) {
+      showWarning(result.warnings.join("\n"));
+      document.getElementById("drawer-err").textContent = "Queued with warning. Review the exercise ID warning before closing.";
+      await refreshSessionBar();
+      await refreshMigrationTab();
+      return;
+    }
     closeDrawer();
     await refreshSessionBar();
     await refreshMigrationTab();
