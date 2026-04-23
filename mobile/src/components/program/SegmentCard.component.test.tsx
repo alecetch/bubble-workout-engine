@@ -82,7 +82,7 @@ describe("SegmentCard adaptation chip integration", () => {
         recommendedLoadDeltaKg: 5,
         recommendedRepsTarget: null,
         recommendedRepDelta: null,
-        displayChip: "Load increased ↑",
+        displayChip: "Load increased â†‘",
         displayDetail: "You hit all sets at the top of your rep range.",
         decidedAt: "2026-04-10T18:32:00.000Z",
       },
@@ -92,11 +92,11 @@ describe("SegmentCard adaptation chip integration", () => {
   it("renders the adaptation chip above the prescription text", () => {
     const segment = makeSegment({}, [makeDecisionExercise()]);
     renderCard({ segment });
-    const row = screen.getByText("Barbell Squat").closest("div");
-    expect(row?.textContent?.indexOf("Load increased ↑")).toBeGreaterThan(-1);
-    expect((row?.textContent?.indexOf("Load increased ↑") ?? 9999)).toBeLessThan(
-      row?.textContent?.indexOf("3 sets 5-8 reps") ?? -1,
-    );
+    const chipEl = screen.getByText("Load increased â†‘");
+    const prescEl = screen.getByText(/3 sets 5-8 reps/);
+    expect(
+      chipEl.compareDocumentPosition(prescEl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("calls onViewDecisionHistory when the history link is tapped", () => {
@@ -104,7 +104,7 @@ describe("SegmentCard adaptation chip integration", () => {
     const segment = makeSegment({}, [makeDecisionExercise()]);
     renderCard({ segment, onViewDecisionHistory });
     fireEvent.click(screen.getByRole("button", { name: /Adaptation: Load increased/i }));
-    fireEvent.click(screen.getByText("View full history →"));
+    fireEvent.click(screen.getByRole("button", { name: /View full history/i }));
     expect(onViewDecisionHistory).toHaveBeenCalledWith("bb-squat", "Barbell Squat", "ex-1");
   });
 
@@ -127,7 +127,7 @@ describe("SegmentCard adaptation chip integration", () => {
         name: "Bench Press",
         adaptationDecision: {
           ...makeDecisionExercise().adaptationDecision!,
-          displayChip: "Reps progressing ↑",
+          displayChip: "Reps progressing â†‘",
           outcome: "increase_reps",
           displayDetail: "You are ready to push the rep target.",
         },

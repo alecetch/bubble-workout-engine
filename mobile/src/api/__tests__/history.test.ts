@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   normalizeSessionHistoryMetrics,
   normalizeWeeklyVolumeByRegion,
-} from "../history";
+} from "../historyNormalizers";
 
 test("normalizeWeeklyVolumeByRegion returns structured upper/lower/full arrays", () => {
   const raw = {
