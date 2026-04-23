@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
   Modal,
   ScrollView,
@@ -19,6 +20,7 @@ import {
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
+import { useTimerStore } from "../../state/timer/useTimerStore";
 import { typography } from "../../theme/typography";
 
 type Segment = ProgramDayFullResponse["segments"][number];
@@ -53,6 +55,11 @@ function getDefaultActiveKey(
   };
 }
 
+function formatRestTimer(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export function LogSegmentModal({
   visible,
   segment,
@@ -70,6 +77,10 @@ export function LogSegmentModal({
   const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
   const [activeKey, setActiveKey] = useState<{ exerciseId: string; setIndex: number } | null>(null);
   const initializedSegmentIdRef = useRef<string | null>(null);
+  const restEntry = useTimerStore(
+    (state) => (segment?.id ? (state.entries[segment.id] ?? null) : null),
+  );
+  const [restDisplaySeconds, setRestDisplaySeconds] = useState(0);
 
   const exercises = segment?.exercises ?? [];
   const loadableExercises = exercises.filter((ex) => ex.isLoadable === true);
@@ -99,6 +110,37 @@ export function LogSegmentModal({
     setActiveKey(defaultActiveKey);
     initializedSegmentIdRef.current = segment.id;
   }, [visible, segment?.id, existingLogsQuery.isLoading, existingRows, exercises, defaultActiveKey]);
+
+  useEffect(() => {
+    if (!restEntry?.restIsRunning) {
+      const remaining =
+        restEntry != null
+          ? Math.max(0, restEntry.restTotalSeconds - restEntry.restElapsedSeconds)
+          : 0;
+      setRestDisplaySeconds(remaining);
+      return;
+    }
+    const tick = (): void => {
+      if (!restEntry) return;
+      const elapsed = Math.floor((Date.now() - (restEntry.restStartedAtMs ?? Date.now())) / 1000);
+      const remaining = Math.max(
+        0,
+        restEntry.restTotalSeconds - (restEntry.restElapsedSeconds + elapsed),
+      );
+      setRestDisplaySeconds(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [restEntry?.restElapsedSeconds, restEntry?.restIsRunning, restEntry?.restStartedAtMs, restEntry?.restTotalSeconds]);
+
+  const showRestStrip =
+    restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
+
+  const restProgress =
+    restEntry != null && restEntry.restTotalSeconds > 0
+      ? Math.max(0, Math.min(1, restDisplaySeconds / restEntry.restTotalSeconds))
+      : 0;
 
   const handleSave = (): void => {
     if (!segment) return;
@@ -134,6 +176,28 @@ export function LogSegmentModal({
           <View style={styles.card}>
             <Text style={styles.title}>Log Segment</Text>
             <Text style={styles.segmentName}>{segment?.segmentName ?? "Segment"}</Text>
+            {showRestStrip ? (
+              <View style={styles.restStrip}>
+                <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+                <Text style={styles.restStripLabel}>Rest</Text>
+                <Text style={styles.restStripCountdown}>{formatRestTimer(restDisplaySeconds)}</Text>
+                <View style={styles.restStripBarTrack}>
+                  <View style={[styles.restStripBarFill, { flex: restProgress }]} />
+                  <View style={{ flex: 1 - restProgress }} />
+                </View>
+                <PressableScale
+                  style={styles.restStripSkip}
+                  onPress={() => {
+                    if (segment?.id) {
+                      useTimerStore.getState().stopRest(segment.id);
+                    }
+                    setRestDisplaySeconds(0);
+                  }}
+                >
+                  <Text style={styles.restStripSkipLabel}>Skip</Text>
+                </PressableScale>
+              </View>
+            ) : null}
             {existingRows.length > 0 ? (
               <View style={styles.savedBanner}>
                 <Text style={styles.savedBannerTitle}>Saved workout data loaded</Text>
@@ -190,6 +254,24 @@ export function LogSegmentModal({
                                 <Text style={styles.savedSetBadgeText}>Saved</Text>
                               </View>
                             ) : null}
+                            {i === 0 && sets.length > 1 ? (
+                              <PressableScale
+                                style={styles.fillDownButton}
+                                onPress={() => {
+                                  setInputMap((current) => {
+                                    const prev = current[key] ?? [];
+                                    const filled = prev.map((row, rowIndex) =>
+                                      rowIndex === 0
+                                        ? row
+                                        : { ...row, weight: prev[0].weight, reps: prev[0].reps },
+                                    );
+                                    return { ...current, [key]: filled };
+                                  });
+                                }}
+                              >
+                                <Text style={styles.fillDownLabel}>Fill down ↓</Text>
+                              </PressableScale>
+                            ) : null}
                           </View>
                           <View style={styles.inputsRow}>
                             <View style={styles.inputGroup}>
@@ -210,12 +292,12 @@ export function LogSegmentModal({
                                 keyboardType="decimal-pad"
                                 textContentType="none"
                                 autoComplete="off"
-                                placeholder="kg"
+                                placeholder="0"
                                 placeholderTextColor={colors.textSecondary}
-                                style={styles.input}
-                                accessibilityLabel={`${ex.name} set ${i + 1} weight in kg`}
+                                style={styles.inputField}
+                                accessibilityLabel={`${ex.name} set ${i + 1} weight`}
                               />
-                              <Text style={styles.inputUnit}>kg</Text>
+                              <Text style={styles.inputSuffix}>kg</Text>
                             </View>
                             <View style={styles.inputGroup}>
                               <TextInput
@@ -233,30 +315,14 @@ export function LogSegmentModal({
                                 keyboardType="numeric"
                                 textContentType="none"
                                 autoComplete="off"
-                                placeholder="reps"
+                                placeholder="0"
                                 placeholderTextColor={colors.textSecondary}
-                                style={styles.input}
-                                accessibilityLabel={`${ex.name} set ${i + 1} reps completed`}
+                                style={styles.inputField}
+                                accessibilityLabel={`${ex.name} set ${i + 1} reps`}
                               />
-                              <Text style={styles.inputUnit}>reps</Text>
+                              <Text style={styles.inputSuffix}>reps</Text>
                             </View>
                           </View>
-                          {i === 0 && sets.length > 1 ? (
-                            <PressableScale
-                              style={styles.fillDownButton}
-                              onPress={() => {
-                                setInputMap((current) => {
-                                  const prev = current[key] ?? [];
-                                  const filled = prev.map((row, rowIndex) =>
-                                    rowIndex === 0 ? row : { ...row, weight: prev[0].weight, reps: prev[0].reps },
-                                  );
-                                  return { ...current, [key]: filled };
-                                });
-                              }}
-                            >
-                              <Text style={styles.fillDownLabel}>Fill down</Text>
-                            </PressableScale>
-                          ) : null}
                         </View>
                       ))}
                     </View>
@@ -264,15 +330,14 @@ export function LogSegmentModal({
                 })}
 
                 <View style={styles.effortCard}>
-                  <Text style={styles.effortTitle}>Rate Your Last Set</Text>
-                  <Text style={styles.effortPrompt}>How many more reps could you do?</Text>
-                  {activeExercise ? (
-                    <Text style={styles.effortActiveExercise} numberOfLines={1}>
-                      Applying to {activeExercise.name}
-                    </Text>
-                  ) : (
-                    <Text style={styles.effortHint}>Enter your set first to rate effort.</Text>
-                  )}
+                  <View style={styles.effortHeader}>
+                    <Text style={styles.effortHeaderLabel}>RIR</Text>
+                    {activeExercise ? (
+                      <Text style={styles.effortHeaderExercise} numberOfLines={1}>
+                        {activeExercise.name}
+                      </Text>
+                    ) : null}
+                  </View>
                   <View style={styles.effortButtonRow}>
                     {EFFORT_OPTIONS.map((option) => {
                       const selected = activeEffort === option.value;
@@ -302,26 +367,15 @@ export function LogSegmentModal({
                           ]}
                           accessibilityLabel={option.caption}
                         >
-                          <View style={styles.effortButtonContent}>
-                            <Text
-                              style={[
-                                styles.effortButtonLabel,
-                                disabled && styles.effortButtonLabelDisabled,
-                                selected && styles.effortButtonLabelSelected,
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.effortButtonCaption,
-                                disabled && styles.effortButtonCaptionDisabled,
-                                selected && styles.effortButtonCaptionSelected,
-                              ]}
-                            >
-                              {option.caption}
-                            </Text>
-                          </View>
+                          <Text
+                            style={[
+                              styles.effortButtonLabel,
+                              disabled && styles.effortButtonLabelDisabled,
+                              selected && styles.effortButtonLabelSelected,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
                         </PressableScale>
                       );
                     })}
@@ -387,6 +441,50 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.body,
   },
+  restStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    minHeight: 36,
+  },
+  restStripLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  restStripCountdown: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "700",
+    minWidth: 36,
+  },
+  restStripBarTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    flexDirection: "row",
+    overflow: "hidden",
+  },
+  restStripBarFill: {
+    backgroundColor: colors.accent,
+    borderRadius: 2,
+  },
+  restStripSkip: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+  },
+  restStripSkipLabel: {
+    color: colors.accent,
+    ...typography.small,
+    fontWeight: "600",
+  },
   sectionLabel: {
     color: colors.textSecondary,
     ...typography.label,
@@ -420,7 +518,6 @@ const styles = StyleSheet.create({
   setLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: spacing.xs,
   },
   setLabel: {
@@ -468,26 +565,30 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     flex: 1,
-    gap: 2,
-  },
-  input: {
-    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
+    overflow: "hidden",
+  },
+  inputField: {
+    flex: 1,
+    minHeight: 44,
     color: colors.textPrimary,
     paddingHorizontal: spacing.md,
     ...typography.body,
   },
-  inputUnit: {
+  inputSuffix: {
+    paddingRight: spacing.sm,
     color: colors.textSecondary,
-    ...typography.label,
+    ...typography.small,
   },
   fillDownButton: {
-    alignSelf: "flex-start",
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
+    marginLeft: "auto",
+    paddingVertical: 2,
+    paddingHorizontal: spacing.xs,
   },
   fillDownLabel: {
     color: colors.accent,
@@ -503,40 +604,37 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
-  effortTitle: {
-    color: colors.textPrimary,
-    ...typography.h3,
+  effortHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
   },
-  effortPrompt: {
-    color: colors.textPrimary,
-    ...typography.body,
-  },
-  effortHint: {
+  effortHeaderLabel: {
     color: colors.textSecondary,
-    ...typography.small,
+    ...typography.label,
+    textTransform: "uppercase",
   },
-  effortActiveExercise: {
+  effortHeaderExercise: {
+    flex: 1,
     color: colors.accent,
     ...typography.small,
     fontWeight: "600",
+    textAlign: "right",
   },
   effortButtonRow: {
-    flexDirection: "column",
+    flexDirection: "row",
     gap: spacing.xs,
   },
   effortButton: {
-    width: "100%",
-    minHeight: 64,
+    flex: 1,
+    minHeight: 44,
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    alignItems: "center",
     justifyContent: "center",
-  },
-  effortButtonContent: {
-    gap: 2,
   },
   effortButtonSelected: {
     borderColor: colors.accent,
@@ -550,23 +648,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: "700",
   },
-  effortButtonCaption: {
-    color: colors.textSecondary,
-    ...typography.small,
-  },
   effortButtonLabelSelected: {
     color: colors.textPrimary,
   },
   effortButtonLabelDisabled: {
     color: colors.textSecondary,
-  },
-  effortButtonCaptionSelected: {
-    color: colors.textPrimary,
-    opacity: 0.9,
-  },
-  effortButtonCaptionDisabled: {
-    color: colors.textSecondary,
-    opacity: 0.85,
   },
   effortCaption: {
     color: colors.textSecondary,
