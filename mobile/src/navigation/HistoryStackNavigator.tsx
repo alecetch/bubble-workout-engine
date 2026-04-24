@@ -6,6 +6,7 @@ export type HistoryStackParamList = {
   HistoryMain: undefined;
   ExerciseTrend: { exerciseId: string; exerciseName: string };
   ProgressOverview: undefined;
+  PhysiqueCheckIn: undefined;
 };
 
 const Stack = createNativeStackNavigator<HistoryStackParamList>();
@@ -26,6 +27,11 @@ export function HistoryStackNavigator(): React.JSX.Element {
       <Stack.Screen
         name="ProgressOverview"
         getComponent={() => require("../screens/history/ProgressOverviewScreen").ProgressOverviewScreen}
+      />
+      <Stack.Screen
+        name="PhysiqueCheckIn"
+        getComponent={() => require("../screens/physique/PhysiqueCheckInScreen").PhysiqueCheckInScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

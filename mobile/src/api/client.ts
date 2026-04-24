@@ -76,7 +76,9 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
   };
 
   if (body !== undefined) {
-    requestHeaders["Content-Type"] = requestHeaders["Content-Type"] ?? "application/json";
+    if (!(body instanceof FormData)) {
+      requestHeaders["Content-Type"] = requestHeaders["Content-Type"] ?? "application/json";
+    }
   }
 
   // TODO: Inject auth header/token when auth strategy is defined.
@@ -85,7 +87,11 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
     response = await fetch(url, {
       method,
       headers: requestHeaders,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData
+        ? (body as unknown as BodyInit)
+        : body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
       signal,
     });
   } catch (error) {

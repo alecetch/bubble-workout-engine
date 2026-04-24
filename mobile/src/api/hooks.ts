@@ -41,6 +41,11 @@ import {
   type ExerciseGuidance,
 } from "./exerciseGuidance";
 import {
+  getCheckIns,
+  deleteCheckIn,
+  type CheckInListResponse,
+} from "./physique";
+import {
   completeProgram,
   getProgramEndCheck,
   getProgramCompletionSummary,
@@ -125,6 +130,7 @@ export const queryKeys = {
   exerciseGuidance: (exerciseId: string) => ["exerciseGuidance", exerciseId] as const,
   notificationPreferences: ["notificationPreferences"] as const,
   entitlement: ["entitlement"] as const,
+  physiqueCheckIns: ["physiqueCheckIns"] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -586,6 +592,24 @@ export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegment
           variables.programDayId,
         ),
       });
+    },
+  });
+}
+
+export function usePhysiqueCheckIns(limit = 20): UseQueryResult<CheckInListResponse> {
+  return useQuery({
+    queryKey: [...queryKeys.physiqueCheckIns, limit],
+    queryFn: () => getCheckIns(limit),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useDeleteCheckIn(): UseMutationResult<{ ok: boolean }, Error, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCheckIn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueCheckIns });
     },
   });
 }
