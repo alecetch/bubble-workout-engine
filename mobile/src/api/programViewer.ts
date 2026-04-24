@@ -131,6 +131,8 @@ export type ProgramDayFullResponse = {
         recommendedRestSeconds: number | null;
       } | null;
       adaptationDecision?: AdaptationDecision | null;
+      coachingCuesJson?: string[] | null;
+      isNewExercise?: boolean | null;
     }>;
   }>;
 };
@@ -443,6 +445,12 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
             adaptationDecision: normalizeAdaptationDecision(
               rawExercise.adaptation_decision ?? rawExercise.adaptationDecision ?? null,
             ),
+            coachingCuesJson: asArray(rawExercise.coaching_cues_json)
+              .map((c) => (typeof c === "string" ? c : null))
+              .filter((c): c is string => c !== null),
+            isNewExercise: asNullableBoolean(
+              rawExercise.is_new_exercise ?? rawExercise.isNewExercise,
+            ) ?? null,
           };
         }),
       };

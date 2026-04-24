@@ -13,6 +13,7 @@ import { HeroHeader } from "../../components/program/HeroHeader";
 import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { LogSegmentModal } from "../../components/program/LogSegmentModal";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
+import { TechniqueSheet } from "../../components/program/TechniqueSheet";
 import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { PressableScale } from "../../components/interaction/PressableScale";
@@ -58,6 +59,10 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [swapSheetVisible, setSwapSheetVisible] = useState(false);
   const [swapTargetProgramExerciseId, setSwapTargetProgramExerciseId] = useState<string | null>(null);
   const [swapTargetExerciseName, setSwapTargetExerciseName] = useState<string | null>(null);
+  const [techniqueSheetVisible, setTechniqueSheetVisible] = useState(false);
+  const [techniqueTargetExerciseId, setTechniqueTargetExerciseId] = useState<string | null>(null);
+  const [techniqueTargetExerciseName, setTechniqueTargetExerciseName] = useState<string | null>(null);
+  const [autoOpenedExerciseIds, setAutoOpenedExerciseIds] = useState<Set<string>>(new Set());
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [prHits] = useState<string[]>([]);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
@@ -114,6 +119,29 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     };
   }, [orderedSegments, programDayId]);
 
+  useEffect(() => {
+    if (!dayQuery.data || dayQuery.isLoading) return;
+
+    for (const segment of orderedSegments) {
+      if (segmentLogs[segment.id]) continue;
+
+      for (const exercise of segment.exercises ?? []) {
+        if (
+          exercise.isNewExercise &&
+          exercise.exerciseId &&
+          !autoOpenedExerciseIds.has(exercise.exerciseId) &&
+          (exercise.coachingCuesJson?.length ?? 0) > 0
+        ) {
+          setAutoOpenedExerciseIds((prev) => new Set([...prev, exercise.exerciseId ?? ""]));
+          setTechniqueTargetExerciseId(exercise.exerciseId);
+          setTechniqueTargetExerciseName(exercise.name);
+          setTechniqueSheetVisible(true);
+          return;
+        }
+      }
+    }
+  }, [autoOpenedExerciseIds, dayQuery.data, dayQuery.isLoading, orderedSegments, segmentLogs]);
+
   const activeSegment = useMemo(
     () => orderedSegments.find((segment) => segment.id === activeSegmentId) ?? null,
     [activeSegmentId, orderedSegments],
@@ -129,6 +157,18 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     setSwapSheetVisible(false);
     setSwapTargetProgramExerciseId(null);
     setSwapTargetExerciseName(null);
+  }
+
+  function openTechniqueSheet(exerciseId: string, exerciseName: string): void {
+    setTechniqueTargetExerciseId(exerciseId);
+    setTechniqueTargetExerciseName(exerciseName);
+    setTechniqueSheetVisible(true);
+  }
+
+  function closeTechniqueSheet(): void {
+    setTechniqueSheetVisible(false);
+    setTechniqueTargetExerciseId(null);
+    setTechniqueTargetExerciseName(null);
   }
 
   const handleCompleteWorkout = async (): Promise<void> => {
@@ -231,6 +271,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
                 exerciseName,
               });
             }}
+            onViewTechnique={openTechniqueSheet}
           />
         ))}
       </ScrollView>
@@ -308,6 +349,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
           closeSwapSheet();
           void dayQuery.refetch();
         }}
+      />
+      <TechniqueSheet
+        visible={techniqueSheetVisible}
+        exerciseId={techniqueTargetExerciseId}
+        exerciseName={techniqueTargetExerciseName}
+        onClose={closeTechniqueSheet}
       />
       <SessionSummaryModal
         visible={summaryVisible}

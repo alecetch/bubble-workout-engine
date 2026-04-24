@@ -497,3 +497,122 @@ test("dayFull exposes progression recommendations when present on program exerci
   assert.equal(res.body?.segments?.[0]?.items?.[0]?.progression_recommendation?.outcome, "increase_load");
   assert.equal(res.body?.segments?.[0]?.items?.[0]?.progression_recommendation?.recommended_load_kg, 105);
 });
+
+test("dayFull exposes is_new_exercise true and coaching_cues_json arrays", async () => {
+  const handlers = createReadProgramHandlers({
+    db: mockPool([
+      {
+        rowCount: 1,
+        rows: [{
+          program_day_id: VALID_UUID,
+          day_label: "Day 1",
+          day_type: "strength",
+          session_duration_mins: 50,
+          hero_image_key: null,
+          hero_image_url: null,
+          client_profile_id: VALID_UUID,
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          block_order: 1,
+          segment_order_in_block: 1,
+          segment_type: "single",
+          segment_title: "Main lift",
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          exercise_id: "bb_back_squat",
+          exercise_name: "Back Squat",
+          order_in_day: 1,
+          is_loadable: true,
+          coaching_cues_json: ["Brace", "Drive evenly"],
+          is_new_exercise: true,
+          progression_outcome: null,
+        }],
+      },
+    ]),
+    guidelineLoadService: {
+      async annotateExercisesWithGuidelineLoads({ exercises }) {
+        return exercises;
+      },
+    },
+  });
+  const req = {
+    request_id: "t",
+    params: { program_day_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.dayFull(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.segments?.[0]?.items?.[0]?.is_new_exercise, true);
+  assert.deepEqual(res.body?.segments?.[0]?.items?.[0]?.coaching_cues_json, ["Brace", "Drive evenly"]);
+});
+
+test("dayFull exposes is_new_exercise false when exercise has prior exposures", async () => {
+  const handlers = createReadProgramHandlers({
+    db: mockPool([
+      {
+        rowCount: 1,
+        rows: [{
+          program_day_id: VALID_UUID,
+          day_label: "Day 1",
+          day_type: "strength",
+          session_duration_mins: 50,
+          hero_image_key: null,
+          hero_image_url: null,
+          client_profile_id: VALID_UUID,
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          block_order: 1,
+          segment_order_in_block: 1,
+          segment_type: "single",
+          segment_title: "Main lift",
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          exercise_id: "bb_back_squat",
+          exercise_name: "Back Squat",
+          order_in_day: 1,
+          is_loadable: true,
+          coaching_cues_json: [],
+          is_new_exercise: false,
+          progression_outcome: null,
+        }],
+      },
+    ]),
+    guidelineLoadService: {
+      async annotateExercisesWithGuidelineLoads({ exercises }) {
+        return exercises;
+      },
+    },
+  });
+  const req = {
+    request_id: "t",
+    params: { program_day_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.dayFull(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.segments?.[0]?.items?.[0]?.is_new_exercise, false);
+});

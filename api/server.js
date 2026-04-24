@@ -41,6 +41,7 @@ import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
+import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
@@ -714,6 +715,7 @@ app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 
 // RevenueCat webhook uses a shared secret header, not user JWT auth.
 app.use("/api", webhookRevenuecatRouter);
+app.use("/api/exercise", exerciseGuidanceRouter);
 
 app.use("/api", notificationPreferencesRouter);
 app.use("/api", accountSettingsRouter);
