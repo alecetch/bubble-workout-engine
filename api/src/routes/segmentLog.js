@@ -3,6 +3,7 @@ import { pool } from "../db.js";
 import { requireEntitlement } from "../middleware/requireEntitlement.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { makeNotificationService } from "../services/notificationService.js";
+import { maybeSendPhysiqueNudge } from "../services/physiqueNudgeService.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
@@ -280,6 +281,7 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
             }
           })();
         }
+        void maybeSendPhysiqueNudge(db, user_id);
         return res.json({ saved: rows.length });
       } catch (err) {
         try {
