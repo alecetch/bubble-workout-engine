@@ -28,6 +28,7 @@ type SegmentCardProps = {
     exerciseName: string,
     programExerciseId: string,
   ) => void;
+  onViewTechnique?: (exerciseId: string, exerciseName: string) => void;
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
@@ -56,6 +57,7 @@ export function SegmentCard({
   onLogSegment,
   onSwapExercise,
   onViewDecisionHistory,
+  onViewTechnique,
 }: SegmentCardProps): React.JSX.Element {
   const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null);
   const presentation = getSegmentPresentation({
@@ -200,6 +202,17 @@ export function SegmentCard({
                         <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
                           {line2}
                         </Text>
+                      ) : null}
+                      {!isLogged &&
+                      onViewTechnique &&
+                      exercise.exerciseId &&
+                      (exercise.coachingCuesJson?.length ?? 0) > 0 ? (
+                        <PressableScale
+                          style={styles.formTipChip}
+                          onPress={() => onViewTechnique(exercise.exerciseId ?? "", exercise.name)}
+                        >
+                          <Text style={styles.formTipLabel}>Form tip</Text>
+                        </PressableScale>
                       ) : null}
                       {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
                         <View style={styles.restRow}>
@@ -358,6 +371,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
     fontWeight: "600",
+  },
+  formTipChip: {
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginTop: 2,
+  },
+  formTipLabel: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: "500",
   },
   exerciseRow: {
     borderRadius: radii.card,

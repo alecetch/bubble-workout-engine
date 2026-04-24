@@ -37,6 +37,10 @@ import {
   type ViewerIdentityOptions,
 } from "./programViewer";
 import {
+  fetchExerciseGuidance,
+  type ExerciseGuidance,
+} from "./exerciseGuidance";
+import {
   completeProgram,
   getProgramEndCheck,
   getProgramCompletionSummary,
@@ -118,6 +122,7 @@ export const queryKeys = {
     ["programCompletionSummary", programId] as const,
   programEndCheck: (programId: string) =>
     ["programEndCheck", programId] as const,
+  exerciseGuidance: (exerciseId: string) => ["exerciseGuidance", exerciseId] as const,
   notificationPreferences: ["notificationPreferences"] as const,
   entitlement: ["entitlement"] as const,
 };
@@ -235,6 +240,18 @@ export function useProgramDayFull(
     queryKey: queryKeys.programDayFull(programDayId, opts),
     queryFn: () => getProgramDayFull(programDayId, opts),
     enabled: Boolean(programDayId && opts.userId),
+  });
+}
+
+export function useExerciseGuidance(
+  exerciseId: string | null,
+): UseQueryResult<ExerciseGuidance> {
+  return useQuery({
+    queryKey: queryKeys.exerciseGuidance(exerciseId ?? ""),
+    queryFn: () => fetchExerciseGuidance(exerciseId as string),
+    enabled: Boolean(exerciseId),
+    staleTime: 60 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
   });
 }
 

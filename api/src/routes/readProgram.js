@@ -508,12 +508,16 @@ export function createReadProgramHandlers(options = pool) {
           is_loadable,
           coaching_cues_json,
           load_hint,
-          log_prompt
-        FROM program_exercise
-        WHERE program_day_id = $1
+          log_prompt,
+          (COALESCE(eps.exposures_count, 0) = 0) AS is_new_exercise
+        FROM program_exercise pe
+        LEFT JOIN exercise_progression_state eps
+          ON eps.user_id = $2
+          AND eps.exercise_id = pe.exercise_id
+        WHERE pe.program_day_id = $1
         ORDER BY order_in_day
         `,
-        [program_day_id],
+        [program_day_id, user_id],
       );
 
       const programExerciseIds = exR.rows
