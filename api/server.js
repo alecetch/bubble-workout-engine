@@ -47,13 +47,18 @@ import {
   handleCheckInSubmit,
   physiqueReadRouter,
 } from "./src/routes/physiqueCheckIn.js";
+import {
+  handleScanSubmit,
+  physiqueScanRouter,
+  physiquePhotoRouter,
+} from "./src/routes/physiqueScan.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
 import { requireAuth } from "./src/middleware/requireAuth.js";
-import { adminOnly, userAuth, entitledUserAuth } from "./src/middleware/chains.js";
+import { adminOnly, userAuth, entitledUserAuth, premiumUserAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
@@ -722,7 +727,10 @@ app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/api", webhookRevenuecatRouter);
 app.use("/api/exercise", exerciseGuidanceRouter);
 app.post("/api/physique/check-in", ...entitledUserAuth, uploadSingle, handleCheckInSubmit);
+app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
+app.use("/api", physiquePhotoRouter);
 app.use("/api", ...userAuth, physiqueReadRouter);
+app.use("/api", ...userAuth, physiqueScanRouter);
 
 app.use("/api", notificationPreferencesRouter);
 app.use("/api", accountSettingsRouter);

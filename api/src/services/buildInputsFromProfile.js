@@ -107,6 +107,12 @@ export function buildInputsFromProfile(profile, exerciseRows, physiqueContext = 
   const exercises = mapExerciseRowsToResults(exerciseRows);
   const catalogEx = mapExerciseRowsToCatalogEx(exerciseRows);
   const fitnessRank = mapFitnessRank(profile?.fitnessLevel);
+  const emphasisSlugs = Array.isArray(physiqueContext?.emphasisSuggestions)
+    ? physiqueContext.emphasisSuggestions
+    : [];
+  const emphasisWeights = physiqueContext?.emphasisWeights && typeof physiqueContext.emphasisWeights === "object"
+    ? physiqueContext.emphasisWeights
+    : null;
 
   return {
     clientProfile: {
@@ -129,9 +135,8 @@ export function buildInputsFromProfile(profile, exerciseRows, physiqueContext = 
         equipment_preset_slug: toSlug(profile?.equipmentPreset || ""),
         goal_notes: profile?.goalNotes ?? "",
         schedule_constraints: profile?.scheduleConstraints ?? "",
-        physique_emphasis_slugs: Array.isArray(physiqueContext?.emphasisSuggestions)
-          ? physiqueContext.emphasisSuggestions
-          : [],
+        physique_emphasis_slugs: emphasisSlugs,
+        physique_emphasis_weights: emphasisWeights,
       },
     },
     exercises: {

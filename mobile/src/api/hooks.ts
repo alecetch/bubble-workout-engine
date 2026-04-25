@@ -46,6 +46,11 @@ import {
   type CheckInListResponse,
 } from "./physique";
 import {
+  getMilestones,
+  getScans,
+  getScanTrend,
+} from "./physiqueScan";
+import {
   completeProgram,
   getProgramEndCheck,
   getProgramCompletionSummary,
@@ -131,6 +136,9 @@ export const queryKeys = {
   notificationPreferences: ["notificationPreferences"] as const,
   entitlement: ["entitlement"] as const,
   physiqueCheckIns: ["physiqueCheckIns"] as const,
+  physiqueScans: ["physiqueScans"] as const,
+  physiqueScanTrend: ["physiqueScanTrend"] as const,
+  physiqueMilestones: ["physiqueMilestones"] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -611,5 +619,30 @@ export function useDeleteCheckIn(): UseMutationResult<{ ok: boolean }, Error, st
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueCheckIns });
     },
+  });
+}
+
+export function usePhysiqueScans(limit = 20) {
+  return useQuery({
+    queryKey: [...queryKeys.physiqueScans, limit],
+    queryFn: () => getScans(limit),
+    // No staleTime — presigned photo URLs expire after 1 hour so we always
+    // background-refetch on mount to serve fresh signed URLs.
+  });
+}
+
+export function usePhysiqueScanTrend() {
+  return useQuery({
+    queryKey: queryKeys.physiqueScanTrend,
+    queryFn: getScanTrend,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePhysiqueMilestones() {
+  return useQuery({
+    queryKey: queryKeys.physiqueMilestones,
+    queryFn: getMilestones,
+    staleTime: 5 * 60 * 1000,
   });
 }
