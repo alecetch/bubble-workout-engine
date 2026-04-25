@@ -1,5 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { PressableScale } from "../interaction/PressableScale";
@@ -85,6 +91,23 @@ export function SegmentCard({
     if (withRest.length === 0) return null;
     return Math.max(...withRest);
   }, [exercises]);
+  const loggedBadgeScale = useSharedValue(isLogged ? 1 : 0.6);
+  const loggedBadgeOpacity = useSharedValue(isLogged ? 1 : 0);
+
+  useEffect(() => {
+    if (isLogged) {
+      loggedBadgeScale.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.back(1.4)) });
+      loggedBadgeOpacity.value = withTiming(1, { duration: 220 });
+    } else {
+      loggedBadgeScale.value = 0.6;
+      loggedBadgeOpacity.value = 0;
+    }
+  }, [isLogged, loggedBadgeOpacity, loggedBadgeScale]);
+
+  const animatedLoggedBadgeStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: loggedBadgeScale.value }],
+    opacity: loggedBadgeOpacity.value,
+  }));
 
   function recommendedLoadHintForExercise(
     exercise: Segment["exercises"][number],
@@ -130,7 +153,9 @@ export function SegmentCard({
             </Text>
           ) : null}
         </View>
-        {isLogged ? <View style={styles.loggedBadge}><Text style={styles.loggedText}>Logged</Text></View> : null}
+        <Animated.View style={[styles.loggedBadge, animatedLoggedBadgeStyle]}>
+          <Text style={styles.loggedText}>Logged</Text>
+        </Animated.View>
       </View>
 
       <View style={styles.bodyRow}>

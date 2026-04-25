@@ -1,7 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import { SessionSummaryModal } from "../../components/program/SessionSummaryModa
 import { TechniqueSheet } from "../../components/program/TechniqueSheet";
 import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
 import { SegmentCard } from "../../components/program/SegmentCard";
+import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { hapticLight, hapticMedium } from "../../components/interaction/haptics";
 import { getProgramEndCheck } from "../../api/programCompletion";
@@ -223,9 +223,17 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
 
   if (dayQuery.isLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.loadingText}>Loading workout day...</Text>
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <SkeletonBlock height={164} />
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={skeletonStyles.card}>
+              <SkeletonBlock width="55%" height={18} />
+              <SkeletonBlock width="100%" height={14} />
+              <SkeletonBlock width="80%" height={14} />
+            </View>
+          ))}
+        </ScrollView>
       </View>
     );
   }
@@ -360,6 +368,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         visible={summaryVisible}
         {...computeSessionStats()}
         prHits={prHits}
+        streakDays={0}
         onDismiss={() => { void handleSummaryDismiss(); }}
       />
     </View>
@@ -384,10 +393,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: 150,
     gap: spacing.md,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    ...typography.body,
   },
   errorTitle: {
     color: colors.textPrimary,
@@ -471,5 +476,16 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
     textAlign: "center",
+  },
+});
+
+const skeletonStyles = StyleSheet.create({
+  card: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
 });

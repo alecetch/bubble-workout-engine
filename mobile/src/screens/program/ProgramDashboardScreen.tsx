@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
@@ -9,6 +9,7 @@ import {
 import { DayPreviewCard } from "../../components/program/DayPreviewCard";
 import { HeroHeader } from "../../components/program/HeroHeader";
 import { WeekPillStrip, type WeekStatus } from "../../components/program/WeekPillStrip";
+import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
@@ -259,9 +260,21 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
 
   if (overviewQuery.isLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.loadingText}>Loading program dashboard...</Text>
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <SkeletonBlock height={164} />
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            {[0, 1, 2, 3].map((i) => (
+              <SkeletonBlock key={i} width={64} height={36} borderRadius={radii.pill} />
+            ))}
+          </View>
+          <SkeletonBlock height={120} />
+          <View style={{ flexDirection: "row", gap: spacing.xs }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <SkeletonBlock key={i} width={44} height={44} borderRadius={radii.pill} />
+            ))}
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -368,10 +381,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    ...typography.body,
   },
   errorTitle: {
     color: colors.textPrimary,
