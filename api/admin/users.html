@@ -47,7 +47,16 @@
       .chip { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
       .chip-ok { background: #d1fae5; color: var(--ok); }
       .chip-muted { background: #f3f4f6; color: var(--muted); }
+      .chip-trial { background: #fef9c3; color: #854d0e; }
+      .chip-active { background: #d1fae5; color: #065f46; }
+      .chip-expired { background: #fee2e2; color: #991b1b; }
+      .chip-cancelled { background: #f3f4f6; color: #6b7280; }
       .count-badge { display: inline-block; min-width: 22px; text-align: center; background: #e5e7eb; border-radius: 999px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+      .sub-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .sub-btn { font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); background: #fff; color: var(--text); }
+      .sub-btn:hover { background: #f0f4ff; border-color: var(--primary); }
+      .sub-btn.active-btn { border-color: var(--ok); color: var(--ok); }
+      .sub-btn.trial-btn { border-color: #854d0e; color: #854d0e; }
     </style>
   </head>
   <body>
@@ -102,7 +111,7 @@
       const userCount = document.getElementById("user-count");
 
       tokenInput.value = sessionStorage.getItem(STORAGE_KEY) || "";
-      tokenInput.addEventListener("change", () =>
+      tokenInput.addEventListener("input", () =>
         sessionStorage.setItem(STORAGE_KEY, tokenInput.value.trim())
       );
 
@@ -147,6 +156,24 @@
         return `<span class="chip chip-muted">Not started</span>`;
       }
 
+      function subscriptionChip(status) {
+        const map = {
+          trialing: ["chip-trial", "Trial"],
+          active: ["chip-active", "Active"],
+          expired: ["chip-expired", "Expired"],
+          cancelled: ["chip-cancelled", "Cancelled"],
+        };
+        const [cls, label] = map[status] ?? ["chip-muted", status ?? "—"];
+        return `<span class="chip ${cls}">${label}</span>`;
+      }
+
+      function trialDaysCell(u) {
+        if (u.subscription_status !== "trialing") return '<span class="muted">—</span>';
+        const days = Number(u.trial_days_remaining ?? 0);
+        if (days <= 0) return '<span style="color:var(--danger)">Expired</span>';
+        return `<strong>${days}</strong> day${days === 1 ? "" : "s"}`;
+      }
+
       let users = [];
 
       function render() {
@@ -161,6 +188,8 @@
               <tr>
                 <th>Email</th>
                 <th>Display name</th>
+                <th>Subscription</th>
+                <th>Trial days left</th>
                 <th>Onboarding</th>
                 <th>Programs</th>
                 <th>Registered</th>
@@ -173,12 +202,18 @@
                 <tr data-id="${esc(u.id)}">
                   <td>${esc(u.email)}</td>
                   <td>${u.display_name ? esc(u.display_name) : '<span class="muted">—</span>'}</td>
+                  <td>${subscriptionChip(u.subscription_status)}</td>
+                  <td>${trialDaysCell(u)}</td>
                   <td>${onboardingChip(u)}</td>
                   <td><span class="count-badge">${u.program_count ?? 0}</span></td>
                   <td class="mono">${fmtDate(u.created_at)}</td>
                   <td class="mono" style="font-size:11px; color:var(--muted)">${esc(u.id)}</td>
                   <td>
-                    <button class="danger-btn delete-btn" data-id="${esc(u.id)}" data-email="${esc(u.email)}" type="button">Delete</button>
+                    <div class="sub-actions">
+                      <button class="sub-btn trial-btn set-sub-btn" data-id="${esc(u.id)}" data-status="trialing" title="Reset to 14-day trial">Trial</button>
+                      <button class="sub-btn active-btn set-sub-btn" data-id="${esc(u.id)}" data-status="active" title="Set active subscription (unlocks premium physique scan)">Active</button>
+                      <button class="danger-btn delete-btn" data-id="${esc(u.id)}" data-email="${esc(u.email)}" type="button" style="font-size:11px;padding:3px 8px">Delete</button>
+                    </div>
                   </td>
                 </tr>
               `).join("")}
@@ -188,6 +223,9 @@
 
         tableWrap.querySelectorAll(".delete-btn").forEach((btn) => {
           btn.addEventListener("click", () => handleDelete(btn.dataset.id, btn.dataset.email));
+        });
+        tableWrap.querySelectorAll(".set-sub-btn").forEach((btn) => {
+          btn.addEventListener("click", () => handleSetSubscription(btn.dataset.id, btn.dataset.status));
         });
       }
 
@@ -201,6 +239,29 @@
           setStatus(`Deleted ${email}.`, "ok");
         } catch (err) {
           setStatus("Delete failed: " + err.message, "err");
+        }
+      }
+
+      async function handleSetSubscription(id, status) {
+        setStatus(`Setting subscription to "${status}"…`, "");
+        try {
+          await apiFetch(`/admin/users/${encodeURIComponent(id)}/subscription`, {
+            method: "PATCH",
+            body: JSON.stringify({ status }),
+          });
+          const u = users.find((row) => row.id === id);
+          if (u) {
+            u.subscription_status = status;
+            if (status === "trialing") {
+              const exp = new Date(Date.now() + 14 * 86400 * 1000);
+              u.trial_expires_at = exp.toISOString();
+              u.trial_days_remaining = 14;
+            }
+          }
+          render();
+          setStatus(`Subscription updated to "${status}".`, "ok");
+        } catch (err) {
+          setStatus("Update failed: " + err.message, "err");
         }
       }
 

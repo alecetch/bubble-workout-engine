@@ -320,24 +320,6 @@ export function LogSegmentModal({
                                 <Text style={styles.savedSetBadgeText}>Saved</Text>
                               </View>
                             ) : null}
-                            {i === 0 && sets.length > 1 ? (
-                              <PressableScale
-                                style={styles.fillDownButton}
-                                onPress={() => {
-                                  setInputMap((current) => {
-                                    const prev = current[key] ?? [];
-                                    const filled = prev.map((row, rowIndex) =>
-                                      rowIndex === 0
-                                        ? row
-                                        : { ...row, weight: prev[0].weight, reps: prev[0].reps },
-                                    );
-                                    return { ...current, [key]: filled };
-                                  });
-                                }}
-                              >
-                                <Text style={styles.fillDownLabel}>Fill down ↓</Text>
-                              </PressableScale>
-                            ) : null}
                           </View>
                           <View style={styles.inputsRow}>
                             <View
