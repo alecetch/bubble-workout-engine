@@ -34,6 +34,7 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
 type ApiErrorPayload = {
@@ -61,8 +62,98 @@ type InternalRequestOptions = RequestOptions & {
   extraHeaders?: Record<string, string>;
 };
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+
+export class NetworkTimeoutError extends Error {
+  constructor(message = "Network request timed out") {
+    super(message);
+    this.name = "NetworkTimeoutError";
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "name" in error &&
+    (error as { name?: unknown }).name === "AbortError",
+  );
+}
+
+function createRequestSignal(
+  upstreamSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): {
+  signal: AbortSignal | undefined;
+  cleanup: () => void;
+  didTimeout: () => boolean;
+} {
+  if (!upstreamSignal && timeoutMs <= 0) {
+    return {
+      signal: undefined,
+      cleanup: () => undefined,
+      didTimeout: () => false,
+    };
+  }
+
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+
+  const abortFromUpstream = () => {
+    controller.abort();
+  };
+
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      controller.abort();
+    } else {
+      upstreamSignal.addEventListener("abort", abortFromUpstream, { once: true });
+    }
+  }
+
+  if (timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (upstreamSignal) upstreamSignal.removeEventListener("abort", abortFromUpstream);
+    },
+    didTimeout: () => timedOut,
+  };
+}
+
+export function isNetworkTimeoutError(error: unknown): boolean {
+  return error instanceof NetworkTimeoutError;
+}
+
+export function isNetworkConnectivityError(error: unknown): boolean {
+  if (isNetworkTimeoutError(error)) return false;
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("network request failed") ||
+    message.includes("network request timed out") ||
+    message.includes("failed to fetch") ||
+    message.includes("load failed")
+  );
+}
+
 async function requestJson<T>(path: string, options: InternalRequestOptions = {}): Promise<T> {
-  const { method = "GET", body, headers, signal, extraHeaders } = options;
+  const {
+    method = "GET",
+    body,
+    headers,
+    signal,
+    extraHeaders,
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  } = options;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${API_BASE_URL}${normalizedPath}`;
   apiDiagnostics.lastAttemptedUrl = url;
@@ -83,6 +174,7 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
 
   // TODO: Inject auth header/token when auth strategy is defined.
   let response: Response;
+  const requestSignal = createRequestSignal(signal, timeoutMs);
   try {
     response = await fetch(url, {
       method,
@@ -92,13 +184,22 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
         : body !== undefined
           ? JSON.stringify(body)
           : undefined,
-      signal,
+      signal: requestSignal.signal,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = requestSignal.didTimeout()
+      ? "Network request timed out"
+      : error instanceof Error
+        ? error.message
+        : String(error);
     console.log(`[api] network failure ${method} ${url}`, message);
     apiDiagnostics.lastErrorMessage = message;
+    if (requestSignal.didTimeout() || (isAbortError(error) && !signal?.aborted)) {
+      throw new NetworkTimeoutError(message);
+    }
     throw error;
+  } finally {
+    requestSignal.cleanup();
   }
 
   console.log(`[api] response ${method} ${url} ${response.status}`);
@@ -293,6 +394,7 @@ export async function authPostFormData<T>(
   console.log(`[api] request POST ${url}`);
 
   let response: Response;
+  const requestSignal = createRequestSignal(options.signal, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(url, {
       method: "POST",
@@ -301,13 +403,22 @@ export async function authPostFormData<T>(
         Authorization: `Bearer ${accessToken}`,
       },
       body,
-      signal: options.signal,
+      signal: requestSignal.signal,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = requestSignal.didTimeout()
+      ? "Network request timed out"
+      : error instanceof Error
+        ? error.message
+        : String(error);
     console.log(`[api] network failure POST ${url}`, message);
     apiDiagnostics.lastErrorMessage = message;
+    if (requestSignal.didTimeout() || (isAbortError(error) && !options.signal?.aborted)) {
+      throw new NetworkTimeoutError(message);
+    }
     throw error;
+  } finally {
+    requestSignal.cleanup();
   }
 
   console.log(`[api] response POST ${url} ${response.status}`);

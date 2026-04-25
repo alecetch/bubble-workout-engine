@@ -1,22 +1,21 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { PressableScale } from "../interaction/PressableScale";
 import { GuidelineLoadHint } from "./GuidelineLoadHint";
 import { AdaptationChip } from "./AdaptationChip";
-import { PremiumTimer } from "../timers/PremiumTimer";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { getSegmentPresentation } from "./segmentCardLogic";
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(Math.max(0, seconds) / 60);
+  const s = Math.max(0, seconds) % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 type Segment = ProgramDayFullResponse["segments"][number];
 
@@ -84,30 +83,32 @@ export function SegmentCard({
       ? segment.segmentTypeLabel
       : null;
 
-  const suggestedRestSeconds = useMemo(() => {
-    const withRest = exercises
-      .map((exercise) => exercise.restSeconds)
-      .filter((value): value is number => typeof value === "number");
-    if (withRest.length === 0) return null;
-    return Math.max(...withRest);
-  }, [exercises]);
-  const loggedBadgeScale = useSharedValue(isLogged ? 1 : 0.6);
-  const loggedBadgeOpacity = useSharedValue(isLogged ? 1 : 0);
+  const [secondsLeft, setSecondsLeft] = useState<number>(initialDurationSeconds ?? 0);
+  const [timerRunning, setTimerRunning] = useState(false);
 
   useEffect(() => {
-    if (isLogged) {
-      loggedBadgeScale.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.back(1.4)) });
-      loggedBadgeOpacity.value = withTiming(1, { duration: 220 });
-    } else {
-      loggedBadgeScale.value = 0.6;
-      loggedBadgeOpacity.value = 0;
-    }
-  }, [isLogged, loggedBadgeOpacity, loggedBadgeScale]);
+    if (!timerRunning) return;
+    const id = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          setTimerRunning(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [timerRunning]);
 
-  const animatedLoggedBadgeStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: loggedBadgeScale.value }],
-    opacity: loggedBadgeOpacity.value,
-  }));
+  const handleTimerPress = (): void => {
+    if (initialDurationSeconds == null || initialDurationSeconds <= 0) return;
+    if (secondsLeft === 0) {
+      setSecondsLeft(initialDurationSeconds);
+      setTimerRunning(true);
+      return;
+    }
+    setTimerRunning((r) => !r);
+  };
 
   function recommendedLoadHintForExercise(
     exercise: Segment["exercises"][number],
@@ -153,9 +154,23 @@ export function SegmentCard({
             </Text>
           ) : null}
         </View>
-        <Animated.View style={[styles.loggedBadge, animatedLoggedBadgeStyle]}>
-          <Text style={styles.loggedText}>Logged</Text>
-        </Animated.View>
+        <View style={styles.headerRight}>
+          {initialDurationSeconds != null && initialDurationSeconds > 0 ? (
+            <PressableScale style={styles.durationChip} onPress={handleTimerPress}>
+              <Ionicons
+                name={timerRunning ? "pause-circle-outline" : "time-outline"}
+                size={13}
+                color={timerRunning ? colors.accent : colors.textSecondary}
+              />
+              <Text style={[styles.durationText, timerRunning && styles.durationTextRunning]}>
+                {formatDuration(secondsLeft)}
+              </Text>
+            </PressableScale>
+          ) : null}
+          <View style={[styles.loggedBadge, !isLogged && styles.loggedBadgeHidden]}>
+            <Text style={styles.loggedText}>Logged</Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.bodyRow}>
@@ -267,15 +282,6 @@ export function SegmentCard({
           )}
         </View>
 
-        {/* RHS: compact ring clock */}
-        <View style={styles.bodyRhs}>
-          <PremiumTimer
-            initialDurationSeconds={initialDurationSeconds}
-            suggestedRestSeconds={suggestedRestSeconds}
-            segmentId={segment.id}
-            compact
-          />
-        </View>
       </View>
 
       {(segment.postSegmentRestSec ?? 0) > 0 ? (
@@ -320,6 +326,31 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  headerRight: {
+    flexShrink: 0,
+    alignItems: "flex-end",
+    gap: spacing.xs,
+  },
+  durationChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  durationText: {
+    color: colors.textSecondary,
+    ...typography.label,
+    fontVariant: ["tabular-nums"],
+  },
+  durationTextRunning: {
+    color: colors.accent,
+    fontWeight: "700",
+  },
   segmentName: {
     color: colors.textPrimary,
     ...typography.h3,
@@ -350,6 +381,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
+  loggedBadgeHidden: {
+    opacity: 0,
+  },
   loggedText: {
     color: colors.success,
     ...typography.small,
@@ -364,13 +398,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexShrink: 1,
     minWidth: 0,
-  },
-  bodyRhs: {
-    flexShrink: 0,
-    width: "34%",
-    minWidth: 120,
-    maxWidth: 160,
-    alignItems: "center",
   },
   exerciseList: {
     gap: spacing.sm,

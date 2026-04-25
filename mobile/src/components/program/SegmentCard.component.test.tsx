@@ -3,10 +3,6 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { SegmentCard } from "./SegmentCard";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 
-vi.mock("../timers/PremiumTimer", () => ({
-  PremiumTimer: () => null,
-}));
-
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
 

@@ -152,6 +152,15 @@ vi.mock("@react-navigation/bottom-tabs", () => ({
 
 vi.mock("react-native-reanimated", () => ({
   default: {
+    View: ({ children }: { children: React.ReactNode }) => (
+      React.createElement("div", null, children)
+    ),
+    Text: ({ children }: { children: React.ReactNode }) => (
+      React.createElement("span", null, children)
+    ),
+    Image: ({ children }: { children?: React.ReactNode }) => (
+      React.createElement("img", null, children ?? null)
+    ),
     createAnimatedComponent: (c: unknown) => c,
     Value: vi.fn(() => ({ setValue: vi.fn() })),
     timing: vi.fn(),
@@ -180,14 +189,6 @@ vi.mock("react-native-reanimated", () => ({
   FadeIn: { duration: vi.fn().mockReturnThis(), delay: vi.fn().mockReturnThis() },
   FadeOut: { duration: vi.fn().mockReturnThis() },
   SlideInRight: { duration: vi.fn().mockReturnThis() },
-  Animated: {
-    View: ({ children }: { children: React.ReactNode }) => (
-      React.createElement("div", null, children)
-    ),
-    Text: ({ children }: { children: React.ReactNode }) => (
-      React.createElement("span", null, children)
-    ),
-  },
 }));
 
 vi.mock("react-native-worklets", () => ({

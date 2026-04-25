@@ -68,6 +68,7 @@ function OnboardingPlaceholderScreen(): React.JSX.Element {
 }
 
 export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: OnboardingNavigatorProps): React.JSX.Element {
+  console.log("[boot] OnboardingNavigator render", { initialRouteName });
   return (
     <Stack.Navigator
       initialRouteName={initialRouteName}

@@ -1,31 +1,28 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { HeroHeader } from "../../components/program/HeroHeader";
-import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
-import { LogSegmentModal } from "../../components/program/LogSegmentModal";
-import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
-import { TechniqueSheet } from "../../components/program/TechniqueSheet";
-import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
-import { SegmentCard } from "../../components/program/SegmentCard";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import type { NativeStackScreenProps, NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { hapticLight, hapticMedium } from "../../components/interaction/haptics";
-import { getProgramEndCheck } from "../../api/programCompletion";
+import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
+import { LogSegmentModal } from "../../components/program/LogSegmentModal";
+import { SegmentCard } from "../../components/program/SegmentCard";
+import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
+import { TechniqueSheet } from "../../components/program/TechniqueSheet";
+import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
 import { queryKeys, useCompleteProgram, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { getProgramEndCheck } from "../../api/programCompletion";
+import type { SaveSegmentLogPayload } from "../../api/segmentLog";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
-import type { SaveSegmentLogPayload } from "../../api/segmentLog";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { useTimerStore } from "../../state/timer/useTimerStore";
+import { colors } from "../../theme/colors";
+import { radii } from "../../theme/components";
+import { spacing } from "../../theme/spacing";
+import { typography } from "../../theme/typography";
 import {
   getSegmentLog,
   getWorkoutComplete,
@@ -33,10 +30,6 @@ import {
   setWorkoutComplete,
   type SegmentLogEntry,
 } from "../../utils/localWorkoutLog";
-import { colors } from "../../theme/colors";
-import { radii } from "../../theme/components";
-import { spacing } from "../../theme/spacing";
-import { typography } from "../../theme/typography";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDay">;
 
@@ -123,6 +116,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     if (!dayQuery.data || dayQuery.isLoading) return;
 
     for (const segment of orderedSegments) {
+      if (
+        typeof segment.purpose === "string" &&
+        (segment.purpose === "warmup" || segment.purpose === "cooldown")
+      ) {
+        continue;
+      }
       if (segmentLogs[segment.id]) continue;
 
       for (const exercise of segment.exercises ?? []) {
@@ -171,12 +170,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     setTechniqueTargetExerciseName(null);
   }
 
-  const handleCompleteWorkout = async (): Promise<void> => {
+  async function handleCompleteWorkout(): Promise<void> {
     await hapticMedium();
     setSummaryVisible(true);
-  };
+  }
 
-  const handleSummaryDismiss = async (): Promise<void> => {
+  async function handleSummaryDismiss(): Promise<void> {
     setSummaryVisible(false);
     try {
       await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId });
@@ -208,9 +207,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
     }
-  };
+  }
 
-  const handleUndoComplete = async (): Promise<void> => {
+  async function handleUndoComplete(): Promise<void> {
     try {
       await markDayComplete.mutateAsync({ programDayId, isCompleted: false, userId });
       await setWorkoutComplete(programDayId, false);
@@ -219,18 +218,22 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to undo completion.");
     }
-  };
+  }
+
+  function computeSessionStats(): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
+    return computeSessionStatsFromLoggedRows(segmentLogRows);
+  }
 
   if (dayQuery.isLoading) {
     return (
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.content}>
-          <SkeletonBlock height={164} />
+          <SkeletonBlock height={164} style={styles.skeletonHero} />
           {[0, 1, 2].map((i) => (
-            <View key={i} style={skeletonStyles.card}>
-              <SkeletonBlock width="55%" height={18} />
-              <SkeletonBlock width="100%" height={14} />
-              <SkeletonBlock width="80%" height={14} />
+            <View key={i} style={styles.skeletonCard}>
+              <SkeletonBlock width="55%" height={18} borderRadius={radii.pill} style={styles.skeletonLineShort} />
+              <SkeletonBlock width="100%" height={14} borderRadius={radii.pill} style={styles.skeletonLineFull} />
+              <SkeletonBlock width="80%" height={14} borderRadius={radii.pill} style={styles.skeletonLineMedium} />
             </View>
           ))}
         </ScrollView>
@@ -251,19 +254,17 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }
 
   const day = dayQuery.data.day;
-
-  function computeSessionStats(): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
-    return computeSessionStatsFromLoggedRows(segmentLogRows);
-  }
+  const sessionStats = computeSessionStats();
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
-        <HeroHeader
-          title={day.label ?? "Workout Day"}
-          summary={`${day.type ?? "Session"}${day.sessionDuration ? ` • ${day.sessionDuration} min` : ""}`}
-          heroMedia={day.heroMedia}
-        />
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTitle}>{day.label ?? "Workout Day"}</Text>
+          <Text style={styles.heroSummary}>
+            {`${day.type ?? "Session"}${day.sessionDuration ? ` • ${day.sessionDuration} min` : ""}`}
+          </Text>
+        </View>
 
         {orderedSegments.map((segment) => (
           <SegmentCard
@@ -271,7 +272,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             segment={segment}
             isLogged={Boolean(segmentLogs[segment.id])}
             exerciseSetCounts={segmentLogs[segment.id]?.exerciseSetCounts}
-            onLogSegment={() => setActiveSegmentId(segment.id)}
+            onLogSegment={(selectedSegment) => setActiveSegmentId(selectedSegment.id)}
             onSwapExercise={openSwapSheet}
             onViewDecisionHistory={(_exerciseId, exerciseName, programExerciseId) => {
               nav.navigate("ExerciseDecisionHistory", {
@@ -291,9 +292,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             void handleCompleteWorkout();
           }}
         >
-          <Text style={styles.completeButtonLabel}>
-            {workoutComplete ? "Workout complete" : "Workout complete"}
-          </Text>
+          <Text style={styles.completeButtonLabel}>Workout complete</Text>
         </PressableScale>
         {workoutComplete ? (
           <PressableScale
@@ -332,7 +331,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             };
             setSegmentLogs((current) => ({ ...current, [activeSegment.id]: entry }));
             setSegmentLogRows((current) => ({ ...current, [activeSegment.id]: rows }));
-            // Write to AsyncStorage so the isLogged badge persists after app restart.
             void setSegmentLog(programDayId, activeSegment.id, { exerciseSetCounts });
             const maxRest = Math.max(
               0,
@@ -366,10 +364,14 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       />
       <SessionSummaryModal
         visible={summaryVisible}
-        {...computeSessionStats()}
+        totalVolumeKg={sessionStats.totalVolumeKg}
+        totalSets={sessionStats.totalSets}
+        exerciseCount={sessionStats.exerciseCount}
         prHits={prHits}
         streakDays={0}
-        onDismiss={() => { void handleSummaryDismiss(); }}
+        onDismiss={() => {
+          void handleSummaryDismiss();
+        }}
       />
     </View>
   );
@@ -430,6 +432,22 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: "600",
   },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  heroTitle: {
+    color: colors.textPrimary,
+    ...typography.h2,
+  },
+  heroSummary: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -477,15 +495,24 @@ const styles = StyleSheet.create({
     ...typography.small,
     textAlign: "center",
   },
-});
-
-const skeletonStyles = StyleSheet.create({
-  card: {
+  skeletonHero: {
+    backgroundColor: "transparent",
+  },
+  skeletonCard: {
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  skeletonLineShort: {
+    backgroundColor: "transparent",
+  },
+  skeletonLineFull: {
+    backgroundColor: "transparent",
+  },
+  skeletonLineMedium: {
+    backgroundColor: "transparent",
   },
 });
