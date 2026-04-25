@@ -123,6 +123,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     if (!dayQuery.data || dayQuery.isLoading) return;
 
     for (const segment of orderedSegments) {
+      if (segment.purpose === "warmup" || segment.purpose === "cooldown") continue;
       if (segmentLogs[segment.id]) continue;
 
       for (const exercise of segment.exercises ?? []) {
