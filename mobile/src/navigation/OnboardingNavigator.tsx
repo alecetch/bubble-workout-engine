@@ -12,6 +12,7 @@ import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleM
 import { ExerciseDecisionHistoryScreen } from "../screens/program/ExerciseDecisionHistoryScreen";
 import { PaywallScreen } from "../screens/paywall/PaywallScreen";
 import { ProgramCompleteScreen } from "../screens/program/ProgramCompleteScreen";
+import type { ExerciseDetailParams } from "../screens/program/ExerciseDetailScreen";
 import { ProgramEndCheckScreen } from "../screens/program/ProgramEndCheckScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
 import { colors } from "../theme/colors";
@@ -40,6 +41,7 @@ export type OnboardingStackParamList = {
   ProgramDay: {
     programDayId: string;
   };
+  ExerciseDetail: ExerciseDetailParams;
   ExerciseDecisionHistory: {
     programExerciseId: string;
     exerciseName: string;
@@ -67,6 +69,21 @@ function OnboardingPlaceholderScreen(): React.JSX.Element {
   );
 }
 
+function ProgramDashboardScreenDeferred(props: any): React.JSX.Element {
+  const mod = require("../screens/program/ProgramDashboardScreen") as typeof import("../screens/program/ProgramDashboardScreen");
+  return <mod.ProgramDashboardScreen {...props} />;
+}
+
+function ProgramDayScreenDeferred(props: any): React.JSX.Element {
+  const mod = require("../screens/program/ProgramDayScreen") as typeof import("../screens/program/ProgramDayScreen");
+  return <mod.ProgramDayScreen {...props} />;
+}
+
+function ExerciseDetailScreenDeferred(props: any): React.JSX.Element {
+  const mod = require("../screens/program/ExerciseDetailScreen") as typeof import("../screens/program/ExerciseDetailScreen");
+  return <mod.ExerciseDetailScreen {...props} />;
+}
+
 export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: OnboardingNavigatorProps): React.JSX.Element {
   console.log("[boot] OnboardingNavigator render", { initialRouteName });
   return (
@@ -84,6 +101,9 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="ProgramEndCheck" component={ProgramEndCheckScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramComplete" component={ProgramCompleteScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreenDeferred} options={stepTransitionOptions} />
+      <Stack.Screen name="ProgramDay" component={ProgramDayScreenDeferred} options={{ ...stepTransitionOptions, headerShown: true }} />
+      <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreenDeferred} options={{ ...stepTransitionOptions, headerShown: true }} />
       <Stack.Screen name="Paywall" component={PaywallScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ExerciseDecisionHistory" component={ExerciseDecisionHistoryScreen} />
     </Stack.Navigator>
