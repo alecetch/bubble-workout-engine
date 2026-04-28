@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   CalendarDayPillRow,
   type ProgramDayStatus,
 } from "../../components/program/CalendarDayPillRow";
+import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { DayPreviewCard } from "../../components/program/DayPreviewCard";
-import { HeroHeader } from "../../components/program/HeroHeader";
 import { WeekPillStrip, type WeekStatus } from "../../components/program/WeekPillStrip";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
@@ -259,9 +259,21 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
 
   if (overviewQuery.isLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.loadingText}>Loading program dashboard...</Text>
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <SkeletonBlock height={184} style={styles.skeletonBlockLarge} />
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            {[0, 1, 2, 3].map((i) => (
+              <SkeletonBlock key={i} width={76} height={34} style={styles.skeletonPill} />
+            ))}
+          </View>
+          <SkeletonBlock height={132} style={styles.skeletonBlockMedium} />
+          <View style={{ flexDirection: "row", gap: spacing.xs }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <SkeletonBlock key={i} width={28} height={28} borderRadius={14} style={styles.skeletonDot} />
+            ))}
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -285,11 +297,12 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <HeroHeader
-        title={overview.program.title ?? "Training Program"}
-        summary={overview.program.summary}
-        heroMedia={overview.program.heroMedia}
-      />
+      <View style={styles.heroCard}>
+        <Text style={styles.heroTitle}>{overview.program.title ?? "Training Program"}</Text>
+        {overview.program.summary ? (
+          <Text style={styles.heroSummary}>{overview.program.summary}</Text>
+        ) : null}
+      </View>
 
       {showCompletionBanner ? (
         <PressableScale
@@ -369,10 +382,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
-  loadingText: {
-    color: colors.textSecondary,
-    ...typography.body,
-  },
   errorTitle: {
     color: colors.textPrimary,
     ...typography.h3,
@@ -396,6 +405,44 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",
+  },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  heroTitle: {
+    color: colors.textPrimary,
+    ...typography.h2,
+  },
+  heroSummary: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  skeletonBlockLarge: {
+    height: 164,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+  },
+  skeletonBlockMedium: {
+    height: 120,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+  },
+  skeletonPill: {
+    width: 64,
+    height: 36,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+  },
+  skeletonDot: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
   },
   completionBanner: {
     backgroundColor: colors.surface,
