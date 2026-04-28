@@ -67,7 +67,7 @@ function hashImportPayload(payload) {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
-function parseEmitterRows(rows) {
+export function parseEmitterRows(rows) {
   const parsed = {
     prg: null,
     weeks: [],

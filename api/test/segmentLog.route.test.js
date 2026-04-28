@@ -197,6 +197,9 @@ test("postSegmentLog accepts rir_actual of 0", async () => {
           if (sql.includes("INSERT INTO segment_exercise_log")) {
             return { rows: [], rowCount: 1 };
           }
+          if (sql.includes("WITH new_rows AS")) {
+            return { rows: [], rowCount: 0 };
+          }
           throw new Error(`Unexpected SQL: ${sql}`);
         },
         release() {},
@@ -236,6 +239,9 @@ test("postSegmentLog accepts rir_actual of 3", async () => {
           }
           if (sql.includes("INSERT INTO segment_exercise_log")) {
             return { rows: [], rowCount: 1 };
+          }
+          if (sql.includes("WITH new_rows AS")) {
+            return { rows: [], rowCount: 0 };
           }
           throw new Error(`Unexpected SQL: ${sql}`);
         },
@@ -338,6 +344,9 @@ test("postSegmentLog persists rir_actual when provided", async () => {
           if (sql.includes("INSERT INTO segment_exercise_log")) {
             return { rows: [], rowCount: 1 };
           }
+          if (sql.includes("WITH new_rows AS")) {
+            return { rows: [], rowCount: 0 };
+          }
           throw new Error(`Unexpected SQL: ${sql}`);
         },
         release() {},
@@ -377,6 +386,9 @@ test("postSegmentLog stores null rir_actual when omitted", async () => {
           }
           if (sql.includes("INSERT INTO segment_exercise_log")) {
             return { rows: [], rowCount: 1 };
+          }
+          if (sql.includes("WITH new_rows AS")) {
+            return { rows: [], rowCount: 0 };
           }
           throw new Error(`Unexpected SQL: ${sql}`);
         },

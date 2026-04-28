@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -10,8 +11,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { ResizeMode, Video } from "expo-av";
 import { useExerciseGuidance } from "../../api/hooks";
+import { PressableScale } from "../interaction/PressableScale";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -119,15 +120,20 @@ export function TechniqueSheet({
 
             {guidance?.techniqueVideoUrl ? (
               <View style={styles.videoContainer}>
-                <Video
-                  source={{ uri: guidance.techniqueVideoUrl }}
-                  style={styles.video}
-                  resizeMode={ResizeMode.CONTAIN}
-                  shouldPlay
-                  isLooping
-                  isMuted
-                  useNativeControls={false}
-                />
+                <Text style={styles.videoTitle}>Demo video available</Text>
+                <Text style={styles.videoCaption}>
+                  Open the technique clip in your device browser.
+                </Text>
+                <PressableScale
+                  style={styles.videoLinkButton}
+                  onPress={() => {
+                    const videoUrl = guidance.techniqueVideoUrl;
+                    if (!videoUrl) return;
+                    void Linking.openURL(videoUrl);
+                  }}
+                >
+                  <Text style={styles.videoLinkLabel}>Open video</Text>
+                </PressableScale>
               </View>
             ) : null}
 
@@ -306,12 +312,34 @@ const styles = StyleSheet.create({
   },
   videoContainer: {
     borderRadius: radii.card,
-    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.card,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
-  video: {
-    width: "100%",
-    aspectRatio: 16 / 9,
+  videoTitle: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "600",
+  },
+  videoCaption: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  videoLinkButton: {
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  videoLinkLabel: {
+    color: colors.accent,
+    ...typography.small,
+    fontWeight: "600",
   },
   emptyText: {
     color: colors.textSecondary,
