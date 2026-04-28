@@ -147,9 +147,9 @@ async function seedProgramFixture(db) {
        segment_duration_mmss
      )
      VALUES
-       ($1, $2, 'PD_W1_D1', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
-       ($1, $3, 'PD_W1_D2', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
-       ($1, $4, 'PD_W1_D3', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, '')
+       ($1, $2, 'PD_W1_D1', 'B1_S1', 'B1', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
+       ($1, $3, 'PD_W1_D2', 'B1_S1', 'B1', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
+       ($1, $4, 'PD_W1_D3', 'B1_S1', 'B1', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, '')
      RETURNING id, program_day_id`,
     [programId, dayByKey.PD_W1_D1, dayByKey.PD_W1_D2, dayByKey.PD_W1_D3],
   );
