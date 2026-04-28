@@ -344,17 +344,16 @@ test("regenerateDaysWithEquipment applies bodyweight-only filtering when equipme
 
     assert.equal(result.regenerated, 1);
 
-    const equipmentR = await pool.query(
-      `SELECT e.equipment_items_slugs
+    const exercisesR = await pool.query(
+      `SELECT pe.exercise_id, pe.equipment_items_slugs_csv
        FROM program_exercise pe
-       JOIN exercise_catalogue e ON e.exercise_id = pe.exercise_id
        WHERE pe.program_day_id = $1`,
       [fixture.dayIds.pending],
     );
 
-    assert.ok(equipmentR.rows.length > 0, "Expected regenerated exercises for pending day");
+    assert.ok(exercisesR.rows.length > 0, "Expected regenerated exercises for pending day");
     assert.ok(
-      equipmentR.rows.every((row) => Array.isArray(row.equipment_items_slugs) && row.equipment_items_slugs.length === 0),
+      exercisesR.rows.every((row) => !row.equipment_items_slugs_csv || row.equipment_items_slugs_csv === ""),
       "Expected only bodyweight exercises after empty-equipment regeneration",
     );
   } finally {
