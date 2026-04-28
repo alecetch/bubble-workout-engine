@@ -1,7 +1,12 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { afterEach } from "vitest";
 import { GuidelineLoadHint } from "./GuidelineLoadHint";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
+
+afterEach(() => {
+  cleanup();
+});
 
 type GuidelineLoad = NonNullable<
   ProgramDayFullResponse["segments"][number]["exercises"][number]["guidelineLoad"]
