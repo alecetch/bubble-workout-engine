@@ -123,64 +123,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     };
   }, [orderedSegments, programDayId]);
 
-  useEffect(() => {
-    if (!dayQuery.data || dayQuery.isLoading) return;
-
-    for (const segment of orderedSegments) {
-      if (segment.purpose === "warmup" || segment.purpose === "cooldown") continue;
-      if (segmentLogs[segment.id]) continue;
-
-      for (const exercise of segment.exercises ?? []) {
-        if (
-          exercise.isNewExercise &&
-          exercise.exerciseId &&
-          !autoOpenedExerciseIds.has(exercise.exerciseId) &&
-          (exercise.coachingCuesJson?.length ?? 0) > 0
-        ) {
-          setAutoOpenedExerciseIds((prev) => new Set([...prev, exercise.exerciseId ?? ""]));
-          setTechniqueTargetExerciseId(exercise.exerciseId);
-          setTechniqueTargetExerciseName(exercise.name);
-          setTechniqueSheetVisible(true);
-          return;
-        }
-      }
-    }
-  }, [autoOpenedExerciseIds, dayQuery.data, dayQuery.isLoading, orderedSegments, segmentLogs]);
-
-  const activeSegment = useMemo(
-    () => orderedSegments.find((segment) => segment.id === activeSegmentId) ?? null,
-    [activeSegmentId, orderedSegments],
-  );
-
-  function openSwapSheet(programExerciseId: string, exerciseName: string): void {
-    setSwapTargetProgramExerciseId(programExerciseId);
-    setSwapTargetExerciseName(exerciseName);
-    setSwapSheetVisible(true);
-  }
-
-  function closeSwapSheet(): void {
-    setSwapSheetVisible(false);
-    setSwapTargetProgramExerciseId(null);
-    setSwapTargetExerciseName(null);
-  }
-
-  function openTechniqueSheet(exerciseId: string, exerciseName: string): void {
-    setTechniqueTargetExerciseId(exerciseId);
-    setTechniqueTargetExerciseName(exerciseName);
-    setTechniqueSheetVisible(true);
-  }
-
-  function closeTechniqueSheet(): void {
-    setTechniqueSheetVisible(false);
-    setTechniqueTargetExerciseId(null);
-    setTechniqueTargetExerciseName(null);
-  }
-
-  const handleCompleteWorkout = async (): Promise<void> => {
-    await hapticMedium();
-    setSummaryVisible(true);
-  };
-
   async function handleSummaryDismiss(): Promise<void> {
     setSummaryVisible(false);
     try {
