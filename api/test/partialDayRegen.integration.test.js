@@ -116,9 +116,9 @@ async function seedProgramFixture(db) {
        is_completed
      )
      VALUES
-       ($1, $2, 1, 1, 1, 'week_1_day_1', 'Day 1', 'hypertrophy', 60, 0, 'Mon', $3::date, true),
-       ($1, $2, 1, 2, 2, 'week_1_day_2', 'Day 2', 'hypertrophy', 60, 2, 'Wed', $4::date, false),
-       ($1, $2, 1, 3, 3, 'week_1_day_3', 'Day 3', 'hypertrophy', 60, 4, 'Fri', $5::date, false)
+       ($1, $2, 1, 1, 1, 'PD_W1_D1', 'Day 1', 'hypertrophy', 60, 0, 'Mon', $3::date, true),
+       ($1, $2, 1, 2, 2, 'PD_W1_D2', 'Day 2', 'hypertrophy', 60, 2, 'Wed', $4::date, false),
+       ($1, $2, 1, 3, 3, 'PD_W1_D3', 'Day 3', 'hypertrophy', 60, 4, 'Fri', $5::date, false)
      RETURNING id, program_day_key`,
     [programId, programWeekId, isoDate(nextMonday), isoDate(nextWednesday), isoDate(nextFriday)],
   );
@@ -147,11 +147,11 @@ async function seedProgramFixture(db) {
        segment_duration_mmss
      )
      VALUES
-       ($1, $2, 'week_1_day_1', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
-       ($1, $3, 'week_1_day_2', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
-       ($1, $4, 'week_1_day_3', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, '')
+       ($1, $2, 'PD_W1_D1', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
+       ($1, $3, 'PD_W1_D2', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
+       ($1, $4, 'PD_W1_D3', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, '')
      RETURNING id, program_day_id`,
-    [programId, dayByKey.week_1_day_1, dayByKey.week_1_day_2, dayByKey.week_1_day_3],
+    [programId, dayByKey.PD_W1_D1, dayByKey.PD_W1_D2, dayByKey.PD_W1_D3],
   );
   const segmentByDayId = Object.fromEntries(segmentsR.rows.map((row) => [row.program_day_id, row.id]));
 
@@ -166,7 +166,7 @@ async function seedProgramFixture(db) {
   const catalogueExercises = exerciseIdsR.rows;
 
   let orderInDay = 1;
-  for (const dayId of [dayByKey.week_1_day_1, dayByKey.week_1_day_2, dayByKey.week_1_day_3]) {
+  for (const dayId of [dayByKey.PD_W1_D1, dayByKey.PD_W1_D2, dayByKey.PD_W1_D3]) {
     for (const exercise of catalogueExercises.slice(0, 3)) {
       await db.query(
         `INSERT INTO program_exercise (
@@ -230,7 +230,7 @@ async function seedProgramFixture(db) {
          ORDER BY order_in_day
          LIMIT 1
        ), 1, false, 50, 8, 2)`,
-    [ownerUserId, programId, dayByKey.week_1_day_2, segmentByDayId[dayByKey.week_1_day_2]],
+    [ownerUserId, programId, dayByKey.PD_W1_D2, segmentByDayId[dayByKey.PD_W1_D2]],
   );
 
   return {
@@ -238,9 +238,9 @@ async function seedProgramFixture(db) {
     strangerUserId,
     programId,
     dayIds: {
-      completed: dayByKey.week_1_day_1,
-      partiallyLogged: dayByKey.week_1_day_2,
-      pending: dayByKey.week_1_day_3,
+      completed: dayByKey.PD_W1_D1,
+      partiallyLogged: dayByKey.PD_W1_D2,
+      pending: dayByKey.PD_W1_D3,
     },
     ownerSubjectId,
     strangerSubjectId,

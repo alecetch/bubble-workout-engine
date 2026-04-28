@@ -140,8 +140,8 @@ async function seedRouteFixture(db) {
        is_completed
      )
      VALUES
-       ($1, $2, 1, 1, 1, 'week_1_day_1', 'Day 1', 'hypertrophy', 60, 0, 'Mon', $3::date, false),
-       ($1, $2, 1, 2, 2, 'week_1_day_2', 'Day 2', 'hypertrophy', 60, 2, 'Wed', $4::date, false)
+       ($1, $2, 1, 1, 1, 'PD_W1_D1', 'Day 1', 'hypertrophy', 60, 0, 'Mon', $3::date, false),
+       ($1, $2, 1, 2, 2, 'PD_W1_D2', 'Day 2', 'hypertrophy', 60, 2, 'Wed', $4::date, false)
      RETURNING id, program_day_key`,
     [programId, programWeekId, isoDate(nextMonday), isoDate(nextWednesday)],
   );
@@ -170,8 +170,8 @@ async function seedRouteFixture(db) {
        segment_duration_mmss
      )
      VALUES
-       ($1, $2, 'week_1_day_1', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
-       ($1, $3, 'week_1_day_2', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, '')
+       ($1, $2, 'PD_W1_D1', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, ''),
+       ($1, $3, 'PD_W1_D2', 'main_1', 'block_a', 1, 1, 'single', 'main', 'Main', 'Main Work', '', 1, 'none', '', '', '{}'::jsonb, 0, '')
      RETURNING id, program_day_id`,
     [programId, dayIds[0], dayIds[1]],
   );
@@ -219,7 +219,7 @@ async function seedRouteFixture(db) {
           programId,
           dayId,
           segmentByDay[dayId],
-          `week_1_day_${dayIndex + 1}`,
+          `PD_W1_D${dayIndex + 1}`,
           exercise.exercise_id,
           exercise.name,
           orderInDay,
