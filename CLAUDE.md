@@ -109,3 +109,23 @@ When asked to "commit" or "submit" work, the full expected flow is:
 3. Push the branch and open a PR with an outcome-focused title
 4. Monitor CI — if it fails, fix on the branch and push again before merging
 5. Merge only when CI is green
+
+## Test requirements for Codex prompts
+
+Every implementation prompt MUST include an explicit test deliverable section. Templates:
+
+### For API routes
+"Write a `api/test/<feature>.route.test.js` using `node:test` + the test DB that covers:
+the golden path (200 response with correct shape), auth (401), and ownership isolation (404 for another user's resource)."
+
+### For services with business logic
+"Write a `api/src/services/__tests__/<service>.test.js` or integration test that asserts
+the critical invariant: [name the specific invariant, e.g. 'equipment filtering is applied - no exercises requiring equipment the user lacks appear in the output']."
+
+### For mobile components
+"Write a `<Component>.component.test.tsx` covering: initial render, the happy path interaction,
+and at least one failure/error state."
+
+### Verification line in every prompt
+Replace: `Verified with npx tsc --noEmit`
+With: `Verified with npx tsc --noEmit AND all new tests pass (npx vitest run / npm test)`

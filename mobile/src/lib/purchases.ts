@@ -1,3 +1,5 @@
+import Constants from "expo-constants";
+
 type PurchasesModule = {
   default?: {
     configure: (options: { apiKey: string }) => Promise<void> | void;
@@ -17,9 +19,18 @@ type PurchasesModule = {
 };
 
 let cachedModule: PurchasesModule | null | undefined;
+let purchasesConfigured = false;
+
+function canUsePurchasesNative(): boolean {
+  return Constants.executionEnvironment !== "storeClient";
+}
 
 function loadPurchasesModule(): PurchasesModule | null {
   if (cachedModule !== undefined) return cachedModule ?? null;
+  if (!canUsePurchasesNative()) {
+    cachedModule = null;
+    return null;
+  }
 
   try {
     const dynamicRequire = eval("require") as (id: string) => PurchasesModule;
@@ -42,24 +53,56 @@ export function isPurchasesAvailable(): boolean {
 export function configurePurchases(apiKey: string): void {
   const mod = loadPurchasesModule();
   const purchases = mod?.default;
-  if (!purchases || !apiKey) return;
-  const errorLevel = mod?.LOG_LEVEL?.ERROR;
-  if (errorLevel !== undefined && typeof purchases.setLogLevel === "function") {
-    purchases.setLogLevel(errorLevel);
+  if (!purchases || !apiKey) {
+    purchasesConfigured = false;
+    return;
   }
-  void purchases.configure({ apiKey });
+  try {
+    const errorLevel = mod?.LOG_LEVEL?.ERROR;
+    if (errorLevel !== undefined && typeof purchases.setLogLevel === "function") {
+      purchases.setLogLevel(errorLevel);
+    }
+    const result = purchases.configure({ apiKey });
+    purchasesConfigured = true;
+    if (result && typeof (result as Promise<unknown>).catch === "function") {
+      void (result as Promise<unknown>).catch(() => {
+        purchasesConfigured = false;
+      });
+    }
+  } catch {
+    purchasesConfigured = false;
+    // Never block app startup if the native purchases module is unavailable.
+  }
 }
 
 export function logInPurchases(userId: string): void {
   const purchases = getPurchasesApi();
-  if (!purchases || !userId) return;
-  void purchases.logIn(userId);
+  if (!purchases || !userId || !purchasesConfigured) return;
+  try {
+    const result = purchases.logIn(userId);
+    if (result && typeof result.catch === "function") {
+      void result.catch(() => {
+        // Ignore async purchase SDK login failures in unsupported runtimes.
+      });
+    }
+  } catch {
+    // Ignore purchase SDK login failures in unsupported runtimes.
+  }
 }
 
 export function logOutPurchases(): void {
   const purchases = getPurchasesApi();
-  if (!purchases) return;
-  void purchases.logOut();
+  if (!purchases || !purchasesConfigured) return;
+  try {
+    const result = purchases.logOut();
+    if (result && typeof result.catch === "function") {
+      void result.catch(() => {
+        // Ignore async purchase SDK logout failures in unsupported runtimes.
+      });
+    }
+  } catch {
+    // Ignore purchase SDK logout failures in unsupported runtimes.
+  }
 }
 
 export async function getPurchaseOfferings(): Promise<any | null> {

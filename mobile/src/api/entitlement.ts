@@ -7,6 +7,7 @@ export type EntitlementResponse = {
   trial_days_remaining: number | null;
   trial_expires_at: string;
   subscription_expires_at: string | null;
+  physique_consent_given: boolean;
 };
 
 export function getEntitlement(): Promise<EntitlementResponse> {
