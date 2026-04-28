@@ -50,6 +50,13 @@ jobs:
             -locations=filesystem:/flyway/sql \
             migrate
 
+      - name: Validate compiledConfig for all active program types
+        working-directory: api
+        env:
+          DATABASE_URL: postgres://workout:workout@127.0.0.1:5432/workout_test
+          NODE_ENV: test
+        run: node scripts/check_configs.mjs
+
       - name: Run API tests
         working-directory: api
         env:

@@ -10,7 +10,8 @@
     "import:bubble": "node scripts/import_bubble_exports.mjs",
     "test": "node --test",
     "qa:history": "node scripts/history_qa_smoke.mjs",
-    "qa:seeds": "node scripts/check_seeds.mjs"
+    "qa:seeds": "node scripts/check_seeds.mjs",
+    "qa:config": "node scripts/check_configs.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1036.0",
