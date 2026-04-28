@@ -49,7 +49,6 @@ async function seedProgramFixture(db) {
   await db.query(
     `INSERT INTO client_profile (
        user_id,
-       bubble_client_profile_id,
        fitness_level_slug,
        fitness_rank,
        equipment_items_slugs,
@@ -58,9 +57,9 @@ async function seedProgramFixture(db) {
        minutes_per_session,
        main_goals_slugs
      )
-     VALUES ($1, $2, 'beginner', 0, ARRAY['barbell','dumbbells','cable'], 'commercial_gym',
+     VALUES ($1, 'beginner', 0, ARRAY['barbell','dumbbells','cable'], 'commercial_gym',
              ARRAY['mon','wed','fri'], 60, ARRAY['strength'])`,
-    [ownerUserId, `cp-${ownerSubjectId}`],
+    [ownerUserId],
   );
 
   const nextMonday = nextWeekday(1);
