@@ -1,6 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { EquipmentSettingsScreen } from "./EquipmentSettingsScreen";
 import { getProgramEquipment } from "../../api/equipmentRegen";
 
@@ -86,10 +85,6 @@ function renderScreen() {
 function clickButton(label: string) {
   fireEvent.click(screen.getByRole("button", { name: label }));
 }
-
-afterEach(() => {
-  cleanup();
-});
 
 describe("EquipmentSettingsScreen", () => {
   beforeEach(() => {

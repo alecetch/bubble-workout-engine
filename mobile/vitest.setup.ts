@@ -1,5 +1,13 @@
 import "@testing-library/jest-dom";
+import { cleanup } from "@testing-library/react";
 import React from "react";
+
+// Ensure DOM is cleaned up between every test. @testing-library/react registers
+// this automatically when globals are detected, but it does not fire reliably
+// under vitest's forks pool with singleFork:true — so we wire it explicitly.
+afterEach(() => {
+  cleanup();
+});
 
 // ── jsdom polyfills ───────────────────────────────────────────────────────────
 
