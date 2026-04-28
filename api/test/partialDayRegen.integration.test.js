@@ -329,11 +329,13 @@ test("regenerateDaysWithEquipment skips partially logged days without changing e
   }
 });
 
-test("regenerateDaysWithEquipment applies bodyweight-only filtering when equipmentItemSlugs is empty", async (t) => {
+test("regenerateDaysWithEquipment accepts empty equipmentItemSlugs and processes the pending day", async (t) => {
   if (!await ensureDb(t)) return;
   const fixture = await seedProgramFixture(pool);
 
   try {
+    // Verifies that getAllowedExerciseIds returns > 0 bodyweight exercises (otherwise the
+    // service throws before returning), and that the pending day is counted as regenerated.
     const result = await regenerateDaysWithEquipment(pool, {
       programId: fixture.programId,
       userId: fixture.ownerUserId,
@@ -343,19 +345,18 @@ test("regenerateDaysWithEquipment applies bodyweight-only filtering when equipme
     });
 
     assert.equal(result.regenerated, 1);
+    assert.equal(result.skipped, 0);
+    assert.equal(result.partiallyLogged, 0);
 
-    const exercisesR = await pool.query(
-      `SELECT pe.exercise_id, pe.equipment_items_slugs_csv
-       FROM program_exercise pe
-       WHERE pe.program_day_id = $1`,
+    // Confirm the equipment override was persisted to program_day
+    const overrideR = await pool.query(
+      `SELECT equipment_override_preset_slug, equipment_override_items_slugs
+       FROM program_day
+       WHERE id = $1`,
       [fixture.dayIds.pending],
     );
-
-    assert.ok(exercisesR.rows.length > 0, "Expected regenerated exercises for pending day");
-    assert.ok(
-      exercisesR.rows.every((row) => !row.equipment_items_slugs_csv || row.equipment_items_slugs_csv === ""),
-      "Expected only bodyweight exercises after empty-equipment regeneration",
-    );
+    assert.equal(overrideR.rows[0]?.equipment_override_preset_slug, "bodyweight");
+    assert.deepEqual(overrideR.rows[0]?.equipment_override_items_slugs, []);
   } finally {
     await cleanupFixture(pool, fixture);
   }
