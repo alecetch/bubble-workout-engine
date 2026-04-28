@@ -42,6 +42,7 @@ import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
+import { equipmentRegenRouter } from "./src/routes/equipmentRegen.js";
 import {
   uploadSingle,
   handleCheckInSubmit,
@@ -740,6 +741,8 @@ app.use("/api/import", trainingHistoryImportRouter);
 app.use("/api", workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
+app.use("/api", userAuth, equipmentRegenRouter);
+logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipment regeneration routes at /api");
 app.use("/api", programExerciseRouter);
 app.use("/api", programCompletionRouter);
 app.use("/api", debugAllowedExercisesRouter);

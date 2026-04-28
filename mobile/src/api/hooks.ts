@@ -41,6 +41,12 @@ import {
   type ExerciseGuidance,
 } from "./exerciseGuidance";
 import {
+  getProgramEquipment,
+  regenerateProgramDays,
+  type RegenerateDaysResult,
+  type ProgramEquipmentState,
+} from "./equipmentRegen";
+import {
   getCheckIns,
   deleteCheckIn,
   type CheckInListResponse,
@@ -62,6 +68,7 @@ import {
   saveSegmentExerciseLogs,
   type SegmentLogRow,
   type SaveSegmentLogPayload,
+  type SaveSegmentLogResult,
 } from "./segmentLog";
 import {
   applyExerciseSwap,
@@ -139,6 +146,7 @@ export const queryKeys = {
   physiqueScans: ["physiqueScans"] as const,
   physiqueScanTrend: ["physiqueScanTrend"] as const,
   physiqueMilestones: ["physiqueMilestones"] as const,
+  programEquipment: (programId: string | null) => ["programEquipment", programId] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -254,6 +262,16 @@ export function useProgramDayFull(
     queryKey: queryKeys.programDayFull(programDayId, opts),
     queryFn: () => getProgramDayFull(programDayId, opts),
     enabled: Boolean(programDayId && opts.userId),
+  });
+}
+
+export function useProgramEquipment(
+  programId: string | null,
+): UseQueryResult<ProgramEquipmentState> {
+  return useQuery({
+    queryKey: queryKeys.programEquipment(programId),
+    queryFn: () => getProgramEquipment(programId as string),
+    enabled: Boolean(programId),
   });
 }
 
@@ -589,7 +607,7 @@ export function useApplyExerciseSwap(): UseMutationResult<
   });
 }
 
-export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegmentLogPayload> {
+export function useSaveSegmentLogs(): UseMutationResult<SaveSegmentLogResult, Error, SaveSegmentLogPayload> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: saveSegmentExerciseLogs,
@@ -600,6 +618,29 @@ export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegment
           variables.programDayId,
         ),
       });
+    },
+  });
+}
+
+export function useRegenerateDays(
+  programId: string,
+): UseMutationResult<
+  RegenerateDaysResult,
+  Error,
+  Parameters<typeof regenerateProgramDays>[1]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => regenerateProgramDays(programId, payload),
+    onSuccess: (result) => {
+      for (const dayId of result.dayIds) {
+        void queryClient.invalidateQueries({
+          queryKey: ["programDayFull", dayId],
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.programEquipment(programId) });
+      void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+      void queryClient.invalidateQueries({ queryKey: ["dayPreview"] });
     },
   });
 }

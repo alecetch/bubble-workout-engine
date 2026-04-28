@@ -2,9 +2,12 @@ import "react-native-gesture-handler";
 import React from "react";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { Platform } from "react-native";
+import { AuthNavigator } from "./src/navigation/AuthNavigator";
+import { AppTabs } from "./src/navigation/AppTabs";
 import { configurePurchases } from "./src/lib/purchases";
 import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
@@ -20,6 +23,19 @@ const queryClient = new QueryClient({
   },
 });
 
+// Notification tap-through handling can be re-enabled once the underlying
+// native HostFunction failure is understood. Token registration stays enabled.
+const ENABLE_NOTIFICATION_RESPONSE_HANDLERS = false;
+const CAN_USE_NOTIFICATIONS_NATIVE = Constants.executionEnvironment !== "storeClient";
+
+function logBoot(message: string, detail?: unknown): void {
+  if (detail === undefined) {
+    console.log(`[boot] ${message}`);
+    return;
+  }
+  console.log(`[boot] ${message}`, detail);
+}
+
 const appTheme: Theme = {
   ...DefaultTheme,
   colors: {
@@ -32,14 +48,20 @@ const appTheme: Theme = {
   },
 };
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+if (ENABLE_NOTIFICATION_RESPONSE_HANDLERS) {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch {
+    // Some native notification host functions can fail on startup in unsupported runtimes.
+  }
+}
 
 let pendingNotificationResponse: Notifications.NotificationResponse | null = null;
 
@@ -83,40 +105,49 @@ export default function App(): React.JSX.Element {
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const userId = useSessionStore((state) => state.userId);
   const entryRoute = useSessionStore((state) => state.entryRoute);
-  const AuthModule = React.useMemo(
-    () =>
-      !isAuthenticated
-        ? (require("./src/navigation/AuthNavigator") as typeof import("./src/navigation/AuthNavigator"))
-        : null,
-    [isAuthenticated],
-  );
-  const AppTabsModule = React.useMemo(
-    () =>
-      isAuthenticated
-        ? (require("./src/navigation/AppTabs") as typeof import("./src/navigation/AppTabs"))
-        : null,
-    [isAuthenticated],
-  );
+
+  logBoot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
 
   React.useEffect(() => {
+    if (!CAN_USE_NOTIFICATIONS_NATIVE) {
+      logBoot("push registration skipped", { reason: "expo-go" });
+      return;
+    }
     if (!isAuthenticated || !userId) return;
 
     (async () => {
       try {
+        logBoot("push registration start", { platform: Platform.OS });
         if (Platform.OS === "android") {
+          logBoot("push setNotificationChannelAsync start");
           await Notifications.setNotificationChannelAsync("default", {
             name: "default",
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
           });
+          logBoot("push setNotificationChannelAsync success");
         }
 
+        logBoot("push requestPermissionsAsync start");
         const { status } = await Notifications.requestPermissionsAsync();
+        logBoot("push requestPermissionsAsync success", { status });
         if (status !== "granted") return;
 
-        const tokenData = await Notifications.getExpoPushTokenAsync();
+        const projectId =
+          Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+        logBoot("push getExpoPushTokenAsync start", { hasProjectId: Boolean(projectId) });
+        const tokenData = await Notifications.getExpoPushTokenAsync(
+          projectId ? { projectId } : undefined,
+        );
+        logBoot("push getExpoPushTokenAsync success", { hasToken: Boolean(tokenData.data) });
+        logBoot("push registerPushToken start");
         await registerPushToken(tokenData.data);
-      } catch {
+        logBoot("push registerPushToken success");
+      } catch (error) {
+        logBoot(
+          "push registration failed",
+          error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
+        );
         // Never block app startup on notification registration.
       }
     })();
@@ -124,14 +155,39 @@ export default function App(): React.JSX.Element {
 
   React.useEffect(() => {
     const key = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ?? "";
+    logBoot("configurePurchases start", { hasKey: Boolean(key) });
     configurePurchases(key);
+    logBoot("configurePurchases done");
   }, []);
 
   React.useEffect(() => {
-    void Notifications.getLastNotificationResponseAsync().then(handleNotificationResponse);
+    if (!CAN_USE_NOTIFICATIONS_NATIVE) return undefined;
+    if (!ENABLE_NOTIFICATION_RESPONSE_HANDLERS) return undefined;
 
-    const sub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
-    return () => sub.remove();
+    let sub: { remove: () => void } | null = null;
+
+    try {
+      logBoot("notification response hydration start");
+      void Notifications.getLastNotificationResponseAsync()
+        .then(handleNotificationResponse)
+        .catch(() => {
+          // Ignore notification hydration issues during startup.
+        });
+
+      logBoot("notification response listener start");
+      sub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+      logBoot("notification response listener success");
+    } catch {
+      // Never block app startup on notification listener registration.
+    }
+
+    return () => {
+      try {
+        sub?.remove();
+      } catch {
+        // Ignore teardown errors from notification listeners.
+      }
+    };
   }, []);
 
   React.useEffect(() => {
@@ -148,9 +204,9 @@ export default function App(): React.JSX.Element {
       >
         <StatusBar style="light" />
         {isAuthenticated ? (
-          AppTabsModule ? <AppTabsModule.AppTabs homeInitialRoute={entryRoute} /> : null
+          <AppTabs homeInitialRoute={entryRoute} />
         ) : (
-          AuthModule ? <AuthModule.AuthNavigator /> : null
+          <AuthNavigator />
         )}
       </NavigationContainer>
     </QueryClientProvider>

@@ -407,6 +407,7 @@ export function createReadProgramHandlers(options = pool) {
           d.id AS program_day_id,
           d.program_id,
           d.scheduled_date,
+          d.scheduled_weekday,
           d.week_number,
           d.day_number,
           d.global_day_index,
@@ -419,6 +420,8 @@ export function createReadProgramHandlers(options = pool) {
           d.block_format_finisher_text,
           d.is_completed,
           d.has_activity,
+          d.equipment_override_preset_slug,
+          d.equipment_override_items_slugs,
           p.client_profile_id,
           d.hero_media_id,
           ma.image_key  AS hero_image_key,
@@ -439,6 +442,10 @@ export function createReadProgramHandlers(options = pool) {
       const _dayRow = dayR.rows[0];
       const day = {
         ..._dayRow,
+        equipmentOverridePresetSlug: _dayRow.equipment_override_preset_slug ?? null,
+        equipmentOverrideItemSlugs: _dayRow.equipment_override_items_slugs ?? null,
+        scheduledWeekday: _dayRow.scheduled_weekday ?? "",
+        weekNumber: _dayRow.week_number ?? 1,
         hero_media: _dayRow.hero_image_key
           ? resolveMediaUrl({
               image_key: _dayRow.hero_image_key,

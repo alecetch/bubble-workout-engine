@@ -7,12 +7,6 @@ import {
   View,
 } from "react-native";
 import { PressableScale } from "../interaction/PressableScale";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { hapticMedium } from "../interaction/haptics";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -44,24 +38,12 @@ export function SessionSummaryModal({
     roundedVolume >= 1000
       ? `${(roundedVolume / 1000).toFixed(1)}t`
       : `${roundedVolume.toLocaleString()} kg`;
-  const prScale = useSharedValue(0.5);
-  const prOpacity = useSharedValue(0);
 
   useEffect(() => {
     if (visible && prHits.length > 0) {
-      prScale.value = withTiming(1, { duration: 380, easing: Easing.out(Easing.back(1.6)) });
-      prOpacity.value = withTiming(1, { duration: 300 });
       void hapticMedium();
-    } else if (!visible) {
-      prScale.value = 0.5;
-      prOpacity.value = 0;
     }
-  }, [prHits.length, prOpacity, prScale, visible]);
-
-  const animatedPrBannerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: prScale.value }],
-    opacity: prOpacity.value,
-  }));
+  }, [prHits.length, visible]);
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onDismiss}>
@@ -75,14 +57,14 @@ export function SessionSummaryModal({
             <View style={styles.divider} />
 
             {prHits.length > 0 ? (
-              <Animated.View style={[styles.prBanner, animatedPrBannerStyle]}>
+              <View style={styles.prBanner}>
                 <Text style={styles.prEmoji}>PR</Text>
                 <Text style={styles.prText} numberOfLines={2}>
                   {prHits.length === 1
                     ? `New PR on ${prHits[0]}!`
                     : `New PRs on ${prHits.slice(0, 2).join(" & ")}!`}
                 </Text>
-              </Animated.View>
+              </View>
             ) : null}
 
             <View style={styles.statsGrid}>
