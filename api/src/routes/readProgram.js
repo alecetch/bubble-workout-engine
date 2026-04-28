@@ -407,6 +407,7 @@ export function createReadProgramHandlers(options = pool) {
           d.id AS program_day_id,
           d.program_id,
           d.scheduled_date,
+          d.scheduled_weekday,
           d.week_number,
           d.day_number,
           d.global_day_index,
@@ -419,6 +420,8 @@ export function createReadProgramHandlers(options = pool) {
           d.block_format_finisher_text,
           d.is_completed,
           d.has_activity,
+          d.equipment_override_preset_slug,
+          d.equipment_override_items_slugs,
           p.client_profile_id,
           d.hero_media_id,
           ma.image_key  AS hero_image_key,
@@ -439,6 +442,10 @@ export function createReadProgramHandlers(options = pool) {
       const _dayRow = dayR.rows[0];
       const day = {
         ..._dayRow,
+        equipmentOverridePresetSlug: _dayRow.equipment_override_preset_slug ?? null,
+        equipmentOverrideItemSlugs: _dayRow.equipment_override_items_slugs ?? null,
+        scheduledWeekday: _dayRow.scheduled_weekday ?? "",
+        weekNumber: _dayRow.week_number ?? 1,
         hero_media: _dayRow.hero_image_key
           ? resolveMediaUrl({
               image_key: _dayRow.hero_image_key,
@@ -480,40 +487,44 @@ export function createReadProgramHandlers(options = pool) {
       const exR = await client.query(
         `
         SELECT
-          id AS program_exercise_id,
-          workout_segment_id,
-          exercise_id,
-          exercise_name,
-          order_in_day,
-          block_order,
-          order_in_block,
-          purpose,
-          purpose_label,
-          sets_prescribed,
-          reps_prescribed,
-          reps_unit,
-          intensity_prescription,
-          tempo,
-          rest_seconds,
-          progression_outcome,
-          progression_primary_lever,
-          progression_confidence,
-          progression_source,
-          progression_reasoning_json,
-          recommended_load_kg,
-          recommended_reps_target,
-          recommended_sets,
-          recommended_rest_seconds,
-          notes,
-          is_loadable,
-          coaching_cues_json,
-          load_hint,
-          log_prompt
-        FROM program_exercise
-        WHERE program_day_id = $1
-        ORDER BY order_in_day
+          pe.id AS program_exercise_id,
+          pe.workout_segment_id,
+          pe.exercise_id,
+          pe.exercise_name,
+          pe.order_in_day,
+          pe.block_order,
+          pe.order_in_block,
+          pe.purpose,
+          pe.purpose_label,
+          pe.sets_prescribed,
+          pe.reps_prescribed,
+          pe.reps_unit,
+          pe.intensity_prescription,
+          pe.tempo,
+          pe.rest_seconds,
+          pe.progression_outcome,
+          pe.progression_primary_lever,
+          pe.progression_confidence,
+          pe.progression_source,
+          pe.progression_reasoning_json,
+          pe.recommended_load_kg,
+          pe.recommended_reps_target,
+          pe.recommended_sets,
+          pe.recommended_rest_seconds,
+          pe.notes,
+          pe.is_loadable,
+          pe.coaching_cues_json,
+          pe.load_hint,
+          pe.log_prompt,
+          (eps.exercise_id IS NULL) AS is_new_exercise
+        FROM program_exercise pe
+        LEFT JOIN exercise_progression_state eps
+          ON eps.user_id = $2
+          AND eps.exercise_id = pe.exercise_id
+        WHERE pe.program_day_id = $1
+        ORDER BY pe.order_in_day
         `,
-        [program_day_id],
+        [program_day_id, user_id],
       );
 
       const programExerciseIds = exR.rows

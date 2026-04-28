@@ -123,6 +123,8 @@ services:
       done;
       mc mb --ignore-existing local/media-assets;
       mc anonymous set download local/media-assets;
+      mc mb --ignore-existing local/physique-photos;
+      # physique-photos is intentionally private - no anonymous set
       echo 'minio bucket init complete';
       "
 

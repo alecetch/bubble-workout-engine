@@ -1,30 +1,27 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { HeroHeader } from "../../components/program/HeroHeader";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
+import { queryKeys, useCompleteProgram, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { getProgramEndCheck } from "../../api/programCompletion";
+import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/segmentLog";
+import type { ProgramDayFullResponse } from "../../api/programViewer";
+import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
+import { PressableScale } from "../../components/interaction/PressableScale";
+import { EquipmentOverrideSheet } from "../../components/program/EquipmentOverrideSheet";
 import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
-import { LogSegmentModal } from "../../components/program/LogSegmentModal";
+import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
 import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
-import { SegmentCard } from "../../components/program/SegmentCard";
-import { PressableScale } from "../../components/interaction/PressableScale";
-import { hapticLight, hapticMedium } from "../../components/interaction/haptics";
-import { getProgramEndCheck } from "../../api/programCompletion";
-import { queryKeys, useCompleteProgram, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
-import type { SaveSegmentLogPayload } from "../../api/segmentLog";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
-import { useTimerStore } from "../../state/timer/useTimerStore";
+import { colors } from "../../theme/colors";
+import { radii } from "../../theme/components";
+import { spacing } from "../../theme/spacing";
+import { typography } from "../../theme/typography";
 import {
   getSegmentLog,
   getWorkoutComplete,
@@ -32,12 +29,24 @@ import {
   setWorkoutComplete,
   type SegmentLogEntry,
 } from "../../utils/localWorkoutLog";
-import { colors } from "../../theme/colors";
-import { radii } from "../../theme/components";
-import { spacing } from "../../theme/spacing";
-import { typography } from "../../theme/typography";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDay">;
+type Segment = ProgramDayFullResponse["segments"][number];
+
+const WEEKDAY_LABELS: Record<string, string> = {
+  Mon: "Mondays",
+  Tue: "Tuesdays",
+  Wed: "Wednesdays",
+  Thu: "Thursdays",
+  Fri: "Fridays",
+  Sat: "Saturdays",
+  Sun: "Sundays",
+};
+
+function toWeekdayPlural(raw: string | null | undefined): string {
+  if (!raw) return "";
+  return WEEKDAY_LABELS[raw] ?? `${raw}s`;
+}
 
 export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Element {
   const { programDayId } = route.params;
@@ -54,10 +63,10 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [segmentLogRows, setSegmentLogRows] = useState<Record<string, SaveSegmentLogPayload["rows"]>>({});
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
-  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const [swapSheetVisible, setSwapSheetVisible] = useState(false);
   const [swapTargetProgramExerciseId, setSwapTargetProgramExerciseId] = useState<string | null>(null);
   const [swapTargetExerciseName, setSwapTargetExerciseName] = useState<string | null>(null);
+  const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [prHits] = useState<string[]>([]);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
@@ -114,29 +123,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     };
   }, [orderedSegments, programDayId]);
 
-  const activeSegment = useMemo(
-    () => orderedSegments.find((segment) => segment.id === activeSegmentId) ?? null,
-    [activeSegmentId, orderedSegments],
-  );
-
-  function openSwapSheet(programExerciseId: string, exerciseName: string): void {
-    setSwapTargetProgramExerciseId(programExerciseId);
-    setSwapTargetExerciseName(exerciseName);
-    setSwapSheetVisible(true);
-  }
-
-  function closeSwapSheet(): void {
-    setSwapSheetVisible(false);
-    setSwapTargetProgramExerciseId(null);
-    setSwapTargetExerciseName(null);
-  }
-
-  const handleCompleteWorkout = async (): Promise<void> => {
-    await hapticMedium();
-    setSummaryVisible(true);
-  };
-
-  const handleSummaryDismiss = async (): Promise<void> => {
+  async function handleSummaryDismiss(): Promise<void> {
     setSummaryVisible(false);
     try {
       await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId });
@@ -168,9 +155,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
     }
-  };
+  }
 
-  const handleUndoComplete = async (): Promise<void> => {
+  async function handleUndoComplete(): Promise<void> {
     try {
       await markDayComplete.mutateAsync({ programDayId, isCompleted: false, userId });
       await setWorkoutComplete(programDayId, false);
@@ -179,13 +166,94 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to undo completion.");
     }
-  };
+  }
+
+  function closeSwapSheet(): void {
+    setSwapSheetVisible(false);
+    setSwapTargetProgramExerciseId(null);
+    setSwapTargetExerciseName(null);
+  }
+
+  function handleViewExerciseDetail(
+    exerciseId: string,
+    programExerciseId: string,
+    exerciseName: string,
+    exercise: Segment["exercises"][number],
+  ): void {
+    navigation.navigate("ExerciseDetail", {
+      exerciseId,
+      programExerciseId,
+      exerciseName,
+      sets: exercise.sets ?? null,
+      reps: exercise.reps ?? null,
+      repsUnit: exercise.repsUnit ?? null,
+      intensity: exercise.intensity ?? null,
+      restSeconds: exercise.restSeconds ?? null,
+      guidelineLoadJson: exercise.guidelineLoad ? JSON.stringify(exercise.guidelineLoad) : null,
+      adaptationDecisionJson: exercise.adaptationDecision ? JSON.stringify(exercise.adaptationDecision) : null,
+    });
+  }
+
+  function computeExerciseSetCounts(rows: SaveSegmentLogPayload["rows"]): Record<string, number> {
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      const hasSavedData =
+        row.weightKg != null ||
+        row.repsCompleted != null ||
+        row.rirActual != null;
+      if (!hasSavedData || !row.programExerciseId) return acc;
+      acc[row.programExerciseId] = (acc[row.programExerciseId] ?? 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  function handleAllSetsSaved(segmentId: string): void {
+    void (async () => {
+      const rows = await queryClient.fetchQuery({
+        queryKey: queryKeys.segmentExerciseLogs(segmentId, programDayId),
+        queryFn: () =>
+          getSegmentExerciseLogs({
+            userId,
+            workoutSegmentId: segmentId,
+            programDayId,
+          }),
+      });
+
+      const normalizedRows: SaveSegmentLogPayload["rows"] = rows.map((row) => ({
+        programExerciseId: row.programExerciseId,
+        orderIndex: row.orderIndex,
+        weightKg: row.weightKg,
+        repsCompleted: row.repsCompleted,
+        rirActual: row.rirActual,
+      }));
+      const exerciseSetCounts = computeExerciseSetCounts(normalizedRows);
+      const entry: SegmentLogEntry = {
+        updatedAt: new Date().toISOString(),
+        exerciseSetCounts,
+      };
+
+      setSegmentLogs((current) => ({ ...current, [segmentId]: entry }));
+      setSegmentLogRows((current) => ({ ...current, [segmentId]: normalizedRows }));
+      await setSegmentLog(programDayId, segmentId, { exerciseSetCounts });
+    })();
+  }
+
+  function computeSessionStats(): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
+    return computeSessionStatsFromLoggedRows(segmentLogRows);
+  }
 
   if (dayQuery.isLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.loadingText}>Loading workout day...</Text>
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <SkeletonBlock height={164} style={styles.skeletonHero} />
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.skeletonCard}>
+              <SkeletonBlock width="55%" height={18} borderRadius={radii.pill} style={styles.skeletonLineShort} />
+              <SkeletonBlock width="100%" height={14} borderRadius={radii.pill} style={styles.skeletonLineFull} />
+              <SkeletonBlock width="80%" height={14} borderRadius={radii.pill} style={styles.skeletonLineMedium} />
+            </View>
+          ))}
+        </ScrollView>
       </View>
     );
   }
@@ -203,19 +271,34 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }
 
   const day = dayQuery.data.day;
-
-  function computeSessionStats(): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
-    return computeSessionStatsFromLoggedRows(segmentLogRows);
-  }
+  const scheduledWeekday = day.scheduledWeekday ?? "";
+  const scheduledWeekdayLabel = toWeekdayPlural(scheduledWeekday);
+  const weekNumber = day.weekNumber ?? 1;
+  const currentEquipmentPreset = day.equipmentOverridePresetSlug ?? null;
+  const currentEquipmentItems = day.equipmentOverrideItemSlugs ?? [];
+  const sessionStats = computeSessionStats();
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <HeroHeader
-          title={day.label ?? "Workout Day"}
-          summary={`${day.type ?? "Session"}${day.sessionDuration ? ` • ${day.sessionDuration} min` : ""}`}
-          heroMedia={day.heroMedia}
-        />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      >
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTitle}>{day.label ?? "Workout Day"}</Text>
+          <Text style={styles.heroSummary}>
+            {`${day.type ?? "Session"}${day.sessionDuration ? ` • ${day.sessionDuration} min` : ""}`}
+          </Text>
+        </View>
+
+        <PressableScale
+          style={styles.changeEquipmentLink}
+          onPress={() => setEquipmentSheetVisible(true)}
+        >
+          <Ionicons name="barbell-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.changeEquipmentLabel}>Change equipment</Text>
+        </PressableScale>
 
         {orderedSegments.map((segment) => (
           <SegmentCard
@@ -223,14 +306,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             segment={segment}
             isLogged={Boolean(segmentLogs[segment.id])}
             exerciseSetCounts={segmentLogs[segment.id]?.exerciseSetCounts}
-            onLogSegment={() => setActiveSegmentId(segment.id)}
-            onSwapExercise={openSwapSheet}
-            onViewDecisionHistory={(_exerciseId, exerciseName, programExerciseId) => {
-              nav.navigate("ExerciseDecisionHistory", {
-                programExerciseId,
-                exerciseName,
-              });
-            }}
+            programId={programId}
+            programDayId={programDayId}
+            userId={userId}
+            onViewExerciseDetail={handleViewExerciseDetail}
+            onAllSetsSaved={handleAllSetsSaved}
           />
         ))}
       </ScrollView>
@@ -238,13 +318,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       <View style={styles.bottomBar}>
         <PressableScale
           style={[styles.completeButton, workoutComplete && styles.completeButtonDone]}
-          onPress={() => {
-            void handleCompleteWorkout();
-          }}
+          onPress={() => setSummaryVisible(true)}
         >
-          <Text style={styles.completeButtonLabel}>
-            {workoutComplete ? "Workout complete" : "Workout complete"}
-          </Text>
+          <Text style={styles.completeButtonLabel}>Workout complete</Text>
         </PressableScale>
         {workoutComplete ? (
           <PressableScale
@@ -259,44 +335,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         {confirmationText ? <Text style={styles.confirmationText}>{confirmationText}</Text> : null}
       </View>
 
-      <LogSegmentModal
-        visible={Boolean(activeSegment)}
-        segment={activeSegment}
-        programDayId={programDayId}
-        programId={programId}
-        userId={userId}
-        onClose={() => setActiveSegmentId(null)}
-        onSave={(rows) => {
-          if (activeSegment) {
-            const exerciseSetCounts = rows.reduce<Record<string, number>>((acc, row) => {
-              const hasSavedData =
-                row.weightKg != null ||
-                row.repsCompleted != null ||
-                row.rirActual != null;
-              if (!hasSavedData || !row.programExerciseId) return acc;
-              acc[row.programExerciseId] = (acc[row.programExerciseId] ?? 0) + 1;
-              return acc;
-            }, {});
-            const entry: SegmentLogEntry = {
-              updatedAt: new Date().toISOString(),
-              exerciseSetCounts,
-            };
-            setSegmentLogs((current) => ({ ...current, [activeSegment.id]: entry }));
-            setSegmentLogRows((current) => ({ ...current, [activeSegment.id]: rows }));
-            // Write to AsyncStorage so the isLogged badge persists after app restart.
-            void setSegmentLog(programDayId, activeSegment.id, { exerciseSetCounts });
-            const maxRest = Math.max(
-              0,
-              ...(activeSegment.exercises ?? []).map((ex) => (ex.restSeconds as number | null | undefined) ?? 0),
-            );
-            if (maxRest > 0) {
-              useTimerStore.getState().startRest(activeSegment.id);
-            }
-          }
-          setActiveSegmentId(null);
-          void hapticLight();
-        }}
-      />
       <ExerciseSwapSheet
         visible={swapSheetVisible}
         programExerciseId={swapTargetProgramExerciseId}
@@ -311,9 +349,32 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       />
       <SessionSummaryModal
         visible={summaryVisible}
-        {...computeSessionStats()}
+        totalVolumeKg={sessionStats.totalVolumeKg}
+        totalSets={sessionStats.totalSets}
+        exerciseCount={sessionStats.exerciseCount}
         prHits={prHits}
-        onDismiss={() => { void handleSummaryDismiss(); }}
+        streakDays={0}
+        onDismiss={() => {
+          void handleSummaryDismiss();
+        }}
+      />
+      <EquipmentOverrideSheet
+        visible={equipmentSheetVisible}
+        onClose={() => setEquipmentSheetVisible(false)}
+        onApplied={(message) => {
+          setEquipmentSheetVisible(false);
+          setConfirmationText(message ?? "Workout updated with new equipment.");
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.programDayFull(programDayId, { userId }),
+          });
+        }}
+        programId={programId}
+        programDayId={programDayId}
+        scheduledWeekday={scheduledWeekday}
+        scheduledWeekdayLabel={scheduledWeekdayLabel}
+        weekNumber={weekNumber}
+        currentPresetSlug={currentEquipmentPreset}
+        currentItemSlugs={currentEquipmentItems}
       />
     </View>
   );
@@ -337,10 +398,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: 150,
     gap: spacing.md,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    ...typography.body,
   },
   errorTitle: {
     color: colors.textPrimary,
@@ -376,6 +433,40 @@ const styles = StyleSheet.create({
   headerBackLabel: {
     color: colors.textPrimary,
     ...typography.body,
+    fontWeight: "600",
+  },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  heroTitle: {
+    color: colors.textPrimary,
+    ...typography.h2,
+  },
+  heroSummary: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  changeEquipmentLink: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 32,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    justifyContent: "center",
+  },
+  changeEquipmentLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
     fontWeight: "600",
   },
   bottomBar: {
@@ -424,5 +515,25 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
     textAlign: "center",
+  },
+  skeletonHero: {
+    backgroundColor: "transparent",
+  },
+  skeletonCard: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  skeletonLineShort: {
+    backgroundColor: "transparent",
+  },
+  skeletonLineFull: {
+    backgroundColor: "transparent",
+  },
+  skeletonLineMedium: {
+    backgroundColor: "transparent",
   },
 });

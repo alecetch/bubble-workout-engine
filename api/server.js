@@ -41,13 +41,25 @@ import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
+import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
+import { equipmentRegenRouter } from "./src/routes/equipmentRegen.js";
+import {
+  uploadSingle,
+  handleCheckInSubmit,
+  physiqueReadRouter,
+} from "./src/routes/physiqueCheckIn.js";
+import {
+  handleScanSubmit,
+  physiqueScanRouter,
+  physiquePhotoRouter,
+} from "./src/routes/physiqueScan.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
 import { requireAuth } from "./src/middleware/requireAuth.js";
-import { adminOnly, userAuth } from "./src/middleware/chains.js";
+import { adminOnly, userAuth, entitledUserAuth, premiumUserAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
@@ -714,6 +726,12 @@ app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 
 // RevenueCat webhook uses a shared secret header, not user JWT auth.
 app.use("/api", webhookRevenuecatRouter);
+app.use("/api/exercise", exerciseGuidanceRouter);
+app.post("/api/physique/check-in", ...entitledUserAuth, uploadSingle, handleCheckInSubmit);
+app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
+app.use("/api", physiquePhotoRouter);
+app.use("/api", ...userAuth, physiqueReadRouter);
+app.use("/api", ...userAuth, physiqueScanRouter);
 
 app.use("/api", notificationPreferencesRouter);
 app.use("/api", accountSettingsRouter);
@@ -723,6 +741,8 @@ app.use("/api/import", trainingHistoryImportRouter);
 app.use("/api", workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
+app.use("/api", userAuth, equipmentRegenRouter);
+logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipment regeneration routes at /api");
 app.use("/api", programExerciseRouter);
 app.use("/api", programCompletionRouter);
 app.use("/api", debugAllowedExercisesRouter);

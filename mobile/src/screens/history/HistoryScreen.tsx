@@ -15,9 +15,11 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   queryKeys,
+  useEntitlement,
   useHistoryPrograms,
   useHistoryTimeline,
   useLoggedExercisesSearch,
+  usePhysiqueCheckIns,
   usePrsFeed,
   useSessionHistoryMetrics,
 } from "../../api/hooks";
@@ -125,6 +127,10 @@ export function HistoryScreen(): React.JSX.Element {
   const prsFeedQuery = usePrsFeed(userId);
   const programsQuery = useHistoryPrograms(10, userId);
   const timelineQuery = useHistoryTimeline(40, userId);
+  const checkInsQuery = usePhysiqueCheckIns(1);
+  const entitlementQuery = useEntitlement();
+  const lastCheckIn = checkInsQuery.data?.check_ins[0] ?? null;
+  const isPremium = entitlementQuery.data?.subscription_status === "active";
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
@@ -217,6 +223,42 @@ export function HistoryScreen(): React.JSX.Element {
       >
         <Text style={styles.progressCardTitle}>Progress Overview</Text>
         <Text style={styles.progressCardSubtitle}>Volume trends & strength snapshots</Text>
+      </PressableScale>
+
+      <PressableScale
+        onPress={() => navigation.navigate("PhysiqueCheckIn")}
+        style={styles.progressCard}
+      >
+        <Text style={styles.progressCardTitle}>Physique Check-In</Text>
+        <Text style={styles.progressCardSubtitle}>
+          {lastCheckIn
+            ? `Last check-in: ${new Date(lastCheckIn.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+            : "Track your visual progress with AI"}
+        </Text>
+      </PressableScale>
+
+      <PressableScale
+        onPress={() => {
+          if (isPremium) {
+            navigation.navigate("PhysiqueIntelligence");
+            return;
+          }
+          const parent = navigation.getParent() as any;
+          parent?.navigate?.("HomeTab", { screen: "Paywall" });
+        }}
+        style={styles.progressCard}
+      >
+        <View style={styles.physiquePremiumRow}>
+          <View style={styles.physiquePremiumText}>
+            <Text style={styles.progressCardTitle}>Physique Intelligence</Text>
+            <Text style={styles.progressCardSubtitle}>
+              {isPremium
+                ? "Score trends, region breakdowns, streaks, and milestones"
+                : "Premium • Unlock score trends and milestone tracking"}
+            </Text>
+          </View>
+          {!isPremium ? <Text style={styles.premiumBadge}>PREMIUM</Text> : null}
+        </View>
       </PressableScale>
 
       <View style={styles.metricsGrid}>
@@ -582,6 +624,21 @@ const styles = StyleSheet.create({
   progressCardSubtitle: {
     color: colors.textSecondary,
     ...typography.body,
+  },
+  physiquePremiumRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  physiquePremiumText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  premiumBadge: {
+    color: colors.warning,
+    ...typography.label,
+    fontWeight: "700",
   },
   metricsGridCard: {
     width: "48%",

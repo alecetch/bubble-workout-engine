@@ -37,6 +37,26 @@ import {
   type ViewerIdentityOptions,
 } from "./programViewer";
 import {
+  fetchExerciseGuidance,
+  type ExerciseGuidance,
+} from "./exerciseGuidance";
+import {
+  getProgramEquipment,
+  regenerateProgramDays,
+  type RegenerateDaysResult,
+  type ProgramEquipmentState,
+} from "./equipmentRegen";
+import {
+  getCheckIns,
+  deleteCheckIn,
+  type CheckInListResponse,
+} from "./physique";
+import {
+  getMilestones,
+  getScans,
+  getScanTrend,
+} from "./physiqueScan";
+import {
   completeProgram,
   getProgramEndCheck,
   getProgramCompletionSummary,
@@ -48,6 +68,7 @@ import {
   saveSegmentExerciseLogs,
   type SegmentLogRow,
   type SaveSegmentLogPayload,
+  type SaveSegmentLogResult,
 } from "./segmentLog";
 import {
   applyExerciseSwap,
@@ -118,8 +139,14 @@ export const queryKeys = {
     ["programCompletionSummary", programId] as const,
   programEndCheck: (programId: string) =>
     ["programEndCheck", programId] as const,
+  exerciseGuidance: (exerciseId: string) => ["exerciseGuidance", exerciseId] as const,
   notificationPreferences: ["notificationPreferences"] as const,
   entitlement: ["entitlement"] as const,
+  physiqueCheckIns: ["physiqueCheckIns"] as const,
+  physiqueScans: ["physiqueScans"] as const,
+  physiqueScanTrend: ["physiqueScanTrend"] as const,
+  physiqueMilestones: ["physiqueMilestones"] as const,
+  programEquipment: (programId: string | null) => ["programEquipment", programId] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -235,6 +262,28 @@ export function useProgramDayFull(
     queryKey: queryKeys.programDayFull(programDayId, opts),
     queryFn: () => getProgramDayFull(programDayId, opts),
     enabled: Boolean(programDayId && opts.userId),
+  });
+}
+
+export function useProgramEquipment(
+  programId: string | null,
+): UseQueryResult<ProgramEquipmentState> {
+  return useQuery({
+    queryKey: queryKeys.programEquipment(programId),
+    queryFn: () => getProgramEquipment(programId as string),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useExerciseGuidance(
+  exerciseId: string | null,
+): UseQueryResult<ExerciseGuidance> {
+  return useQuery({
+    queryKey: queryKeys.exerciseGuidance(exerciseId ?? ""),
+    queryFn: () => fetchExerciseGuidance(exerciseId as string),
+    enabled: Boolean(exerciseId),
+    staleTime: 60 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
   });
 }
 
@@ -558,7 +607,7 @@ export function useApplyExerciseSwap(): UseMutationResult<
   });
 }
 
-export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegmentLogPayload> {
+export function useSaveSegmentLogs(): UseMutationResult<SaveSegmentLogResult, Error, SaveSegmentLogPayload> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: saveSegmentExerciseLogs,
@@ -570,5 +619,71 @@ export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegment
         ),
       });
     },
+  });
+}
+
+export function useRegenerateDays(
+  programId: string,
+): UseMutationResult<
+  RegenerateDaysResult,
+  Error,
+  Parameters<typeof regenerateProgramDays>[1]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => regenerateProgramDays(programId, payload),
+    onSuccess: (result) => {
+      for (const dayId of result.dayIds) {
+        void queryClient.invalidateQueries({
+          queryKey: ["programDayFull", dayId],
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.programEquipment(programId) });
+      void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+      void queryClient.invalidateQueries({ queryKey: ["dayPreview"] });
+    },
+  });
+}
+
+export function usePhysiqueCheckIns(limit = 20): UseQueryResult<CheckInListResponse> {
+  return useQuery({
+    queryKey: [...queryKeys.physiqueCheckIns, limit],
+    queryFn: () => getCheckIns(limit),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useDeleteCheckIn(): UseMutationResult<{ ok: boolean }, Error, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCheckIn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueCheckIns });
+    },
+  });
+}
+
+export function usePhysiqueScans(limit = 20) {
+  return useQuery({
+    queryKey: [...queryKeys.physiqueScans, limit],
+    queryFn: () => getScans(limit),
+    // No staleTime — presigned photo URLs expire after 1 hour so we always
+    // background-refetch on mount to serve fresh signed URLs.
+  });
+}
+
+export function usePhysiqueScanTrend() {
+  return useQuery({
+    queryKey: queryKeys.physiqueScanTrend,
+    queryFn: getScanTrend,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePhysiqueMilestones() {
+  return useQuery({
+    queryKey: queryKeys.physiqueMilestones,
+    queryFn: getMilestones,
+    staleTime: 5 * 60 * 1000,
   });
 }

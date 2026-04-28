@@ -3,6 +3,7 @@ import { pool } from "../db.js";
 import { requireEntitlement } from "../middleware/requireEntitlement.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { makeNotificationService } from "../services/notificationService.js";
+import { maybeSendPhysiqueNudge } from "../services/physiqueNudgeService.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
@@ -48,6 +49,72 @@ export function compute1rmKg(weightKg, repsCompleted, region) {
 }
 
 export function createSegmentLogHandlers(db = pool, notificationService = null) {
+  async function checkPrs(queryable, userId, programDayId, programExerciseIds) {
+    if (!Array.isArray(programExerciseIds) || programExerciseIds.length === 0) {
+      return [];
+    }
+
+    const prR = await queryable.query(
+      `
+      WITH new_rows AS (
+        SELECT
+          sel.program_exercise_id,
+          pe.exercise_id,
+          COALESCE(ec.name, pe.exercise_name) AS exercise_name,
+          MAX(sel.estimated_1rm_kg) AS new_e1rm
+        FROM segment_exercise_log sel
+        JOIN program_exercise pe
+          ON pe.id = sel.program_exercise_id
+        LEFT JOIN exercise_catalogue ec
+          ON ec.exercise_id = pe.exercise_id
+        WHERE sel.user_id = $1
+          AND sel.program_day_id = $2
+          AND sel.program_exercise_id = ANY($3::uuid[])
+          AND sel.is_draft = FALSE
+          AND sel.estimated_1rm_kg IS NOT NULL
+        GROUP BY
+          sel.program_exercise_id,
+          pe.exercise_id,
+          COALESCE(ec.name, pe.exercise_name)
+      ),
+      prev_best AS (
+        SELECT
+          pe.exercise_id,
+          MAX(sel.estimated_1rm_kg) AS prev_e1rm
+        FROM segment_exercise_log sel
+        JOIN program_exercise pe
+          ON pe.id = sel.program_exercise_id
+        JOIN program p
+          ON p.id = sel.program_id
+        WHERE p.user_id = $1
+          AND sel.program_day_id <> $2
+          AND sel.is_draft = FALSE
+          AND sel.estimated_1rm_kg IS NOT NULL
+        GROUP BY pe.exercise_id
+      )
+      SELECT
+        nr.program_exercise_id,
+        nr.exercise_id,
+        nr.exercise_name,
+        nr.new_e1rm,
+        pb.prev_e1rm
+      FROM new_rows nr
+      LEFT JOIN prev_best pb
+        USING (exercise_id)
+      WHERE nr.new_e1rm > COALESCE(pb.prev_e1rm, 0)
+      `,
+      [userId, programDayId, programExerciseIds],
+    );
+
+    return prR.rows.map((row) => ({
+      programExerciseId: row.program_exercise_id,
+      exerciseId: row.exercise_id,
+      exerciseName: row.exercise_name,
+      estimated1rmKg: Number(row.new_e1rm),
+      prevEstimated1rmKg: row.prev_e1rm == null ? null : Number(row.prev_e1rm),
+    }));
+  }
+
   function resolveUserId(req) {
     const userId = safeString(req.auth?.user_id);
     if (userId) return userId;
@@ -176,7 +243,15 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
           );
         }
 
+        const prs = await checkPrs(client, user_id, program_day_id, programExerciseIds);
         await client.query("COMMIT");
+        res.json({
+          saved: rows.length,
+          prs: prs.map((pr) => ({
+            programExerciseId: pr.programExerciseId,
+            estimated1rmKg: pr.estimated1rmKg,
+          })),
+        });
         if (notificationService) {
           const exerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
           (async () => {
@@ -190,69 +265,22 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
               const prEnabled = prefR.rows[0]?.pr_notification_enabled ?? true;
               if (!prEnabled) return;
 
-              const prR = await db.query(
-                `
-                WITH new_rows AS (
-                  SELECT
-                    pe.exercise_id,
-                    COALESCE(ec.name, pe.exercise_name) AS exercise_name,
-                    MAX(sel.estimated_1rm_kg) AS new_e1rm
-                  FROM segment_exercise_log sel
-                  JOIN program_exercise pe
-                    ON pe.id = sel.program_exercise_id
-                  LEFT JOIN exercise_catalogue ec
-                    ON ec.exercise_id = pe.exercise_id
-                  WHERE sel.user_id = $1
-                    AND sel.program_day_id = $2
-                    AND sel.program_exercise_id = ANY($3::uuid[])
-                    AND sel.is_draft = FALSE
-                    AND sel.estimated_1rm_kg IS NOT NULL
-                  GROUP BY pe.exercise_id, COALESCE(ec.name, pe.exercise_name)
-                ),
-                prev_best AS (
-                  SELECT
-                    pe.exercise_id,
-                    MAX(sel.estimated_1rm_kg) AS prev_e1rm
-                  FROM segment_exercise_log sel
-                  JOIN program_exercise pe
-                    ON pe.id = sel.program_exercise_id
-                  JOIN program p
-                    ON p.id = sel.program_id
-                  WHERE p.user_id = $1
-                    AND sel.program_day_id <> $2
-                    AND sel.is_draft = FALSE
-                    AND sel.estimated_1rm_kg IS NOT NULL
-                  GROUP BY pe.exercise_id
-                )
-                SELECT
-                  nr.exercise_id,
-                  nr.exercise_name,
-                  nr.new_e1rm,
-                  pb.prev_e1rm
-                FROM new_rows nr
-                LEFT JOIN prev_best pb
-                  USING (exercise_id)
-                WHERE nr.new_e1rm > COALESCE(pb.prev_e1rm, 0)
-                `,
-                [user_id, program_day_id, exerciseIds],
-              );
-
-              const prs = prR.rows;
+              const prs = await checkPrs(db, user_id, program_day_id, exerciseIds);
               if (prs.length === 0) return;
 
               if (prs.length === 1) {
                 const pr = prs[0];
-                const e1rm = Number(pr.new_e1rm).toFixed(1);
+                const e1rm = Number(pr.estimated1rmKg).toFixed(1);
                 await notificationService.send({
                   userId: user_id,
                   title: "New PR!",
-                  body: `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exercise_name}.`,
-                  data: { event: "pr", exerciseId: pr.exercise_id, e1rmKg: Number(pr.new_e1rm) },
-                  emailSubject: `New PR \u2014 ${pr.exercise_name}`,
+                  body: `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exerciseName}.`,
+                  data: { event: "pr", exerciseId: pr.exerciseId, e1rmKg: Number(pr.estimated1rmKg) },
+                  emailSubject: `New PR \u2014 ${pr.exerciseName}`,
                   emailText: [
                     "Personal record!",
                     "",
-                    `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exercise_name}.`,
+                    `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exerciseName}.`,
                     "",
                     "Keep it up.",
                   ].join("\n"),
@@ -270,7 +298,7 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
                   "Personal records!",
                   "",
                   `You set ${prs.length} PRs this session:`,
-                  ...prs.map((pr) => `  * ${pr.exercise_name}: ${Number(pr.new_e1rm).toFixed(1)} kg`),
+                  ...prs.map((pr) => `  * ${pr.exerciseName}: ${Number(pr.estimated1rmKg).toFixed(1)} kg`),
                   "",
                   "Keep it up.",
                 ].join("\n"),
@@ -280,7 +308,8 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
             }
           })();
         }
-        return res.json({ saved: rows.length });
+        void maybeSendPhysiqueNudge(db, user_id);
+        return;
       } catch (err) {
         try {
           await client.query("ROLLBACK");

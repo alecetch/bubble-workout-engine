@@ -8,7 +8,8 @@ userEntitlementRouter.get("/users/me/entitlement", async (req, res) => {
   const userId = req.auth.user_id;
   try {
     const { rows } = await pool.query(
-      `SELECT subscription_status, trial_expires_at, subscription_expires_at
+      `SELECT subscription_status, trial_expires_at, subscription_expires_at,
+              physique_consent_at IS NOT NULL AS physique_consent_given
        FROM app_user
        WHERE id = $1`,
       [userId],
@@ -18,7 +19,7 @@ userEntitlementRouter.get("/users/me/entitlement", async (req, res) => {
       return res.status(404).json({ ok: false, error: "User not found." });
     }
 
-    const { subscription_status, trial_expires_at, subscription_expires_at } = rows[0];
+    const { subscription_status, trial_expires_at, subscription_expires_at, physique_consent_given } = rows[0];
     const now = new Date();
 
     let effectiveStatus = subscription_status;
@@ -43,6 +44,7 @@ userEntitlementRouter.get("/users/me/entitlement", async (req, res) => {
       trial_days_remaining: trialDaysRemaining,
       trial_expires_at,
       subscription_expires_at: subscription_expires_at ?? null,
+      physique_consent_given: physique_consent_given === true,
     });
   } catch (err) {
     return res.status(500).json({ ok: false, error: publicInternalError(err) });

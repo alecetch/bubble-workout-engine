@@ -28,6 +28,7 @@ function formatValue(value: string | number | null | undefined): string {
 }
 
 export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Element {
+  console.log("[boot] ProgramReviewScreen render");
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
   const setIdentity = useOnboardingStore((state) => state.setIdentity);
   const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
@@ -42,6 +43,13 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   const entitlementQuery = useEntitlement();
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    console.log("[boot] ProgramReviewScreen mounted");
+    return () => {
+      console.log("[boot] ProgramReviewScreen unmounted");
+    };
+  }, []);
 
   useEffect(() => {
     if (!meQuery.data?.id) return;

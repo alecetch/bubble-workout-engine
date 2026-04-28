@@ -8,13 +8,17 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    // Tier 2: component tests only — Tier 1 uses node:test (*.test.ts)
     include: ["src/**/*.component.test.{ts,tsx}", "src/**/__tests__/**/*.test.tsx"],
+    pool: "forks",
+    poolOptions: {
+      forks: { singleFork: true },
+    },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+    },
   },
   resolve: {
-    alias: {
-      // Map react-native imports to react-native-web for DOM-compatible rendering
-      "react-native": "react-native-web",
-    },
+    alias: { "react-native": "react-native-web" },
   },
 });

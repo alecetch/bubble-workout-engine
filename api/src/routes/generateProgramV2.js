@@ -421,6 +421,43 @@ export function createGenerateProgramV2Handler({
     setupClient?.release();
   }
 
+  let physiqueContext = null;
+  try {
+    const premiumR = await db.query(
+      `SELECT emphasis_weights_json
+       FROM physique_scan
+       WHERE user_id = $1
+         AND submitted_at > now() - INTERVAL '30 days'
+       ORDER BY submitted_at DESC
+       LIMIT 1`,
+      [pg_user_id],
+    );
+    if (premiumR.rows[0]) {
+      physiqueContext = {
+        emphasisWeights: premiumR.rows[0].emphasis_weights_json ?? {},
+        emphasisSuggestions: Object.keys(premiumR.rows[0].emphasis_weights_json ?? {}),
+      };
+    } else {
+      const physiqueR = await db.query(
+        `SELECT program_emphasis_json
+         FROM physique_check_in
+         WHERE user_id = $1
+           AND submitted_at > now() - INTERVAL '30 days'
+         ORDER BY submitted_at DESC
+         LIMIT 1`,
+        [pg_user_id],
+      );
+      if (physiqueR.rows[0]) {
+        physiqueContext = {
+          emphasisWeights: null,
+          emphasisSuggestions: physiqueR.rows[0].program_emphasis_json ?? [],
+        };
+      }
+    }
+  } catch {
+    // Non-fatal - physique context is optional
+  }
+
   // ── Phase 3–6: Pipeline + import (program_id is now stable) ──────────────
   // On any error: mark generation_run + program as failed (best-effort, no delete).
 
@@ -446,7 +483,7 @@ export function createGenerateProgramV2Handler({
     );
 
     const inputs = {
-      ...buildInputs(devProfile, exerciseRows),
+      ...buildInputs(devProfile, exerciseRows, physiqueContext),
       allowed_exercise_ids: allowedIds.map((id) => String(id)),
     };
     const allowed_ids_csv = allowedIds.join(",");

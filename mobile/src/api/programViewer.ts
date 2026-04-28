@@ -85,9 +85,14 @@ export type ProgramDayFullResponse = {
     type?: string;
     sessionDuration?: number;
     heroMedia?: string | null;
+    equipmentOverridePresetSlug?: string | null;
+    equipmentOverrideItemSlugs?: string[] | null;
+    scheduledWeekday?: string;
+    weekNumber?: number;
   };
   segments: Array<{
     id: string;
+    purpose?: string | null;
     segmentType?: string | null;
     segmentTypeLabel?: string | null;
     segmentName: string;
@@ -131,6 +136,8 @@ export type ProgramDayFullResponse = {
         recommendedRestSeconds: number | null;
       } | null;
       adaptationDecision?: AdaptationDecision | null;
+      coachingCuesJson?: string[] | null;
+      isNewExercise?: boolean | null;
     }>;
   }>;
 };
@@ -332,6 +339,19 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
         rawDay.session_duration_mins ?? rawDay.session_duration ?? rawDay.sessionDuration,
       ),
       heroMedia: asNullableString(rawDay.hero_media ?? rawDay.heroMedia),
+      equipmentOverridePresetSlug: asNullableString(
+        rawDay.equipmentOverridePresetSlug ?? rawDay.equipment_override_preset_slug,
+      ) ?? null,
+      equipmentOverrideItemSlugs: rawDay.equipmentOverrideItemSlugs == null &&
+        rawDay.equipment_override_items_slugs == null
+        ? undefined
+        : asArray(
+            rawDay.equipmentOverrideItemSlugs ?? rawDay.equipment_override_items_slugs,
+          )
+            .map(asString)
+            .filter((value): value is string => Boolean(value)),
+      scheduledWeekday: asString(rawDay.scheduledWeekday ?? rawDay.scheduled_weekday) ?? "",
+      weekNumber: asNumber(rawDay.weekNumber ?? rawDay.week_number) ?? 1,
     },
     segments: rawSegments.map((item, segmentIndex) => {
       const rawSegment = asObject(item);
@@ -340,6 +360,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
 
       return {
         id: asString(rawSegment.workout_segment_id ?? rawSegment.id) ?? `segment-${segmentIndex + 1}`,
+        purpose: asNullableString(rawSegment.purpose),
         segmentType: asNullableString(rawSegment.segment_type ?? rawSegment.segmentType),
         segmentTypeLabel: asNullableString(
           rawSegment.segment_type_label ?? rawSegment.segmentTypeLabel,
@@ -443,6 +464,12 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
             adaptationDecision: normalizeAdaptationDecision(
               rawExercise.adaptation_decision ?? rawExercise.adaptationDecision ?? null,
             ),
+            coachingCuesJson: asArray(rawExercise.coaching_cues_json)
+              .map((c) => (typeof c === "string" ? c : null))
+              .filter((c): c is string => c !== null),
+            isNewExercise: asNullableBoolean(
+              rawExercise.is_new_exercise ?? rawExercise.isNewExercise,
+            ) ?? null,
           };
         }),
       };

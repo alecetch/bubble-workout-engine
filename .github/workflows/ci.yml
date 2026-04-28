@@ -77,3 +77,7 @@ jobs:
       - name: Run mobile Tier 1 unit tests
         working-directory: mobile
         run: npm test
+
+      - name: Run mobile component tests (Vitest)
+        working-directory: mobile
+        run: npx vitest run --coverage

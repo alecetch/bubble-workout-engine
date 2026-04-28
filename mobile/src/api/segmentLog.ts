@@ -23,6 +23,11 @@ export type SaveSegmentLogPayload = {
   }>;
 };
 
+export type SaveSegmentLogResult = {
+  saved: number;
+  prs: Array<{ programExerciseId: string; estimated1rmKg: number }>;
+};
+
 export async function getSegmentExerciseLogs(params: {
   userId?: string;
   workoutSegmentId: string;
@@ -55,8 +60,8 @@ export async function getSegmentExerciseLogs(params: {
 
 export async function saveSegmentExerciseLogs(
   payload: SaveSegmentLogPayload,
-): Promise<void> {
-  await authPostJson<unknown, Record<string, unknown>>("/api/segment-log", {
+): Promise<SaveSegmentLogResult> {
+  const raw = await authPostJson<unknown, Record<string, unknown>>("/api/segment-log", {
       user_id: payload.userId,
       program_id: payload.programId,
       program_day_id: payload.programDayId,
@@ -69,5 +74,15 @@ export async function saveSegmentExerciseLogs(
         rir_actual: r.rirActual ?? null,
       })),
   });
+  const result = raw as Record<string, unknown>;
+  return {
+    saved: Number(result.saved ?? 0),
+    prs: Array.isArray(result.prs)
+      ? (result.prs as Array<Record<string, unknown>>).map((pr) => ({
+          programExerciseId: String(pr.program_exercise_id ?? pr.programExerciseId ?? ""),
+          estimated1rmKg: Number(pr.estimated_1rm_kg ?? pr.estimated1rmKg ?? 0),
+        }))
+      : [],
+  };
 }
 
