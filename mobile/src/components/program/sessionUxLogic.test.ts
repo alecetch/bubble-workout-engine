@@ -3,8 +3,12 @@ import assert from "node:assert/strict";
 import {
   buildInitialSetInputMap,
   buildSegmentLogRows,
+  computeSessionStatsFromLoggedRows,
   computeSessionStatsFromSegments,
+  getExerciseSetCount,
   guidelinePrefill,
+  parseRepsPrefill,
+  parseWeightPrefill,
   repsPrefill,
 } from "./sessionUxLogic";
 
@@ -149,4 +153,90 @@ test("computeSessionStatsFromSegments uses logged segments only", () => {
   assert.equal(stats.totalSets, 3);
   assert.equal(stats.exerciseCount, 1);
   assert.equal(stats.totalVolumeKg, 1500);
+});
+
+test("parseWeightPrefill parses a plain numeric string", () => {
+  assert.equal(parseWeightPrefill("70"), "70");
+});
+
+test("parseWeightPrefill returns empty string for non-numeric intensity", () => {
+  assert.equal(parseWeightPrefill("RPE 7"), "");
+  assert.equal(parseWeightPrefill(null), "");
+  assert.equal(parseWeightPrefill(undefined), "");
+});
+
+test("parseWeightPrefill returns empty string for zero or negative", () => {
+  assert.equal(parseWeightPrefill("0"), "");
+  assert.equal(parseWeightPrefill("-5"), "");
+});
+
+test("parseRepsPrefill returns the integer when given a plain integer string", () => {
+  assert.equal(parseRepsPrefill("10"), "10");
+});
+
+test("parseRepsPrefill falls back to 10 when reps is 0 or below 1", () => {
+  assert.equal(parseRepsPrefill("0"), "10");
+});
+
+test("parseRepsPrefill returns midpoint for a range with hyphen", () => {
+  assert.equal(parseRepsPrefill("8-12"), "10");
+});
+
+test("parseRepsPrefill returns midpoint for a range with en-dash", () => {
+  assert.equal(parseRepsPrefill("8–12"), "10");
+});
+
+test("parseRepsPrefill returns 10 for non-parseable strings and empty/null", () => {
+  assert.equal(parseRepsPrefill("AMRAP"), "10");
+  assert.equal(parseRepsPrefill(""), "10");
+  assert.equal(parseRepsPrefill(null), "10");
+});
+
+test("getExerciseSetCount returns the numeric value when sets is a positive number", () => {
+  assert.equal(getExerciseSetCount({ sets: 3 }), 3);
+});
+
+test("getExerciseSetCount returns 1 when sets is null or undefined", () => {
+  assert.equal(getExerciseSetCount({ sets: null }), 1);
+  assert.equal(getExerciseSetCount({}), 1);
+});
+
+test("getExerciseSetCount coerces string sets", () => {
+  assert.equal(getExerciseSetCount({ sets: "2" }), 2);
+});
+
+test("getExerciseSetCount clamps to minimum 1 for zero or NaN", () => {
+  assert.equal(getExerciseSetCount({ sets: 0 }), 1);
+  assert.equal(getExerciseSetCount({ sets: "abc" }), 1);
+});
+
+test("computeSessionStatsFromLoggedRows sums volume across segments", () => {
+  const stats = computeSessionStatsFromLoggedRows({
+    "seg-1": [
+      { programExerciseId: "pe-1", orderIndex: 1, weightKg: 100, repsCompleted: 5, rirActual: null },
+      { programExerciseId: "pe-1", orderIndex: 2, weightKg: 100, repsCompleted: 5, rirActual: null },
+      { programExerciseId: "pe-1", orderIndex: 3, weightKg: 105, repsCompleted: 4, rirActual: null },
+    ],
+    "seg-2": [
+      { programExerciseId: "pe-2", orderIndex: 1, weightKg: 60, repsCompleted: 8, rirActual: null },
+    ],
+  });
+
+  assert.equal(stats.totalVolumeKg, 1900);
+  assert.equal(stats.totalSets, 4);
+  assert.equal(stats.exerciseCount, 2);
+});
+
+test("computeSessionStatsFromLoggedRows excludes rows with null weight or zero reps from volume", () => {
+  const stats = computeSessionStatsFromLoggedRows({
+    "seg-1": [
+      { programExerciseId: "pe-1", orderIndex: 1, weightKg: null, repsCompleted: 5, rirActual: null },
+      { programExerciseId: "pe-2", orderIndex: 1, weightKg: 80, repsCompleted: 0, rirActual: null },
+      { programExerciseId: "pe-3", orderIndex: 1, weightKg: 80, repsCompleted: 5, rirActual: null },
+    ],
+  });
+
+  assert.equal(stats.totalVolumeKg, 400);
+  assert.equal(stats.totalSets, 3);
+  assert.equal(stats.exerciseCount, 3);
 });
