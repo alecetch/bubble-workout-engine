@@ -8,9 +8,10 @@ import {
   Text,
   View,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { usePhysiqueCheckIns } from "../../api/hooks";
+import { useEntitlement, usePhysiqueCheckIns } from "../../api/hooks";
 import { recordConsent, submitCheckIn, type PhysiqueAnalysis } from "../../api/physique";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -26,8 +27,18 @@ type ScreenState =
   | { phase: "error"; message: string };
 
 export function PhysiqueCheckInScreen(): React.JSX.Element {
+  const navigation = useNavigation<any>();
   const { data: checkInsData, refetch } = usePhysiqueCheckIns(6);
+  const entitlementQuery = useEntitlement();
+  const hasConsented = entitlementQuery.data?.physique_consent_given === true;
   const [state, setState] = useState<ScreenState>({ phase: "consent" });
+  const showPremiumUpsell = entitlementQuery.data?.subscription_status !== "active";
+
+  React.useEffect(() => {
+    if (hasConsented && state.phase === "consent") {
+      setState({ phase: "picker", hasConsented: true });
+    }
+  }, [hasConsented, state.phase]);
 
   const handleConsent = async (): Promise<void> => {
     try {
@@ -210,6 +221,21 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
           </View>
         ) : null}
         <Text style={styles.disclaimer}>{state.analysis.disclaimer}</Text>
+        {showPremiumUpsell ? (
+          <View style={styles.lockedCard}>
+            <Text style={styles.cardTitle}>Unlock Physique Intelligence</Text>
+            <Text style={styles.body}>See your Physique Score, region breakdown, milestone streaks, and trend charts with Premium.</Text>
+            <PressableScale
+              style={styles.secondaryButton}
+              onPress={() => {
+                const parent = navigation.getParent() as any;
+                parent?.navigate?.("HomeTab", { screen: "Paywall" });
+              }}
+            >
+              <Text style={styles.secondaryLabel}>Upgrade to Premium</Text>
+            </PressableScale>
+          </View>
+        ) : null}
         <PressableScale
           style={styles.secondaryButton}
           onPress={() => setState({ phase: "picker", hasConsented: true })}
@@ -339,5 +365,13 @@ const styles = StyleSheet.create({
     ...typography.label,
     textAlign: "center",
     lineHeight: 18,
+  },
+  lockedCard: {
+    backgroundColor: "rgba(250,204,21,0.08)",
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: "rgba(250,204,21,0.35)",
+    padding: spacing.md,
+    gap: spacing.sm,
   },
 });

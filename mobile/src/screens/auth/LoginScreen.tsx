@@ -4,7 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiLogin } from "../../api/authApi";
-import { ApiError } from "../../api/client";
+import { ApiError, getApiDiagnostics, isNetworkConnectivityError, isNetworkTimeoutError } from "../../api/client";
 import { createClientProfile, getClientProfile } from "../../api/clientProfiles";
 import { logInPurchases } from "../../lib/purchases";
 import { saveTokens } from "../../api/tokenStorage";
@@ -88,6 +88,16 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       console.error("[LoginScreen] sign-in failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
       if (error instanceof ApiError && error.status === 401) {
         setErrorMessage("Incorrect email or password.");
+      } else if (isNetworkTimeoutError(error)) {
+        const diagnostics = getApiDiagnostics();
+        setErrorMessage(
+          `Sign-in timed out while reaching the server. Check that the API is running and reachable at ${diagnostics.lastAttemptedUrl ?? "the configured API URL"}.`,
+        );
+      } else if (isNetworkConnectivityError(error)) {
+        const diagnostics = getApiDiagnostics();
+        setErrorMessage(
+          `Couldn't reach the server. Confirm your device can access ${diagnostics.lastAttemptedUrl ?? "the configured API URL"} and try again.`,
+        );
       } else {
         setErrorMessage("Unable to sign in. Please try again.");
       }

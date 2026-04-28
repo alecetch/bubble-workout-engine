@@ -38,6 +38,13 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
 
   const [fatalError, setFatalError] = useState<string | null>(null);
 
+  useEffect(() => {
+    console.log("[boot] OnboardingEntry mounted");
+    return () => {
+      console.log("[boot] OnboardingEntry unmounted");
+    };
+  }, []);
+
   const bootstrappingRef = useRef(false);
   const hydratedRef = useRef(false);
   const createdProfileIdRef = useRef<string | null>(null);
@@ -105,6 +112,8 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
     if (!meQuery.isSuccess || !referenceDataQuery.isSuccess) return;
     if (!profileId || !profileQuery.data) return;
 
+    console.log("[boot] OnboardingEntry hydrate success", { profileId });
+
     resetFromProfile(profileQuery.data);
 
     const hydratedDraft = getOnboardingDraft();
@@ -113,26 +122,32 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
     hydratedRef.current = true;
 
     if (resumeStep === 1) {
+      console.log("[boot] OnboardingEntry navigate Step1Goals");
       navigation.replace("Step1Goals");
       return;
     }
     if (resumeStep === 2) {
+      console.log("[boot] OnboardingEntry navigate Step2Equipment");
       navigation.replace("Step2Equipment");
       return;
     }
     if (resumeStep === "2b") {
+      console.log("[boot] OnboardingEntry navigate Step2bBaselineLoads");
       navigation.replace("Step2bBaselineLoads");
       return;
     }
     if (resumeStep === 3) {
+      console.log("[boot] OnboardingEntry navigate Step3Schedule");
       navigation.replace("Step3Schedule");
       return;
     }
     if (resumeStep === "done") {
+      console.log("[boot] OnboardingEntry navigate ProgramReview");
       navigation.replace("ProgramReview");
       return;
     }
 
+    console.log("[boot] OnboardingEntry navigate default Step3Schedule");
     navigation.replace("Step3Schedule");
   }, [
     meQuery.isSuccess,
