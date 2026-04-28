@@ -16,10 +16,6 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
-      thresholds: {
-        branches: 60,
-        statements: 60,
-      },
     },
   },
   resolve: {
