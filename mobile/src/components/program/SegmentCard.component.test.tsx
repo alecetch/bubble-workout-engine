@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { SegmentCard } from "./SegmentCard";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 
-const mutateAsyncMock = vi.fn().mockResolvedValue(undefined);
+const mutateAsyncMock = vi.fn().mockResolvedValue({ saved: 1, prs: [] });
 const initEntryMock = vi.fn();
 const startRestMock = vi.fn();
 const stopRestMock = vi.fn();
@@ -142,5 +142,17 @@ describe("SegmentCard", () => {
 
     expect(await screen.findByText("Close")).toBeInTheDocument();
     expect(await screen.findByText("Set 1")).toBeInTheDocument();
+  });
+
+  it("does not save a set when weight or reps fields receive focus", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+
+    const inputs = await screen.findAllByPlaceholderText("0");
+    fireEvent.focus(inputs[0]);
+    fireEvent.focus(inputs[1]);
+
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
   });
 });

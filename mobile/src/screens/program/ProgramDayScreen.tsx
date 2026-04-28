@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -8,6 +9,7 @@ import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/se
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { EquipmentOverrideSheet } from "../../components/program/EquipmentOverrideSheet";
 import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
@@ -31,6 +33,21 @@ import {
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDay">;
 type Segment = ProgramDayFullResponse["segments"][number];
 
+const WEEKDAY_LABELS: Record<string, string> = {
+  Mon: "Mondays",
+  Tue: "Tuesdays",
+  Wed: "Wednesdays",
+  Thu: "Thursdays",
+  Fri: "Fridays",
+  Sat: "Saturdays",
+  Sun: "Sundays",
+};
+
+function toWeekdayPlural(raw: string | null | undefined): string {
+  if (!raw) return "";
+  return WEEKDAY_LABELS[raw] ?? `${raw}s`;
+}
+
 export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Element {
   const { programDayId } = route.params;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
@@ -49,6 +66,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [swapSheetVisible, setSwapSheetVisible] = useState(false);
   const [swapTargetProgramExerciseId, setSwapTargetProgramExerciseId] = useState<string | null>(null);
   const [swapTargetExerciseName, setSwapTargetExerciseName] = useState<string | null>(null);
+  const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [prHits] = useState<string[]>([]);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
@@ -148,12 +166,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to undo completion.");
     }
-  }
-
-  function openSwapSheet(programExerciseId: string, exerciseName: string): void {
-    setSwapTargetProgramExerciseId(programExerciseId);
-    setSwapTargetExerciseName(exerciseName);
-    setSwapSheetVisible(true);
   }
 
   function closeSwapSheet(): void {
@@ -259,6 +271,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }
 
   const day = dayQuery.data.day;
+  const scheduledWeekday = day.scheduledWeekday ?? "";
+  const scheduledWeekdayLabel = toWeekdayPlural(scheduledWeekday);
+  const weekNumber = day.weekNumber ?? 1;
+  const currentEquipmentPreset = day.equipmentOverridePresetSlug ?? null;
+  const currentEquipmentItems = day.equipmentOverrideItemSlugs ?? [];
   const sessionStats = computeSessionStats();
 
   return (
@@ -274,6 +291,14 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             {`${day.type ?? "Session"}${day.sessionDuration ? ` • ${day.sessionDuration} min` : ""}`}
           </Text>
         </View>
+
+        <PressableScale
+          style={styles.changeEquipmentLink}
+          onPress={() => setEquipmentSheetVisible(true)}
+        >
+          <Ionicons name="barbell-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.changeEquipmentLabel}>Change equipment</Text>
+        </PressableScale>
 
         {orderedSegments.map((segment) => (
           <SegmentCard
@@ -332,6 +357,24 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         onDismiss={() => {
           void handleSummaryDismiss();
         }}
+      />
+      <EquipmentOverrideSheet
+        visible={equipmentSheetVisible}
+        onClose={() => setEquipmentSheetVisible(false)}
+        onApplied={(message) => {
+          setEquipmentSheetVisible(false);
+          setConfirmationText(message ?? "Workout updated with new equipment.");
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.programDayFull(programDayId, { userId }),
+          });
+        }}
+        programId={programId}
+        programDayId={programDayId}
+        scheduledWeekday={scheduledWeekday}
+        scheduledWeekdayLabel={scheduledWeekdayLabel}
+        weekNumber={weekNumber}
+        currentPresetSlug={currentEquipmentPreset}
+        currentItemSlugs={currentEquipmentItems}
       />
     </View>
   );
@@ -407,6 +450,24 @@ const styles = StyleSheet.create({
   heroSummary: {
     color: colors.textSecondary,
     ...typography.body,
+  },
+  changeEquipmentLink: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 32,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    justifyContent: "center",
+  },
+  changeEquipmentLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
   },
   bottomBar: {
     position: "absolute",

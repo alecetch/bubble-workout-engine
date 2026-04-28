@@ -15,7 +15,12 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { deleteAccount, getAccountInfo } from "../../api/accountApi";
 import { apiLogout } from "../../api/authApi";
-import { useEntitlement } from "../../api/hooks";
+import {
+  useClientProfile,
+  useEntitlement,
+  useMe,
+  useReferenceData,
+} from "../../api/hooks";
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -140,6 +145,9 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const clearSession = useSessionStore((state) => state.clearSession);
   const tabNavigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const entitlementQuery = useEntitlement();
+  const meQuery = useMe();
+  const referenceDataQuery = useReferenceData();
+  const profileQuery = useClientProfile(meQuery.data?.clientProfileId ?? null);
   const ent = entitlementQuery.data;
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [notifSaveError, setNotifSaveError] = useState<string | null>(null);
@@ -201,6 +209,12 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const reminderTimeLabel = useMemo(() => {
     return notifQuery.data ? formatReminderTimeLabel(notifQuery.data.reminderTimeLocalHhmm) : "";
   }, [notifQuery.data]);
+
+  const equipmentLabel = useMemo(() => {
+    const presetCode = profileQuery.data?.equipmentPreset ?? null;
+    if (!presetCode) return "Not set";
+    return referenceDataQuery.data?.equipmentPresets.find((preset) => preset.code === presetCode)?.label ?? "Not set";
+  }, [profileQuery.data?.equipmentPreset, referenceDataQuery.data?.equipmentPresets]);
 
   const handleLogout = async (): Promise<void> => {
     const refreshToken = await getRefreshToken();
@@ -350,30 +364,40 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
         <View style={styles.section}>
           <SectionLabel>PREFERENCES</SectionLabel>
           <View style={styles.sectionCard}>
-            {preferredUnitQuery.isLoading || preferredHeightUnitQuery.isLoading ? (
-              <SkeletonRows count={1} />
+            {preferredUnitQuery.isLoading || preferredHeightUnitQuery.isLoading || meQuery.isLoading || profileQuery.isLoading ? (
+              <SkeletonRows count={2} />
             ) : null}
-            {preferredUnitQuery.isError || preferredHeightUnitQuery.isError ? (
+            {preferredUnitQuery.isError || preferredHeightUnitQuery.isError || profileQuery.isError ? (
               <RetryRow
                 label="Couldn't load preferences - tap to retry"
                 onPress={() => {
                   void preferredUnitQuery.refetch();
                   void preferredHeightUnitQuery.refetch();
+                  void profileQuery.refetch();
                 }}
               />
             ) : null}
             {preferredUnitQuery.data && preferredHeightUnitQuery.data ? (
-              <SettingsRow
-                label="Units"
-                value={`${preferredUnitQuery.data} · ${preferredHeightUnitQuery.data}`}
-                onPress={() =>
-                  navigation.navigate("UnitPicker", {
-                    currentUnit: preferredUnitQuery.data ?? "kg",
-                    currentHeightUnit: preferredHeightUnitQuery.data ?? "cm",
-                  })
-                }
-                showChevron
-              />
+              <>
+                <SettingsRow
+                  label="Units"
+                  value={`${preferredUnitQuery.data} · ${preferredHeightUnitQuery.data}`}
+                  onPress={() =>
+                    navigation.navigate("UnitPicker", {
+                      currentUnit: preferredUnitQuery.data ?? "kg",
+                      currentHeightUnit: preferredHeightUnitQuery.data ?? "cm",
+                    })
+                  }
+                  showChevron
+                  showDivider
+                />
+                <SettingsRow
+                  label="Equipment"
+                  value={equipmentLabel}
+                  onPress={() => navigation.navigate("EquipmentSettings")}
+                  showChevron
+                />
+              </>
             ) : null}
           </View>
         </View>

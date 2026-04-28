@@ -112,6 +112,7 @@ export function SegmentCard({
   const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
   const [exerciseRirMap, setExerciseRirMap] = useState<Record<string, number | null>>({});
   const [doneSetKeys, setDoneSetKeys] = useState<Set<string>>(new Set());
+  const [pbSetKeys, setPbSetKeys] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(initialDurationSeconds ?? 0);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -200,10 +201,15 @@ export function SegmentCard({
       ? Math.max(0, Math.min(1, restDisplaySeconds / restEntry.restTotalSeconds))
       : 0;
   const showRestStrip = restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
-  const totalSetCount = useMemo(
-    () => loadableExercises.reduce((sum, exercise) => sum + getExerciseSetCount(exercise), 0),
-    [loadableExercises],
-  );
+  const totalSetCount = useMemo(() => {
+    if (!initialized) {
+      return loadableExercises.reduce((sum, ex) => sum + getExerciseSetCount(ex), 0);
+    }
+    return loadableExercises.reduce((sum, ex) => {
+      const key = ex.id ?? "";
+      return sum + (inputMap[key]?.length ?? getExerciseSetCount(ex));
+    }, 0);
+  }, [initialized, inputMap, loadableExercises]);
 
   function handleTimerPress(): void {
     if (initialDurationSeconds == null || initialDurationSeconds <= 0) return;
@@ -232,7 +238,7 @@ export function SegmentCard({
     return `${exercise.id ?? exercise.exerciseId ?? exercise.name}:${setIndex}`;
   }
 
-  function handleSetComplete(exercise: Exercise, setIndex: number): void {
+  async function handleSetComplete(exercise: Exercise, setIndex: number): Promise<void> {
     const programExerciseId = exercise.id;
     if (!programExerciseId) return;
     const setKey = buildSetKey(exercise, setIndex);
@@ -259,7 +265,123 @@ export function SegmentCard({
       }],
     };
 
-    void saveLogsMutation.mutateAsync(payload);
+    const result = await saveLogsMutation.mutateAsync(payload);
+    if (result.prs.length > 0) {
+      setPbSetKeys((prev) => {
+        const next = new Set(prev);
+        for (const pr of result.prs) {
+          if (pr.programExerciseId === programExerciseId) {
+            next.add(setKey);
+          }
+        }
+        return next;
+      });
+    }
+
+    useTimerStore.getState().initEntry({
+      segmentId: segment.id,
+      segmentTotal: null,
+      restTotal: exercise.restSeconds ?? 90,
+    });
+    useTimerStore.getState().startRest(segment.id);
+
+    if (nextDoneSetKeys.size >= totalSetCount) {
+      onAllSetsSaved(segment.id);
+    }
+  }
+
+  function handleAddSet(exercise: Exercise): void {
+    const exerciseKey = exercise.id ?? "";
+    setInputMap((current) => {
+      const existing = current[exerciseKey] ?? [];
+      const last = existing[existing.length - 1] ?? { weight: "", reps: "", rirActual: null };
+      return {
+        ...current,
+        [exerciseKey]: [...existing, { weight: last.weight, reps: last.reps, rirActual: null }],
+      };
+    });
+  }
+
+  function handleRemoveSet(exercise: Exercise): void {
+    const exerciseKey = exercise.id ?? "";
+    const currentLength = inputMap[exerciseKey]?.length ?? 1;
+    if (currentLength <= 1) return;
+
+    setInputMap((current) => {
+      const existing = current[exerciseKey] ?? [];
+      if (existing.length <= 1) return current;
+      return { ...current, [exerciseKey]: existing.slice(0, -1) };
+    });
+    setDoneSetKeys((prev) => {
+      const removedIndex = currentLength - 1;
+      const removedKey = `${exerciseKey}:${removedIndex}`;
+      if (!prev.has(removedKey)) return prev;
+      const next = new Set(prev);
+      next.delete(removedKey);
+      return next;
+    });
+    setPbSetKeys((prev) => {
+      const removedIndex = currentLength - 1;
+      const removedKey = `${exerciseKey}:${removedIndex}`;
+      if (!prev.has(removedKey)) return prev;
+      const next = new Set(prev);
+      next.delete(removedKey);
+      return next;
+    });
+  }
+
+  async function handleLogAllSets(exercise: Exercise): Promise<void> {
+    const exerciseKey = exercise.id ?? "";
+    const programExerciseId = exercise.id;
+    if (!programExerciseId) return;
+    const sets = inputMap[exerciseKey] ?? [];
+    const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
+
+    const uncheckedRows: Array<{ setIndex: number; row: SetInputState }> = [];
+    for (let setIndex = 0; setIndex < sets.length; setIndex += 1) {
+      const setKey = buildSetKey(exercise, setIndex);
+      if (!doneSetKeys.has(setKey)) {
+        uncheckedRows.push({ setIndex, row: sets[setIndex] });
+      }
+    }
+    if (uncheckedRows.length === 0) return;
+
+    const nextDoneSetKeys = new Set(doneSetKeys);
+    for (const { setIndex } of uncheckedRows) {
+      nextDoneSetKeys.add(buildSetKey(exercise, setIndex));
+    }
+    setDoneSetKeys(nextDoneSetKeys);
+    setActiveSetKey(buildSetKey(exercise, uncheckedRows[uncheckedRows.length - 1].setIndex));
+
+    const payload: SaveSegmentLogPayload = {
+      userId,
+      programId,
+      programDayId,
+      workoutSegmentId: segment.id,
+      rows: uncheckedRows.map(({ setIndex, row }) => ({
+        programExerciseId,
+        orderIndex: setIndex + 1,
+        weightKg: Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null,
+        repsCompleted: Number.isFinite(parseInt(row.reps, 10)) ? parseInt(row.reps, 10) || null : null,
+        rirActual: exerciseRir,
+      })),
+    };
+
+    const result = await saveLogsMutation.mutateAsync(payload);
+
+    if (result.prs.length > 0) {
+      setPbSetKeys((prev) => {
+        const next = new Set(prev);
+        for (const pr of result.prs) {
+          if (pr.programExerciseId === programExerciseId) {
+            for (const { setIndex } of uncheckedRows) {
+              next.add(buildSetKey(exercise, setIndex));
+            }
+          }
+        }
+        return next;
+      });
+    }
 
     useTimerStore.getState().initEntry({
       segmentId: segment.id,
@@ -404,9 +526,8 @@ export function SegmentCard({
           ) : (
             loadableExercises.map((exercise) => {
               const exerciseKey = exercise.id ?? "";
-              const setCount = getExerciseSetCount(exercise);
               const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
-              const setInputs = inputMap[exerciseKey] ?? Array.from({ length: setCount }, () => ({
+              const setInputs = inputMap[exerciseKey] ?? Array.from({ length: getExerciseSetCount(exercise) }, () => ({
                 weight: "",
                 reps: "",
                 rirActual: null,
@@ -414,18 +535,21 @@ export function SegmentCard({
 
               return (
                 <View key={exerciseKey} style={styles.inlineExerciseBlock}>
-                  {Array.from({ length: setCount }, (_, setIndex) => {
-                    const setInput = setInputs[setIndex] ?? { weight: "", reps: "", rirActual: null };
+                  {setInputs.map((setInput, setIndex) => {
                     const setKey = buildSetKey(exercise, setIndex);
                     const isDone = doneSetKeys.has(setKey);
                     const isActive = activeSetKey === setKey;
                     return (
                       <View key={setKey} style={[styles.setRow, isDone && styles.setRowDone, isActive && styles.setRowActive]}>
                         <Text style={[styles.setLabel, isDone && styles.setLabelDone]}>{`Set ${setIndex + 1}`}</Text>
+                        {isDone && pbSetKeys.has(setKey) ? (
+                          <View style={styles.pbBadge}>
+                            <Text style={styles.pbBadgeText}>PB</Text>
+                          </View>
+                        ) : null}
                         <View style={styles.weightInputGroup}>
                           <TextInput
                             value={setInput.weight}
-                            onFocus={() => handleSetComplete(exercise, setIndex)}
                             onChangeText={(value) => {
                               const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
                               updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, weight: sanitized }));
@@ -442,7 +566,6 @@ export function SegmentCard({
                         <View style={styles.repsInputGroup}>
                           <TextInput
                             value={setInput.reps}
-                            onFocus={() => handleSetComplete(exercise, setIndex)}
                             onChangeText={(value) => {
                               const sanitized = value.replace(/[^0-9]/g, "");
                               updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, reps: sanitized }));
@@ -455,7 +578,7 @@ export function SegmentCard({
                         </View>
                         <PressableScale
                           style={styles.checkboxButton}
-                          onPress={() => handleSetComplete(exercise, setIndex)}
+                          onPress={() => { void handleSetComplete(exercise, setIndex); }}
                         >
                           <Ionicons
                             name={isDone ? "checkbox" : "checkbox-outline"}
@@ -466,6 +589,28 @@ export function SegmentCard({
                       </View>
                     );
                   })}
+                  <View style={styles.setMutationRow}>
+                    <PressableScale
+                      style={[styles.setMutationButton, setInputs.length <= 1 && styles.setMutationButtonDisabled]}
+                      onPress={() => handleRemoveSet(exercise)}
+                    >
+                      <Ionicons
+                        name="remove-circle-outline"
+                        size={16}
+                        color={setInputs.length <= 1 ? colors.textSecondary : colors.textPrimary}
+                      />
+                      <Text style={[styles.setMutationLabel, setInputs.length <= 1 && styles.setMutationLabelDisabled]}>
+                        Remove set
+                      </Text>
+                    </PressableScale>
+                    <PressableScale
+                      style={styles.setMutationButton}
+                      onPress={() => handleAddSet(exercise)}
+                    >
+                      <Ionicons name="add-circle-outline" size={16} color={colors.textPrimary} />
+                      <Text style={styles.setMutationLabel}>Add set</Text>
+                    </PressableScale>
+                  </View>
                   <View style={styles.exerciseRirBlock}>
                     <Text style={styles.exerciseRirQuestion}>
                       How many more reps could you complete per set?
@@ -495,6 +640,12 @@ export function SegmentCard({
                         );
                       })}
                     </View>
+                    <PressableScale
+                      style={styles.logAllButton}
+                      onPress={() => { void handleLogAllSets(exercise); }}
+                    >
+                      <Text style={styles.logAllButtonLabel}>Log all sets as complete</Text>
+                    </PressableScale>
                     <View style={styles.rirHintRow}>
                       <Text style={styles.rirHintText}>Too easy</Text>
                       <Text style={styles.rirHintText}>Max effort</Text>
@@ -721,6 +872,20 @@ const styles = StyleSheet.create({
   setLabelDone: {
     color: colors.textSecondary,
   },
+  pbBadge: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignSelf: "center",
+  },
+  pbBadgeText: {
+    color: "#F59E0B",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
   weightInputGroup: {
     flexDirection: "row",
     alignItems: "center",
@@ -771,6 +936,29 @@ const styles = StyleSheet.create({
   exerciseRirBlock: {
     gap: spacing.xs,
   },
+  setMutationRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: spacing.xs,
+  },
+  setMutationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: spacing.xs,
+  },
+  setMutationButtonDisabled: {
+    opacity: 0.35,
+  },
+  setMutationLabel: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  setMutationLabelDisabled: {
+    color: colors.textSecondary,
+  },
   exerciseRirQuestion: {
     color: colors.textSecondary,
     ...typography.small,
@@ -778,6 +966,7 @@ const styles = StyleSheet.create({
   },
   rirPills: {
     flexDirection: "row",
+    width: "100%",
     gap: spacing.xs,
   },
   rirPill: {
@@ -805,6 +994,20 @@ const styles = StyleSheet.create({
   rirHintRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+  },
+  logAllButton: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logAllButtonLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
   },
   rirHintText: {
     color: colors.textSecondary,

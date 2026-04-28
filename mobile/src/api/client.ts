@@ -212,6 +212,8 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
     const messageFromBody =
       typeof data === "object" && data !== null && "error" in data && typeof (data as { error: unknown }).error === "string"
         ? (data as { error: string }).error
+        : typeof data === "object" && data !== null && "message" in data && typeof (data as { message: unknown }).message === "string"
+          ? (data as { message: string }).message
         : typeof data === "string"
           ? data
           : fallbackMessage;
@@ -430,6 +432,8 @@ export async function authPostFormData<T>(
     const messageFromBody =
       typeof data === "object" && data !== null && "error" in data && typeof (data as { error: unknown }).error === "string"
         ? (data as { error: string }).error
+        : typeof data === "object" && data !== null && "message" in data && typeof (data as { message: unknown }).message === "string"
+          ? (data as { message: string }).message
         : typeof data === "string"
           ? data
           : fallbackMessage;
