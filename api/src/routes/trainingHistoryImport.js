@@ -45,11 +45,10 @@ function uploadSingle(req, res, next) {
   });
 }
 
-trainingHistoryImportRouter.post(
-  "/training-history",
-  ...userAuth,
-  uploadSingle,
-  async (req, res, next) => {
+export function createImportHandlers(db, options = {}) {
+  const importService = options.importService ?? makeTrainingHistoryImportService(db);
+
+  async function postTrainingHistory(req, res, next) {
     try {
       const userId = req.auth.user_id;
       const sourceApp = String(req.body?.source_app ?? "").trim().toLowerCase();
@@ -66,7 +65,7 @@ trainingHistoryImportRouter.post(
         return res.status(400).json({ ok: false, code: "missing_file", error: "A CSV file is required." });
       }
 
-      const profileR = await pool.query(
+      const profileR = await db.query(
         `SELECT id
          FROM client_profile
          WHERE user_id = $1
@@ -75,7 +74,6 @@ trainingHistoryImportRouter.post(
       );
       const clientProfileId = profileR.rows[0]?.id ?? null;
 
-      const importService = makeTrainingHistoryImportService(pool);
       const result = await importService.processHevyCsv({
         csvBuffer: req.file.buffer,
         userId,
@@ -90,16 +88,11 @@ trainingHistoryImportRouter.post(
       }
       return next(err);
     }
-  },
-);
+  }
 
-trainingHistoryImportRouter.get(
-  "/training-history/:import_id",
-  ...userAuth,
-  async (req, res, next) => {
+  async function getImportRecord(req, res, next) {
     try {
       const userId = req.auth.user_id;
-      const importService = makeTrainingHistoryImportService(pool);
       const record = await importService.getImport(req.params.import_id, userId);
       if (!record) {
         return res.status(404).json({ ok: false, error: "Import not found." });
@@ -119,5 +112,21 @@ trainingHistoryImportRouter.get(
     } catch (err) {
       return next(err);
     }
-  },
+  }
+
+  return { postTrainingHistory, getImportRecord };
+}
+
+const importHandlers = createImportHandlers(pool);
+trainingHistoryImportRouter.post(
+  "/training-history",
+  ...userAuth,
+  uploadSingle,
+  importHandlers.postTrainingHistory,
+);
+
+trainingHistoryImportRouter.get(
+  "/training-history/:import_id",
+  ...userAuth,
+  importHandlers.getImportRecord,
 );

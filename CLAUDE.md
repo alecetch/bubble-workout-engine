@@ -36,7 +36,7 @@ The detailed spec then goes into `docs/specs/` following the naming convention a
 When asked to write a spec for a new feature:
 1. Look for the source material in `docs/planning/` first (the user will often refer to a doc or feature number there).
 2. Create the spec file in `docs/specs/` following the naming convention above.
-3. Write the spec and present it to the user.
+3. Write the spec and present it to the user. The spec must include a **Test coverage** section that identifies which new automated tests will be written as part of the implementation (e.g. route integration tests, service unit tests, component tests). This section becomes the basis for the test deliverable in the Codex prompt.
 4. Register the spec in the board database so it has full lineage. Run:
    ```
    docker compose exec db psql -U app -d doc_admin -c "UPDATE admin_doc_board_items SET planning_doc = '<source-filename>' WHERE doc_key = '<doc_key>';"
@@ -48,7 +48,8 @@ When asked to write a spec for a new feature:
 Only create a prompt after the user explicitly confirms they are happy with the spec. Then:
 1. Create the prompt file in `docs/prompts/active/` following the naming convention above.
 2. Write the prompt with enough context for Codex to implement the spec end-to-end.
-3. Tell the user the prompt is ready in `docs/prompts/active/` for them to submit to Codex.
+3. **Every prompt must include an explicit automated test deliverable.** Use the templates in the "Test requirements for Codex prompts" section below. There are no exceptions — UI-only features still require component tests; purely backend features require route or service tests. If a surface genuinely cannot be covered automatically, state that explicitly in the prompt and explain why, and add a manual verification step instead.
+4. Tell the user the prompt is ready in `docs/prompts/active/` for them to submit to Codex.
 
 ### Creating a bug-fix prompt
 When a bug is found during manual testing of a feature, create a bug-fix prompt — a focused prompt that describes only the bug and its fix. Bug-fix prompts are linked to their parent spec on the board automatically by file naming convention.

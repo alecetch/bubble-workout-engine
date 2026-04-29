@@ -39,6 +39,13 @@ type SegmentCardProps = {
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
 const RIR_OPTIONS = ["4+", "3", "2", "1", "0"] as const;
+const CHIP_PALETTE: Record<string, { bg: string; text: string; border: string }> = {
+  increase_load: { bg: "#052e16", text: colors.success, border: "#16a34a" },
+  increase_reps: { bg: "#052e16", text: colors.success, border: "#16a34a" },
+  increase_sets: { bg: "#052e16", text: colors.success, border: "#16a34a" },
+  reduce_rest: { bg: "#0c1a4a", text: colors.accent, border: "#3b82f6" },
+  deload_local: { bg: "#451a03", text: colors.warning, border: "#d97706" },
+};
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(Math.max(0, seconds) / 60);
@@ -478,6 +485,29 @@ export function SegmentCard({
                           <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
                         </View>
                       ) : null}
+                      {(() => {
+                        const decision = exercise.adaptationDecision ?? null;
+                        if (!decision || decision.outcome === "hold") return null;
+                        const palette = CHIP_PALETTE[decision.outcome] ?? {
+                          bg: "#0c1a4a",
+                          text: colors.accent,
+                          border: "#3b82f6",
+                        };
+
+                        return (
+                          <PressableScale
+                            onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
+                            style={[
+                              styles.adaptChip,
+                              { backgroundColor: palette.bg, borderColor: palette.border },
+                            ]}
+                          >
+                            <Text style={[styles.adaptChipText, { color: palette.text }]}>
+                              {decision.displayChip}
+                            </Text>
+                          </PressableScale>
+                        );
+                      })()}
                     </View>
                   );
                 })
@@ -820,6 +850,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+  },
+  adaptChip: {
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+    marginTop: 2,
+  },
+  adaptChipText: {
+    ...typography.label,
+    fontWeight: "600",
   },
   inlinePanel: {
     borderTopWidth: 1,
