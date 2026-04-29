@@ -277,6 +277,28 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const currentEquipmentPreset = day.equipmentOverridePresetSlug ?? null;
   const currentEquipmentItems = day.equipmentOverrideItemSlugs ?? [];
   const sessionStats = computeSessionStats();
+  const adaptedCount = dayQuery.data
+    ? dayQuery.data.segments
+        .flatMap((s) => s.exercises)
+        .filter(
+          (ex) =>
+            ex.adaptationDecision != null &&
+            ex.adaptationDecision.outcome !== "hold",
+        ).length
+    : 0;
+  const adaptedExercisesForSummary = dayQuery.data
+    ? dayQuery.data.segments
+        .flatMap((s) => s.exercises)
+        .filter(
+          (ex) =>
+            ex.adaptationDecision != null &&
+            ex.adaptationDecision.outcome !== "hold",
+        )
+        .map((ex) => ({
+          name: ex.name,
+          displayChip: ex.adaptationDecision!.displayChip,
+        }))
+    : [];
 
   return (
     <View style={styles.root}>
@@ -299,6 +321,16 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
           <Ionicons name="barbell-outline" size={14} color={colors.textSecondary} />
           <Text style={styles.changeEquipmentLabel}>Change equipment</Text>
         </PressableScale>
+
+        {adaptedCount > 0 ? (
+          <View style={styles.adaptBanner}>
+            <Text style={styles.adaptBannerText}>
+              {adaptedCount === 1
+                ? "1 exercise personalised based on your last session. Tap an exercise name for details."
+                : `${adaptedCount} exercises personalised based on your last session. Tap an exercise name for details.`}
+            </Text>
+          </View>
+        ) : null}
 
         {orderedSegments.map((segment) => (
           <SegmentCard
@@ -354,6 +386,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         exerciseCount={sessionStats.exerciseCount}
         prHits={prHits}
         streakDays={0}
+        adaptedExercises={adaptedExercisesForSummary}
         onDismiss={() => {
           void handleSummaryDismiss();
         }}
@@ -468,6 +501,19 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
     fontWeight: "600",
+  },
+  adaptBanner: {
+    backgroundColor: "#0c1a4a",
+    borderWidth: 1,
+    borderColor: "#3b82f6",
+    borderRadius: radii.card,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  adaptBannerText: {
+    color: colors.accent,
+    ...typography.small,
+    lineHeight: 18,
   },
   bottomBar: {
     position: "absolute",

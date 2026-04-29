@@ -21,6 +21,7 @@ type SessionSummaryModalProps = {
   exerciseCount: number;
   prHits: string[];
   streakDays: number;
+  adaptedExercises?: Array<{ name: string; displayChip: string }>;
   onDismiss: () => void;
 };
 
@@ -31,6 +32,7 @@ export function SessionSummaryModal({
   exerciseCount,
   prHits,
   streakDays,
+  adaptedExercises = [],
   onDismiss,
 }: SessionSummaryModalProps): React.JSX.Element {
   const roundedVolume = Math.round(totalVolumeKg);
@@ -64,6 +66,19 @@ export function SessionSummaryModal({
                     ? `New PR on ${prHits[0]}!`
                     : `New PRs on ${prHits.slice(0, 2).join(" & ")}!`}
                 </Text>
+              </View>
+            ) : null}
+
+            {adaptedExercises.length > 0 ? (
+              <View style={styles.adaptSection}>
+                <Text style={styles.adaptSectionTitle}>Adapted this session</Text>
+                {adaptedExercises.map((item, index) => (
+                  <View key={index} style={styles.adaptRow}>
+                    <Text style={styles.adaptExName}>{item.name}</Text>
+                    <Text style={styles.adaptSep}>{" — "}</Text>
+                    <Text style={styles.adaptChipLabel}>{item.displayChip}</Text>
+                  </View>
+                ))}
               </View>
             ) : null}
 
@@ -141,6 +156,38 @@ const styles = StyleSheet.create({
     color: colors.accent,
     ...typography.body,
     fontWeight: "700",
+  },
+  adaptSection: {
+    backgroundColor: colors.card,
+    borderRadius: radii.card,
+    padding: spacing.sm,
+    gap: spacing.xs,
+  },
+  adaptSectionTitle: {
+    color: colors.textPrimary,
+    ...typography.label,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    opacity: 0.65,
+  },
+  adaptRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+  adaptExName: {
+    color: colors.textSecondary,
+    ...typography.small,
+    lineHeight: 18,
+  },
+  adaptSep: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  adaptChipLabel: {
+    color: colors.success,
+    ...typography.small,
+    fontWeight: "600",
   },
   statsGrid: {
     flexDirection: "row",
