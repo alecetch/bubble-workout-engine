@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { SegmentCard } from "./SegmentCard";
-import type { ProgramDayFullResponse } from "../../api/programViewer";
+import type { AdaptationDecision, ProgramDayFullResponse } from "../../api/programViewer";
 
 const mutateAsyncMock = vi.fn().mockResolvedValue({ saved: 1, prs: [] });
 const initEntryMock = vi.fn();
@@ -154,5 +154,73 @@ describe("SegmentCard", () => {
     fireEvent.focus(inputs[1]);
 
     expect(mutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("renders adaptation chip text for a non-hold decision", () => {
+    const decision: AdaptationDecision = {
+      outcome: "increase_load",
+      primaryLever: "load",
+      confidence: "high",
+      recommendedLoadKg: 95,
+      recommendedLoadDeltaKg: 5,
+      recommendedRepsTarget: null,
+      recommendedRepDelta: null,
+      displayChip: "Load increased ↑",
+      displayDetail: "You hit all sets at your top rep range.",
+      decidedAt: "2026-04-29T00:00:00.000Z",
+    };
+    const exercise = makeExercise({ adaptationDecision: decision });
+
+    renderCard({ segment: makeSegment({}, [exercise]) });
+
+    expect(screen.getByText("Load increased ↑")).toBeInTheDocument();
+  });
+
+  it("does not render chip text for outcome hold", () => {
+    const decision: AdaptationDecision = {
+      outcome: "hold",
+      primaryLever: "hold",
+      confidence: "medium",
+      recommendedLoadKg: null,
+      recommendedLoadDeltaKg: null,
+      recommendedRepsTarget: null,
+      recommendedRepDelta: null,
+      displayChip: "Holding steady",
+      displayDetail: "Consolidating current load.",
+      decidedAt: "2026-04-29T00:00:00.000Z",
+    };
+    const exercise = makeExercise({ adaptationDecision: decision });
+
+    renderCard({ segment: makeSegment({}, [exercise]) });
+
+    expect(screen.queryByText("Holding steady")).not.toBeInTheDocument();
+  });
+
+  it("does not render any chip when adaptationDecision is null", () => {
+    const exercise = makeExercise({ adaptationDecision: null });
+
+    renderCard({ segment: makeSegment({}, [exercise]) });
+
+    expect(screen.queryByText(/[↑↓]/)).not.toBeInTheDocument();
+  });
+
+  it("renders chip text for deload_local", () => {
+    const decision: AdaptationDecision = {
+      outcome: "deload_local",
+      primaryLever: "load",
+      confidence: "high",
+      recommendedLoadKg: 80,
+      recommendedLoadDeltaKg: -5,
+      recommendedRepsTarget: null,
+      recommendedRepDelta: null,
+      displayChip: "Deload this week",
+      displayDetail: "Signs of fatigue detected.",
+      decidedAt: "2026-04-29T00:00:00.000Z",
+    };
+    const exercise = makeExercise({ adaptationDecision: decision });
+
+    renderCard({ segment: makeSegment({}, [exercise]) });
+
+    expect(screen.getByText("Deload this week")).toBeInTheDocument();
   });
 });
