@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TextInput, View } from "react-native";
+import { ApiError } from "../../api/client";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
-import type { SaveSegmentLogPayload } from "../../api/segmentLog";
+import type { SaveSegmentLogPayload, SaveSegmentLogResult } from "../../api/segmentLog";
 import { useSaveSegmentLogs, useSegmentExerciseLogs } from "../../api/hooks";
 import { useTimerStore } from "../../state/timer/useTimerStore";
 import { colors } from "../../theme/colors";
@@ -35,6 +36,8 @@ type SegmentCardProps = {
     exercise: Exercise,
   ) => void;
   onAllSetsSaved: (segmentId: string) => void;
+  onSubscriptionRequired?: () => void;
+  onPrsDetected?: (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => void;
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
@@ -100,6 +103,8 @@ export function SegmentCard({
   userId,
   onViewExerciseDetail,
   onAllSetsSaved,
+  onSubscriptionRequired,
+  onPrsDetected,
 }: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
@@ -272,8 +277,28 @@ export function SegmentCard({
       }],
     };
 
-    const result = await saveLogsMutation.mutateAsync(payload);
+    let result: SaveSegmentLogResult;
+    try {
+      result = await saveLogsMutation.mutateAsync(payload);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 402) {
+        onSubscriptionRequired?.();
+        return;
+      }
+      return;
+    }
     if (result.prs.length > 0) {
+      onPrsDetected?.(
+        result.prs
+          .map((pr) => {
+            const matchedExercise = exercises.find((exercise) => exercise.id === pr.programExerciseId);
+            return {
+              exerciseName: matchedExercise?.name ?? "Exercise",
+              estimated1rmKg: pr.estimated1rmKg,
+            };
+          })
+          .filter((pr) => pr.estimated1rmKg > 0),
+      );
       setPbSetKeys((prev) => {
         const next = new Set(prev);
         for (const pr of result.prs) {
@@ -374,9 +399,29 @@ export function SegmentCard({
       })),
     };
 
-    const result = await saveLogsMutation.mutateAsync(payload);
+    let result: SaveSegmentLogResult;
+    try {
+      result = await saveLogsMutation.mutateAsync(payload);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 402) {
+        onSubscriptionRequired?.();
+        return;
+      }
+      return;
+    }
 
     if (result.prs.length > 0) {
+      onPrsDetected?.(
+        result.prs
+          .map((pr) => {
+            const matchedExercise = exercises.find((candidate) => candidate.id === pr.programExerciseId);
+            return {
+              exerciseName: matchedExercise?.name ?? "Exercise",
+              estimated1rmKg: pr.estimated1rmKg,
+            };
+          })
+          .filter((pr) => pr.estimated1rmKg > 0),
+      );
       setPbSetKeys((prev) => {
         const next = new Set(prev);
         for (const pr of result.prs) {

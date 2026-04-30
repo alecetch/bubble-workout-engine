@@ -16,6 +16,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { getAppStorage } from "../../utils/appStorage";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
@@ -76,7 +77,9 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
 
     let result: AuthTokens;
     try {
-      result = await apiRegister(normalizedEmail, password);
+      const pendingReferralCode = await getAppStorage().getItem("pendingReferralCode");
+      result = await apiRegister(normalizedEmail, password, pendingReferralCode);
+      await getAppStorage().removeItem("pendingReferralCode");
     } catch (error) {
       console.error("[RegisterScreen] apiRegister failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
       if (error instanceof ApiError && error.status === 409) {

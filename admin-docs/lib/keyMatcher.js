@@ -110,6 +110,36 @@ export async function buildBugPromptMap(activeDir, doneDir) {
 }
 
 /**
+ * Extract a canonical doc_key from a test plan filename (basename).
+ * e.g. "feature-9-social-sharing-test-plan.md" → "feature-9-social-sharing"
+ */
+export function extractTestPlanKey(filename) {
+  let key = basename(filename, extname(filename)); // strip extension
+  key = key.replace(/-test-plan$/, '');            // strip trailing "-test-plan"
+  return key;
+}
+
+/**
+ * Scan docs/test_plans/ and return Map<docKey, testPlanFilename>.
+ */
+export async function buildTestPlanMap(testPlansDir) {
+  const map = new Map();
+  let files;
+  try {
+    files = await readdir(testPlansDir);
+  } catch {
+    console.warn(`[keyMatcher] test_plans dir not found or unreadable: ${testPlansDir}`);
+    return map;
+  }
+  for (const file of files) {
+    if (!/\.(md|txt)$/i.test(file)) continue;
+    const key = extractTestPlanKey(file);
+    if (key) map.set(key, file);
+  }
+  return map;
+}
+
+/**
  * Scan docs/specs/ and return Map<docKey, specFilename>.
  */
 export async function buildSpecMap(specsDir) {

@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -131,9 +131,23 @@ export function HistoryScreen(): React.JSX.Element {
   const entitlementQuery = useEntitlement();
   const lastCheckIn = checkInsQuery.data?.check_ins[0] ?? null;
   const isPremium = entitlementQuery.data?.subscription_status === "active";
+  const isActive = entitlementQuery.data?.is_active ?? true;
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
+    }, [queryClient]),
+  );
+
+  React.useEffect(() => {
+    if (entitlementQuery.isSuccess && !isActive) {
+      const parent = navigation.getParent() as any;
+      parent?.navigate?.("HomeTab", { screen: "Paywall" });
+    }
+  }, [entitlementQuery.isSuccess, isActive, navigation]);
 
   React.useEffect(() => {
     const timeout = setTimeout(() => {

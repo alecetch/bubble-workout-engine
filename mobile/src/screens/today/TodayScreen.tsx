@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -6,7 +7,7 @@ import type { RootTabParamList } from "../../navigation/AppTabs";
 import { TodayWorkoutCard } from "../../components/today/TodayWorkoutCard";
 import { WeekProgressBadge } from "../../components/today/WeekProgressBadge";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useActivePrograms, useProgramOverview } from "../../api/hooks";
+import { useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
 import { type ProgramDayStatus } from "../../components/program/CalendarDayPillRow";
@@ -45,9 +46,12 @@ function greetingText(): string {
 
 export function TodayScreen(): React.JSX.Element {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+  const queryClient = useQueryClient();
   const userId = useSessionStore((state) => state.userId) ?? undefined;
   const activeProgramId = useSessionStore((state) => state.activeProgramId);
   const activeProgramsQuery = useActivePrograms();
+  const entitlementQuery = useEntitlement();
+  const isActive = entitlementQuery.data?.is_active ?? true;
   const resolvedProgramId = activeProgramId ?? activeProgramsQuery.data?.primary_program_id ?? null;
 
   const overviewQuery = useProgramOverview(resolvedProgramId ?? "", { userId });
@@ -102,9 +106,10 @@ export function TodayScreen(): React.JSX.Element {
 
   useFocusEffect(
     useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
       void refreshDayStatuses();
       return undefined;
-    }, [refreshDayStatuses]),
+    }, [queryClient, refreshDayStatuses]),
   );
 
   useEffect(() => {
@@ -242,6 +247,10 @@ export function TodayScreen(): React.JSX.Element {
           type={todayPreview?.type ?? ""}
           sessionDuration={todayPreview?.sessionDuration ?? null}
           onStartWorkout={() => {
+            if (!isActive) {
+              navigation.navigate("HomeTab", { screen: "Paywall" } as never);
+              return;
+            }
             if (!todayProgramDayId) return;
             navigation.navigate("ProgramsTab", {
               screen: "ProgramDay",
@@ -264,7 +273,13 @@ export function TodayScreen(): React.JSX.Element {
         </Text>
         <PressableScale
           style={styles.secondaryButton}
-          onPress={() => navigation.navigate("ProgramsTab", { screen: "ProgramHub" } as never)}
+          onPress={() => {
+            if (!isActive) {
+              navigation.navigate("HomeTab", { screen: "Paywall" } as never);
+              return;
+            }
+            navigation.navigate("ProgramsTab", { screen: "ProgramHub" } as never);
+          }}
         >
           <Text style={styles.secondaryLabel}>View Full Program</Text>
         </PressableScale>
@@ -289,7 +304,13 @@ export function TodayScreen(): React.JSX.Element {
         />
         <PressableScale
           style={styles.secondaryButton}
-          onPress={() => navigation.navigate("ProgramsTab", { screen: "ProgramHub" } as never)}
+          onPress={() => {
+            if (!isActive) {
+              navigation.navigate("HomeTab", { screen: "Paywall" } as never);
+              return;
+            }
+            navigation.navigate("ProgramsTab", { screen: "ProgramHub" } as never);
+          }}
         >
           <Text style={styles.secondaryLabel}>View Program</Text>
         </PressableScale>

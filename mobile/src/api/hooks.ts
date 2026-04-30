@@ -106,6 +106,12 @@ import {
   updateNotificationPreferences,
   type NotificationPreferences,
 } from "./notifications";
+import {
+  fetchReferralInfo,
+  fetchReferralStats,
+  type ReferralInfo,
+  type ReferralStats,
+} from "./referral";
 import { getEntitlement, type EntitlementResponse } from "./entitlement";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
@@ -147,6 +153,8 @@ export const queryKeys = {
   physiqueScanTrend: ["physiqueScanTrend"] as const,
   physiqueMilestones: ["physiqueMilestones"] as const,
   programEquipment: (programId: string | null) => ["programEquipment", programId] as const,
+  referralInfo: ["referralInfo"] as const,
+  referralStats: ["referralStats"] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -429,6 +437,22 @@ export function useEntitlement(): UseQueryResult<EntitlementResponse> {
     queryFn: getEntitlement,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
+  });
+}
+
+export function useReferralInfo(): UseQueryResult<ReferralInfo> {
+  return useQuery({
+    queryKey: queryKeys.referralInfo,
+    queryFn: fetchReferralInfo,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+}
+
+export function useReferralStats(): UseQueryResult<ReferralStats> {
+  return useQuery({
+    queryKey: queryKeys.referralStats,
+    queryFn: fetchReferralStats,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

@@ -1,18 +1,21 @@
-import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
-import { queryKeys, useCompleteProgram, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { queryKeys, useCompleteProgram, useEntitlement, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getProgramEndCheck } from "../../api/programCompletion";
 import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/segmentLog";
-import type { ProgramDayFullResponse } from "../../api/programViewer";
+import { getPrsFeed } from "../../api/history";
+import { getProgramOverview, type ProgramDayFullResponse } from "../../api/programViewer";
 import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { EquipmentOverrideSheet } from "../../components/program/EquipmentOverrideSheet";
 import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
+import { WeekShareCard } from "../../components/sharing/WeekShareCard";
 import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
@@ -29,9 +32,47 @@ import {
   setWorkoutComplete,
   type SegmentLogEntry,
 } from "../../utils/localWorkoutLog";
+import { captureAndShare } from "../../utils/shareCard";
+import { getAppStorage } from "../../utils/appStorage";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDay">;
 type Segment = ProgramDayFullResponse["segments"][number];
+type WeekShareData = {
+  weekNumber: number;
+  sessionsCompleted: number;
+  totalVolumeKg: number;
+};
+
+const REVIEW_PROMPT_KEY = "hasRequestedStoreReview";
+
+async function maybeRequestStoreReview(): Promise<void> {
+  try {
+    const storage = getAppStorage();
+    const already = await storage.getItem(REVIEW_PROMPT_KEY);
+    if (already) return;
+
+    const requireFn = (globalThis as { require?: (id: string) => unknown }).require;
+    if (!requireFn) return;
+    const StoreReview = requireFn("expo-store-review") as {
+      isAvailableAsync?: () => Promise<boolean>;
+      requestReview?: () => Promise<void>;
+    };
+    if (
+      typeof StoreReview?.isAvailableAsync !== "function" ||
+      typeof StoreReview?.requestReview !== "function"
+    ) {
+      return;
+    }
+
+    const isAvailable = await StoreReview.isAvailableAsync();
+    if (!isAvailable) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+    await StoreReview.requestReview();
+    await storage.setItem(REVIEW_PROMPT_KEY, "1");
+  } catch {
+    // Review prompt is best-effort only.
+  }
+}
 
 const WEEKDAY_LABELS: Record<string, string> = {
   Mon: "Mondays",
@@ -56,6 +97,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const activeProgramId = useSessionStore((state) => state.activeProgramId);
 
   const dayQuery = useProgramDayFull(programDayId, { userId });
+  const entitlementQuery = useEntitlement();
   const markDayComplete = useMarkDayComplete();
   const completeProgram = useCompleteProgram();
   const queryClient = useQueryClient();
@@ -68,10 +110,47 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [swapTargetExerciseName, setSwapTargetExerciseName] = useState<string | null>(null);
   const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
-  const [prHits] = useState<string[]>([]);
+  const [prHits, setPrHits] = useState<string[]>([]);
+  const [prE1rmKg, setPrE1rmKg] = useState<number | null>(null);
+  const [weekShareVisible, setWeekShareVisible] = useState(false);
+  const [weekShareData, setWeekShareData] = useState<WeekShareData | null>(null);
+  const [isSharingWeek, setIsSharingWeek] = useState(false);
+  const weekCardRef = useRef<View>(null);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
   const programId = dayQuery.data?.day?.programId ?? activeProgramId ?? "";
   const nav = navigation as unknown as NativeStackNavigationProp<ProgramsStackParamList>;
+
+  useFocusEffect(
+    useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
+    }, [queryClient]),
+  );
+
+  useEffect(() => {
+    if (entitlementQuery.isSuccess && !entitlementQuery.data.is_active) {
+      const parent = navigation.getParent();
+      parent?.navigate("HomeTab", { screen: "Paywall" } as never);
+    }
+  }, [entitlementQuery.data?.is_active, entitlementQuery.isSuccess, navigation]);
+
+  const handlePrsDetected = useCallback(
+    (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => {
+      if (prs.length === 0) return;
+      setPrHits((current) => {
+        const merged = new Set(current);
+        for (const pr of prs) {
+          if (pr.exerciseName) merged.add(pr.exerciseName);
+        }
+        return Array.from(merged);
+      });
+      setPrE1rmKg((current) => {
+        const nextMax = prs.reduce((max, pr) => Math.max(max, pr.estimated1rmKg ?? 0), 0);
+        if (nextMax <= 0) return current;
+        return current == null ? nextMax : Math.max(current, nextMax);
+      });
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -131,7 +210,56 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       setWorkoutCompleteState(true);
       setConfirmationText(null);
 
+      if (userId && prHits.length === 0) {
+        void getPrsFeed(userId)
+          .then((feed) => {
+            const names = feed.rows.map((row) => row.exerciseName).filter(Boolean);
+            if (names.length > 0) {
+              setPrHits(names);
+              const bestE1rm = feed.rows.reduce(
+                (max, row) => Math.max(max, row.estimatedE1rmKg ?? 0),
+                0,
+              );
+              if (bestE1rm > 0) setPrE1rmKg(bestE1rm);
+              void maybeRequestStoreReview();
+            }
+          })
+          .catch(() => {});
+      }
+
+      if (prHits.length > 0) {
+        void maybeRequestStoreReview();
+      }
+
       if (!programId || !userId) return;
+
+      const overview = await queryClient.fetchQuery({
+        queryKey: queryKeys.programOverview(programId, { userId }),
+        queryFn: () => getProgramOverview(programId, { userId }),
+        staleTime: 0,
+      });
+
+      const currentWeekNumber = day.weekNumber ?? null;
+      if (currentWeekNumber != null) {
+        const thisWeekTrainingDays = overview.calendarDays.filter(
+          (calendarDay) =>
+            calendarDay.isTrainingDay &&
+            Boolean(calendarDay.programDayId) &&
+            calendarDay.weekNumber === currentWeekNumber,
+        );
+        const thisWeekAllDone =
+          thisWeekTrainingDays.length > 0 &&
+          thisWeekTrainingDays.every((calendarDay) => calendarDay.status === "complete");
+
+        if (thisWeekAllDone) {
+          setWeekShareData({
+            weekNumber: currentWeekNumber,
+            sessionsCompleted: thisWeekTrainingDays.length,
+            totalVolumeKg: computeSessionStats().totalVolumeKg,
+          });
+          setWeekShareVisible(true);
+        }
+      }
 
       const endCheck = await queryClient.fetchQuery({
         queryKey: queryKeys.programEndCheck(programId),
@@ -154,6 +282,16 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       }
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
+    }
+  }
+
+  async function handleShareWeek(): Promise<void> {
+    if (isSharingWeek) return;
+    setIsSharingWeek(true);
+    try {
+      await captureAndShare(weekCardRef);
+    } finally {
+      setIsSharingWeek(false);
     }
   }
 
@@ -332,6 +470,28 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
           </View>
         ) : null}
 
+        {weekShareVisible && weekShareData ? (
+          <View style={styles.weekCompleteBanner}>
+            <View style={styles.weekCompleteContent}>
+              <Text style={styles.weekCompleteTitle}>Week {weekShareData.weekNumber} complete!</Text>
+              <Text style={styles.weekCompleteSubtitle}>
+                {weekShareData.sessionsCompleted} sessions completed
+              </Text>
+            </View>
+            <PressableScale
+              style={styles.weekShareButton}
+              onPress={() => {
+                void handleShareWeek();
+              }}
+              disabled={isSharingWeek}
+            >
+              <Text style={styles.weekShareButtonLabel}>
+                {isSharingWeek ? "..." : "Share"}
+              </Text>
+            </PressableScale>
+          </View>
+        ) : null}
+
         {orderedSegments.map((segment) => (
           <SegmentCard
             key={segment.id}
@@ -343,6 +503,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             userId={userId}
             onViewExerciseDetail={handleViewExerciseDetail}
             onAllSetsSaved={handleAllSetsSaved}
+            onSubscriptionRequired={() => {
+              const parent = navigation.getParent();
+              parent?.navigate("HomeTab", { screen: "Paywall" } as never);
+            }}
+            onPrsDetected={handlePrsDetected}
           />
         ))}
       </ScrollView>
@@ -385,12 +550,21 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         totalSets={sessionStats.totalSets}
         exerciseCount={sessionStats.exerciseCount}
         prHits={prHits}
+        prE1rmKg={prE1rmKg}
         streakDays={0}
         adaptedExercises={adaptedExercisesForSummary}
         onDismiss={() => {
           void handleSummaryDismiss();
         }}
       />
+      {weekShareData ? (
+        <WeekShareCard
+          weekNumber={weekShareData.weekNumber}
+          sessionsCompleted={weekShareData.sessionsCompleted}
+          totalVolumeKg={weekShareData.totalVolumeKg}
+          cardRef={weekCardRef}
+        />
+      ) : null}
       <EquipmentOverrideSheet
         visible={equipmentSheetVisible}
         onClose={() => setEquipmentSheetVisible(false)}
@@ -514,6 +688,40 @@ const styles = StyleSheet.create({
     color: colors.accent,
     ...typography.small,
     lineHeight: 18,
+  },
+  weekCompleteBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#052e16",
+    borderRadius: radii.card,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  weekCompleteContent: {
+    flex: 1,
+    gap: 4,
+  },
+  weekCompleteTitle: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "700",
+  },
+  weekCompleteSubtitle: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  weekShareButton: {
+    minHeight: 36,
+    borderRadius: radii.pill,
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  weekShareButtonLabel: {
+    color: colors.background,
+    ...typography.small,
+    fontWeight: "700",
   },
   bottomBar: {
     position: "absolute",

@@ -3,6 +3,7 @@ import {
   Modal,
   SafeAreaView,
   ScrollView,
+  Share,
   StyleSheet,
   Switch,
   Text,
@@ -19,6 +20,8 @@ import {
   useClientProfile,
   useEntitlement,
   useMe,
+  useReferralInfo,
+  useReferralStats,
   useReferenceData,
 } from "../../api/hooks";
 import {
@@ -149,6 +152,8 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const referenceDataQuery = useReferenceData();
   const profileQuery = useClientProfile(meQuery.data?.clientProfileId ?? null);
   const ent = entitlementQuery.data;
+  const referralQuery = useReferralInfo();
+  const referralStatsQuery = useReferralStats();
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [notifSaveError, setNotifSaveError] = useState<string | null>(null);
   const [dangerError, setDangerError] = useState<string | null>(null);
@@ -216,6 +221,14 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     return referenceDataQuery.data?.equipmentPresets.find((preset) => preset.code === presetCode)?.label ?? "Not set";
   }, [profileQuery.data?.equipmentPreset, referenceDataQuery.data?.equipmentPresets]);
 
+  const referralStatsLabel = useMemo(() => {
+    if (!referralStatsQuery.data || referralStatsQuery.data.totalReferrals <= 0) return null;
+    const stats = referralStatsQuery.data;
+    return `${stats.totalReferrals} referred · ${stats.conversions} converted${
+      stats.rewardsGranted > 0 ? ` · ${stats.rewardsGranted} rewards` : ""
+    }`;
+  }, [referralStatsQuery.data]);
+
   const handleLogout = async (): Promise<void> => {
     const refreshToken = await getRefreshToken();
     if (refreshToken) {
@@ -234,6 +247,15 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     value: boolean,
   ): void => {
     notifMutation.mutate({ [key]: value });
+  };
+
+  const handleShareReferral = async (): Promise<void> => {
+    const shareUrl = referralQuery.data?.shareUrl ?? "";
+    if (!shareUrl) return;
+    await Share.share({
+      message: `Train smarter with Formai. Start your free trial: ${shareUrl}`,
+      url: shareUrl,
+    });
   };
 
   return (
@@ -354,6 +376,40 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
                 <SettingsRow
                   label="Change Password"
                   onPress={() => navigation.navigate("ChangePassword")}
+                  showChevron
+                />
+              </>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>REFERRALS</SectionLabel>
+          <View style={styles.sectionCard}>
+            {referralQuery.isLoading || referralStatsQuery.isLoading ? <SkeletonRows count={2} /> : null}
+            {referralQuery.isError || referralStatsQuery.isError ? (
+              <RetryRow
+                label="Couldn't load referral info - tap to retry"
+                onPress={() => {
+                  void referralQuery.refetch();
+                  void referralStatsQuery.refetch();
+                }}
+              />
+            ) : null}
+            {referralQuery.data ? (
+              <>
+                <SettingsRow
+                  label="Your referral code"
+                  description="Share Formai with a friend. Get a free month when they subscribe."
+                  value={referralQuery.data.code}
+                  showDivider
+                />
+                <SettingsRow
+                  label="Share invite link"
+                  description={referralStatsLabel ?? "Send your personal invite link."}
+                  onPress={() => {
+                    void handleShareReferral();
+                  }}
                   showChevron
                 />
               </>

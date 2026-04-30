@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
@@ -38,11 +40,18 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   const profileQuery = useClientProfile(profileId);
   const activeProgramsQuery = useActivePrograms();
   const hasActiveProgram = (activeProgramsQuery.data?.programs?.length ?? 0) > 0;
+  const queryClient = useQueryClient();
 
   const [isGenerating, setIsGenerating] = useState(false);
   const entitlementQuery = useEntitlement();
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
+    }, [queryClient]),
+  );
 
   useEffect(() => {
     console.log("[boot] ProgramReviewScreen mounted");
@@ -116,6 +125,10 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
 
       setGenerationMessage("Generation completed. Open program from dashboard.");
     } catch (error) {
+      if (error instanceof Error && error.message.includes("(402)")) {
+        navigation.navigate("Paywall");
+        return;
+      }
       if (error instanceof Error && error.message.includes("ENGINE_KEY missing in app runtime")) {
         const keyStatus = getEngineKeyStatus();
         setGenerationError(

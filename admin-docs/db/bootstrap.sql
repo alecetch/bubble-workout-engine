@@ -62,6 +62,10 @@ ALTER TABLE admin_doc_board_items
   ADD COLUMN IF NOT EXISTS bug_prompt_filenames TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE admin_doc_board_items
   ADD COLUMN IF NOT EXISTS bug_prompt_done_filenames TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE admin_doc_board_items
+  ADD COLUMN IF NOT EXISTS test_plan_filename TEXT;
+  -- nullable; basename only, e.g. "feature-9-social-sharing-test-plan.md"
+  -- populated by reconcile(); null = no test plan written yet
 
 CREATE INDEX IF NOT EXISTS idx_board_status_rank
   ON admin_doc_board_items (status, priority_rank);
