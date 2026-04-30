@@ -22,30 +22,33 @@
 
 import { join } from 'path';
 import pool from '../db/pool.js';
-import { buildSpecMap, buildPromptMap, buildBugPromptMap } from './keyMatcher.js';
+import { buildSpecMap, buildPromptMap, buildBugPromptMap, buildTestPlanMap } from './keyMatcher.js';
 
 export async function reconcile(docsRoot) {
-  const specsDir  = join(docsRoot, 'specs');
-  const activeDir = join(docsRoot, 'prompts', 'active');
-  const doneDir   = join(docsRoot, 'prompts', 'done');
+  const specsDir     = join(docsRoot, 'specs');
+  const activeDir    = join(docsRoot, 'prompts', 'active');
+  const doneDir      = join(docsRoot, 'prompts', 'done');
+  const testPlansDir = join(docsRoot, 'test_plans');
 
-  const [specMap, promptMap, bugPromptMap] = await Promise.all([
+  const [specMap, promptMap, bugPromptMap, testPlanMap] = await Promise.all([
     buildSpecMap(specsDir),
     buildPromptMap(activeDir, doneDir),
     buildBugPromptMap(activeDir, doneDir),
+    buildTestPlanMap(testPlansDir),
   ]);
 
   const { rows: existing } = await pool.query(
-    'SELECT id, doc_key, prompt_filename, status FROM admin_doc_board_items'
+    'SELECT id, doc_key, prompt_filename, test_plan_filename, status FROM admin_doc_board_items'
   );
   const existingByKey = new Map(existing.map(r => [r.doc_key, r]));
 
   const summary = { inserted: 0, updated: 0, unchanged: 0, orphanPrompts: [] };
 
   for (const [docKey, specFilename] of specMap) {
-    const promptEntry    = promptMap.get(docKey) ?? null;
-    const promptFilename = promptEntry?.filename ?? null;
-    const bugFilenames   = bugPromptMap.get(docKey) ?? [];
+    const promptEntry      = promptMap.get(docKey) ?? null;
+    const promptFilename   = promptEntry?.filename ?? null;
+    const bugFilenames     = bugPromptMap.get(docKey) ?? [];
+    const testPlanFilename = testPlanMap.get(docKey) ?? null;
 
     if (!existingByKey.has(docKey)) {
       // New spec — determine initial status from filesystem
@@ -61,20 +64,21 @@ export async function reconcile(docsRoot) {
 
       await pool.query(
         `INSERT INTO admin_doc_board_items
-           (doc_key, spec_filename, prompt_filename, bug_prompt_filenames, status, priority_rank)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [docKey, specFilename, promptFilename, bugFilenames, initialStatus, max_rank + 1]
+           (doc_key, spec_filename, prompt_filename, bug_prompt_filenames, test_plan_filename, status, priority_rank)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [docKey, specFilename, promptFilename, bugFilenames, testPlanFilename, initialStatus, max_rank + 1]
       );
       summary.inserted++;
     } else {
-      // Existing spec — update prompt_filename and bug_prompt_filenames if changed
+      // Existing spec — update prompt_filename, bug_prompt_filenames, and test_plan_filename if changed
       const row = existingByKey.get(docKey);
-      const bugChanged = JSON.stringify((row.bug_prompt_filenames ?? []).sort())
-                      !== JSON.stringify([...bugFilenames].sort());
-      if (row.prompt_filename !== promptFilename || bugChanged) {
+      const bugChanged      = JSON.stringify((row.bug_prompt_filenames ?? []).sort())
+                           !== JSON.stringify([...bugFilenames].sort());
+      const testPlanChanged = row.test_plan_filename !== testPlanFilename;
+      if (row.prompt_filename !== promptFilename || bugChanged || testPlanChanged) {
         await pool.query(
-          'UPDATE admin_doc_board_items SET prompt_filename = $1, bug_prompt_filenames = $2 WHERE doc_key = $3',
-          [promptFilename, bugFilenames, docKey]
+          'UPDATE admin_doc_board_items SET prompt_filename = $1, bug_prompt_filenames = $2, test_plan_filename = $3 WHERE doc_key = $4',
+          [promptFilename, bugFilenames, testPlanFilename, docKey]
         );
         summary.updated++;
       } else {

@@ -26,6 +26,7 @@ import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { workoutRemindersRouter } from "./src/routes/workoutReminders.js";
 import { trainingHistoryImportRouter } from "./src/routes/trainingHistoryImport.js";
+import { referralRouter } from "./src/routes/referral.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
@@ -746,6 +747,7 @@ logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipme
 app.use("/api", programExerciseRouter);
 app.use("/api", programCompletionRouter);
 app.use("/api", debugAllowedExercisesRouter);
+app.use("/api", referralRouter);
 
 // Canonical /api-prefixed mounts (new).
 app.get("/api/v1/history/programs", ...userAuth, createHistoryProgramsHandler(pool));

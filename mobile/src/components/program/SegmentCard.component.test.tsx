@@ -1,5 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { ApiError } from "../../api/client";
 import { SegmentCard } from "./SegmentCard";
 import type { AdaptationDecision, ProgramDayFullResponse } from "../../api/programViewer";
 
@@ -99,6 +100,7 @@ function renderCard(
       userId={props.userId}
       onViewExerciseDetail={props.onViewExerciseDetail ?? vi.fn()}
       onAllSetsSaved={props.onAllSetsSaved ?? vi.fn()}
+      onSubscriptionRequired={props.onSubscriptionRequired}
     />,
   );
 }
@@ -154,6 +156,19 @@ describe("SegmentCard", () => {
     fireEvent.focus(inputs[1]);
 
     expect(mutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("routes to subscription-required callback when set logging gets a 402", async () => {
+    const onSubscriptionRequired = vi.fn();
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(402, "subscription required"));
+    renderCard({ onSubscriptionRequired });
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Log all sets as complete"));
+
+    await vi.waitFor(() => {
+      expect(onSubscriptionRequired).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("renders adaptation chip text for a non-hold decision", () => {

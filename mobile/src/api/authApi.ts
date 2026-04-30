@@ -14,10 +14,18 @@ export type RefreshResponse = {
   refresh_token: string;
 };
 
-export async function apiRegister(email: string, password: string): Promise<AuthTokens> {
+export async function apiRegister(
+  email: string,
+  password: string,
+  referredByCode?: string | null,
+): Promise<AuthTokens> {
   return apiFetch("/api/auth/register", {
     method: "POST",
-    body: { email, password },
+    body: {
+      email,
+      password,
+      ...(referredByCode ? { referredByCode } : {}),
+    },
   });
 }
 

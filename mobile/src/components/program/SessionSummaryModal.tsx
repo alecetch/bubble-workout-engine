@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
   ScrollView,
@@ -8,10 +8,12 @@ import {
 } from "react-native";
 import { PressableScale } from "../interaction/PressableScale";
 import { hapticMedium } from "../interaction/haptics";
+import { PRShareCard } from "../sharing/PRShareCard";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { captureAndShare } from "../../utils/shareCard";
 import { streakCopy } from "../../utils/streakCopy";
 
 type SessionSummaryModalProps = {
@@ -20,6 +22,7 @@ type SessionSummaryModalProps = {
   totalSets: number;
   exerciseCount: number;
   prHits: string[];
+  prE1rmKg?: number | null;
   streakDays: number;
   adaptedExercises?: Array<{ name: string; displayChip: string }>;
   onDismiss: () => void;
@@ -31,10 +34,13 @@ export function SessionSummaryModal({
   totalSets,
   exerciseCount,
   prHits,
+  prE1rmKg,
   streakDays,
   adaptedExercises = [],
   onDismiss,
 }: SessionSummaryModalProps): React.JSX.Element {
+  const prCardRef = useRef<View>(null);
+  const [isSharing, setIsSharing] = useState(false);
   const roundedVolume = Math.round(totalVolumeKg);
   const volumeDisplay =
     roundedVolume >= 1000
@@ -46,6 +52,16 @@ export function SessionSummaryModal({
       void hapticMedium();
     }
   }, [prHits.length, visible]);
+
+  async function handleSharePR(): Promise<void> {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      await captureAndShare(prCardRef);
+    } finally {
+      setIsSharing(false);
+    }
+  }
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onDismiss}>
@@ -59,14 +75,25 @@ export function SessionSummaryModal({
             <View style={styles.divider} />
 
             {prHits.length > 0 ? (
-              <View style={styles.prBanner}>
-                <Text style={styles.prEmoji}>PR</Text>
-                <Text style={styles.prText} numberOfLines={2}>
-                  {prHits.length === 1
-                    ? `New PR on ${prHits[0]}!`
-                    : `New PRs on ${prHits.slice(0, 2).join(" & ")}!`}
-                </Text>
-              </View>
+              <>
+                <View style={styles.prBanner}>
+                  <Text style={styles.prEmoji}>PR</Text>
+                  <Text style={styles.prText} numberOfLines={2}>
+                    {prHits.length === 1
+                      ? `New PR on ${prHits[0]}!`
+                      : `New PRs on ${prHits.slice(0, 2).join(" & ")}!`}
+                  </Text>
+                </View>
+                <PressableScale
+                  style={styles.shareButton}
+                  onPress={() => void handleSharePR()}
+                  disabled={isSharing}
+                >
+                  <Text style={styles.shareButtonLabel}>
+                    {isSharing ? "Preparing..." : "Share this PR"}
+                  </Text>
+                </PressableScale>
+              </>
             ) : null}
 
             {adaptedExercises.length > 0 ? (
@@ -104,6 +131,18 @@ export function SessionSummaryModal({
             </PressableScale>
           </View>
         </ScrollView>
+        {prHits.length > 0 && (prE1rmKg ?? 0) > 0 ? (
+          <PRShareCard
+            exerciseName={prHits[0] ?? ""}
+            e1rmKg={prE1rmKg ?? 0}
+            dateLabel={new Date().toLocaleDateString(undefined, {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+            cardRef={prCardRef}
+          />
+        ) : null}
       </View>
     </Modal>
   );
@@ -156,6 +195,20 @@ const styles = StyleSheet.create({
     color: colors.accent,
     ...typography.body,
     fontWeight: "700",
+  },
+  shareButton: {
+    minHeight: 44,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  shareButtonLabel: {
+    color: colors.accent,
+    ...typography.body,
+    fontWeight: "600",
   },
   adaptSection: {
     backgroundColor: colors.card,

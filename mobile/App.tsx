@@ -3,6 +3,7 @@ import React from "react";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Constants from "expo-constants";
+import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { Platform } from "react-native";
@@ -13,6 +14,7 @@ import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
 import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
+import { getAppStorage } from "./src/utils/appStorage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +109,20 @@ export default function App(): React.JSX.Element {
   const entryRoute = useSessionStore((state) => state.entryRoute);
 
   logBoot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
+
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        const url = await Linking.getInitialURL();
+        if (!url) return;
+        const match = url.match(/(?:^|\/)ref\/([A-Z2-9]{8})(?:$|\?)/);
+        if (!match?.[1]) return;
+        await getAppStorage().setItem("pendingReferralCode", match[1]);
+      } catch {
+        // Referral deep-link capture is best-effort only.
+      }
+    })();
+  }, []);
 
   React.useEffect(() => {
     if (!CAN_USE_NOTIFICATIONS_NATIVE) {

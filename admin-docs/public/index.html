@@ -188,6 +188,9 @@
     .lineage-node.prompt-done  { background: #d1fae5; color: #059669; cursor: pointer; border: 1px solid #6ee7b7; }
     .lineage-node.prompt-done:hover { background: #a7f3d0; }
     .lineage-node.no-prompt { background: #f1f5f9; color: #94a3b8; }
+    .lineage-node.test-plan { background: #f0fdf4; color: #16a34a; cursor: pointer; border: 1px solid #86efac; }
+    .lineage-node.test-plan:hover { background: #dcfce7; }
+    .lineage-node.no-test-plan { background: #f1f5f9; color: #94a3b8; }
     .lineage-arrow { color: #cbd5e1; font-size: 10px; }
     .lineage-set {
       font-size: 10px;
@@ -894,6 +897,15 @@ function lineageHtml(item) {
     parts.push(`<span class="lineage-node prompt-done" title="View prompt: ${escHtml(item.prompt_filename)}" onclick="viewDocSafe('prompts/done/${escHtml(item.prompt_filename)}', '${escHtml(item.prompt_filename)}')">prompt ✓</span>`);
   } else {
     parts.push(`<span class="lineage-node prompt-active" title="View prompt: ${escHtml(item.prompt_filename)}" onclick="viewDocSafe('prompts/active/${escHtml(item.prompt_filename)}', '${escHtml(item.prompt_filename)}')">prompt active</span>`);
+  }
+
+  parts.push('<span class="lineage-arrow">→</span>');
+
+  // Test plan node
+  if (item.test_plan_filename) {
+    parts.push(`<span class="lineage-node test-plan" title="View test plan: ${escHtml(item.test_plan_filename)}" onclick="viewDocSafe('test_plans/${escHtml(item.test_plan_filename)}', '${escHtml(item.test_plan_filename)}')">📋 test plan</span>`);
+  } else {
+    parts.push('<span class="lineage-node no-test-plan">no test plan</span>');
   }
 
   return parts.join('');

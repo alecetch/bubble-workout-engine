@@ -3,6 +3,7 @@
     "name": "Bubble Workout Mobile",
     "slug": "bubble-workout-mobile",
     "version": "1.0.0",
+    "scheme": "formai",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -14,12 +15,32 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bubbleworkout.mobile",
+      "associatedDomains": [
+        "applinks:getformai.com"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.bubbleworkout.mobile",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "getformai.com",
+              "pathPrefix": "/ref/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0F172A"
       }

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { createHash, randomBytes } from "node:crypto";
+import { generateReferralCode } from "../utils/referralCode.js";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_ISSUER = process.env.JWT_ISSUER;
@@ -54,7 +55,7 @@ async function issueTokenPair(db, userId) {
   return { accessToken, refreshToken };
 }
 
-export async function registerUser(db, { email, password }) {
+export async function registerUser(db, { email, password, referredByCode = null }) {
   const { normalizedEmail, textPassword } = validateEmailAndPassword(email, password);
 
   const existingUser = await db.query(
@@ -71,16 +72,40 @@ export async function registerUser(db, { email, password }) {
     throw { code: "email_in_use", message: "Email already registered" };
   }
 
-  const passwordHash = await bcrypt.hash(textPassword, BCRYPT_COST_FACTOR);
+  let referrerId = null;
+  if (referredByCode) {
+    const referrerResult = await db.query(
+      `SELECT id FROM app_user WHERE referral_code = $1 LIMIT 1`,
+      [referredByCode],
+    );
+    if (referrerResult.rowCount > 0) {
+      referrerId = referrerResult.rows[0].id;
+    }
+  }
 
-  const userResult = await db.query(
-    `
-    INSERT INTO app_user (subject_id, email, password_hash)
-    VALUES ($1, $2, $3)
-    RETURNING id
-    `,
-    [normalizedEmail, normalizedEmail, passwordHash],
-  );
+  const passwordHash = await bcrypt.hash(textPassword, BCRYPT_COST_FACTOR);
+  const newReferralCode = generateReferralCode();
+
+  let userResult;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const codeToTry = attempt === 0 ? newReferralCode : generateReferralCode();
+    try {
+      userResult = await db.query(
+        `
+        INSERT INTO app_user (subject_id, email, password_hash, referral_code, referred_by_code)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+        `,
+        [normalizedEmail, normalizedEmail, passwordHash, codeToTry, referredByCode],
+      );
+      break;
+    } catch (insertErr) {
+      if (insertErr.code === "23505" && insertErr.constraint === "idx_app_user_referral_code" && attempt === 0) {
+        continue;
+      }
+      throw insertErr;
+    }
+  }
 
   const userId = userResult.rows[0].id;
   const profileResult = await db.query(
@@ -91,6 +116,16 @@ export async function registerUser(db, { email, password }) {
     `,
     [userId],
   );
+
+  if (referrerId) {
+    await db.query(
+      `INSERT INTO referral_conversion (referrer_user_id, referred_user_id, referred_code)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (referred_user_id) DO NOTHING`,
+      [referrerId, userId, referredByCode],
+    );
+  }
+
   const clientProfileId = profileResult.rows[0].id;
   const { accessToken, refreshToken } = await issueTokenPair(db, userId, clientProfileId);
   const subResult = await db.query(

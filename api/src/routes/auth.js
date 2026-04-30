@@ -60,8 +60,9 @@ export function createChangePasswordHandler(db = pool) {
 
 authRouter.post("/register", credentialLimiter, async (req, res) => {
   const { email, password } = req.body ?? {};
+  const referredByCode = typeof req.body?.referredByCode === "string" ? req.body.referredByCode.trim() : null;
   try {
-    const result = await registerUser(pool, { email, password });
+    const result = await registerUser(pool, { email, password, referredByCode });
     return res.status(201).json({
       ok: true,
       access_token: result.accessToken,
