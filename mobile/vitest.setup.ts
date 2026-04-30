@@ -273,6 +273,17 @@ vi.mock("react-native-screens", () => ({
   ),
 }));
 
+vi.mock("react-native-view-shot", () => ({
+  captureRef: vi.fn().mockResolvedValue("/tmp/test-capture.png"),
+  default: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children ?? null),
+}));
+
+vi.mock("expo-sharing", () => ({
+  isAvailableAsync: vi.fn().mockResolvedValue(false),
+  shareAsync: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
