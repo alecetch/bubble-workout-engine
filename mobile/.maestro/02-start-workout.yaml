@@ -1,0 +1,17 @@
+appId: com.bubbleworkout.mobile
+---
+- launchApp:
+    clearState: false
+- tapOn: "Programs"
+- extendedWaitUntil:
+    visible: "Active Programs"
+    timeout: 20000
+- tapOn: "Strength Block"
+- extendedWaitUntil:
+    visible: "Day Preview"
+    timeout: 20000
+- tapOn: "Start workout"
+- extendedWaitUntil:
+    visible: "Workout complete"
+    timeout: 20000
+- assertVisible: "Change equipment"

@@ -1,0 +1,30 @@
+appId: com.bubbleworkout.mobile
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 10000
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Email"
+    timeout: 10000
+- tapOn:
+    id: "email-input"
+- inputText: ${TEST_EMAIL}
+- tapOn:
+    id: "password-input"
+- inputText: ${TEST_PASSWORD}
+- hideKeyboard
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Program Review"
+    timeout: 20000
+- tapOn: "Programs"
+- extendedWaitUntil:
+    visible: "Active Programs"
+    timeout: 20000
+- tapOn: "Strength Block"
+- extendedWaitUntil:
+    visible: "Day Preview"
+    timeout: 20000
