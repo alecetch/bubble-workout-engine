@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   CalendarDayPillRow,
@@ -41,6 +42,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const sessionUserId = useSessionStore((state) => state.userId);
   const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
   const userId = sessionUserId ?? onboardingUserId ?? undefined;
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (programId) {
@@ -149,10 +151,10 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
       if (inWeek) return userSelectedDayId;
     }
     const serverDefault = overview?.selectedDayPreview?.programDayId;
-    if (serverDefault && daysInSelectedWeek.some((d) => d.programDayId === serverDefault)) {
+    if (serverDefault && daysInSelectedWeek.some((d) => d.programDayId === serverDefault && !d.isSkipped)) {
       return serverDefault;
     }
-    return daysInSelectedWeek.find((d) => d.programDayId)?.programDayId ?? undefined;
+    return daysInSelectedWeek.find((d) => d.programDayId && !d.isSkipped)?.programDayId ?? undefined;
   }, [userSelectedDayId, daysInSelectedWeek, overview?.selectedDayPreview?.programDayId]);
 
   // Resolved preview: use the per-day fetch result when the user has explicitly
@@ -161,6 +163,10 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const activePreview = userSelectedDayId
     ? (dayPreviewQuery.data ?? overview?.selectedDayPreview)
     : overview?.selectedDayPreview;
+  const selectedCalendarDay = useMemo(
+    () => calendarDays.find((day) => day.programDayId === selectedProgramDayId),
+    [calendarSig, selectedProgramDayId],
+  );
 
   // ── Day status (local workout log) ────────────────────────────────────────
   const programDayIdsSignature = useMemo(
@@ -213,7 +219,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
     const map: Record<number, WeekStatus> = {};
     weekNumbers.forEach((weekNumber) => {
       const daysInWeek = calendarDays.filter((d) => {
-        if (!d.programDayId) return false;
+        if (!d.programDayId || d.isSkipped) return false;
         if (typeof d.weekNumber !== "number") return weekNumber === 1;
         return d.weekNumber === weekNumber;
       });
@@ -222,13 +228,18 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         return;
       }
       const statuses = daysInWeek.map(
-        (d) => dayStatusByProgramDayId[d.programDayId as string] ?? "scheduled",
+        (d) => d.isSkipped ? "skipped" : (dayStatusByProgramDayId[d.programDayId as string] ?? "scheduled"),
       );
-      if (statuses.every((s) => s === "complete")) {
+      const requiredStatuses = statuses.filter((status) => status !== "skipped");
+      if (requiredStatuses.length === 0) {
         map[weekNumber] = "complete";
         return;
       }
-      map[weekNumber] = statuses.some((s) => s === "started" || s === "complete")
+      if (requiredStatuses.every((s) => s === "complete")) {
+        map[weekNumber] = "complete";
+        return;
+      }
+      map[weekNumber] = requiredStatuses.some((s) => s === "started" || s === "complete")
         ? "started"
         : "none";
     });
@@ -246,6 +257,34 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const onSelectProgramDay = useCallback((nextProgramDayId?: string) => {
     setUserSelectedDayId(nextProgramDayId);
   }, []);
+
+  const openRecalibrate = useCallback(() => {
+    const parent = navigation.getParent() as any;
+    if (parent) {
+      parent.navigate("HomeTab", { screen: "RecalibrateA" });
+      return;
+    }
+    navigation.navigate("RecalibrateA");
+  }, [navigation]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const missedSessionCount = useMemo(() => {
+    return calendarDays.filter((day) => {
+      if (!day.isTrainingDay || !day.programDayId) return false;
+      if (day.isSkipped) return false;
+      const scheduled = day.scheduledDate ?? day.calendarDate ?? "";
+      if (!scheduled || scheduled >= today) return false;
+      const status = (day.status ?? "").toLowerCase();
+      return status !== "complete" && status !== "completed";
+    }).length;
+  }, [calendarSig, calendarDays, today]);
+
+  const refreshOverview = useCallback(() => {
+    void overviewQuery.refetch();
+    void endCheckQuery.refetch();
+    void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+    void queryClient.invalidateQueries({ queryKey: ["programEndCheck"] });
+  }, [endCheckQuery, overviewQuery, queryClient]);
 
   // ── Guards ────────────────────────────────────────────────────────────────
   if (!programId) {
@@ -321,7 +360,23 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         >
           <Text style={styles.completionBannerTitle}>End of block reached</Text>
           <Text style={styles.completionBannerCopy}>
-            {endCheck?.missedWorkoutsCount ?? 0} missed workout{(endCheck?.missedWorkoutsCount ?? 0) === 1 ? "" : "s"} remain. Finish them or move on.
+            {endCheck?.missedWorkoutsCount ?? 0} missed workout{(endCheck?.missedWorkoutsCount ?? 0) === 1 ? "" : "s"}
+            {(endCheck?.skippedWorkoutsCount ?? 0) > 0
+              ? `, ${endCheck?.skippedWorkoutsCount ?? 0} skipped`
+              : ""}{" "}
+            remain. Finish them or move on.
+          </Text>
+        </PressableScale>
+      ) : null}
+
+      {missedSessionCount >= 3 && !showCompletionBanner ? (
+        <PressableScale
+          style={styles.missedBanner}
+          onPress={openRecalibrate}
+        >
+          <Text style={styles.missedBannerTitle}>{missedSessionCount} sessions missed</Text>
+          <Text style={styles.missedBannerCopy}>
+            Life happens. Recalibrate your program to get back on track.
           </Text>
         </PressableScale>
       ) : null}
@@ -340,6 +395,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
           scheduledDate: day.scheduledDate ?? day.calendarDate,
           isTrainingDay: day.isTrainingDay,
           programDayId: day.programDayId ?? undefined,
+          isSkipped: day.isSkipped ?? false,
         }))}
         selectedProgramDayId={selectedProgramDayId}
         onSelectProgramDay={onSelectProgramDay}
@@ -347,17 +403,21 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
       />
 
       <DayPreviewCard
+        programId={programId}
         preview={{
           programDayId: selectedProgramDayId,
           label: activePreview?.label,
           type: activePreview?.type,
           sessionDuration: activePreview?.sessionDuration,
           equipmentSlugs: activePreview?.equipmentSlugs,
+          isCompleted: ["complete", "completed"].includes(String(selectedCalendarDay?.status ?? "").toLowerCase()),
         }}
         onStartWorkout={() => {
           if (!selectedProgramDayId) return;
           navigation.navigate("ProgramDay", { programDayId: selectedProgramDayId });
         }}
+        onSessionSkipped={refreshOverview}
+        onSessionRescheduled={refreshOverview}
       />
     </ScrollView>
   );
@@ -457,6 +517,22 @@ const styles = StyleSheet.create({
     ...typography.h3,
   },
   completionBannerCopy: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  missedBanner: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  missedBannerTitle: {
+    color: colors.textPrimary,
+    ...typography.h3,
+  },
+  missedBannerCopy: {
     color: colors.textSecondary,
     ...typography.body,
   },

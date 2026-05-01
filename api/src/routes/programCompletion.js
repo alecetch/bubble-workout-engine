@@ -29,20 +29,30 @@ SELECT
   cp.fitness_rank,
   cp.fitness_level_slug,
   cp.main_goals_slugs AS goals,
+  cp.injury_flags,
+  cp.goal_notes,
   cp.minutes_per_session,
   cp.preferred_days,
+  cp.schedule_constraints,
+  cp.height_cm,
+  cp.weight_kg,
+  cp.sex,
+  cp.age_range,
   cp.equipment_items_slugs,
   cp.equipment_preset_slug,
-  COUNT(pd.id) AS total_days,
+  cp.onboarding_step_completed,
+  COUNT(pd.id) FILTER (WHERE pd.is_skipped IS NOT TRUE) AS total_days,
   COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE) AS completed_days,
   COUNT(pd.id) FILTER (
     WHERE pd.is_completed = FALSE
+      AND pd.is_skipped IS NOT TRUE
       AND pd.global_day_index < (
         SELECT MAX(pd2.global_day_index)
         FROM program_day pd2
         WHERE pd2.program_id = p.id
       )
   ) AS missed_workouts_count,
+  COUNT(pd.id) FILTER (WHERE pd.is_skipped = TRUE) AS skipped_workouts_count,
   COALESCE((
     SELECT pd3.is_completed
     FROM program_day pd3
@@ -50,8 +60,9 @@ SELECT
     ORDER BY pd3.global_day_index DESC
     LIMIT 1
   ), FALSE) AS is_last_scheduled_day_complete,
-  CASE WHEN COUNT(pd.id) = 0 THEN 0
-       ELSE (COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE))::float / COUNT(pd.id)
+  CASE WHEN COUNT(pd.id) FILTER (WHERE pd.is_skipped IS NOT TRUE) = 0 THEN 0
+       ELSE (COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE))::float /
+            NULLIF(COUNT(pd.id) FILTER (WHERE pd.is_skipped IS NOT TRUE), 0)
   END AS completion_ratio,
   COUNT(DISTINCT eps.exercise_id) FILTER (
     WHERE eps.last_outcome IN ('increase_load', 'increase_reps')
@@ -82,14 +93,15 @@ LEFT JOIN exercise_progression_state eps
 WHERE p.id = $1
   AND p.user_id = $2
 GROUP BY p.id, cp.fitness_rank, cp.fitness_level_slug, cp.main_goals_slugs,
-         cp.minutes_per_session, cp.preferred_days, cp.equipment_items_slugs,
-         cp.equipment_preset_slug
+         cp.injury_flags, cp.goal_notes, cp.minutes_per_session, cp.preferred_days,
+         cp.schedule_constraints, cp.height_cm, cp.weight_kg, cp.sex, cp.age_range,
+         cp.equipment_items_slugs, cp.equipment_preset_slug, cp.onboarding_step_completed
 `;
 
 const SQL_PROGRAM_PRS = `
-SELECT DISTINCT ON (pe.exercise_id)
+SELECT
   pe.exercise_id,
-  COALESCE(ec.name, pe.exercise_name) AS exercise_name,
+  (ARRAY_AGG(COALESCE(ec.name, pe.exercise_name) ORDER BY sel.weight_kg DESC NULLS LAST))[1] AS exercise_name,
   MAX(sel.weight_kg) AS best_weight_kg
 FROM segment_exercise_log sel
 JOIN program_exercise pe ON pe.id = sel.program_exercise_id
@@ -99,8 +111,9 @@ WHERE sel.program_id = $1
   AND pd.is_completed = TRUE
   AND sel.is_draft = FALSE
   AND sel.weight_kg IS NOT NULL
-GROUP BY pe.exercise_id, ec.name, pe.exercise_name
-ORDER BY pe.exercise_id, best_weight_kg DESC
+  AND sel.weight_kg > 0
+GROUP BY pe.exercise_id
+ORDER BY best_weight_kg DESC
 LIMIT 10
 `;
 
@@ -110,16 +123,18 @@ SELECT
   p.program_title,
   p.status AS lifecycle_status,
   p.completed_mode,
-  COUNT(pd.id) AS total_days,
+  COUNT(pd.id) FILTER (WHERE pd.is_skipped IS NOT TRUE) AS total_days,
   COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE) AS completed_days,
   COUNT(pd.id) FILTER (
     WHERE pd.is_completed = FALSE
+      AND pd.is_skipped IS NOT TRUE
       AND pd.global_day_index < (
         SELECT MAX(pd2.global_day_index)
         FROM program_day pd2
         WHERE pd2.program_id = p.id
       )
   ) AS missed_workouts_count,
+  COUNT(pd.id) FILTER (WHERE pd.is_skipped = TRUE) AS skipped_workouts_count,
   COALESCE((
     SELECT pd3.is_completed
     FROM program_day pd3
@@ -237,6 +252,7 @@ function toEndCheckPayload(row) {
   const totalDays = toFiniteNumber(row.total_days, 0);
   const completedDays = toFiniteNumber(row.completed_days, 0);
   const missedWorkoutsCount = toFiniteNumber(row.missed_workouts_count, 0);
+  const skippedWorkoutsCount = toFiniteNumber(row.skipped_workouts_count, 0);
   const isLastScheduledDayComplete = asBoolean(row.is_last_scheduled_day_complete);
 
   return {
@@ -247,6 +263,7 @@ function toEndCheckPayload(row) {
     total_days: totalDays,
     completed_days: completedDays,
     missed_workouts_count: missedWorkoutsCount,
+    skipped_workouts_count: skippedWorkoutsCount,
     is_last_scheduled_day_complete: isLastScheduledDayComplete,
     can_complete_with_skips:
       lifecycleStatus !== "completed" &&
@@ -307,6 +324,7 @@ export function createProgramCompletionHandlers(db = pool) {
         days_completed: toFiniteNumber(row.completed_days, 0),
         days_total: toFiniteNumber(row.total_days, 0),
         missed_workouts_count: toFiniteNumber(row.missed_workouts_count, 0),
+        skipped_workouts_count: toFiniteNumber(row.skipped_workouts_count, 0),
         is_last_scheduled_day_complete: asBoolean(row.is_last_scheduled_day_complete),
         lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
         completed_mode: normalizeCompletedMode(row.completed_mode),
@@ -325,10 +343,18 @@ export function createProgramCompletionHandlers(db = pool) {
           fitness_rank: currentRank,
           fitness_level_slug: row.fitness_level_slug ?? null,
           goals: Array.isArray(row.goals) ? row.goals : [],
+          injury_flags: Array.isArray(row.injury_flags) ? row.injury_flags : [],
+          goal_notes: row.goal_notes ?? "",
           minutes_per_session: row.minutes_per_session == null ? null : toFiniteNumber(row.minutes_per_session, null),
           preferred_days: Array.isArray(row.preferred_days) ? row.preferred_days : [],
+          schedule_constraints: row.schedule_constraints ?? "",
+          height_cm: row.height_cm ?? null,
+          weight_kg: row.weight_kg ?? null,
+          sex: row.sex ?? null,
+          age_range: row.age_range ?? null,
           equipment_items_slugs: Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [],
           equipment_preset_slug: row.equipment_preset_slug ?? null,
+          onboarding_step_completed: toFiniteNumber(row.onboarding_step_completed, 0),
         },
         suggested_next_rank: suggestedNextRank,
         re_enrollment_options: buildReEnrollmentOptions(currentRank, suggestedNextRank),
