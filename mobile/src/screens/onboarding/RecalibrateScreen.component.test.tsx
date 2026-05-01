@@ -149,7 +149,7 @@ const profile = {
   onboardingStepCompleted: 3,
 };
 
-function renderScreen() {
+function renderScreen(selectedCategories = ["goals"]) {
   return render(
     <RecalibrateScreenB
       navigation={{
@@ -160,7 +160,7 @@ function renderScreen() {
       route={{
         key: "RecalibrateB",
         name: "RecalibrateB",
-        params: { selectedCategories: ["goals"] },
+        params: { selectedCategories },
       } as never}
     />,
   );
@@ -185,6 +185,7 @@ describe("RecalibrateScreenB", () => {
       data: { items: [] },
       isLoading: false,
     });
+    updateProfileMutateAsyncMock.mockReset();
     updateProfileMutateAsyncMock.mockResolvedValue({
       ...profile,
       goals: ["Hypertrophy"],
@@ -216,5 +217,51 @@ describe("RecalibrateScreenB", () => {
       }));
       expect(navigationNavigateMock).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true });
     });
+  });
+
+  it("disables saving while profile data is loading", () => {
+    useClientProfileMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+
+    renderScreen();
+
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByText("Goals")).toBeInTheDocument();
+  });
+
+  it("handles profile query errors without crashing when no visual retry is surfaced", () => {
+    useClientProfileMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: { message: "profile failed" },
+    });
+
+    renderScreen();
+
+    expect(screen.getByText("Goals")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).not.toBeDisabled();
+  });
+
+  it("shows an error when saving before generation fails", async () => {
+    updateProfileMutateAsyncMock.mockRejectedValueOnce(new Error("generate failed"));
+    renderScreen();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Generate new program" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save and generate" }));
+
+    expect(await screen.findByText("generate failed")).toBeInTheDocument();
+    expect(navigationNavigateMock).not.toHaveBeenCalledWith("ProgramReview", { preserveDraft: true });
+  });
+
+  it("keeps validation local when no recalibration categories are selected", () => {
+    renderScreen([]);
+
+    expect(screen.getByText("No recalibration categories selected.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(updateProfileMutateAsyncMock).not.toHaveBeenCalled();
   });
 });
