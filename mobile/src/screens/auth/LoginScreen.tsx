@@ -115,6 +115,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
+            testID="email-input"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -132,6 +133,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputRow}>
             <TextInput
+              testID="password-input"
               value={password}
               onChangeText={setPassword}
               autoCapitalize="none"
