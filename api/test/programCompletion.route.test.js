@@ -80,6 +80,7 @@ test("toEndCheckPayload derives can_complete_with_skips only at end of block", (
       total_days: 8,
       completed_days: 6,
       missed_workouts_count: 2,
+      skipped_workouts_count: 0,
       is_last_scheduled_day_complete: true,
     }),
     {
@@ -90,6 +91,7 @@ test("toEndCheckPayload derives can_complete_with_skips only at end of block", (
       total_days: 8,
       completed_days: 6,
       missed_workouts_count: 2,
+      skipped_workouts_count: 0,
       is_last_scheduled_day_complete: true,
       can_complete_with_skips: true,
     },
@@ -120,10 +122,18 @@ test("completionSummary returns shaped response for owned program", async () => 
         fitness_rank: 1,
         fitness_level_slug: "intermediate",
         goals: ["strength"],
+        injury_flags: ["knee_issues"],
+        goal_notes: "More engine work",
         minutes_per_session: 50,
         preferred_days: ["mon", "wed", "fri"],
+        schedule_constraints: "No Sundays",
+        height_cm: 182,
+        weight_kg: 84,
+        sex: "male",
+        age_range: "25_34",
         equipment_items_slugs: ["barbell", "rack", "dumbbells"],
         equipment_preset_slug: "commercial_gym",
+        onboarding_step_completed: 3,
       }],
     },
     {
@@ -163,6 +173,23 @@ test("completionSummary returns shaped response for owned program", async () => 
       best_weight_kg: 120,
     },
   ]);
+  assert.deepEqual(res.body?.current_profile, {
+    fitness_rank: 1,
+    fitness_level_slug: "intermediate",
+    goals: ["strength"],
+    injury_flags: ["knee_issues"],
+    goal_notes: "More engine work",
+    minutes_per_session: 50,
+    preferred_days: ["mon", "wed", "fri"],
+    schedule_constraints: "No Sundays",
+    height_cm: 182,
+    weight_kg: 84,
+    sex: "male",
+    age_range: "25_34",
+    equipment_items_slugs: ["barbell", "rack", "dumbbells"],
+    equipment_preset_slug: "commercial_gym",
+    onboarding_step_completed: 3,
+  });
   assert.deepEqual(res.body?.re_enrollment_options, [
     { option: "same_settings", label: "Start a new program (same settings)", fitness_rank: 1 },
     { option: "change_goals", label: "Change goals", fitness_rank: 1 },
@@ -289,6 +316,7 @@ test("endCheck returns skip-aware end-of-block state", async () => {
         total_days: 8,
         completed_days: 6,
         missed_workouts_count: 2,
+        skipped_workouts_count: 1,
         is_last_scheduled_day_complete: true,
       }],
     },
@@ -305,7 +333,38 @@ test("endCheck returns skip-aware end-of-block state", async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body?.can_complete_with_skips, true);
   assert.equal(res.body?.missed_workouts_count, 2);
+  assert.equal(res.body?.skipped_workouts_count, 1);
   assert.equal(res.body?.lifecycle_status, "in_progress");
+});
+
+test("endCheck includes skipped workout count", async () => {
+  const handlers = createProgramCompletionHandlers(mockDb([
+    {
+      rowCount: 1,
+      rows: [{
+        program_id: VALID_UUID,
+        program_title: "Block",
+        lifecycle_status: "active",
+        completed_mode: null,
+        total_days: 1,
+        completed_days: 1,
+        missed_workouts_count: 0,
+        skipped_workouts_count: 1,
+        is_last_scheduled_day_complete: true,
+      }],
+    },
+  ]));
+  const req = {
+    request_id: "t",
+    params: { program_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.endCheck(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.skipped_workouts_count, 1);
 });
 
 test("completeProgram accepts with_skips after the final scheduled day is complete", async () => {
@@ -392,6 +451,78 @@ test("completionSummary returns 400 for invalid UUID", async () => {
 
   assert.equal(res.statusCode, 400);
   assert.equal(res.body?.code, "validation_error");
+});
+
+test("completionSummary returns highest positive personal record", async () => {
+  const calls = [];
+  const handlers = createProgramCompletionHandlers({
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (calls.length === 1) {
+        return {
+          rowCount: 1,
+          rows: [{
+            program_id: VALID_UUID,
+            program_title: "Strength Block 1",
+            program_type: "strength",
+            weeks_count: 12,
+            total_days: 2,
+            completed_days: 2,
+            missed_workouts_count: 0,
+            skipped_workouts_count: 0,
+            is_last_scheduled_day_complete: true,
+            lifecycle_status: "active",
+            completed_mode: null,
+            completed_at: null,
+            completion_ratio: 1,
+            exercises_progressed: 0,
+            exercises_tracked: 0,
+            avg_progression_score: 0,
+            avg_confidence_score: null,
+            fitness_rank: 1,
+            fitness_level_slug: "intermediate",
+            goals: ["strength"],
+            injury_flags: [],
+            goal_notes: "",
+            minutes_per_session: 50,
+            preferred_days: ["mon"],
+            schedule_constraints: "",
+            height_cm: null,
+            weight_kg: null,
+            sex: null,
+            age_range: null,
+            equipment_items_slugs: ["barbell"],
+            equipment_preset_slug: "commercial_gym",
+            onboarding_step_completed: 3,
+          }],
+        };
+      }
+      if (calls.length === 2) {
+        assert.match(sql, /sel\.weight_kg > 0/);
+        assert.doesNotMatch(sql, /DISTINCT ON/);
+        return {
+          rowCount: 1,
+          rows: [{
+            exercise_id: "bb_back_squat",
+            exercise_name: "Back Squat",
+            best_weight_kg: 80,
+          }],
+        };
+      }
+      throw new Error("Unexpected DB call");
+    },
+  });
+  const req = {
+    request_id: "t",
+    params: { program_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.completionSummary(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.personal_records?.[0]?.best_weight_kg, 80);
 });
 
 test("completionSummary returns 400 when auth context is missing", async () => {

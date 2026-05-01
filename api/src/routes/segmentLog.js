@@ -208,10 +208,12 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
           const region = regionByProgramExerciseId.get(row.program_exercise_id) ?? null;
           const weightKg = Number(row.weight_kg);
           const repsCompleted = Number(row.reps_completed);
+          const savedWeightKg = Number.isFinite(weightKg) && weightKg > 0 ? weightKg : null;
+          const savedRepsCompleted = Number.isFinite(repsCompleted) && repsCompleted > 0 ? repsCompleted : null;
           const rirActual = row.rir_actual == null || String(row.rir_actual).trim() === ""
             ? null
             : Number(row.rir_actual);
-          const estimated1rmKg = compute1rmKg(weightKg, repsCompleted, region);
+          const estimated1rmKg = compute1rmKg(savedWeightKg, savedRepsCompleted, region);
 
           await client.query(
             `
@@ -235,8 +237,8 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
               workout_segment_id,
               row.program_exercise_id,
               row.order_index,
-              row.weight_kg,
-              row.reps_completed,
+              savedWeightKg,
+              savedRepsCompleted,
               Number.isFinite(rirActual) ? rirActual : null,
               estimated1rmKg,
             ],
