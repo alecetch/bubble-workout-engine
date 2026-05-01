@@ -10,10 +10,18 @@ export type ProgramCompletionProfile = {
   fitnessRank: number;
   fitnessLevelSlug: string | null;
   goals: string[];
+  injuryFlags: string[];
+  goalNotes: string;
   minutesPerSession: number | null;
   preferredDays: string[];
+  scheduleConstraints: string;
+  heightCm: number | null;
+  weightKg: number | null;
+  sex: string | null;
+  ageRange: string | null;
   equipmentItemsSlugs: string[];
   equipmentPresetSlug: string | null;
+  onboardingStepCompleted: number;
 };
 
 export type ReEnrollmentOption = {
@@ -33,6 +41,7 @@ export type ProgramCompletionSummary = {
   daysCompleted: number;
   daysTotal: number;
   missedWorkoutsCount: number;
+  skippedWorkoutsCount: number;
   isLastScheduledDayComplete: boolean;
   lifecycleStatus: ProgramLifecycleStatus;
   completedMode: ProgramCompletedMode;
@@ -56,6 +65,7 @@ export type ProgramEndCheck = {
   totalDays: number;
   completedDays: number;
   missedWorkoutsCount: number;
+  skippedWorkoutsCount: number;
   isLastScheduledDayComplete: boolean;
   canCompleteWithSkips: boolean;
 };
@@ -134,6 +144,7 @@ function normalizeProgramCompletionSummary(raw: unknown): ProgramCompletionSumma
     daysCompleted: asNumber(root.days_completed ?? root.daysCompleted, 0),
     daysTotal: asNumber(root.days_total ?? root.daysTotal, 0),
     missedWorkoutsCount: asNumber(root.missed_workouts_count ?? root.missedWorkoutsCount, 0),
+    skippedWorkoutsCount: asNumber(root.skipped_workouts_count ?? root.skippedWorkoutsCount, 0),
     isLastScheduledDayComplete: asBoolean(
       root.is_last_scheduled_day_complete ?? root.isLastScheduledDayComplete,
     ),
@@ -159,17 +170,36 @@ function normalizeProgramCompletionSummary(raw: unknown): ProgramCompletionSumma
         currentProfile.fitness_level_slug ?? currentProfile.fitnessLevelSlug,
       ),
       goals: asArray(currentProfile.goals).map((goal) => asString(goal)).filter(Boolean),
+      injuryFlags: asArray(
+        currentProfile.injury_flags ?? currentProfile.injuryFlags,
+      ).map((flag) => asString(flag)).filter(Boolean),
+      goalNotes: asString(currentProfile.goal_notes ?? currentProfile.goalNotes),
       minutesPerSession: currentProfile.minutes_per_session == null && currentProfile.minutesPerSession == null
         ? null
         : asNumber(currentProfile.minutes_per_session ?? currentProfile.minutesPerSession, 0),
       preferredDays: asArray(
         currentProfile.preferred_days ?? currentProfile.preferredDays,
       ).map((day) => asString(day)).filter(Boolean),
+      scheduleConstraints: asString(
+        currentProfile.schedule_constraints ?? currentProfile.scheduleConstraints,
+      ),
+      heightCm: currentProfile.height_cm == null && currentProfile.heightCm == null
+        ? null
+        : asNumber(currentProfile.height_cm ?? currentProfile.heightCm, 0),
+      weightKg: currentProfile.weight_kg == null && currentProfile.weightKg == null
+        ? null
+        : asNumber(currentProfile.weight_kg ?? currentProfile.weightKg, 0),
+      sex: asNullableString(currentProfile.sex),
+      ageRange: asNullableString(currentProfile.age_range ?? currentProfile.ageRange),
       equipmentItemsSlugs: asArray(
         currentProfile.equipment_items_slugs ?? currentProfile.equipmentItemsSlugs,
       ).map((item) => asString(item)).filter(Boolean),
       equipmentPresetSlug: asNullableString(
         currentProfile.equipment_preset_slug ?? currentProfile.equipmentPresetSlug,
+      ),
+      onboardingStepCompleted: asNumber(
+        currentProfile.onboarding_step_completed ?? currentProfile.onboardingStepCompleted,
+        0,
       ),
     },
     suggestedNextRank: asNumber(root.suggested_next_rank ?? root.suggestedNextRank, 0),
@@ -191,6 +221,7 @@ function normalizeProgramEndCheck(raw: unknown): ProgramEndCheck {
     totalDays: asNumber(root.total_days ?? root.totalDays, 0),
     completedDays: asNumber(root.completed_days ?? root.completedDays, 0),
     missedWorkoutsCount: asNumber(root.missed_workouts_count ?? root.missedWorkoutsCount, 0),
+    skippedWorkoutsCount: asNumber(root.skipped_workouts_count ?? root.skippedWorkoutsCount, 0),
     isLastScheduledDayComplete: asBoolean(
       root.is_last_scheduled_day_complete ?? root.isLastScheduledDayComplete,
     ),
