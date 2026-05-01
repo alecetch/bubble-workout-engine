@@ -8,7 +8,11 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    include: ["src/**/*.component.test.{ts,tsx}", "src/**/__tests__/**/*.test.tsx"],
+    include: [
+      "src/**/*.component.test.{ts,tsx}",
+      "src/**/*.unit.test.{ts,tsx}",
+      "src/**/__tests__/**/*.test.tsx",
+    ],
     pool: "forks",
     poolOptions: {
       forks: { singleFork: true },
