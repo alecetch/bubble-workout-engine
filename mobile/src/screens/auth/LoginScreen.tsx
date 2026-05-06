@@ -164,6 +164,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
       <View style={styles.actions}>
         <PressableScale
+          testID="login-submit-button"
           style={[styles.primaryButton, isSubmitting && styles.disabledButton]}
           disabled={isSubmitting}
           onPress={() => void handleSubmit()}
@@ -171,6 +172,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.primaryLabel}>{isSubmitting ? "Signing in..." : "Sign in"}</Text>
         </PressableScale>
         <PressableScale
+          testID="login-create-account-button"
           style={styles.secondaryButton}
           disabled={isSubmitting}
           onPress={() => navigation.navigate("Register")}
