@@ -1,22 +1,56 @@
 appId: com.bubbleworkout.mobile
 ---
+# Precondition: test account must be logged out before running this flow.
+# If already logged in, go to Settings -> "Log Out" on the emulator first.
+# Do NOT use clearState — pm clear invalidates the Maestro instrumentation context.
+
+# First launchApp restarts the Maestro instrumentation (gRPC drops ~143ms after it
+# returns). The host-side sleep bridges that gap while the new server starts.
+# The second launchApp brings the app's activity to the foreground now that the
+# instrumentation is stable — this one does NOT restart the instrumentation.
 - launchApp:
-    clearState: true
-- extendedWaitUntil:
-    visible: "Welcome"
-    timeout: 10000
-- tapOn: "Sign in"
+    stopApp: false
+- runScript:
+    file: scripts/post-launch-sleep.js
+- launchApp:
+    stopApp: false
+# Dev client always appears on launch. Wait for it, tap the Metro server entry,
+# then dismiss the bundle-loaded overlay. Server shows as 10.0.2.2:8081 on the
+# Android emulator (the emulator's address for the host machine).
+- runFlow:
+    when:
+      visible: "Development Build"
+    commands:
+      - extendedWaitUntil:
+          visible: "http://10.0.2.2:8081"
+          timeout: 30000
+      - tapOn: "http://10.0.2.2:8081"
+      - extendedWaitUntil:
+          visible: "Continue"
+          timeout: 120000
+      - tapOn: "Continue"
+- tapOn:
+    text: "Close"
+    optional: true
+- runFlow:
+    when:
+      visible: "Welcome"
+    commands:
+      - tapOn: "Sign in"
 - extendedWaitUntil:
     visible: "Email"
     timeout: 10000
 - tapOn:
     id: "email-input"
+- eraseText
 - inputText: ${TEST_EMAIL}
 - tapOn:
     id: "password-input"
+- eraseText
 - inputText: ${TEST_PASSWORD}
 - hideKeyboard
-- tapOn: "Sign in"
+- tapOn:
+    id: "login-submit-button"
 - extendedWaitUntil:
     visible: "Program Review"
     timeout: 20000
