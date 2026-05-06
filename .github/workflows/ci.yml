@@ -212,17 +212,8 @@ jobs:
           emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim
           disable-animations: true
           script: |
-            set -e
             adb reverse tcp:3000 tcp:3000
-            (
-              cd mobile
-              EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 \
-              EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" \
-              npx expo start --dev-client --port 8081 > ../maestro-metro.log 2>&1 &
-            )
+            cd mobile && EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
             npx --yes wait-on tcp:127.0.0.1:8081 --timeout 60000
             adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
-            maestro test mobile/.maestro/01-auth-login.yaml \
-              -e TEST_EMAIL="$E2E_EMAIL" \
-              -e TEST_PASSWORD="$E2E_PASSWORD" \
-              --no-ansi
+            maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
