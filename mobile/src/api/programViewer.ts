@@ -294,7 +294,9 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       id: programId,
       title: asString(rawProgram.title),
       summary: asString(rawProgram.summary),
-      heroMedia: asNullableString(rawProgram.hero_media ?? rawProgram.heroMedia),
+      heroMedia: asNullableString(
+        rawProgram.hero_media === null ? null : rawProgram.hero_media ?? rawProgram.heroMedia,
+      ),
     },
     weeks,
     calendarDays,
