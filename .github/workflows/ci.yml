@@ -205,7 +205,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_apis
+          target: default
           arch: x86_64
           profile: pixel_6
           avd-name: e2e-pixel6-api34
@@ -217,7 +217,6 @@ jobs:
             npx --yes wait-on http://127.0.0.1:8081 --timeout 120000
             adb shell settings put global package_verifier_enable 0
             adb shell settings put global verifier_verify_adb_installs 0
-            adb shell settings put global show_anr_dialog 0
             adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
             maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
 
