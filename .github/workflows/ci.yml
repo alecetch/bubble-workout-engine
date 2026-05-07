@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -127,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -201,7 +201,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run E2E - 01-auth-login
+      - name: Run E2E flows
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -219,6 +219,7 @@ jobs:
             adb shell settings put global verifier_verify_adb_installs 0
             adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
             maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
+            maestro test mobile/.maestro/02-start-workout.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
 
       - name: Upload Maestro debug output
         if: failure()
