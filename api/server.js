@@ -8,6 +8,7 @@ import { join, dirname } from "path";
 import { readProgramRouter } from "./src/routes/readProgram.js";
 import { programExerciseRouter } from "./src/routes/programExercise.js";
 import { programCompletionRouter } from "./src/routes/programCompletion.js";
+import { programDayActionsRouter } from "./src/routes/programDayActions.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
 import { segmentLogRouter } from "./src/routes/segmentLog.js";
@@ -746,6 +747,7 @@ app.use("/api", userAuth, equipmentRegenRouter);
 logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipment regeneration routes at /api");
 app.use("/api", programExerciseRouter);
 app.use("/api", programCompletionRouter);
+app.use("/api", programDayActionsRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", referralRouter);
 
