@@ -6,11 +6,11 @@
   "main": "expo/AppEntry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "tsx --test src/**/*.test.ts",
-    "test:unit": "tsx --test src/**/*.test.ts",
+    "test": "find src -name '*.test.ts' ! -name '*.unit.test.ts' | sort | xargs tsx --test",
+    "test:unit": "find src -name '*.test.ts' ! -name '*.unit.test.ts' | sort | xargs tsx --test",
     "test:components": "vitest run",
     "test:components:watch": "vitest",
     "test:all": "npm run test && npm run test:components"
