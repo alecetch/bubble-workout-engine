@@ -9,6 +9,7 @@ import { saveTokens } from "../../api/tokenStorage";
 import { logInPurchases } from "../../lib/purchases";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { buildClientProfile, buildToken, mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/authApi", () => ({
   apiLogin: vi.fn(),
@@ -55,26 +56,26 @@ const resetFromProfileMock = vi.fn();
 const setIdentityMock = vi.fn();
 const setSessionMock = vi.fn();
 
-const tokens = {
+const tokens = buildToken({
   access_token: "access-token",
   refresh_token: "refresh-token",
   user_id: "user-1",
   client_profile_id: "profile-1",
   subscription_status: "trialing",
   trial_expires_at: null,
-};
+});
 
-const completeProfile = {
+const completeProfile = buildClientProfile({
   id: "profile-1",
   onboardingStepCompleted: 3,
   onboardingCompletedAt: "2026-05-01T12:00:00Z",
-};
+});
 
-const partialProfile = {
+const partialProfile = buildClientProfile({
   id: "profile-2",
   onboardingStepCompleted: 1,
   onboardingCompletedAt: null,
-};
+});
 
 function renderScreen() {
   const navigation = { navigate: vi.fn(), goBack: vi.fn(), replace: vi.fn() };
@@ -98,12 +99,11 @@ describe("LoginScreen", () => {
     setIdentityMock.mockReset();
     setSessionMock.mockReset();
 
-    useOnboardingStoreMock.mockImplementation((selector: any) =>
-      selector({ resetFromProfile: resetFromProfileMock, setIdentity: setIdentityMock }),
-    );
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ setSession: setSessionMock }),
-    );
+    mockZustandSelector(useOnboardingStoreMock as any, {
+      resetFromProfile: resetFromProfileMock,
+      setIdentity: setIdentityMock,
+    });
+    mockZustandSelector(useSessionStoreMock as any, { setSession: setSessionMock });
     apiLoginMock.mockResolvedValue(tokens);
     getClientProfileMock.mockResolvedValue(completeProfile as any);
     createClientProfileMock.mockResolvedValue(partialProfile as any);

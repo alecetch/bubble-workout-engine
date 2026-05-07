@@ -11,6 +11,7 @@ import {
 } from "../../lib/purchases";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { PaywallScreen } from "./PaywallScreen";
+import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../lib/purchases", () => ({
   getPurchaseOfferings: vi.fn(),
@@ -55,9 +56,7 @@ describe("PaywallScreen", () => {
     vi.clearAllMocks();
     alertSpy.mockClear();
 
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ setEntitlement: setEntitlementMock }),
-    );
+    mockZustandSelector(useSessionStoreMock as any, { setEntitlement: setEntitlementMock });
     getPurchaseOfferingsMock.mockResolvedValue(MOCK_OFFERINGS);
     purchasePackageMock.mockResolvedValue(undefined);
     restorePurchasesMock.mockResolvedValue({

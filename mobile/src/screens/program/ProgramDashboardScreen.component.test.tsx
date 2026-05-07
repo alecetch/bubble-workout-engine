@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { fireEvent, screen } from "@testing-library/react";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDashboardScreen } from "./ProgramDashboardScreen";
 import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
@@ -8,6 +8,11 @@ import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
+import {
+  createTestQueryClient,
+  mockZustandSelector,
+  renderWithProviders,
+} from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
 
@@ -87,17 +92,12 @@ function data(overrides: Record<string, unknown> = {}) {
 function renderDashboard(
   navigation = { navigate: vi.fn(), getParent: vi.fn(() => null) },
 ) {
-  queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <ProgramDashboardScreen
-        route={{ params: { programId: "prog-1" } } as any}
-        navigation={navigation as any}
-      />
-    </QueryClientProvider>,
-  );
+  ({ queryClient } = renderWithProviders(
+    <ProgramDashboardScreen
+      route={{ params: { programId: "prog-1" } } as any}
+      navigation={navigation as any}
+    />,
+  ));
   return navigation;
 }
 
@@ -107,10 +107,11 @@ describe("ProgramDashboardScreen", () => {
     vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
     setActiveProgramIdMock.mockReset();
     getProgramOverviewMock.mockReset();
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ userId: "user-1", setActiveProgramId: setActiveProgramIdMock }),
-    );
-    useOnboardingStoreMock.mockImplementation((selector: any) => selector({ userId: "onboard-user" }));
+    mockZustandSelector(useSessionStoreMock as any, {
+      userId: "user-1",
+      setActiveProgramId: setActiveProgramIdMock,
+    });
+    mockZustandSelector(useOnboardingStoreMock as any, { userId: "onboard-user" });
     useProgramOverviewMock.mockReturnValue({
       data: data(),
       isLoading: false,
@@ -237,16 +238,15 @@ describe("ProgramDashboardScreen - React Query integration", () => {
   }
 
   function renderWithRealQuery(
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+    client = createTestQueryClient(),
     navigation = { navigate: vi.fn(), getParent: vi.fn(() => null) },
   ) {
-    const view = render(
-      <QueryClientProvider client={client}>
-        <ProgramDashboardScreen
-          route={{ params: { programId: "prog-1" } } as any}
-          navigation={navigation as any}
-        />
-      </QueryClientProvider>,
+    const view = renderWithProviders(
+      <ProgramDashboardScreen
+        route={{ params: { programId: "prog-1" } } as any}
+        navigation={navigation as any}
+      />,
+      { queryClient: client },
     );
     return { ...view, queryClient: client, navigation };
   }
@@ -256,10 +256,11 @@ describe("ProgramDashboardScreen - React Query integration", () => {
     overviewStaleTime = 5 * 60 * 1000;
     setActiveProgramIdMock.mockReset();
     getProgramOverviewMock.mockReset();
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ userId: "user-1", setActiveProgramId: setActiveProgramIdMock }),
-    );
-    useOnboardingStoreMock.mockImplementation((selector: any) => selector({ userId: "onboard-user" }));
+    mockZustandSelector(useSessionStoreMock as any, {
+      userId: "user-1",
+      setActiveProgramId: setActiveProgramIdMock,
+    });
+    mockZustandSelector(useOnboardingStoreMock as any, { userId: "onboard-user" });
     useProgramOverviewMock.mockImplementation(useRealOverviewQuery as any);
     useProgramEndCheckMock.mockReturnValue({
       data: { lifecycleStatus: "active", canCompleteWithSkips: false },
@@ -274,7 +275,7 @@ describe("ProgramDashboardScreen - React Query integration", () => {
   });
 
   it("serves a second mount from cache without a duplicate overview request", async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = createTestQueryClient();
     getProgramOverviewMock.mockResolvedValue(data() as any);
 
     const first = renderWithRealQuery(client);
@@ -290,7 +291,7 @@ describe("ProgramDashboardScreen - React Query integration", () => {
 
   it("background-refetches stale cached overview data", async () => {
     overviewStaleTime = 0;
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } });
+    const client = createTestQueryClient();
     client.setQueryData(["programOverview", "prog-1", "user-1"], data());
     getProgramOverviewMock.mockResolvedValue(data({ program: { id: "prog-1", title: "Updated Block" } }) as any);
 

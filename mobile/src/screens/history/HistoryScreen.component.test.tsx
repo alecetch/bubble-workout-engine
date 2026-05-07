@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryScreen } from "./HistoryScreen";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { mockZustandSelector, renderWithProviders } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
 
@@ -96,14 +97,7 @@ const timelineItem = {
 };
 
 function renderScreen() {
-  queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <HistoryScreen />
-    </QueryClientProvider>,
-  );
+  ({ queryClient } = renderWithProviders(<HistoryScreen />));
 }
 
 function setAllHooksLoading() {
@@ -126,8 +120,8 @@ describe("HistoryScreen", () => {
   beforeEach(() => {
     navigationNavigateMock.mockReset();
     parentNavigateMock.mockReset();
-    useSessionStoreMock.mockImplementation((selector: any) => selector({ userId: "user-1" }));
-    useOnboardingStoreMock.mockImplementation((selector: any) => selector({ userId: "onboard-user" }));
+    mockZustandSelector(useSessionStoreMock as any, { userId: "user-1" });
+    mockZustandSelector(useOnboardingStoreMock as any, { userId: "onboard-user" });
     useSessionHistoryMetricsMock.mockReturnValue({
       data: metricsFixture,
       isLoading: false,

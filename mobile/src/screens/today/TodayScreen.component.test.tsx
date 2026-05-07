@@ -5,6 +5,7 @@ import { TodayScreen } from "./TodayScreen";
 import { useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
+import { mockZustandSelector } from "../../__test-utils__";
 
 const navigationMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -65,7 +66,7 @@ describe("TodayScreen", () => {
     vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
     navigationMocks.navigate.mockReset();
     sessionState = { userId: "user-1", activeProgramId: "prog-1" };
-    useSessionStoreMock.mockImplementation((selector: any) => selector(sessionState));
+    mockZustandSelector(useSessionStoreMock as any, sessionState);
     useActiveProgramsMock.mockReturnValue({ data: undefined, isLoading: false } as any);
     useEntitlementMock.mockReturnValue({ data: { is_active: true } } as any);
     useProgramOverviewMock.mockReturnValue({
@@ -90,6 +91,7 @@ describe("TodayScreen", () => {
 
   it("renders the no active program state", () => {
     sessionState = { userId: "user-1", activeProgramId: null as any };
+    mockZustandSelector(useSessionStoreMock as any, sessionState);
     render(<TodayScreen />);
     expect(screen.getByText("No Active Program")).toBeInTheDocument();
     expect(screen.getByText("Go To Program Review")).toBeInTheDocument();

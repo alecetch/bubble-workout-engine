@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionHistoryMetrics } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { ProgressOverviewScreen } from "./ProgressOverviewScreen";
+import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useSessionHistoryMetrics: vi.fn(),
@@ -62,9 +63,7 @@ describe("ProgressOverviewScreen", () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     mockRefetch.mockReset();
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ userId: "user-123" }),
-    );
+    mockZustandSelector(useSessionStoreMock as any, { userId: "user-123" });
     useSessionHistoryMetricsMock.mockReturnValue({
       data: METRICS_FIXTURE,
       isLoading: false,
