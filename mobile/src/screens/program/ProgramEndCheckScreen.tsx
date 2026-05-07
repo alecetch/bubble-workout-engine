@@ -17,6 +17,10 @@ function formatMissed(count: number): string {
   return `${count} missed workout${count === 1 ? "" : "s"}`;
 }
 
+function formatSkipped(count: number): string {
+  return `${count} session${count === 1 ? "" : "s"} marked as skipped`;
+}
+
 export function ProgramEndCheckScreen({ route, navigation }: Props): React.JSX.Element {
   const { programId } = route.params;
   const endCheckQuery = useProgramEndCheck(programId);
@@ -80,6 +84,9 @@ export function ProgramEndCheckScreen({ route, navigation }: Props): React.JSX.E
             ? `You still have ${formatMissed(endCheck.missedWorkoutsCount)} in this program. You can finish them first, or move on to your next block now.`
             : "You still have workouts left in this program before you can end this block."}
         </Text>
+        {endCheck.skippedWorkoutsCount > 0 ? (
+          <Text style={styles.skippedNote}>{formatSkipped(endCheck.skippedWorkoutsCount)}.</Text>
+        ) : null}
 
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Completed so far</Text>
@@ -145,6 +152,10 @@ const styles = StyleSheet.create({
     ...typography.h2,
   },
   body: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  skippedNote: {
     color: colors.textSecondary,
     ...typography.body,
   },

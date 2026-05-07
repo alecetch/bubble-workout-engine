@@ -17,6 +17,7 @@ type PressableScaleProps = {
   containerStyle?: StyleProp<ViewStyle>;
   hitSlop?: PressableProps["hitSlop"];
   accessibilityLabel?: string;
+  testID?: string;
 };
 
 // Usage:
@@ -32,9 +33,11 @@ export function PressableScale({
   containerStyle,
   hitSlop,
   accessibilityLabel,
+  testID,
 }: PressableScaleProps): React.JSX.Element {
   return (
     <Pressable
+      testID={testID}
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}
