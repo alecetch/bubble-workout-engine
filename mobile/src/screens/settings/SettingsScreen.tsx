@@ -459,6 +459,20 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
         </View>
 
         <View style={styles.section}>
+          <SectionLabel>PROGRAM</SectionLabel>
+          <View style={styles.sectionCard}>
+            <SettingsRow
+              label="Recalibrate my program"
+              description="Update goals, schedule, equipment, or body metrics mid-program."
+              onPress={() =>
+                tabNavigation.navigate("HomeTab", { screen: "RecalibrateA" } as never)
+              }
+              showChevron
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <SectionLabel>DANGER ZONE</SectionLabel>
           <View style={styles.sectionCard}>
             <SettingsRow

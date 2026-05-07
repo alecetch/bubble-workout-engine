@@ -30,6 +30,7 @@ export type ProgramOverviewResponse = {
     status?: string | null;
     weekNumber?: number | null;
     isTrainingDay: boolean;
+    isSkipped?: boolean | null;
   }>;
   selectedDayPreview?: {
     programDayId: string;
@@ -280,6 +281,7 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       weekNumber: asNullableNumber(day.week_number ?? day.weekNumber),
       // Default true: legacy rows without the field are training days.
       isTrainingDay: asNullableBoolean(day.is_training_day ?? day.isTrainingDay) ?? true,
+      isSkipped: asNullableBoolean(day.is_skipped ?? day.isSkipped) ?? false,
     };
   });
 
@@ -292,7 +294,9 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       id: programId,
       title: asString(rawProgram.title),
       summary: asString(rawProgram.summary),
-      heroMedia: asNullableString(rawProgram.hero_media ?? rawProgram.heroMedia),
+      heroMedia: asNullableString(
+        rawProgram.hero_media === null ? null : rawProgram.hero_media ?? rawProgram.heroMedia,
+      ),
     },
     weeks,
     calendarDays,

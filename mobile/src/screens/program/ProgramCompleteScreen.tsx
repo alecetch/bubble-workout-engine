@@ -8,10 +8,16 @@ import type { OnboardingStackParamList } from "../../navigation/OnboardingNaviga
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import {
-  GOAL_TYPES,
+  AGE_RANGES,
+  INJURY_FLAGS,
+  SEX_OPTIONS,
   type FitnessLevel,
   type GoalType,
+  type AgeRange,
+  type DayOfWeek,
+  type InjuryFlag,
   type ProfileLike,
+  type Sex,
 } from "../../state/onboarding/types";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -38,6 +44,10 @@ function toFitnessLevelFromRank(rank: number): FitnessLevel {
   return "Elite";
 }
 
+function toSlug(value: string): string {
+  return value.trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
 function helperTextForOption(option: "same_settings" | "progress_level" | "change_goals"): string {
   if (option === "same_settings") return "Use your current setup unchanged and generate the next block.";
   if (option === "progress_level") return "Keep your setup, but move up to the next fitness level.";
@@ -51,13 +61,73 @@ function confidenceLabel(value: "low" | "medium" | "high" | null): string {
   return "Not set";
 }
 
+const GOAL_ALIASES: Record<string, GoalType> = {
+  strength: "Strength",
+  hypertrophy: "Hypertrophy",
+  conditioning: "Conditioning",
+  hyrox: "HYROX Workout",
+  hyrox_workout: "HYROX Workout",
+  hyrox_competition: "HYROX Workout",
+};
+
 function toGoalTypes(values: string[]): GoalType[] {
-  return values.filter((value): value is GoalType =>
-    (GOAL_TYPES as readonly string[]).includes(value),
-  );
+  const goals = values
+    .map((value) => GOAL_ALIASES[toSlug(value)] ?? null)
+    .filter((value): value is GoalType => Boolean(value));
+  return Array.from(new Set(goals));
 }
 
-function buildPrefillProfile(
+function toInjuryFlags(values: string[]): InjuryFlag[] {
+  const bySlug = new Map(INJURY_FLAGS.map((flag) => [toSlug(flag), flag]));
+  return values
+    .map((value) => bySlug.get(toSlug(value)))
+    .filter((value): value is InjuryFlag => Boolean(value));
+}
+
+function toPreferredDays(values: string[]): DayOfWeek[] {
+  const aliases: Record<string, DayOfWeek> = {
+    mon: "Mon",
+    monday: "Mon",
+    tue: "Tues",
+    tues: "Tues",
+    tuesday: "Tues",
+    wed: "Wed",
+    wednesday: "Wed",
+    thu: "Thurs",
+    thur: "Thurs",
+    thurs: "Thurs",
+    thursday: "Thurs",
+    fri: "Fri",
+    friday: "Fri",
+    sat: "Sat",
+    saturday: "Sat",
+    sun: "Sun",
+    sunday: "Sun",
+  };
+  const days = values
+    .map((value) => aliases[toSlug(value)] ?? null)
+    .filter((value): value is DayOfWeek => Boolean(value));
+  return Array.from(new Set(days));
+}
+
+function toSexOption(value: string | null): Sex | null {
+  if (!value) return null;
+  const bySlug = new Map(SEX_OPTIONS.map((option) => [toSlug(option), option]));
+  return bySlug.get(toSlug(value)) ?? null;
+}
+
+function toAgeRangeOption(value: string | null): AgeRange | null {
+  if (!value) return null;
+  const bySlug = new Map(AGE_RANGES.map((option) => [toSlug(option), option]));
+  return bySlug.get(toSlug(value)) ?? null;
+}
+
+function toCompletedStep(value: number): 0 | 1 | 2 | 3 {
+  if (value === 1 || value === 2 || value === 3) return value;
+  return 0;
+}
+
+export function buildPrefillProfile(
   summary: ProgramCompletionSummary,
   option: "same_settings" | "progress_level" | "change_goals",
 ): ProfileLike {
@@ -70,10 +140,18 @@ function buildPrefillProfile(
   return {
     fitnessLevel: nextLevel,
     goals: toGoalTypes(summary.currentProfile.goals),
+    injuryFlags: toInjuryFlags(summary.currentProfile.injuryFlags),
+    goalNotes: summary.currentProfile.goalNotes,
     minutes_per_session: summary.currentProfile.minutesPerSession,
-    preferred_days: summary.currentProfile.preferredDays,
+    preferred_days: toPreferredDays(summary.currentProfile.preferredDays),
+    scheduleConstraints: summary.currentProfile.scheduleConstraints,
+    heightCm: summary.currentProfile.heightCm,
+    weightKg: summary.currentProfile.weightKg,
+    sex: toSexOption(summary.currentProfile.sex),
+    ageRange: toAgeRangeOption(summary.currentProfile.ageRange),
     equipment_items_slugs: summary.currentProfile.equipmentItemsSlugs,
     equipment_preset_slug: summary.currentProfile.equipmentPresetSlug,
+    onboardingStepCompleted: toCompletedStep(summary.currentProfile.onboardingStepCompleted),
   };
 }
 
@@ -97,7 +175,7 @@ export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.E
 
   function navigateIntoHome(
     screen: "ProgramReview" | "Step1Goals",
-    params?: OnboardingStackParamList["ProgramReview"],
+    params?: OnboardingStackParamList["ProgramReview"] | OnboardingStackParamList["Step1Goals"],
   ): void {
     const parent = navigation.getParent() as any;
     if (parent) {
@@ -126,7 +204,7 @@ export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.E
     resetFromProfile(buildPrefillProfile(summaryQuery.data, selectedOption));
 
     if (selectedOption === "change_goals") {
-      navigateIntoHome("Step1Goals");
+      navigateIntoHome("Step1Goals", { returnToReview: true });
       return;
     }
 
@@ -171,7 +249,11 @@ export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.E
           {summary.programType ? <Text style={styles.programType}>{summary.programType}</Text> : null}
           {summary.completedMode === "with_skips" ? (
             <Text style={styles.skippedCopy}>
-              Completed with {summary.missedWorkoutsCount} skipped workout{summary.missedWorkoutsCount === 1 ? "" : "s"}.
+              Completed with {summary.skippedWorkoutsCount} skipped session{summary.skippedWorkoutsCount === 1 ? "" : "s"}
+              {summary.missedWorkoutsCount > 0
+                ? ` and ${summary.missedWorkoutsCount} missed workout${summary.missedWorkoutsCount === 1 ? "" : "s"}`
+                : ""}
+              .
             </Text>
           ) : null}
         </View>
