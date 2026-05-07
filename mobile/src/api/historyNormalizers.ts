@@ -254,24 +254,25 @@ export function normalizePrograms(raw: unknown): HistoryProgramItem[] {
 
 export function normalizeTimeline(raw: unknown): HistoryTimelineResponse {
   const root = asObject(raw);
-  const nextCursorRaw = root.nextCursor == null ? null : asObject(root.nextCursor);
+  const nextCursorSource = root.nextCursor ?? root.next_cursor;
+  const nextCursorRaw = nextCursorSource == null ? null : asObject(nextCursorSource);
 
   const items = asArray(root.items).map((item) => {
     const row = asObject(item);
     const highlightRaw = row.highlight == null ? null : asObject(row.highlight);
     return {
-      programDayId: asString(row.programDayId),
-      scheduledDate: toDateOnly(row.scheduledDate),
-      dayLabel: asString(row.dayLabel),
-      durationMins: asNumber(row.durationMins, 0),
-      heroMediaId: asNullableString(row.heroMediaId),
+      programDayId: asString(row.programDayId ?? row.program_day_id),
+      scheduledDate: toDateOnly(row.scheduledDate ?? row.scheduled_date),
+      dayLabel: asString(row.dayLabel ?? row.day_label),
+      durationMins: asNumber(row.durationMins ?? row.duration_mins, 0),
+      heroMediaId: asNullableString(row.heroMediaId ?? row.hero_media_id),
       highlight:
         highlightRaw == null
           ? null
           : {
               value: asNumber(highlightRaw.value, 0),
-              exerciseName: asString(highlightRaw.exerciseName),
-              exerciseId: asString(highlightRaw.exerciseId),
+              exerciseName: asString(highlightRaw.exerciseName ?? highlightRaw.exercise_name),
+              exerciseId: asString(highlightRaw.exerciseId ?? highlightRaw.exercise_id),
             },
     };
   });
@@ -280,8 +281,8 @@ export function normalizeTimeline(raw: unknown): HistoryTimelineResponse {
     nextCursorRaw == null
       ? null
       : {
-          cursorDate: asString(nextCursorRaw.cursorDate),
-          cursorId: asString(nextCursorRaw.cursorId),
+          cursorDate: asString(nextCursorRaw.cursorDate ?? nextCursorRaw.cursor_date),
+          cursorId: asString(nextCursorRaw.cursorId ?? nextCursorRaw.cursor_id),
         };
 
   return { items, nextCursor };
@@ -349,18 +350,18 @@ function normalizeSessionHistoryStrengthRegion(raw: unknown): SessionHistoryStre
   if (raw == null) return null;
   const row = asObject(raw);
   return {
-    exerciseId: asString(row.exerciseId),
-    exerciseName: asString(row.exerciseName),
-    bestE1rmKg: asNumber(row.bestE1rmKg, 0),
-    trendPct: asNullableNumber(row.trendPct),
+    exerciseId: asString(row.exerciseId ?? row.exercise_id),
+    exerciseName: asString(row.exerciseName ?? row.exercise_name),
+    bestE1rmKg: asNumber(row.bestE1rmKg ?? row.best_e1rm_kg, 0),
+    trendPct: asNullableNumber(row.trendPct ?? row.trend_pct),
   };
 }
 
 export function normalizeWeeklyVolumePoint(raw: unknown): WeeklyVolumePoint {
   const row = asObject(raw);
   return {
-    weekStart: toDateOnly(row.weekStart),
-    volumeLoad: asNumber(row.volumeLoad, 0),
+    weekStart: toDateOnly(row.weekStart ?? row.week_start),
+    volumeLoad: asNumber(row.volumeLoad ?? row.volume_load ?? row.volume_kg, 0),
   };
 }
 
@@ -375,21 +376,23 @@ export function normalizeWeeklyVolumeByRegion(raw: unknown): WeeklyVolumeByRegio
 
 export function normalizeSessionHistoryMetrics(raw: unknown): SessionHistoryMetrics {
   const root = asObject(raw);
-  const consistency28d = asObject(root.consistency28d);
+  const consistency28d = asObject(root.consistency28d ?? root.consistency_28d);
   return {
-    dayStreak: asNumber(root.dayStreak, 0),
+    dayStreak: asNumber(root.dayStreak ?? root.day_streak, 0),
     consistency28d: {
       completed: asNumber(consistency28d.completed, 0),
       scheduled: asNumber(consistency28d.scheduled, 0),
       rate: asNumber(consistency28d.rate, 0),
     },
-    volume28d: asNumber(root.volume28d, 0),
-    strengthUpper28d: normalizeSessionHistoryStrengthRegion(root.strengthUpper28d),
-    strengthLower28d: normalizeSessionHistoryStrengthRegion(root.strengthLower28d),
-    sessionsCount: asNumber(root.sessionsCount, 0),
-    sessionsCount28d: asNumber(root.sessionsCount28d, 0),
-    programmesCompleted: asNumber(root.programmesCompleted, 0),
-    weeklyVolumeByRegion8w: normalizeWeeklyVolumeByRegion(root.weeklyVolumeByRegion8w),
+    volume28d: asNumber(root.volume28d ?? root.volume_28d, 0),
+    strengthUpper28d: normalizeSessionHistoryStrengthRegion(root.strengthUpper28d ?? root.strength_upper_28d),
+    strengthLower28d: normalizeSessionHistoryStrengthRegion(root.strengthLower28d ?? root.strength_lower_28d),
+    sessionsCount: asNumber(root.sessionsCount ?? root.sessions_count, 0),
+    sessionsCount28d: asNumber(root.sessionsCount28d ?? root.sessions_count_28d, 0),
+    programmesCompleted: asNumber(root.programmesCompleted ?? root.programmes_completed, 0),
+    weeklyVolumeByRegion8w: normalizeWeeklyVolumeByRegion(
+      root.weeklyVolumeByRegion8w ?? root.weekly_volume_by_region_8w,
+    ),
   };
 }
 
@@ -397,11 +400,11 @@ export function normalizeHeaviestLift(raw: unknown): HeaviestLift | null {
   if (raw == null) return null;
   const row = asObject(raw);
   return {
-    exerciseId: asString(row.exerciseId),
-    exerciseName: asString(row.exerciseName),
-    weightKg: asNumber(row.weightKg, 0),
-    repsCompleted: asNumber(row.repsCompleted, 0),
-    estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg),
+    exerciseId: asString(row.exerciseId ?? row.exercise_id),
+    exerciseName: asString(row.exerciseName ?? row.exercise_name),
+    weightKg: asNumber(row.weightKg ?? row.weight_kg, 0),
+    repsCompleted: asNumber(row.repsCompleted ?? row.reps_completed, 0),
+    estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg ?? row.estimated_e1rm_kg),
     date: toDateOnly(row.date),
   };
 }
@@ -417,15 +420,15 @@ export function normalizePrsFeed(raw: unknown): PrsFeedResponse {
   const rows = asArray(root.rows).map((item) => {
     const row = asObject(item);
     return {
-      exerciseId: asString(row.exerciseId),
-      exerciseName: asString(row.exerciseName),
-      weightKg: asNumber(row.weightKg, 0),
-      repsCompleted: asNumber(row.repsCompleted, 0),
-      estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg),
+      exerciseId: asString(row.exerciseId ?? row.exercise_id),
+      exerciseName: asString(row.exerciseName ?? row.exercise_name),
+      weightKg: asNumber(row.weightKg ?? row.weight_kg, 0),
+      repsCompleted: asNumber(row.repsCompleted ?? row.reps_completed, 0),
+      estimatedE1rmKg: asNullableNumber(row.estimatedE1rmKg ?? row.estimated_e1rm_kg),
       date: toDateOnly(row.date),
       region: asString(row.region),
-      shareLabel: asNullableString(row.shareLabel),
-      milestoneType: asNullableString(row.milestoneType),
+      shareLabel: asNullableString(row.shareLabel ?? row.share_label),
+      milestoneType: asNullableString(row.milestoneType ?? row.milestone_type),
     };
   });
 
