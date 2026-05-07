@@ -214,6 +214,24 @@ jobs:
           script: |
             adb reverse tcp:3000 tcp:3000
             cd mobile && EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
-            npx --yes wait-on tcp:127.0.0.1:8081 --timeout 60000
+            npx --yes wait-on http://127.0.0.1:8081 --timeout 120000
+            adb shell settings put global package_verifier_enable 0
+            adb shell settings put global verifier_verify_adb_installs 0
             adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
             maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
+
+      - name: Upload Maestro debug output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-debug
+          path: ~/.maestro/tests/
+          if-no-files-found: ignore
+
+      - name: Upload Metro log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metro-log
+          path: /tmp/metro.log
+          if-no-files-found: ignore
