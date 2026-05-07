@@ -288,6 +288,9 @@ export function createReadProgramHandlers(options = pool) {
           d.day_label,
           d.session_duration_mins,
           d.is_completed,
+          CASE WHEN c.rescheduled_from_day_id IS NOT NULL THEN FALSE
+               ELSE COALESCE(d.is_skipped, FALSE)
+          END AS is_skipped,
           d.has_activity
         FROM program_calendar_day c
         LEFT JOIN program_day d
@@ -310,7 +313,7 @@ export function createReadProgramHandlers(options = pool) {
           FROM program_day
           WHERE program_id = $1
           ORDER BY
-            CASE WHEN is_completed = FALSE THEN 0 ELSE 1 END,
+            CASE WHEN is_completed = FALSE AND is_skipped IS NOT TRUE THEN 0 ELSE 1 END,
             global_day_index ASC
           LIMIT 1
           `,

@@ -39,9 +39,14 @@ const defaultPreferredUnit: "kg" | "lbs" = "kg";
 
 let notificationState: QueryState<MockPreferences>;
 let accountState: QueryState<MockAccountInfo>;
+let meState: QueryState<{ id: string; clientProfileId: string }>;
+let profileState: QueryState<{ id: string; equipmentPreset: string | null }>;
+let referenceDataState: QueryState<{ equipmentPresets: Array<{ code: string; label: string }> }>;
 let preferredUnitState: QueryState<"kg" | "lbs">;
+let preferredHeightUnitState: QueryState<"cm" | "ft_in">;
 let notificationMutationShouldFail = false;
 let notificationMutationPending = false;
+let deleteAccountShouldFail = false;
 let mutationCallCount = 0;
 const notificationMutateSpy = vi.fn();
 const deleteAccountMutateSpy = vi.fn();
@@ -53,7 +58,10 @@ const getRefreshTokenSpy = vi.fn();
 const navigationNavigateSpy = vi.fn();
 const notificationRefetchSpy = vi.fn();
 const accountRefetchSpy = vi.fn();
+const meRefetchSpy = vi.fn();
+const profileRefetchSpy = vi.fn();
 const preferredUnitRefetchSpy = vi.fn();
+const preferredHeightUnitRefetchSpy = vi.fn();
 
 function resetMockState(): void {
   notificationState = {
@@ -68,14 +76,39 @@ function resetMockState(): void {
     isError: false,
     isFetching: false,
   };
+  meState = {
+    data: { id: "user-1", clientProfileId: "profile-1" },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+  };
+  profileState = {
+    data: { id: "profile-1", equipmentPreset: "commercial_gym" },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+  };
+  referenceDataState = {
+    data: { equipmentPresets: [{ code: "commercial_gym", label: "Commercial Gym" }] },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+  };
   preferredUnitState = {
     data: defaultPreferredUnit,
     isLoading: false,
     isError: false,
     isFetching: false,
   };
+  preferredHeightUnitState = {
+    data: "cm",
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+  };
   notificationMutationShouldFail = false;
   notificationMutationPending = false;
+  deleteAccountShouldFail = false;
   mutationCallCount = 0;
   notificationMutateSpy.mockReset();
   deleteAccountMutateSpy.mockReset();
@@ -87,7 +120,10 @@ function resetMockState(): void {
   navigationNavigateSpy.mockReset();
   notificationRefetchSpy.mockReset();
   accountRefetchSpy.mockReset();
+  meRefetchSpy.mockReset();
+  profileRefetchSpy.mockReset();
   preferredUnitRefetchSpy.mockReset();
+  preferredHeightUnitRefetchSpy.mockReset();
   getRefreshTokenSpy.mockResolvedValue(null);
   clearTokensSpy.mockResolvedValue(undefined);
   logoutSpy.mockResolvedValue(undefined);
@@ -109,6 +145,34 @@ vi.mock("@tanstack/react-query", async () => {
           ...accountState,
           error: accountState.isError ? new Error("account load failed") : null,
           refetch: accountRefetchSpy,
+        };
+      }
+      if (key === "me") {
+        return {
+          ...meState,
+          error: meState.isError ? new Error("me load failed") : null,
+          refetch: meRefetchSpy,
+        };
+      }
+      if (key === "clientProfile") {
+        return {
+          ...profileState,
+          error: profileState.isError ? new Error("profile load failed") : null,
+          refetch: profileRefetchSpy,
+        };
+      }
+      if (key === "referenceData") {
+        return {
+          ...referenceDataState,
+          error: referenceDataState.isError ? new Error("reference load failed") : null,
+          refetch: vi.fn(),
+        };
+      }
+      if (key === "preferredHeightUnit") {
+        return {
+          ...preferredHeightUnitState,
+          error: preferredHeightUnitState.isError ? new Error("height unit load failed") : null,
+          refetch: preferredHeightUnitRefetchSpy,
         };
       }
       return {
@@ -151,6 +215,9 @@ vi.mock("@tanstack/react-query", async () => {
         isPending: false,
         mutate: () => {
           deleteAccountMutateSpy();
+          if (deleteAccountShouldFail) {
+            config?.onError?.(new Error("delete failed"), undefined, undefined);
+          }
         },
       };
     }),
@@ -240,6 +307,26 @@ describe("SettingsScreen", () => {
     expect(getAllByTestId("settings-skeleton-row")).toHaveLength(3);
   });
 
+  it("shows preference skeleton rows while profile data is loading", () => {
+    meState = {
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      isFetching: false,
+    };
+    profileState = {
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      isFetching: false,
+    };
+
+    const { getAllByTestId } = renderScreen();
+
+    expect(getAllByTestId("settings-skeleton-row").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Couldn't load preferences - tap to retry")).not.toBeInTheDocument();
+  });
+
   it("shows a retry row on notification fetch error", () => {
     notificationState = {
       data: undefined,
@@ -252,6 +339,30 @@ describe("SettingsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Couldn't load notification settings - tap to retry" }));
 
     expect(notificationRefetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a preferences retry row when profile fetch fails", () => {
+    profileState = {
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      isFetching: false,
+    };
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Couldn't load preferences - tap to retry" }));
+
+    expect(profileRefetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps notification toggles usable after a failed save", () => {
+    notificationMutationShouldFail = true;
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Recovery Notifications" }));
+
+    expect(screen.getByRole("switch", { name: "Recovery Notifications" })).not.toBeDisabled();
+    expect(screen.getByText("Couldn't save. Check your connection.")).toBeInTheDocument();
   });
 
   it("shows Reminder Time only when workout reminders are enabled", () => {
@@ -290,6 +401,19 @@ describe("SettingsScreen", () => {
       expect(clearTokensSpy).toHaveBeenCalledTimes(1);
       expect(clearSessionSpy).toHaveBeenCalledTimes(1);
       expect(queryClientClearSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("surfaces delete-account failures and keeps the screen usable", async () => {
+    deleteAccountShouldFail = true;
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
+    fireEvent.click(screen.getByText("Delete my account"));
+
+    await waitFor(() => {
+      expect(deleteAccountMutateSpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Couldn't delete account. Try again.")).toBeInTheDocument();
     });
   });
 });

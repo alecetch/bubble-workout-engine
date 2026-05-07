@@ -9,9 +9,15 @@ import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
 import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
+import {
+  RecalibrateScreenA,
+  RecalibrateScreenB,
+  type ChangeCategory,
+} from "../screens/onboarding/RecalibrateScreen";
 import { ExerciseDecisionHistoryScreen } from "../screens/program/ExerciseDecisionHistoryScreen";
 import { PaywallScreen } from "../screens/paywall/PaywallScreen";
 import { ProgramCompleteScreen } from "../screens/program/ProgramCompleteScreen";
+import { SubstitutionProgressScreen } from "../screens/program/SubstitutionProgressScreen";
 import type { ExerciseDetailParams } from "../screens/program/ExerciseDetailScreen";
 import { ProgramEndCheckScreen } from "../screens/program/ProgramEndCheckScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
@@ -21,7 +27,9 @@ import { typography } from "../theme/typography";
 
 export type OnboardingStackParamList = {
   OnboardingEntry: undefined;
-  Step1Goals: undefined;
+  Step1Goals: {
+    returnToReview?: boolean;
+  } | undefined;
   Step2Equipment: undefined;
   Step2bBaselineLoads: undefined;
   Step3Schedule: undefined;
@@ -34,6 +42,14 @@ export type OnboardingStackParamList = {
   };
   ProgramComplete: {
     programId: string;
+  };
+  RecalibrateA: undefined;
+  RecalibrateB: {
+    selectedCategories: ChangeCategory[];
+  };
+  SubstitutionProgress: {
+    programId: string;
+    jobId: string;
   };
   ProgramDashboard: {
     programId?: string;
@@ -100,6 +116,9 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramEndCheck" component={ProgramEndCheckScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramComplete" component={ProgramCompleteScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="RecalibrateA" component={RecalibrateScreenA} options={stepTransitionOptions} />
+      <Stack.Screen name="RecalibrateB" component={RecalibrateScreenB} options={stepTransitionOptions} />
+      <Stack.Screen name="SubstitutionProgress" component={SubstitutionProgressScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreenDeferred} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramDay" component={ProgramDayScreenDeferred} options={{ ...stepTransitionOptions, headerShown: true }} />
