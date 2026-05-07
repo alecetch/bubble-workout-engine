@@ -119,6 +119,21 @@ describe("Step3ScheduleMetricsScreen", () => {
     expect(screen.getByText("Schedule constraints")).toBeInTheDocument();
   });
 
+  it("renders loading state while profile data is loading", () => {
+    useMeMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Preferred training days")).toBeInTheDocument();
+    expect(screen.getByText("Session settings")).toBeInTheDocument();
+    expect(screen.getByText("Body metrics")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Finish" })).toBeDisabled();
+  });
+
   it("disables Finish while saving", () => {
     mockStore(validDraft, { isSaving: true });
 

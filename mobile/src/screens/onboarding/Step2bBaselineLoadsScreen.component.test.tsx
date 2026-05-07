@@ -195,6 +195,20 @@ describe("Step2bBaselineLoadsScreen", () => {
     }
   });
 
+  it("renders loading indicator while reference data is loading", () => {
+    useReferenceDataMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Choose a setup method")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    expect(screen.queryByText("No anchor lifts available")).not.toBeInTheDocument();
+  });
+
   it("mode chips switch views", () => {
     renderScreen();
 

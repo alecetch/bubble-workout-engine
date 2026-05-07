@@ -168,4 +168,20 @@ describe("TodayScreen", () => {
     render(<TodayScreen />);
     expect(screen.getByText("Loading today's workout...")).toBeInTheDocument();
   });
+
+  it("renders error state when program overview fetch fails", () => {
+    useProgramOverviewMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Network error"),
+      refetch: vi.fn(),
+    } as any);
+
+    render(<TodayScreen />);
+
+    expect(screen.getByText("Today Is Unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Network error")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Programs" })).toBeInTheDocument();
+  });
 });

@@ -163,6 +163,19 @@ describe("EquipmentSettingsScreen", () => {
     expect(screen.getByText("Commercial Gym")).toBeInTheDocument();
   });
 
+  it("renders loading skeleton while profile data is loading", () => {
+    useClientProfileMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+
+    renderScreen();
+
+    expect(screen.getByText("Loading your equipment setup...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
   it("does not open the save confirmation on initial load", () => {
     renderScreen();
 

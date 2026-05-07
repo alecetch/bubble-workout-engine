@@ -137,6 +137,21 @@ describe("Step1GoalsScreen", () => {
     expect(screen.getByText("Injuries and limitations")).toBeInTheDocument();
   });
 
+  it("renders loading state while reference data is loading", () => {
+    useReferenceDataMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Main goals")).toBeInTheDocument();
+    expect(screen.getByText("Fitness level")).toBeInTheDocument();
+    expect(screen.getByText("Injuries and limitations")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "No known issues" })).not.toBeInTheDocument();
+  });
+
   it("disables Next while saving", () => {
     mockStore(buildDraft(), { isSaving: true });
 
