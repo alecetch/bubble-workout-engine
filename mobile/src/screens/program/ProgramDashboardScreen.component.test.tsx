@@ -1,11 +1,15 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDashboardScreen } from "./ProgramDashboardScreen";
 import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
+import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
+
+vi.unmock("@tanstack/react-query");
 
 vi.mock("@react-navigation/native", async () => {
   const ReactActual = await import("react");
@@ -20,6 +24,10 @@ vi.mock("../../api/hooks", () => ({
   useDayPreview: vi.fn(),
   useProgramEndCheck: vi.fn(),
   useProgramOverview: vi.fn(),
+}));
+
+vi.mock("../../api/programViewer", () => ({
+  getProgramOverview: vi.fn(),
 }));
 
 vi.mock("../../state/session/sessionStore", () => ({
@@ -52,8 +60,10 @@ const useDayPreviewMock = vi.mocked(useDayPreview);
 const useSessionStoreMock = vi.mocked(useSessionStore);
 const useOnboardingStoreMock = vi.mocked(useOnboardingStore);
 const getDayStatusMock = vi.mocked(getDayStatus);
+const getProgramOverviewMock = vi.mocked(getProgramOverview);
 
 const setActiveProgramIdMock = vi.fn();
+let queryClient: QueryClient;
 
 function data(overrides: Record<string, unknown> = {}) {
   return {
@@ -77,11 +87,16 @@ function data(overrides: Record<string, unknown> = {}) {
 function renderDashboard(
   navigation = { navigate: vi.fn(), getParent: vi.fn(() => null) },
 ) {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   render(
-    <ProgramDashboardScreen
-      route={{ params: { programId: "prog-1" } } as any}
-      navigation={navigation as any}
-    />,
+    <QueryClientProvider client={queryClient}>
+      <ProgramDashboardScreen
+        route={{ params: { programId: "prog-1" } } as any}
+        navigation={navigation as any}
+      />
+    </QueryClientProvider>,
   );
   return navigation;
 }
@@ -91,6 +106,7 @@ describe("ProgramDashboardScreen", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
     setActiveProgramIdMock.mockReset();
+    getProgramOverviewMock.mockReset();
     useSessionStoreMock.mockImplementation((selector: any) =>
       selector({ userId: "user-1", setActiveProgramId: setActiveProgramIdMock }),
     );
@@ -111,6 +127,7 @@ describe("ProgramDashboardScreen", () => {
   });
 
   afterEach(() => {
+    queryClient?.clear();
     vi.useRealTimers();
   });
 
@@ -204,5 +221,93 @@ describe("ProgramDashboardScreen", () => {
     renderDashboard();
     expect(screen.getByText("Program complete")).toBeInTheDocument();
     expect(screen.queryByText(/sessions missed/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ProgramDashboardScreen - React Query integration", () => {
+  let overviewStaleTime: number;
+
+  function useRealOverviewQuery(programId: string, opts: { userId?: string }) {
+    return useQuery({
+      queryKey: ["programOverview", programId, opts.userId ?? null],
+      queryFn: () => getProgramOverview(programId, opts),
+      enabled: Boolean(programId && opts.userId),
+      staleTime: overviewStaleTime,
+    });
+  }
+
+  function renderWithRealQuery(
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+    navigation = { navigate: vi.fn(), getParent: vi.fn(() => null) },
+  ) {
+    const view = render(
+      <QueryClientProvider client={client}>
+        <ProgramDashboardScreen
+          route={{ params: { programId: "prog-1" } } as any}
+          navigation={navigation as any}
+        />
+      </QueryClientProvider>,
+    );
+    return { ...view, queryClient: client, navigation };
+  }
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    overviewStaleTime = 5 * 60 * 1000;
+    setActiveProgramIdMock.mockReset();
+    getProgramOverviewMock.mockReset();
+    useSessionStoreMock.mockImplementation((selector: any) =>
+      selector({ userId: "user-1", setActiveProgramId: setActiveProgramIdMock }),
+    );
+    useOnboardingStoreMock.mockImplementation((selector: any) => selector({ userId: "onboard-user" }));
+    useProgramOverviewMock.mockImplementation(useRealOverviewQuery as any);
+    useProgramEndCheckMock.mockReturnValue({
+      data: { lifecycleStatus: "active", canCompleteWithSkips: false },
+      refetch: vi.fn(),
+    } as any);
+    useDayPreviewMock.mockReturnValue({ data: undefined } as any);
+    getDayStatusMock.mockResolvedValue("scheduled");
+  });
+
+  afterEach(() => {
+    queryClient?.clear();
+  });
+
+  it("serves a second mount from cache without a duplicate overview request", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    getProgramOverviewMock.mockResolvedValue(data() as any);
+
+    const first = renderWithRealQuery(client);
+    expect(await screen.findByText("Strength Block")).toBeInTheDocument();
+    first.unmount();
+
+    renderWithRealQuery(client);
+    expect(await screen.findByText("Strength Block")).toBeInTheDocument();
+
+    expect(getProgramOverviewMock).toHaveBeenCalledTimes(1);
+    client.clear();
+  });
+
+  it("background-refetches stale cached overview data", async () => {
+    overviewStaleTime = 0;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } });
+    client.setQueryData(["programOverview", "prog-1", "user-1"], data());
+    getProgramOverviewMock.mockResolvedValue(data({ program: { id: "prog-1", title: "Updated Block" } }) as any);
+
+    renderWithRealQuery(client);
+
+    expect(await screen.findByText("Strength Block")).toBeInTheDocument();
+    expect(getProgramOverviewMock).toHaveBeenCalledTimes(1);
+    client.clear();
+  });
+
+  it("shows dashboard error state when the overview request fails", async () => {
+    overviewStaleTime = 0;
+    getProgramOverviewMock.mockRejectedValue(new Error("overview failed"));
+
+    renderWithRealQuery();
+
+    expect(await screen.findByText("Unable to load dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Retry")).toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@
   "compilerOptions": {
     "strict": true,
     "baseUrl": ".",
+    "resolveJsonModule": true,
     "types": ["vitest/globals"]
   },
   "include": ["**/*.ts", "**/*.tsx"]
