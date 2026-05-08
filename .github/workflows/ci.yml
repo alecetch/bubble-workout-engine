@@ -223,7 +223,7 @@ jobs:
 
       - name: Upload Maestro debug output
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: maestro-debug
           path: ~/.maestro/tests/
@@ -231,7 +231,7 @@ jobs:
 
       - name: Upload Metro log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: metro-log
           path: /tmp/metro.log
