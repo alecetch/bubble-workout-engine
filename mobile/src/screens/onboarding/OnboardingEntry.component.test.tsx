@@ -10,7 +10,11 @@ import {
   useReferenceData,
 } from "../../api/hooks";
 import { getOnboardingDraft, useOnboardingStore } from "../../state/onboarding/onboardingStore";
-import { DEFAULT_ONBOARDING_DRAFT } from "../../state/onboarding/types";
+import {
+  buildClientProfile,
+  buildOnboardingDraft,
+  mockZustandSelector,
+} from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useMe: vi.fn(),
@@ -66,7 +70,7 @@ const setIdentityMock = vi.fn();
 const createMutateMock = vi.fn();
 const linkMutateMock = vi.fn();
 
-const completeProfile = {
+const completeProfile = buildClientProfile({
   id: "profile-1",
   goals: ["Strength"],
   fitnessLevel: "Intermediate",
@@ -81,13 +85,12 @@ const completeProfile = {
   ageRange: "25-34",
   onboardingStepCompleted: 3,
   onboardingCompletedAt: "2026-01-01T00:00:00Z",
-};
+});
 
-const completeDraft = {
-  ...DEFAULT_ONBOARDING_DRAFT,
+const completeDraft = buildOnboardingDraft({
   ...completeProfile,
   anchorLiftsSkipped: true,
-};
+});
 
 function renderScreen() {
   const navigation = { replace: vi.fn(), navigate: vi.fn() };
@@ -102,9 +105,10 @@ describe("OnboardingEntry", () => {
     createMutateMock.mockReset();
     linkMutateMock.mockReset();
 
-    useOnboardingStoreMock.mockImplementation((selector: any) =>
-      selector({ resetFromProfile: resetFromProfileMock, setIdentity: setIdentityMock }),
-    );
+    mockZustandSelector(useOnboardingStoreMock as any, {
+      resetFromProfile: resetFromProfileMock,
+      setIdentity: setIdentityMock,
+    });
     getOnboardingDraftMock.mockReturnValue(completeDraft as any);
     useMeMock.mockReturnValue({
       data: { id: "user-1", clientProfileId: "profile-1" },
@@ -179,7 +183,7 @@ describe("OnboardingEntry", () => {
       refetch: vi.fn(),
     } as any);
     getOnboardingDraftMock.mockReturnValueOnce({
-      ...DEFAULT_ONBOARDING_DRAFT,
+      ...buildOnboardingDraft(),
       goals: ["Strength"],
       fitnessLevel: "Intermediate",
       injuryFlags: ["No known issues"],

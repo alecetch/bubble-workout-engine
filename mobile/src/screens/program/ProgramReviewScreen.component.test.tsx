@@ -6,6 +6,7 @@ import { useActivePrograms, useClientProfile, useEntitlement, useMe } from "../.
 import { extractProgramId, generateProgram } from "../../api/program";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { buildClientProfile, mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useActivePrograms: vi.fn(),
@@ -50,7 +51,7 @@ const resetFromProfileMock = vi.fn();
 const setIdentityMock = vi.fn();
 const setActiveProgramIdMock = vi.fn();
 
-const mockProfile = {
+const mockProfile = buildClientProfile({
   id: "profile-1",
   goals: ["Strength"],
   goalNotes: "Build muscle",
@@ -59,13 +60,13 @@ const mockProfile = {
   equipmentPreset: "commercial_gym",
   equipmentItemCodes: ["barbell", "dumbbell"],
   preferredDays: ["Mon", "Wed"],
-  minutesPerSession: 45,
+  minutesPerSession: 45 as any,
   heightCm: 180,
   weightKg: 82,
   sex: "Male",
   ageRange: "25-34",
   scheduleConstraints: "No Sundays",
-};
+});
 
 function renderScreen(params: Record<string, unknown> = {}) {
   const navigation = {
@@ -113,12 +114,13 @@ describe("ProgramReviewScreen", () => {
       data: { is_active: true },
       isSuccess: true,
     } as any);
-    useOnboardingStoreMock.mockImplementation((selector: any) =>
-      selector({ resetFromProfile: resetFromProfileMock, setIdentity: setIdentityMock }),
-    );
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ setActiveProgramId: setActiveProgramIdMock }),
-    );
+    mockZustandSelector(useOnboardingStoreMock as any, {
+      resetFromProfile: resetFromProfileMock,
+      setIdentity: setIdentityMock,
+    });
+    mockZustandSelector(useSessionStoreMock as any, {
+      setActiveProgramId: setActiveProgramIdMock,
+    });
     generateProgramMock.mockResolvedValue({ program_id: "prog-1" });
   });
 

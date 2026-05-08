@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramHubScreen } from "./ProgramHubScreen";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("react-native", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-native")>();
@@ -156,9 +157,10 @@ describe("ProgramHubScreen", () => {
       isRefetching: false,
       refetch: vi.fn(),
     };
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ activeProgramId: "prog-1", setActiveProgramId: setActiveProgramIdMock }),
-    );
+    mockZustandSelector(useSessionStoreMock as any, {
+      activeProgramId: "prog-1",
+      setActiveProgramId: setActiveProgramIdMock,
+    });
   });
 
   afterEach(() => {
