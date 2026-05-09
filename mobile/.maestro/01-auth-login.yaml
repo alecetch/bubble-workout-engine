@@ -70,6 +70,40 @@ appId: com.bubbleworkout.mobile
 - extendedWaitUntil:
     visible: "Program Review"
     timeout: 20000
+- runFlow:
+    when:
+      visible: "Settings"
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil:
+          visible: "Settings"
+          timeout: 20000
+      - scrollUntilVisible:
+          element:
+            text: "Log Out"
+          direction: DOWN
+      - tapOn: "Log Out"
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 15000
+      - tapOn: "Sign in"
+      - extendedWaitUntil:
+          visible: "Email"
+          timeout: 10000
+      - tapOn:
+          id: "email-input"
+      - eraseText
+      - inputText: ${TEST_EMAIL}
+      - tapOn:
+          id: "password-input"
+      - eraseText
+      - inputText: ${TEST_PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          id: "login-submit-button"
+      - extendedWaitUntil:
+          visible: "Program Review"
+          timeout: 20000
 - tapOn: "Programs"
 - extendedWaitUntil:
     visible: "Active Programs"
