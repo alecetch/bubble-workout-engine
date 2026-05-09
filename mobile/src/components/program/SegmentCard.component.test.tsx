@@ -2,7 +2,9 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ApiError } from "../../api/client";
 import { SegmentCard } from "./SegmentCard";
-import type { AdaptationDecision, ProgramDayFullResponse } from "../../api/programViewer";
+import type { ProgramDayFullResponse } from "../../api/programViewer";
+import { useTimerStore } from "../../state/timer/useTimerStore";
+import { buildAdaptationDecision, buildExercise, buildSegment, mockZustandSelector } from "../../__test-utils__";
 
 const mutateAsyncMock = vi.fn().mockResolvedValue({ saved: 1, prs: [] });
 const initEntryMock = vi.fn();
@@ -19,73 +21,16 @@ vi.mock("../../api/hooks", () => ({
   }),
 }));
 
-vi.mock("../../state/timer/useTimerStore", () => {
-  const storeState = {
-    entries: {},
-  };
-  const useTimerStore = ((selector: (state: typeof storeState) => unknown) => selector(storeState)) as ((
-    selector: (state: typeof storeState) => unknown,
-  ) => unknown) & {
-    getState: () => {
-      initEntry: typeof initEntryMock;
-      startRest: typeof startRestMock;
-      stopRest: typeof stopRestMock;
-    };
-  };
-  useTimerStore.getState = () => ({
-    initEntry: initEntryMock,
-    startRest: startRestMock,
-    stopRest: stopRestMock,
-  });
-  return { useTimerStore };
-});
+vi.mock("../../state/timer/useTimerStore", () => ({
+  useTimerStore: vi.fn(),
+}));
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
+const useTimerStoreMock = vi.mocked(useTimerStore);
 
-function makeExercise(overrides: Partial<Exercise> = {}): Exercise {
-  return {
-    id: "ex-1",
-    exerciseId: "bb-squat",
-    name: "Barbell Squat",
-    sets: 3,
-    reps: "5-8",
-    repsUnit: "reps",
-    intensity: null,
-    tempo: null,
-    restSeconds: 90,
-    notes: null,
-    equipment: null,
-    isLoadable: true,
-    guidelineLoad: null,
-    progressionRecommendation: null,
-    adaptationDecision: null,
-    coachingCuesJson: [],
-    isNewExercise: false,
-    ...overrides,
-  };
-}
-
-function makeSegment(
-  segmentOverrides: Partial<Omit<Segment, "exercises">> = {},
-  exercises: Exercise[] = [makeExercise()],
-): Segment {
-  return {
-    id: "seg-1",
-    purpose: "main",
-    segmentType: "single",
-    segmentTypeLabel: null,
-    segmentName: "Main Work",
-    orderInDay: 1,
-    rounds: 1,
-    segmentDurationSeconds: null,
-    segmentDurationMmss: null,
-    notes: null,
-    postSegmentRestSec: 0,
-    exercises,
-    ...segmentOverrides,
-  };
-}
+const makeExercise = buildExercise;
+const makeSegment = buildSegment;
 
 function renderCard(
   props: Partial<React.ComponentProps<typeof SegmentCard>> = {},
@@ -111,6 +56,12 @@ describe("SegmentCard", () => {
     initEntryMock.mockClear();
     startRestMock.mockClear();
     stopRestMock.mockClear();
+    mockZustandSelector(useTimerStoreMock as any, {
+      entries: {},
+      initEntry: initEntryMock,
+      startRest: startRestMock,
+      stopRest: stopRestMock,
+    });
   });
 
   it("renders Start Exercise for loadable segments", () => {
@@ -172,18 +123,11 @@ describe("SegmentCard", () => {
   });
 
   it("renders adaptation chip text for a non-hold decision", () => {
-    const decision: AdaptationDecision = {
-      outcome: "increase_load",
-      primaryLever: "load",
-      confidence: "high",
+    const decision = buildAdaptationDecision({
       recommendedLoadKg: 95,
-      recommendedLoadDeltaKg: 5,
-      recommendedRepsTarget: null,
-      recommendedRepDelta: null,
-      displayChip: "Load increased ↑",
       displayDetail: "You hit all sets at your top rep range.",
       decidedAt: "2026-04-29T00:00:00.000Z",
-    };
+    });
     const exercise = makeExercise({ adaptationDecision: decision });
 
     renderCard({ segment: makeSegment({}, [exercise]) });
@@ -192,18 +136,16 @@ describe("SegmentCard", () => {
   });
 
   it("does not render chip text for outcome hold", () => {
-    const decision: AdaptationDecision = {
+    const decision = buildAdaptationDecision({
       outcome: "hold",
       primaryLever: "hold",
       confidence: "medium",
       recommendedLoadKg: null,
       recommendedLoadDeltaKg: null,
-      recommendedRepsTarget: null,
-      recommendedRepDelta: null,
       displayChip: "Holding steady",
       displayDetail: "Consolidating current load.",
       decidedAt: "2026-04-29T00:00:00.000Z",
-    };
+    });
     const exercise = makeExercise({ adaptationDecision: decision });
 
     renderCard({ segment: makeSegment({}, [exercise]) });
@@ -220,18 +162,13 @@ describe("SegmentCard", () => {
   });
 
   it("renders chip text for deload_local", () => {
-    const decision: AdaptationDecision = {
+    const decision = buildAdaptationDecision({
       outcome: "deload_local",
-      primaryLever: "load",
-      confidence: "high",
-      recommendedLoadKg: 80,
       recommendedLoadDeltaKg: -5,
-      recommendedRepsTarget: null,
-      recommendedRepDelta: null,
       displayChip: "Deload this week",
       displayDetail: "Signs of fatigue detected.",
       decidedAt: "2026-04-29T00:00:00.000Z",
-    };
+    });
     const exercise = makeExercise({ adaptationDecision: decision });
 
     renderCard({ segment: makeSegment({}, [exercise]) });
