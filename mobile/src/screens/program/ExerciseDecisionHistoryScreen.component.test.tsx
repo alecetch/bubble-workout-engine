@@ -5,6 +5,7 @@ import { fetchDecisionHistory } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { ExerciseDecisionHistoryScreen } from "./ExerciseDecisionHistoryScreen";
+import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/programViewer", () => ({
   fetchDecisionHistory: vi.fn(),
@@ -78,12 +79,8 @@ describe("ExerciseDecisionHistoryScreen", () => {
   beforeEach(() => {
     mockFetchDecisionHistory.mockReset();
     mockFetchDecisionHistory.mockResolvedValue(PAGE1_FIXTURE as any);
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ userId: "user-123" }),
-    );
-    useOnboardingStoreMock.mockImplementation((selector: any) =>
-      selector({ userId: "onboard-user" }),
-    );
+    mockZustandSelector(useSessionStoreMock as any, { userId: "user-123" });
+    mockZustandSelector(useOnboardingStoreMock as any, { userId: "onboard-user" });
   });
 
   it("shows loading indicator on initial fetch before promise resolves", () => {

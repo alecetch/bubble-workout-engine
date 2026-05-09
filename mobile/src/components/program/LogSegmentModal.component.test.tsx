@@ -5,6 +5,7 @@ import { LogSegmentModal } from "./LogSegmentModal";
 import { useSegmentExerciseLogs, useSaveSegmentLogs } from "../../api/hooks";
 import { useTimerStore } from "../../state/timer/useTimerStore";
 import type { SegmentLogRow } from "../../api/segmentLog";
+import { buildExercise, buildSegment, mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useSegmentExerciseLogs: vi.fn(),
@@ -35,20 +36,22 @@ const useTimerStoreMock = vi.mocked(useTimerStore);
 const saveMutateMock = vi.fn();
 const onSaveMock = vi.fn();
 
-const mockSegment = {
-  id: "seg-1",
-  purpose: "main",
-  segmentType: "single",
-  segmentTypeLabel: null,
-  segmentName: "Main Strength",
-  orderInDay: 1,
-  rounds: 1,
-  segmentDurationSeconds: null,
-  segmentDurationMmss: null,
-  notes: null,
-  postSegmentRestSec: 90,
-  exercises: [
-    {
+const mockSegment = buildSegment(
+  {
+    id: "seg-1",
+    purpose: "main",
+    segmentType: "single",
+    segmentTypeLabel: null,
+    segmentName: "Main Strength",
+    orderInDay: 1,
+    rounds: 1,
+    segmentDurationSeconds: null,
+    segmentDurationMmss: null,
+    notes: null,
+    postSegmentRestSec: 90,
+  },
+  [
+    buildExercise({
       id: "ex-1",
       exerciseId: "back-squat",
       name: "Back Squat",
@@ -66,8 +69,8 @@ const mockSegment = {
       adaptationDecision: null,
       coachingCuesJson: [],
       isNewExercise: false,
-    },
-    {
+    } as any),
+    buildExercise({
       id: "ex-2",
       exerciseId: "bench-press",
       name: "Bench Press",
@@ -85,9 +88,9 @@ const mockSegment = {
       adaptationDecision: null,
       coachingCuesJson: [],
       isNewExercise: false,
-    },
+    } as any),
   ],
-};
+);
 
 function renderModal(visible = true) {
   const onClose = vi.fn();
@@ -111,8 +114,7 @@ describe("LogSegmentModal", () => {
     saveMutateMock.mockImplementation((_payload, options) => options?.onSuccess?.({ saved: 6, prs: [] }));
     onSaveMock.mockReset();
 
-    useTimerStoreMock.mockImplementation((selector: any) => selector({ entries: {} }));
-    (useTimerStoreMock as any).getState = () => ({ stopRest: vi.fn() });
+    mockZustandSelector(useTimerStoreMock as any, { entries: {}, stopRest: vi.fn() });
     useSegmentExerciseLogsMock.mockReturnValue({
       data: [],
       isLoading: false,

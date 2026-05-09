@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDayScreen } from "./ProgramDayScreen";
 import { useCompleteProgram, useEntitlement, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
@@ -9,6 +9,13 @@ import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getSegmentLog, getWorkoutComplete, setWorkoutComplete } from "../../utils/localWorkoutLog";
+import {
+  buildExercise,
+  buildProgramDay,
+  buildSegment,
+  mockZustandSelector,
+  renderWithProviders,
+} from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
 
@@ -173,8 +180,9 @@ const setWorkoutCompleteMock = vi.mocked(setWorkoutComplete);
 const markDayMutateMock = vi.fn();
 const completeProgramMutateMock = vi.fn();
 
-const mockDay = {
-  day: {
+const mockDay = buildProgramDay(
+  {
+    day: {
     id: "day-1",
     programDayId: "day-1",
     programId: "prog-1",
@@ -185,49 +193,51 @@ const mockDay = {
     weekNumber: 1,
     equipmentOverridePresetSlug: null,
     equipmentOverrideItemSlugs: [],
+  } as any,
   },
-  segments: [
-    {
+  [
+    buildSegment(
+      {
       id: "seg-1",
       purpose: "main",
       segmentType: "single",
       segmentName: "Squats",
       orderInDay: 1,
-      exercises: [
-        {
+      },
+      [
+        buildExercise({
           id: "ex-1",
           exerciseId: "back-squat",
           programExerciseId: "pe-1",
           name: "Back Squat",
           adaptationDecision: null,
-        },
+        } as any),
       ],
-    },
-    {
+    ),
+    buildSegment(
+      {
       id: "seg-2",
       purpose: "accessory",
       segmentType: "single",
       segmentName: "Accessories",
       orderInDay: 2,
-      exercises: [
-        {
+      },
+      [
+        buildExercise({
           id: "ex-2",
           exerciseId: "leg-press",
           programExerciseId: "pe-2",
           name: "Leg Press",
           adaptationDecision: null,
-        },
+        } as any),
       ],
-    },
+    ),
   ],
-};
+);
 
 let queryClient: QueryClient;
 
 function renderScreen() {
-  queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
   const parentNavigation = { navigate: vi.fn() };
   const navigation = {
     navigate: vi.fn(),
@@ -236,14 +246,12 @@ function renderScreen() {
     setOptions: vi.fn(),
   };
 
-  render(
-    <QueryClientProvider client={queryClient}>
-      <ProgramDayScreen
-        route={{ params: { programDayId: "day-1" } } as any}
-        navigation={navigation as any}
-      />
-    </QueryClientProvider>,
-  );
+  ({ queryClient } = renderWithProviders(
+    <ProgramDayScreen
+      route={{ params: { programDayId: "day-1" } } as any}
+      navigation={navigation as any}
+    />,
+  ));
 
   return { navigation, parentNavigation };
 }
@@ -297,12 +305,8 @@ describe("ProgramDayScreen", () => {
       mutateAsync: completeProgramMutateMock,
       isPending: false,
     } as any);
-    useOnboardingStoreMock.mockImplementation((selector: any) =>
-      selector({ userId: "onboard-user" }),
-    );
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ userId: "user-1", activeProgramId: "prog-1" }),
-    );
+    mockZustandSelector(useOnboardingStoreMock as any, { userId: "onboard-user" });
+    mockZustandSelector(useSessionStoreMock as any, { userId: "user-1", activeProgramId: "prog-1" });
   });
 
   afterEach(() => {

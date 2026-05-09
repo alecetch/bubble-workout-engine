@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountNameScreen } from "./AccountNameScreen";
@@ -19,10 +19,12 @@ vi.mock("../../components/interaction/PressableScale", () => ({
 const mutateMock = vi.fn();
 const setQueryDataMock = vi.fn();
 let capturedOnSuccess: ((data: string) => void) | undefined;
+let capturedOnError: ((error: unknown) => void) | undefined;
 
 function installUseMutationMock(overrides: Record<string, unknown> = {}) {
-  vi.mocked(useMutation).mockImplementation(({ onSuccess }: any) => {
+  vi.mocked(useMutation).mockImplementation(({ onSuccess, onError }: any) => {
     capturedOnSuccess = onSuccess;
+    capturedOnError = onError;
     return {
       mutate: mutateMock,
       mutateAsync: vi.fn(),
@@ -51,6 +53,7 @@ describe("AccountNameScreen", () => {
     mutateMock.mockReset();
     setQueryDataMock.mockReset();
     capturedOnSuccess = undefined;
+    capturedOnError = undefined;
     vi.mocked(useQueryClient).mockReturnValue({ setQueryData: setQueryDataMock } as any);
     installUseMutationMock();
   });
@@ -103,5 +106,17 @@ describe("AccountNameScreen", () => {
     expect(mutateMock).toHaveBeenCalledWith("Bob");
     expect(setQueryDataMock).toHaveBeenCalledWith(["accountInfo"], expect.any(Function));
     expect(navigation.goBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an error message when the name save fails", () => {
+    renderScreen();
+
+    fireEvent.change(screen.getByPlaceholderText("Your name"), { target: { value: "Bob" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    act(() => {
+      capturedOnError?.(new Error("Save failed"));
+    });
+
+    expect(screen.getByText("Couldn't save. Try again.")).toBeInTheDocument();
   });
 });
