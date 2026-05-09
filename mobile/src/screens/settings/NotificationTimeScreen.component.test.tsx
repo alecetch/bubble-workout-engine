@@ -44,7 +44,7 @@ let capturedMutationFn: ((time: string) => Promise<unknown>) | undefined;
 let capturedOnError: ((error: unknown) => void) | undefined;
 let dateTimeFormatSpy: { mockRestore: () => void };
 
-function installUseMutationMock() {
+function installUseMutationMock(overrides: Record<string, unknown> = {}) {
   vi.mocked(useMutation).mockImplementation(({ mutationFn, onError }: any) => {
     capturedMutationFn = mutationFn;
     capturedOnError = onError;
@@ -55,6 +55,7 @@ function installUseMutationMock() {
       isError: false,
       error: null,
       reset: vi.fn(),
+      ...overrides,
     } as any;
   });
 }
@@ -102,6 +103,18 @@ describe("NotificationTimeScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mutateMock).toHaveBeenCalledWith("10:00");
+  });
+
+  it("disables Save button while mutation is pending", () => {
+    installUseMutationMock({ isPending: true });
+
+    renderScreen();
+
+    expect(
+      screen
+        .getAllByRole("button", { name: "" })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
   });
 
   it("Save mutation function uses selected time and device timezone", async () => {

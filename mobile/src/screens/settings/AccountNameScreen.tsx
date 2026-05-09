@@ -49,6 +49,7 @@ export function AccountNameScreen({ navigation, route }: Props): React.JSX.Eleme
           autoFocus
           maxLength={60}
           returnKeyType="done"
+          testID="account-name-input"
           value={value}
           onChangeText={setValue}
           placeholder="Your name"
