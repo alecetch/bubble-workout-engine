@@ -246,6 +246,7 @@ jobs:
             maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
             maestro test mobile/.maestro/02-start-workout.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
             maestro test mobile/.maestro/03-settings-edit-name.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
+            psql -v ON_ERROR_STOP=1 -c "UPDATE app_user SET subscription_status = 'expired', trial_expires_at = now() - interval '1 day', subscription_expires_at = NULL WHERE lower(email) = lower('$E2E_EMAIL');"
             maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
             maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
 

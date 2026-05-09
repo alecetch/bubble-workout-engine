@@ -145,6 +145,16 @@ DELETE FROM program_day
 WHERE program_id = '${program_id}'
   AND id NOT IN (SELECT id FROM keep);
 
+WITH keep AS (
+  SELECT id FROM program_calendar_day
+  WHERE program_id = '${program_id}'
+  ORDER BY week_number ASC, global_day_index ASC
+  LIMIT 1
+)
+DELETE FROM program_calendar_day
+WHERE program_id = '${program_id}'
+  AND id NOT IN (SELECT id FROM keep);
+
 UPDATE program_day
 SET scheduled_date = CURRENT_DATE,
     week_number    = 1
