@@ -5,8 +5,8 @@ import { getDocumentAsync } from "expo-document-picker";
 import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
 import { uploadTrainingHistoryCsv } from "../../api/trainingHistoryImport";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
-import { DEFAULT_ONBOARDING_DRAFT } from "../../state/onboarding/types";
 import { Step2bBaselineLoadsScreen } from "./Step2bBaselineLoadsScreen";
+import { buildOnboardingStoreState, mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useMe: vi.fn(),
@@ -143,16 +143,13 @@ const getDocumentAsyncMock = vi.mocked(getDocumentAsync);
 const uploadTrainingHistoryCsvMock = vi.mocked(uploadTrainingHistoryCsv);
 
 function mockStore(overrides: Record<string, unknown> = {}) {
-  const state = {
-    draft: { ...DEFAULT_ONBOARDING_DRAFT, selectedEquipmentCodes: [] },
-    attempted: { step1: false, step2: false, step2b: false, step3: false },
-    isSaving: false,
+  const state = buildOnboardingStoreState({ selectedEquipmentCodes: [] }, {
     setDraft: setDraftMock,
     setAttempted: setAttemptedMock,
     setIsSaving: setIsSavingMock,
     ...overrides,
-  };
-  useOnboardingStoreMock.mockImplementation((selector: any) => selector(state));
+  } as any);
+  mockZustandSelector(useOnboardingStoreMock as any, state);
 }
 
 function makeNav() {
@@ -196,6 +193,20 @@ describe("Step2bBaselineLoadsScreen", () => {
     for (const label of FAMILY_LABELS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+  });
+
+  it("renders loading indicator while reference data is loading", () => {
+    useReferenceDataMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Choose a setup method")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    expect(screen.queryByText("No anchor lifts available")).not.toBeInTheDocument();
   });
 
   it("mode chips switch views", () => {

@@ -1,0 +1,84 @@
+appId: com.bubbleworkout.mobile
+---
+# Standalone flow: logs in with TEST_EMAIL / TEST_PASSWORD for a one-day program account.
+# Precondition: any user may be logged in; this flow logs them out first.
+- launchApp:
+    stopApp: false
+- runScript:
+    file: scripts/post-launch-sleep.js
+- launchApp:
+    stopApp: false
+- runFlow:
+    when:
+      visible: "Development Build"
+    commands:
+      - extendedWaitUntil:
+          visible: "http://10.0.2.2:8081"
+          timeout: 10000
+      - tapOn: "http://10.0.2.2:8081"
+      - extendedWaitUntil:
+          visible: "Continue"
+          timeout: 20000
+      - tapOn: "Continue"
+- tapOn:
+    text: "Close"
+    optional: true
+# Log out any currently-logged-in user before signing in as the complete-flow account.
+- runFlow:
+    when:
+      visible: "Settings"
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil:
+          visible: "Settings"
+          timeout: 20000
+      - scrollUntilVisible:
+          element:
+            text: "Log Out"
+          direction: DOWN
+      - tapOn: "Log Out"
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 15000
+- runFlow:
+    when:
+      visible: "Welcome"
+    commands:
+      - tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Email"
+    timeout: 10000
+- tapOn:
+    id: "email-input"
+- eraseText
+- inputText: ${TEST_EMAIL}
+- tapOn:
+    id: "password-input"
+- eraseText
+- inputText: ${TEST_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "login-submit-button"
+- extendedWaitUntil:
+    visible: "Program Review"
+    timeout: 20000
+- tapOn: "Today"
+- extendedWaitUntil:
+    visible: "Start Workout"
+    timeout: 20000
+- tapOn:
+    text: "Start Workout"
+- extendedWaitUntil:
+    visible: "Workout complete"
+    timeout: 20000
+- tapOn:
+    text: "Workout complete"
+- extendedWaitUntil:
+    visible: "Session complete"
+    timeout: 10000
+- tapOn:
+    text: "Done"
+- extendedWaitUntil:
+    visible: "Program complete!"
+    timeout: 15000
+- assertVisible: "Choose your next block"

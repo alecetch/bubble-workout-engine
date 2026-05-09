@@ -6,6 +6,7 @@ import { ApiError } from "../../api/client";
 import { clearTokens } from "../../api/tokenStorage";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { ChangePasswordScreen } from "./ChangePasswordScreen";
+import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/accountApi", () => ({
   changePassword: vi.fn(),
@@ -82,9 +83,7 @@ describe("ChangePasswordScreen", () => {
     vi.mocked(clearTokens).mockClear();
     capturedOnSuccess = undefined;
     capturedOnError = undefined;
-    vi.mocked(useSessionStore).mockImplementation((selector: any) =>
-      selector({ clearSession: clearSessionMock }),
-    );
+    mockZustandSelector(vi.mocked(useSessionStore) as any, { clearSession: clearSessionMock });
     installUseMutationMock();
   });
 
