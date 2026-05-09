@@ -1,0 +1,35 @@
+appId: com.bubbleworkout.mobile
+---
+# Precondition: test account must be logged in.
+- launchApp:
+    stopApp: false
+- runScript:
+    file: scripts/post-launch-sleep.js
+- launchApp:
+    stopApp: false
+- runFlow:
+    when:
+      visible: "Development Build"
+    commands:
+      - extendedWaitUntil:
+          visible: "http://10.0.2.2:8081"
+          timeout: 10000
+      - tapOn: "http://10.0.2.2:8081"
+      - extendedWaitUntil:
+          visible: "Continue"
+          timeout: 20000
+      - tapOn: "Continue"
+- tapOn:
+    text: "Close"
+    optional: true
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 20000
+- tapOn:
+    text: "Subscribe"
+- extendedWaitUntil:
+    visible: "Your trial has ended"
+    timeout: 10000
+- assertVisible: "Subscribe"
+- assertVisible: "Billed monthly - Cancel anytime"

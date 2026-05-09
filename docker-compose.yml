@@ -25,6 +25,7 @@ services:
       - api_node_modules:/app/node_modules
     command: >
       sh -lc "
+      set -e;
       export PGUSER=\"$$POSTGRES_USER\";
       export PGPASSWORD=\"$$POSTGRES_PASSWORD\";
       export PGDATABASE=\"$$POSTGRES_DB\";
