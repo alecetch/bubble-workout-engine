@@ -185,6 +185,8 @@ jobs:
 
       - name: Provision E2E complete account
         run: bash scripts/provision-e2e-complete.sh
+        env:
+          API_URL: http://127.0.0.1:3000
 
       - name: Install mobile dependencies
         working-directory: mobile
