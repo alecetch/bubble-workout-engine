@@ -4,8 +4,9 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiRegister, type AuthTokens } from "../../api/authApi";
-import { ApiError } from "../../api/client";
-import { getClientProfile } from "../../api/clientProfiles";
+import { ApiError, getApiDiagnostics, isNetworkConnectivityError, isNetworkTimeoutError } from "../../api/client";
+import { createClientProfile, getClientProfile } from "../../api/clientProfiles";
+import { logInPurchases } from "../../lib/purchases";
 import { saveTokens } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { AuthStackParamList } from "../../navigation/AuthNavigator";
@@ -15,6 +16,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { getAppStorage } from "../../utils/appStorage";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
@@ -40,6 +42,17 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
   const prevPasswordLenRef = useRef(0);
   const prevConfirmLenRef = useRef(0);
 
+  const resolveClientProfile = async (clientProfileId: string | null | undefined) => {
+    if (clientProfileId) {
+      try {
+        return await getClientProfile(clientProfileId);
+      } catch {
+        // Fall through and recreate if the referenced profile is missing/inaccessible.
+      }
+    }
+    return createClientProfile({});
+  };
+
   const handleSubmit = async (): Promise<void> => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
@@ -64,13 +77,25 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
 
     let result: AuthTokens;
     try {
-      result = await apiRegister(normalizedEmail, password);
+      const pendingReferralCode = await getAppStorage().getItem("pendingReferralCode");
+      result = await apiRegister(normalizedEmail, password, pendingReferralCode);
+      await getAppStorage().removeItem("pendingReferralCode");
     } catch (error) {
       console.error("[RegisterScreen] apiRegister failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
       if (error instanceof ApiError && error.status === 409) {
         setErrorMessage("An account with this email already exists.");
       } else if (error instanceof ApiError && error.status === 400) {
         setErrorMessage(error.message || "Please check your details.");
+      } else if (isNetworkTimeoutError(error)) {
+        const diagnostics = getApiDiagnostics();
+        setErrorMessage(
+          `Account creation timed out while reaching the server. Check that the API is running and reachable at ${diagnostics.lastAttemptedUrl ?? "the configured API URL"}.`,
+        );
+      } else if (isNetworkConnectivityError(error)) {
+        const diagnostics = getApiDiagnostics();
+        setErrorMessage(
+          `Couldn't reach the server. Confirm your device can access ${diagnostics.lastAttemptedUrl ?? "the configured API URL"} and try again.`,
+        );
       } else if (error instanceof ApiError) {
         setErrorMessage(error.message || "Unable to create account. Please try again.");
       } else {
@@ -91,18 +116,26 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
     }
 
     try {
-      const profile = await getClientProfile(result.client_profile_id);
+      const profile = await resolveClientProfile(result.client_profile_id);
+      const resolvedClientProfileId = profile.id;
       const entryRoute = isOnboardingComplete(profile) ? "ProgramReview" : "OnboardingEntry";
 
       queryClient.setQueryData(["me"], {
         id: result.user_id,
-        clientProfileId: result.client_profile_id,
+        clientProfileId: resolvedClientProfileId,
       });
-      queryClient.setQueryData(["clientProfile", result.client_profile_id], profile);
+      queryClient.setQueryData(["clientProfile", resolvedClientProfileId], profile);
 
       resetFromProfile(profile);
-      setIdentity({ userId: result.user_id, clientProfileId: result.client_profile_id });
-      setSession({ userId: result.user_id, clientProfileId: result.client_profile_id, entryRoute });
+      setIdentity({ userId: result.user_id, clientProfileId: resolvedClientProfileId });
+      logInPurchases(result.user_id);
+      setSession({
+        userId: result.user_id,
+        clientProfileId: resolvedClientProfileId,
+        entryRoute,
+        subscriptionStatus: result.subscription_status,
+        trialExpiresAt: result.trial_expires_at ?? null,
+      });
     } catch (error) {
       console.error("[RegisterScreen] post-registration profile fetch failed:", error);
       navigation.navigate("Login");
@@ -125,7 +158,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
-            textContentType="emailAddress"
+            autoComplete="username"
+            textContentType="username"
             returnKeyType="next"
             onSubmitEditing={() => passwordRef.current?.focus()}
             placeholder="you@example.com"
@@ -153,7 +187,9 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
+              autoComplete="new-password"
               textContentType="newPassword"
+              passwordRules="minlength: 8;"
               returnKeyType="next"
               onSubmitEditing={() => confirmPasswordRef.current?.focus()}
               placeholder="Create password"
@@ -193,7 +229,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
-              textContentType="newPassword"
+              autoComplete="off"
+              textContentType="none"
               returnKeyType="go"
               onSubmitEditing={() => void handleSubmit()}
               placeholder="Re-enter password"

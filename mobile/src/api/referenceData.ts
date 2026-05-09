@@ -51,6 +51,16 @@ export type ReferenceDataResponse = {
   daysOfWeek: DayOfWeekOption[];
   sexOptions: SexOption[];
   ageRanges: AgeRangeOption[];
+  anchorExercises?: Array<{
+    exerciseId: string;
+    label: string;
+    equipmentItemsSlugs: string[];
+    estimationFamily: string;
+    anchorPriority: number;
+    isAnchorEligible: boolean;
+    familyConversionFactor: number;
+    isUnilateral: boolean;
+  }>;
 };
 
 export function getReferenceData(): Promise<ReferenceDataResponse> {

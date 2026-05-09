@@ -4,8 +4,9 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiLogin } from "../../api/authApi";
-import { ApiError } from "../../api/client";
-import { getClientProfile } from "../../api/clientProfiles";
+import { ApiError, getApiDiagnostics, isNetworkConnectivityError, isNetworkTimeoutError } from "../../api/client";
+import { createClientProfile, getClientProfile } from "../../api/clientProfiles";
+import { logInPurchases } from "../../lib/purchases";
 import { saveTokens } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { AuthStackParamList } from "../../navigation/AuthNavigator";
@@ -35,6 +36,17 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const resolveClientProfile = async (clientProfileId: string | null | undefined) => {
+    if (clientProfileId) {
+      try {
+        return await getClientProfile(clientProfileId);
+      } catch {
+        // Fall through and recreate if the referenced profile is missing/inaccessible.
+      }
+    }
+    return createClientProfile({});
+  };
+
   const handleSubmit = async (): Promise<void> => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
@@ -52,21 +64,40 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
     try {
       const result = await apiLogin(normalizedEmail, password);
       await saveTokens(result.access_token, result.refresh_token);
-      const profile = await getClientProfile(result.client_profile_id);
+      const profile = await resolveClientProfile(result.client_profile_id);
+      const resolvedClientProfileId = profile.id;
       const entryRoute = isOnboardingComplete(profile) ? "ProgramReview" : "OnboardingEntry";
 
       queryClient.setQueryData(["me"], {
         id: result.user_id,
-        clientProfileId: result.client_profile_id,
+        clientProfileId: resolvedClientProfileId,
       });
-      queryClient.setQueryData(["clientProfile", result.client_profile_id], profile);
+      queryClient.setQueryData(["clientProfile", resolvedClientProfileId], profile);
 
       resetFromProfile(profile);
-      setIdentity({ userId: result.user_id, clientProfileId: result.client_profile_id });
-      setSession({ userId: result.user_id, clientProfileId: result.client_profile_id, entryRoute });
+      setIdentity({ userId: result.user_id, clientProfileId: resolvedClientProfileId });
+      logInPurchases(result.user_id);
+      setSession({
+        userId: result.user_id,
+        clientProfileId: resolvedClientProfileId,
+        entryRoute,
+        subscriptionStatus: result.subscription_status,
+        trialExpiresAt: result.trial_expires_at ?? null,
+      });
     } catch (error) {
+      console.error("[LoginScreen] sign-in failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
       if (error instanceof ApiError && error.status === 401) {
         setErrorMessage("Incorrect email or password.");
+      } else if (isNetworkTimeoutError(error)) {
+        const diagnostics = getApiDiagnostics();
+        setErrorMessage(
+          `Sign-in timed out while reaching the server. Check that the API is running and reachable at ${diagnostics.lastAttemptedUrl ?? "the configured API URL"}.`,
+        );
+      } else if (isNetworkConnectivityError(error)) {
+        const diagnostics = getApiDiagnostics();
+        setErrorMessage(
+          `Couldn't reach the server. Confirm your device can access ${diagnostics.lastAttemptedUrl ?? "the configured API URL"} and try again.`,
+        );
       } else {
         setErrorMessage("Unable to sign in. Please try again.");
       }
@@ -84,12 +115,14 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
+            testID="email-input"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
-            textContentType="emailAddress"
+            autoComplete="username"
+            textContentType="username"
             placeholder="you@example.com"
             placeholderTextColor={colors.textSecondary}
             style={styles.input}
@@ -100,11 +133,13 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputRow}>
             <TextInput
+              testID="password-input"
               value={password}
               onChangeText={setPassword}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
+              autoComplete="password"
               textContentType="password"
               placeholder="Enter password"
               placeholderTextColor={colors.textSecondary}
@@ -129,6 +164,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
       <View style={styles.actions}>
         <PressableScale
+          testID="login-submit-button"
           style={[styles.primaryButton, isSubmitting && styles.disabledButton]}
           disabled={isSubmitting}
           onPress={() => void handleSubmit()}
@@ -136,6 +172,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.primaryLabel}>{isSubmitting ? "Signing in..." : "Sign in"}</Text>
         </PressableScale>
         <PressableScale
+          testID="login-create-account-button"
           style={styles.secondaryButton}
           disabled={isSubmitting}
           onPress={() => navigation.navigate("Register")}

@@ -1,6 +1,6 @@
 -- Smoke checks for repeatable seed migrations:
 -- - R__seed_equipment_items.sql
--- - R__seed_exercise_catalogue.sql
+-- - R__exercise_catalogue_edits.sql
 -- - R__seed_narration_template.sql
 -- - R__seed_program_generation_config.sql
 -- - R__seed_media_assets.sql

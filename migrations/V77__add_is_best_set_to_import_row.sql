@@ -1,0 +1,2 @@
+ALTER TABLE training_history_import_row
+ADD COLUMN IF NOT EXISTS is_best_set BOOLEAN NOT NULL DEFAULT FALSE;

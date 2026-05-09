@@ -1,0 +1,36 @@
+﻿{
+  "program": {
+    "id": "prog-1",
+    "title": "Strength Block",
+    "summary": "Build strength with progressive overload.",
+    "hero_media": null
+  },
+  "weeks": [
+    {
+      "id": "week-1",
+      "week_number": 1,
+      "focus": "Base",
+      "notes": "Establish positions."
+    }
+  ],
+  "calendar_days": [
+    {
+      "id": "cal-1",
+      "calendar_date": "2026-05-06",
+      "scheduled_date": "2026-05-06",
+      "scheduled_weekday": "Wed",
+      "program_day_id": "day-1",
+      "status": "scheduled",
+      "week_number": 1,
+      "is_training_day": true,
+      "is_skipped": false
+    }
+  ],
+  "selected_day": {
+    "program_day_id": "day-1",
+    "day_label": "Lower Body",
+    "day_type": "strength",
+    "session_duration_mins": 45,
+    "equipment_slugs": ["barbell", "bench"]
+  }
+}

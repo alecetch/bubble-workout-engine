@@ -30,6 +30,7 @@ export type ProgramOverviewResponse = {
     status?: string | null;
     weekNumber?: number | null;
     isTrainingDay: boolean;
+    isSkipped?: boolean | null;
   }>;
   selectedDayPreview?: {
     programDayId: string;
@@ -40,16 +41,59 @@ export type ProgramOverviewResponse = {
   };
 };
 
+export type AdaptationDecision = {
+  outcome: string;
+  primaryLever: string | null;
+  confidence: string | null;
+  recommendedLoadKg: number | null;
+  recommendedLoadDeltaKg: number | null;
+  recommendedRepsTarget: number | null;
+  recommendedRepDelta: number | null;
+  displayChip: string;
+  displayDetail: string | null;
+  decidedAt: string;
+};
+
+export type DecisionHistoryItem = {
+  id: string;
+  weekNumber: number | null;
+  dayNumber: number | null;
+  scheduledDate: string | null;
+  outcome: string;
+  primaryLever: string | null;
+  confidence: string | null;
+  recommendedLoadKg: number | null;
+  recommendedLoadDeltaKg: number | null;
+  recommendedRepsTarget: number | null;
+  recommendedRepDelta: number | null;
+  displayLabel: string;
+  displayReason: string | null;
+  evidence: Record<string, unknown>;
+  decidedAt: string;
+};
+
+export type DecisionHistoryResponse = {
+  exerciseName: string;
+  totalDecisions: number;
+  decisions: DecisionHistoryItem[];
+};
+
 export type ProgramDayFullResponse = {
   day: {
     id: string;
+    programId?: string;
     label?: string;
     type?: string;
     sessionDuration?: number;
     heroMedia?: string | null;
+    equipmentOverridePresetSlug?: string | null;
+    equipmentOverrideItemSlugs?: string[] | null;
+    scheduledWeekday?: string;
+    weekNumber?: number;
   };
   segments: Array<{
     id: string;
+    purpose?: string | null;
     segmentType?: string | null;
     segmentTypeLabel?: string | null;
     segmentName: string;
@@ -61,6 +105,7 @@ export type ProgramDayFullResponse = {
     postSegmentRestSec?: number;
     exercises: Array<{
       id?: string;
+      exerciseId?: string;
       name: string;
       sets?: number | null;
       reps?: string | null;
@@ -71,6 +116,29 @@ export type ProgramDayFullResponse = {
       notes?: string | null;
       equipment?: string[] | null;
       isLoadable?: boolean | null;
+      guidelineLoad?: {
+        value: number;
+        unit: string;
+        confidence: "low" | "medium" | "high";
+        confidenceScore?: number;
+        source?: string;
+        reasoning?: string[];
+        set1Rule?: string;
+      } | null;
+      progressionRecommendation?: {
+        outcome: string;
+        primaryLever: string | null;
+        confidence: string | null;
+        source: string | null;
+        reasoning: string[];
+        recommendedLoadKg: number | null;
+        recommendedRepsTarget: number | null;
+        recommendedSets: number | null;
+        recommendedRestSeconds: number | null;
+      } | null;
+      adaptationDecision?: AdaptationDecision | null;
+      coachingCuesJson?: string[] | null;
+      isNewExercise?: boolean | null;
     }>;
   }>;
 };
@@ -112,6 +180,32 @@ function asNullableBoolean(value: unknown): boolean | null | undefined {
   if (value === null) return null;
   if (typeof value === "boolean") return value;
   return undefined;
+}
+
+function normalizeAdaptationDecision(raw: unknown): AdaptationDecision | null {
+  if (raw == null) return null;
+  const r = asObject(raw);
+  const outcome = asString(r.outcome ?? r.decision_outcome);
+  if (!outcome) return null;
+
+  return {
+    outcome,
+    primaryLever: asNullableString(r.primary_lever ?? r.primaryLever) ?? null,
+    confidence: asNullableString(r.confidence) ?? null,
+    recommendedLoadKg: asNullableNumber(r.recommended_load_kg ?? r.recommendedLoadKg) ?? null,
+    recommendedLoadDeltaKg: asNullableNumber(
+      r.recommended_load_delta_kg ?? r.recommendedLoadDeltaKg,
+    ) ?? null,
+    recommendedRepsTarget: asNullableNumber(
+      r.recommended_reps_target ?? r.recommendedRepsTarget,
+    ) ?? null,
+    recommendedRepDelta: asNullableNumber(
+      r.recommended_rep_delta ?? r.recommendedRepDelta,
+    ) ?? null,
+    displayChip: asString(r.display_chip ?? r.displayChip) ?? outcome,
+    displayDetail: asNullableString(r.display_detail ?? r.displayDetail) ?? null,
+    decidedAt: asString(r.decided_at ?? r.decidedAt) ?? "",
+  };
 }
 
 function toIsoDate(value: unknown): string | undefined {
@@ -181,10 +275,13 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       scheduledDate,
       scheduledWeekday: asNullableString(day.scheduled_weekday ?? day.scheduledWeekday),
       programDayId: asNullableString(day.program_day_id ?? day.programDayId),
-      status: asNullableString(day.status),
+      status:
+        asNullableString(day.status) ??
+        ((day.is_completed ?? day.isCompleted) === true ? "complete" : "scheduled"),
       weekNumber: asNullableNumber(day.week_number ?? day.weekNumber),
       // Default true: legacy rows without the field are training days.
       isTrainingDay: asNullableBoolean(day.is_training_day ?? day.isTrainingDay) ?? true,
+      isSkipped: asNullableBoolean(day.is_skipped ?? day.isSkipped) ?? false,
     };
   });
 
@@ -197,7 +294,9 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       id: programId,
       title: asString(rawProgram.title),
       summary: asString(rawProgram.summary),
-      heroMedia: asNullableString(rawProgram.hero_media ?? rawProgram.heroMedia),
+      heroMedia: asNullableString(
+        rawProgram.hero_media === null ? null : rawProgram.hero_media ?? rawProgram.heroMedia,
+      ),
     },
     weeks,
     calendarDays,
@@ -237,12 +336,26 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
   return {
     day: {
       id: dayId,
+      programId: asString(rawDay.program_id ?? rawDay.programId),
       label: asString(rawDay.day_label ?? rawDay.label),
       type: asString(rawDay.day_type ?? rawDay.type),
       sessionDuration: asNumber(
         rawDay.session_duration_mins ?? rawDay.session_duration ?? rawDay.sessionDuration,
       ),
       heroMedia: asNullableString(rawDay.hero_media ?? rawDay.heroMedia),
+      equipmentOverridePresetSlug: asNullableString(
+        rawDay.equipmentOverridePresetSlug ?? rawDay.equipment_override_preset_slug,
+      ) ?? null,
+      equipmentOverrideItemSlugs: rawDay.equipmentOverrideItemSlugs == null &&
+        rawDay.equipment_override_items_slugs == null
+        ? undefined
+        : asArray(
+            rawDay.equipmentOverrideItemSlugs ?? rawDay.equipment_override_items_slugs,
+          )
+            .map(asString)
+            .filter((value): value is string => Boolean(value)),
+      scheduledWeekday: asString(rawDay.scheduledWeekday ?? rawDay.scheduled_weekday) ?? "",
+      weekNumber: asNumber(rawDay.weekNumber ?? rawDay.week_number) ?? 1,
     },
     segments: rawSegments.map((item, segmentIndex) => {
       const rawSegment = asObject(item);
@@ -251,6 +364,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
 
       return {
         id: asString(rawSegment.workout_segment_id ?? rawSegment.id) ?? `segment-${segmentIndex + 1}`,
+        purpose: asNullableString(rawSegment.purpose),
         segmentType: asNullableString(rawSegment.segment_type ?? rawSegment.segmentType),
         segmentTypeLabel: asNullableString(
           rawSegment.segment_type_label ?? rawSegment.segmentTypeLabel,
@@ -274,6 +388,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
 
           return {
             id: asString(rawExercise.program_exercise_id ?? rawExercise.id),
+            exerciseId: asString(rawExercise.exercise_id ?? rawExercise.exerciseId),
             name:
               asString(rawExercise.name) ??
               asString(rawExercise.exercise_name ?? rawExercise.exerciseName) ??
@@ -293,6 +408,72 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
                   .map(asString)
                   .filter((value): value is string => Boolean(value)),
             isLoadable: asNullableBoolean(rawExercise.is_loadable ?? rawExercise.isLoadable),
+            guidelineLoad: rawExercise.guideline_load == null
+              ? rawExercise.guideline_load === null
+                ? null
+                : undefined
+              : (() => {
+                  const guideline = asObject(rawExercise.guideline_load);
+                  const confidence = asString(guideline.confidence);
+                  if (!confidence) return undefined;
+                  return {
+                    value: asNumber(guideline.value) ?? 0,
+                    unit: asString(guideline.unit) ?? "kg",
+                    confidence: confidence as "low" | "medium" | "high",
+                    confidenceScore: asNumber(
+                      guideline.confidence_score ?? guideline.confidenceScore,
+                    ),
+                    source: asString(guideline.source),
+                    reasoning: asArray(guideline.reasoning)
+                      .map(asString)
+                      .filter((value): value is string => Boolean(value)),
+                    set1Rule: asString(guideline.set_1_rule ?? guideline.set1Rule),
+                  };
+                })(),
+            progressionRecommendation: rawExercise.progression_recommendation == null
+              ? rawExercise.progression_recommendation === null
+                ? null
+                : undefined
+              : (() => {
+                  const recommendation = asObject(rawExercise.progression_recommendation);
+                  const outcome = asString(recommendation.outcome);
+                  if (!outcome) return undefined;
+                  return {
+                    outcome,
+                    primaryLever: asNullableString(
+                      recommendation.primary_lever ?? recommendation.primaryLever,
+                    ) ?? null,
+                    confidence: asNullableString(recommendation.confidence) ?? null,
+                    source: asNullableString(recommendation.source) ?? null,
+                    reasoning: asArray(
+                      recommendation.reasoning ?? recommendation.reasoning_json,
+                    )
+                      .map(asString)
+                      .filter((value): value is string => Boolean(value)),
+                    recommendedLoadKg: asNullableNumber(
+                      recommendation.recommended_load_kg ?? recommendation.recommendedLoadKg,
+                    ) ?? null,
+                    recommendedRepsTarget: asNullableNumber(
+                      recommendation.recommended_reps_target ?? recommendation.recommendedRepsTarget,
+                    ) ?? null,
+                    recommendedSets: asNullableNumber(
+                      recommendation.recommended_sets ?? recommendation.recommendedSets,
+                    ) ?? null,
+                    recommendedRestSeconds: asNullableNumber(
+                      recommendation.recommended_rest_seconds ??
+                        recommendation.recommendedRestSeconds,
+                    ) ?? null,
+                  };
+                })(),
+            adaptationDecision: normalizeAdaptationDecision(
+              rawExercise.adaptation_decision ?? rawExercise.adaptationDecision ?? null,
+            ),
+            coachingCuesJson: asArray(rawExercise.coaching_cues_json)
+              .map((c) => (typeof c === "string" ? c : null))
+              .filter((c): c is string => c !== null),
+            isNewExercise: asNullableBoolean(
+              rawExercise.is_new_exercise ?? rawExercise.isNewExercise,
+            ) ?? null,
           };
         }),
       };
@@ -335,4 +516,48 @@ export async function getProgramDayFull(
   const path = `/api/day/${encodeURIComponent(programDayId)}/full${queryString ? `?${queryString}` : ""}`;
   const response = await authGetJson<unknown>(path);
   return normalizeProgramDayFull(response);
+}
+
+export async function fetchDecisionHistory(
+  programExerciseId: string,
+  opts: ViewerIdentityOptions & { limit?: number; offset?: number },
+): Promise<DecisionHistoryResponse> {
+  const params = buildIdentityQuery(opts);
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  if (opts.offset != null) params.set("offset", String(opts.offset));
+  const queryString = params.toString();
+  const path = `/api/program-exercise/${encodeURIComponent(programExerciseId)}/decision-history${queryString ? `?${queryString}` : ""}`;
+  const raw = await authGetJson<unknown>(path);
+  const root = asObject(raw);
+
+  return {
+    exerciseName: asString(root.exercise_name ?? root.exerciseName) ?? programExerciseId,
+    totalDecisions: asNumber(root.total_decisions ?? root.totalDecisions) ?? 0,
+    decisions: asArray(root.decisions).map((item) => {
+      const r = asObject(item);
+      return {
+        id: asString(r.id) ?? "",
+        weekNumber: asNullableNumber(r.week_number ?? r.weekNumber) ?? null,
+        dayNumber: asNullableNumber(r.day_number ?? r.dayNumber) ?? null,
+        scheduledDate: asNullableString(r.scheduled_date ?? r.scheduledDate) ?? null,
+        outcome: asString(r.outcome) ?? "hold",
+        primaryLever: asNullableString(r.primary_lever ?? r.primaryLever) ?? null,
+        confidence: asNullableString(r.confidence) ?? null,
+        recommendedLoadKg: asNullableNumber(r.recommended_load_kg ?? r.recommendedLoadKg) ?? null,
+        recommendedLoadDeltaKg: asNullableNumber(
+          r.recommended_load_delta_kg ?? r.recommendedLoadDeltaKg,
+        ) ?? null,
+        recommendedRepsTarget: asNullableNumber(
+          r.recommended_reps_target ?? r.recommendedRepsTarget,
+        ) ?? null,
+        recommendedRepDelta: asNullableNumber(
+          r.recommended_rep_delta ?? r.recommendedRepDelta,
+        ) ?? null,
+        displayLabel: asString(r.display_label ?? r.displayLabel) ?? "",
+        displayReason: asNullableString(r.display_reason ?? r.displayReason) ?? null,
+        evidence: asObject(r.evidence),
+        decidedAt: asString(r.decided_at ?? r.decidedAt) ?? "",
+      };
+    }),
+  };
 }

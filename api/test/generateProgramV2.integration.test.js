@@ -69,11 +69,15 @@ test("generate-plan-v2: profile found -> pipeline called -> 200 response with pr
 
   await seedTestUser(pool);
 
+  let capturedInputs = null;
+
   const handler = createGenerateProgramV2Handler({
     db: pool,
-    getAllowed: async () => [],
+    getAllowed: async () => ["barbell_back_squat", "leg_press"],
     buildInputs: () => ({ stub: true }),
-    pipeline: async () => ({
+    pipeline: async ({ inputs }) => {
+      capturedInputs = inputs;
+      return ({
       ok: true,
       rows: [
         {
@@ -103,7 +107,8 @@ test("generate-plan-v2: profile found -> pipeline called -> 200 response with pr
         step5: {},
         step6: {},
       },
-    }),
+    });
+    },
     emitPayload: async ({ payload }) => ({
       counts: { days: 0 },
       idempotent: false,
@@ -141,6 +146,13 @@ test("generate-plan-v2: profile found -> pipeline called -> 200 response with pr
     assert.equal(res.body.ok, true);
     assert.ok(res.body.program_id);
     assert.ok(res.body.generation_run_id);
+    assert.deepEqual(capturedInputs?.allowed_exercise_ids, ["barbell_back_squat", "leg_press"]);
+
+    const persisted = await pool.query(
+      `SELECT program_type FROM program WHERE id = $1`,
+      [res.body.program_id],
+    );
+    assert.equal(persisted.rows[0]?.program_type, "strength");
   } finally {
     await cleanupTestUser(pool);
   }

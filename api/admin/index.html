@@ -388,7 +388,10 @@
             <a href="/admin/rep-rules">Rep Rules</a>
             <a href="/admin/observability">Observability</a>
             <a href="/admin/preview">Preview</a>
-            <a href="/admin-ui/users.html">Users</a>
+            <a href="/admin/progression-sandbox">Progression Sandbox</a>
+            <a href="/admin/users">Users</a>
+            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
+            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
           </div>
           <div style="margin-top:8px">
             <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;width:100%">⬇ Sync All to Flyway</button>
@@ -419,7 +422,11 @@
       const REQUIRE_PREF_OPTIONS = [
         "",
         "strength_main",
+        "strength_secondary",
+        "strength_accessory",
+        "hypertrophy_main",
         "hypertrophy_secondary",
+        "hypertrophy_accessory",
         "conditioning_main",
         "finisher",
         "hyrox_buy_in",
@@ -780,6 +787,36 @@
               `<button class="tab-btn ${i === state.dayTab ? "selected" : ""}" data-day-tab="${i}">${escapeHtml(d?.day_key || `day${i + 1}`)}</button>`,
           )
           .join("");
+
+        const dpwByDpw = root.builder.day_templates_by_dpw || {};
+        const dpwMatrixHtml = (() => {
+          if (!dayTemplates.length) return '<p class="editor-empty">Add day templates first.</p>';
+          const colHeaders = dayTemplates.map((dt, i) => {
+            const key = dt?.day_key || `day${i + 1}`;
+            const focus = dt?.focus || "";
+            return `<th style="text-align:center"><span>${escapeHtml(focus)}</span><br><span style="color:#888;font-size:0.8em">${escapeHtml(key)}</span></th>`;
+          }).join("");
+          const rows = Array.from({length: 6}, (_, ri) => {
+            const dpw = ri + 1;
+            const selected = dpwByDpw[String(dpw)] || [];
+            const cells = dayTemplates.map((dt, ci) => {
+              const key = dt?.day_key || `day${ci + 1}`;
+              const checked = selected.includes(key) ? "checked" : "";
+              return `<td style="text-align:center"><input type="checkbox" data-dpw="${dpw}" data-day-key="${escapeHtml(key)}" ${checked} /></td>`;
+            }).join("");
+            const unchecked = !selected.length;
+            const fallbackNote = unchecked ? `<span style="color:#888;font-size:0.8em"> — using default (first N)</span>` : "";
+            return `<tr><td><strong>${dpw}</strong>${fallbackNote}</td>${cells}</tr>`;
+          }).join("");
+          return `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>DPW</th>${colHeaders}</tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>`;
+        })();
+
         const familyOptionsHtml = Array.from(
           new Set(
             dayTemplates.flatMap((day) =>
@@ -1129,6 +1166,12 @@
                   `
                   : `<div class="editor-empty">No day templates. Add one.</div>`
               }
+              <details open style="margin-top:1rem">
+                <summary>Day selection by days/week</summary>
+                <div class="section-body">
+                  ${dpwMatrixHtml}
+                </div>
+              </details>
             </div>
           </details>
 
@@ -1426,6 +1469,19 @@
             return rebuilt;
           });
         }
+
+        // DPW matrix → builder.day_templates_by_dpw
+        const dpwMap = {};
+        document.querySelectorAll('input[data-dpw][data-day-key]').forEach((cb) => {
+          const dpw = cb.dataset.dpw;
+          if (!dpwMap[dpw]) dpwMap[dpw] = [];
+          if (cb.checked) dpwMap[dpw].push(cb.dataset.dayKey);
+        });
+        const dpwResult = {};
+        Object.keys(dpwMap).forEach((dpw) => {
+          if (dpwMap[dpw].length > 0) dpwResult[dpw] = dpwMap[dpw];
+        });
+        root.builder.day_templates_by_dpw = Object.keys(dpwResult).length ? dpwResult : undefined;
 
         const semRows = Array.from(document.querySelectorAll("#semantics-tbody tr[data-sem-letter]"));
         const nextSem = {};

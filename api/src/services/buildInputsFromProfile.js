@@ -83,10 +83,14 @@ function mapExerciseRowsToCatalogEx(exerciseRows) {
     mc: row.movement_class || "",
     tr: row.target_regions_json ?? [],
     wh: row.warmup_hooks ?? [],
+    accepts_distance_unit: Boolean(row.accepts_distance_unit),
+    coaching_cues_json: row.coaching_cues_json ?? [],
+    load_guidance: row.load_guidance ?? "",
+    logging_guidance: row.logging_guidance ?? "",
   }));
 }
 
-export function buildInputsFromProfile(profile, exerciseRows) {
+export function buildInputsFromProfile(profile, exerciseRows, physiqueContext = null) {
   const preferredDays = asArray(profile?.preferredDays)
     .map((day) => toPreferredDayCode(day))
     .filter(Boolean);
@@ -103,6 +107,12 @@ export function buildInputsFromProfile(profile, exerciseRows) {
   const exercises = mapExerciseRowsToResults(exerciseRows);
   const catalogEx = mapExerciseRowsToCatalogEx(exerciseRows);
   const fitnessRank = mapFitnessRank(profile?.fitnessLevel);
+  const emphasisSlugs = Array.isArray(physiqueContext?.emphasisSuggestions)
+    ? physiqueContext.emphasisSuggestions
+    : [];
+  const emphasisWeights = physiqueContext?.emphasisWeights && typeof physiqueContext.emphasisWeights === "object"
+    ? physiqueContext.emphasisWeights
+    : null;
 
   return {
     clientProfile: {
@@ -125,6 +135,8 @@ export function buildInputsFromProfile(profile, exerciseRows) {
         equipment_preset_slug: toSlug(profile?.equipmentPreset || ""),
         goal_notes: profile?.goalNotes ?? "",
         schedule_constraints: profile?.scheduleConstraints ?? "",
+        physique_emphasis_slugs: emphasisSlugs,
+        physique_emphasis_weights: emphasisWeights,
       },
     },
     exercises: {

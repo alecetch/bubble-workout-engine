@@ -1,8 +1,6 @@
-import { pickWithFallback } from "./exerciseSelector.js";
+import { debugRankWithFallback, pickWithFallback } from "./exerciseSelector.js";
 
-function bestMatchByMovement(slotDef, catalogIndex, state) {
-  const compiledConfig = state?.compiledConfig ?? null;
-  const isConditioning = compiledConfig?.programType === "conditioning";
+export function mergeAvoidCanonicalNames(state) {
   const mergedAvoidCanonicalNames = new Set(
     state?.usedCanonicalNamesToday instanceof Set ? state.usedCanonicalNamesToday : [],
   );
@@ -11,7 +9,13 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
       mergedAvoidCanonicalNames.add(name);
     }
   }
-  const sel = {
+  return mergedAvoidCanonicalNames;
+}
+
+export function buildBestMatchSelector(slotDef, state) {
+  const compiledConfig = state?.compiledConfig ?? null;
+  const isConditioning = compiledConfig?.programType === "conditioning";
+  return {
     mp: slotDef.mp || null,
     sw: slotDef.sw || null,
     swAny: slotDef.swAny || null,
@@ -32,6 +36,26 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     slotFamily: slotDef.slot_family || null,
     selectionMode: state?.daySelectionMode || "default",
   };
+}
+
+function bestMatchByMovement(slotDef, catalogIndex, state) {
+  const mergedAvoidCanonicalNames = mergeAvoidCanonicalNames(state);
+  const sel = buildBestMatchSelector(slotDef, state);
+
+  if (state?.slotSelectionDebug && typeof state.slotSelectionDebug === "object") {
+    Object.assign(
+      state.slotSelectionDebug,
+      debugRankWithFallback(
+        catalogIndex.allowedSet,
+        catalogIndex.byId,
+        sel,
+        state.usedIdsWeek,
+        state.usedIdsToday,
+        state.usedRegionsToday,
+        mergedAvoidCanonicalNames,
+      ),
+    );
+  }
 
   return pickWithFallback(
     catalogIndex.allowedSet,
@@ -39,7 +63,7 @@ function bestMatchByMovement(slotDef, catalogIndex, state) {
     sel,
     state.usedIdsWeek,
     state.stats,
-    state.usedSw2Today,
+    state.usedIdsToday,
     state.usedRegionsToday,
     mergedAvoidCanonicalNames,
   );

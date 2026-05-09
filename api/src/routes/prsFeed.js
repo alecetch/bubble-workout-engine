@@ -36,16 +36,34 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-function mapPrRow(row) {
+export function mapPrRow(row) {
+  const date = row.scheduled_date?.slice?.(0, 10) ?? row.scheduled_date;
   return {
     exerciseId: row.exercise_id,
     exerciseName: row.exercise_name,
     weightKg: row.weight_kg == null ? null : Number(row.weight_kg),
     repsCompleted: row.reps_completed == null ? null : Number(row.reps_completed),
     estimatedE1rmKg: row.estimated_1rm_kg == null ? null : Number(row.estimated_1rm_kg),
-    date: row.scheduled_date,
+    date,
     region: row.region ?? null,
+    shareLabel: `${row.exercise_name} PR`,
+    milestoneType: "weight_pr",
   };
+}
+
+export function buildGroupedByDate(rows) {
+  const groups = [];
+  let current = null;
+
+  for (const row of rows) {
+    if (!current || current.date !== row.date) {
+      current = { date: row.date, rows: [] };
+      groups.push(current);
+    }
+    current.rows.push(row);
+  }
+
+  return groups;
 }
 
 async function fetchPrRows(client, userId, windowDays) {
@@ -110,6 +128,8 @@ prsFeedRouter.get("/prs-feed", async (req, res) => {
         return res.json({
           mode: "prs_28d",
           rows: rows28,
+          groupedByDate: buildGroupedByDate(rows28),
+          totalPrsInWindow: rows28.length,
           heaviest: null,
         });
       }
@@ -119,6 +139,8 @@ prsFeedRouter.get("/prs-feed", async (req, res) => {
         return res.json({
           mode: "prs_90d",
           rows: rows90,
+          groupedByDate: buildGroupedByDate(rows90),
+          totalPrsInWindow: rows90.length,
           heaviest: null,
         });
       }
@@ -126,6 +148,7 @@ prsFeedRouter.get("/prs-feed", async (req, res) => {
       const heaviestResult = await client.query(
         `
         SELECT DISTINCT ON (ec.strength_primary_region)
+          pe.exercise_id,
           COALESCE(ec.name, pe.exercise_name) AS exercise_name,
           sel.weight_kg, sel.reps_completed, sel.estimated_1rm_kg, pd.scheduled_date,
           ec.strength_primary_region AS region
@@ -149,6 +172,7 @@ prsFeedRouter.get("/prs-feed", async (req, res) => {
         const region = row.region;
         if (region !== "upper" && region !== "lower") continue;
         heaviest[region] = {
+          exerciseId: row.exercise_id,
           exerciseName: row.exercise_name,
           weightKg: row.weight_kg == null ? null : Number(row.weight_kg),
           repsCompleted: row.reps_completed == null ? null : Number(row.reps_completed),
@@ -160,6 +184,8 @@ prsFeedRouter.get("/prs-feed", async (req, res) => {
       return res.json({
         mode: "heaviest_28d",
         rows: [],
+        groupedByDate: [],
+        totalPrsInWindow: 0,
         heaviest,
       });
     } finally {

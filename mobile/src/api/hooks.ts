@@ -19,6 +19,15 @@ import {
 import { getEquipmentItemsForPreset, type EquipmentItemsForPresetResponse } from "./equipmentPresets";
 import { getMe, linkClientProfileToMe, type MeResponse } from "./me";
 import {
+  fetchActivePrograms,
+  fetchCombinedCalendar,
+  fetchSessionsByDate,
+  setPrimaryProgram,
+  type ActiveProgramsResponse,
+  type CombinedCalendarResponse,
+  type SessionsByDateResponse,
+} from "./activePrograms";
+import {
   getProgramDayFull,
   getProgramOverview,
   markProgramDayComplete,
@@ -28,11 +37,45 @@ import {
   type ViewerIdentityOptions,
 } from "./programViewer";
 import {
+  fetchExerciseGuidance,
+  type ExerciseGuidance,
+} from "./exerciseGuidance";
+import {
+  getProgramEquipment,
+  regenerateProgramDays,
+  type RegenerateDaysResult,
+  type ProgramEquipmentState,
+} from "./equipmentRegen";
+import {
+  getCheckIns,
+  deleteCheckIn,
+  type CheckInListResponse,
+} from "./physique";
+import {
+  getMilestones,
+  getScans,
+  getScanTrend,
+} from "./physiqueScan";
+import {
+  completeProgram,
+  getProgramEndCheck,
+  getProgramCompletionSummary,
+  type ProgramEndCheck,
+  type ProgramCompletionSummary,
+} from "./programCompletion";
+import {
   getSegmentExerciseLogs,
   saveSegmentExerciseLogs,
   type SegmentLogRow,
   type SaveSegmentLogPayload,
+  type SaveSegmentLogResult,
 } from "./segmentLog";
+import {
+  applyExerciseSwap,
+  getExerciseSwapOptions,
+  type ApplyExerciseSwapResponse,
+  type ExerciseSwapOptionsResponse,
+} from "./programExercise";
 import { getReferenceData, type ReferenceDataResponse } from "./referenceData";
 import {
   fetchExerciseHistory,
@@ -47,6 +90,7 @@ import {
   searchExercises,
   type ExerciseSummaryResponse,
   type ExerciseHistoryResponse,
+  type ExerciseHistoryWindow,
   type ExerciseSearchItem,
   type LoggedExerciseItem,
   type HistoryOverviewResponse,
@@ -57,6 +101,18 @@ import {
   type PrsFeedResponse,
   type SessionHistoryMetrics,
 } from "./history";
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationPreferences,
+} from "./notifications";
+import {
+  fetchReferralInfo,
+  fetchReferralStats,
+  type ReferralInfo,
+  type ReferralStats,
+} from "./referral";
+import { getEntitlement, type EntitlementResponse } from "./entitlement";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
 export const queryKeys = {
@@ -75,12 +131,30 @@ export const queryKeys = {
     ["programDayFull", programDayId, opts.userId ?? null] as const,
   historyOverview: ["historyOverview"] as const,
   historyPrograms: ["historyPrograms"] as const,
+  activePrograms: ["activePrograms"] as const,
+  combinedCalendar: ["combinedCalendar"] as const,
   historyTimeline: ["historyTimeline"] as const,
   historyPersonalRecords: ["historyPersonalRecords"] as const,
   exerciseSearch: (q: string) => ["exerciseSearch", q] as const,
   exerciseHistory: (exerciseId: string) => ["exerciseHistory", exerciseId] as const,
   segmentExerciseLogs: (workoutSegmentId: string, programDayId: string) =>
     ["segmentExerciseLogs", workoutSegmentId, programDayId] as const,
+  exerciseSwapOptions: (programExerciseId: string) =>
+    ["exerciseSwapOptions", programExerciseId] as const,
+  programCompletionSummary: (programId: string) =>
+    ["programCompletionSummary", programId] as const,
+  programEndCheck: (programId: string) =>
+    ["programEndCheck", programId] as const,
+  exerciseGuidance: (exerciseId: string) => ["exerciseGuidance", exerciseId] as const,
+  notificationPreferences: ["notificationPreferences"] as const,
+  entitlement: ["entitlement"] as const,
+  physiqueCheckIns: ["physiqueCheckIns"] as const,
+  physiqueScans: ["physiqueScans"] as const,
+  physiqueScanTrend: ["physiqueScanTrend"] as const,
+  physiqueMilestones: ["physiqueMilestones"] as const,
+  programEquipment: (programId: string | null) => ["programEquipment", programId] as const,
+  referralInfo: ["referralInfo"] as const,
+  referralStats: ["referralStats"] as const,
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -199,6 +273,90 @@ export function useProgramDayFull(
   });
 }
 
+export function useProgramEquipment(
+  programId: string | null,
+): UseQueryResult<ProgramEquipmentState> {
+  return useQuery({
+    queryKey: queryKeys.programEquipment(programId),
+    queryFn: () => getProgramEquipment(programId as string),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useExerciseGuidance(
+  exerciseId: string | null,
+): UseQueryResult<ExerciseGuidance> {
+  return useQuery({
+    queryKey: queryKeys.exerciseGuidance(exerciseId ?? ""),
+    queryFn: () => fetchExerciseGuidance(exerciseId as string),
+    enabled: Boolean(exerciseId),
+    staleTime: 60 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
+  });
+}
+
+export function useProgramCompletionSummary(
+  programId: string | null,
+): UseQueryResult<ProgramCompletionSummary> {
+  return useQuery({
+    queryKey: queryKeys.programCompletionSummary(programId ?? ""),
+    queryFn: () => getProgramCompletionSummary(programId as string),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useProgramEndCheck(
+  programId: string | null,
+): UseQueryResult<ProgramEndCheck> {
+  return useQuery({
+    queryKey: queryKeys.programEndCheck(programId ?? ""),
+    queryFn: () => getProgramEndCheck(programId as string),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useActivePrograms(): UseQueryResult<ActiveProgramsResponse> {
+  return useQuery({
+    queryKey: queryKeys.activePrograms,
+    queryFn: fetchActivePrograms,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useCombinedCalendar(from?: string, to?: string): UseQueryResult<CombinedCalendarResponse> {
+  return useQuery({
+    queryKey: [...queryKeys.combinedCalendar, from ?? null, to ?? null],
+    queryFn: () => fetchCombinedCalendar(from, to),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSessionsByDate(
+  scheduledDate: string | null,
+): UseQueryResult<SessionsByDateResponse> {
+  return useQuery({
+    queryKey: ["sessionsByDate", scheduledDate ?? null],
+    queryFn: () => fetchSessionsByDate(scheduledDate as string),
+    enabled: Boolean(scheduledDate),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSetPrimaryProgram(): UseMutationResult<
+  { ok: boolean; primary_program_id: string },
+  Error,
+  string
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setPrimaryProgram,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+    },
+  });
+}
+
 const HISTORY_STALE_MS = 5 * 60 * 1000; // 5 minutes — history changes only after workout completion
 
 export function useHistoryOverview(userId?: string): UseQueryResult<HistoryOverviewResponse> {
@@ -266,6 +424,66 @@ export function usePrsFeed(userId?: string): UseQueryResult<PrsFeedResponse> {
   });
 }
 
+export function useNotificationPreferences(): UseQueryResult<NotificationPreferences> {
+  return useQuery({
+    queryKey: queryKeys.notificationPreferences,
+    queryFn: getNotificationPreferences,
+  });
+}
+
+export function useEntitlement(): UseQueryResult<EntitlementResponse> {
+  return useQuery({
+    queryKey: queryKeys.entitlement,
+    queryFn: getEntitlement,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+  });
+}
+
+export function useReferralInfo(): UseQueryResult<ReferralInfo> {
+  return useQuery({
+    queryKey: queryKeys.referralInfo,
+    queryFn: fetchReferralInfo,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+}
+
+export function useReferralStats(): UseQueryResult<ReferralStats> {
+  return useQuery({
+    queryKey: queryKeys.referralStats,
+    queryFn: fetchReferralStats,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useUpdateNotificationPreferences(): UseMutationResult<
+  NotificationPreferences,
+  Error,
+  Partial<NotificationPreferences>,
+  { prev?: NotificationPreferences }
+> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (patch) => updateNotificationPreferences(patch),
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.notificationPreferences });
+      const prev = queryClient.getQueryData<NotificationPreferences>(queryKeys.notificationPreferences);
+      queryClient.setQueryData<NotificationPreferences | undefined>(
+        queryKeys.notificationPreferences,
+        (old) => (old ? { ...old, ...patch } : old),
+      );
+      return { prev };
+    },
+    onError: (_error, _patch, context) => {
+      queryClient.setQueryData(queryKeys.notificationPreferences, context?.prev);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notificationPreferences });
+    },
+  });
+}
+
 export function useLoggedExercisesSearch(q: string, userId?: string): UseQueryResult<LoggedExerciseItem[]> {
   const term = q.trim();
   return useQuery({
@@ -298,10 +516,14 @@ export function useExerciseSearch(q: string, userId?: string): UseQueryResult<Ex
   });
 }
 
-export function useExerciseHistory(exerciseId: string | null, userId?: string): UseQueryResult<ExerciseHistoryResponse> {
+export function useExerciseHistory(
+  exerciseId: string | null,
+  window: ExerciseHistoryWindow = "12w",
+  userId?: string,
+): UseQueryResult<ExerciseHistoryResponse> {
   return useQuery({
-    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), userId ?? null],
-    queryFn: () => fetchExerciseHistory(exerciseId as string, userId),
+    queryKey: [...queryKeys.exerciseHistory(exerciseId ?? ""), window, userId ?? null],
+    queryFn: () => fetchExerciseHistory(exerciseId as string, window, userId),
     enabled: Boolean(exerciseId),
     staleTime: HISTORY_STALE_MS,
   });
@@ -317,10 +539,18 @@ export function useMarkDayComplete(): UseMutationResult<
     mutationFn: ({ programDayId, isCompleted, userId }) =>
       markProgramDayComplete(programDayId, isCompleted, { userId }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+      void queryClient.invalidateQueries({ queryKey: ["dayPreview"] });
+      void queryClient.invalidateQueries({ queryKey: ["programDayFull"] });
+      void queryClient.invalidateQueries({ queryKey: ["programCompletionSummary"] });
+      void queryClient.invalidateQueries({ queryKey: ["programEndCheck"] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyOverview });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPrograms });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPersonalRecords });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+      void queryClient.invalidateQueries({ queryKey: ["sessionsByDate"] });
       void queryClient.invalidateQueries({ queryKey: ["sessionHistoryMetrics"] });
       void queryClient.invalidateQueries({ queryKey: ["prsFeed"] });
     },
@@ -345,7 +575,63 @@ export function useSegmentExerciseLogs(
   });
 }
 
-export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegmentLogPayload> {
+export function useCompleteProgram(): UseMutationResult<
+  { ok: boolean; programId: string; lifecycleStatus: "in_progress" | "completed"; completedMode: "as_scheduled" | "with_skips" | null },
+  Error,
+  { programId: string; mode: "as_scheduled" | "with_skips" }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ programId, mode }) => completeProgram(programId, mode),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.programCompletionSummary(variables.programId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.programEndCheck(variables.programId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
+      void queryClient.invalidateQueries({ queryKey: ["sessionsByDate"] });
+      void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+    },
+  });
+}
+
+export function useExerciseSwapOptions(
+  programExerciseId: string | null,
+): UseQueryResult<ExerciseSwapOptionsResponse> {
+  return useQuery({
+    queryKey: queryKeys.exerciseSwapOptions(programExerciseId ?? ""),
+    queryFn: () => getExerciseSwapOptions(programExerciseId as string),
+    enabled: Boolean(programExerciseId),
+    staleTime: 0,
+  });
+}
+
+export function useApplyExerciseSwap(): UseMutationResult<
+  ApplyExerciseSwapResponse,
+  Error,
+  {
+    programExerciseId: string;
+    exerciseId: string;
+    reason?: string | null;
+    programDayId: string;
+    userId?: string;
+  }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ programExerciseId, exerciseId, reason }) =>
+      applyExerciseSwap(programExerciseId, { exerciseId, reason }),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.programDayFull(variables.programDayId, { userId: variables.userId }),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.exerciseSwapOptions(variables.programExerciseId),
+      });
+    },
+  });
+}
+
+export function useSaveSegmentLogs(): UseMutationResult<SaveSegmentLogResult, Error, SaveSegmentLogPayload> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: saveSegmentExerciseLogs,
@@ -357,5 +643,71 @@ export function useSaveSegmentLogs(): UseMutationResult<void, Error, SaveSegment
         ),
       });
     },
+  });
+}
+
+export function useRegenerateDays(
+  programId: string,
+): UseMutationResult<
+  RegenerateDaysResult,
+  Error,
+  Parameters<typeof regenerateProgramDays>[1]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => regenerateProgramDays(programId, payload),
+    onSuccess: (result) => {
+      for (const dayId of result.dayIds) {
+        void queryClient.invalidateQueries({
+          queryKey: ["programDayFull", dayId],
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.programEquipment(programId) });
+      void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+      void queryClient.invalidateQueries({ queryKey: ["dayPreview"] });
+    },
+  });
+}
+
+export function usePhysiqueCheckIns(limit = 20): UseQueryResult<CheckInListResponse> {
+  return useQuery({
+    queryKey: [...queryKeys.physiqueCheckIns, limit],
+    queryFn: () => getCheckIns(limit),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useDeleteCheckIn(): UseMutationResult<{ ok: boolean }, Error, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCheckIn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueCheckIns });
+    },
+  });
+}
+
+export function usePhysiqueScans(limit = 20) {
+  return useQuery({
+    queryKey: [...queryKeys.physiqueScans, limit],
+    queryFn: () => getScans(limit),
+    // No staleTime — presigned photo URLs expire after 1 hour so we always
+    // background-refetch on mount to serve fresh signed URLs.
+  });
+}
+
+export function usePhysiqueScanTrend() {
+  return useQuery({
+    queryKey: queryKeys.physiqueScanTrend,
+    queryFn: getScanTrend,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePhysiqueMilestones() {
+  return useQuery({
+    queryKey: queryKeys.physiqueMilestones,
+    queryFn: getMilestones,
+    staleTime: 5 * 60 * 1000,
   });
 }

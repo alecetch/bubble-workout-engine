@@ -2,6 +2,9 @@
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { makeGuidelineLoadService } from "../services/guidelineLoadService.js";
+import { makeNotificationService } from "../services/notificationService.js";
+import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
@@ -32,6 +35,33 @@ const SEGMENT_TYPE_LABELS = {
   cooldown: "Cool-down",
 };
 
+const OUTCOME_CHIP = {
+  increase_load: "Load increased ↑",
+  increase_reps: "Reps progressing ↑",
+  increase_sets: "Sets increasing ↑",
+  reduce_rest: "Rest reduced ↓",
+  hold: "Holding steady",
+  deload_local: "Deload this week",
+};
+
+const OUTCOME_DETAIL_FALLBACK = {
+  increase_load: "Your recent sessions hit the rep target comfortably - load has been increased.",
+  increase_reps: "You are ready to push further into the rep range before the next load jump.",
+  increase_sets: "Volume is increasing this session.",
+  reduce_rest: "Rest periods are tightening as conditioning improves.",
+  hold: "The current prescription stays the same - more data needed before changing.",
+  deload_local: "Recent sessions showed signs of fatigue or underperformance - load is reduced to recover.",
+};
+
+const DECISION_HISTORY_LABEL_PHRASE = {
+  increase_load: (delta) => (delta != null ? `Added ${Math.abs(delta)} kg` : "Load increased"),
+  increase_reps: () => "Rep target increased",
+  increase_sets: () => "Set added",
+  reduce_rest: () => "Rest reduced",
+  hold: () => "Held steady",
+  deload_local: () => "Load reduced (deload)",
+};
+
 export function segmentTypeLabel(segment_type) {
   return SEGMENT_TYPE_LABELS[safeString(segment_type)] ?? safeString(segment_type);
 }
@@ -50,6 +80,93 @@ export function parseEquipmentSlugs(rows) {
   return uniq(slugs);
 }
 
+function normalizeDecisionSentence(value) {
+  const trimmed = safeString(value);
+  if (!trimmed) return null;
+  let sentence = trimmed;
+  if (!sentence.endsWith(".")) sentence += ".";
+  if (sentence.length > 160) {
+    sentence = `${sentence.slice(0, 157).replace(/\s+\S*$/, "")}...`;
+  }
+  return sentence;
+}
+
+function extractDecisionReasons(decisionContext) {
+  try {
+    const ctx = typeof decisionContext === "object" && decisionContext !== null
+      ? decisionContext
+      : JSON.parse(String(decisionContext ?? "{}"));
+    return Array.isArray(ctx.reasons) ? ctx.reasons : [];
+  } catch {
+    return [];
+  }
+}
+
+function extractDecisionEvidence(raw) {
+  try {
+    const value = typeof raw === "object" && raw !== null
+      ? raw
+      : JSON.parse(String(raw ?? "{}"));
+    return value && typeof value === "object" ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+export function buildAdaptationDecision(row) {
+  if (!row) return null;
+  const outcome = safeString(row.decision_outcome);
+  if (!outcome) return null;
+
+  const reasons = extractDecisionReasons(row.decision_context_json);
+  const displayDetail = normalizeDecisionSentence(reasons[0])
+    ?? OUTCOME_DETAIL_FALLBACK[outcome]
+    ?? null;
+
+  return {
+    outcome,
+    primary_lever: safeString(row.primary_lever),
+    confidence: safeString(row.confidence),
+    recommended_load_kg: row.recommended_load_kg != null ? Number(row.recommended_load_kg) : null,
+    recommended_load_delta_kg: row.recommended_load_delta_kg != null ? Number(row.recommended_load_delta_kg) : null,
+    recommended_reps_target: row.recommended_reps_target != null ? Number(row.recommended_reps_target) : null,
+    recommended_rep_delta: row.recommended_rep_delta != null ? Number(row.recommended_rep_delta) : null,
+    display_chip: OUTCOME_CHIP[outcome] ?? outcome,
+    display_detail: displayDetail,
+    decided_at: row.decided_at instanceof Date ? row.decided_at.toISOString() : String(row.decided_at ?? ""),
+  };
+}
+
+function buildDecisionHistoryItem(row) {
+  const outcome = safeString(row.decision_outcome) ?? "hold";
+  const delta = row.recommended_load_delta_kg != null ? Number(row.recommended_load_delta_kg) : null;
+  const phraseBuilder = DECISION_HISTORY_LABEL_PHRASE[outcome] ?? (() => outcome);
+  const phrase = phraseBuilder(delta);
+  const weekNumber = row.week_number ?? null;
+  const reasons = extractDecisionReasons(row.decision_context_json);
+  const displayReason = normalizeDecisionSentence(reasons[0])
+    ?? OUTCOME_DETAIL_FALLBACK[outcome]
+    ?? null;
+
+  return {
+    id: row.id,
+    week_number: weekNumber,
+    day_number: row.day_number ?? null,
+    scheduled_date: row.scheduled_date ? String(row.scheduled_date).slice(0, 10) : null,
+    outcome,
+    primary_lever: safeString(row.primary_lever),
+    confidence: safeString(row.confidence),
+    recommended_load_kg: row.recommended_load_kg != null ? Number(row.recommended_load_kg) : null,
+    recommended_load_delta_kg: delta,
+    recommended_reps_target: row.recommended_reps_target != null ? Number(row.recommended_reps_target) : null,
+    recommended_rep_delta: row.recommended_rep_delta != null ? Number(row.recommended_rep_delta) : null,
+    display_label: weekNumber != null ? `Week ${weekNumber} \u2014 ${phrase}` : phrase,
+    display_reason: displayReason,
+    evidence: extractDecisionEvidence(row.evidence_summary_json),
+    decided_at: row.decided_at instanceof Date ? row.decided_at.toISOString() : String(row.decided_at ?? ""),
+  };
+}
+
 function mapError(err) {
   if (err instanceof RequestValidationError || err instanceof NotFoundError) {
     return { status: err.status ?? 400, code: err instanceof NotFoundError ? "not_found" : "validation_error", message: err.message, details: err.details };
@@ -64,7 +181,25 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-export function createReadProgramHandlers(db = pool) {
+export function createReadProgramHandlers(options = pool) {
+  const resolved = options && typeof options.connect === "function"
+    ? {
+        db: options,
+        guidelineLoadService: makeGuidelineLoadService(options),
+        progressionDecisionService: makeProgressionDecisionService(options),
+        notificationService: makeNotificationService(options),
+      }
+    : {
+        db: options?.db ?? pool,
+        guidelineLoadService: options?.guidelineLoadService ?? makeGuidelineLoadService(options?.db ?? pool),
+        progressionDecisionService: options?.progressionDecisionService ?? makeProgressionDecisionService(options?.db ?? pool),
+        notificationService: options?.notificationService ?? makeNotificationService(options?.db ?? pool),
+      };
+  const db = resolved.db;
+  const guidelineLoadService = resolved.guidelineLoadService;
+  const progressionDecisionService = resolved.progressionDecisionService;
+  const notificationService = resolved.notificationService;
+
   function toAuthUserId(req) {
     return safeString(req.auth?.user_id) || safeString(req.auth?.userId);
   }
@@ -153,6 +288,9 @@ export function createReadProgramHandlers(db = pool) {
           d.day_label,
           d.session_duration_mins,
           d.is_completed,
+          CASE WHEN c.rescheduled_from_day_id IS NOT NULL THEN FALSE
+               ELSE COALESCE(d.is_skipped, FALSE)
+          END AS is_skipped,
           d.has_activity
         FROM program_calendar_day c
         LEFT JOIN program_day d
@@ -165,7 +303,7 @@ export function createReadProgramHandlers(db = pool) {
 
       // 4) Pick selected day:
       // - if selected_program_day_id provided, use it (but must belong to program)
-      // - otherwise pick earliest scheduled_date >= CURRENT_DATE; fallback to earliest overall
+      // - otherwise pick the earliest incomplete training day; fallback to earliest overall
       let selectedDayId = selected_program_day_id;
 
       if (!selectedDayId) {
@@ -175,8 +313,7 @@ export function createReadProgramHandlers(db = pool) {
           FROM program_day
           WHERE program_id = $1
           ORDER BY
-            CASE WHEN scheduled_date >= CURRENT_DATE THEN 0 ELSE 1 END,
-            scheduled_date ASC,
+            CASE WHEN is_completed = FALSE AND is_skipped IS NOT TRUE THEN 0 ELSE 1 END,
             global_day_index ASC
           LIMIT 1
           `,
@@ -273,6 +410,7 @@ export function createReadProgramHandlers(db = pool) {
           d.id AS program_day_id,
           d.program_id,
           d.scheduled_date,
+          d.scheduled_weekday,
           d.week_number,
           d.day_number,
           d.global_day_index,
@@ -285,6 +423,9 @@ export function createReadProgramHandlers(db = pool) {
           d.block_format_finisher_text,
           d.is_completed,
           d.has_activity,
+          d.equipment_override_preset_slug,
+          d.equipment_override_items_slugs,
+          p.client_profile_id,
           d.hero_media_id,
           ma.image_key  AS hero_image_key,
           ma.image_url  AS hero_image_url
@@ -304,6 +445,10 @@ export function createReadProgramHandlers(db = pool) {
       const _dayRow = dayR.rows[0];
       const day = {
         ..._dayRow,
+        equipmentOverridePresetSlug: _dayRow.equipment_override_preset_slug ?? null,
+        equipmentOverrideItemSlugs: _dayRow.equipment_override_items_slugs ?? null,
+        scheduledWeekday: _dayRow.scheduled_weekday ?? "",
+        weekNumber: _dayRow.week_number ?? 1,
         hero_media: _dayRow.hero_image_key
           ? resolveMediaUrl({
               image_key: _dayRow.hero_image_key,
@@ -345,33 +490,112 @@ export function createReadProgramHandlers(db = pool) {
       const exR = await client.query(
         `
         SELECT
-          id AS program_exercise_id,
-          workout_segment_id,
-          exercise_id,
-          exercise_name,
-          order_in_day,
-          block_order,
-          order_in_block,
-          purpose,
-          purpose_label,
-          sets_prescribed,
-          reps_prescribed,
-          reps_unit,
-          intensity_prescription,
-          tempo,
-          rest_seconds,
-          notes,
-          is_loadable
-        FROM program_exercise
-        WHERE program_day_id = $1
-        ORDER BY order_in_day
+          pe.id AS program_exercise_id,
+          pe.workout_segment_id,
+          pe.exercise_id,
+          pe.exercise_name,
+          pe.order_in_day,
+          pe.block_order,
+          pe.order_in_block,
+          pe.purpose,
+          pe.purpose_label,
+          pe.sets_prescribed,
+          pe.reps_prescribed,
+          pe.reps_unit,
+          pe.intensity_prescription,
+          pe.tempo,
+          pe.rest_seconds,
+          pe.progression_outcome,
+          pe.progression_primary_lever,
+          pe.progression_confidence,
+          pe.progression_source,
+          pe.progression_reasoning_json,
+          pe.recommended_load_kg,
+          pe.recommended_reps_target,
+          pe.recommended_sets,
+          pe.recommended_rest_seconds,
+          pe.notes,
+          pe.is_loadable,
+          pe.coaching_cues_json,
+          pe.load_hint,
+          pe.log_prompt,
+          (eps.exercise_id IS NULL) AS is_new_exercise
+        FROM program_exercise pe
+        LEFT JOIN exercise_progression_state eps
+          ON eps.user_id = $2
+          AND eps.exercise_id = pe.exercise_id
+        WHERE pe.program_day_id = $1
+        ORDER BY pe.order_in_day
         `,
-        [program_day_id],
+        [program_day_id, user_id],
       );
+
+      const programExerciseIds = exR.rows
+        .map((row) => row.program_exercise_id)
+        .filter((value) => Boolean(safeString(value)));
+
+      let decisionByPeId = new Map();
+      if (programExerciseIds.length > 0) {
+        const decisionRows = await client.query(
+          `
+          SELECT DISTINCT ON (epd.program_exercise_id)
+            epd.program_exercise_id,
+            epd.decision_outcome,
+            epd.primary_lever,
+            epd.confidence,
+            epd.recommended_load_kg,
+            epd.recommended_load_delta_kg,
+            epd.recommended_reps_target,
+            epd.recommended_rep_delta,
+            epd.decision_context_json,
+            epd.created_at AS decided_at
+          FROM exercise_progression_decision epd
+          WHERE epd.program_exercise_id = ANY($1::uuid[])
+            AND epd.user_id = $2
+          ORDER BY epd.program_exercise_id, epd.created_at DESC
+          `,
+          [programExerciseIds, user_id],
+        );
+        decisionByPeId = new Map(
+          decisionRows.rows.map((row) => [row.program_exercise_id, row]),
+        );
+      }
+
+      let resolvedClientProfileId = day.client_profile_id ?? null;
+      if (!resolvedClientProfileId) {
+        const profileR = await client.query(
+          `
+          SELECT id
+          FROM client_profile
+          WHERE user_id = $1
+          ORDER BY updated_at DESC
+          LIMIT 1
+          `,
+          [user_id],
+        );
+        resolvedClientProfileId = profileR.rows[0]?.id ?? null;
+      }
+
+      let annotatedExercises = exR.rows;
+      if (resolvedClientProfileId) {
+        try {
+          annotatedExercises = await guidelineLoadService.annotateExercisesWithGuidelineLoads({
+            exercises: exR.rows,
+            clientProfileId: resolvedClientProfileId,
+            userId: user_id,
+            programType: day.day_type,
+          });
+        } catch (guidelineErr) {
+          req.log.warn(
+            { event: "read_program.guideline_load.warning", err: guidelineErr?.message },
+            "guideline load annotation failed; returning day without guideline loads",
+          );
+        }
+      }
 
       // Group exercises by segment id.
       const itemsBySegmentId = new Map();
-      for (const ex of exR.rows) {
+      for (const ex of annotatedExercises) {
         const key = ex.workout_segment_id;
         if (!key) continue; // Should not happen in current importer.
         if (!itemsBySegmentId.has(key)) itemsBySegmentId.set(key, []);
@@ -381,11 +605,79 @@ export function createReadProgramHandlers(db = pool) {
       const segments = segR.rows.map((seg) => ({
         ...seg,
         segment_type_label: segmentTypeLabel(seg.segment_type),
-        items: itemsBySegmentId.get(seg.workout_segment_id) || [],
+        items: (itemsBySegmentId.get(seg.workout_segment_id) || []).map((item) => {
+          const {
+            progression_outcome,
+            progression_primary_lever,
+            progression_confidence,
+            progression_source,
+            progression_reasoning_json,
+            recommended_load_kg,
+            recommended_reps_target,
+            recommended_sets,
+            recommended_rest_seconds,
+            ...rest
+          } = item;
+          return {
+            ...rest,
+            progression_recommendation: progression_outcome
+              ? {
+                  outcome: progression_outcome,
+                  primary_lever: progression_primary_lever,
+                  confidence: progression_confidence,
+                  source: progression_source,
+                  reasoning: Array.isArray(progression_reasoning_json)
+                    ? progression_reasoning_json
+                    : [],
+                  recommended_load_kg: recommended_load_kg == null ? null : Number(recommended_load_kg),
+                  recommended_reps_target: recommended_reps_target == null ? null : Number(recommended_reps_target),
+                  recommended_sets: recommended_sets == null ? null : Number(recommended_sets),
+                  recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
+                }
+              : null,
+            adaptation_decision: buildAdaptationDecision(
+              decisionByPeId.get(item.program_exercise_id) ?? null,
+            ),
+          };
+        }),
       }));
 
       // Optionally surface unassigned exercises if any exist.
-      const unassigned = exR.rows.filter((x) => !x.workout_segment_id);
+      const unassigned = annotatedExercises
+        .filter((x) => !x.workout_segment_id)
+        .map((item) => {
+          const {
+            progression_outcome,
+            progression_primary_lever,
+            progression_confidence,
+            progression_source,
+            progression_reasoning_json,
+            recommended_load_kg,
+            recommended_reps_target,
+            recommended_sets,
+            recommended_rest_seconds,
+            ...rest
+          } = item;
+          return {
+            ...rest,
+            progression_recommendation: progression_outcome
+              ? {
+                  outcome: progression_outcome,
+                  primary_lever: progression_primary_lever,
+                  confidence: progression_confidence,
+                  source: progression_source,
+                  reasoning: Array.isArray(progression_reasoning_json) ? progression_reasoning_json : [],
+                  recommended_load_kg: recommended_load_kg == null ? null : Number(recommended_load_kg),
+                  recommended_reps_target: recommended_reps_target == null ? null : Number(recommended_reps_target),
+                  recommended_sets: recommended_sets == null ? null : Number(recommended_sets),
+                  recommended_rest_seconds: recommended_rest_seconds == null ? null : Number(recommended_rest_seconds),
+                }
+              : null,
+            adaptation_decision: buildAdaptationDecision(
+              decisionByPeId.get(item.program_exercise_id) ?? null,
+            ),
+          };
+        });
       if (unassigned.length) {
         segments.push({
           workout_segment_id: null,
@@ -438,28 +730,94 @@ export function createReadProgramHandlers(db = pool) {
     try {
       requireUuid(program_day_id, "program_day_id");
 
+      let user_id = "";
       const client = await db.connect();
       try {
         // Accept identity from body (PATCH) or query (fallback).
-        const user_id = resolveUserId(req);
+        user_id = resolveUserId(req);
 
-      const r = await client.query(
-        `UPDATE program_day pd
-         SET is_completed = $3
-         FROM program p
-         WHERE pd.id = $1
-           AND p.id = pd.program_id
-           AND p.user_id = $2
-         RETURNING pd.id`,
-        [program_day_id, user_id, Boolean(is_completed)],
-      );
+        const r = await client.query(
+          `UPDATE program_day pd
+           SET is_completed = $3
+           FROM program p
+           WHERE pd.id = $1
+             AND p.id = pd.program_id
+             AND p.user_id = $2
+           RETURNING pd.id`,
+          [program_day_id, user_id, Boolean(is_completed)],
+        );
 
-      if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
-
-        return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
+        if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
       } finally {
         client.release();
       }
+
+      if (Boolean(is_completed)) {
+        // Fire-and-forget Layer B backstop. The intended primary trigger remains
+        // PATCH /api/day/:program_day_id/complete; this path must never delay the response.
+        db.query(
+          `SELECT
+             p.id AS program_id,
+             p.program_type,
+             cp.fitness_rank
+           FROM program_day pd
+           JOIN program p
+             ON p.id = pd.program_id
+           LEFT JOIN client_profile cp
+             ON cp.user_id = p.user_id
+           WHERE pd.id = $1`,
+          [program_day_id],
+        )
+          .then(async (meta) => {
+            const row = meta?.rows?.[0];
+            if (!row?.program_id) return null;
+            const decisionResult = await progressionDecisionService.applyProgressionRecommendations({
+              programId: row.program_id,
+              userId: user_id,
+              programType: row.program_type,
+              fitnessRank: row.fitness_rank ?? 1,
+              completedProgramDayId: program_day_id,
+            });
+
+            const hasDeload = decisionResult?.decisions?.some((decision) => decision.outcome === "deload_local");
+            if (!hasDeload) return decisionResult;
+
+            const prefR = await db.query(
+              `SELECT deload_notification_enabled
+               FROM notification_preference
+               WHERE user_id = $1`,
+              [user_id],
+            ).catch(() => ({ rows: [] }));
+            const deloadEnabled = prefR.rows[0]?.deload_notification_enabled ?? true;
+            if (!deloadEnabled) return decisionResult;
+
+            await notificationService.send({
+              userId: user_id,
+              title: "Easy week incoming",
+              body: "Your body showed signs of fatigue \u2014 your program has been adjusted to help you recover.",
+              data: { event: "deload", programDayId: program_day_id },
+              emailSubject: "Recovery week \u2014 your program adjusted",
+              emailText: [
+                "Easy week ahead.",
+                "",
+                "Based on your recent sessions, your program has been adjusted to reduce load on some exercises.",
+                "This is a normal and necessary part of long-term progress.",
+                "",
+                "Open the app to see what changed.",
+              ].join("\n"),
+            });
+
+            return decisionResult;
+          })
+          .catch((err) => {
+            req.log?.warn(
+              { event: "progression.layer_b.error", err: err?.message, program_day_id },
+              "Layer B progression decision failed (non-blocking)",
+            );
+          });
+      }
+
+      return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
     } catch (err) {
       const mapped = mapError(err);
       return res.status(mapped.status).json({
@@ -472,7 +830,104 @@ export function createReadProgramHandlers(db = pool) {
     }
   }
 
-  return { programOverview, dayFull, dayComplete };
+  async function exerciseDecisionHistory(req, res) {
+    const { request_id } = req;
+
+    try {
+      const programExerciseId = requireUuid(req.params.program_exercise_id, "program_exercise_id");
+      const user_id = resolveUserId(req);
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit ?? "20", 10) || 20));
+      const offset = Math.max(0, parseInt(req.query.offset ?? "0", 10) || 0);
+
+      const ownerR = await db.query(
+        `
+        SELECT pe.id
+        FROM program_exercise pe
+        JOIN program p ON p.id = pe.program_id
+        WHERE pe.id = $1 AND p.user_id = $2
+        LIMIT 1
+        `,
+        [programExerciseId, user_id],
+      );
+
+      if (ownerR.rowCount === 0) {
+        return res.status(403).json({ ok: false, request_id, error: "not_found_or_forbidden" });
+      }
+
+      const [countR, rowsR, nameR] = await Promise.all([
+        db.query(
+          `SELECT COUNT(*)::int AS total
+           FROM exercise_progression_decision
+           WHERE program_exercise_id = $1 AND user_id = $2`,
+          [programExerciseId, user_id],
+        ),
+        db.query(
+          `
+          SELECT
+            epd.id,
+            epd.decision_outcome,
+            epd.primary_lever,
+            epd.confidence,
+            epd.recommended_load_kg,
+            epd.recommended_load_delta_kg,
+            epd.recommended_reps_target,
+            epd.recommended_rep_delta,
+            epd.evidence_summary_json,
+            epd.decision_context_json,
+            epd.created_at AS decided_at,
+            pd.week_number,
+            pd.day_number,
+            pd.scheduled_date,
+            pe.exercise_id
+          FROM exercise_progression_decision epd
+          LEFT JOIN program_day pd ON pd.id = epd.program_day_id
+          LEFT JOIN program_exercise pe ON pe.id = epd.program_exercise_id
+          WHERE epd.program_exercise_id = $1 AND epd.user_id = $2
+          ORDER BY epd.created_at DESC
+          LIMIT $3 OFFSET $4
+          `,
+          [programExerciseId, user_id, limit, offset],
+        ),
+        db.query(
+          `SELECT
+             COALESCE(
+               (SELECT ec.name
+                FROM exercise_catalogue ec
+                JOIN program_exercise pe ON pe.exercise_id = ec.exercise_id
+                WHERE pe.id = $1
+                LIMIT 1),
+               (SELECT pe.exercise_name FROM program_exercise pe WHERE pe.id = $1 LIMIT 1),
+               $1
+             ) AS exercise_name,
+             (SELECT pe.exercise_id FROM program_exercise pe WHERE pe.id = $1 LIMIT 1) AS exercise_id`,
+          [programExerciseId],
+        ),
+      ]);
+
+      const total = countR.rows[0]?.total ?? 0;
+      const exerciseName = nameR.rows[0]?.exercise_name ?? programExerciseId;
+      const exerciseId = nameR.rows[0]?.exercise_id ?? null;
+
+      return res.json({
+        ok: true,
+        exercise_id: exerciseId,
+        exercise_name: exerciseName,
+        total_decisions: total,
+        decisions: rowsR.rows.map(buildDecisionHistoryItem),
+      });
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
+    }
+  }
+
+  return { programOverview, dayFull, dayComplete, exerciseDecisionHistory };
 }
 
 const handlers = createReadProgramHandlers();
@@ -489,3 +944,9 @@ readProgramRouter.get("/day/:program_day_id/full", handlers.dayFull);
 // ---- PATCH /api/day/:program_day_id/complete ----
 // Marks (or unmarks) a program day as completed.
 readProgramRouter.patch("/day/:program_day_id/complete", handlers.dayComplete);
+
+// ---- GET /api/program-exercise/:program_exercise_id/decision-history ----
+readProgramRouter.get(
+  "/program-exercise/:program_exercise_id/decision-history",
+  handlers.exerciseDecisionHistory,
+);

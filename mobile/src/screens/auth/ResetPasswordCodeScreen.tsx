@@ -130,7 +130,9 @@ export function ResetPasswordCodeScreen({ navigation, route }: Props): React.JSX
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
+              autoComplete="new-password"
               textContentType="newPassword"
+              passwordRules="minlength: 8;"
               returnKeyType="next"
               onSubmitEditing={() => confirmRef.current?.focus()}
               placeholder="Create password"
@@ -169,7 +171,8 @@ export function ResetPasswordCodeScreen({ navigation, route }: Props): React.JSX
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
-              textContentType="newPassword"
+              autoComplete="off"
+              textContentType="none"
               returnKeyType="go"
               onSubmitEditing={() => void handleSubmit()}
               placeholder="Re-enter password"

@@ -1,12 +1,5 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { StyleSheet, Text } from "react-native";
-import Animated, {
-  Easing,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { PressableScale } from "../interaction/PressableScale";
 import { hapticLight } from "../interaction/haptics";
 import { colors } from "../../theme/colors";
@@ -21,27 +14,7 @@ type PillProps = {
   disabled?: boolean;
 };
 
-const DURATION_MS = 180;
-
 export function Pill({ label, selected, onPress, disabled = false }: PillProps): React.JSX.Element {
-  const selectedProgress = useSharedValue(selected ? 1 : 0);
-
-  useEffect(() => {
-    selectedProgress.value = withTiming(selected ? 1 : 0, {
-      duration: DURATION_MS,
-      easing: Easing.out(Easing.ease),
-    });
-  }, [selected, selectedProgress]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(selectedProgress.value, [0, 1], [colors.surface, "rgba(59,130,246,0.28)"]),
-    borderColor: interpolateColor(selectedProgress.value, [0, 1], [colors.border, colors.accent]),
-  }));
-
-  const textAnimatedStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(selectedProgress.value, [0, 1], [colors.textSecondary, colors.textPrimary]),
-  }));
-
   const handlePress = async (): Promise<void> => {
     if (disabled) return;
     await hapticLight();
@@ -50,13 +23,13 @@ export function Pill({ label, selected, onPress, disabled = false }: PillProps):
 
   return (
     <PressableScale
-      style={[styles.pill, animatedStyle, disabled && styles.disabled]}
+      style={[styles.pill, selected && styles.pillSelected, disabled && styles.disabled]}
       onPress={() => {
         void handlePress();
       }}
       disabled={disabled}
     >
-      <Animated.Text style={[styles.label, textAnimatedStyle]}>{label}</Animated.Text>
+      <Text style={[styles.label, selected && styles.labelSelected]}>{label}</Text>
     </PressableScale>
   );
 }
@@ -66,17 +39,27 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: radii.pill,
     borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: spacing.md,
   },
+  pillSelected: {
+    backgroundColor: "rgba(59,130,246,0.28)",
+    borderColor: colors.accent,
+  },
   label: {
+    color: colors.textSecondary,
     ...typography.body,
     fontWeight: "500",
     width: "100%",
     textAlign: "center",
     textAlignVertical: "center",
     includeFontPadding: false,
+  },
+  labelSelected: {
+    color: colors.textPrimary,
   },
   disabled: {
     opacity: 0.5,

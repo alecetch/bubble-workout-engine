@@ -1,0 +1,20 @@
+﻿{
+  "items": [
+    {
+      "program_day_id": "day-1",
+      "scheduled_date": "2026-05-01",
+      "day_label": "Lower Body",
+      "duration_mins": 45,
+      "hero_media_id": null,
+      "highlight": {
+        "value": 120,
+        "exercise_name": "Back Squat",
+        "exercise_id": "back-squat"
+      }
+    }
+  ],
+  "next_cursor": {
+    "cursor_date": "2026-04-24",
+    "cursor_id": "cursor-abc123"
+  }
+}

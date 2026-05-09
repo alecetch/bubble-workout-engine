@@ -1,0 +1,12 @@
+﻿{
+  "program_id": "prog-1",
+  "program_title": "Strength Block",
+  "lifecycle_status": "completed",
+  "completed_mode": "with_skips",
+  "total_days": 24,
+  "completed_days": 22,
+  "missed_workouts_count": 1,
+  "skipped_workouts_count": 1,
+  "is_last_scheduled_day_complete": true,
+  "can_complete_with_skips": true
+}
