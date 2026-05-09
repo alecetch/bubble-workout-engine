@@ -1,7 +1,5 @@
 appId: com.bubbleworkout.mobile
 ---
-# Precondition: test account must be logged out before running this flow.
-# If already logged in, go to Settings -> "Log Out" on the emulator first.
 # Do NOT use clearState — pm clear invalidates the Maestro instrumentation context.
 
 # First launchApp restarts the Maestro instrumentation (gRPC drops ~143ms after it
@@ -32,6 +30,24 @@ appId: com.bubbleworkout.mobile
 - tapOn:
     text: "Close"
     optional: true
+# If a previous run left the app authenticated, log out through the UI instead of
+# clearing app data. Clearing data leaves the Expo dev client on a blank surface.
+- runFlow:
+    when:
+      visible: "Settings"
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil:
+          visible: "Settings"
+          timeout: 20000
+      - scrollUntilVisible:
+          element:
+            text: "Log Out"
+          direction: DOWN
+      - tapOn: "Log Out"
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 15000
 - runFlow:
     when:
       visible: "Welcome"
@@ -54,11 +70,45 @@ appId: com.bubbleworkout.mobile
 - extendedWaitUntil:
     visible: "Program Review"
     timeout: 20000
+- runFlow:
+    when:
+      visible: "Settings"
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil:
+          visible: "Settings"
+          timeout: 20000
+      - scrollUntilVisible:
+          element:
+            text: "Log Out"
+          direction: DOWN
+      - tapOn: "Log Out"
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 15000
+      - tapOn: "Sign in"
+      - extendedWaitUntil:
+          visible: "Email"
+          timeout: 10000
+      - tapOn:
+          id: "email-input"
+      - eraseText
+      - inputText: ${TEST_EMAIL}
+      - tapOn:
+          id: "password-input"
+      - eraseText
+      - inputText: ${TEST_PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          id: "login-submit-button"
+      - extendedWaitUntil:
+          visible: "Program Review"
+          timeout: 20000
 - tapOn: "Programs"
 - extendedWaitUntil:
     visible: "Active Programs"
     timeout: 20000
 - tapOn: "Strength Block"
 - extendedWaitUntil:
-    visible: "Day Preview"
+    visible: "Start workout"
     timeout: 20000

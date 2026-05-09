@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramCompleteScreen } from "./ProgramCompleteScreen";
 import { useProgramCompletionSummary } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
+import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useProgramCompletionSummary: vi.fn(),
@@ -74,9 +75,7 @@ function renderScreen(navigation = { navigate: vi.fn(), goBack: vi.fn(), getPare
 describe("ProgramCompleteScreen", () => {
   beforeEach(() => {
     resetFromProfileMock.mockReset();
-    useOnboardingStoreMock.mockImplementation((selector: any) =>
-      selector({ resetFromProfile: resetFromProfileMock }),
-    );
+    mockZustandSelector(useOnboardingStoreMock as any, { resetFromProfile: resetFromProfileMock });
     useProgramCompletionSummaryMock.mockReturnValue({
       data: summary,
       isLoading: false,
