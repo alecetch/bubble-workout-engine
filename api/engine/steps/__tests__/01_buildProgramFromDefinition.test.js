@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildProgramFromDefinition,
   deriveEquipmentProfile,
+  maybePromoteStructuralMatch,
   resolveSlotVariant,
 } from "../01_buildProgramFromDefinition.js";
 
@@ -176,6 +177,67 @@ test("returns program with correct shape for 1 day / 2 slots", async () => {
   assert.equal(typeof result.debug, "object");
 });
 
+test("maybePromoteStructuralMatch upgrades weaker mp fallback to strongest available sw2 match", () => {
+  const byId = {
+    compound_row: {
+      id: "compound_row",
+      n: "Feet-Elevated Inverted Row",
+      mp: "pull_horizontal",
+      sw: "pull_horizontal_pattern",
+      sw2: "pull_horizontal_compound",
+      pref: ["hypertrophy_secondary"],
+      mc: "compound",
+      tr: ["upper_back", "biceps"],
+      eq: [],
+      den: 1,
+      cx: 1,
+      rank: 1,
+    },
+    curl: {
+      id: "curl",
+      n: "Barbell Curl",
+      mp: "pull_horizontal",
+      sw: "arms",
+      sw2: "",
+      pref: ["hypertrophy_secondary"],
+      mc: "isolation",
+      tr: ["arms"],
+      eq: ["barbell"],
+      den: 1,
+      cx: 1,
+      rank: 1,
+    },
+  };
+  const builderState = {
+    compiledConfig: makeMinimalCompiledConfig({ programType: "hypertrophy" }),
+    rankValue: 1,
+    conditioning: null,
+    usedIdsWeek: new Set(),
+    usedIdsToday: new Set(),
+    usedRegionsToday: new Set(),
+    usedCanonicalNamesToday: new Set(),
+    variabilityAvoidCanonicalNames: null,
+    daySelectionMode: "default",
+  };
+  const promoted = maybePromoteStructuralMatch(
+    {
+      slot: "B:pull_horizontal",
+      mp: "pull_horizontal",
+      sw2: "pull_horizontal_compound",
+      requirePref: "hypertrophy_secondary",
+      pref_mode: "strict",
+    },
+    byId.curl,
+    { byId, allowedSet: new Set(["compound_row", "curl"]) },
+    builderState,
+  );
+
+  assert.equal(promoted.exercise?.id, "compound_row");
+  assert.equal(promoted.debug?.applied, true);
+  assert.equal(promoted.debug?.strongest_selector_kind, "sw2");
+  assert.equal(promoted.debug?.override_attempt_label, "sw2_pref:avoid_repeat_exact_exercise");
+});
+
 test("days_per_week is clamped to dayTemplates.length", async () => {
   const exercises = [
     makeExercise({ id: "sq1", mp: "squat", sw: "squat_group", sw2: "squat_compound" }),
@@ -200,6 +262,39 @@ test("days_per_week is clamped to dayTemplates.length", async () => {
   });
 
   assert.equal(result.program.days.length, 2);
+});
+
+test("slot debug includes selection attempts and state snapshot", async () => {
+  const exercises = [
+    makeExercise({ id: "push1", mp: "push_horizontal", sw: "push_horizontal_bb", sw2: "push_horizontal_compound" }),
+    makeExercise({ id: "pull1", mp: "pull_horizontal", sw: "pull_horizontal_row", sw2: "pull_horizontal_compound" }),
+  ];
+  const compiledConfig = makeMinimalCompiledConfig({
+    programType: "hypertrophy",
+    builder: {
+      dayTemplates: [[
+        { slot: "A:push_horizontal", mp: "push_horizontal", sw2: "push_horizontal_compound", requirePref: null },
+        { slot: "B:pull_horizontal", mp: "pull_horizontal", sw2: "pull_horizontal_compound", requirePref: null },
+      ]],
+      setsByDuration: { "50": { A: 4, B: 3, C: 2, D: 2 } },
+      blockBudget: { "50": 2 },
+      slotDefaults: {},
+    },
+  });
+
+  const result = await buildProgramFromDefinition({
+    inputs: makeInputs(exercises),
+    request: {},
+    compiledConfig,
+  });
+
+  const slotDebug = result.debug.slot_debug.find((entry) => entry.slot === "B:pull_horizontal");
+  assert.ok(slotDebug);
+  assert.ok(Array.isArray(slotDebug.selection_attempts));
+  assert.ok(slotDebug.selection_attempts.length >= 1);
+  assert.equal(slotDebug.state_snapshot?.day_selection_mode, "default");
+  assert.ok(Array.isArray(slotDebug.state_snapshot?.used_ids_today));
+  assert.equal(typeof slotDebug.state_snapshot?.allowed_exercise_count, "number");
 });
 
 test("duration_mins is clamped to 40 when request says 30", async () => {
@@ -403,6 +498,130 @@ test("med variability reuses within block, prefers later-block variation, and do
   assert.equal(day1Blocks[1].ex_id, "run1");
   assert.equal(day1Blocks[2].ex_id, "run2");
   assert.equal(day2Blocks[0].ex_id, "run3");
+});
+
+test("high variability keeps same-sw2 alternatives eligible later in the day", async () => {
+  const exercises = [
+    makeExercise({
+      id: "sled_pull_exact",
+      name: "Sled Pull",
+      mp: "sled_pull",
+      sw: "sled_pull",
+      sw2: "sled_compound",
+      mc: "compound",
+    }),
+    makeExercise({
+      id: "wheelbarrow_pull",
+      name: "Wheelbarrow Pull",
+      mp: "sled_pull",
+      sw: "sled_pull",
+      sw2: "sled_compound",
+      mc: "compound",
+    }),
+    makeExercise({
+      id: "rdl_row",
+      name: "RDL and Bent over row",
+      mp: "sled_pull",
+      sw: "sled_pull",
+      sw2: "hinge_compound",
+      mc: "compound",
+    }),
+  ];
+
+  const compiledConfig = makeMinimalCompiledConfig({
+    builder: {
+      dayTemplates: [[
+        {
+          slot: "A:sled_pull_1",
+          mp: "sled_pull",
+          sw: "sled_pull",
+          sw2: "sled_compound",
+          slot_family: "sled_pull_station",
+          variability_policy: "high",
+        },
+        {
+          slot: "B:sled_pull_2",
+          mp: "sled_pull",
+          sw: "sled_pull",
+          sw2: "sled_compound",
+          slot_family: "sled_pull_station_alt",
+          variability_policy: "high",
+        },
+      ]],
+      setsByDuration: { "50": { A: 5, B: 4, C: 3, D: 2 } },
+      blockBudget: { "50": 5 },
+      slotDefaults: {},
+      excludeMovementClasses: [],
+    },
+  });
+
+  const result = await buildProgramFromDefinition({
+    inputs: makeInputs(exercises),
+    request: { days_per_week: 1 },
+    compiledConfig,
+  });
+
+  const blocks = result.program.days[0].blocks;
+  assert.equal(blocks[0].ex_id, "sled_pull_exact");
+  assert.equal(blocks[1].ex_id, "wheelbarrow_pull");
+});
+
+test("none variability still reuses sticky exact exercise within the day", async () => {
+  const exercises = [
+    makeExercise({
+      id: "run_outdoor",
+      name: "Outdoor Run",
+      mp: "locomotion",
+      sw: "locomotion",
+      sw2: "run_family",
+      mc: "compound",
+    }),
+    makeExercise({
+      id: "run_treadmill",
+      name: "Treadmill Run",
+      mp: "locomotion",
+      sw: "locomotion",
+      sw2: "run_family",
+      mc: "compound",
+    }),
+  ];
+
+  const compiledConfig = makeMinimalCompiledConfig({
+    builder: {
+      dayTemplates: [[
+        {
+          slot: "A:run_1",
+          mp: "locomotion",
+          sw: "locomotion",
+          sw2: "run_family",
+          slot_family: "day_run",
+          variability_policy: "none",
+        },
+        {
+          slot: "B:run_2",
+          mp: "locomotion",
+          sw: "locomotion",
+          sw2: "run_family",
+          slot_family: "day_run",
+          variability_policy: "none",
+        },
+      ]],
+      setsByDuration: { "50": { A: 5, B: 4, C: 3, D: 2 } },
+      blockBudget: { "50": 5 },
+      slotDefaults: {},
+      excludeMovementClasses: [],
+    },
+  });
+
+  const result = await buildProgramFromDefinition({
+    inputs: makeInputs(exercises),
+    request: { days_per_week: 1 },
+    compiledConfig,
+  });
+
+  const blocks = result.program.days[0].blocks;
+  assert.equal(blocks[0].ex_id, "run_outdoor");
+  assert.equal(blocks[1].ex_id, "run_outdoor");
 });
 
 test("ordered simulation day preserves slot order and resolves exact station matches first", async () => {

@@ -1,48 +1,23 @@
-import React, { useEffect } from "react";
-import { StyleSheet, Text } from "react-native";
-import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 
-type ErrorBannerProps = {
-  visible: boolean;
-};
-
-const DURATION_MS = 180;
+type ErrorBannerProps = { visible: boolean };
 
 export function ErrorBanner({ visible }: ErrorBannerProps): React.JSX.Element {
-  const progress = useSharedValue(visible ? 1 : 0);
-
-  useEffect(() => {
-    progress.value = withTiming(visible ? 1 : 0, {
-      duration: DURATION_MS,
-      easing: Easing.out(Easing.ease),
-    });
-  }, [progress, visible]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    height: interpolate(progress.value, [0, 1], [0, 40]),
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [4, 0]) }],
-    marginTop: interpolate(progress.value, [0, 1], [0, spacing.sm]),
-  }));
-
+  if (!visible) return <View style={styles.hiddenSpacer} />;
   return (
-    <Animated.View pointerEvents={visible ? "auto" : "none"} style={[styles.container, animatedStyle]}>
+    <View style={styles.container}>
       <Text style={styles.text}>Please fix the highlighted fields</Text>
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    marginTop: spacing.sm,
     overflow: "hidden",
     backgroundColor: "rgba(250,204,21,0.14)",
     borderRadius: 12,
@@ -55,5 +30,8 @@ const styles = StyleSheet.create({
     color: colors.warning,
     ...typography.small,
     fontWeight: "500",
+  },
+  hiddenSpacer: {
+    height: 0,
   },
 });

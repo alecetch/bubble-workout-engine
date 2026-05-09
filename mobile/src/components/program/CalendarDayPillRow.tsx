@@ -13,9 +13,10 @@ export type CalendarDayPillItem = {
   scheduledWeekday?: string | null;
   isTrainingDay?: boolean | null;
   programDayId?: string | null;
+  isSkipped?: boolean | null;
 };
 
-export type ProgramDayStatus = "none" | "scheduled" | "started" | "complete";
+export type ProgramDayStatus = "none" | "scheduled" | "started" | "complete" | "skipped";
 
 type CalendarDayPillRowProps = {
   days: CalendarDayPillItem[];
@@ -90,9 +91,12 @@ export function CalendarDayPillRow({
         {days.map((day) => {
           const selected = Boolean(day.programDayId) && day.programDayId === selectedProgramDayId;
           const isRecoveryDay = !day.programDayId || day.isTrainingDay === false;
+          const isSkipped = day.isSkipped === true;
           const { weekday, dayNum } = formatCalendarParts(day);
           const status: ProgramDayStatus = day.programDayId
-            ? (dayStatusByProgramDayId[day.programDayId] ?? "scheduled")
+            ? isSkipped
+              ? "skipped"
+              : (dayStatusByProgramDayId[day.programDayId] ?? "scheduled")
             : "none";
 
           return (
@@ -102,14 +106,16 @@ export function CalendarDayPillRow({
                   styles.pill,
                   selected ? styles.pillSelected : styles.pillIdle,
                   isRecoveryDay && styles.pillMuted,
+                  isSkipped && styles.pillSkipped,
                 ]}
                 onPress={() => onSelectProgramDay(day.programDayId ?? undefined)}
+                disabled={isSkipped}
               >
                 <View style={styles.labelStack}>
-                  <Text style={[styles.weekday, selected && styles.pillLabelSelected, isRecoveryDay && styles.textMuted]}>
+                  <Text style={[styles.weekday, selected && styles.pillLabelSelected, isRecoveryDay && styles.textMuted, isSkipped && styles.textSkipped]}>
                     {weekday}
                   </Text>
-                  <Text style={[styles.dayNum, selected && styles.pillLabelSelected, isRecoveryDay && styles.textMuted]}>
+                  <Text style={[styles.dayNum, selected && styles.pillLabelSelected, isRecoveryDay && styles.textMuted, isSkipped && styles.textSkipped]}>
                     {dayNum}
                   </Text>
                 </View>
@@ -124,7 +130,9 @@ export function CalendarDayPillRow({
                       ? styles.dotComplete
                       : status === "started"
                         ? styles.dotStarted
-                        : styles.dotScheduled,
+                        : status === "skipped"
+                          ? styles.dotSkipped
+                          : styles.dotScheduled,
                   ]}
                 />
               )}
@@ -176,6 +184,11 @@ const styles = StyleSheet.create({
   pillMuted: {
     opacity: 0.6,
   },
+  pillSkipped: {
+    borderColor: colors.border,
+    backgroundColor: "rgba(71,85,105,0.45)",
+    opacity: 0.7,
+  },
   weekday: {
     color: colors.textSecondary,
     ...typography.label,
@@ -195,6 +208,9 @@ const styles = StyleSheet.create({
   textMuted: {
     opacity: 0.9,
   },
+  textSkipped: {
+    textDecorationLine: "line-through",
+  },
   programDayDot: {
     width: 6,
     height: 6,
@@ -208,6 +224,9 @@ const styles = StyleSheet.create({
   },
   dotComplete: {
     backgroundColor: colors.success,
+  },
+  dotSkipped: {
+    backgroundColor: colors.textSecondary,
   },
   programDayDotPlaceholder: {
     width: 6,

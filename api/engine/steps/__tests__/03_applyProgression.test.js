@@ -166,7 +166,7 @@ test("deload week reduces sets", async () => {
     programGenerationConfigs: [
       makeConfigRow({
         progression_by_rank_json: JSON.stringify({
-          beginner: {
+          intermediate: {
             apply_to_purposes: ["main", "secondary"],
             weekly_set_step: 1,
             max_extra_sets: 3,
@@ -183,15 +183,26 @@ test("deload week reduces sets", async () => {
   assert.equal(week4MainItem.sets, 2);
 });
 
-test("fitnessRank 2 uses intermediate progression config", async () => {
+test("fitnessRank 1 uses intermediate progression config", async () => {
   const result = await applyProgression({
     program: makeSegmentedProgram(),
     programGenerationConfigs: [makeConfigRow()],
     programType: "strength",
-    fitnessRank: 2,
+    fitnessRank: 1,
   });
 
   assert.equal(result.debug.rank_key, "intermediate");
+});
+
+test("fitnessRank 0 uses beginner progression config", async () => {
+  const result = await applyProgression({
+    program: makeSegmentedProgram(),
+    programGenerationConfigs: [makeConfigRow()],
+    programType: "strength",
+    fitnessRank: 0,
+  });
+
+  assert.equal(result.debug.rank_key, "beginner");
 });
 
 test("each week entry has week_index starting at 1", async () => {

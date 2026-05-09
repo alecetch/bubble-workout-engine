@@ -1,0 +1,20 @@
+﻿{
+  "sessions_count": 12,
+  "day_streak": 5,
+  "programmes_completed": 2,
+  "consistency_28d": { "completed": 8, "scheduled": 10, "rate": 0.8 },
+  "volume_28d": 5000,
+  "strength_upper_28d": {
+    "exercise_id": "bench-press",
+    "exercise_name": "Bench Press",
+    "best_e1rm_kg": 100,
+    "trend_pct": 0.05
+  },
+  "strength_lower_28d": null,
+  "sessions_count_28d": 8,
+  "weekly_volume_by_region_8w": {
+    "upper": [{ "week_start": "2026-04-28", "volume_kg": 1500 }],
+    "lower": [],
+    "full": []
+  }
+}

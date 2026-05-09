@@ -1,0 +1,27 @@
+appId: com.bubbleworkout.mobile
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Sign in"
+
+- tapOn:
+    id: "input-email"
+- inputText: "existing@example.com"
+
+- tapOn:
+    id: "input-password"
+- inputText: "TestPass123!"
+
+- tapOn:
+    text: "Sign in"
+
+- assertVisible: "Today"
+
+- tapOn:
+    text: "Settings"
+
+- tapOn:
+    text: "Log out"
+
+- assertVisible: "Sign in"

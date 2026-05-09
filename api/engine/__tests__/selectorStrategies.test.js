@@ -64,6 +64,7 @@ function makeState(overrides = {}) {
     compiledConfig: { programType: "strength" },
     rankValue: 0,
     usedIdsWeek: new Set(),
+    usedIdsToday: new Set(),
     usedSw2Today: new Set(),
     usedCanonicalNamesToday: new Set(),
     usedRegionsToday: new Set(),

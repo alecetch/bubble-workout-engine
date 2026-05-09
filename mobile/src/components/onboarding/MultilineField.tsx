@@ -33,6 +33,8 @@ export function MultilineField({
         onBlur={onBlur}
         placeholder={placeholder}
         placeholderTextColor={colors.textSecondary}
+        textContentType="none"
+        autoComplete="off"
         multiline
         numberOfLines={numberOfLines}
         textAlignVertical="top"

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getSegmentPresentation } from "./segmentCardLogic";
+import { getSegmentPresentation } from "./segmentCardLogic.js";
 
 test("warmup segment shows notes-only behavior and no log button", () => {
   const out = getSegmentPresentation({

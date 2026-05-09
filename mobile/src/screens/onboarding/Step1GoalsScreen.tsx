@@ -34,7 +34,7 @@ type SectionKey = "goals" | "fitnessLevel" | "injuryFlags";
 
 const SECTION_ORDER: SectionKey[] = ["goals", "fitnessLevel", "injuryFlags"];
 
-export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
+export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Element {
   const scrollRef = useRef<ScrollView | null>(null);
   const sectionOffsetsRef = useRef<Record<SectionKey, number>>({
     goals: 0,
@@ -193,6 +193,11 @@ export function Step1GoalsScreen({ navigation }: Props): React.JSX.Element {
         injuryFlags: draft.injuryFlags,
         onboardingStepCompleted: draft.onboardingStepCompleted < 1 ? 1 : draft.onboardingStepCompleted,
       });
+      if (route.params?.returnToReview) {
+        navigation.replace("ProgramReview", { preserveDraft: true });
+        return;
+      }
+
       navigation.replace("Step2Equipment");
     } catch {
       setFieldErrors({ goals: "Unable to save your changes. Please try again." });

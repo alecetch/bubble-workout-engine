@@ -22,7 +22,7 @@ import {
   type ProfileLike,
   type StepAttemptedState,
   type Sex,
-} from "./types";
+} from "./types.js";
 
 type OnboardingState = {
   userId: string | null;
@@ -110,7 +110,7 @@ function applyExclusivity(flags: InjuryFlag[]): InjuryFlag[] {
   return unique.filter((flag) => flag !== NO_KNOWN_ISSUES);
 }
 
-function fromProfile(profileLike: ProfileLike): OnboardingDraft {
+export function fromProfile(profileLike: ProfileLike): OnboardingDraft {
   const goals = toGoalTypes(profileLike.goals ?? profileLike.main_goals ?? profileLike.mainGoals ?? []);
   const fitnessLevel = toFitnessLevel(
     profileLike.fitnessLevel ?? profileLike.fitness_level ?? profileLike.fitness_level_slug,
@@ -149,6 +149,8 @@ function fromProfile(profileLike: ProfileLike): OnboardingDraft {
     minutesPerSession: toMinutes(profileLike.minutesPerSession ?? profileLike.minutes_per_session),
     sex: toSex(profileLike.sex),
     ageRange: toAgeRange(profileLike.ageRange ?? profileLike.age_range),
+    anchorLifts: [],
+    anchorLiftsSkipped: Boolean(profileLike.anchorLiftsSkipped ?? profileLike.anchor_lifts_skipped ?? false),
     onboardingStepCompleted:
       (Number(profileLike.onboardingStepCompleted ?? profileLike.onboarding_step_completed ?? 0) as 0 | 1 | 2 | 3) ||
       0,
@@ -163,6 +165,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   attempted: {
     step1: false,
     step2: false,
+    step2b: false,
     step3: false,
   },
   touched: {},
@@ -223,6 +226,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
       attempted: {
         step1: false,
         step2: false,
+        step2b: false,
         step3: false,
       },
       currentStep: 1,

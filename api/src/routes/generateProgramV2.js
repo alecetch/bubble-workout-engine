@@ -7,6 +7,9 @@ import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
 import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
+import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
+import { programCalendarDayHasUserIdColumn } from "../services/programCalendarDaySchema.js";
+import { programHasIsPrimaryColumn } from "../services/programSchema.js";
 import { publicInternalError } from "../utils/publicError.js";
 
 export const generateProgramV2Router = express.Router();
@@ -81,8 +84,10 @@ export function createGenerateProgramV2Handler({
   buildInputs = buildInputsFromProfile,
   ensureCalendar = ensureProgramCalendarCoverage,
   emitPayload = importEmitterPayload,
+  progressionService = makeProgressionDecisionService(db),
 } = {}) {
   let cachedInjuryColumn = null;
+  let cachedHasProgramTypeColumn = null;
   const getProfileByResolvedUser = getProfileByUser ?? getProfile;
 
   async function resolveInjuryColumn(client) {
@@ -109,6 +114,42 @@ export function createGenerateProgramV2Handler({
     }
 
     throw new Error("client_profile missing injury flags column (injury_flags_slugs or injury_flags)");
+  }
+
+  async function ensureProgramTypeColumn(client, log) {
+    if (cachedHasProgramTypeColumn != null) return cachedHasProgramTypeColumn;
+
+    const hasColumnQuery = `
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'program'
+        AND column_name = 'program_type'
+      LIMIT 1
+    `;
+
+    const readHasColumn = async () => {
+      const result = await client.query(hasColumnQuery);
+      return result.rowCount > 0;
+    };
+
+    if (await readHasColumn()) {
+      cachedHasProgramTypeColumn = true;
+      return true;
+    }
+
+    try {
+      await client.query(`ALTER TABLE program ADD COLUMN IF NOT EXISTS program_type TEXT NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_program_program_type ON program (user_id, program_type)`);
+    } catch (err) {
+      log?.warn?.(
+        { event: "schema.program_type.ensure_failed", err: err?.message, code: err?.code },
+        "Unable to add missing program.program_type column",
+      );
+    }
+
+    cachedHasProgramTypeColumn = await readHasColumn();
+    return cachedHasProgramTypeColumn;
   }
 
   return async function generateProgramV2Handler(req, res) {
@@ -190,6 +231,7 @@ export function createGenerateProgramV2Handler({
   try {
     setupClient = await db.connect();
     await setupClient.query("BEGIN");
+    await ensureProgramTypeColumn(setupClient, req.log);
 
     // Phase 1a: Resolve app_user.
     // JWT-registered users send their app_user.id (a UUID) as user_id.
@@ -217,6 +259,24 @@ export function createGenerateProgramV2Handler({
         [user_id],
       );
       pg_user_id = userR.rows[0].id;
+    }
+
+    const sameTypeR = await setupClient.query(
+      `SELECT id
+       FROM program
+       WHERE user_id = $1
+         AND program_type = $2
+         AND status = 'active'
+       LIMIT 1`,
+      [pg_user_id, programType],
+    );
+    if (sameTypeR.rowCount > 0) {
+      await setupClient.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        code: "conflict_active_program_same_type",
+        error: `You already have an active ${programType} program. Archive it before generating a new one.`,
+      });
     }
 
     // Phase 1b: Refresh client_profile from the current API profile shape
@@ -271,14 +331,20 @@ export function createGenerateProgramV2Handler({
         movement_class,
         movement_pattern_primary,
         is_loadable,
+        strength_equivalent,
+        min_fitness_rank,
         complexity_rank,
         density_rating,
         equipment_json,
+        coaching_cues_json,
+        load_guidance,
+        logging_guidance,
         preferred_in_json,
         swap_group_id_1,
         swap_group_id_2,
         target_regions_json,
-        warmup_hooks
+        warmup_hooks,
+        accepts_distance_unit
       FROM exercise_catalogue
       WHERE is_archived = false
       ORDER BY exercise_id
@@ -310,6 +376,17 @@ export function createGenerateProgramV2Handler({
       [pg_user_id, 1, daysPerWeek, anchorDate],
     );
     created_program_id = programR.rows[0].id;
+
+    await setupClient.query(
+      `
+      DELETE FROM program_calendar_day pcd
+      USING program p
+      WHERE pcd.program_id = p.id
+        AND p.user_id = $1
+        AND p.status IN ('failed', 'generating', 'archived', 'completed')
+      `,
+      [pg_user_id],
+    );
 
     // Phase 2b: Pre-create generation_run
     const runR = await setupClient.query(
@@ -344,6 +421,43 @@ export function createGenerateProgramV2Handler({
     setupClient?.release();
   }
 
+  let physiqueContext = null;
+  try {
+    const premiumR = await db.query(
+      `SELECT emphasis_weights_json
+       FROM physique_scan
+       WHERE user_id = $1
+         AND submitted_at > now() - INTERVAL '30 days'
+       ORDER BY submitted_at DESC
+       LIMIT 1`,
+      [pg_user_id],
+    );
+    if (premiumR.rows[0]) {
+      physiqueContext = {
+        emphasisWeights: premiumR.rows[0].emphasis_weights_json ?? {},
+        emphasisSuggestions: Object.keys(premiumR.rows[0].emphasis_weights_json ?? {}),
+      };
+    } else {
+      const physiqueR = await db.query(
+        `SELECT program_emphasis_json
+         FROM physique_check_in
+         WHERE user_id = $1
+           AND submitted_at > now() - INTERVAL '30 days'
+         ORDER BY submitted_at DESC
+         LIMIT 1`,
+        [pg_user_id],
+      );
+      if (physiqueR.rows[0]) {
+        physiqueContext = {
+          emphasisWeights: null,
+          emphasisSuggestions: physiqueR.rows[0].program_emphasis_json ?? [],
+        };
+      }
+    }
+  } catch {
+    // Non-fatal - physique context is optional
+  }
+
   // ── Phase 3–6: Pipeline + import (program_id is now stable) ──────────────
   // On any error: mark generation_run + program as failed (best-effort, no delete).
 
@@ -360,13 +474,18 @@ export function createGenerateProgramV2Handler({
   }
 
   try {
+    const hasProgramTypeColumn = await ensureProgramTypeColumn(db, req.log);
+
     // Phase 3: Run pipeline
     await db.query(
       `UPDATE generation_run SET last_stage='pipeline', updated_at=now() WHERE id=$1`,
       [generation_run_id],
     );
 
-    const inputs = buildInputs(devProfile, exerciseRows);
+    const inputs = {
+      ...buildInputs(devProfile, exerciseRows, physiqueContext),
+      allowed_exercise_ids: allowedIds.map((id) => String(id)),
+    };
     const allowed_ids_csv = allowedIds.join(",");
 
     req.log.info({
@@ -383,6 +502,7 @@ export function createGenerateProgramV2Handler({
       db,
       inputs,
       programType,
+      userId: user_id,
       request: {
         anchor_date_ms,
         allowed_ids_csv,
@@ -469,37 +589,125 @@ export function createGenerateProgramV2Handler({
     const programSummary = prgData.program_summary
       || `Auto-generated ${programType} program.`;
 
+    const hasProgramCalendarDayUserId = await programCalendarDayHasUserIdColumn(db);
+    const conflictR = await db.query(
+      hasProgramCalendarDayUserId
+        ? `
+          SELECT
+            pcd_new.scheduled_date::text AS conflict_date,
+            ep.program_type AS existing_type
+          FROM program_calendar_day pcd_new
+          JOIN program_calendar_day pcd_existing
+            ON pcd_existing.user_id = pcd_new.user_id
+           AND pcd_existing.scheduled_date = pcd_new.scheduled_date
+           AND pcd_existing.is_training_day = TRUE
+           AND pcd_existing.program_id <> pcd_new.program_id
+          JOIN program ep
+            ON ep.id = pcd_existing.program_id
+           AND ep.status = 'active'
+          WHERE pcd_new.program_id = $1
+            AND pcd_new.is_training_day = TRUE
+          ORDER BY pcd_new.scheduled_date
+          `
+        : `
+          SELECT
+            pcd_new.scheduled_date::text AS conflict_date,
+            ep.program_type AS existing_type
+          FROM program_calendar_day pcd_new
+          JOIN program p_new
+            ON p_new.id = pcd_new.program_id
+          JOIN program_calendar_day pcd_existing
+            ON pcd_existing.scheduled_date = pcd_new.scheduled_date
+           AND pcd_existing.is_training_day = TRUE
+           AND pcd_existing.program_id <> pcd_new.program_id
+          JOIN program ep
+            ON ep.id = pcd_existing.program_id
+           AND ep.status = 'active'
+           AND ep.user_id = p_new.user_id
+          WHERE pcd_new.program_id = $1
+            AND pcd_new.is_training_day = TRUE
+          ORDER BY pcd_new.scheduled_date
+          `,
+      [created_program_id],
+    );
+
+    if (conflictR.rowCount > 0) {
+      const conflictDates = [...new Set(conflictR.rows.map((row) => row.conflict_date))];
+      const existingTypes = [...new Set(conflictR.rows.map((row) => row.existing_type).filter(Boolean))];
+      await markFailed("schedule_conflict");
+      return res.status(409).json({
+        ok: false,
+        code: "schedule_conflict",
+        error: "The new program overlaps with existing active sessions.",
+        details: {
+          conflict_dates: conflictDates,
+          existing_program_types: existingTypes,
+          suggestion: "Choose different preferred days or archive an active program first.",
+        },
+      });
+    }
+
+    const hasProgramIsPrimaryColumn = await programHasIsPrimaryColumn(db);
+    let isPrimary = true;
+    if (hasProgramIsPrimaryColumn) {
+      const hasPrimaryR = await db.query(
+        `SELECT id
+         FROM program
+         WHERE user_id = $1
+           AND status = 'active'
+           AND is_primary = TRUE
+         LIMIT 1`,
+        [pg_user_id],
+      );
+      isPrimary = hasPrimaryR.rowCount === 0;
+    }
+
+    const programUpdateAssignments = [
+      "program_title = $1",
+      "program_summary = $2",
+      "weeks_count = $3",
+      "days_per_week = $4",
+      "program_outline_json = $5::jsonb",
+      "start_date = $6::date",
+      "start_offset_days = $7",
+      "start_weekday = $8",
+      "preferred_days_sorted_json = $9::jsonb",
+      "hero_media_id = $10",
+      "status = 'active'",
+      "is_ready = true",
+      "updated_at = now()",
+    ];
+    const programUpdateParams = [
+      programTitle,
+      programSummary,
+      prgData.weeks_count ?? 1,
+      prgData.days_per_week ?? daysPerWeek,
+      JSON.stringify(prgData.program_outline_json ?? {}),
+      prgData.start_date ?? anchorDate,
+      prgData.start_offset_days ?? 0,
+      prgData.start_weekday ?? "",
+      JSON.stringify(prgData.preferred_days_sorted_json ?? []),
+      pipelineOut?.program?.hero_media_id ?? null,
+    ];
+
+    if (hasProgramIsPrimaryColumn) {
+      programUpdateAssignments.splice(programUpdateAssignments.length - 1, 0, `is_primary = $${programUpdateParams.length + 1}`);
+      programUpdateParams.push(isPrimary);
+    }
+
+    if (hasProgramTypeColumn) {
+      programUpdateAssignments.push(`program_type = $${programUpdateParams.length + 1}`);
+      programUpdateParams.push(programType);
+    }
+    programUpdateParams.push(created_program_id);
+
     await db.query(
       `
       UPDATE program SET
-        program_title = $1,
-        program_summary = $2,
-        weeks_count = $3,
-        days_per_week = $4,
-        program_outline_json = $5::jsonb,
-        start_date = $6::date,
-        start_offset_days = $7,
-        start_weekday = $8,
-        preferred_days_sorted_json = $9::jsonb,
-        hero_media_id = $10,
-        status = 'active',
-        is_ready = true,
-        updated_at = now()
-      WHERE id = $11
+        ${programUpdateAssignments.join(",\n        ")}
+      WHERE id = $${programUpdateParams.length}
       `,
-      [
-        programTitle,
-        programSummary,
-        prgData.weeks_count ?? 1,
-        prgData.days_per_week ?? daysPerWeek,
-        JSON.stringify(prgData.program_outline_json ?? {}),
-        prgData.start_date ?? anchorDate,
-        prgData.start_offset_days ?? 0,
-        prgData.start_weekday ?? "",
-        JSON.stringify(prgData.preferred_days_sorted_json ?? []),
-        pipelineOut?.program?.hero_media_id ?? null,
-        created_program_id,
-      ],
+      programUpdateParams,
     );
 
     // Phase 5c: day hero_media_id
@@ -536,6 +744,29 @@ export function createGenerateProgramV2Handler({
       [generation_run_id],
     );
     await ensureCalendar(db, created_program_id);
+
+    try {
+      // This generation-time pass is a non-fatal backstop, not the primary trigger.
+      // The intended canonical trigger for progression is PATCH /api/day/:program_day_id/complete
+      // once a day is marked completed and real history exists. Keeping this pass here lets us
+      // re-derive recommendations for regenerated programs or existing athletes who already have
+      // completed history, while still no-oping safely for brand-new programs with no history.
+      await db.query(
+        `UPDATE generation_run SET last_stage='progression', updated_at=now() WHERE id=$1`,
+        [generation_run_id],
+      );
+      await progressionService.applyProgressionRecommendations({
+        programId: created_program_id,
+        userId: pg_user_id,
+        programType,
+        fitnessRank: mappedFitnessRank,
+      });
+    } catch (progressionErr) {
+      req.log.warn(
+        { event: "pipeline.progression.error", err: progressionErr?.message, generation_run_id },
+        "progression recommendation pass failed (non-fatal)",
+      );
+    }
 
     // Phase 6: Mark generation_run complete
     await db.query(

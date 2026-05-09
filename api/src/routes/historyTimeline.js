@@ -28,7 +28,8 @@ const SQL_HISTORY_HIGHLIGHTS = `
 SELECT
   l.program_day_id,
   MAX(l.weight_kg) AS max_weight_kg,
-  (ARRAY_AGG(COALESCE(ec.name, pe.exercise_name) ORDER BY l.weight_kg DESC NULLS LAST))[1] AS exercise_name
+  (ARRAY_AGG(COALESCE(ec.name, pe.exercise_name) ORDER BY l.weight_kg DESC NULLS LAST))[1] AS exercise_name,
+  (ARRAY_AGG(pe.exercise_id ORDER BY l.weight_kg DESC NULLS LAST))[1] AS exercise_id
 FROM segment_exercise_log l
 JOIN program_exercise pe ON pe.id = l.program_exercise_id
 LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
@@ -60,6 +61,15 @@ function toFiniteNumber(value, fallback = 0) {
   return fallback;
 }
 
+function mapHighlight(row) {
+  if (row == null || row.max_weight_kg == null) return null;
+  return {
+    value: toFiniteNumber(row.max_weight_kg, 0),
+    exerciseName: asString(row.exercise_name),
+    exerciseId: asString(row.exercise_id),
+  };
+}
+
 export function clampTimelineLimit(rawLimit) {
   if (rawLimit === undefined) return 40;
   if (safeString(rawLimit) === "") return 1;
@@ -89,7 +99,7 @@ export function parseTimelineCursor(query) {
 
 export function mapTimelineItem(row, highlightByProgramDayId) {
   const programDayId = asString(row.program_day_id);
-  const highlight = highlightByProgramDayId.get(programDayId) ?? null;
+  const highlightRow = highlightByProgramDayId.get(programDayId) ?? null;
 
   return {
     programDayId,
@@ -99,7 +109,7 @@ export function mapTimelineItem(row, highlightByProgramDayId) {
     dayType: asString(row.day_type),
     durationMins: toFiniteNumber(row.session_duration_mins, 0),
     heroMediaId: asNullableString(row.hero_media_id),
-    highlight,
+    highlight: mapHighlight(highlightRow),
   };
 }
 
@@ -155,12 +165,7 @@ export function createHistoryTimelineHandler(db = pool) {
         highlightByProgramDayId = new Map(
           (highlightResult.rows ?? []).map((row) => [
             asString(row.program_day_id),
-            {
-              type: "max_load",
-              value: toFiniteNumber(row.max_weight_kg, 0),
-              unit: "kg",
-              exerciseName: asString(row.exercise_name),
-            },
+            row,
           ]),
         );
       }

@@ -187,16 +187,32 @@ test("isConditioning returns true for mp=cardio", () => {
   assert.equal(isConditioning({ mp: "cardio", sw: "", sw2: "", n: "" }), true);
 });
 
-test("isConditioning returns true when sw contains engine", () => {
-  assert.equal(isConditioning({ mp: "", sw: "cardio_engine", sw2: "", n: "" }), true);
+test("isConditioning returns true for conditioning_main pref tag", () => {
+  assert.equal(isConditioning({ mp: "", pref: ["conditioning_main"] }), true);
 });
 
-test("isConditioning returns true for name containing bike", () => {
-  assert.equal(isConditioning({ mp: "", sw: "", sw2: "", n: "Air Bike Intervals" }), true);
+test("isConditioning returns true for hyrox_station pref tag", () => {
+  assert.equal(isConditioning({ mp: "", pref: ["hyrox_station"] }), true);
+});
+
+test("isConditioning returns true for hyrox_buy_in pref tag", () => {
+  assert.equal(isConditioning({ mp: "", pref: ["hyrox_buy_in"] }), true);
+});
+
+test("isConditioning returns false for strength rows", () => {
+  assert.equal(
+    isConditioning({ mp: "pull_horizontal", sw: "pull_horizontal", sw2: "pull_horizontal_compound", n: "Seated Cable Row", pref: [] }),
+    false,
+  );
+});
+
+test("isConditioning does not infer conditioning from names alone", () => {
+  assert.equal(isConditioning({ mp: "", sw: "", sw2: "", n: "Air Bike Intervals", pref: [] }), false);
+  assert.equal(isConditioning({ mp: "", sw: "", sw2: "", n: "Row Erg Intervals", pref: [] }), false);
 });
 
 test("isConditioning returns false for normal strength exercise", () => {
-  assert.equal(isConditioning({ mp: "squat", sw: "squat_group", sw2: "squat_comp", n: "Squat" }), false);
+  assert.equal(isConditioning({ mp: "squat", sw: "squat_group", sw2: "squat_comp", n: "Squat", pref: [] }), false);
 });
 
 test("isLoadable returns true when load=true", () => {
@@ -362,9 +378,48 @@ test("pickWithFallback returns sw2 match on first attempt (stats.picked_sw2_pref
     stats,
     new Set(),
     new Set(),
+    new Set(),
   );
   assert.equal(result.id, "ex1");
   assert.equal(stats.picked_sw2_pref, 1);
+});
+
+test("pickWithFallback keeps same-sw2 alternatives eligible when one exact exercise was already used today", () => {
+  const exactUsed = makeExercise({
+    id: "sled_pull_a",
+    name: "Sled Pull Heavy",
+    mp: "sled_pull",
+    sw: "sled_pull",
+    sw2: "sled_compound",
+  });
+  const sameSw2Alt = makeExercise({
+    id: "sled_pull_b",
+    name: "Sled Pull Moderate",
+    mp: "sled_pull",
+    sw: "sled_pull",
+    sw2: "sled_compound",
+  });
+  const sameSwFallback = makeExercise({
+    id: "rdl_row",
+    name: "RDL and Bent Over Row",
+    mp: "sled_pull",
+    sw: "sled_pull",
+    sw2: "hinge_compound",
+  });
+  const pool = makeSelectorPool([exactUsed, sameSw2Alt, sameSwFallback]);
+
+  const result = pickWithFallback(
+    pool.allowedSet,
+    pool.byId,
+    { mp: "sled_pull", sw: "sled_pull", sw2: "sled_compound", requirePref: null, prefMode: "soft", prefBonus: 4 },
+    new Set(),
+    makeStats(),
+    new Set(["sled_pull_a"]),
+    new Set(),
+    new Set(),
+  );
+
+  assert.equal(result?.id, "sled_pull_b");
 });
 
 test("avoids exercise with same canonical name already used today", () => {
@@ -431,14 +486,14 @@ test("requirePref soft mode can succeed on initial sw2 attempt without a pref ma
   const pool = makeSelectorPool([exNoPref]);
   const stats = makeStats();
   const sel = { sw2: "sq_comp", requirePref: "strength_main", prefMode: "soft", prefBonus: 4 };
-  const result = pickWithFallback(pool.allowedSet, pool.byId, sel, new Set(), stats, new Set(), new Set());
+  const result = pickWithFallback(pool.allowedSet, pool.byId, sel, new Set(), stats, new Set(), new Set(), new Set());
   assert.equal(result.id, "ex1");
   assert.equal(stats.picked_sw2_pref, 1);
   assert.equal(stats.picked_sw2_relaxed, 0);
 });
 
 test("pickWithFallback returns null when allowedSet is empty", () => {
-  const result = pickWithFallback(new Set(), {}, { sw2: "x", prefMode: "soft", prefBonus: 4 }, new Set(), makeStats(), new Set(), new Set());
+  const result = pickWithFallback(new Set(), {}, { sw2: "x", prefMode: "soft", prefBonus: 4 }, new Set(), makeStats(), new Set(), new Set(), new Set());
   assert.equal(result, null);
 });
 

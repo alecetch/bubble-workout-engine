@@ -1,0 +1,38 @@
+﻿{
+  "mode": "prs_28d",
+  "rows": [
+    {
+      "exercise_id": "back-squat",
+      "exercise_name": "Back Squat",
+      "weight_kg": 100,
+      "reps_completed": 5,
+      "estimated_e1rm_kg": 117,
+      "date": "2026-05-01",
+      "region": "lower",
+      "share_label": "Back Squat PR",
+      "milestone_type": "rep_pr"
+    },
+    {
+      "exercise_id": "bench-press",
+      "exercise_name": "Bench Press",
+      "weight_kg": 80,
+      "reps_completed": 8,
+      "estimated_e1rm_kg": 107,
+      "date": "2026-04-28",
+      "region": "upper",
+      "share_label": null,
+      "milestone_type": null
+    }
+  ],
+  "heaviest": {
+    "upper": {
+      "exercise_id": "bench-press",
+      "exercise_name": "Bench Press",
+      "weight_kg": 80,
+      "reps_completed": 8,
+      "estimated_e1rm_kg": 107,
+      "date": "2026-04-28"
+    },
+    "lower": null
+  }
+}

@@ -121,7 +121,43 @@ test("priority DESC wins", async () => {
     ],
   });
   assert.equal(firstItem(result).rep_rule_id, "high");
-  assert.equal(firstItem(result).reps_prescribed, "9-9");
+  assert.equal(firstItem(result).reps_prescribed, "9");
+});
+
+test("equal reps range collapses to single value", async () => {
+  const result = await applyRepRules({
+    program: makeProgram(),
+    catalogJson: makeCatalogJson(),
+    repRules: [makeRule({ rep_low: 9, rep_high: 9 })],
+  });
+  assert.equal(firstItem(result).reps_prescribed, "9");
+});
+
+test("equal meter range collapses to single value", async () => {
+  const result = await applyRepRules({
+    program: makeProgram(),
+    catalogJson: makeCatalogJson(),
+    repRules: [makeRule({ rep_low: 400, rep_high: 400, reps_unit: "m" })],
+  });
+  assert.equal(firstItem(result).reps_prescribed, "400 m");
+});
+
+test("equal seconds range collapses to single value", async () => {
+  const result = await applyRepRules({
+    program: makeProgram(),
+    catalogJson: makeCatalogJson(),
+    repRules: [makeRule({ rep_low: 30, rep_high: 30, reps_unit: "seconds" })],
+  });
+  assert.equal(firstItem(result).reps_prescribed, "30 seconds");
+});
+
+test("unequal range is unchanged", async () => {
+  const result = await applyRepRules({
+    program: makeProgram(),
+    catalogJson: makeCatalogJson(),
+    repRules: [makeRule({ rep_low: 300, rep_high: 500, reps_unit: "m" })],
+  });
+  assert.equal(firstItem(result).reps_prescribed, "300-500 m");
 });
 
 test("tie on priority uses higher specificity", async () => {
@@ -250,4 +286,109 @@ test("reps_unit reps does not append unit in reps_prescribed", async () => {
     repRules: [makeRule({ rule_id: "reps_rule", reps_unit: "reps", rep_low: 8, rep_high: 12 })],
   });
   assert.equal(firstItem(result).reps_prescribed, "8-12");
+});
+
+test("unit override - distance rule on non-distance exercise", async (t) => {
+  await t.test("override fires for non-whitelist exercise", async () => {
+    const result = await applyRepRules({
+      program: makeProgram(),
+      catalogJson: JSON.stringify({
+        schema: "catalog_v3",
+        ex: [
+          {
+            id: "ex1",
+            mp: "cyclical_engine",
+            sw2: "",
+            mc: "compound",
+            tr: ["upper_back"],
+            eq: ["barbell"],
+            accepts_distance_unit: false,
+          },
+        ],
+      }),
+      repRules: [
+        makeRule({
+          rule_id: "distance_rule_non_whitelist",
+          movement_pattern: "cyclical_engine",
+          reps_unit: "m",
+          rep_low: 200,
+          rep_high: 300,
+          time_equivalent_low_sec: 60,
+          time_equivalent_high_sec: 90,
+        }),
+      ],
+    });
+
+    assert.equal(firstItem(result).reps_unit, "seconds");
+    assert.equal(firstItem(result).reps_prescribed, "60-90 seconds");
+  });
+
+  await t.test("override does not fire for whitelist exercise", async () => {
+    const result = await applyRepRules({
+      program: makeProgram(),
+      catalogJson: JSON.stringify({
+        schema: "catalog_v3",
+        ex: [
+          {
+            id: "ex1",
+            mp: "cyclical_engine",
+            sw2: "",
+            mc: "compound",
+            tr: ["upper_back"],
+            eq: ["row_erg"],
+            accepts_distance_unit: true,
+          },
+        ],
+      }),
+      repRules: [
+        makeRule({
+          rule_id: "distance_rule_whitelist",
+          movement_pattern: "cyclical_engine",
+          reps_unit: "m",
+          rep_low: 200,
+          rep_high: 300,
+          time_equivalent_low_sec: 60,
+          time_equivalent_high_sec: 90,
+        }),
+      ],
+    });
+
+    assert.equal(firstItem(result).reps_unit, "m");
+    assert.equal(firstItem(result).reps_prescribed.includes("m"), true);
+    assert.equal(firstItem(result).reps_prescribed.includes("seconds"), false);
+  });
+
+  await t.test("override does not fire when rule has no time equivalent", async () => {
+    const result = await applyRepRules({
+      program: makeProgram(),
+      catalogJson: JSON.stringify({
+        schema: "catalog_v3",
+        ex: [
+          {
+            id: "ex1",
+            mp: "cyclical_engine",
+            sw2: "",
+            mc: "compound",
+            tr: ["upper_back"],
+            eq: ["barbell"],
+            accepts_distance_unit: false,
+          },
+        ],
+      }),
+      repRules: [
+        makeRule({
+          rule_id: "distance_rule_no_equivalent",
+          movement_pattern: "cyclical_engine",
+          reps_unit: "m",
+          rep_low: 200,
+          rep_high: 300,
+          time_equivalent_low_sec: null,
+          time_equivalent_high_sec: null,
+        }),
+      ],
+    });
+
+    assert.equal(firstItem(result).reps_unit, "m");
+    assert.equal(firstItem(result).reps_prescribed, "200-300 m");
+  });
 });

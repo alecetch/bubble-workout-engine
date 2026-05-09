@@ -21,11 +21,11 @@ function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
 
 function rankKey(rank){
   rank = toInt(rank, 1);
-  if (rank === 1) return "beginner";
-  if (rank === 2) return "intermediate";
-  if (rank === 3) return "advanced";
-  if (rank === 4) return "elite";
-  return "beginner";
+  if (rank === 0) return "beginner";
+  if (rank === 1) return "intermediate";
+  if (rank === 2) return "advanced";
+  if (rank === 3) return "elite";
+  return "intermediate";
 }
 
 // Accepts either: single row, array, {rows:[...]} or {data:[...]}
@@ -207,6 +207,13 @@ export async function applyProgression({
 
             it.sets = progressed;
             if (progressed !== baseSets) dbg.items_progressed += 1;
+
+            // RIR bump for deload week — written here, applied in 04_applyRepRules after rule matching
+            const dlCfg = progCfg.deload || null;
+            if (dlCfg && toInt(dlCfg.week, 0) === w) {
+              const rirBump = toInt(dlCfg.rir_bump, 0);
+              if (rirBump > 0) it.deload_rir_bump = rirBump;
+            }
           }
         }
       }

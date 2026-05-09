@@ -10,17 +10,21 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   queryKeys,
-  useExerciseSummary,
+  useEntitlement,
   useHistoryPrograms,
   useHistoryTimeline,
   useLoggedExercisesSearch,
+  usePhysiqueCheckIns,
   usePrsFeed,
   useSessionHistoryMetrics,
 } from "../../api/hooks";
 import type { HistoryTimelineItem, LoggedExerciseItem } from "../../api/history";
+import type { HistoryStackParamList } from "../../navigation/HistoryStackNavigator";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -28,6 +32,8 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+
+type HistoryScreenNavProp = NativeStackNavigationProp<HistoryStackParamList, "HistoryMain">;
 
 function formatDateLabel(isoDate: string): string {
   if (!isoDate) return "Unknown date";
@@ -63,7 +69,13 @@ function HeroMediaThumb({
   return <Image source={{ uri }} style={thumbStyle} />;
 }
 
-function TimelineRow({ item }: { item: HistoryTimelineItem }): React.JSX.Element {
+function TimelineRow({
+  item,
+  onPressExercise,
+}: {
+  item: HistoryTimelineItem;
+  onPressExercise?: (exerciseId: string, exerciseName: string) => void;
+}): React.JSX.Element {
   return (
     <View style={styles.timelineCard}>
       <HeroMediaThumb uri={item.heroMediaId} compact />
@@ -72,9 +84,18 @@ function TimelineRow({ item }: { item: HistoryTimelineItem }): React.JSX.Element
         <Text style={styles.timelineLabel}>{item.dayLabel || "Session"}</Text>
         <Text style={styles.timelineMeta}>{item.durationMins} mins</Text>
         {item.highlight ? (
-          <Text style={styles.timelineHighlight}>
-            Max {item.highlight.value}kg - {item.highlight.exerciseName}
-          </Text>
+          <PressableScale
+            onPress={
+              item.highlight.exerciseId && onPressExercise
+                ? () => onPressExercise(item.highlight!.exerciseId, item.highlight!.exerciseName)
+                : undefined
+            }
+            disabled={!item.highlight.exerciseId || !onPressExercise}
+          >
+            <Text style={styles.timelineHighlight}>
+              Max {item.highlight.value}kg - {item.highlight.exerciseName}
+            </Text>
+          </PressableScale>
         ) : null}
       </View>
     </View>
@@ -96,6 +117,7 @@ function ExerciseResultRow({
 }
 
 export function HistoryScreen(): React.JSX.Element {
+  const navigation = useNavigation<HistoryScreenNavProp>();
   const queryClient = useQueryClient();
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
@@ -105,10 +127,27 @@ export function HistoryScreen(): React.JSX.Element {
   const prsFeedQuery = usePrsFeed(userId);
   const programsQuery = useHistoryPrograms(10, userId);
   const timelineQuery = useHistoryTimeline(40, userId);
+  const checkInsQuery = usePhysiqueCheckIns(1);
+  const entitlementQuery = useEntitlement();
+  const lastCheckIn = checkInsQuery.data?.check_ins[0] ?? null;
+  const isPremium = entitlementQuery.data?.subscription_status === "active";
+  const isActive = entitlementQuery.data?.is_active ?? true;
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
-  const [selectedExercise, setSelectedExercise] = React.useState<LoggedExerciseItem | null>(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
+    }, [queryClient]),
+  );
+
+  React.useEffect(() => {
+    if (entitlementQuery.isSuccess && !isActive) {
+      const parent = navigation.getParent() as any;
+      parent?.navigate?.("HomeTab", { screen: "Paywall" });
+    }
+  }, [entitlementQuery.isSuccess, isActive, navigation]);
 
   React.useEffect(() => {
     const timeout = setTimeout(() => {
@@ -118,7 +157,6 @@ export function HistoryScreen(): React.JSX.Element {
   }, [searchTerm]);
 
   const exerciseSearchQuery = useLoggedExercisesSearch(debouncedSearchTerm, userId);
-  const exerciseSummaryQuery = useExerciseSummary(selectedExercise?.exerciseId ?? null, userId);
 
   const metrics = metricsQuery.data;
   const prsFeed = prsFeedQuery.data;
@@ -193,6 +231,50 @@ export function HistoryScreen(): React.JSX.Element {
         </View>
       </View>
 
+      <PressableScale
+        onPress={() => navigation.navigate("ProgressOverview")}
+        style={styles.progressCard}
+      >
+        <Text style={styles.progressCardTitle}>Progress Overview</Text>
+        <Text style={styles.progressCardSubtitle}>Volume trends & strength snapshots</Text>
+      </PressableScale>
+
+      <PressableScale
+        onPress={() => navigation.navigate("PhysiqueCheckIn")}
+        style={styles.progressCard}
+      >
+        <Text style={styles.progressCardTitle}>Physique Check-In</Text>
+        <Text style={styles.progressCardSubtitle}>
+          {lastCheckIn
+            ? `Last check-in: ${new Date(lastCheckIn.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+            : "Track your visual progress with AI"}
+        </Text>
+      </PressableScale>
+
+      <PressableScale
+        onPress={() => {
+          if (isPremium) {
+            navigation.navigate("PhysiqueIntelligence");
+            return;
+          }
+          const parent = navigation.getParent() as any;
+          parent?.navigate?.("HomeTab", { screen: "Paywall" });
+        }}
+        style={styles.progressCard}
+      >
+        <View style={styles.physiquePremiumRow}>
+          <View style={styles.physiquePremiumText}>
+            <Text style={styles.progressCardTitle}>Physique Intelligence</Text>
+            <Text style={styles.progressCardSubtitle}>
+              {isPremium
+                ? "Score trends, region breakdowns, streaks, and milestones"
+                : "Premium • Unlock score trends and milestone tracking"}
+            </Text>
+          </View>
+          {!isPremium ? <Text style={styles.premiumBadge}>PREMIUM</Text> : null}
+        </View>
+      </PressableScale>
+
       <View style={styles.metricsGrid}>
         <View style={styles.metricsGridCard}>
           <Text style={styles.metricsGridLabel}>Consistency 28d</Text>
@@ -221,6 +303,7 @@ export function HistoryScreen(): React.JSX.Element {
               ? `${metrics.strengthUpper28d.bestE1rmKg.toFixed(1)} kg`
               : "-"}
           </Text>
+          <Text style={styles.metricsGridSubLabel}>Best e1RM</Text>
           <Text style={styles.metricsGridSub}>{metrics?.strengthUpper28d?.exerciseName ?? "No upper data"}</Text>
           <Text style={styles.metricsGridTrend}>
             {metrics?.strengthUpper28d?.trendPct != null
@@ -236,6 +319,7 @@ export function HistoryScreen(): React.JSX.Element {
               ? `${metrics.strengthLower28d.bestE1rmKg.toFixed(1)} kg`
               : "-"}
           </Text>
+          <Text style={styles.metricsGridSubLabel}>Best e1RM</Text>
           <Text style={styles.metricsGridSub}>{metrics?.strengthLower28d?.exerciseName ?? "No lower data"}</Text>
           <Text style={styles.metricsGridTrend}>
             {metrics?.strengthLower28d?.trendPct != null
@@ -286,7 +370,18 @@ export function HistoryScreen(): React.JSX.Element {
       {prsFeed?.mode === "heaviest_28d" ? (
         prsFeed.heaviest?.upper || prsFeed.heaviest?.lower ? (
           <View style={styles.personalRecordsWrap}>
-            <View style={styles.prsFeedRow}>
+            <PressableScale
+              style={styles.prsFeedRow}
+              onPress={() =>
+                prsFeed.heaviest?.upper?.exerciseId
+                  ? navigation.navigate("ExerciseTrend", {
+                      exerciseId: prsFeed.heaviest.upper.exerciseId,
+                      exerciseName: prsFeed.heaviest.upper.exerciseName,
+                    })
+                  : undefined
+              }
+              disabled={!prsFeed.heaviest?.upper?.exerciseId}
+            >
               <View style={styles.personalRecordMain}>
                 <Text style={styles.prsFeedName}>{prsFeed.heaviest?.upper?.exerciseName ?? "No upper data"}</Text>
                 {prsFeed.heaviest?.upper ? (
@@ -299,8 +394,19 @@ export function HistoryScreen(): React.JSX.Element {
                 ) : null}
               </View>
               <Text style={styles.prsFeedDate}>Upper</Text>
-            </View>
-            <View style={styles.prsFeedRow}>
+            </PressableScale>
+            <PressableScale
+              style={styles.prsFeedRow}
+              onPress={() =>
+                prsFeed.heaviest?.lower?.exerciseId
+                  ? navigation.navigate("ExerciseTrend", {
+                      exerciseId: prsFeed.heaviest.lower.exerciseId,
+                      exerciseName: prsFeed.heaviest.lower.exerciseName,
+                    })
+                  : undefined
+              }
+              disabled={!prsFeed.heaviest?.lower?.exerciseId}
+            >
               <View style={styles.personalRecordMain}>
                 <Text style={styles.prsFeedName}>{prsFeed.heaviest?.lower?.exerciseName ?? "No lower data"}</Text>
                 {prsFeed.heaviest?.lower ? (
@@ -313,7 +419,7 @@ export function HistoryScreen(): React.JSX.Element {
                 ) : null}
               </View>
               <Text style={styles.prsFeedDate}>Lower</Text>
-            </View>
+            </PressableScale>
           </View>
         ) : (
           <View style={styles.emptyCard}>
@@ -323,7 +429,16 @@ export function HistoryScreen(): React.JSX.Element {
       ) : prsFeed?.rows && prsFeed.rows.length > 0 ? (
         <View style={styles.personalRecordsWrap}>
           {prsFeed.rows.map((row) => (
-            <View key={`${row.exerciseId}:${row.date}`} style={styles.prsFeedRow}>
+            <PressableScale
+              key={`${row.exerciseId}:${row.date}`}
+              style={styles.prsFeedRow}
+              onPress={() =>
+                navigation.navigate("ExerciseTrend", {
+                  exerciseId: row.exerciseId,
+                  exerciseName: row.exerciseName || row.exerciseId,
+                })
+              }
+            >
               <View style={styles.personalRecordMain}>
                 <Text style={styles.prsFeedName}>{row.exerciseName}</Text>
                 <Text style={styles.prsFeedStats}>
@@ -332,7 +447,7 @@ export function HistoryScreen(): React.JSX.Element {
                 </Text>
               </View>
               <Text style={styles.prsFeedDate}>{formatDateLabel(row.date)}</Text>
-            </View>
+            </PressableScale>
           ))}
         </View>
       ) : (
@@ -353,6 +468,8 @@ export function HistoryScreen(): React.JSX.Element {
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          textContentType="none"
+          autoComplete="off"
           style={styles.exerciseInput}
         />
 
@@ -372,98 +489,16 @@ export function HistoryScreen(): React.JSX.Element {
                 item={item}
                 onPress={(selected) => {
                   Keyboard.dismiss();
-                  setSelectedExercise(selected);
                   setSearchTerm("");
+                  navigation.navigate("ExerciseTrend", {
+                    exerciseId: selected.exerciseId,
+                    exerciseName: selected.exerciseName || selected.exerciseId,
+                  });
                 }}
               />
             ))}
           </View>
         )}
-
-        {selectedExercise ? (
-          <View style={styles.exerciseSummaryCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.exerciseSummaryTitle}>{selectedExercise.exerciseName}</Text>
-              <PressableScale style={styles.modalCloseButton} onPress={() => setSelectedExercise(null)}>
-                <Text style={styles.modalCloseLabel}>Clear</Text>
-              </PressableScale>
-            </View>
-
-            {exerciseSummaryQuery.isLoading ? (
-              <View style={styles.exerciseSearchLoading}>
-                <ActivityIndicator color={colors.accent} size="small" />
-              </View>
-            ) : !exerciseSummaryQuery.data?.bestEver && !exerciseSummaryQuery.data?.best28d ? (
-              <Text style={styles.exerciseExplorerHint}>No logged data for this exercise.</Text>
-            ) : (
-              <View style={styles.exerciseSummaryGrid}>
-                <View style={styles.exerciseSummarySubCard}>
-                  <Text style={styles.exerciseSummaryStatLabel}>Best Ever</Text>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>Weight</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.bestEver ? formatKg(exerciseSummaryQuery.data.bestEver.weightKg) : "n/a"}
-                    </Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>Reps</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.bestEver?.repsCompleted ?? "n/a"}
-                    </Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>e1RM</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.bestEver?.estimatedE1rmKg != null
-                        ? formatKg(exerciseSummaryQuery.data.bestEver.estimatedE1rmKg)
-                        : "n/a"}
-                    </Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>Date</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.bestEver?.date
-                        ? formatDateLabel(exerciseSummaryQuery.data.bestEver.date)
-                        : "n/a"}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.exerciseSummarySubCard}>
-                  <Text style={styles.exerciseSummaryStatLabel}>Best 28d</Text>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>Weight</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.best28d ? formatKg(exerciseSummaryQuery.data.best28d.weightKg) : "n/a"}
-                    </Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>Reps</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.best28d?.repsCompleted ?? "n/a"}
-                    </Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>e1RM</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.best28d?.estimatedE1rmKg != null
-                        ? formatKg(exerciseSummaryQuery.data.best28d.estimatedE1rmKg)
-                        : "n/a"}
-                    </Text>
-                  </View>
-                  <View style={styles.exerciseSummaryStatRow}>
-                    <Text style={styles.exerciseSummaryStatLabel}>Date</Text>
-                    <Text style={styles.exerciseSummaryStatValue}>
-                      {exerciseSummaryQuery.data?.best28d?.date
-                        ? formatDateLabel(exerciseSummaryQuery.data.best28d.date)
-                        : "n/a"}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-          </View>
-        ) : null}
       </View>
     </View>
   );
@@ -492,7 +527,14 @@ export function HistoryScreen(): React.JSX.Element {
       contentContainerStyle={styles.content}
       data={timelineItems}
       keyExtractor={(item) => item.programDayId}
-      renderItem={({ item }) => <TimelineRow item={item} />}
+      renderItem={({ item }) => (
+        <TimelineRow
+          item={item}
+          onPressExercise={(exerciseId, exerciseName) =>
+            navigation.navigate("ExerciseTrend", { exerciseId, exerciseName })
+          }
+        />
+      )}
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
       ListEmptyComponent={
@@ -581,6 +623,37 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.sm,
   },
+  progressCard: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  progressCardTitle: {
+    color: colors.textPrimary,
+    ...typography.h3,
+  },
+  progressCardSubtitle: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  physiquePremiumRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  physiquePremiumText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  premiumBadge: {
+    color: colors.warning,
+    ...typography.label,
+    fontWeight: "700",
+  },
   metricsGridCard: {
     width: "48%",
     borderRadius: radii.card,
@@ -597,6 +670,10 @@ const styles = StyleSheet.create({
   metricsGridValue: {
     color: colors.textPrimary,
     ...typography.h3,
+  },
+  metricsGridSubLabel: {
+    color: colors.textSecondary,
+    ...typography.label,
   },
   metricsGridSub: {
     color: colors.textSecondary,
@@ -797,69 +874,5 @@ const styles = StyleSheet.create({
   exerciseResultName: {
     color: colors.textPrimary,
     ...typography.body,
-  },
-  exerciseSummaryCard: {
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-    gap: spacing.sm,
-  },
-  modalHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-  exerciseSummaryTitle: {
-    color: colors.textPrimary,
-    ...typography.h3,
-    flex: 1,
-  },
-  modalCloseButton: {
-    minHeight: 34,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.md,
-  },
-  modalCloseLabel: {
-    color: colors.textPrimary,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  exerciseSummaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  exerciseSummarySubCard: {
-    flex: 1,
-    minWidth: "48%",
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  exerciseSummaryStatRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-  exerciseSummaryStatLabel: {
-    color: colors.textSecondary,
-    ...typography.label,
-  },
-  exerciseSummaryStatValue: {
-    color: colors.textPrimary,
-    ...typography.small,
-    fontWeight: "600",
   },
 });

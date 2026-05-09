@@ -6,6 +6,9 @@ import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
 import { readProgramRouter } from "./src/routes/readProgram.js";
+import { programExerciseRouter } from "./src/routes/programExercise.js";
+import { programCompletionRouter } from "./src/routes/programCompletion.js";
+import { programDayActionsRouter } from "./src/routes/programDayActions.js";
 import { debugAllowedExercisesRouter } from "./src/routes/debugAllowedExercises.js";
 import { generateProgramV2Router } from "./src/routes/generateProgramV2.js";
 import { segmentLogRouter } from "./src/routes/segmentLog.js";
@@ -15,8 +18,16 @@ import { createHistoryOverviewHandler, historyOverviewRouter } from "./src/route
 import { createHistoryPersonalRecordsHandler, historyPersonalRecordsRouter } from "./src/routes/historyPersonalRecords.js";
 import { createHistoryExerciseHandler, historyExerciseRouter } from "./src/routes/historyExercise.js";
 import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.js";
+import { activeProgramsRouter } from "./src/routes/activePrograms.js";
+import { notificationPreferencesRouter } from "./src/routes/notificationPreferences.js";
+import { accountSettingsRouter } from "./src/routes/accountSettings.js";
+import { userEntitlementRouter } from "./src/routes/userEntitlement.js";
+import { webhookRevenuecatRouter } from "./src/routes/webhookRevenuecat.js";
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
 import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
+import { workoutRemindersRouter } from "./src/routes/workoutReminders.js";
+import { trainingHistoryImportRouter } from "./src/routes/trainingHistoryImport.js";
+import { referralRouter } from "./src/routes/referral.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
@@ -26,23 +37,41 @@ import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogu
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
+import { adminProgressionSandboxRouter } from "./src/routes/adminProgressionSandbox.js";
+import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
+import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { authRouter } from "./src/routes/auth.js";
+import { coachPortalRouter } from "./src/routes/coachPortal.js";
+import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
+import { equipmentRegenRouter } from "./src/routes/equipmentRegen.js";
+import {
+  uploadSingle,
+  handleCheckInSubmit,
+  physiqueReadRouter,
+} from "./src/routes/physiqueCheckIn.js";
+import {
+  handleScanSubmit,
+  physiqueScanRouter,
+  physiquePhotoRouter,
+} from "./src/routes/physiqueScan.js";
 import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
 import { requireAuth } from "./src/middleware/requireAuth.js";
-import { adminOnly, userAuth } from "./src/middleware/chains.js";
+import { adminOnly, userAuth, entitledUserAuth, premiumUserAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import {
+  makeClientProfileService,
   upsertProfile,
   getProfileById,
-  patchProfile,
   toApiShape,
 } from "./src/services/clientProfileService.js";
+import { makeAnchorLiftService } from "./src/services/anchorLiftService.js";
+import { RequestValidationError } from "./src/utils/validate.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -158,6 +187,10 @@ const profilePatchKeys = [
   "onboardingStepCompleted",
   "onboardingCompletedAt",
   "programType",
+  "preferredUnit",
+  "anchorLiftsSkipped",
+  "anchorLiftsCollectedAt",
+  "anchorLifts",
 ];
 
 const presetColumnByCode = {
@@ -258,6 +291,15 @@ app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res
 app.get("/admin/rep-rules", adminCspMiddleware, (_req, res) => sendAdminPage(res, "rep-rules.html"));
 app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
 app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
+app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "progression-sandbox.html"));
+app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(res, "seed-history.html"));
+app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
+app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
+// /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
+app.get("/admin/users", (req, res, next) => {
+  if (req.headers["x-internal-token"] || req.headers["x-engine-key"]) return next();
+  adminCspMiddleware(req, res, () => sendAdminPage(res, "users.html"));
+});
 
 // Global JSON parser with raw body capture for diagnostics.
 app.use(
@@ -296,7 +338,43 @@ const handleReferenceData = async (req, res) => {
       label: row.label,
       category: row.category ?? null,
     }));
-    return res.status(200).json({ ...devReferenceData, equipmentItems });
+
+    let anchorExercises = [];
+    try {
+      const anchorResult = await pool.query(`
+        SELECT
+          exercise_id,
+          name,
+          equipment_items_slugs,
+          COALESCE(load_estimation_metadata->>'estimation_family', '') AS estimation_family,
+          COALESCE((load_estimation_metadata->>'anchor_priority')::int, 999) AS anchor_priority,
+          COALESCE((load_estimation_metadata->>'is_anchor_eligible')::boolean, false) AS is_anchor_eligible,
+          COALESCE((load_estimation_metadata->>'family_conversion_factor')::numeric, 1) AS family_conversion_factor,
+          COALESCE((load_estimation_metadata->>'is_unilateral')::boolean, false) AS is_unilateral
+        FROM exercise_catalogue
+        WHERE is_archived = false
+          AND COALESCE((load_estimation_metadata->>'is_anchor_eligible')::boolean, false) = true
+        ORDER BY estimation_family ASC, anchor_priority ASC, name ASC
+      `);
+
+      anchorExercises = anchorResult.rows.map((row) => ({
+        exerciseId: row.exercise_id,
+        label: row.name,
+        equipmentItemsSlugs: Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [],
+        estimationFamily: row.estimation_family,
+        anchorPriority: Number(row.anchor_priority ?? 999),
+        isAnchorEligible: Boolean(row.is_anchor_eligible),
+        familyConversionFactor: Number(row.family_conversion_factor ?? 1),
+        isUnilateral: Boolean(row.is_unilateral),
+      }));
+    } catch (anchorErr) {
+      req.log.warn(
+        { event: "http.reference_data.anchor_exercises.warning", err: anchorErr?.message },
+        "anchorExercises unavailable; returning reference data without them",
+      );
+    }
+
+    return res.status(200).json({ ...devReferenceData, equipmentItems, anchorExercises });
   } catch (err) {
     req.log.error({ event: "http.reference_data.error", err: err?.message }, "reference-data error");
     return res.status(200).json(devReferenceData);
@@ -507,16 +585,50 @@ app.get("/client-profiles/:id", requireAuth, handleGetClientProfile);
 const handlePatchClientProfile = async (req, res) => {
   const profileId = req.params.id;
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  let client;
   try {
-    const updated = await patchProfile(profileId, patch);
+    client = await pool.connect();
+    await client.query("BEGIN");
+
+    const anchorLifts = Array.isArray(patch.anchorLifts) ? patch.anchorLifts : undefined;
+    const anchorLiftsSkipped = patch.anchorLiftsSkipped === undefined ? undefined : Boolean(patch.anchorLiftsSkipped);
+    const shouldStampAnchorCollection = anchorLifts !== undefined || anchorLiftsSkipped !== undefined;
+    const profilePatch = {
+      ...patch,
+      anchorLiftsSkipped,
+      anchorLiftsCollectedAt: shouldStampAnchorCollection ? new Date().toISOString() : patch.anchorLiftsCollectedAt,
+    };
+    delete profilePatch.anchorLifts;
+
+    const profileService = makeClientProfileService(client);
+    const anchorLiftService = makeAnchorLiftService(client);
+    const updated = await profileService.patchProfile(profileId, profilePatch);
     if (!updated) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
     }
+
+    if (anchorLifts !== undefined) {
+      await anchorLiftService.upsertAnchorLifts(profileId, anchorLifts);
+    }
+
+    await client.query("COMMIT");
     req.log.debug({ event: "profile.patch", id: profileId }, "profile patch applied");
-    return res.status(200).json(updated);
+    const refreshed = await profileService.getProfileById(profileId);
+    return res.status(200).json(refreshed);
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // ignore rollback failures
+    }
     req.log.error({ event: "profile.patch.error", err: err?.message }, "PATCH /client-profiles/:id error");
+    if (err instanceof RequestValidationError) {
+      return res.status(400).json({ ok: false, code: "validation_error", error: err.message, details: err.details });
+    }
     return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+  } finally {
+    client?.release();
   }
 };
 
@@ -531,6 +643,8 @@ const handleUsersMe = async (req, res) => {
   const userId = req.auth.user_id;
   try {
     const clientProfileId = (req.body?.clientProfileId ?? "").toString().trim();
+    const preferredUnit = typeof req.body?.preferredUnit === "string" ? req.body.preferredUnit.trim().toLowerCase() : null;
+    const preferredHeightUnit = typeof req.body?.preferredHeightUnit === "string" ? req.body.preferredHeightUnit.trim().toLowerCase() : null;
     if (clientProfileId) {
       await pool.query(
         `
@@ -541,9 +655,43 @@ const handleUsersMe = async (req, res) => {
         [userId, clientProfileId],
       );
     }
+    if (preferredUnit !== null) {
+      if (preferredUnit !== "kg" && preferredUnit !== "lbs") {
+        return res.status(400).json({
+          ok: false,
+          code: "validation_error",
+          error: "preferredUnit must be one of: kg, lbs",
+        });
+      }
+      await pool.query(
+        `
+        UPDATE client_profile
+        SET preferred_unit = $2, updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId, preferredUnit],
+      );
+    }
+    if (preferredHeightUnit !== null) {
+      if (preferredHeightUnit !== "cm" && preferredHeightUnit !== "ft") {
+        return res.status(400).json({
+          ok: false,
+          code: "validation_error",
+          error: "preferredHeightUnit must be one of: cm, ft",
+        });
+      }
+      await pool.query(
+        `
+        UPDATE client_profile
+        SET preferred_height_unit = $2, updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId, preferredHeightUnit],
+      );
+    }
     const profileResult = await pool.query(
       `
-      SELECT id
+      SELECT id, preferred_unit, preferred_height_unit
       FROM client_profile
       WHERE user_id = $1
       LIMIT 1
@@ -553,6 +701,8 @@ const handleUsersMe = async (req, res) => {
     return res.status(200).json({
       id: userId,
       clientProfileId: profileResult.rows[0]?.id ?? null,
+      preferredUnit: profileResult.rows[0]?.preferred_unit ?? "kg",
+      preferredHeightUnit: profileResult.rows[0]?.preferred_height_unit ?? "cm",
     });
   } catch (err) {
     req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");
@@ -568,16 +718,38 @@ app.patch("/users/me", requireAuth, handleUsersMe);
 // Auth routes must be mounted before any /api router that applies requireAuth globally.
 app.use("/api/auth", authRouter);
 
-// Mount routers.
-// IMPORTANT: /api/admin mounts must come before the broad /api mounts below.
-// Broad /api routers (segmentLog, readProgram, etc.) apply router-level requireAuth
-// to every /api/* request that reaches them, which intercepts /api/admin/* calls
-// before they can reach the internal-token–guarded admin routers.
+// IMPORTANT: /api/admin mounts must come before ALL broad /api mounts — including
+// notificationPreferencesRouter and activeProgramsRouter which apply router-level
+// requireAuth globally and would intercept /api/admin/* calls before they reach the
+// internal-token–guarded admin routers.
+app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
+
+// RevenueCat webhook uses a shared secret header, not user JWT auth.
+app.use("/api", webhookRevenuecatRouter);
+app.use("/api/exercise", exerciseGuidanceRouter);
+app.post("/api/physique/check-in", ...entitledUserAuth, uploadSingle, handleCheckInSubmit);
+app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
+app.use("/api", physiquePhotoRouter);
+app.use("/api", ...userAuth, physiqueReadRouter);
+app.use("/api", ...userAuth, physiqueScanRouter);
+
+app.use("/api", notificationPreferencesRouter);
+app.use("/api", accountSettingsRouter);
+app.use("/api", activeProgramsRouter);
+app.use("/api/coach", coachPortalRouter);
+app.use("/api/import", trainingHistoryImportRouter);
+app.use("/api", workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
+app.use("/api", userAuth, equipmentRegenRouter);
+logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipment regeneration routes at /api");
+app.use("/api", programExerciseRouter);
+app.use("/api", programCompletionRouter);
+app.use("/api", programDayActionsRouter);
 app.use("/api", debugAllowedExercisesRouter);
+app.use("/api", referralRouter);
 
 // Canonical /api-prefixed mounts (new).
 app.get("/api/v1/history/programs", ...userAuth, createHistoryProgramsHandler(pool));
@@ -593,6 +765,7 @@ app.use(historyOverviewRouter); // → GET /v1/history/overview
 app.use(historyPersonalRecordsRouter); // → GET /v1/history/personal-records
 app.use(historyExerciseRouter); // → GET /v1/history/exercise/:exerciseId
 
+app.use("/api", ...userAuth, userEntitlementRouter);
 app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);
@@ -605,7 +778,9 @@ app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminSyncRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
+app.use("/admin", ...adminOnly, adminProgressionSandboxRouter);
 app.use("/admin", ...adminOnly, adminUsersRouter);
+app.use("/admin", ...adminOnly, adminSeedHistoryRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates

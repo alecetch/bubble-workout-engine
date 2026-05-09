@@ -75,6 +75,52 @@ test("mapTimelineItem maps nullable hero and optional highlight", () => {
   });
 });
 
+test("mapTimelineItem includes exerciseId in highlight", () => {
+  const highlightMap = new Map([
+    [
+      "day-1",
+      {
+        program_day_id: "day-1",
+        max_weight_kg: 140,
+        exercise_name: "Barbell Back Squat",
+        exercise_id: "bb_back_squat",
+      },
+    ],
+  ]);
+
+  const row = {
+    program_day_id: "day-1",
+    program_id: "prog-1",
+    scheduled_date: "2026-04-14",
+    day_label: "Lower A",
+    day_type: "strength",
+    session_duration_mins: 60,
+    hero_media_id: null,
+  };
+
+  const item = mapTimelineItem(row, highlightMap);
+
+  assert.equal(item.highlight?.exerciseId, "bb_back_squat");
+  assert.equal(item.highlight?.exerciseName, "Barbell Back Squat");
+  assert.equal(item.highlight?.value, 140);
+});
+
+test("mapTimelineItem returns null highlight when no highlight found", () => {
+  const highlightMap = new Map();
+  const row = {
+    program_day_id: "day-2",
+    program_id: "prog-1",
+    scheduled_date: "2026-04-15",
+    day_label: "Upper A",
+    day_type: "strength",
+    session_duration_mins: 55,
+    hero_media_id: null,
+  };
+
+  const item = mapTimelineItem(row, highlightMap);
+  assert.equal(item.highlight, null);
+});
+
 test("timeline handler uses completed-only query and ignores draft logs in highlight query", async () => {
   const queries = [];
   const db = {
@@ -110,6 +156,7 @@ test("timeline handler uses completed-only query and ignores draft logs in highl
             program_day_id: "11111111-1111-4111-8111-111111111111",
             max_weight_kg: "120",
             exercise_name: "Back Squat",
+            exercise_id: "bb_back_squat",
           },
         ],
       };
@@ -136,10 +183,9 @@ test("timeline handler uses completed-only query and ignores draft logs in highl
 
   assert.equal(res.body.items.length, 2);
   assert.deepEqual(res.body.items[0].highlight, {
-    type: "max_load",
     value: 120,
-    unit: "kg",
     exerciseName: "Back Squat",
+    exerciseId: "bb_back_squat",
   });
   assert.equal(res.body.items[1].highlight, null);
   assert.deepEqual(res.body.nextCursor, {

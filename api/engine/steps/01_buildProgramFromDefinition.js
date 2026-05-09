@@ -3,10 +3,11 @@ import {
   buildIndex,
   canonicalName,
   dayHasRealExercise,
+  debugRankWithFallback,
   isConditioning,
   pickSeedExerciseForSlot,
 } from "../exerciseSelector.js";
-import { fillSlot } from "../selectorStrategies.js";
+import { buildBestMatchSelector, fillSlot, mergeAvoidCanonicalNames } from "../selectorStrategies.js";
 import {
   createVariabilityState,
   getBlockStickyMeta,
@@ -54,6 +55,18 @@ function normalizeArr(v) {
     return [s];
   }
   return [];
+}
+
+function resolveTemplateSequence(byDpw, dayTemplates, dperweek) {
+  if (!byDpw || typeof byDpw !== "object") {
+    return dayTemplates.slice(0, dperweek);
+  }
+  const keys = byDpw[String(dperweek)] ?? byDpw[dperweek];
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return dayTemplates.slice(0, dperweek);
+  }
+  const index = Object.fromEntries(dayTemplates.map((t) => [t.day_key, t]));
+  return keys.map((k) => index[k]).filter(Boolean);
 }
 
 function defaultDayTemplates() {
@@ -113,6 +126,147 @@ function extractSlotsFromTemplate(template) {
   if (!template || typeof template !== "object") return [];
   if (Array.isArray(template.ordered_slots)) return template.ordered_slots;
   return [];
+}
+
+function toSortedArray(valueSet) {
+  if (!(valueSet instanceof Set) || valueSet.size === 0) return [];
+  return Array.from(valueSet).sort();
+}
+
+function strongestSelector(slotDef) {
+  const sw2Any = Array.isArray(slotDef?.sw2Any) ? slotDef.sw2Any.filter(Boolean) : [];
+  if (sw2Any.length > 0) return { kind: "sw2Any", values: sw2Any };
+  if (toStr(slotDef?.sw2).trim()) return { kind: "sw2", values: [toStr(slotDef.sw2).trim()] };
+
+  const swAny = Array.isArray(slotDef?.swAny) ? slotDef.swAny.filter(Boolean) : [];
+  if (swAny.length > 0) return { kind: "swAny", values: swAny };
+  if (toStr(slotDef?.sw).trim()) return { kind: "sw", values: [toStr(slotDef.sw).trim()] };
+
+  if (toStr(slotDef?.mp).trim()) return { kind: "mp", values: [toStr(slotDef.mp).trim()] };
+  return null;
+}
+
+function matchesStrongestSelector(exercise, selector) {
+  if (!exercise || !selector) return false;
+  const values = Array.isArray(selector.values) ? selector.values : [];
+  if (values.length === 0) return false;
+
+  if (selector.kind === "sw2Any" || selector.kind === "sw2") {
+    return values.includes(toStr(exercise.sw2).trim());
+  }
+  if (selector.kind === "swAny" || selector.kind === "sw") {
+    return values.includes(toStr(exercise.sw).trim());
+  }
+  if (selector.kind === "mp") {
+    return values.includes(toStr(exercise.mp).trim());
+  }
+  return false;
+}
+
+function buildSpecificitySelector(baseSelector, selector) {
+  const shared = {
+    requirePref: baseSelector.requirePref,
+    prefMode: baseSelector.prefMode,
+    prefBonus: baseSelector.prefBonus,
+    strengthEquivalentBonus: baseSelector.strengthEquivalentBonus,
+    preferLoadable: baseSelector.preferLoadable,
+    preferIsolation: baseSelector.preferIsolation,
+    preferCompound: baseSelector.preferCompound,
+    programType: baseSelector.programType,
+    rankValue: baseSelector.rankValue,
+    condState: baseSelector.condState,
+    condThresholds: baseSelector.condThresholds,
+    selectionMode: baseSelector.selectionMode,
+  };
+
+  if (!selector) {
+    return {
+      ...shared,
+      mp: baseSelector.mp || null,
+      sw: baseSelector.sw || null,
+      swAny: baseSelector.swAny || null,
+      sw2: baseSelector.sw2 || null,
+      sw2Any: baseSelector.sw2Any || null,
+    };
+  }
+
+  if (selector.kind === "sw2Any") {
+    return { ...shared, mp: null, sw: null, swAny: null, sw2: null, sw2Any: selector.values };
+  }
+  if (selector.kind === "sw2") {
+    return { ...shared, mp: null, sw: null, swAny: null, sw2: selector.values[0], sw2Any: null };
+  }
+  if (selector.kind === "swAny") {
+    return { ...shared, mp: null, sw: null, swAny: selector.values, sw2: null, sw2Any: null };
+  }
+  if (selector.kind === "sw") {
+    return { ...shared, mp: null, sw: selector.values[0], swAny: null, sw2: null, sw2Any: null };
+  }
+  if (selector.kind === "mp") {
+    return { ...shared, mp: selector.values[0], sw: null, swAny: null, sw2: null, sw2Any: null };
+  }
+
+  return {
+    ...shared,
+    mp: baseSelector.mp || null,
+    sw: baseSelector.sw || null,
+    swAny: baseSelector.swAny || null,
+    sw2: baseSelector.sw2 || null,
+    sw2Any: baseSelector.sw2Any || null,
+  };
+}
+
+export function maybePromoteStructuralMatch(resolvedSlot, selectedExercise, catalogIndex, builderState) {
+  const selector = strongestSelector(resolvedSlot);
+  if (!selectedExercise || !selector || matchesStrongestSelector(selectedExercise, selector)) {
+    return {
+      exercise: selectedExercise,
+      debug: null,
+    };
+  }
+
+  const bestMatchSelector = buildBestMatchSelector(resolvedSlot, builderState);
+  const exactSelector = buildSpecificitySelector(bestMatchSelector, selector);
+  const exactDebug = debugRankWithFallback(
+    catalogIndex.allowedSet,
+    catalogIndex.byId,
+    exactSelector,
+    builderState.usedIdsWeek,
+    builderState.usedIdsToday,
+    builderState.usedRegionsToday,
+    mergeAvoidCanonicalNames(builderState),
+  );
+  const overrideId = exactDebug?.ranked_candidates?.[0]?.exercise_id ?? null;
+  const overrideExercise = overrideId ? catalogIndex.byId[overrideId] ?? null : null;
+
+  if (!matchesStrongestSelector(overrideExercise, selector)) {
+    return {
+      exercise: selectedExercise,
+      debug: null,
+    };
+  }
+
+  return {
+    exercise: overrideExercise,
+    debug: {
+      applied: true,
+      strongest_selector_kind: selector.kind,
+      strongest_selector_values: selector.values,
+      original_exercise_id: selectedExercise.id,
+      original_exercise_name: selectedExercise.n,
+      original_exercise_mp: selectedExercise.mp || "",
+      original_exercise_sw: selectedExercise.sw || "",
+      original_exercise_sw2: selectedExercise.sw2 || "",
+      original_selected_attempt_label: null,
+      override_attempt_label: exactDebug?.selected_attempt_label ?? null,
+      override_ranked_candidates: Array.isArray(exactDebug?.ranked_candidates)
+        ? exactDebug.ranked_candidates
+        : [],
+      override_selection_attempts: Array.isArray(exactDebug?.selection_attempts)
+        ? exactDebug.selection_attempts
+        : [],
+    },
+  };
 }
 
 function normalizeSlotDefinition(rawSlot) {
@@ -262,6 +416,11 @@ function resolveOrderedSimulationSlot({
 }) {
   const attempts = [];
   const chain = buildSimulationAttemptChain(resolvedSlot);
+  let selectionDebug = {
+    selected_attempt_label: null,
+    ranked_candidates: [],
+    selection_attempts: [],
+  };
 
   for (let idx = 0; idx < chain.length; idx++) {
     const attemptSlot = chain[idx];
@@ -283,12 +442,18 @@ function resolveOrderedSimulationSlot({
 
     if (attemptAllowedSet.size === 0) continue;
 
+    const attemptSelectionDebug = {
+      selected_attempt_label: null,
+      ranked_candidates: [],
+      selection_attempts: [],
+    };
     const ex = fillSlot(
       { ...attemptSlot, slot_family: slotFamily, variability_policy: variabilityPolicy },
       { byId, allowedSet: attemptAllowedSet },
-      builderState,
+      { ...builderState, slotSelectionDebug: attemptSelectionDebug },
     );
     if (!ex || isExcludedExercise(ex, excludeMovementClassesSet)) continue;
+    selectionDebug = attemptSelectionDebug;
 
     logBuilderEvent(stats, {
       event: "ordered_simulation_resolved",
@@ -304,6 +469,7 @@ function resolveOrderedSimulationSlot({
       ex,
       metadata: attemptMeta,
       attempts,
+      selectionDebug,
     };
   }
 
@@ -327,6 +493,7 @@ function resolveOrderedSimulationSlot({
         : [],
     },
     attempts,
+    selectionDebug,
   };
 }
 
@@ -415,15 +582,20 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     config_key: compiledConfig?.configKey,
     equipment_profile: equipmentProfile,
     notes: [],
+    slot_debug: [],
   };
 
   const days = [];
   const usedIdsWeek = new Set();
   const variabilityState = createVariabilityState();
-  const maxDays = Math.min(dperweek, dayTemplates.length);
+  const templateSequence = resolveTemplateSequence(
+    builderCfg.dayTemplatesByDpw,
+    dayTemplates,
+    dperweek,
+  );
 
-  for (let day = 1; day <= maxDays; day++) {
-    const template = dayTemplates[day - 1];
+  for (let day = 1; day <= templateSequence.length; day++) {
+    const template = templateSequence[day - 1];
     const effectiveSetsByDuration =
       template?.sets_by_duration != null ? template.sets_by_duration : setsByDurationCfg;
     const effectiveBlockBudget =
@@ -459,6 +631,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         highComplexityCountToday: 0,
       },
       usedIdsWeek: daySelectionMode === "benchmark_exactness" ? null : usedIdsWeek,
+      usedIdsToday: new Set(),
       usedSw2Today: new Set(),
       usedCanonicalNamesToday: new Set(),
       usedRegionsToday: new Set(),
@@ -521,6 +694,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       let ex = null;
       let simulationMetadata = null;
       let simulationAttempts = null;
+      let slotSelectionDebug = {
+        selected_attempt_label: null,
+        ranked_candidates: [],
+        selection_attempts: [],
+        structural_guard: null,
+      };
       builderState.variabilityAvoidCanonicalNames = null;
 
       if (variabilityPolicy === "none" && slotFamily) {
@@ -592,14 +771,42 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         ex = simulationResolved.ex;
         simulationMetadata = simulationResolved.metadata;
         simulationAttempts = simulationResolved.attempts;
+        if (simulationResolved.selectionDebug) slotSelectionDebug = simulationResolved.selectionDebug;
       }
 
       if (!ex && !isOrderedSimulationDay) {
+        builderState.slotSelectionDebug = slotSelectionDebug;
         ex = fillSlot(
           { ...resolvedSlot, slot_family: slotFamily, variability_policy: variabilityPolicy },
           catalogIndex,
           builderState,
         );
+        delete builderState.slotSelectionDebug;
+      }
+      if (ex && !isOrderedSimulationDay) {
+        const promoted = maybePromoteStructuralMatch(
+          { ...resolvedSlot, slot_family: slotFamily, variability_policy: variabilityPolicy },
+          ex,
+          catalogIndex,
+          builderState,
+        );
+        if (promoted?.debug) {
+          promoted.debug.original_selected_attempt_label = slotSelectionDebug.selected_attempt_label ?? null;
+          slotSelectionDebug.structural_guard = promoted.debug;
+          slotSelectionDebug.selected_attempt_label =
+            promoted.debug.override_attempt_label ?? slotSelectionDebug.selected_attempt_label;
+          slotSelectionDebug.ranked_candidates =
+            promoted.debug.override_ranked_candidates ?? slotSelectionDebug.ranked_candidates;
+          slotSelectionDebug.selection_attempts = [
+            ...(Array.isArray(slotSelectionDebug.selection_attempts) ? slotSelectionDebug.selection_attempts : []),
+            {
+              label: "structural_guard",
+              candidate_count: promoted.debug.override_ranked_candidates?.length ?? 0,
+              candidates: promoted.debug.override_ranked_candidates ?? [],
+            },
+          ];
+        }
+        ex = promoted.exercise;
       }
       if (ex && isExcludedExercise(ex, excludeMovementClassesSet)) {
         ex = null;
@@ -610,12 +817,52 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         if (seeded && !isExcludedExercise(seeded, excludeMovementClassesSet)) {
           stats.picked_seed_slot_aware++;
           ex = seeded;
+          slotSelectionDebug.selected_attempt_label = slotSelectionDebug.selected_attempt_label || "seed_fallback";
         }
       }
+
+      const slotDebugEntry = {
+        day_index: day,
+        template_name: compiledConfig?.configKey ?? compiledConfig?.programType ?? null,
+        day_focus: toStr(template?.focus) || null,
+        slot: slotName,
+        mp: resolvedSlot.mp ?? null,
+        sw: resolvedSlot.sw ?? null,
+        swAny: Array.isArray(resolvedSlot.swAny) ? resolvedSlot.swAny : [],
+        sw2: resolvedSlot.sw2 ?? null,
+        sw2Any: Array.isArray(resolvedSlot.sw2Any) ? resolvedSlot.sw2Any : [],
+        requirePref: resolvedSlot.requirePref ?? null,
+        pref_mode: resolvedSlot.pref_mode ?? "soft",
+        pref_bonus: resolvedSlot.pref_bonus ?? 4,
+        preferLoadable: resolvedSlot.preferLoadable === true,
+        strength_equivalent_bonus: resolvedSlot.strength_equivalent_bonus === true,
+        selector_strategy: resolvedSlot.selector_strategy ?? "best_match_by_movement",
+        slot_family: slotFamily,
+        variability_policy: variabilityPolicy,
+        selection_attempts: Array.isArray(slotSelectionDebug.selection_attempts)
+          ? slotSelectionDebug.selection_attempts
+          : [],
+        structural_guard: slotSelectionDebug.structural_guard ?? null,
+        state_snapshot: {
+          equipment_profile: equipmentProfile,
+          allowed_exercise_count: allowedSet.size,
+          day_selection_mode: daySelectionMode,
+          used_ids_week: toSortedArray(builderState.usedIdsWeek),
+          used_ids_today: toSortedArray(builderState.usedIdsToday),
+          used_regions_today: toSortedArray(builderState.usedRegionsToday),
+          used_canonical_names_today: toSortedArray(builderState.usedCanonicalNamesToday),
+          variability_avoid_canonical_names: toSortedArray(builderState.variabilityAvoidCanonicalNames),
+        },
+        selected_attempt_label: slotSelectionDebug.selected_attempt_label ?? null,
+        ranked_candidates: Array.isArray(slotSelectionDebug.ranked_candidates)
+          ? slotSelectionDebug.ranked_candidates
+          : [],
+      };
 
       if (ex) {
         const cn = canonicalName(ex.n);
         usedIdsWeek.add(ex.id);
+        builderState.usedIdsToday.add(ex.id);
         if (ex.sw2) builderState.usedSw2Today.add(ex.sw2);
         if (cn) builderState.usedCanonicalNamesToday.add(cn);
         for (const r of ex.tr || []) {
@@ -687,6 +934,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           is_buy_in: resolvedSlot.is_buy_in === true,
           ...simulationBlockFields,
         });
+        stats.slot_debug.push({
+          ...slotDebugEntry,
+          selected_exercise_id: ex.id,
+          selected_exercise_name: ex.n,
+          fill: null,
+        });
         continue;
       }
 
@@ -703,6 +956,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
           simulation_required_equipment_slugs: simulationMetadata?.simulation_required_equipment_slugs ?? [],
           simulation_attempts: simulationAttempts,
         });
+        stats.slot_debug.push({
+          ...slotDebugEntry,
+          selected_exercise_id: null,
+          selected_exercise_name: null,
+          fill: "simulation_unresolvable",
+        });
         continue;
       }
 
@@ -718,6 +977,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       });
 
       stats.fills_add_sets += 1;
+      stats.slot_debug.push({
+        ...slotDebugEntry,
+        selected_exercise_id: null,
+        selected_exercise_name: null,
+        fill: "add_sets",
+      });
     }
 
     for (let bi = 0; bi < blocks.length; bi++) {

@@ -1,0 +1,33 @@
+﻿{
+  "ok": true,
+  "primary_program_id": "prog-1",
+  "programs": [
+    {
+      "program_id": "prog-1",
+      "program_title": "Strength Block",
+      "program_type": "strength",
+      "is_primary": true,
+      "status": "active",
+      "weeks_count": 8,
+      "days_per_week": 3,
+      "start_date": "2026-05-01",
+      "hero_media_id": null,
+      "today_session_count": 0,
+      "next_session_date": "2026-05-06"
+    },
+    {
+      "program_id": "prog-2",
+      "program_title": "Hypertrophy Block",
+      "program_type": "hypertrophy",
+      "is_primary": false,
+      "status": "active",
+      "weeks_count": 8,
+      "days_per_week": 4,
+      "start_date": "2026-05-01",
+      "hero_media_id": null,
+      "today_session_count": 0,
+      "next_session_date": null
+    }
+  ],
+  "today_sessions": []
+}

@@ -1,0 +1,23 @@
+appId: com.bubbleworkout.mobile
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Create account"
+
+- tapOn:
+    id: "input-email"
+- inputText: "test+${RANDOM_STRING}@example.com"
+
+- tapOn:
+    id: "input-password"
+- inputText: "TestPass123!"
+
+- tapOn:
+    id: "input-confirm-password"
+- inputText: "TestPass123!"
+
+- tapOn:
+    text: "Create account"
+
+- assertVisible: "What are your goals?"

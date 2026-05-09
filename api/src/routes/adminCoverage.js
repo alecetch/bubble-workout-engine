@@ -80,7 +80,7 @@ function summarizeSlot(slot) {
     sw2Any: asArray(slot?.sw2Any).map((v) => safeString(v)).filter(Boolean),
     mp: safeString(slot?.mp) || null,
     requirePref: safeString(slot?.requirePref) || null,
-    pref_mode: safeString(slot?.pref_mode) || (slot?.allowPrefFallback ? "soft" : "strict"),
+    pref_mode: safeString(slot?.pref_mode) === "strict" ? "strict" : "soft",
     pref_bonus: Number.isFinite(Number(slot?.pref_bonus)) ? Number(slot.pref_bonus) : null,
     strength_equivalent_bonus: slot?.strength_equivalent_bonus === true,
     variant_matched: Array.isArray(slot?.variants) ? false : true,
@@ -114,7 +114,7 @@ async function fetchSlotCounts(client, presets, slot, excludedClasses) {
     .map((v) => safeString(v))
     .filter(Boolean);
   const mp = safeString(slot.mp) || null;
-  const prefMode = safeString(slot.pref_mode) || (slot.allowPrefFallback ? "soft" : "strict");
+  const prefMode = safeString(slot.pref_mode) === "strict" ? "strict" : "soft";
   const requirePref = prefMode === "strict" ? (safeString(slot.requirePref) || null) : null;
   const unconstrained = !sw && !sw2 && swAny.length === 0 && sw2Any.length === 0 && !mp;
   const excluded = asTextArray(excludedClasses);
@@ -301,7 +301,7 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
             sw2Any: asArray(slot.sw2Any).map((v) => safeString(v)).filter(Boolean) || null,
             mp: safeString(slot.mp) || null,
             requirePref: safeString(slot.requirePref) || null,
-            pref_mode: safeString(slot.pref_mode) || (slot.allowPrefFallback ? "soft" : "strict"),
+            pref_mode: safeString(slot.pref_mode) === "strict" ? "strict" : "soft",
             pref_bonus: Number.isFinite(Number(slot.pref_bonus)) ? Number(slot.pref_bonus) : null,
             strength_equivalent_bonus: slot.strength_equivalent_bonus === true,
             resolved_by_preset: resolvedByPreset,

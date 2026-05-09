@@ -1,5 +1,12 @@
-import React from "react";
-import { ImageBackground, StyleSheet, Text, View } from "react-native";
+import React, { useEffect } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -12,9 +19,17 @@ type HeroHeaderProps = {
 };
 
 export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): React.JSX.Element {
-  const hasMedia = Boolean(heroMedia);
+  const opacity = useSharedValue(heroMedia ? 0 : 1);
 
-  if (!hasMedia) {
+  useEffect(() => {
+    if (heroMedia) {
+      opacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.quad) });
+    }
+  }, [heroMedia, opacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  if (!heroMedia) {
     return (
       <View style={[styles.container, styles.containerNoMedia]}>
         <Text style={styles.title}>{title}</Text>
@@ -24,13 +39,22 @@ export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): Reac
   }
 
   return (
-    <ImageBackground source={{ uri: heroMedia ?? "" }} style={styles.container} imageStyle={styles.image}>
-      <View style={styles.overlay} />
+    <Animated.View style={[styles.container, animatedStyle]}>
+      <Animated.Image
+        source={{ uri: heroMedia }}
+        style={[StyleSheet.absoluteFill, styles.image]}
+        resizeMode="cover"
+      />
+      <LinearGradient
+        colors={["transparent", "rgba(15,23,42,0.55)", "rgba(15,23,42,0.90)"]}
+        locations={[0, 0.55, 1]}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
         {summary ? <Text style={styles.summary}>{summary}</Text> : null}
       </View>
-    </ImageBackground>
+    </Animated.View>
   );
 }
 
@@ -50,10 +74,6 @@ const styles = StyleSheet.create({
   },
   image: {
     borderRadius: radii.card,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,23,42,0.56)",
   },
   content: {
     paddingHorizontal: spacing.lg,

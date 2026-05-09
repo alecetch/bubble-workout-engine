@@ -1,0 +1,77 @@
+﻿{
+  "day": {
+    "program_day_id": "day-1",
+    "program_id": "prog-1",
+    "day_label": "Lower Body",
+    "day_type": "strength",
+    "session_duration_mins": 45,
+    "hero_media": null,
+    "equipment_override_preset_slug": null,
+    "equipment_override_items_slugs": null,
+    "scheduled_weekday": "Wed",
+    "week_number": 1
+  },
+  "segments": [
+    {
+      "workout_segment_id": "seg-1",
+      "purpose": "main",
+      "segment_type": "single",
+      "segment_type_label": "Single",
+      "segment_title": "Main Strength",
+      "order_in_day": 1,
+      "rounds": 1,
+      "post_segment_rest_sec": 90,
+      "items": [
+        {
+          "program_exercise_id": "pex-1",
+          "exercise_id": "back-squat",
+          "exercise_name": "Back Squat",
+          "sets_prescribed": 3,
+          "reps_prescribed": "5",
+          "reps_unit": "reps",
+          "intensity_prescription": "100 kg",
+          "rest_seconds": 180,
+          "is_loadable": true,
+          "is_new_exercise": false,
+          "guideline_load": {
+            "value": 100,
+            "unit": "kg",
+            "confidence": "high",
+            "confidence_score": 90,
+            "source": "planned",
+            "reasoning": ["recent anchor lift"],
+            "set_1_rule": "top set"
+          },
+          "adaptation_decision": {
+            "outcome": "increase_load",
+            "primary_lever": "load",
+            "confidence": "high",
+            "recommended_load_kg": 102.5,
+            "recommended_load_delta_kg": 2.5,
+            "recommended_reps_target": 5,
+            "recommended_rep_delta": null,
+            "display_chip": "Load increased",
+            "display_detail": "Previous sets moved well.",
+            "decided_at": "2026-05-06T08:00:00.000Z"
+          },
+          "coaching_cues_json": ["Brace your core", "Drive evenly"]
+        },
+        {
+          "program_exercise_id": "pex-2",
+          "exercise_id": "leg-press",
+          "exercise_name": "Leg Press",
+          "sets_prescribed": 3,
+          "reps_prescribed": "10",
+          "reps_unit": "reps",
+          "intensity_prescription": "120 kg",
+          "rest_seconds": 120,
+          "is_loadable": true,
+          "is_new_exercise": false,
+          "guideline_load": null,
+          "adaptation_decision": null,
+          "coaching_cues_json": []
+        }
+      ]
+    }
+  ]
+}

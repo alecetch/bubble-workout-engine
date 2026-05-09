@@ -177,6 +177,7 @@ export function normalizeTemplates(rows) {
     const applies = isPlainObject(row?.applies_json) ? row.applies_json : {};
     const poolValue = Array.isArray(row?.text_pool_json) ? row.text_pool_json : [];
     return {
+      rule_number: Number.isFinite(Number(row?.rule_number)) ? Number(row.rule_number) : null,
       template_id: safeString(row?.template_id),
       scope: safeString(row?.scope),
       field: safeString(row?.field),
@@ -328,6 +329,7 @@ adminNarrationRouter.get("/narration/templates", async (req, res) => {
     const result = await pool.query(
       `
       SELECT
+        ROW_NUMBER() OVER (ORDER BY priority ASC NULLS LAST, template_id ASC) AS rule_number,
         template_id,
         scope,
         field,
@@ -442,28 +444,31 @@ adminNarrationRouter.put("/narration/templates/:template_id", async (req, res) =
     if (!templateId) {
       return res.status(400).json({ ok: false, error: "template_id is required" });
     }
-    if (req.body?.template_id != null && safeString(req.body.template_id) !== templateId) {
-      return res.status(400).json({ ok: false, error: "template_id cannot be changed" });
-    }
-
-    const parsed = validateTemplatePayload({ ...req.body, template_id: templateId }, { requireTemplateId: true });
+    const parsed = validateTemplatePayload(req.body, { requireTemplateId: true });
     if (parsed.error) {
       return res.status(400).json({ ok: false, error: parsed.error });
     }
 
     const template = parsed.value;
+    if (template.template_id !== templateId) {
+      const existing = await fetchTemplateById(template.template_id);
+      if (existing) {
+        return res.status(409).json({ ok: false, error: "template_id already exists" });
+      }
+    }
     const result = await pool.query(
       `
       UPDATE public.narration_template
       SET
-        scope = $2,
-        field = $3,
-        purpose = $4,
-        segment_type = $5,
-        priority = $6,
-        text_pool_json = $7::jsonb,
-        applies_json = $8::jsonb,
-        is_active = $9,
+        template_id = $2,
+        scope = $3,
+        field = $4,
+        purpose = $5,
+        segment_type = $6,
+        priority = $7,
+        text_pool_json = $8::jsonb,
+        applies_json = $9::jsonb,
+        is_active = $10,
         updated_at = now()
       WHERE template_id = $1
       RETURNING
@@ -481,6 +486,7 @@ adminNarrationRouter.put("/narration/templates/:template_id", async (req, res) =
       `,
       [
         templateId,
+        template.template_id,
         template.scope,
         template.field,
         template.purpose,
