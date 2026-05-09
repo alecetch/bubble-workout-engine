@@ -117,6 +117,16 @@ describe("ResetPasswordCodeScreen", () => {
     });
   });
 
+  it("disables the Reset password button while the request is in flight", async () => {
+    apiFetchMock.mockReturnValueOnce(new Promise(() => {}));
+    renderCode();
+
+    fillValidResetForm();
+    fireEvent.click(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(await screen.findByRole("button", { name: "Resetting..." })).toBeDisabled();
+  });
+
   it("ApiError(400) shows invalid-or-expired code error message", async () => {
     apiFetchMock.mockRejectedValueOnce(new ApiError(400, "bad code"));
     renderCode();
