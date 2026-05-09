@@ -32,6 +32,10 @@ appId: com.bubbleworkout.mobile
     timeout: 20000
 - tapOn: "Strength Block"
 - extendedWaitUntil:
+    visible: "Start workout"
+    timeout: 20000
+- tapOn: "Start workout"
+- extendedWaitUntil:
     visible: "Workout complete"
     timeout: 20000
 - assertVisible: "Change equipment"
