@@ -32,8 +32,11 @@ appId: com.bubbleworkout.mobile
       - extendedWaitUntil:
           visible: "Settings"
           timeout: 20000
-      - tapOn:
-          id: "Log Out"
+      - scrollUntilVisible:
+          element:
+            text: "Log Out"
+          direction: DOWN
+      - tapOn: "Log Out"
       - extendedWaitUntil:
           visible: "Welcome"
           timeout: 15000

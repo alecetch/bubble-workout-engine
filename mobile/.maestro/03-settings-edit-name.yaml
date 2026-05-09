@@ -26,8 +26,7 @@ appId: com.bubbleworkout.mobile
 - extendedWaitUntil:
     visible: "Settings"
     timeout: 20000
-- tapOn:
-    id: "Name"
+- tapOn: "Name"
 - extendedWaitUntil:
     visible: "Edit Name"
     timeout: 10000

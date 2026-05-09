@@ -129,9 +129,28 @@ function Wait-Port($Port, $TimeoutSeconds = 90) {
     throw "Timed out waiting for localhost:$Port"
 }
 
+function Escape-SqlLiteral($Value) {
+    return [string]$Value -replace "'", "''"
+}
+
 function Invoke-Psql($Sql) {
     & docker compose exec -T db psql -U app -d app -v ON_ERROR_STOP=1 -c $Sql | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "psql command failed" }
+}
+
+function Set-TestUserSubscription($Email, $Status) {
+    $safeEmail = Escape-SqlLiteral $Email
+    if ($Status -eq "expired") {
+        Invoke-Psql "UPDATE app_user SET subscription_status = 'expired', trial_expires_at = now() - interval '1 day', subscription_expires_at = NULL WHERE lower(email) = lower('$safeEmail');"
+        return
+    }
+
+    if ($Status -eq "trialing") {
+        Invoke-Psql "UPDATE app_user SET subscription_status = 'trialing', trial_expires_at = now() + interval '14 days', subscription_expires_at = NULL WHERE lower(email) = lower('$safeEmail');"
+        return
+    }
+
+    throw "Unsupported subscription status: $Status"
 }
 
 function Invoke-JsonPost($Uri, $Body, $Headers = @{}) {
@@ -210,6 +229,7 @@ WHERE id = '$profileId';
 
     if (-not $programId) { throw "Could not resolve or generate an active program for $TestEmail." }
 
+    Set-TestUserSubscription $TestEmail "trialing"
     Invoke-Psql "UPDATE program SET program_title = 'Strength Block', status = 'active', is_primary = true WHERE id = '$programId';"
 }
 
@@ -422,14 +442,13 @@ if ($flows -contains "05-program-complete") {
 Step "Running E2E flow(s): $($flows -join ', ')"
 
 foreach ($name in $flows) {
-    if ($name -eq "01-auth-login") {
-        Step "Clearing app state for login flow"
-        & adb shell pm clear com.bubbleworkout.mobile | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "Failed to clear app state before login flow" }
-    }
-
     $email    = if ($name -eq "05-program-complete") { $CompleteEmail }    else { $TestEmail }
     $password = if ($name -eq "05-program-complete") { $CompletePassword } else { $TestPassword }
+
+    if ($name -eq "04-paywall") {
+        Step "Expiring main test account for paywall flow"
+        Set-TestUserSubscription $TestEmail "expired"
+    }
 
     Step "Flow: $name  ($email)"
     & (Join-Path $repoRoot "mobile\.maestro\run.ps1") $name -e "TEST_EMAIL=$email" -e "TEST_PASSWORD=$password"

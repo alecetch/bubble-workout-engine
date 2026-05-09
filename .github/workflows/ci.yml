@@ -123,6 +123,8 @@ jobs:
       MAESTRO_CLI_NO_ANALYTICS: "1"
       E2E_EMAIL: e2e@example.com
       E2E_PASSWORD: E2ePass123!
+      E2E_COMPLETE_EMAIL: e2e-complete@example.com
+      E2E_COMPLETE_PASSWORD: E2eComplete123!
 
     steps:
       - uses: actions/checkout@v6
@@ -181,6 +183,9 @@ jobs:
         env:
           API_URL: http://127.0.0.1:3000
 
+      - name: Provision E2E complete account
+        run: bash scripts/provision-e2e-complete.sh
+
       - name: Install mobile dependencies
         working-directory: mobile
         run: npm ci
@@ -238,6 +243,9 @@ jobs:
             adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
             maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
             maestro test mobile/.maestro/02-start-workout.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
+            maestro test mobile/.maestro/03-settings-edit-name.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
+            maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
+            maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
 
       - name: Upload Maestro debug output
         if: failure()
