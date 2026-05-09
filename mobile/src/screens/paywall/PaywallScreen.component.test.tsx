@@ -11,6 +11,7 @@ import {
 } from "../../lib/purchases";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { PaywallScreen } from "./PaywallScreen";
+import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../lib/purchases", () => ({
   getPurchaseOfferings: vi.fn(),
@@ -55,9 +56,7 @@ describe("PaywallScreen", () => {
     vi.clearAllMocks();
     alertSpy.mockClear();
 
-    useSessionStoreMock.mockImplementation((selector: any) =>
-      selector({ setEntitlement: setEntitlementMock }),
-    );
+    mockZustandSelector(useSessionStoreMock as any, { setEntitlement: setEntitlementMock });
     getPurchaseOfferingsMock.mockResolvedValue(MOCK_OFFERINGS);
     purchasePackageMock.mockResolvedValue(undefined);
     restorePurchasesMock.mockResolvedValue({
@@ -122,6 +121,17 @@ describe("PaywallScreen", () => {
       "Purchase failed",
       "Something went wrong. Please try again.",
     );
+  });
+
+  it("disables the Subscribe button while a purchase is in progress", async () => {
+    purchasePackageMock.mockReturnValueOnce(new Promise(() => {}));
+    renderScreen();
+
+    fireEvent.click(screen.getByText("Subscribe"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Processing\.\.\./ })).toBeDisabled();
+    });
   });
 
   it("Restore purchase button calls restorePurchases", async () => {

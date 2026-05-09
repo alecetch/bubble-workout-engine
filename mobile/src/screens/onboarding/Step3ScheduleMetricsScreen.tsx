@@ -251,7 +251,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
     }
   };
 
-  const finishDisabled = isSaving || under18Selected;
+  const finishDisabled = isSaving || under18Selected || meQuery.isLoading;
 
   return (
     <OnboardingScaffold

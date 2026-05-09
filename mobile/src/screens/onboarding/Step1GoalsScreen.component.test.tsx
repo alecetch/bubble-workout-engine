@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Step1GoalsScreen } from "./Step1GoalsScreen";
 import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
-import { DEFAULT_ONBOARDING_DRAFT, type OnboardingDraft } from "../../state/onboarding/types";
+import type { OnboardingDraft } from "../../state/onboarding/types";
+import {
+  buildOnboardingDraft,
+  buildOnboardingStoreState,
+  mockZustandSelector,
+} from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useMe: vi.fn(),
@@ -71,24 +76,17 @@ const setFieldErrorsMock = vi.fn();
 const setAttemptedMock = vi.fn();
 const setIsSavingMock = vi.fn();
 
-function buildDraft(partial: Partial<OnboardingDraft> = {}): OnboardingDraft {
-  return { ...DEFAULT_ONBOARDING_DRAFT, ...partial };
-}
+const buildDraft = buildOnboardingDraft;
 
 function mockStore(draft: OnboardingDraft, overrides: Record<string, unknown> = {}) {
-  const state = {
-    draft,
-    attempted: { step1: false, step2: false, step2b: false, step3: false },
-    fieldErrors: {},
-    isSaving: false,
+  const state = buildOnboardingStoreState(draft, {
     setDraft: setDraftMock,
     setFieldErrors: setFieldErrorsMock,
     setAttempted: setAttemptedMock,
     setIsSaving: setIsSavingMock,
     ...overrides,
-  };
-  useOnboardingStoreMock.mockImplementation((selector: any) => selector(state));
-  (useOnboardingStoreMock as any).getState = () => state;
+  } as any);
+  mockZustandSelector(useOnboardingStoreMock as any, state);
 }
 
 function renderScreen(params: Record<string, unknown> = {}) {
@@ -137,6 +135,21 @@ describe("Step1GoalsScreen", () => {
     expect(screen.getByText("Main goals")).toBeInTheDocument();
     expect(screen.getByText("Fitness level")).toBeInTheDocument();
     expect(screen.getByText("Injuries and limitations")).toBeInTheDocument();
+  });
+
+  it("renders loading state while reference data is loading", () => {
+    useReferenceDataMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Main goals")).toBeInTheDocument();
+    expect(screen.getByText("Fitness level")).toBeInTheDocument();
+    expect(screen.getByText("Injuries and limitations")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "No known issues" })).not.toBeInTheDocument();
   });
 
   it("disables Next while saving", () => {
