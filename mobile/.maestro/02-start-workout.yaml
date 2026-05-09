@@ -14,11 +14,11 @@ appId: com.bubbleworkout.mobile
     commands:
       - extendedWaitUntil:
           visible: "http://10.0.2.2:8081"
-          timeout: 30000
+          timeout: 10000
       - tapOn: "http://10.0.2.2:8081"
       - extendedWaitUntil:
           visible: "Continue"
-          timeout: 120000
+          timeout: 20000
       - tapOn: "Continue"
 - tapOn:
     text: "Close"
@@ -31,10 +31,6 @@ appId: com.bubbleworkout.mobile
     visible: "Active Programs"
     timeout: 20000
 - tapOn: "Strength Block"
-- extendedWaitUntil:
-    visible: "Day Preview"
-    timeout: 20000
-- tapOn: "Start workout"
 - extendedWaitUntil:
     visible: "Workout complete"
     timeout: 20000
