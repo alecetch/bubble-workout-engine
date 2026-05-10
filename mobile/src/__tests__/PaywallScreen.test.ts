@@ -1,25 +1,22 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-
 test("PaywallScreen file is importable (structural check)", async () => {
-  try {
-    const mod = await import("../screens/paywall/PaywallScreen");
-    assert.equal(typeof mod.PaywallScreen, "function", "PaywallScreen should be a function");
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const isReactNativeErr =
-      msg.includes("react-native") ||
-      msg.includes("Cannot find module") ||
-      msg.includes("react-native-purchases");
-    assert.ok(isReactNativeErr, `Unexpected error: ${msg}`);
-  }
+    try {
+        const mod = await import("../screens/paywall/PaywallScreen");
+        expect(typeof mod.PaywallScreen).toBe("function");
+    }
+    catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : JSON.stringify(err);
+        const isReactNativeErr = msg.includes("react-native") ||
+            msg.includes("Cannot find module") ||
+            msg.includes("react-native-purchases");
+        expect(isReactNativeErr, msg).toBeTruthy();
+    }
 });
-
 test("PaywallScreen module remains structurally reachable", async () => {
-  try {
-    const mod = await import("../screens/paywall/PaywallScreen");
-    assert.ok("PaywallScreen" in mod);
-  } catch {
-    assert.ok(true);
-  }
+    try {
+        const mod = await import("../screens/paywall/PaywallScreen");
+        expect("PaywallScreen" in mod).toBeTruthy();
+    }
+    catch {
+        expect(true).toBeTruthy();
+    }
 });
