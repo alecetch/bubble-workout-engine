@@ -55,7 +55,7 @@ appId: com.bubbleworkout.mobile
       - tapOn: "Sign in"
 - extendedWaitUntil:
     visible: "Email"
-    timeout: 30000
+    timeout: 10000
 - tapOn:
     id: "email-input"
 - eraseText
@@ -89,7 +89,7 @@ appId: com.bubbleworkout.mobile
       - tapOn: "Sign in"
       - extendedWaitUntil:
           visible: "Email"
-          timeout: 30000
+          timeout: 10000
       - tapOn:
           id: "email-input"
       - eraseText
