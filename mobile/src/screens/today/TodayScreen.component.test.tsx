@@ -169,6 +169,22 @@ describe("TodayScreen", () => {
     expect(screen.getByText("Loading today's workout...")).toBeInTheDocument();
   });
 
+  it("hides workout and no-program CTAs while program overview is fetching", async () => {
+    useProgramOverviewMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    } as any);
+
+    render(<TodayScreen />);
+    await flushEffects();
+
+    expect(screen.getByText("Loading today's workout...")).toBeInTheDocument();
+    expect(screen.queryByText("Start Workout")).not.toBeInTheDocument();
+    expect(screen.queryByText("No Active Program")).not.toBeInTheDocument();
+  });
+
   it("renders error state when program overview fetch fails", () => {
     useProgramOverviewMock.mockReturnValue({
       data: undefined,
@@ -183,5 +199,21 @@ describe("TodayScreen", () => {
     expect(screen.getByText("Today Is Unavailable")).toBeInTheDocument();
     expect(screen.getByText("Network error")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Programs" })).toBeInTheDocument();
+  });
+
+  it("hides the start-workout CTA when program overview fails to load", async () => {
+    useProgramOverviewMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Network error"),
+      refetch: vi.fn(),
+    } as any);
+
+    render(<TodayScreen />);
+    await flushEffects();
+
+    expect(screen.getByText("Today Is Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Start Workout")).not.toBeInTheDocument();
   });
 });

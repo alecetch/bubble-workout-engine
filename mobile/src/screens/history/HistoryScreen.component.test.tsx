@@ -269,4 +269,72 @@ describe("HistoryScreen", () => {
 
     expect(screen.getByText("Unable to load history")).toBeInTheDocument();
   });
+
+  it("shows error state when history metrics fail before timeline data is available", () => {
+    useSessionHistoryMetricsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Fetch failed"),
+      refetch: vi.fn(),
+    } as any);
+    useHistoryTimelineMock.mockReturnValue({
+      data: { pages: [{ items: [], nextCursor: null }] },
+      isLoading: false,
+      isError: false,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Unable to load history")).toBeInTheDocument();
+    expect(screen.queryByText("Lower Body")).not.toBeInTheDocument();
+  });
+
+  it("shows empty states when history has no programs, sessions, or records", () => {
+    useSessionHistoryMetricsMock.mockReturnValue({
+      data: {
+        ...metricsFixture,
+        sessionsCount: 0,
+        dayStreak: 0,
+        programmesCompleted: 0,
+        consistency28d: { completed: 0, scheduled: 0, rate: 0 },
+        volume28d: 0,
+        strengthUpper28d: null,
+        strengthLower28d: null,
+        sessionsCount28d: 0,
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+    usePrsFeedMock.mockReturnValue({
+      data: { mode: "prs_28d", rows: [] },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+    useHistoryProgramsMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+    useHistoryTimelineMock.mockReturnValue({
+      data: { pages: [{ items: [], nextCursor: null }] },
+      isLoading: false,
+      isError: false,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("No completed programs yet.")).toBeInTheDocument();
+    expect(screen.getByText("No completed sessions yet.")).toBeInTheDocument();
+    expect(screen.getByText("Complete workouts with logged weight to see records.")).toBeInTheDocument();
+  });
 });

@@ -268,6 +268,7 @@ describe("ProgramDayScreen", () => {
     completeProgramMutateMock.mockResolvedValue({ ok: true });
     getWorkoutCompleteMock.mockResolvedValue(false);
     getSegmentLogMock.mockResolvedValue(null);
+    setWorkoutCompleteMock.mockReset();
     setWorkoutCompleteMock.mockResolvedValue(undefined);
     getProgramOverviewMock.mockResolvedValue({
       calendarDays: [
@@ -327,6 +328,21 @@ describe("ProgramDayScreen", () => {
     await waitForLocalStateLoad();
   });
 
+  it("does not render segment content while the workout day is loading", async () => {
+    useProgramDayFullMock.mockReturnValueOnce({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getAllByTestId("skeleton-block").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Squats")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Workout complete" })).not.toBeInTheDocument();
+    await waitForLocalStateLoad();
+  });
+
   it("renders error state with retry", async () => {
     const refetch = vi.fn();
     useProgramDayFullMock.mockReturnValueOnce({
@@ -343,6 +359,24 @@ describe("ProgramDayScreen", () => {
     expect(screen.getByText("Network down")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Retry"));
     expect(refetch).toHaveBeenCalledTimes(1);
+    await waitForLocalStateLoad();
+  });
+
+  it("does not render workout controls when segment data fails to load", async () => {
+    useProgramDayFullMock.mockReturnValueOnce({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Load failed"),
+      refetch: vi.fn(),
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Couldn't load workout")).toBeInTheDocument();
+    expect(screen.getByText("Load failed")).toBeInTheDocument();
+    expect(screen.queryByTestId("segment-card")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Workout complete" })).not.toBeInTheDocument();
     await waitForLocalStateLoad();
   });
 
@@ -405,6 +439,17 @@ describe("ProgramDayScreen", () => {
       }),
     );
     expect(setWorkoutCompleteMock).toHaveBeenCalledWith("day-1", true);
+  });
+
+  it("shows error feedback when the completion mutation fails", async () => {
+    markDayMutateMock.mockRejectedValueOnce(new Error("Save failed"));
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
+
+    expect(await screen.findByText("Save failed")).toBeInTheDocument();
+    expect(setWorkoutCompleteMock).not.toHaveBeenCalledWith("day-1", true);
   });
 
   it("shows the session summary before completing the workout", async () => {

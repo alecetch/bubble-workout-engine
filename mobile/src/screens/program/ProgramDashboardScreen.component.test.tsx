@@ -138,6 +138,21 @@ describe("ProgramDashboardScreen", () => {
     expect(screen.queryByText("Unable to load dashboard")).not.toBeInTheDocument();
   });
 
+  it("hides dashboard content while program overview is fetching", () => {
+    useProgramOverviewMock.mockReturnValueOnce({
+      isLoading: true,
+      isError: false,
+      data: undefined,
+      error: null,
+    } as any);
+
+    renderDashboard();
+
+    expect(screen.queryByText("Strength Block")).not.toBeInTheDocument();
+    expect(screen.queryByText("Preview: Day 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unable to load dashboard")).not.toBeInTheDocument();
+  });
+
   it("renders error state with retry", () => {
     useProgramOverviewMock.mockReturnValue({
       isLoading: false,
@@ -149,6 +164,22 @@ describe("ProgramDashboardScreen", () => {
     renderDashboard();
     expect(screen.getByText("Unable to load dashboard")).toBeInTheDocument();
     expect(screen.getByText("Retry")).toBeInTheDocument();
+  });
+
+  it("shows the overview error message and hides the week grid when loading fails", () => {
+    useProgramOverviewMock.mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: new Error("Fetch failed"),
+      data: undefined,
+      refetch: vi.fn(),
+    } as any);
+
+    renderDashboard();
+
+    expect(screen.getByText("Unable to load dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Fetch failed")).toBeInTheDocument();
+    expect(screen.queryByText("Preview: Day 1")).not.toBeInTheDocument();
   });
 
   it("renders the program title", () => {
