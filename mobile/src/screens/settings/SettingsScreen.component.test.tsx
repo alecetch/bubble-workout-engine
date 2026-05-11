@@ -68,6 +68,19 @@ describe("SettingsScreen", () => {
           refetch: vi.fn(),
         } as any;
       }
+      if (queryKey[0] === "notificationPreferences") {
+        return {
+          data: {
+            prNotificationEnabled: true,
+            deloadNotificationEnabled: false,
+            reminderEnabled: true,
+            reminderTimeLocalHhmm: "08:00",
+          },
+          isLoading: false,
+          isError: false,
+          refetch: vi.fn(),
+        } as any;
+      }
       return { data: undefined, isLoading: false, isError: false, refetch: vi.fn() } as any;
     });
   });
@@ -90,5 +103,23 @@ describe("SettingsScreen", () => {
     render(<SettingsScreen navigation={nav as any} route={{} as any} />);
     fireEvent.click(screen.getByRole("button", { name: "Change Password" }));
     expect(nav.navigate).toHaveBeenCalledWith("ChangePassword");
+  });
+
+  it("Account settings navigation item is accessible as a named button", () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+
+    expect(screen.getByRole("button", { name: /name/i })).toBeInTheDocument();
+  });
+
+  it("Notification settings item is accessible as a named button", () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+
+    expect(screen.getByRole("button", { name: /pr notifications/i })).toBeInTheDocument();
+  });
+
+  it("Sign out button is accessible as a named button", () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+
+    expect(screen.getByRole("button", { name: /log out/i })).toBeInTheDocument();
   });
 });

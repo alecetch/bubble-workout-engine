@@ -117,6 +117,28 @@ describe("LoginScreen", () => {
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 
+  it("TODO: email input should be associated with a visible label for screen readers", () => {
+    renderScreen();
+
+    // The visible Email text is adjacent to the input, but not associated as an accessible name yet.
+    expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
+  });
+
+  it("submit button is accessible as a named button", () => {
+    renderScreen();
+
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+  });
+
+  it("failed login renders a user-readable error message", async () => {
+    apiLoginMock.mockRejectedValueOnce(new ApiError(401, "invalid credentials"));
+    renderScreen();
+    fillCredentials();
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(await screen.findByText("Incorrect email or password.")).toBeInTheDocument();
+  });
+
   it("does not call apiLogin when fields are empty", async () => {
     renderScreen();
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));

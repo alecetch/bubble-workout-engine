@@ -73,6 +73,18 @@ describe("PaywallScreen", () => {
     expect(screen.getByText("Restore purchase")).toBeInTheDocument();
   });
 
+  it("primary CTA is accessible as a named button", () => {
+    renderScreen();
+
+    expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
+  });
+
+  it("restore purchase action is accessible as a named button", () => {
+    renderScreen();
+
+    expect(screen.getByRole("button", { name: /restore purchase/i })).toBeInTheDocument();
+  });
+
   it("Subscribe calls getPurchaseOfferings then purchasePackage with the first available package", async () => {
     renderScreen();
 
