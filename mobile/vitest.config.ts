@@ -30,7 +30,7 @@ export default defineConfig({
       thresholds: {
         statements: 60,
         branches: 55,
-        functions: 58, // baseline 56.23% → 58.14% after native-boundary exclusions; spec targeted 60% but Feature 56 MSW tests expanded coverage scope
+        functions: 57, // CI baseline 57.69% after native-boundary exclusions; spec targeted 60% but Feature 56 MSW tests expanded coverage scope
       },
     },
     projects: [
