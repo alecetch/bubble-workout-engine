@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Step3ScheduleMetricsScreen } from "./Step3ScheduleMetricsScreen";
 import { useMe, useUpdateClientProfile } from "../../api/hooks";
@@ -109,6 +110,13 @@ describe("Step3ScheduleMetricsScreen", () => {
     } as any);
     mockStore(validDraft);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders schedule and metrics section headings", () => {
     renderScreen();

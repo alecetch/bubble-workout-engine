@@ -1,4 +1,5 @@
 import React from "react";
+import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as ImagePicker from "expo-image-picker";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,8 +51,8 @@ vi.mock("../../components/physique/PhysiqueShareCard", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -140,6 +141,13 @@ describe("PhysiqueIntelligenceScreen", () => {
     launchCameraAsyncMock.mockResolvedValue({ canceled: true } as any);
     submitScanMock.mockResolvedValue(SCAN_RESULT_FIXTURE as any);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders picker phase initially with camera and library buttons", () => {
     renderScreen();

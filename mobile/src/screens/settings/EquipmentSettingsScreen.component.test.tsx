@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { EquipmentSettingsScreen } from "./EquipmentSettingsScreen";
 import { getProgramEquipment } from "../../api/equipmentRegen";
 
@@ -156,6 +157,13 @@ describe("EquipmentSettingsScreen", () => {
       isPending: false,
     });
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders with the current preset selected from the profile", () => {
     renderScreen();

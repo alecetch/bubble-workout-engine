@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramHubScreen } from "./ProgramHubScreen";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -167,6 +168,13 @@ describe("ProgramHubScreen", () => {
     consoleErrorSpy?.mockRestore();
     consoleWarnSpy?.mockRestore();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders loading skeleton while activePrograms loads", () => {
     activeProgramsQueryState = { data: undefined, isLoading: true, isError: false, refetch: vi.fn() };

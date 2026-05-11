@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiFetch } from "../../api/client";
 import { ResetPasswordCodeScreen } from "./ResetPasswordCodeScreen";
@@ -18,8 +19,8 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -53,6 +54,13 @@ describe("ResetPasswordCodeScreen", () => {
     apiFetchMock.mockReset();
     apiFetchMock.mockResolvedValue(undefined);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderCode();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders code input, two password inputs, and Reset password button", () => {
     renderCode();

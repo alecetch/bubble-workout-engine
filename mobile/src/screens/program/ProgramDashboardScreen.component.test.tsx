@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDashboardScreen } from "./ProgramDashboardScreen";
@@ -48,8 +49,8 @@ vi.mock("../../utils/localWorkoutLog", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -131,6 +132,14 @@ describe("ProgramDashboardScreen", () => {
     queryClient?.clear();
     vi.useRealTimers();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    vi.useRealTimers();
+    renderDashboard();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders loading skeletons without an error", () => {
     useProgramOverviewMock.mockReturnValueOnce({ isLoading: true, data: undefined } as any);
