@@ -142,13 +142,4 @@ SET program_title = 'Strength Block',
 WHERE id = '${program_id}';
 SQL
 
-echo "Setting subscription status to trialing for ${E2E_EMAIL}"
-psql -v ON_ERROR_STOP=1 <<SQL
-UPDATE app_user
-SET subscription_status    = 'trialing',
-    trial_expires_at       = now() + interval '14 days',
-    subscription_expires_at = NULL
-WHERE lower(email) = lower('${E2E_EMAIL}');
-SQL
-
 echo "E2E account ready: user_id=${user_id} client_profile_id=${client_profile_id} program_id=${program_id}"
