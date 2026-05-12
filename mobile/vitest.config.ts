@@ -37,19 +37,7 @@ export default defineConfig({
         "src/api/tokenStorage.ts", // wraps expo-secure-store native module; native key-value store not mockable in jsdom
         "src/api/trainingHistoryImport.ts", // thin import endpoint wrapper with no local business logic
         "src/api/userIdentity.ts", // device identity boundary wrapper with no local business logic
-        // Onboarding presentational shells — covered through screen-level flows
-        "src/components/onboarding/DayChipRow.tsx",
-        "src/components/onboarding/EquipmentCategorySection.tsx",
-        "src/components/onboarding/ErrorBanner.tsx",
-        "src/components/onboarding/MultilineField.tsx",
-        "src/components/onboarding/NumericField.tsx",
-        "src/components/onboarding/OnboardingScaffold.tsx",
-        "src/components/onboarding/Pill.tsx",
-        "src/components/onboarding/PillGrid.tsx",
-        "src/components/onboarding/PresetCard.tsx",
-        "src/components/onboarding/PresetCardList.tsx",
-        "src/components/onboarding/ProgressHeader.tsx",
-        "src/components/onboarding/StickyNavBar.tsx",
+        // Onboarding components with dedicated component tests — no longer excluded
         // Native API / platform boundaries — not mockable in jsdom
         "src/components/sharing/PRShareCard.tsx", // share-card rendering is native/media boundary; tested via E2E screenshot flows
         "src/components/physique/PhysiqueShareCard.tsx", // physique share-card at native screenshot boundary
