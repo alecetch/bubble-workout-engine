@@ -41,7 +41,11 @@ export function AccountNameScreen({ navigation, route }: Props): React.JSX.Eleme
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.root}>
-        <PressableScale style={styles.backButton} onPress={() => navigation.goBack()}>
+        <PressableScale
+          accessibilityLabel="Go back"
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
         </PressableScale>
         <Text style={styles.title}>Edit Name</Text>

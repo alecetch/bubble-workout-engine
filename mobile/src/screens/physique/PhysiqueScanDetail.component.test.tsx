@@ -1,5 +1,6 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, render, screen } from "@testing-library/react";
 import { useQuery } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getScan } from "../../api/physiqueScan";
@@ -59,6 +60,13 @@ describe("PhysiqueScanDetailScreen", () => {
       error: null,
     } as any);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("shows loading indicator when scan is loading", () => {
     useQueryMock.mockReturnValue({

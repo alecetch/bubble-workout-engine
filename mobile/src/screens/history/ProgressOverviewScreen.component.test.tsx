@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionHistoryMetrics } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -15,8 +16,8 @@ vi.mock("../../state/session/sessionStore", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -71,6 +72,13 @@ describe("ProgressOverviewScreen", () => {
       refetch: mockRefetch,
     } as any);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("shows loading indicator when isLoading is true", () => {
     useSessionHistoryMetricsMock.mockReturnValue({

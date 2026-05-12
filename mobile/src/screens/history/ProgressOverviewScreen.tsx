@@ -155,7 +155,11 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <PressableScale style={styles.iconButton} onPress={() => navigation.goBack()}>
+          <PressableScale
+            accessibilityLabel="Go back"
+            style={styles.iconButton}
+            onPress={() => navigation.goBack()}
+          >
             <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
           </PressableScale>
           <Text style={styles.screenTitle}>Progress Overview</Text>
