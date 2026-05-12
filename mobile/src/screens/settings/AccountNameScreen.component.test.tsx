@@ -1,4 +1,5 @@
 import React from "react";
+import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,8 +10,8 @@ vi.mock("../../api/accountApi", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -57,6 +58,13 @@ describe("AccountNameScreen", () => {
     vi.mocked(useQueryClient).mockReturnValue({ setQueryData: setQueryDataMock } as any);
     installUseMutationMock();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("input is pre-populated with current name from route params", () => {
     renderScreen();

@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePhysiqueScans, usePhysiqueScanTrend } from "../../api/hooks";
 import { PhysiqueHistoryScreen } from "./PhysiqueHistoryScreen";
@@ -18,8 +19,8 @@ vi.mock("react-native-svg", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -84,6 +85,13 @@ describe("PhysiqueHistoryScreen", () => {
       error: null,
     } as any);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("shows loading indicator when usePhysiqueScans returns isLoading true", () => {
     usePhysiqueScansMock.mockReturnValue({

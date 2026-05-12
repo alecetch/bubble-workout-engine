@@ -1,8 +1,12 @@
 import "@testing-library/jest-dom";
 import { cleanup } from "@testing-library/react";
+import { configureAxe, toHaveNoViolations } from "jest-axe";
 import React from "react";
 
 if (typeof window !== "undefined") {
+expect.extend(toHaveNoViolations);
+configureAxe({ rules: [{ id: "color-contrast", enabled: false }] });
+
 // Ensure DOM is cleaned up between every test. @testing-library/react registers
 // this automatically when globals are detected, but it does not fire reliably
 // under vitest's forks pool with singleFork:true — so we wire it explicitly.

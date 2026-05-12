@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import * as ImagePicker from "expo-image-picker";
 import { useEntitlement, usePhysiqueCheckIns } from "../../api/hooks";
 import { recordConsent, submitCheckIn } from "../../api/physique";
@@ -23,8 +24,8 @@ vi.mock("expo-image-picker", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -90,6 +91,13 @@ describe("PhysiqueCheckInScreen", () => {
       },
     } as any);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderConsentedScreenWithPreview();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders the consent screen title and primary CTA", () => {
     render(<PhysiqueCheckInScreen />);

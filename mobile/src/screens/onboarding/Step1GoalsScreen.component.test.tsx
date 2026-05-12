@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Step1GoalsScreen } from "./Step1GoalsScreen";
 import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
@@ -128,6 +129,13 @@ describe("Step1GoalsScreen", () => {
     } as any);
     mockStore(buildDraft());
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders goals, fitness, and injury section headings", () => {
     renderScreen();

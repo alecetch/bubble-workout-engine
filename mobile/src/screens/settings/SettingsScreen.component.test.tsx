@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEntitlement } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -101,6 +102,13 @@ describe("SettingsScreen", () => {
   beforeEach(() => {
     resetSettingsMocks();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders Settings title and ACCOUNT section rows when account data is loaded", () => {
     render(<SettingsScreen navigation={nav as any} route={{} as any} />);

@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UnitPickerScreen } from "./UnitPickerScreen";
@@ -14,8 +15,8 @@ vi.mock("@expo/vector-icons", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -66,6 +67,13 @@ describe("UnitPickerScreen", () => {
     vi.mocked(useQueryClient).mockReturnValue({ setQueryData: setQueryDataMock } as any);
     installUseMutationMock();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders WEIGHT section with kg and lbs options; kg is shown as selected", () => {
     renderScreen();

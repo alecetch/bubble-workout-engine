@@ -139,7 +139,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!showPassword}
-              autoComplete="password"
+              autoComplete="current-password"
               textContentType="password"
               placeholder="Enter password"
               placeholderTextColor={colors.textSecondary}
@@ -149,6 +149,8 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
               style={styles.eyeBtn}
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              accessibilityRole="button"
             >
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}

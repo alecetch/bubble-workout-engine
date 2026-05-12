@@ -1,4 +1,5 @@
 import React from "react";
+import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TodayScreen } from "./TodayScreen";
@@ -36,8 +37,8 @@ vi.mock("../../utils/localWorkoutLog", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -88,6 +89,14 @@ describe("TodayScreen", () => {
       await Promise.resolve();
     });
   }
+  it("has no accessibility violations in the default render state", async () => {
+    vi.useRealTimers();
+    render(<TodayScreen />);
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders the no active program state", () => {
     sessionState = { userId: "user-1", activeProgramId: null as any };
