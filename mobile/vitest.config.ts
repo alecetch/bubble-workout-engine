@@ -15,15 +15,12 @@ export default defineConfig({
         "scripts/**", // local maintenance helpers, not shipped mobile runtime code
         "src/navigation/**", // pure navigator configuration, covered by screen and E2E flows
         // Thin HTTP endpoint wrappers — no local business logic
-        "src/api/accountApi.ts", // getAccountInfo covered by MSW tests; updateDisplayName/changePassword/deleteAccount untested — file-level coverage below threshold
-        "src/api/authApi.ts", // thin HTTP endpoint wrapper exercised through auth screen tests
         "src/api/client.ts", // shared network boundary wrapper; branch coverage belongs in API contract/integration tests
-        "src/api/clientProfiles.ts", // thin HTTP endpoint wrapper exercised through onboarding flows
         "src/api/equipmentPresets.ts", // reference-data endpoint wrapper with no local business logic
         "src/api/equipmentRegen.ts", // thin mutation endpoint wrapper exercised through equipment screen tests
         "src/api/exerciseGuidance.ts", // thin endpoint wrapper with no local business logic
         "src/api/history.ts", // thin history endpoint wrapper exercised through history screen tests
-        "src/api/notifications.ts", // getNotificationPreferences covered by MSW tests; registerPushToken/unregisterPushToken/updateNotificationPreferences untested — file-level coverage below threshold
+
         "src/api/physique.ts", // thin physique endpoint wrapper exercised through physique screen tests
         "src/api/physiqueScan.ts", // native upload endpoint wrapper exercised through physique screen tests
         "src/api/profileApi.ts", // thin profile endpoint wrapper exercised through settings/onboarding flows
