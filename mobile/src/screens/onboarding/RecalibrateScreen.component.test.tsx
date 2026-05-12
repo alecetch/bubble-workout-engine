@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RecalibrateScreenB } from "./RecalibrateScreen";
 
 const {
@@ -198,6 +199,13 @@ describe("RecalibrateScreenB", () => {
     navigationNavigateMock.mockReset();
     navigationGoBackMock.mockReset();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("seeds ProgramReview with newly selected goals before generating", async () => {
     renderScreen();

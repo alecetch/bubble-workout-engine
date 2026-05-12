@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useNavigation } from "@react-navigation/native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePhysiqueMilestones } from "../../api/hooks";
@@ -10,8 +11,8 @@ vi.mock("../../api/hooks", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -45,6 +46,13 @@ describe("PhysiqueMilestonesScreen", () => {
       error: null,
     } as any);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    render(<PhysiqueMilestonesScreen />);
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("shows loading indicator when isLoading is true", () => {
     usePhysiqueMilestonesMock.mockReturnValue({

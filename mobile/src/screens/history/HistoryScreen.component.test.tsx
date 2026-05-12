@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryScreen } from "./HistoryScreen";
@@ -190,6 +191,13 @@ describe("HistoryScreen", () => {
     queryClient?.clear();
     vi.useRealTimers();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it('renders "Training History" heading', () => {
     renderScreen();

@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDocumentAsync } from "expo-document-picker";
 import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
@@ -56,8 +57,8 @@ vi.mock("../../components/onboarding/SelectField", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -184,6 +185,13 @@ describe("Step2bBaselineLoadsScreen", () => {
     } as any);
     mockStore();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders known_weights mode by default with all family section titles", () => {
     renderScreen();

@@ -1,4 +1,5 @@
 import React from "react";
+import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useMutation } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,8 +36,8 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -90,6 +91,15 @@ describe("ChangePasswordScreen", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
+
+  it("has no accessibility violations in the default render state", async () => {
+    vi.useRealTimers();
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders current password, new password, confirm password fields and Submit button", () => {
     renderScreen();

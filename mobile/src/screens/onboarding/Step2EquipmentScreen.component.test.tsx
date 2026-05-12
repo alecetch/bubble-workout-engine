@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Step2EquipmentScreen } from "./Step2EquipmentScreen";
 import { useEquipmentItems, useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
@@ -196,6 +197,13 @@ describe("Step2EquipmentScreen", () => {
     } as any);
     mockStore(buildDraft());
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders preset cards from reference data", () => {
     renderScreen();

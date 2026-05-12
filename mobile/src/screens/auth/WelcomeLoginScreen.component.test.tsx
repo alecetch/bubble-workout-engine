@@ -1,11 +1,12 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WelcomeLoginScreen } from "./WelcomeLoginScreen";
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -25,6 +26,13 @@ describe("WelcomeLoginScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("renders Sign in and Create account buttons", () => {
     renderScreen();

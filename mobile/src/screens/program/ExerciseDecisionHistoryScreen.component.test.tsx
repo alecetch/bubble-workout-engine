@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchDecisionHistory } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -82,6 +83,13 @@ describe("ExerciseDecisionHistoryScreen", () => {
     mockZustandSelector(useSessionStoreMock as any, { userId: "user-123" });
     mockZustandSelector(useOnboardingStoreMock as any, { userId: "onboard-user" });
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("shows loading indicator on initial fetch before promise resolves", () => {
     mockFetchDecisionHistory.mockReturnValue(new Promise(() => {}));

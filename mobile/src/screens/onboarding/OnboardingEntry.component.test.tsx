@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingEntry } from "./OnboardingEntry";
 import {
@@ -138,6 +139,13 @@ describe("OnboardingEntry", () => {
     useCreateClientProfileMock.mockReturnValue({ mutateAsync: createMutateMock, isPending: false } as any);
     useLinkClientProfileToUserMock.mockReturnValue({ mutateAsync: linkMutateMock, isPending: false } as any);
   });
+  it("has no accessibility violations in the default render state", async () => {
+    renderScreen();
+    await act(async () => {});
+    document.body.firstElementChild?.setAttribute("role", "main");
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
 
   it("shows loading while me query is in flight", () => {
     useMeMock.mockReturnValueOnce({ data: undefined, isLoading: true, isError: false } as any);

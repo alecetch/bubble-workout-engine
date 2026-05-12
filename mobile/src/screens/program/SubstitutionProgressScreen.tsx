@@ -74,7 +74,11 @@ export function SubstitutionProgressScreen({ route, navigation }: Props): React.
 
   return (
     <View style={styles.centered}>
-      <ActivityIndicator color={colors.accent} size="large" />
+      <ActivityIndicator
+        accessibilityLabel="Updating program"
+        color={colors.accent}
+        size="large"
+      />
       <Text style={styles.title}>Updating your program...</Text>
       <Text style={styles.body}>Swapping exercises for the kit you have available.</Text>
     </View>
