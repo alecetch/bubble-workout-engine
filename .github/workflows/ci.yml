@@ -81,6 +81,10 @@ jobs:
         working-directory: mobile
         run: npx tsc --noEmit
 
+      - name: Validate coverage manifest
+        working-directory: mobile
+        run: node scripts/validate-coverage-manifest.mjs
+
       - name: Run mobile tests
         working-directory: mobile
         run: npx vitest run --coverage

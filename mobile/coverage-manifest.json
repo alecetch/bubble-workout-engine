@@ -1,0 +1,755 @@
+{
+  "version": "1",
+  "entries": [
+    {
+      "type": "component",
+      "source": "src/components/feedback/SkeletonBlock.tsx",
+      "test": "src/components/feedback/SkeletonBlock.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "feedback"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/interaction/PressableScale.tsx",
+      "test": null,
+      "status": "gap",
+      "tags": [
+        "interaction"
+      ],
+      "reason": "No component test exists yet for this testable surface."
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/DayChipRow.tsx",
+      "test": "src/components/onboarding/DayChipRow.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/EquipmentCategorySection.tsx",
+      "test": "src/components/onboarding/EquipmentCategorySection.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/ErrorBanner.tsx",
+      "test": "src/components/onboarding/ErrorBanner.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/MultilineField.tsx",
+      "test": "src/components/onboarding/MultilineField.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/NumericField.tsx",
+      "test": "src/components/onboarding/NumericField.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/OnboardingScaffold.tsx",
+      "test": "src/components/onboarding/OnboardingScaffold.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/Pill.tsx",
+      "test": "src/components/onboarding/Pill.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/PillGrid.tsx",
+      "test": "src/components/onboarding/PillGrid.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/PresetCard.tsx",
+      "test": "src/components/onboarding/PresetCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/PresetCardList.tsx",
+      "test": "src/components/onboarding/PresetCardList.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/ProgressHeader.tsx",
+      "test": "src/components/onboarding/ProgressHeader.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/SectionCard.tsx",
+      "test": "src/components/onboarding/SectionCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/SelectField.tsx",
+      "test": "src/components/onboarding/SelectField.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/SkeletonOnboarding.tsx",
+      "test": "src/components/onboarding/SkeletonOnboarding.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/onboarding/StickyNavBar.tsx",
+      "test": "src/components/onboarding/StickyNavBar.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/physique/PhysiqueShareCard.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "physique"
+      ],
+      "reason": "physique share-card at native screenshot boundary"
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/AdaptationChip.tsx",
+      "test": "src/components/program/AdaptationChip.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/CalendarDayPillRow.tsx",
+      "test": "src/components/program/CalendarDayPillRow.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/CombinedCalendar.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "program"
+      ],
+      "reason": "presentational calendar shell, covered through program screen behaviour"
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/DayPreviewCard.tsx",
+      "test": "src/components/program/DayPreviewCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/EquipmentOverrideSheet.tsx",
+      "test": "src/components/program/EquipmentOverrideSheet.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/ExerciseSwapSheet.tsx",
+      "test": "src/components/program/ExerciseSwapSheet.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/GuidelineLoadHint.tsx",
+      "test": "src/components/program/GuidelineLoadHint.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/HeroHeader.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "program"
+      ],
+      "reason": "Reanimated + expo-linear-gradient animation component; animation worklet boundary"
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/LogSegmentModal.tsx",
+      "test": "src/components/program/LogSegmentModal.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/SegmentCard.tsx",
+      "test": "src/components/program/SegmentCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/SessionPickerSheet.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "program"
+      ],
+      "reason": "presentational picker shell, covered through program screen behaviour"
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/SessionSummaryModal.tsx",
+      "test": "src/components/program/SessionSummaryModal.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/TechniqueSheet.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "program"
+      ],
+      "reason": "presentational technique sheet, covered through workout flow behaviour"
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/WeekPillStrip.tsx",
+      "test": null,
+      "status": "gap",
+      "tags": [
+        "program"
+      ],
+      "reason": "No component test exists yet for this testable surface."
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/WeekProgressRing.tsx",
+      "test": "src/components/program/WeekProgressRing.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/sharing/PRShareCard.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "sharing"
+      ],
+      "reason": "share-card rendering is native/media boundary; tested via E2E screenshot flows"
+    },
+    {
+      "type": "component",
+      "source": "src/components/sharing/WeekShareCard.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "sharing"
+      ],
+      "reason": "share-card rendering is native/media boundary, covered by feature-level UI tests later"
+    },
+    {
+      "type": "component",
+      "source": "src/components/timers/PremiumTimer.tsx",
+      "test": "src/components/timers/PremiumTimer.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "timers"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/timers/RingTimer.tsx",
+      "test": null,
+      "status": "excluded",
+      "tags": [
+        "timers"
+      ],
+      "reason": "visual timer shell, covered through premium timer/countdown behaviour"
+    },
+    {
+      "type": "component",
+      "source": "src/components/today/TodayWorkoutCard.tsx",
+      "test": "src/components/today/TodayWorkoutCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "today"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/today/WeekProgressBadge.tsx",
+      "test": "src/components/today/WeekProgressBadge.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "today"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/auth/LoginScreen.tsx",
+      "test": "src/screens/auth/LoginScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "auth"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/auth/RegisterScreen.tsx",
+      "test": "src/screens/auth/RegisterScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "auth"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/auth/ResetPasswordCodeScreen.tsx",
+      "test": "src/screens/auth/ResetPasswordCodeScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "auth"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/auth/ResetPasswordScreen.tsx",
+      "test": "src/screens/auth/ResetPasswordScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "auth"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/auth/WelcomeLoginScreen.tsx",
+      "test": "src/screens/auth/WelcomeLoginScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "auth"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/history/ExerciseTrendScreen.tsx",
+      "test": "src/screens/history/ExerciseTrendScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "history"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/history/HistoryScreen.tsx",
+      "test": "src/screens/history/HistoryScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "history"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/history/ProgressOverviewScreen.tsx",
+      "test": "src/screens/history/ProgressOverviewScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "history"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/OnboardingEntry.tsx",
+      "test": "src/screens/onboarding/OnboardingEntry.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/RecalibrateScreen.tsx",
+      "test": "src/screens/onboarding/RecalibrateScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/Step1GoalsScreen.tsx",
+      "test": "src/screens/onboarding/Step1GoalsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/Step2EquipmentScreen.tsx",
+      "test": "src/screens/onboarding/Step2EquipmentScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/Step2bBaselineLoadsScreen.tsx",
+      "test": "src/screens/onboarding/Step2bBaselineLoadsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/Step3ScheduleMetricsScreen.tsx",
+      "test": "src/screens/onboarding/Step3ScheduleMetricsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/paywall/PaywallScreen.tsx",
+      "test": "src/screens/paywall/PaywallScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "paywall"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/physique/PhysiqueCheckInScreen.tsx",
+      "test": "src/screens/physique/PhysiqueCheckInScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "physique"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/physique/PhysiqueHistoryScreen.tsx",
+      "test": "src/screens/physique/PhysiqueHistoryScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "physique"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/physique/PhysiqueIntelligenceScreen.tsx",
+      "test": "src/screens/physique/PhysiqueIntelligenceScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "physique"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/physique/PhysiqueMilestonesScreen.tsx",
+      "test": "src/screens/physique/PhysiqueMilestonesScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "physique"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/physique/PhysiqueScanDetail.tsx",
+      "test": "src/screens/physique/PhysiqueScanDetail.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "physique"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ExerciseDecisionHistoryScreen.tsx",
+      "test": "src/screens/program/ExerciseDecisionHistoryScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ExerciseDetailScreen.tsx",
+      "test": "src/screens/program/ExerciseDetailScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ProgramCompleteScreen.tsx",
+      "test": "src/screens/program/ProgramCompleteScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ProgramDashboardScreen.tsx",
+      "test": "src/screens/program/ProgramDashboardScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ProgramDayScreen.tsx",
+      "test": "src/screens/program/ProgramDayScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ProgramEndCheckScreen.tsx",
+      "test": "src/screens/program/ProgramEndCheckScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ProgramHubScreen.tsx",
+      "test": "src/screens/program/ProgramHubScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/ProgramReviewScreen.tsx",
+      "test": "src/screens/program/ProgramReviewScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/program/SubstitutionProgressScreen.tsx",
+      "test": "src/screens/program/SubstitutionProgressScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/AccountNameScreen.tsx",
+      "test": "src/screens/settings/AccountNameScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/ChangePasswordScreen.tsx",
+      "test": "src/screens/settings/ChangePasswordScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/EquipmentSettingsScreen.tsx",
+      "test": "src/screens/settings/EquipmentSettingsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/NotificationTimeScreen.tsx",
+      "test": "src/screens/settings/NotificationTimeScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/SettingsScreen.tsx",
+      "test": "src/screens/settings/SettingsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/UnitPickerScreen.tsx",
+      "test": "src/screens/settings/UnitPickerScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/today/TodayScreen.tsx",
+      "test": "src/screens/today/TodayScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "today"
+      ],
+      "reason": ""
+    }
+  ]
+}
