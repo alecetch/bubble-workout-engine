@@ -90,7 +90,26 @@ if (-not $pkgs) {
 
 Write-Host "Driver APKs installed. Starting Maestro..."
 
-# 6. Run the flow(s)
+# Clear app state before onboarding flows so stale auth/navigation state from a
+# failed run cannot leave the next run mid-onboarding or on a dirty register form.
+if ($flowName -match '^0[67]') {
+    Invoke-BestEffort { adb shell pm clear com.bubbleworkout.mobile }
+}
+
+# 6. Load maestro.env and pass all key=value pairs as --env flags.
+#    Maestro's auto-loading of maestro.env is CWD-sensitive and does not reliably pick
+#    up the file when invoked from the project root. Passing vars explicitly is the safe path.
+$envArgs = @()
+$envFile = "mobile/.maestro/maestro.env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | Where-Object { $_ -match '^\w' } | ForEach-Object {
+        $envArgs += "--env"
+        $envArgs += $_
+    }
+}
+
+# 7. Run the flow(s). User-supplied @maestroArgs (e.g. -e KEY=override) follow envArgs so
+#    they take precedence over values loaded from the env file.
 $target = if ($flowName) { "mobile/.maestro/$flowName.yaml" } else { "mobile/.maestro/" }
-& maestro test $target @maestroArgs
+& maestro test $target @envArgs @maestroArgs
 exit $LASTEXITCODE

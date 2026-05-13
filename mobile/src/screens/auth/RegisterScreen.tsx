@@ -153,6 +153,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
+            testID="register-email-input"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -172,6 +173,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputRow}>
             <TextInput
+              testID="register-password-input"
               ref={passwordRef}
               value={password}
               onChangeText={(text) => {
@@ -214,6 +216,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.label}>Confirm password</Text>
           <View style={styles.inputRow}>
             <TextInput
+              testID="register-confirm-password-input"
               ref={confirmPasswordRef}
               value={confirmPassword}
               onChangeText={(text) => {
@@ -256,6 +259,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
 
       <View style={styles.actions}>
         <PressableScale
+          testID="register-submit-button"
           style={[styles.primaryButton, isSubmitting && styles.disabledButton]}
           disabled={isSubmitting}
           onPress={() => void handleSubmit()}
@@ -263,6 +267,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.primaryLabel}>{isSubmitting ? "Creating..." : "Create account"}</Text>
         </PressableScale>
         <PressableScale
+          testID="register-login-button"
           style={styles.secondaryButton}
           disabled={isSubmitting}
           onPress={() => navigation.navigate("Login")}
