@@ -314,6 +314,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
         <SectionCard title="Body metrics" subtitle="Used for plan calibration.">
           <NumericField
             label="Height (cm)"
+            testID="height-input"
             value={heightInput}
             onChangeText={handleHeightChange}
             placeholder="e.g. 175"
@@ -321,6 +322,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
           />
           <NumericField
             label="Weight (kg)"
+            testID="weight-input"
             value={weightInput}
             onChangeText={handleWeightChange}
             placeholder="e.g. 72.5"

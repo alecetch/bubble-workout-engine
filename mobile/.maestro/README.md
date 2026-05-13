@@ -8,12 +8,26 @@
 - Test credentials in `mobile/.maestro/maestro.env` (copy from `maestro.env.example`).
 - The test account must have an active program named `Strength Block`.
 
+### Flows
+
+| Flow | Description |
+|------|-------------|
+| `01-auth-login` | Logs in with `TEST_EMAIL` / `TEST_PASSWORD` and verifies the active program list. |
+| `02-start-workout` | Opens the active Strength Block and completes the start-workout smoke path. |
+| `03-settings-edit-name` | Edits the logged-in user's display name from Settings. |
+| `04-paywall` | Refreshes the session for an expired account and checks the paywall. |
+| `05-program-complete` | Completes a one-day program and verifies the completion state. |
+| `06-onboarding-beginner` | Registers `ONBOARDING_TEST_EMAIL`, completes Beginner onboarding, and reaches Program Review. |
+| `07-onboarding-intermediate` | Registers `ONBOARDING2_TEST_EMAIL`, skips baseline loads, and reaches Program Review. |
+
 ### State preconditions per flow
 
 | Flow | Required state |
 |------|---------------|
 | `01-auth-login` | Test account **logged out** on the emulator. If logged in, go to Settings → **Log Out** first. |
 | `02-start-workout` | Test account **logged in** with an active "Strength Block" program. Run `01-auth-login` first, or log in manually. |
+| `06-onboarding-beginner` | Any logged-in user is logged out by the flow. `ONBOARDING_TEST_EMAIL` must be unused. |
+| `07-onboarding-intermediate` | Any logged-in user is logged out by the flow. `ONBOARDING2_TEST_EMAIL` must be unused. |
 
 > **Why no `clearState`**: `pm clear` (Maestro's `clearState: true`) invalidates the Android instrumentation context that the Maestro gRPC driver runs within. State is managed via preconditions instead.
 

@@ -1,0 +1,183 @@
+appId: com.bubbleworkout.mobile
+---
+# Do NOT use clearState - pm clear invalidates the Maestro instrumentation context.
+
+# First launchApp restarts the Maestro instrumentation (gRPC drops ~143ms after it
+# returns). The host-side sleep bridges that gap while the new server starts.
+# The second launchApp brings the app's activity to the foreground now that the
+# instrumentation is stable - this one does NOT restart the instrumentation.
+- launchApp:
+    stopApp: false
+- runScript:
+    file: scripts/post-launch-sleep.js
+- launchApp:
+    stopApp: false
+# Dev client always appears on launch. Wait for it, tap the Metro server entry,
+# then dismiss the bundle-loaded overlay. Server shows as 10.0.2.2:8081 on the
+# Android emulator (the emulator's address for the host machine).
+- runFlow:
+    when:
+      visible: "Development Build"
+    commands:
+      - extendedWaitUntil:
+          visible: "http://10.0.2.2:8081"
+          timeout: 30000
+      - tapOn: "http://10.0.2.2:8081"
+      - extendedWaitUntil:
+          visible: "Continue"
+          timeout: 120000
+      - tapOn: "Continue"
+# Dismiss any overlays left from previous runs.
+- tapOn:
+    text: "Close"
+    optional: true
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- tapOn:
+    text: "Wait"
+    optional: true
+# If Metro crashed, the error screen shows Reload - tap it and wait for recovery.
+- runFlow:
+    when:
+      visible: "Reload"
+    commands:
+      - tapOn: "Reload"
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 90000
+# If a previous run left the app authenticated, log out through the UI.
+- runFlow:
+    when:
+      visible: "Settings"
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil:
+          visible: "Settings"
+          timeout: 20000
+      - scrollUntilVisible:
+          element:
+            text: "Log Out"
+          direction: DOWN
+      - tapOn: "Log Out"
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 15000
+# If a previous run left the app on the Login screen, go back and push Register.
+# "Forgot password?" is unique to the Login screen.
+- runFlow:
+    when:
+      visible: "Forgot password?"
+    commands:
+      - tapOn: "Back"
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 10000
+      - tapOn: "Create account"
+      - extendedWaitUntil:
+          visible: "Create account"
+          timeout: 15000
+# If on the WelcomeLogin screen, push the Register screen.
+# "Welcome" is the WelcomeLogin screen title.
+- runFlow:
+    when:
+      visible: "Welcome"
+    commands:
+      - tapOn: "Create account"
+
+# We are now on the Register screen after run.ps1 clears app state for onboarding
+# flows, so fields start empty and avoid stale autocomplete/form contents.
+- extendedWaitUntil:
+    visible: "Create account"
+    timeout: 15000
+- tapOn:
+    id: "register-email-input"
+    optional: true
+- eraseText: 200
+- inputText: ${ONBOARDING_TEST_EMAIL}
+- hideKeyboard
+- tapOn:
+    id: "register-password-input"
+    optional: true
+- eraseText: 200
+- inputText: ${ONBOARDING_TEST_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "register-confirm-password-input"
+    optional: true
+- eraseText: 200
+- inputText: ${ONBOARDING_TEST_PASSWORD}
+- hideKeyboard
+- tapOn:
+    text: "Create account"
+    index: 1
+
+- extendedWaitUntil:
+    visible: "Goals and background"
+    timeout: 20000
+- tapOn: "Strength"
+- tapOn: "Beginner"
+- scrollUntilVisible:
+    element:
+      text: "No Known Issues"
+    direction: DOWN
+- tapOn: "No Known Issues"
+- tapOn: "Next"
+
+- extendedWaitUntil:
+    visible: "Equipment setup"
+    timeout: 10000
+- tapOn: "Commercial Gym"
+- scrollUntilVisible:
+    element:
+      text: "Search equipment"
+    direction: DOWN
+- tapOn: "Next"
+
+- extendedWaitUntil:
+    visible: "Schedule and metrics"
+    timeout: 10000
+- tapOn: "Mon"
+- tapOn: "Choose duration"
+- tapOn: "50 min"
+- tapOn: "Select sex"
+- tapOn: "Male"
+- tapOn: "Select age range"
+- tapOn: "25-34"
+- scrollUntilVisible:
+    element:
+      text: "e.g. 175"
+    direction: DOWN
+- tapOn: "e.g. 175"
+- eraseText: 200
+- inputText: "178"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "e.g. 72.5"
+    direction: DOWN
+- tapOn: "e.g. 72.5"
+- eraseText: 200
+- inputText: "80"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish"
+    direction: DOWN
+- tapOn: "Finish"
+
+- extendedWaitUntil:
+    visible: "Program Review"
+    timeout: 20000
+
+# Self-cleaning: delete the test account so the next run starts fresh.
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element:
+      text: "Delete Account"
+    direction: DOWN
+- tapOn: "Delete Account"
+- tapOn: "Delete my account"
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 15000
