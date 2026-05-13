@@ -1,4 +1,6 @@
 import express from "express";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -45,6 +47,54 @@ function fillDailyCounts(days, rows) {
     out.push(byDate.get(key) ?? { date: key, count: 0, success_count: 0 });
   }
   return out;
+}
+
+export function computeCoverageStats(manifest) {
+  const entries = Array.isArray(manifest?.entries) ? manifest.entries : [];
+  const covered = entries.filter((e) => e.status === "covered").length;
+  const gap = entries.filter((e) => e.status === "gap").length;
+  const excluded = entries.filter((e) => e.status === "excluded").length;
+  const total = entries.length;
+  const testable = covered + gap;
+  const coveragePct = testable === 0 ? 0 : Math.round((covered / testable) * 100);
+  const maturityScore = coveragePct;
+
+  let maturityBand;
+  if (maturityScore >= 90) maturityBand = "comprehensive";
+  else if (maturityScore >= 80) maturityBand = "mature";
+  else if (maturityScore >= 60) maturityBand = "maturing";
+  else maturityBand = "developing";
+
+  const tagMap = new Map();
+  for (const entry of entries) {
+    const tag = Array.isArray(entry.tags) && entry.tags[0] ? entry.tags[0] : "other";
+    if (!tagMap.has(tag)) tagMap.set(tag, { tag, covered: 0, gap: 0, excluded: 0 });
+    tagMap.get(tag)[entry.status] += 1;
+  }
+  const byTag = [...tagMap.values()].sort(
+    (a, b) => b.covered + b.gap + b.excluded - (a.covered + a.gap + a.excluded),
+  );
+
+  const gaps = entries
+    .filter((e) => e.status === "gap")
+    .map((e) => ({ type: e.type, source: e.source, reason: e.reason || "", tags: e.tags }))
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === "screen" ? -1 : 1;
+      return a.source.localeCompare(b.source);
+    });
+
+  return {
+    covered,
+    gap,
+    excluded,
+    total,
+    testable,
+    coveragePct,
+    maturityScore,
+    maturityBand,
+    byTag,
+    gaps,
+  };
 }
 
 adminObservabilityRouter.get("/summary", async (req, res) => {
@@ -441,5 +491,34 @@ adminObservabilityRouter.get("/narration-adoption", async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+
+adminObservabilityRouter.get("/test-coverage", (req, res) => {
+  const manifestPath = process.env.COVERAGE_MANIFEST_PATH ?? resolve(process.cwd(), "coverage-manifest.json");
+
+  try {
+    const raw = readFileSync(manifestPath, "utf8");
+    const manifest = JSON.parse(raw);
+    const stats = computeCoverageStats(manifest);
+    return res.json({
+      ok: true,
+      available: true,
+      checkedAt: new Date().toISOString(),
+      summary: {
+        covered: stats.covered,
+        gap: stats.gap,
+        excluded: stats.excluded,
+        total: stats.total,
+        testable: stats.testable,
+        coveragePct: stats.coveragePct,
+        maturityScore: stats.maturityScore,
+        maturityBand: stats.maturityBand,
+      },
+      byTag: stats.byTag,
+      gaps: stats.gaps,
+    });
+  } catch {
+    return res.json({ ok: true, available: false });
   }
 });

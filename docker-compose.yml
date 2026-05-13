@@ -22,6 +22,7 @@ services:
       - ./api:/app
       - ./assets:/app/assets
       - ./migrations:/app/migrations
+      - ./mobile/coverage-manifest.json:/app/coverage-manifest.json:ro
       - api_node_modules:/app/node_modules
     command: >
       sh -lc "

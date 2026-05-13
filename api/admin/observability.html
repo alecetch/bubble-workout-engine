@@ -142,6 +142,7 @@
         vertical-align: middle;
       }
       .tab-panel.hidden { display: none; }
+      .hidden { display: none !important; }
       .grid-2, .split-panels, .meta-grid, .kv-grid {
         display: grid;
         gap: 12px;
@@ -333,6 +334,7 @@
           <button class="tab-btn" data-tab="fill">Fill Quality</button>
           <button class="tab-btn" data-tab="config">Config / Rules</button>
           <button class="tab-btn" data-tab="exercises">Exercises</button>
+          <button class="tab-btn" data-tab="coverage">Test Coverage</button>
         </div>
 
         <div id="tab-overview" class="tab-panel">
@@ -489,6 +491,51 @@
               </table>
             </div>
           </section>
+        </div>
+
+        <div id="tab-coverage" class="tab-panel hidden">
+          <div id="coverage-unavailable" class="panel hidden" style="border-left:4px solid #f59e0b">
+            <strong>Coverage manifest not available.</strong>
+            Run the API from the repo root with the docker-compose volume mount in place
+            (<code>./mobile/coverage-manifest.json:/app/coverage-manifest.json:ro</code>).
+          </div>
+
+          <div id="coverage-available">
+            <div class="kpi-grid">
+              <div class="kpi-card">
+                <div class="kpi-label">Maturity Score</div>
+                <div class="kpi-value" id="kpi-maturity-score">-</div>
+                <div class="kpi-note" id="kpi-maturity-band">-</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Coverage</div>
+                <div class="kpi-value" id="kpi-coverage-pct">-</div>
+                <div class="kpi-note" id="kpi-coverage-detail">-</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Gaps</div>
+                <div class="kpi-value" id="kpi-gap-count">-</div>
+                <div class="kpi-note">Testable, not yet covered</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Excluded</div>
+                <div class="kpi-value" id="kpi-excluded-count">-</div>
+                <div class="kpi-note">Structurally untestable</div>
+              </div>
+            </div>
+
+            <section class="panel">
+              <h2>Coverage by Area</h2>
+              <div class="chart-wrap">
+                <canvas id="coverage-chart" height="220"></canvas>
+              </div>
+            </section>
+
+            <section class="panel" id="gaps-section">
+              <h2>Open Gaps</h2>
+              <div id="gaps-table-wrap"></div>
+            </section>
+          </div>
         </div>
       </main>
     </div>
@@ -647,10 +694,11 @@
       let chartDaily = null;
       let chartFill = null;
       let chartExercise = null;
-      let anomalies = { fill: 0, config: 0, exercises: 0, overview: 0 };
+      let chartCoverage = null;
+      let anomalies = { fill: 0, config: 0, exercises: 0, overview: 0, coverage: 0 };
 
       function renderAnomalyBadges() {
-        const map = { overview: "overview", fill: "fill", config: "config", exercises: "exercises" };
+        const map = { overview: "overview", fill: "fill", config: "config", exercises: "exercises", coverage: "coverage" };
         for (const [tab, key] of Object.entries(map)) {
           const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
           if (!btn) continue;
@@ -681,10 +729,10 @@
 
       async function loadAll() {
         const days = getSelectedDays();
-        anomalies = { fill: 0, config: 0, exercises: 0, overview: 0 };
+        anomalies = { fill: 0, config: 0, exercises: 0, overview: 0, coverage: 0 };
         renderAnomalyBadges();
         setStatus("Loading observability data...", "");
-        await Promise.all([loadOverview(days), loadFillQuality(days), loadConfigHits(days), loadExercises(days)]);
+        await Promise.all([loadOverview(days), loadFillQuality(days), loadConfigHits(days), loadExercises(days), loadTestCoverage()]);
         setStatus(`Loaded observability data for the last ${days} days.`, "ok");
       }
 
@@ -745,6 +793,49 @@
         renderExerciseChart(topUsed);
         renderNeverUsedTable(neverUsed);
         anomalies.exercises = neverUsed.length > 0 ? 1 : 0;
+        renderAnomalyBadges();
+      }
+
+      async function loadTestCoverage() {
+        const data = await apiFetch("/api/admin/observability/test-coverage");
+
+        if (!data.available) {
+          document.getElementById("coverage-unavailable").classList.remove("hidden");
+          document.getElementById("coverage-available").classList.add("hidden");
+          anomalies.coverage = 0;
+          renderAnomalyBadges();
+          return;
+        }
+
+        document.getElementById("coverage-unavailable").classList.add("hidden");
+        document.getElementById("coverage-available").classList.remove("hidden");
+
+        const s = data.summary;
+        const bandClass = s.maturityScore >= 90 ? "badge-green"
+          : s.maturityScore >= 60 ? "badge-amber"
+          : "badge-red";
+        const bandLabel = {
+          comprehensive: "Comprehensive",
+          mature: "Mature",
+          maturing: "Maturing",
+          developing: "Developing",
+        }[s.maturityBand] ?? s.maturityBand;
+
+        document.getElementById("kpi-maturity-score").innerHTML =
+          `<span class="${bandClass}">${s.maturityScore}/100</span>`;
+        document.getElementById("kpi-maturity-band").textContent = bandLabel;
+        document.getElementById("kpi-coverage-pct").innerHTML =
+          `<span class="${bandClass}">${s.coveragePct}%</span>`;
+        document.getElementById("kpi-coverage-detail").textContent =
+          `${s.covered} of ${s.testable} testable surfaces`;
+        document.getElementById("kpi-gap-count").innerHTML =
+          `<span class="${s.gap > 0 ? "badge-amber" : "badge-green"}">${s.gap}</span>`;
+        document.getElementById("kpi-excluded-count").textContent = s.excluded;
+
+        renderCoverageChart(Array.isArray(data.byTag) ? data.byTag : []);
+        renderGapsTable(Array.isArray(data.gaps) ? data.gaps : []);
+
+        anomalies.coverage = s.gap;
         renderAnomalyBadges();
       }
 
@@ -810,6 +901,57 @@
             scales: { x: { beginAtZero: true }, y: { ticks: { autoSkip: false } } },
           },
         });
+      }
+
+      function renderCoverageChart(byTag) {
+        const ctx = document.getElementById("coverage-chart");
+        if (chartCoverage) chartCoverage.destroy();
+        chartCoverage = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: byTag.map((t) => t.tag),
+            datasets: [
+              { label: "Covered", data: byTag.map((t) => t.covered), backgroundColor: "#22c55e" },
+              { label: "Gap", data: byTag.map((t) => t.gap), backgroundColor: "#f59e0b" },
+              { label: "Excluded", data: byTag.map((t) => t.excluded), backgroundColor: "#9ca3af" },
+            ],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            plugins: { legend: { position: "top" } },
+            scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
+          },
+        });
+      }
+
+      function renderGapsTable(gaps) {
+        const wrap = document.getElementById("gaps-table-wrap");
+        const section = document.getElementById("gaps-section");
+        if (!gaps.length) {
+          wrap.innerHTML = `
+            <div class="badge-green" style="padding:12px">
+              All testable surfaces are covered.
+            </div>`;
+          return;
+        }
+        section.querySelector("h2").textContent = "Open Gaps";
+        wrap.innerHTML = `
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Source</th><th>Reason</th></tr>
+            </thead>
+            <tbody>
+              ${gaps.map((g) => `
+                <tr style="border-left:3px solid #f59e0b">
+                  <td><span style="font-size:11px;background:#fef3c7;padding:2px 6px;border-radius:4px">
+                    ${escapeHtml(g.type)}
+                  </span></td>
+                  <td style="font-family:monospace;font-size:12px">${escapeHtml(g.source)}</td>
+                  <td>${escapeHtml(g.reason)}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`;
       }
 
       function renderTopErrors(topErrors) {
