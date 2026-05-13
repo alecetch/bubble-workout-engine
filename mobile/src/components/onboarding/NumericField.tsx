@@ -12,6 +12,7 @@ type NumericFieldProps = {
   onBlur?: () => void;
   placeholder?: string;
   error?: string;
+  testID?: string;
 };
 
 export function NumericField({
@@ -21,11 +22,13 @@ export function NumericField({
   onBlur,
   placeholder,
   error,
+  testID,
 }: NumericFieldProps): React.JSX.Element {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
+        testID={testID}
         value={value}
         onChangeText={onChangeText}
         onBlur={onBlur}
