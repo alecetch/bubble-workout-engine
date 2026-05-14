@@ -127,6 +127,13 @@ the critical invariant: [name the specific invariant, e.g. 'equipment filtering 
 "Write a `<Component>.component.test.tsx` covering: initial render, the happy path interaction,
 and at least one failure/error state."
 
+### Coverage manifest (mobile screens and components)
+Any prompt that adds a new `.tsx` file to `mobile/src/screens/` or `mobile/src/components/` **must** also add an entry to `mobile/coverage-manifest.json`. Without this, the `Validate coverage manifest` CI step will fail before tests even run. The entry should use:
+- `"status": "covered"` with the test file path — when a test is being written in the same prompt.
+- `"status": "gap"` with a non-empty `"reason"` — when no test is being written (and explain why).
+
+Include this in the Codex prompt's verification step: `node mobile/scripts/validate-coverage-manifest.mjs` exits 0.
+
 ### Verification line in every prompt
 Replace: `Verified with npx tsc --noEmit`
 With: `Verified with npx tsc --noEmit AND all new tests pass (npx vitest run / npm test)`
