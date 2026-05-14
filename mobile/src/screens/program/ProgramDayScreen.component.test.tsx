@@ -302,7 +302,7 @@ describe("ProgramDayScreen", () => {
     setWorkoutCompleteMock.mockResolvedValue(undefined);
     captureAndShareMock.mockReset();
     captureAndShareMock.mockResolvedValue(undefined);
-    getPrsFeedMock.mockResolvedValue({ rows: [] });
+    getPrsFeedMock.mockResolvedValue({ rows: [], mode: "prs_28d", heaviest: null });
     appStorageMocks.getItem.mockReset();
     appStorageMocks.getItem.mockResolvedValue(null);
     appStorageMocks.setItem.mockReset();

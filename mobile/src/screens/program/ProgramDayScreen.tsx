@@ -80,7 +80,7 @@ function getCompletedWeekShareData(
 }
 
 async function hasRequestedStoreReview(userId: string | undefined): Promise<boolean> {
-  if (!userId) return;
+  if (!userId) return false;
   try {
     const storage = getAppStorage();
     const already = await storage.getItem(reviewPromptKey(userId));
