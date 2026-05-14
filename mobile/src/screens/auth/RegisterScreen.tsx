@@ -81,7 +81,6 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
       result = await apiRegister(normalizedEmail, password, pendingReferralCode);
       await getAppStorage().removeItem("pendingReferralCode");
     } catch (error) {
-      console.error("[RegisterScreen] apiRegister failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
       if (error instanceof ApiError && error.status === 409) {
         setErrorMessage("An account with this email already exists.");
       } else if (error instanceof ApiError && error.status === 400) {

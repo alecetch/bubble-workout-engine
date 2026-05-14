@@ -191,11 +191,17 @@ describe("RegisterScreen", () => {
   });
 
   it("shows an account-exists error on 409", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     apiRegisterMock.mockRejectedValueOnce(new ApiError(409, "already exists"));
-    renderScreen();
-    fillRegistration();
-    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
-    expect(await screen.findByText("An account with this email already exists.")).toBeInTheDocument();
+    try {
+      renderScreen();
+      fillRegistration();
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+      expect(await screen.findByText("An account with this email already exists.")).toBeInTheDocument();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it("shows password mismatch before calling the API", async () => {

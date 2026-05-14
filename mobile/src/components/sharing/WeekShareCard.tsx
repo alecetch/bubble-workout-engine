@@ -6,6 +6,7 @@ type WeekShareCardProps = {
   sessionsCompleted: number;
   totalVolumeKg: number;
   cardRef: React.RefObject<View | null>;
+  onReady?: () => void;
 };
 
 export function WeekShareCard({
@@ -13,6 +14,7 @@ export function WeekShareCard({
   sessionsCompleted,
   totalVolumeKg,
   cardRef,
+  onReady,
 }: WeekShareCardProps): React.JSX.Element {
   const volumeDisplay =
     totalVolumeKg >= 1000
@@ -21,7 +23,7 @@ export function WeekShareCard({
 
   return (
     <View style={styles.offscreen} pointerEvents="none">
-      <View ref={cardRef} style={styles.card} collapsable={false}>
+      <View ref={cardRef} style={styles.card} collapsable={false} onLayout={onReady}>
         <View style={styles.topBar}>
           <Text style={styles.brandName}>Formai</Text>
         </View>

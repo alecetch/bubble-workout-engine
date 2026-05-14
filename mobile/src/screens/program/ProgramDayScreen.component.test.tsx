@@ -5,11 +5,13 @@ import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDayScreen } from "./ProgramDayScreen";
 import { useCompleteProgram, useEntitlement, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { getPrsFeed } from "../../api/history";
 import { getProgramEndCheck } from "../../api/programCompletion";
 import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getSegmentLog, getWorkoutComplete, setWorkoutComplete } from "../../utils/localWorkoutLog";
+import { captureAndShare } from "../../utils/shareCard";
 import {
   buildExercise,
   buildProgramDay,
@@ -19,6 +21,17 @@ import {
 } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
+
+const storeReviewMocks = vi.hoisted(() => ({
+  hasAction: vi.fn(),
+  isAvailableAsync: vi.fn(),
+  requestReview: vi.fn(),
+}));
+
+const appStorageMocks = vi.hoisted(() => ({
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+}));
 
 vi.mock("@react-navigation/native", async () => {
   const ReactActual = await import("react");
@@ -45,6 +58,12 @@ vi.mock("expo-haptics", () => ({
   notificationAsync: vi.fn().mockResolvedValue(undefined),
   ImpactFeedbackStyle: { Medium: "medium", Light: "light", Heavy: "heavy" },
   NotificationFeedbackType: { Success: "success", Warning: "warning", Error: "error" },
+}));
+
+vi.mock("expo-store-review", () => ({
+  hasAction: storeReviewMocks.hasAction,
+  isAvailableAsync: storeReviewMocks.isAvailableAsync,
+  requestReview: storeReviewMocks.requestReview,
 }));
 
 vi.mock("../../api/hooks", () => ({
@@ -112,8 +131,8 @@ vi.mock("../../utils/shareCard", () => ({
 
 vi.mock("../../utils/appStorage", () => ({
   getAppStorage: () => ({
-    getItem: vi.fn().mockResolvedValue(null),
-    setItem: vi.fn().mockResolvedValue(undefined),
+    getItem: appStorageMocks.getItem,
+    setItem: appStorageMocks.setItem,
   }),
 }));
 
@@ -163,7 +182,16 @@ vi.mock("../../components/program/SessionSummaryModal", () => ({
 }));
 
 vi.mock("../../components/sharing/WeekShareCard", () => ({
-  WeekShareCard: () => <div data-testid="week-share-card" />,
+  WeekShareCard: ({ cardRef, onReady }: any) => {
+    React.useEffect(() => {
+      cardRef.current = document.createElement("div");
+      onReady?.();
+      return () => {
+        cardRef.current = null;
+      };
+    }, [cardRef, onReady]);
+    return <div data-testid="week-share-card" />;
+  },
 }));
 
 const useProgramDayFullMock = vi.mocked(useProgramDayFull);
@@ -172,11 +200,13 @@ const useMarkDayCompleteMock = vi.mocked(useMarkDayComplete);
 const useCompleteProgramMock = vi.mocked(useCompleteProgram);
 const useOnboardingStoreMock = vi.mocked(useOnboardingStore);
 const useSessionStoreMock = vi.mocked(useSessionStore);
+const getPrsFeedMock = vi.mocked(getPrsFeed);
 const getProgramOverviewMock = vi.mocked(getProgramOverview);
 const getProgramEndCheckMock = vi.mocked(getProgramEndCheck);
 const getWorkoutCompleteMock = vi.mocked(getWorkoutComplete);
 const getSegmentLogMock = vi.mocked(getSegmentLog);
 const setWorkoutCompleteMock = vi.mocked(setWorkoutComplete);
+const captureAndShareMock = vi.mocked(captureAndShare);
 
 const markDayMutateMock = vi.fn();
 const completeProgramMutateMock = vi.fn();
@@ -270,6 +300,19 @@ describe("ProgramDayScreen", () => {
     getWorkoutCompleteMock.mockResolvedValue(false);
     getSegmentLogMock.mockResolvedValue(null);
     setWorkoutCompleteMock.mockResolvedValue(undefined);
+    captureAndShareMock.mockReset();
+    captureAndShareMock.mockResolvedValue(undefined);
+    getPrsFeedMock.mockResolvedValue({ rows: [] });
+    appStorageMocks.getItem.mockReset();
+    appStorageMocks.getItem.mockResolvedValue(null);
+    appStorageMocks.setItem.mockReset();
+    appStorageMocks.setItem.mockResolvedValue(undefined);
+    storeReviewMocks.hasAction.mockReset();
+    storeReviewMocks.hasAction.mockResolvedValue(true);
+    storeReviewMocks.isAvailableAsync.mockReset();
+    storeReviewMocks.isAvailableAsync.mockResolvedValue(true);
+    storeReviewMocks.requestReview.mockReset();
+    storeReviewMocks.requestReview.mockResolvedValue(undefined);
     getProgramOverviewMock.mockResolvedValue({
       calendarDays: [
         {
@@ -312,6 +355,7 @@ describe("ProgramDayScreen", () => {
 
   afterEach(() => {
     queryClient?.clear();
+    vi.useRealTimers();
   });
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
@@ -413,6 +457,61 @@ describe("ProgramDayScreen", () => {
       }),
     );
     expect(setWorkoutCompleteMock).toHaveBeenCalledWith("day-1", true);
+  });
+
+  it("shows an account-scoped review prompt after a PR and requests native review on tap", async () => {
+    getPrsFeedMock.mockResolvedValueOnce({
+      rows: [{ exerciseName: "Back Squat", estimatedE1rmKg: 120 }],
+    } as any);
+
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
+
+    expect(await screen.findByText("Nice PR.")).toBeInTheDocument();
+    expect(storeReviewMocks.requestReview).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rate" }));
+
+    await waitFor(() => expect(storeReviewMocks.requestReview).toHaveBeenCalledTimes(1));
+    expect(appStorageMocks.setItem).toHaveBeenCalledWith("hasRequestedStoreReview:user-1", "true");
+    expect(
+      await screen.findByText(
+        "Thanks. If the rating sheet doesn't appear, your device may be limiting review prompts.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+  });
+
+  it("shares the week card from the week-complete banner", async () => {
+    getProgramOverviewMock.mockResolvedValueOnce({
+      calendarDays: [
+        {
+          isTrainingDay: true,
+          programDayId: "day-0",
+          weekNumber: 1,
+          status: "complete",
+        },
+        {
+          isTrainingDay: true,
+          programDayId: "day-1",
+          weekNumber: 1,
+          status: "scheduled",
+        },
+      ],
+    } as any);
+
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
+
+    expect(await screen.findByText("Week 1 complete!")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Share" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+
+    await waitFor(() => expect(captureAndShareMock).toHaveBeenCalledTimes(1));
   });
 
   it("shows the session summary before completing the workout", async () => {

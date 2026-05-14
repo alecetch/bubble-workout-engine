@@ -254,7 +254,6 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     if (!shareUrl) return;
     await Share.share({
       message: `Train smarter with Formai. Start your free trial: ${shareUrl}`,
-      url: shareUrl,
     });
   };
 
