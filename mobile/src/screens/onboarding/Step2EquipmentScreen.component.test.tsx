@@ -244,6 +244,21 @@ describe("Step2EquipmentScreen", () => {
     });
   });
 
+  it("does not clear equipment when pressing the selected preset again", () => {
+    mockStore(buildDraft({ equipmentPresetCode: "commercial_gym", selectedEquipmentCodes: ["barbell", "bench"] }));
+
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Commercial Gym" }));
+
+    expect(setDraftMock).not.toHaveBeenCalledWith({
+      equipmentPresetCode: "commercial_gym",
+      selectedEquipmentCodes: [],
+    });
+    expect(setFieldErrorsMock).not.toHaveBeenCalledWith({
+      equipmentItemCodes: "Select at least one equipment item.",
+    });
+  });
+
   it("toggling an unchecked item adds it to the draft", () => {
     mockStore(buildDraft({ selectedEquipmentCodes: [] }));
 

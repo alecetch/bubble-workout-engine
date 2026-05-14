@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useActivePrograms, useClientProfile, useEntitlement, useMe } from "../../api/hooks";
+import { useActivePrograms, useClientProfile, useEntitlement, useEquipmentItems, useMe, useReferenceData } from "../../api/hooks";
 import { extractProgramId, generateProgram } from "../../api/program";
 import { getEngineKeyStatus } from "../../api/config";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
@@ -29,6 +29,39 @@ function formatValue(value: string | number | null | undefined): string {
   return String(value);
 }
 
+function humanizeCode(value: string): string {
+  return value
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getReferenceEquipmentItems(referenceData: unknown): Array<{ code: string; label: string }> {
+  const raw = referenceData as Record<string, unknown> | null | undefined;
+  const maybeItems = raw?.equipmentItems ?? raw?.equipment_items;
+  if (!Array.isArray(maybeItems)) return [];
+
+  return maybeItems
+    .map((item) => {
+      const record = item as Record<string, unknown>;
+      const code = String(record.code ?? "").trim();
+      const label = String(record.label ?? code).trim();
+      return code ? { code, label } : null;
+    })
+    .filter((item): item is { code: string; label: string } => Boolean(item));
+}
+
+function formatMappedValue(value: string | null | undefined, labelsByCode: Map<string, string>): string {
+  if (!value) return "Not set";
+  return labelsByCode.get(value) ?? humanizeCode(value);
+}
+
+function formatMappedList(values: string[] | undefined, labelsByCode: Map<string, string>): string {
+  if (!values || values.length === 0) return "Not set";
+  return values.map((value) => labelsByCode.get(value) ?? humanizeCode(value)).join(", ");
+}
+
 export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Element {
   console.log("[boot] ProgramReviewScreen render");
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
@@ -40,6 +73,9 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   const profileQuery = useClientProfile(profileId);
   const activeProgramsQuery = useActivePrograms();
   const hasActiveProgram = (activeProgramsQuery.data?.programs?.length ?? 0) > 0;
+  const referenceDataQuery = useReferenceData();
+  const equipmentPresetCode = ((profileQuery.data?.equipmentPresetCode ?? profileQuery.data?.equipmentPreset) as string | undefined) ?? null;
+  const equipmentItemsQuery = useEquipmentItems(equipmentPresetCode);
   const queryClient = useQueryClient();
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -169,6 +205,16 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   }
 
   const profile = profileQuery.data;
+  const equipmentPresetLabels = new Map(
+    (referenceDataQuery.data?.equipmentPresets ?? []).map((preset) => [preset.code, preset.label]),
+  );
+  const equipmentItemLabels = new Map<string, string>();
+  getReferenceEquipmentItems(referenceDataQuery.data).forEach((item) => {
+    equipmentItemLabels.set(item.code, item.label);
+  });
+  (equipmentItemsQuery.data?.items ?? []).forEach((item) => {
+    equipmentItemLabels.set(item.code, item.label);
+  });
 
   return (
     <View style={styles.root}>
@@ -232,11 +278,11 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
           </View>
           <Text style={styles.rowLabel}>Preset</Text>
           <Text style={styles.rowValue}>
-            {formatValue((profile.equipmentPresetCode ?? profile.equipmentPreset) as string | undefined)}
+            {formatMappedValue(equipmentPresetCode, equipmentPresetLabels)}
           </Text>
           <Text style={styles.rowLabel}>Equipment items</Text>
           <Text style={styles.rowValue}>
-            {formatList((profile.equipmentItemCodes ?? profile.selectedEquipmentCodes) as string[] | undefined)}
+            {formatMappedList((profile.equipmentItemCodes ?? profile.selectedEquipmentCodes) as string[] | undefined, equipmentItemLabels)}
           </Text>
         </View>
 

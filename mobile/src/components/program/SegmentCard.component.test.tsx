@@ -97,6 +97,17 @@ describe("SegmentCard", () => {
     expect(await screen.findByText("Set 1")).toBeInTheDocument();
   });
 
+  it("renders the RIR choices as accessible single-row buttons", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+
+    expect(await screen.findByText("How many more reps could you complete per set?")).toBeInTheDocument();
+    ["4+", "3", "2", "1", "0"].forEach((option) => {
+      expect(screen.getByRole("button", { name: `${option} reps in reserve` })).toBeInTheDocument();
+    });
+  });
+
   it("does not save a set when weight or reps fields receive focus", async () => {
     renderCard();
 

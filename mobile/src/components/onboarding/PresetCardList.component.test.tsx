@@ -48,8 +48,8 @@ describe("PresetCardList", () => {
     await waitFor(() => expect(onSelect).toHaveBeenCalledWith("commercial"));
   });
 
-  it("marks selected cards by exposing the selected card help action", () => {
+  it("does not expose a selected card help action", () => {
     render(<PresetCardList options={options} selectedValue="home" onSelect={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "?" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "?" })).not.toBeInTheDocument();
   });
 });

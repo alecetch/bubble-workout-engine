@@ -3,7 +3,7 @@ import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramReviewScreen } from "./ProgramReviewScreen";
-import { useActivePrograms, useClientProfile, useEntitlement, useMe } from "../../api/hooks";
+import { useActivePrograms, useClientProfile, useEntitlement, useEquipmentItems, useMe, useReferenceData } from "../../api/hooks";
 import { extractProgramId, generateProgram } from "../../api/program";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -13,7 +13,9 @@ vi.mock("../../api/hooks", () => ({
   useActivePrograms: vi.fn(),
   useClientProfile: vi.fn(),
   useEntitlement: vi.fn(),
+  useEquipmentItems: vi.fn(),
   useMe: vi.fn(),
+  useReferenceData: vi.fn(),
 }));
 
 vi.mock("../../api/program", () => ({
@@ -43,6 +45,8 @@ const useMeMock = vi.mocked(useMe);
 const useClientProfileMock = vi.mocked(useClientProfile);
 const useActiveProgramsMock = vi.mocked(useActivePrograms);
 const useEntitlementMock = vi.mocked(useEntitlement);
+const useEquipmentItemsMock = vi.mocked(useEquipmentItems);
+const useReferenceDataMock = vi.mocked(useReferenceData);
 const useOnboardingStoreMock = vi.mocked(useOnboardingStore);
 const useSessionStoreMock = vi.mocked(useSessionStore);
 const generateProgramMock = vi.mocked(generateProgram);
@@ -111,6 +115,23 @@ describe("ProgramReviewScreen", () => {
       data: { programs: [] },
       isLoading: false,
     } as any);
+    useReferenceDataMock.mockReturnValue({
+      data: {
+        equipmentPresets: [{ code: "commercial_gym", label: "Commercial Gym" }],
+      },
+      isLoading: false,
+      isError: false,
+    } as any);
+    useEquipmentItemsMock.mockReturnValue({
+      data: {
+        items: [
+          { code: "barbell", label: "Barbell" },
+          { code: "dumbbell", label: "Dumbbell" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    } as any);
     useEntitlementMock.mockReturnValue({
       data: { is_active: true },
       isSuccess: true,
@@ -152,6 +173,15 @@ describe("ProgramReviewScreen", () => {
     expect(screen.getByText("Couldn't load profile")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Retry"));
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders user-friendly equipment labels instead of raw codes", () => {
+    renderScreen();
+
+    expect(screen.getByText("Commercial Gym")).toBeInTheDocument();
+    expect(screen.getByText("Barbell, Dumbbell")).toBeInTheDocument();
+    expect(screen.queryByText("commercial_gym")).not.toBeInTheDocument();
+    expect(screen.queryByText("barbell, dumbbell")).not.toBeInTheDocument();
   });
 
   it("generates a program when the generate CTA is pressed without an active program", async () => {

@@ -43,20 +43,8 @@ describe("PresetCard", () => {
     await waitFor(() => expect(onPress).toHaveBeenCalledTimes(1));
   });
 
-  it("shows the help button when selected", () => {
+  it("does not show a help button when selected", () => {
     render(<PresetCard title="Home gym" selected onPress={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "?" })).toBeInTheDocument();
-  });
-
-  it("calls onHelpPress when the help button is pressed", async () => {
-    const onHelpPress = vi.fn();
-    render(<PresetCard title="Home gym" selected onPress={vi.fn()} onHelpPress={onHelpPress} />);
-    fireEvent.click(screen.getByRole("button", { name: "?" }));
-    await waitFor(() => expect(onHelpPress).toHaveBeenCalledTimes(1));
-  });
-
-  it("does not show the help button when not selected", () => {
-    render(<PresetCard title="Home gym" selected={false} onPress={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "?" })).not.toBeInTheDocument();
   });
 });

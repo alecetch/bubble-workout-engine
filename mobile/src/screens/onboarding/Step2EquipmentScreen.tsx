@@ -66,12 +66,10 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
 
   const [prefillError, setPrefillError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [helperHighlighted, setHelperHighlighted] = useState(false);
   const [collapsedByCategory, setCollapsedByCategory] = useState<Record<string, boolean>>({});
   const sectionPulse = useErrorPulse();
   const pendingPrefillPresetRef = useRef<string | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
-  const equipmentListOffsetRef = useRef(0);
 
   const selectedPresetCode = draft.equipmentPresetCode;
   const equipmentItemsQuery = useEquipmentItems(selectedPresetCode);
@@ -131,6 +129,8 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
   };
 
   const handleSelectPreset = (presetCode: string): void => {
+    if (presetCode === draft.equipmentPresetCode) return;
+
     setPrefillError(null);
     pendingPrefillPresetRef.current = presetCode;
     const nextDraft = {
@@ -262,15 +262,6 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
 
   const nextDisabled = isSaving || referenceDataQuery.isLoading;
 
-  const handlePresetHelpPress = (): void => {
-    scrollViewRef.current?.scrollTo({
-      y: Math.max(equipmentListOffsetRef.current - spacing.lg, 0),
-      animated: true,
-    });
-    setHelperHighlighted(true);
-    setTimeout(() => setHelperHighlighted(false), 1200);
-  };
-
   return (
     <OnboardingScaffold
       step={2}
@@ -294,7 +285,6 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
             onSelect={(value) => {
               handleSelectPreset(value);
             }}
-            onHelpPress={handlePresetHelpPress}
           />
 
           {referenceDataQuery.isLoading ? (
@@ -337,14 +327,9 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
           ) : null}
 
           {selectedPresetCode && catalogSourceItems.length > 0 ? (
-            <View
-              style={styles.itemsSection}
-              onLayout={(event) => {
-                equipmentListOffsetRef.current = event.nativeEvent.layout.y;
-              }}
-            >
+            <View style={styles.itemsSection}>
               <Text style={styles.itemsLabel}>Equipment items</Text>
-              <View style={[styles.helperBox, helperHighlighted && styles.helperBoxActive]}>
+              <View style={styles.helperBox}>
                 <Text style={styles.helperText}>
                   {`Below is a typical equipment setup for ${selectedPresetTitle}. You can add or remove items to match what you actually have available.`}
                 </Text>
@@ -423,10 +408,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.sm,
     gap: spacing.xs,
-  },
-  helperBoxActive: {
-    borderColor: colors.accent,
-    backgroundColor: "rgba(59,130,246,0.12)",
   },
   helperText: {
     color: colors.textPrimary,
