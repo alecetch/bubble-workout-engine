@@ -10,7 +10,14 @@ import { saveTokens } from "../../api/tokenStorage";
 import { logInPurchases } from "../../lib/purchases";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { getAppStorage } from "../../utils/appStorage";
 import { buildClientProfile, buildToken, mockZustandSelector } from "../../__test-utils__";
+
+const appStorageMocks = vi.hoisted(() => ({
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+}));
 
 vi.mock("../../api/authApi", () => ({
   apiRegister: vi.fn(),
@@ -37,6 +44,14 @@ vi.mock("../../state/session/sessionStore", () => ({
   useSessionStore: vi.fn(),
 }));
 
+vi.mock("../../utils/appStorage", () => ({
+  getAppStorage: vi.fn(() => ({
+    getItem: appStorageMocks.getItem,
+    setItem: appStorageMocks.setItem,
+    removeItem: appStorageMocks.removeItem,
+  })),
+}));
+
 vi.mock("../../components/interaction/PressableScale", () => ({
   PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
     <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
@@ -52,6 +67,7 @@ const saveTokensMock = vi.mocked(saveTokens);
 const logInPurchasesMock = vi.mocked(logInPurchases);
 const useOnboardingStoreMock = vi.mocked(useOnboardingStore);
 const useSessionStoreMock = vi.mocked(useSessionStore);
+const getAppStorageMock = vi.mocked(getAppStorage);
 
 const resetFromProfileMock = vi.fn();
 const setIdentityMock = vi.fn();
@@ -114,6 +130,9 @@ describe("RegisterScreen", () => {
     resetFromProfileMock.mockReset();
     setIdentityMock.mockReset();
     setSessionMock.mockReset();
+    appStorageMocks.getItem.mockReset();
+    appStorageMocks.setItem.mockReset();
+    appStorageMocks.removeItem.mockReset();
 
     mockZustandSelector(useOnboardingStoreMock as any, {
       resetFromProfile: resetFromProfileMock,
@@ -124,6 +143,9 @@ describe("RegisterScreen", () => {
     getClientProfileMock.mockResolvedValue(completeProfile as any);
     createClientProfileMock.mockResolvedValue(partialProfile as any);
     saveTokensMock.mockResolvedValue(undefined);
+    appStorageMocks.getItem.mockResolvedValue(null);
+    appStorageMocks.setItem.mockResolvedValue(undefined);
+    appStorageMocks.removeItem.mockResolvedValue(undefined);
   });
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
@@ -220,5 +242,82 @@ describe("RegisterScreen", () => {
     const navigation = renderScreen();
     fireEvent.click(screen.getByText("Already have an account? Sign in"));
     expect(navigation.navigate).toHaveBeenCalledWith("Login");
+  });
+
+  describe("referral code field", () => {
+    it("shows the referral toggle and hides the input initially", () => {
+      renderScreen();
+
+      expect(screen.getByText("Have a referral code?")).toBeInTheDocument();
+      expect(screen.queryByTestId("referral-code-input")).not.toBeInTheDocument();
+    });
+
+    it("reveals the referral input when the toggle is tapped", () => {
+      renderScreen();
+
+      fireEvent.click(screen.getByTestId("referral-code-toggle"));
+
+      expect(screen.getByTestId("referral-code-input")).toBeInTheDocument();
+    });
+
+    it("auto-expands and pre-populates from pending referral storage", async () => {
+      appStorageMocks.getItem.mockResolvedValueOnce("ABCD1234");
+
+      renderScreen();
+
+      expect(await screen.findByTestId("referral-code-input")).toHaveValue("ABCD1234");
+      expect(screen.getByText("Hide referral code")).toBeInTheDocument();
+    });
+
+    it("submits a typed referral code in uppercase", async () => {
+      renderScreen();
+      fillRegistration();
+      fireEvent.click(screen.getByTestId("referral-code-toggle"));
+      fireEvent.change(screen.getByTestId("referral-code-input"), { target: { value: "xyz" } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+      await waitFor(() =>
+        expect(apiRegisterMock).toHaveBeenCalledWith("user@example.com", "password123", "XYZ"),
+      );
+    });
+
+    it("falls back to storage when the visible referral field is empty", async () => {
+      appStorageMocks.getItem
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce("STORED1");
+      renderScreen();
+      fillRegistration();
+      fireEvent.click(screen.getByTestId("referral-code-toggle"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+      await waitFor(() =>
+        expect(apiRegisterMock).toHaveBeenCalledWith("user@example.com", "password123", "STORED1"),
+      );
+    });
+
+    it("passes null when no field or stored referral code is available", async () => {
+      renderScreen();
+      fillRegistration();
+
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+      await waitFor(() =>
+        expect(apiRegisterMock).toHaveBeenCalledWith("user@example.com", "password123", null),
+      );
+    });
+
+    it("clears pending referral storage after successful registration", async () => {
+      renderScreen();
+      fillRegistration();
+
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+      await waitFor(() =>
+        expect(appStorageMocks.removeItem).toHaveBeenCalledWith("pendingReferralCode"),
+      );
+      expect(getAppStorageMock).toHaveBeenCalled();
+    });
   });
 });

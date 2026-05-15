@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -37,10 +37,24 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showReferralField, setShowReferralField] = useState(false);
+  const [referralCodeInput, setReferralCodeInput] = useState("");
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
   const prevPasswordLenRef = useRef(0);
   const prevConfirmLenRef = useRef(0);
+
+  useEffect(() => {
+    getAppStorage()
+      .getItem("pendingReferralCode")
+      .then((stored) => {
+        if (stored) {
+          setReferralCodeInput(stored);
+          setShowReferralField(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const resolveClientProfile = async (clientProfileId: string | null | undefined) => {
     if (clientProfileId) {
@@ -77,8 +91,10 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
 
     let result: AuthTokens;
     try {
-      const pendingReferralCode = await getAppStorage().getItem("pendingReferralCode");
-      result = await apiRegister(normalizedEmail, password, pendingReferralCode);
+      const fieldCode = referralCodeInput.trim().toUpperCase() || null;
+      const storedCode = fieldCode ? null : await getAppStorage().getItem("pendingReferralCode");
+      const referralCode = fieldCode ?? storedCode;
+      result = await apiRegister(normalizedEmail, password, referralCode);
       await getAppStorage().removeItem("pendingReferralCode");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -253,6 +269,36 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
           </View>
         </View>
 
+        <TouchableOpacity
+          testID="referral-code-toggle"
+          onPress={() => setShowReferralField((v) => !v)}
+          style={styles.referralToggle}
+        >
+          <Text style={styles.referralToggleLabel}>
+            {showReferralField ? "Hide referral code" : "Have a referral code?"}
+          </Text>
+        </TouchableOpacity>
+
+        {showReferralField ? (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Referral code (optional)</Text>
+            <TextInput
+              testID="referral-code-input"
+              value={referralCodeInput}
+              onChangeText={(text) => setReferralCodeInput(text.toUpperCase())}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder="e.g. CDNZDSL8"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              maxLength={12}
+            />
+            <Text style={styles.referralHint}>
+              Enter the code from your invite link for a 21-day free trial.
+            </Text>
+          </View>
+        ) : null}
+
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
       </View>
 
@@ -336,6 +382,19 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     paddingLeft: spacing.sm,
+  },
+  referralToggle: {
+    paddingVertical: spacing.xs,
+    alignSelf: "flex-start",
+  },
+  referralToggleLabel: {
+    color: colors.accent,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  referralHint: {
+    color: colors.textSecondary,
+    ...typography.small,
   },
   errorText: {
     color: colors.warning,
