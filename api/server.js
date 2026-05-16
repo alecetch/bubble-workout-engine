@@ -28,6 +28,8 @@ import { loggedExercisesRouter } from "./src/routes/loggedExercises.js";
 import { workoutRemindersRouter } from "./src/routes/workoutReminders.js";
 import { trainingHistoryImportRouter } from "./src/routes/trainingHistoryImport.js";
 import { referralRouter } from "./src/routes/referral.js";
+import { referralLandingRouter } from "./src/routes/referralLanding.js";
+import { marketingRouter } from "./src/routes/marketingPages.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
@@ -284,6 +286,7 @@ app.use("/api/generate-plan-v2", generationRateLimiter);
 // Serve local media assets (dev only — in prod these are served from S3).
 app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
 app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));
+app.use("/images", express.static(join(__dirname, "public/images")));
 app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coverage.html"));
 app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
 app.get("/admin/health", adminCspMiddleware, (_req, res) => sendAdminPage(res, "health.html"));
@@ -732,9 +735,13 @@ app.use("/api/exercise", exerciseGuidanceRouter);
 app.post("/api/physique/check-in", ...entitledUserAuth, uploadSingle, handleCheckInSubmit);
 app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
 app.use("/api", physiquePhotoRouter);
+// referralLandingRouter must come before any app.use("/api", ...userAuth, ...) mount —
+// those mounts run userAuth on ALL /api/* paths that reach them, which would block the
+// public GET /api/referral/preview/:code endpoint with a 401 before it can be handled.
+app.use(referralLandingRouter);
+app.use(marketingRouter);
 app.use("/api", ...userAuth, physiqueReadRouter);
 app.use("/api", ...userAuth, physiqueScanRouter);
-
 app.use("/api", notificationPreferencesRouter);
 app.use("/api", accountSettingsRouter);
 app.use("/api", activeProgramsRouter);
