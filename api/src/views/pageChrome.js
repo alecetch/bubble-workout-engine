@@ -11,7 +11,11 @@ function header() {
     <nav class="site-nav">
       <a href="/">Home</a>
       <a href="/download">Download</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/blog">Blog</a>
+      <a href="/changelog">Changelog</a>
       <a href="/support">Support</a>
+      <a href="/signup">Updates</a>
       <a href="${escapeHtml(APP_STORE_URL())}" class="nav-cta">Get the app</a>
     </nav>
   </header>`;
@@ -121,15 +125,39 @@ const SHARED_CSS = `
   }
 `;
 
-export function wrapPage(title, bodyHtml, extraCss = "") {
+export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
+  const isOptions = extraCssOrOptions !== null && typeof extraCssOrOptions === "object";
+  const extraCss = isOptions ? (extraCssOrOptions.extraCss ?? "") : extraCssOrOptions;
+  const opts = isOptions ? extraCssOrOptions : {};
+  const description = opts.description ?? "Formai - personalised strength and conditioning programs that adapt to your performance.";
+  const ogImage = opts.ogImage ?? "/images/formai_hero@2x.png";
+  const ogType = opts.ogType ?? "website";
+  const baseUrl = process.env.BASE_URL ?? "";
+  const canonicalTag = baseUrl && opts.canonical
+    ? `<link rel="canonical" href="${escapeHtml(baseUrl + opts.canonical)}">`
+    : "";
+  const jsonLdTag = opts.jsonLd
+    ? `<script type="application/ld+json">${JSON.stringify(opts.jsonLd)}</script>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)} - Formai</title>
-  <meta name="description" content="Formai - personalised strength and conditioning programs that adapt to your performance.">
+  <meta name="description" content="${escapeHtml(description)}">
+  <meta property="og:title" content="${escapeHtml(title)} - Formai">
+  <meta property="og:description" content="${escapeHtml(description)}">
+  <meta property="og:image" content="${escapeHtml(ogImage)}">
+  <meta property="og:type" content="${escapeHtml(ogType)}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${escapeHtml(title)} - Formai">
+  <meta name="twitter:description" content="${escapeHtml(description)}">
+  <meta name="twitter:image" content="${escapeHtml(ogImage)}">
   <link rel="icon" type="image/svg+xml" href="/images/formai_icon.svg">
+  ${canonicalTag}
+  ${jsonLdTag}
   <style>${SHARED_CSS}${extraCss}</style>
 </head>
 <body>

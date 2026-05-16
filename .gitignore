@@ -16,6 +16,8 @@ pnpm-debug.log*
 .env.*
 !.env.example
 mobile/.maestro/maestro.env
+mobile/.env.android-emulator
+mobile/.env.ios-device
 
 ##################################
 # Expo / React Native

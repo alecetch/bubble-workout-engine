@@ -30,6 +30,7 @@ import { trainingHistoryImportRouter } from "./src/routes/trainingHistoryImport.
 import { referralRouter } from "./src/routes/referral.js";
 import { referralLandingRouter } from "./src/routes/referralLanding.js";
 import { marketingRouter } from "./src/routes/marketingPages.js";
+import { websiteEnhancementsRouter } from "./src/routes/websiteEnhancements.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
@@ -740,6 +741,7 @@ app.use("/api", physiquePhotoRouter);
 // public GET /api/referral/preview/:code endpoint with a 401 before it can be handled.
 app.use(referralLandingRouter);
 app.use(marketingRouter);
+app.use(websiteEnhancementsRouter);
 app.use("/api", ...userAuth, physiqueReadRouter);
 app.use("/api", ...userAuth, physiqueScanRouter);
 app.use("/api", notificationPreferencesRouter);

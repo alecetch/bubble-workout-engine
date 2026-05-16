@@ -28,6 +28,12 @@ const HOME_CSS = `
 .feature-card { background: #1E293B; border-radius: 12px; padding: 28px; }
 .feature-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
 .feature-card p { color: #94A3B8; font-size: 14px; }
+.email-capture-strip { padding: 64px 24px; border-top: 1px solid #1E293B; text-align: center; }
+.email-capture-strip h2 { font-size: 26px; font-weight: 700; margin-bottom: 10px; }
+.email-capture-strip p { color: #94A3B8; margin-bottom: 24px; }
+.strip-form { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.strip-form input[type=email] { background: #1E293B; border: 1px solid #334155; border-radius: 999px; padding: 12px 20px; color: #F1F5F9; font-size: 15px; min-width: 240px; outline: none; }
+.strip-form input[type=email]:focus { border-color: #22D3EE; }
 .bottom-cta { padding: 80px 24px; text-align: center; border-top: 1px solid #1E293B; }
 .bottom-cta h2 { margin-bottom: 24px; }
 @media (max-width: 600px) { .two-col, .steps, .feature-grid { grid-template-columns: 1fr; } }
@@ -174,6 +180,21 @@ const TERMS_HTML = `
 <h2>14. Contact</h2><p><strong>Email:</strong> alecpringle@outlook.com<br><strong>Website:</strong> getformai.com/support</p>`;
 
 let cachedQrSvg = null;
+const softwareAppSchema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Formai",
+  operatingSystem: "iOS",
+  applicationCategory: "HealthApplication",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "GBP",
+    description: "14-day free trial",
+  },
+  url: "https://getformai.com",
+};
+
 async function getQrSvg() {
   if (cachedQrSvg) return cachedQrSvg;
   const url = process.env.APP_STORE_URL || "https://getformai.com/download";
@@ -208,23 +229,51 @@ function homeHandler(_req, res) {
   <section class="how-section"><h2>How it works</h2><div class="steps"><div class="step"><div class="step-num">1</div><h3>Complete your assessment</h3><p>Tell us your goals, experience, equipment, and schedule. Takes 5 minutes.</p></div><div class="step"><div class="step-num">2</div><h3>Get your programme</h3><p>Formai generates a personalised programme built around your life and training goals.</p></div><div class="step"><div class="step-num">3</div><h3>It adapts as you improve</h3><p>Every session you log sharpens the engine. Loads, reps, and intensity update automatically.</p></div></div></section>
   <section class="features-section"><h2>What sets Formai apart</h2><div class="feature-grid"><div class="feature-card"><h3>Personalised progression</h3><p>Loads and reps adjust based on your actual performance.</p></div><div class="feature-card"><h3>Hyrox-ready conditioning</h3><p>Station-by-station programming with pace and time-to-complete tracking.</p></div><div class="feature-card"><h3>Physique tracking</h3><p>Optional AI-assisted progress check-ins with week-on-week comparisons.</p></div><div class="feature-card"><h3>Coach-quality cues</h3><p>Technique guidance and form cues for every exercise.</p></div></div></section>
 </div>
+<section class="email-capture-strip">
+  <div class="container">
+    <h2>Stay in the loop.</h2>
+    <p>Training tips and app updates, straight to your inbox.</p>
+    <form method="POST" action="/signup" class="strip-form">
+      <input type="email" name="email" placeholder="you@example.com" required autocomplete="email">
+      <button type="submit" class="cta-btn">Sign me up</button>
+    </form>
+  </div>
+</section>
 <section class="bottom-cta"><h2>Ready to train smarter?</h2><a href="${appStoreUrl}" class="cta-btn">Download on App Store</a><p class="trial-note">14-day free trial - no credit card required</p></section>`;
-  sendHtml(res, "Home", body, HOME_CSS);
+  sendHtml(res, "Home", body, {
+    description: "Personalised strength and Hyrox training programs that adapt to your performance - every session.",
+    canonical: "/",
+    extraCss: HOME_CSS,
+    jsonLd: softwareAppSchema,
+  });
 }
 
 async function downloadHandler(_req, res) {
   const qrSvg = await getQrSvg();
   const appStoreUrl = escapeHtml(process.env.APP_STORE_URL ?? "#");
   const body = `<div class="download-page"><img src="/images/formai_icon.svg" alt="Formai" class="download-icon"><h1>Get Formai</h1><p class="tagline">Train with your data, not your guesswork.</p>${qrSvg ? `<div class="qr-wrap">${qrSvg}</div><p class="scan-label">Scan to download on iPhone</p>` : ""}<a href="${appStoreUrl}" class="cta-btn">Download on App Store</a><p class="trial-note">14-day free trial - no payment required</p></div>`;
-  sendHtml(res, "Download", body, DOWNLOAD_CSS);
+  sendHtml(res, "Download", body, {
+    description: "Download Formai on the App Store. Start your free 14-day trial - no credit card required.",
+    canonical: "/download",
+    extraCss: DOWNLOAD_CSS,
+    jsonLd: softwareAppSchema,
+  });
 }
 
 function privacyHandler(_req, res) {
-  sendHtml(res, "Privacy Policy", `<div class="container-narrow legal-page">${PRIVACY_HTML}</div>`, LEGAL_CSS);
+  sendHtml(res, "Privacy Policy", `<div class="container-narrow legal-page">${PRIVACY_HTML}</div>`, {
+    description: "Formai Privacy Policy - how we collect, use, and protect your data.",
+    canonical: "/privacy",
+    extraCss: LEGAL_CSS,
+  });
 }
 
 function termsHandler(_req, res) {
-  sendHtml(res, "Terms of Service", `<div class="container-narrow legal-page">${TERMS_HTML}</div>`, LEGAL_CSS);
+  sendHtml(res, "Terms of Service", `<div class="container-narrow legal-page">${TERMS_HTML}</div>`, {
+    description: "Formai Terms of Service - subscription, billing, referral programme, and governing law.",
+    canonical: "/terms",
+    extraCss: LEGAL_CSS,
+  });
 }
 
 function supportHandler(_req, res) {
@@ -240,7 +289,11 @@ function supportHandler(_req, res) {
   <div class="faq-item"><p class="faq-q">How does the programme adapt to my performance?</p><p class="faq-a">After each session, Formai analyses your logged sets, reps, and weights against your target ranges.</p></div>
   <div class="contact-section"><h2>Contact us</h2><p>Can't find what you're looking for? We're happy to help.</p><p>Email: <a href="mailto:${supportEmail}">${supportEmail}</a></p><p>We aim to respond within 2 business days.</p></div>
 </div>`;
-  sendHtml(res, "Support", body, SUPPORT_CSS);
+  sendHtml(res, "Support", body, {
+    description: "Formai support and FAQ - get help with your subscription, account, and training programme.",
+    canonical: "/support",
+    extraCss: SUPPORT_CSS,
+  });
 }
 
 marketingRouter.get("/", homeHandler);

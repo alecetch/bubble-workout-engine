@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Background -->
+  <rect width="200" height="200" rx="36" fill="#0F172A"/>
+  <!-- Upper white piece: top bar + partial stem with diagonal lower-left cut -->
+  <polygon points="48,44 152,44 152,96 84,96 60,120 48,120" fill="#F1F5F9"/>
+  <!-- Lower cyan piece: middle bar of F with diagonal upper-right cut -->
+  <polygon points="48,132 116,132 92,156 48,156" fill="#22D3EE"/>
+</svg>
