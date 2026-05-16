@@ -13,26 +13,39 @@ type PresetCardListProps = {
   options: PresetOption[];
   selectedValue: string | null;
   onSelect: (value: string) => void;
-  onHelpPress?: (value: string) => void;
 };
+
+function chunkIntoRows<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    rows.push(items.slice(i, i + size));
+  }
+  return rows;
+}
 
 export function PresetCardList({
   options,
   selectedValue,
   onSelect,
-  onHelpPress,
 }: PresetCardListProps): React.JSX.Element {
+  const rows = chunkIntoRows(options, 2);
+
   return (
     <View style={styles.list}>
-      {options.map((option) => (
-        <PresetCard
-          key={option.value}
-          title={option.title}
-          description={option.description}
-          selected={selectedValue === option.value}
-          onPress={() => onSelect(option.value)}
-          onHelpPress={selectedValue === option.value ? () => onHelpPress?.(option.value) : undefined}
-        />
+      {rows.map((row, rowIndex) => (
+        <View style={styles.row} key={`preset-row-${rowIndex}`}>
+          {row.map((option) => (
+            <View style={styles.cell} key={option.value}>
+              <PresetCard
+                title={option.title}
+                description={option.description}
+                selected={selectedValue === option.value}
+                onPress={() => onSelect(option.value)}
+              />
+            </View>
+          ))}
+          {row.length < 2 ? <View style={styles.cell} /> : null}
+        </View>
       ))}
     </View>
   );
@@ -41,5 +54,12 @@ export function PresetCardList({
 const styles = StyleSheet.create({
   list: {
     gap: spacing.sm,
+  },
+  row: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  cell: {
+    flex: 1,
   },
 });

@@ -2,17 +2,34 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Share } from "react-native";
 import { useEntitlement } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
+
+const referralMocks = vi.hoisted(() => ({
+  info: vi.fn(),
+  stats: vi.fn(),
+}));
 
 vi.mock("../../api/hooks", () => ({
   useMe: () => ({ data: null, isLoading: false, isError: false }),
   useEntitlement: vi.fn(() => ({ data: null, isLoading: false, isError: false })),
   useReferenceData: () => ({ data: null, isLoading: false, isError: false }),
   useClientProfile: () => ({ data: null, isLoading: false, isError: false }),
-  useReferralInfo: () => ({ data: null, isLoading: false, isError: false }),
-  useReferralStats: () => ({ data: null, isLoading: false, isError: false }),
+  useReferralInfo: referralMocks.info,
+  useReferralStats: referralMocks.stats,
 }));
+
+vi.mock("react-native", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-native")>();
+  return {
+    ...actual,
+    Share: {
+      ...actual.Share,
+      share: vi.fn().mockResolvedValue({ action: "sharedAction" }),
+    },
+  };
+});
 
 vi.mock("../../state/session/sessionStore", () => ({
   useSessionStore: vi.fn((selector: any) => selector({ clearSession: vi.fn() })),
@@ -74,6 +91,8 @@ function mockDefaultQueries() {
 
 function resetSettingsMocks() {
   nav.navigate.mockReset();
+  referralMocks.info.mockReturnValue({ data: null, isLoading: false, isError: false });
+  referralMocks.stats.mockReturnValue({ data: null, isLoading: false, isError: false });
   vi.mocked(useEntitlement).mockReturnValue({ data: null, isLoading: false, isError: false } as any);
   vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ clearSession: vi.fn() }));
   vi.mocked(useQueryClient).mockReturnValue({
@@ -128,6 +147,22 @@ describe("SettingsScreen", () => {
     render(<SettingsScreen navigation={nav as any} route={{} as any} />);
     fireEvent.click(screen.getByRole("button", { name: "Change Password" }));
     expect(nav.navigate).toHaveBeenCalledWith("ChangePassword");
+  });
+
+  it("shares referral invite text without duplicating the URL field", async () => {
+    referralMocks.info.mockReturnValue({
+      data: { code: "Z25TZAYC", shareUrl: "https://getformai.com/ref/Z25TZAYC" },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    fireEvent.click(screen.getByRole("button", { name: "Share invite link" }));
+
+    await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
+    expect(Share.share).toHaveBeenCalledWith({
+      message: "Train smarter with Formai. Start your free trial: https://getformai.com/ref/Z25TZAYC",
+    });
   });
 });
 

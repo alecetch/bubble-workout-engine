@@ -1,4 +1,5 @@
 import { Platform, type ViewStyle } from "react-native";
+import { colors } from "./colors";
 
 export const radii = {
   pill: 16,
@@ -29,5 +30,12 @@ export const componentStyles = {
   cardContainer: {
     borderRadius: radii.card,
     overflow: Platform.OS === "android" ? "hidden" : "visible",
+  } as ViewStyle,
+  celebrationPrompt: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: colors.card,
+    ...shadows.card,
   } as ViewStyle,
 } as const;

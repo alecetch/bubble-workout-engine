@@ -687,6 +687,12 @@ export function SegmentCard({
                     </PressableScale>
                   </View>
                   <View style={styles.exerciseRirBlock}>
+                    <PressableScale
+                      style={styles.logAllButton}
+                      onPress={() => { void handleLogAllSets(exercise); }}
+                    >
+                      <Text style={styles.logAllButtonLabel}>Log all sets as complete</Text>
+                    </PressableScale>
                     <Text style={styles.exerciseRirQuestion}>
                       How many more reps could you complete per set?
                     </Text>
@@ -697,10 +703,13 @@ export function SegmentCard({
                         return (
                           <PressableScale
                             key={option}
+                            containerStyle={styles.rirPillContainer}
                             style={[
                               styles.rirPill,
                               selected && styles.rirPillSelected,
                             ]}
+                            hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                            accessibilityLabel={`${option} reps in reserve`}
                             onPress={() => {
                               setExerciseRirMap((current) => ({
                                 ...current,
@@ -715,12 +724,6 @@ export function SegmentCard({
                         );
                       })}
                     </View>
-                    <PressableScale
-                      style={styles.logAllButton}
-                      onPress={() => { void handleLogAllSets(exercise); }}
-                    >
-                      <Text style={styles.logAllButtonLabel}>Log all sets as complete</Text>
-                    </PressableScale>
                     <View style={styles.rirHintRow}>
                       <Text style={styles.rirHintText}>Too easy</Text>
                       <Text style={styles.rirHintText}>Max effort</Text>
@@ -1056,9 +1059,12 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: spacing.xs,
   },
-  rirPill: {
+  rirPillContainer: {
     flex: 1,
-    minHeight: 44,
+  },
+  rirPill: {
+    width: "100%",
+    minHeight: 48,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1072,8 +1078,12 @@ const styles = StyleSheet.create({
   },
   rirPillLabel: {
     color: colors.textPrimary,
-    ...typography.small,
+    fontSize: typography.body.fontSize,
+    lineHeight: 20,
     fontWeight: "600",
+    includeFontPadding: false,
+    textAlign: "center",
+    textAlignVertical: "center",
   },
   rirPillLabelSelected: {
     color: colors.textPrimary,
