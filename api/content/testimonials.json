@@ -1,0 +1,50 @@
+[
+  {
+    "name": "Sarah M.",
+    "handle": "Hyrox competitor, London",
+    "quote": "Finally a training app that actually understands Hyrox - not just a generic strength app with a different label. The race-prep structure is exactly what I needed.",
+    "avatar_initial": "S"
+  },
+  {
+    "name": "James T.",
+    "handle": "Powerlifter, 4 years",
+    "quote": "I've tried six different apps. This is the only one where I feel like the program is actually responding to how my training is going, not just incrementing a spreadsheet.",
+    "avatar_initial": "J"
+  },
+  {
+    "name": "Priya K.",
+    "handle": "Returning to training after injury",
+    "quote": "The onboarding picked up on my equipment constraints straight away. First program felt achievable, not overwhelming.",
+    "avatar_initial": "P"
+  },
+  {
+    "name": "Dan R.",
+    "handle": "Hyrox qualifier, Northwest",
+    "quote": "The conditioning progression is what sets this apart. My sled push times improved by 15 seconds over 8 weeks. Measurable.",
+    "avatar_initial": "D"
+  },
+  {
+    "name": "Chloe B.",
+    "handle": "Gym member, strength focus",
+    "quote": "I didn't think I needed an AI training app. Then I hit a PR on week 3 that I hadn't managed in two years of solo training.",
+    "avatar_initial": "C"
+  },
+  {
+    "name": "Mike A.",
+    "handle": "Hyrox open finisher",
+    "quote": "Set it up on the commute, had a 12-week Hyrox prep programme by the time I got home. The taper week structure is exactly right.",
+    "avatar_initial": "M"
+  },
+  {
+    "name": "Rach F.",
+    "handle": "Beginner lifter, 6 months in",
+    "quote": "Felt intimidated by gym programming. Formai made it simple - it tells me exactly what to do and why the loads are what they are.",
+    "avatar_initial": "R"
+  },
+  {
+    "name": "Tom H.",
+    "handle": "Home gym, limited equipment",
+    "quote": "Told it I only have a barbell and dumbbells. The programme it built was completely sensible - no exercises that need machines I don't have.",
+    "avatar_initial": "T"
+  }
+]
