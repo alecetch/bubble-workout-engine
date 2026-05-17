@@ -12,6 +12,12 @@ function header() {
       <a href="/">Home</a>
       <a href="/download">Download</a>
       <a href="/pricing">Pricing</a>
+      <a href="/hyrox">Hyrox</a>
+      <a href="/strength">Strength</a>
+      <a href="/testimonials">Testimonials</a>
+      <a href="/press">Press</a>
+      <a href="/guides">Guides</a>
+      <a href="/partners">Partners</a>
       <a href="/blog">Blog</a>
       <a href="/changelog">Changelog</a>
       <a href="/support">Support</a>

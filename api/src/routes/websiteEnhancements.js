@@ -7,11 +7,13 @@ import { escapeHtml } from "./referralLanding.js";
 import { wrapPage } from "../views/pageChrome.js";
 import { sendEmail } from "../services/emailService.js";
 import { requireInternalToken } from "../middleware/auth.js";
+import { parseFrontmatter } from "../utils/markdown.js";
 import { pool } from "../db.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const BLOG_DIR = join(__dirname, "../../content/blog");
 const CHANGELOG_FILE = join(__dirname, "../../content/changelog.md");
+const GUIDES_DIR_SITEMAP = join(__dirname, "../../content/guides");
 
 export const websiteEnhancementsRouter = express.Router();
 
@@ -92,19 +94,6 @@ const CHANGELOG_CSS = `
 
 function sendHtml(res, title, body, options) {
   return res.setHeader("Content-Type", "text/html; charset=utf-8").send(wrapPage(title, body, options));
-}
-
-function parseFrontmatter(src) {
-  const match = src.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) return { meta: {}, body: src };
-  const meta = {};
-  for (const line of match[1].split("\n")) {
-    const colon = line.indexOf(":");
-    if (colon === -1) continue;
-    const key = line.slice(0, colon).trim();
-    meta[key] = line.slice(colon + 1).trim().replace(/^["']|["']$/g, "");
-  }
-  return { meta, body: match[2] };
 }
 
 function readBlogPosts() {
@@ -210,7 +199,7 @@ websiteEnhancementsRouter.get("/robots.txt", (_req, res) => {
 websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
   const baseUrl = process.env.BASE_URL ?? "https://getformai.com";
   const today = new Date().toISOString().slice(0, 10);
-  const staticPaths = ["/", "/download", "/pricing", "/blog", "/changelog", "/privacy", "/terms", "/support", "/signup"];
+  const staticPaths = ["/", "/download", "/pricing", "/hyrox", "/strength", "/testimonials", "/press", "/guides", "/partners", "/blog", "/changelog", "/privacy", "/terms", "/support", "/signup"];
   let blogSlugs = [];
   try {
     blogSlugs = readdirSync(BLOG_DIR)
@@ -219,7 +208,15 @@ websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
   } catch {
     blogSlugs = [];
   }
-  const urls = [...staticPaths, ...blogSlugs]
+  let guideSlugs = [];
+  try {
+    guideSlugs = readdirSync(GUIDES_DIR_SITEMAP)
+      .filter((file) => file.endsWith(".md"))
+      .map((file) => `/guides/${basename(file, ".md")}`);
+  } catch {
+    guideSlugs = [];
+  }
+  const urls = [...staticPaths, ...blogSlugs, ...guideSlugs]
     .map((path) => `  <url><loc>${baseUrl}${path}</loc><lastmod>${today}</lastmod></url>`)
     .join("\n");
   res

@@ -54,6 +54,13 @@ test("GET /sitemap.xml lists enhanced routes", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /text\/xml/);
   assert.match(body, /\/pricing/);
+  assert.match(body, /\/hyrox/);
+  assert.match(body, /\/strength/);
+  assert.match(body, /\/testimonials/);
+  assert.match(body, /\/press/);
+  assert.match(body, /\/guides/);
+  assert.match(body, /\/guides\/hyrox-race-prep-plan/);
+  assert.match(body, /\/partners/);
   assert.match(body, /\/blog/);
   assert.match(body, /\/changelog/);
   assert.match(body, /\/blog\/hyrox-training-block/);
@@ -203,4 +210,75 @@ test("existing marketing home includes SEO metadata", async () => {
     assert.equal(response.status, 200);
     assert.match(body, /og:title/);
   });
+});
+
+test("GET /blog/:slug with non-alphanumeric slug returns 404", async () => {
+  const { response } = await get("/blog/../etc/passwd");
+  assert.equal(response.status, 404);
+});
+
+test("GET /admin/email-signups with wrong token returns 401", async () => {
+  const previous = process.env.INTERNAL_API_TOKEN;
+  process.env.INTERNAL_API_TOKEN = "real-token";
+  const app = express();
+  app.get("/admin/email-signups", requireInternalToken, createAdminEmailSignupsHandler(mockDb()));
+  try {
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/admin/email-signups`, {
+        headers: { "x-internal-token": "wrong-token" },
+      });
+      assert.equal(response.status, 401);
+    });
+  } finally {
+    if (previous == null) delete process.env.INTERNAL_API_TOKEN;
+    else process.env.INTERNAL_API_TOKEN = previous;
+  }
+});
+
+test("GET /admin/email-signups CSV has correct header row", async () => {
+  const previous = process.env.INTERNAL_API_TOKEN;
+  process.env.INTERNAL_API_TOKEN = "test-token";
+  const app = express();
+  app.get("/admin/email-signups", requireInternalToken, createAdminEmailSignupsHandler(mockDb()));
+  try {
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/admin/email-signups`, {
+        headers: { "x-internal-token": "test-token" },
+      });
+      const body = await response.text();
+      assert.match(body, /^id,email,source,created_at/);
+    });
+  } finally {
+    if (previous == null) delete process.env.INTERNAL_API_TOKEN;
+    else process.env.INTERNAL_API_TOKEN = previous;
+  }
+});
+
+test("GET /robots.txt includes BASE_URL in sitemap reference", async () => {
+  const previous = process.env.BASE_URL;
+  process.env.BASE_URL = "https://example-test.com";
+  try {
+    const { body } = await get("/robots.txt");
+    assert.match(body, /https:\/\/example-test\.com\/sitemap\.xml/);
+  } finally {
+    if (previous == null) delete process.env.BASE_URL;
+    else process.env.BASE_URL = previous;
+  }
+});
+
+test("GET /pricing with price env vars renders prices", async () => {
+  const savedMonthly = process.env.MONTHLY_PRICE;
+  const savedAnnual = process.env.ANNUAL_PRICE;
+  process.env.MONTHLY_PRICE = "£9.99";
+  process.env.ANNUAL_PRICE = "£79.99";
+  try {
+    const { body } = await get("/pricing");
+    assert.match(body, /£9\.99/);
+    assert.match(body, /£79\.99/);
+  } finally {
+    if (savedMonthly == null) delete process.env.MONTHLY_PRICE;
+    else process.env.MONTHLY_PRICE = savedMonthly;
+    if (savedAnnual == null) delete process.env.ANNUAL_PRICE;
+    else process.env.ANNUAL_PRICE = savedAnnual;
+  }
 });
