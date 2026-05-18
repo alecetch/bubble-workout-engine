@@ -214,3 +214,66 @@ test("startEquipmentSubstitution rejects empty equipment and wrong owner", async
   );
   assert.equal(ownerRes.statusCode, 403);
 });
+
+test("updateProgramSplit cycles valid focuses across unstarted days", async () => {
+  const calls = [];
+  const handlers = createProgramDayActionHandlers({
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/SELECT user_id FROM program/i.test(sql)) {
+        return { rowCount: 1, rows: [{ user_id: USER_ID }] };
+      }
+      if (/FROM program_day/i.test(sql) && /is_completed = FALSE/i.test(sql)) {
+        return {
+          rowCount: 3,
+          rows: [
+            { id: "11111111-1111-4111-8111-000000000001" },
+            { id: "11111111-1111-4111-8111-000000000002" },
+            { id: "11111111-1111-4111-8111-000000000003" },
+          ],
+        };
+      }
+      if (/UPDATE program_day pd/i.test(sql)) {
+        return { rowCount: 3, rows: [] };
+      }
+      throw new Error("Unexpected query");
+    },
+  });
+  const res = mockRes();
+
+  await handlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["upper_body", "lower_body"] } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.updatedCount, 3);
+  const updateCall = calls.find((call) => /UPDATE program_day pd/i.test(call.sql));
+  assert.deepEqual(updateCall.params[1], ["upper_body", "lower_body", "upper_body"]);
+});
+
+test("updateProgramSplit rejects invalid focuses and other users' programs", async () => {
+  const invalidHandlers = createProgramDayActionHandlers({
+    async query() {
+      throw new Error("should not query for invalid payload");
+    },
+  });
+  const invalidRes = mockRes();
+  await invalidHandlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["chest_day"] } }),
+    invalidRes,
+  );
+  assert.equal(invalidRes.statusCode, 400);
+
+  const ownerHandlers = createProgramDayActionHandlers({
+    async query() {
+      return { rowCount: 1, rows: [{ user_id: OTHER_USER_ID }] };
+    },
+  });
+  const ownerRes = mockRes();
+  await ownerHandlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["upper_body"] } }),
+    ownerRes,
+  );
+  assert.equal(ownerRes.statusCode, 403);
+});

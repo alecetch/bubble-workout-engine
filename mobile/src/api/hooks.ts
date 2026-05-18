@@ -113,6 +113,7 @@ import {
   type ReferralStats,
 } from "./referral";
 import { getEntitlement, type EntitlementResponse } from "./entitlement";
+import { authGetJson, authPatchJson } from "./client";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
 export const queryKeys = {
@@ -155,6 +156,15 @@ export const queryKeys = {
   programEquipment: (programId: string | null) => ["programEquipment", programId] as const,
   referralInfo: ["referralInfo"] as const,
   referralStats: ["referralStats"] as const,
+  splitRecommendation: ["splitRecommendation"] as const,
+};
+
+export type SplitRecommendationResponse = {
+  programType: string;
+  daysPerWeek: number;
+  recommendation: string[];
+  existingPreference: string[] | null;
+  existingModifiedByUser: boolean;
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -169,6 +179,24 @@ export function useReferenceData(): UseQueryResult<ReferenceDataResponse> {
     queryKey: queryKeys.referenceData,
     queryFn: getReferenceData,
   });
+}
+
+export function useSplitRecommendation(): UseQueryResult<SplitRecommendationResponse> {
+  return useQuery({
+    queryKey: queryKeys.splitRecommendation,
+    queryFn: () => authGetJson<SplitRecommendationResponse>("/api/split-recommendation"),
+    staleTime: 0,
+  });
+}
+
+export function patchProgramSplit(
+  programId: string,
+  dayFocuses: string[],
+): Promise<{ ok: boolean; updatedCount: number }> {
+  return authPatchJson<{ ok: boolean; updatedCount: number }, { day_focuses: string[] }>(
+    `/api/programs/${programId}/split`,
+    { day_focuses: dayFocuses },
+  );
 }
 
 export function useClientProfile(profileId: string | null | undefined): UseQueryResult<ClientProfileServer> {

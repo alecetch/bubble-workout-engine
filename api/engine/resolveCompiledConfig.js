@@ -93,6 +93,15 @@ function buildSyntheticRequestConfigRow({ request, programType, schemaVersion, p
     if (!localSemantics || !Object.keys(localSemantics).length) continue;
     dayBlockSemanticsByFocus[focus] = localSemantics;
   }
+  if (!dayBlockSemanticsByFocus.push && dayBlockSemanticsByFocus.upper_body) {
+    dayBlockSemanticsByFocus.push = dayBlockSemanticsByFocus.upper_body;
+  }
+  if (!dayBlockSemanticsByFocus.pull && dayBlockSemanticsByFocus.upper_body) {
+    dayBlockSemanticsByFocus.pull = dayBlockSemanticsByFocus.upper_body;
+  }
+  if (!dayBlockSemanticsByFocus.legs && dayBlockSemanticsByFocus.lower_body) {
+    dayBlockSemanticsByFocus.legs = dayBlockSemanticsByFocus.lower_body;
+  }
 
   return {
     ...parsedRequestPgc,
@@ -160,6 +169,15 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     const localSemantics = normalizeBlockSemanticsMap(template?.block_semantics);
     if (!localSemantics || !Object.keys(localSemantics).length) continue;
     dayBlockSemanticsByFocus[focus] = localSemantics;
+  }
+  if (!dayBlockSemanticsByFocus.push && dayBlockSemanticsByFocus.upper_body) {
+    dayBlockSemanticsByFocus.push = dayBlockSemanticsByFocus.upper_body;
+  }
+  if (!dayBlockSemanticsByFocus.pull && dayBlockSemanticsByFocus.upper_body) {
+    dayBlockSemanticsByFocus.pull = dayBlockSemanticsByFocus.upper_body;
+  }
+  if (!dayBlockSemanticsByFocus.legs && dayBlockSemanticsByFocus.lower_body) {
+    dayBlockSemanticsByFocus.legs = dayBlockSemanticsByFocus.lower_body;
   }
 
   return {

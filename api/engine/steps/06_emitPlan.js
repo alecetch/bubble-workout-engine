@@ -676,6 +676,7 @@ export async function emitPlanRows({
         s(mainText),
         s(secondaryText),
         s(finisherText),
+        s(baseDay.day_focus),
         String(off),
         weekdayLabel(dowIdx),
         s(pdKey),

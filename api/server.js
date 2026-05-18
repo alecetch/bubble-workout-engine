@@ -33,6 +33,7 @@ import { marketingRouter } from "./src/routes/marketingPages.js";
 import { websiteEnhancementsRouter } from "./src/routes/websiteEnhancements.js";
 import { contentHubRouter } from "./src/routes/contentHub.js";
 import { affiliateProgramRouter } from "./src/routes/affiliateProgram.js";
+import { splitRecommendationRouter } from "./src/routes/splitRecommendation.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
@@ -77,6 +78,7 @@ import {
 } from "./src/services/clientProfileService.js";
 import { makeAnchorLiftService } from "./src/services/anchorLiftService.js";
 import { RequestValidationError } from "./src/utils/validate.js";
+import { VALID_FOCUS_SLUGS } from "./src/utils/splitRecommender.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -196,6 +198,7 @@ const profilePatchKeys = [
   "anchorLiftsSkipped",
   "anchorLiftsCollectedAt",
   "anchorLifts",
+  "preferredSplitJson",
 ];
 
 const presetColumnByCode = {
@@ -594,9 +597,6 @@ const handlePatchClientProfile = async (req, res) => {
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   let client;
   try {
-    client = await pool.connect();
-    await client.query("BEGIN");
-
     const anchorLifts = Array.isArray(patch.anchorLifts) ? patch.anchorLifts : undefined;
     const anchorLiftsSkipped = patch.anchorLiftsSkipped === undefined ? undefined : Boolean(patch.anchorLiftsSkipped);
     const shouldStampAnchorCollection = anchorLifts !== undefined || anchorLiftsSkipped !== undefined;
@@ -606,6 +606,31 @@ const handlePatchClientProfile = async (req, res) => {
       anchorLiftsCollectedAt: shouldStampAnchorCollection ? new Date().toISOString() : patch.anchorLiftsCollectedAt,
     };
     delete profilePatch.anchorLifts;
+
+    if (profilePatch.preferredSplitJson !== undefined) {
+      const dayFocuses = profilePatch.preferredSplitJson?.day_focuses;
+      if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
+        return res.status(400).json({
+          ok: false,
+          request_id: req.request_id,
+          code: "validation_error",
+          error: "day_focuses must be a non-empty array",
+        });
+      }
+      for (const slug of dayFocuses) {
+        if (!VALID_FOCUS_SLUGS.has(slug)) {
+          return res.status(400).json({
+            ok: false,
+            request_id: req.request_id,
+            code: "validation_error",
+            error: `Unknown focus slug: ${slug}`,
+          });
+        }
+      }
+    }
+
+    client = await pool.connect();
+    await client.query("BEGIN");
 
     const profileService = makeClientProfileService(client);
     const anchorLiftService = makeAnchorLiftService(client);
@@ -764,6 +789,7 @@ app.use("/api", programCompletionRouter);
 app.use("/api", programDayActionsRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", referralRouter);
+app.use("/api", splitRecommendationRouter);
 
 // Canonical /api-prefixed mounts (new).
 app.get("/api/v1/history/programs", ...userAuth, createHistoryProgramsHandler(pool));

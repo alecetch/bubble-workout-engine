@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
+import { VALID_FOCUS_SLUGS } from "../utils/splitRecommender.js";
 
 export const programDayActionsRouter = express.Router();
 
@@ -482,11 +483,77 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
     }
   }
 
+  async function updateProgramSplit(req, res) {
+    const { request_id } = req;
+    try {
+      const userId = resolveUserId(req);
+      const programId = requireUuid(req.params.programId, "programId");
+      const dayFocuses = req.body?.day_focuses;
+      if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
+        return res.status(400).json({ ok: false, request_id, code: "validation_error", error: "day_focuses must be a non-empty array" });
+      }
+      for (const slug of dayFocuses) {
+        if (!VALID_FOCUS_SLUGS.has(slug)) {
+          return res.status(400).json({ ok: false, request_id, code: "validation_error", error: `Unknown focus slug: ${slug}` });
+        }
+      }
+
+      const programResult = await db.query("SELECT user_id FROM program WHERE id = $1", [programId]);
+      if (programResult.rowCount === 0) {
+        return res.status(404).json({ ok: false, request_id, code: "not_found", error: "Program not found" });
+      }
+      if (String(programResult.rows[0].user_id) !== String(userId)) {
+        return res.status(403).json({ ok: false, request_id, code: "forbidden", error: "Program does not belong to this user" });
+      }
+
+      const daysResult = await db.query(
+        `
+        SELECT id
+        FROM program_day
+        WHERE program_id = $1
+          AND is_completed = FALSE
+          AND is_skipped IS NOT TRUE
+        ORDER BY week_number ASC, day_number ASC
+        `,
+        [programId],
+      );
+
+      if (daysResult.rowCount === 0) {
+        return res.status(200).json({ ok: true, request_id, updatedCount: 0 });
+      }
+
+      const ids = daysResult.rows.map((row) => row.id);
+      const focuses = ids.map((_, index) => dayFocuses[index % dayFocuses.length]);
+      await db.query(
+        `
+        UPDATE program_day pd
+        SET focus_type = u.focus,
+            updated_at = now()
+        FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::text[]) AS focus) AS u
+        WHERE pd.id = u.id
+        `,
+        [ids, focuses],
+      );
+
+      return res.status(200).json({ ok: true, request_id, updatedCount: ids.length });
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
+    }
+  }
+
   return {
     skipProgramDay,
     rescheduleProgramDay,
     startEquipmentSubstitution,
     pollEquipmentSubstitution,
+    updateProgramSplit,
   };
 }
 
@@ -496,5 +563,6 @@ programDayActionsRouter.post("/programs/:programId/days/:programDayId/skip", han
 programDayActionsRouter.post("/programs/:programId/days/:programDayId/reschedule", handlers.rescheduleProgramDay);
 programDayActionsRouter.post("/programs/:programId/equipment-substitution", handlers.startEquipmentSubstitution);
 programDayActionsRouter.get("/programs/:programId/equipment-substitution/:jobId", handlers.pollEquipmentSubstitution);
+programDayActionsRouter.patch("/programs/:programId/split", handlers.updateProgramSplit);
 
 export { createProgramDayActionHandlers, validateFutureDate };

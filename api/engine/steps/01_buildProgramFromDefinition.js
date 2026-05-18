@@ -593,9 +593,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     dayTemplates,
     dperweek,
   );
+  const preferredSplit = clientProfile?.preferredSplitJson?.day_focuses ?? clientProfile?.preferred_split_json?.day_focuses ?? null;
+  const splitValid = Array.isArray(preferredSplit) && preferredSplit.length === templateSequence.length;
 
   for (let day = 1; day <= templateSequence.length; day++) {
     const template = templateSequence[day - 1];
+    const dayFocus = (splitValid ? preferredSplit[day - 1] : null) ?? toStr(template?.focus) ?? null;
     const effectiveSetsByDuration =
       template?.sets_by_duration != null ? template.sets_by_duration : setsByDurationCfg;
     const effectiveBlockBudget =
@@ -824,7 +827,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
       const slotDebugEntry = {
         day_index: day,
         template_name: compiledConfig?.configKey ?? compiledConfig?.programType ?? null,
-        day_focus: toStr(template?.focus) || null,
+        day_focus: dayFocus,
         slot: slotName,
         mp: resolvedSlot.mp ?? null,
         sw: resolvedSlot.sw ?? null,
@@ -995,7 +998,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     days.push({
       day_index: day,
       day_type: isOrderedSimulationDay ? "simulation" : compiledConfig.programType,
-      day_focus: toStr(template.focus) || null,
+      day_focus: dayFocus,
       duration_mins: duration,
       is_ordered_simulation: isOrderedSimulationDay,
       day_selection_mode: daySelectionMode,

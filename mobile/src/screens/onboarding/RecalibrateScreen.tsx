@@ -317,6 +317,20 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
       const updatedProfile = await updateProfile.mutateAsync(
         payload as Parameters<typeof updateProfile.mutateAsync>[0],
       );
+      const previousDaysCount = Array.isArray(profileQuery.data?.preferredDays)
+        ? profileQuery.data.preferredDays.length
+        : 0;
+      const nextDaysCount = Array.isArray(draft.preferredDays) ? draft.preferredDays.length : 0;
+      const daysCountChanged =
+        includes("schedule") && nextDaysCount > 0 && nextDaysCount !== previousDaysCount;
+
+      if (daysCountChanged) {
+        navigation.navigate("SplitReview", {
+          fromRecalibrate: true,
+          programId: activeProgramId ?? undefined,
+        });
+        return;
+      }
 
       if (includes("goals") && programAction === "regenerate") {
         resetFromProfile({
