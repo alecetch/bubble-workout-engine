@@ -2,6 +2,18 @@ import { resolveMediaUrl } from "../src/utils/mediaUrl.js";
 
 // Pure hero-media resolver helpers used by runPipeline.
 export function dayFocusSlug(day) {
+  // If a persisted focus exists (from preferred_split_json or DB focus_type), honour it.
+  // PPL slugs are aliased to their upper/lower equivalents for media resolution.
+  const persisted = day?.day_focus ?? day?.focus_type ?? null;
+  if (persisted) {
+    if (persisted === "push" || persisted === "pull") return "upper_body";
+    if (persisted === "legs") return "lower_body";
+    if (persisted === "upper_body" || persisted === "lower_body" || persisted === "full_body") {
+      return persisted;
+    }
+  }
+
+  // Existing slot-based derivation as fallback.
   const segs = (day && day.segments) || [];
   let mainSlot = "";
   for (const seg of segs) {

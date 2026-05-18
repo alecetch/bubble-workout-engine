@@ -115,6 +115,7 @@ export function buildInputsFromProfile(profile, exerciseRows, physiqueContext = 
     : null;
 
   return {
+    preferredSplitJson: profile?.preferredSplitJson ?? null,
     clientProfile: {
       response: {
         fitness_rank: fitnessRank,
