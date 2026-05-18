@@ -27,18 +27,24 @@ splitRecommendationRouter.get("/split-recommendation", async (req, res) => {
       [userId],
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ ok: false, request_id, code: "not_found", error: "No profile found" });
-    }
+    const qDays = parseInt(req.query.daysPerWeek, 10);
+    const qType = safeString(req.query.programType);
 
-    const profile = result.rows[0];
-    const preferredDays = Array.isArray(profile.preferred_days) ? profile.preferred_days : [];
-    const daysPerWeek = preferredDays.length || 3;
-    const programType = safeString(profile.program_type_slug) || "hypertrophy";
+    let daysPerWeek;
+    let programType;
+
+    if (result.rowCount === 0) {
+      daysPerWeek = Number.isFinite(qDays) && qDays >= 1 && qDays <= 7 ? qDays : 3;
+      programType = qType || "hypertrophy";
+    } else {
+      const profile = result.rows[0];
+      const preferredDays = Array.isArray(profile.preferred_days) ? profile.preferred_days : [];
+      daysPerWeek = preferredDays.length || (Number.isFinite(qDays) && qDays >= 1 ? qDays : 3);
+      programType = safeString(profile.program_type_slug) || qType || "hypertrophy";
+    }
     const recommendation = defaultSplitForProgram(programType, daysPerWeek);
-    const existingSplit = profile.preferred_split_json && typeof profile.preferred_split_json === "object"
-      ? profile.preferred_split_json
-      : null;
+    const rawSplit = result.rows[0]?.preferred_split_json;
+    const existingSplit = rawSplit && typeof rawSplit === "object" ? rawSplit : null;
 
     return res.status(200).json({
       ok: true,

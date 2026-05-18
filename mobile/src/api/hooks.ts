@@ -181,10 +181,17 @@ export function useReferenceData(): UseQueryResult<ReferenceDataResponse> {
   });
 }
 
-export function useSplitRecommendation(): UseQueryResult<SplitRecommendationResponse> {
+export function useSplitRecommendation(
+  params?: { daysPerWeek?: number; programType?: string },
+): UseQueryResult<SplitRecommendationResponse> {
+  const qs = new URLSearchParams();
+  if (params?.daysPerWeek) qs.set("daysPerWeek", String(params.daysPerWeek));
+  if (params?.programType) qs.set("programType", params.programType);
+  const search = qs.toString();
+  const url = search ? `/api/split-recommendation?${search}` : "/api/split-recommendation";
   return useQuery({
-    queryKey: queryKeys.splitRecommendation,
-    queryFn: () => authGetJson<SplitRecommendationResponse>("/api/split-recommendation"),
+    queryKey: [...queryKeys.splitRecommendation, params?.daysPerWeek, params?.programType],
+    queryFn: () => authGetJson<SplitRecommendationResponse>(url),
     staleTime: 0,
   });
 }

@@ -47,7 +47,10 @@ function balanceWarning(focuses: string[]): string | null {
 }
 
 export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Element {
-  const splitQuery = useSplitRecommendation();
+  const splitQuery = useSplitRecommendation({
+    daysPerWeek: route.params?.daysPerWeek,
+    programType: route.params?.programType,
+  });
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? "";
   const profileQuery = useClientProfile(profileId);
@@ -62,9 +65,13 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
   const programType = splitQuery.data?.programType ?? "hypertrophy";
 
   useEffect(() => {
-    if (!splitQuery.data) return;
-    setCurrentFocuses(splitQuery.data.existingPreference ?? splitQuery.data.recommendation);
-  }, [splitQuery.data]);
+    if (splitQuery.data) {
+      setCurrentFocuses(splitQuery.data.existingPreference ?? splitQuery.data.recommendation);
+    } else if (splitQuery.isError) {
+      const fallback = Array(route.params?.daysPerWeek || 3).fill("full_body");
+      setCurrentFocuses((prev) => (prev.length ? prev : fallback));
+    }
+  }, [splitQuery.data, splitQuery.isError, route.params?.daysPerWeek]);
 
   const dayLabels = useMemo(() => {
     const preferredDays = Array.isArray(profileQuery.data?.preferredDays) ? profileQuery.data.preferredDays : [];
@@ -110,7 +117,7 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
     setIsSaving(false);
   }
 
-  const loading = splitQuery.isLoading || meQuery.isLoading || !currentFocuses.length;
+  const loading = (splitQuery.isLoading || meQuery.isLoading) && !splitQuery.isError && !currentFocuses.length;
 
   return (
     <>

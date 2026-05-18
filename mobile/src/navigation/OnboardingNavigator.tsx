@@ -37,6 +37,8 @@ export type OnboardingStackParamList = {
   SplitReview: {
     fromRecalibrate?: boolean;
     programId?: string;
+    daysPerWeek?: number;
+    programType?: string;
   } | undefined;
   ProgramReview: {
     preserveDraft?: boolean;

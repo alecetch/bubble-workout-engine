@@ -241,7 +241,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
         onboardingStepCompleted: 3,
         onboardingCompletedAt: new Date().toISOString(),
       });
-      navigation.navigate("SplitReview");
+      navigation.navigate("SplitReview", { daysPerWeek: draft.preferredDays.length || undefined });
     } catch {
       await hapticHeavy();
       setFieldErrors({ preferredDays: "Unable to save this step. Please try again." });
