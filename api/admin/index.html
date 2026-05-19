@@ -389,6 +389,7 @@
             <a href="/admin/rep-rules">Rep Rules</a>
             <a href="/admin/observability">Observability</a>
             <a href="/admin/preview">Preview</a>
+            <a href="/admin/program-quality">Program Quality</a>
             <a href="/admin/progression-sandbox">Progression Sandbox</a>
             <a href="/admin/users">Users</a>
             <a href="http://127.0.0.1:3000/" target="_blank">Website Preview ↗</a>
@@ -854,7 +855,7 @@
             const focus = dt?.focus || "";
             return `<th style="text-align:center"><span>${escapeHtml(focus)}</span><br><span style="color:#888;font-size:0.8em">${escapeHtml(key)}</span></th>`;
           }).join("");
-          const rows = Array.from({length: 6}, (_, ri) => {
+          const rows = Array.from({length: 7}, (_, ri) => {
             const dpw = ri + 1;
             const selected = dpwByDpw[String(dpw)] || [];
             const cells = dayTemplates.map((dt, ci) => {

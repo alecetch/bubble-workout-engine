@@ -69,6 +69,36 @@ function resolveTemplateSequence(byDpw, dayTemplates, dperweek) {
   return keys.map((k) => index[k]).filter(Boolean);
 }
 
+const USER_FOCUS_TO_TEMPLATE_FOCUS = {
+  full_body: ["full"],
+  upper_body: ["upper"],
+  lower_body: ["lower", "posterior"],
+  push: ["upper"],
+  pull: ["upper"],
+  legs: ["lower", "posterior"],
+};
+
+function remapTemplatesByFocus(templateSequence, dayTemplates, preferredSplit) {
+  if (!Array.isArray(preferredSplit) || preferredSplit.length !== templateSequence.length) {
+    return templateSequence;
+  }
+
+  const templateByFocus = {};
+  for (const template of dayTemplates) {
+    const focus = toStr(template?.focus).trim();
+    if (focus && !templateByFocus[focus]) templateByFocus[focus] = template;
+  }
+
+  return preferredSplit.map((userFocus, i) => {
+    const userFocusKey = toStr(userFocus).trim().toLowerCase();
+    const candidateFocuses = USER_FOCUS_TO_TEMPLATE_FOCUS[userFocusKey] ?? [];
+    for (const focus of candidateFocuses) {
+      if (templateByFocus[focus]) return templateByFocus[focus];
+    }
+    return templateSequence[i];
+  });
+}
+
 function defaultDayTemplates() {
   return [
     ["A:squat", "B:lunge", "C:quad", "C:calves", "D:core", "C:hinge_accessory"],
@@ -588,13 +618,16 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
   const days = [];
   const usedIdsWeek = new Set();
   const variabilityState = createVariabilityState();
-  const templateSequence = resolveTemplateSequence(
+  const rawTemplateSequence = resolveTemplateSequence(
     builderCfg.dayTemplatesByDpw,
     dayTemplates,
     dperweek,
   );
   const preferredSplit = clientProfile?.preferredSplitJson?.day_focuses ?? clientProfile?.preferred_split_json?.day_focuses ?? null;
-  const splitValid = Array.isArray(preferredSplit) && preferredSplit.length === templateSequence.length;
+  const splitValid = Array.isArray(preferredSplit) && preferredSplit.length === rawTemplateSequence.length;
+  const templateSequence = splitValid
+    ? remapTemplatesByFocus(rawTemplateSequence, dayTemplates, preferredSplit)
+    : rawTemplateSequence;
 
   for (let day = 1; day <= templateSequence.length; day++) {
     const template = templateSequence[day - 1];

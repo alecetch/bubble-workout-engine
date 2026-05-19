@@ -8,6 +8,53 @@ import { defaultSplitForProgram } from "../utils/splitRecommender.js";
 export const splitRecommendationRouter = express.Router();
 splitRecommendationRouter.use(requireAuth);
 
+const TEMPLATE_FOCUS_TO_SLUG = {
+  lower: "lower_body",
+  posterior: "lower_body",
+  lower_strength: "lower_body",
+  posterior_strength: "lower_body",
+  upper: "upper_body",
+  upper_strength: "upper_body",
+  full: "full_body",
+  push: "push",
+  pull: "pull",
+  legs: "legs",
+};
+
+function asJsonObject(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function deriveSplitFromConfig(configJson, daysPerWeek) {
+  const cfg = asJsonObject(configJson);
+  const builder = cfg?.builder && typeof cfg.builder === "object" ? cfg.builder : null;
+  const dpwKeys = builder?.day_templates_by_dpw?.[String(daysPerWeek)] ?? null;
+  const dayTemplates = Array.isArray(builder?.day_templates) ? builder.day_templates : [];
+  if (!Array.isArray(dpwKeys) || dpwKeys.length === 0 || dayTemplates.length === 0) {
+    return null;
+  }
+
+  const templateIndex = Object.fromEntries(
+    dayTemplates.map((template) => [safeString(template?.day_key), template]),
+  );
+  const recommendation = [];
+  for (const key of dpwKeys) {
+    const focus = safeString(templateIndex[safeString(key)]?.focus).toLowerCase();
+    const slug = TEMPLATE_FOCUS_TO_SLUG[focus];
+    if (!slug) return { recommendation: [], splitNotApplicable: true };
+    recommendation.push(slug);
+  }
+
+  return { recommendation, splitNotApplicable: false };
+}
+
 splitRecommendationRouter.get("/split-recommendation", async (req, res) => {
   const { request_id } = req;
   try {
@@ -42,7 +89,30 @@ splitRecommendationRouter.get("/split-recommendation", async (req, res) => {
       daysPerWeek = preferredDays.length || (Number.isFinite(qDays) && qDays >= 1 ? qDays : 3);
       programType = safeString(profile.program_type_slug) || qType || "hypertrophy";
     }
-    const recommendation = defaultSplitForProgram(programType, daysPerWeek);
+
+    let recommendation = [];
+    let splitNotApplicable = false;
+    const configResult = await db.query(
+      `
+      SELECT program_generation_config_json
+      FROM program_generation_config
+      WHERE program_type = $1 AND is_active = TRUE
+      ORDER BY schema_version DESC, updated_at DESC
+      LIMIT 1
+      `,
+      [programType],
+    );
+    if (configResult.rowCount > 0) {
+      const derived = deriveSplitFromConfig(configResult.rows[0]?.program_generation_config_json, daysPerWeek);
+      if (derived) {
+        recommendation = derived.recommendation;
+        splitNotApplicable = derived.splitNotApplicable;
+      }
+    }
+    if (recommendation.length === 0 && !splitNotApplicable && configResult.rowCount === 0) {
+      recommendation = defaultSplitForProgram(programType, daysPerWeek);
+    }
+
     const rawSplit = result.rows[0]?.preferred_split_json;
     const existingSplit = rawSplit && typeof rawSplit === "object" ? rawSplit : null;
 
@@ -52,6 +122,7 @@ splitRecommendationRouter.get("/split-recommendation", async (req, res) => {
       programType,
       daysPerWeek,
       recommendation,
+      splitNotApplicable,
       existingPreference: Array.isArray(existingSplit?.day_focuses) ? existingSplit.day_focuses : null,
       existingModifiedByUser: existingSplit?.modified_by_user === true,
     });

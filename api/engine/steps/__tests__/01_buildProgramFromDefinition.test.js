@@ -177,6 +177,61 @@ test("returns program with correct shape for 1 day / 2 slots", async () => {
   assert.equal(typeof result.debug, "object");
 });
 
+test("preferred split remaps templates so focus labels match exercise content", async () => {
+  const exercises = [
+    makeExercise({ id: "squat1", mp: "squat", sw: "squat_group", sw2: "squat_compound" }),
+    makeExercise({ id: "pull1", mp: "pull_horizontal", sw: "pull_group", sw2: "pull_compound" }),
+    makeExercise({ id: "push1", mp: "push_horizontal", sw: "push_group", sw2: "push_compound" }),
+  ];
+  const compiledConfig = makeMinimalCompiledConfig({
+    programType: "hypertrophy",
+    builder: {
+      dayTemplates: [
+        {
+          day_key: "day1",
+          focus: "lower",
+          ordered_slots: [{ slot: "A:squat", mp: "squat", sw: "squat_group", sw2: "squat_compound" }],
+        },
+        {
+          day_key: "day2",
+          focus: "upper",
+          ordered_slots: [{ slot: "A:pull_horizontal", mp: "pull_horizontal", sw: "pull_group", sw2: "pull_compound" }],
+        },
+        {
+          day_key: "day4",
+          focus: "full",
+          ordered_slots: [{ slot: "A:push_horizontal", mp: "push_horizontal", sw: "push_group", sw2: "push_compound" }],
+        },
+      ],
+      dayTemplatesByDpw: { "3": ["day1", "day2", "day4"] },
+      setsByDuration: { "50": { A: 4, B: 3, C: 2, D: 2 } },
+      blockBudget: { "50": 1 },
+      slotDefaults: {},
+    },
+  });
+
+  const result = await buildProgramFromDefinition({
+    inputs: makeInputs(exercises, {
+      preferredSplitJson: { day_focuses: ["full_body", "upper_body", "lower_body"] },
+    }),
+    request: { days_per_week: 3 },
+    compiledConfig,
+  });
+
+  assert.deepEqual(
+    result.program.days.map((day) => day.day_focus),
+    ["full_body", "upper_body", "lower_body"],
+  );
+  assert.deepEqual(
+    result.program.days.map((day) => day.blocks[0].slot),
+    ["A:push_horizontal", "A:pull_horizontal", "A:squat"],
+  );
+  assert.deepEqual(
+    result.program.days.map((day) => day.blocks[0].ex_id),
+    ["push1", "pull1", "squat1"],
+  );
+});
+
 test("maybePromoteStructuralMatch upgrades weaker mp fallback to strongest available sw2 match", () => {
   const byId = {
     compound_row: {
