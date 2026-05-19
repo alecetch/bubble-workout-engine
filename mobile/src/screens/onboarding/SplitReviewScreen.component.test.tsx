@@ -190,7 +190,8 @@ describe("SplitReviewScreen", () => {
         "upper_body",
         "lower_body",
       ]);
-      expect(navigation.popToTop).toHaveBeenCalled();
+      expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", { programId: "program-1" });
+      expect(navigation.popToTop).not.toHaveBeenCalled();
     });
   });
 });

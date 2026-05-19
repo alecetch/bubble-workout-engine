@@ -57,6 +57,60 @@ function normalizeArr(v) {
   return [];
 }
 
+const DOW_MAP = {
+  mon: 0, monday: 0,
+  tue: 1, tues: 1, tuesday: 1,
+  wed: 2, weds: 2, wednesday: 2,
+  thu: 3, thur: 3, thurs: 3, thursday: 3,
+  fri: 4, friday: 4,
+  sat: 5, saturday: 5,
+  sun: 6, sunday: 6,
+};
+
+function parsePreferredDayIndexes(raw) {
+  const arr = normalizeArr(raw);
+  const out = [];
+  for (const item of arr) {
+    if (typeof item === "number" && Number.isFinite(item)) {
+      const n = parseInt(item, 10);
+      if (n >= 0 && n <= 6) out.push(n);
+      continue;
+    }
+    const key = toStr(item).trim().toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(DOW_MAP, key)) out.push(DOW_MAP[key]);
+  }
+  return Array.from(new Set(out));
+}
+
+function anchorDowFromMs(ms) {
+  const x = parseInt(ms, 10);
+  if (!Number.isFinite(x)) return null;
+  const sun0 = new Date(x).getUTCDay();
+  return (sun0 + 6) % 7;
+}
+
+function nextPreferredOffset(anchorIdx, prefs) {
+  if (!Number.isInteger(anchorIdx) || !prefs.length) return 0;
+  for (let off = 0; off < 7; off++) {
+    const d = (anchorIdx + off) % 7;
+    if (prefs.includes(d)) return off;
+  }
+  return 0;
+}
+
+function rotatePreferredSplitFromStart(preferredSplit, preferredDays, anchorMs) {
+  if (!Array.isArray(preferredSplit) || !Array.isArray(preferredDays) || preferredSplit.length !== preferredDays.length) {
+    return preferredSplit;
+  }
+  const anchorIdx = anchorDowFromMs(anchorMs);
+  if (!Number.isInteger(anchorIdx)) return preferredSplit;
+  const startDow = (anchorIdx + nextPreferredOffset(anchorIdx, preferredDays)) % 7;
+  return preferredDays
+    .map((dayIdx, index) => ({ dayIdx, focus: preferredSplit[index] }))
+    .sort((a, b) => ((a.dayIdx - startDow + 7) % 7) - ((b.dayIdx - startDow + 7) % 7))
+    .map((item) => item.focus);
+}
+
 function resolveTemplateSequence(byDpw, dayTemplates, dperweek) {
   if (!byDpw || typeof byDpw !== "object") {
     return dayTemplates.slice(0, dperweek);
@@ -623,7 +677,13 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     dayTemplates,
     dperweek,
   );
-  const preferredSplit = clientProfile?.preferredSplitJson?.day_focuses ?? clientProfile?.preferred_split_json?.day_focuses ?? null;
+  const rawPreferredSplit = clientProfile?.preferredSplitJson?.day_focuses ?? clientProfile?.preferred_split_json?.day_focuses ?? null;
+  const preferredDayIndexes = parsePreferredDayIndexes(request?.preferred_days_json ?? clientProfile?.preferred_days);
+  const preferredSplit = rotatePreferredSplitFromStart(
+    rawPreferredSplit,
+    preferredDayIndexes,
+    request?.anchor_day_ms ?? request?.anchor_date_ms,
+  );
   const splitValid = Array.isArray(preferredSplit) && preferredSplit.length === rawTemplateSequence.length;
   const templateSequence = splitValid
     ? remapTemplatesByFocus(rawTemplateSequence, dayTemplates, preferredSplit)

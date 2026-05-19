@@ -124,7 +124,7 @@ describe("Step3ScheduleMetricsScreen", () => {
     expect(screen.getByText("Preferred training days")).toBeInTheDocument();
     expect(screen.getByText("Session settings")).toBeInTheDocument();
     expect(screen.getByText("Body metrics")).toBeInTheDocument();
-    expect(screen.getByText("Schedule constraints")).toBeInTheDocument();
+    expect(screen.queryByText("Schedule constraints")).not.toBeInTheDocument();
   });
 
   it("renders loading state while profile data is loading", () => {
@@ -177,7 +177,7 @@ describe("Step3ScheduleMetricsScreen", () => {
         onboardingStepCompleted: 3,
         onboardingCompletedAt: expect.any(String),
       }));
-      expect(navigation.navigate).toHaveBeenCalledWith("SplitReview");
+      expect(navigation.navigate).toHaveBeenCalledWith("SplitReview", { daysPerWeek: 2 });
     });
   });
 

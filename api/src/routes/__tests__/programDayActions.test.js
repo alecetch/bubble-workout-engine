@@ -220,7 +220,7 @@ test("updateProgramSplit cycles valid focuses across unstarted days", async () =
   const handlers = createProgramDayActionHandlers({
     async query(sql, params) {
       calls.push({ sql, params });
-      if (/SELECT user_id FROM program/i.test(sql)) {
+      if (/SELECT user_id, preferred_days_sorted_json FROM program/i.test(sql)) {
         return { rowCount: 1, rows: [{ user_id: USER_ID }] };
       }
       if (/FROM program_day/i.test(sql) && /is_completed = FALSE/i.test(sql)) {
@@ -250,6 +250,42 @@ test("updateProgramSplit cycles valid focuses across unstarted days", async () =
   assert.equal(res.body.updatedCount, 3);
   const updateCall = calls.find((call) => /UPDATE program_day pd/i.test(call.sql));
   assert.deepEqual(updateCall.params[1], ["upper_body", "lower_body", "upper_body"]);
+});
+
+test("updateProgramSplit keeps focuses attached to selected weekdays after midweek starts", async () => {
+  const calls = [];
+  const handlers = createProgramDayActionHandlers({
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/SELECT user_id, preferred_days_sorted_json FROM program/i.test(sql)) {
+        return { rowCount: 1, rows: [{ user_id: USER_ID, preferred_days_sorted_json: ["Mon", "Wed", "Thu"] }] };
+      }
+      if (/FROM program_day/i.test(sql) && /is_completed = FALSE/i.test(sql)) {
+        return {
+          rowCount: 3,
+          rows: [
+            { id: "11111111-1111-4111-8111-000000000001", scheduled_weekday: "Wed" },
+            { id: "11111111-1111-4111-8111-000000000002", scheduled_weekday: "Thu" },
+            { id: "11111111-1111-4111-8111-000000000003", scheduled_weekday: "Mon" },
+          ],
+        };
+      }
+      if (/UPDATE program_day pd/i.test(sql)) {
+        return { rowCount: 3, rows: [] };
+      }
+      throw new Error("Unexpected query");
+    },
+  });
+  const res = mockRes();
+
+  await handlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["lower_body", "upper_body", "full_body"] } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  const updateCall = calls.find((call) => /UPDATE program_day pd/i.test(call.sql));
+  assert.deepEqual(updateCall.params[1], ["upper_body", "full_body", "lower_body"]);
 });
 
 test("updateProgramSplit rejects invalid focuses and other users' programs", async () => {

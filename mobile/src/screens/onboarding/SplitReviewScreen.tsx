@@ -102,14 +102,21 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
     }
 
     if (route.params?.fromRecalibrate) {
-      if (route.params.programId) {
-        try {
-          await patchProgramSplit(route.params.programId, currentFocuses);
-        } catch (err) {
-          console.error("[SplitReview] split patch failed, proceeding", err);
-        }
+      if (!route.params.programId) {
+        setSaveError("Your split was saved, but no active program was found to update.");
+        setIsSaving(false);
+        return;
       }
-      navigation.popToTop();
+      try {
+        await patchProgramSplit(route.params.programId, currentFocuses);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Please try again.";
+        console.error("[SplitReview] split patch failed", err);
+        setSaveError(`Your split was saved, but the active program could not be updated. ${message}`);
+        setIsSaving(false);
+        return;
+      }
+      navigation.navigate("ProgramDashboard", { programId: route.params.programId });
       return;
     }
 

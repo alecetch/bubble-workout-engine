@@ -47,6 +47,37 @@ function validateFutureDate(value) {
   return targetDate;
 }
 
+const DOW_MAP = {
+  mon: 0, monday: 0,
+  tue: 1, tues: 1, tuesday: 1,
+  wed: 2, weds: 2, wednesday: 2,
+  thu: 3, thur: 3, thurs: 3, thursday: 3,
+  fri: 4, friday: 4,
+  sat: 5, saturday: 5,
+  sun: 6, sunday: 6,
+};
+
+function weekdayIndex(value) {
+  const key = safeString(value).trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(DOW_MAP, key) ? DOW_MAP[key] : null;
+}
+
+function rotateFocusesFromStart(dayFocuses, preferredDays, startWeekday) {
+  if (!Array.isArray(dayFocuses) || !Array.isArray(preferredDays) || dayFocuses.length !== preferredDays.length) {
+    return dayFocuses;
+  }
+  const startDow = weekdayIndex(startWeekday);
+  if (!Number.isInteger(startDow)) return dayFocuses;
+  const pairs = preferredDays.map((day, index) => ({
+    dayIdx: weekdayIndex(day),
+    focus: dayFocuses[index],
+  }));
+  if (pairs.some((pair) => !Number.isInteger(pair.dayIdx))) return dayFocuses;
+  return pairs
+    .sort((a, b) => ((a.dayIdx - startDow + 7) % 7) - ((b.dayIdx - startDow + 7) % 7))
+    .map((pair) => pair.focus);
+}
+
 async function verifyProgramDay(db, { programId, programDayId, userId }) {
   const result = await db.query(
     `
@@ -498,7 +529,7 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
         }
       }
 
-      const programResult = await db.query("SELECT user_id FROM program WHERE id = $1", [programId]);
+      const programResult = await db.query("SELECT user_id, preferred_days_sorted_json FROM program WHERE id = $1", [programId]);
       if (programResult.rowCount === 0) {
         return res.status(404).json({ ok: false, request_id, code: "not_found", error: "Program not found" });
       }
@@ -508,7 +539,7 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
 
       const daysResult = await db.query(
         `
-        SELECT id
+        SELECT id, scheduled_weekday
         FROM program_day
         WHERE program_id = $1
           AND is_completed = FALSE
@@ -523,7 +554,12 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
       }
 
       const ids = daysResult.rows.map((row) => row.id);
-      const focuses = ids.map((_, index) => dayFocuses[index % dayFocuses.length]);
+      const rotatedDayFocuses = rotateFocusesFromStart(
+        dayFocuses,
+        programResult.rows[0].preferred_days_sorted_json,
+        daysResult.rows[0]?.scheduled_weekday,
+      );
+      const focuses = ids.map((_, index) => rotatedDayFocuses[index % rotatedDayFocuses.length]);
       await db.query(
         `
         UPDATE program_day pd

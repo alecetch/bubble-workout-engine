@@ -5,6 +5,7 @@ import { RecalibrateScreenB } from "./RecalibrateScreen";
 
 const {
   useMeMock,
+  useActiveProgramsMock,
   useClientProfileMock,
   useEquipmentItemsMock,
   useReferenceDataMock,
@@ -15,6 +16,7 @@ const {
   navigationGoBackMock,
 } = vi.hoisted(() => ({
   useMeMock: vi.fn(),
+  useActiveProgramsMock: vi.fn(),
   useClientProfileMock: vi.fn(),
   useEquipmentItemsMock: vi.fn(),
   useReferenceDataMock: vi.fn(),
@@ -27,6 +29,7 @@ const {
 
 vi.mock("../../api/hooks", () => ({
   useMe: useMeMock,
+  useActivePrograms: useActiveProgramsMock,
   useClientProfile: useClientProfileMock,
   useEquipmentItems: useEquipmentItemsMock,
   useReferenceData: useReferenceDataMock,
@@ -173,6 +176,10 @@ describe("RecalibrateScreenB", () => {
       data: { id: "user-1", clientProfileId: "profile-1" },
       isLoading: false,
     });
+    useActiveProgramsMock.mockReturnValue({
+      data: { primary_program_id: "primary-program-1", programs: [], today_sessions: [] },
+      isLoading: false,
+    });
     useClientProfileMock.mockReturnValue({
       data: profile,
       isLoading: false,
@@ -224,6 +231,20 @@ describe("RecalibrateScreenB", () => {
         equipment_items_slugs: ["barbell"],
       }));
       expect(navigationNavigateMock).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true });
+    });
+  });
+
+  it("opens split review after schedule recalibration even when day count is unchanged", async () => {
+    renderScreen(["schedule"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(navigationNavigateMock).toHaveBeenCalledWith("SplitReview", {
+        fromRecalibrate: true,
+        programId: "program-1",
+        daysPerWeek: 2,
+      });
     });
   });
 
