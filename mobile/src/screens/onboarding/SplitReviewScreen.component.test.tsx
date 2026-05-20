@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SplitReviewScreen } from "./SplitReviewScreen";
 import { useMe, useSplitRecommendation, useUpdateClientProfile } from "../../api/hooks";
@@ -166,7 +166,7 @@ describe("SplitReviewScreen", () => {
 
     renderScreen();
 
-    fireEvent.press(screen.getByText("Retry"));
+    fireEvent.click(screen.getByText("Retry"));
     expect(refetchMock).toHaveBeenCalledOnce();
   });
 
@@ -216,8 +216,8 @@ describe("SplitReviewScreen", () => {
     renderScreen();
 
     // Open picker for Day 1 and select lower_body
-    fireEvent.press(screen.getByTestId("split-day-chip-0"));
-    fireEvent.press(screen.getByText("Pick lower_body"));
+    fireEvent.click(screen.getByTestId("split-day-chip-0"));
+    fireEvent.click(screen.getByText("Pick lower_body"));
 
     // Reset link should appear
     await waitFor(() => {
@@ -225,7 +225,7 @@ describe("SplitReviewScreen", () => {
     });
 
     // Click reset
-    fireEvent.press(screen.getByText("Reset to recommended"));
+    fireEvent.click(screen.getByText("Reset to recommended"));
 
     // Reset link should disappear
     await waitFor(() => {
@@ -238,9 +238,7 @@ describe("SplitReviewScreen", () => {
   it("patches profile and navigates to ProgramReview on Continue (normal onboarding)", async () => {
     renderScreen();
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("split-continue-button"));
-    });
+    fireEvent.click(screen.getByTestId("split-continue-button"));
 
     await waitFor(() => {
       expect(mutateAsyncMock).toHaveBeenCalledOnce();
@@ -251,9 +249,7 @@ describe("SplitReviewScreen", () => {
   it("patches profile and program split then calls popToTop on fromRecalibrate", async () => {
     renderScreen({ fromRecalibrate: true, programId: "prog-123" });
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("split-continue-button"));
-    });
+    fireEvent.click(screen.getByTestId("split-continue-button"));
 
     await waitFor(() => {
       expect(mutateAsyncMock).toHaveBeenCalledOnce();
@@ -270,9 +266,7 @@ describe("SplitReviewScreen", () => {
 
     renderScreen();
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("split-continue-button"));
-    });
+    fireEvent.click(screen.getByTestId("split-continue-button"));
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith("ProgramReview");
