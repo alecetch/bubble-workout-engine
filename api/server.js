@@ -52,6 +52,7 @@ import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
 import { equipmentRegenRouter } from "./src/routes/equipmentRegen.js";
+import { splitRecommendationRouter } from "./src/routes/splitRecommendation.js";
 import {
   uploadSingle,
   handleCheckInSubmit,
@@ -785,6 +786,7 @@ app.use("/api", workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
 app.use("/api", userAuth, equipmentRegenRouter);
+app.use("/api", splitRecommendationRouter);
 logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipment regeneration routes at /api");
 app.use("/api", programExerciseRouter);
 app.use("/api", programCompletionRouter);

@@ -330,6 +330,17 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
         return;
       }
 
+      if (includes("schedule") && activeProgramId) {
+        const originalDaysCount = Array.isArray(profileQuery.data?.preferredDays)
+          ? profileQuery.data.preferredDays.length
+          : 0;
+        const newDaysCount = (draft.preferredDays ?? []).length;
+        if (newDaysCount !== originalDaysCount && newDaysCount > 0) {
+          navigation.navigate("SplitReview", { fromRecalibrate: true, programId: activeProgramId });
+          return;
+        }
+      }
+
       if (includes("goals") && programAction === "regenerate") {
         resetFromProfile({
           goals: draft.goals ?? mapGoals(updatedProfile.goals),

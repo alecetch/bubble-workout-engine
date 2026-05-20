@@ -586,6 +586,10 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
   const exercises = inputs?.exercises?.response?.results ?? [];
   const equipmentProfile = deriveEquipmentProfile(clientProfile?.equipment_items_slugs ?? []);
 
+  // Preferred split override from user's profile (set via Split Review screen).
+  const preferredSplitJson = inputs?.preferredSplitJson ?? null;
+  const preferredSplitFocuses = Array.isArray(preferredSplitJson?.day_focuses) ? preferredSplitJson.day_focuses : null;
+
   const duration_mins =
     request?.duration_mins ??
     request?.durationMins ??
@@ -1087,6 +1091,12 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
         delete blocks[bi].ex_sw2;
       }
     }
+
+    // Apply preferred split override if present and length matches daysPerWeek.
+    const splitValid = preferredSplitFocuses !== null && preferredSplitFocuses.length === dperweek;
+    const dayFocus = splitValid
+      ? preferredSplitFocuses[day - 1]
+      : (toStr(template.focus) || null);
 
     days.push({
       day_index: day,

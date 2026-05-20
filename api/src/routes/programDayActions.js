@@ -601,4 +601,81 @@ programDayActionsRouter.post("/programs/:programId/equipment-substitution", hand
 programDayActionsRouter.get("/programs/:programId/equipment-substitution/:jobId", handlers.pollEquipmentSubstitution);
 programDayActionsRouter.patch("/programs/:programId/split", handlers.updateProgramSplit);
 
+// PATCH /api/programs/:programId/split
+// Updates focus_type on all unstarted days using the user's new preferred split.
+programDayActionsRouter.patch("/programs/:programId/split", async (req, res) => {
+  const { request_id } = req;
+  try {
+    const userId = resolveUserId(req);
+    const programId = requireUuid(req.params.programId, "programId");
+    const dayFocuses = req.body?.day_focuses;
+
+    if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        request_id,
+        code: "validation_error",
+        error: "day_focuses must be a non-empty array",
+      });
+    }
+
+    // Verify program exists and belongs to user.
+    const progResult = await pool.query(
+      "SELECT user_id FROM program WHERE id = $1",
+      [programId],
+    );
+    if (progResult.rowCount === 0) {
+      return res.status(404).json({
+        ok: false,
+        request_id,
+        code: "not_found",
+        error: "Program not found",
+      });
+    }
+    if (String(progResult.rows[0].user_id) !== String(userId)) {
+      return res.status(403).json({
+        ok: false,
+        request_id,
+        code: "forbidden",
+        error: "Program does not belong to this user",
+      });
+    }
+
+    // Fetch all unstarted days ordered by position.
+    const daysResult = await pool.query(
+      `SELECT id FROM program_day
+       WHERE program_id = $1 AND is_completed = FALSE AND is_skipped = FALSE
+       ORDER BY week_number ASC, day_number ASC`,
+      [programId],
+    );
+
+    if (daysResult.rowCount === 0) {
+      return res.status(200).json({ ok: true, request_id, updatedCount: 0 });
+    }
+
+    // Assign focus cyclically across the unstarted days.
+    const ids = daysResult.rows.map((row, i) => ({ id: row.id, focus: dayFocuses[i % dayFocuses.length] }));
+
+    // Bulk update using unnest.
+    await pool.query(
+      `UPDATE program_day pd
+       SET focus_type = u.focus
+       FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::text[]) AS focus) AS u
+       WHERE pd.id = u.id`,
+      [ids.map((u) => u.id), ids.map((u) => u.focus)],
+    );
+
+    return res.status(200).json({ ok: true, request_id, updatedCount: ids.length });
+  } catch (err) {
+    const mapped = mapError(err);
+    return res.status(mapped.status).json({
+      ok: false,
+      request_id,
+      code: mapped.code,
+      error: mapped.message,
+      details: mapped.details,
+    });
+  }
+});
+
 export { createProgramDayActionHandlers, validateFutureDate };
