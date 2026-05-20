@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { compute1rmKg, createSegmentLogHandlers } from "../src/routes/segmentLog.js";
 
@@ -459,4 +459,91 @@ test("postSegmentLog stores null weight for non-positive loads", async () => {
   assert.equal(insertCall.params[6], null);
   assert.equal(insertCall.params[7], 10);
   assert.equal(insertCall.params[9], null);
+});
+
+test("postSegmentLog accepts null weight and stores null estimated 1rm", async () => {
+  const queries = [];
+  const handlers = createSegmentLogHandlers({
+    async connect() {
+      return {
+        async query(sql, params) {
+          queries.push({ sql, params });
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) return { rows: [], rowCount: 1 };
+          if (sql.includes("WITH new_rows AS")) return { rows: [], rowCount: 0 };
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  });
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: null, reps_completed: 10 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+
+  assert.equal(res.statusCode, 200);
+  const insertCall = queries.find((call) => call.sql.includes("INSERT INTO segment_exercise_log"));
+  assert.equal(insertCall.params[6], null);
+  assert.equal(insertCall.params[7], 10);
+  assert.equal(insertCall.params[9], null);
+});
+
+test("postSegmentLog does not send PR notification for null weight rows", async () => {
+  const notificationService = { send: mock.fn() };
+  const db = {
+    async query(sql) {
+      if (sql.includes("SELECT pr_notification_enabled")) {
+        return { rows: [{ pr_notification_enabled: true }], rowCount: 1 };
+      }
+      if (sql.includes("WITH new_rows AS")) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 0 };
+    },
+    async connect() {
+      return {
+        async query(sql) {
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) return { rows: [], rowCount: 1 };
+          if (sql.includes("WITH new_rows AS")) return { rows: [], rowCount: 0 };
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  };
+  const handlers = createSegmentLogHandlers(db, notificationService);
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: null, reps_completed: 10 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(notificationService.send.mock.calls.length, 0);
 });

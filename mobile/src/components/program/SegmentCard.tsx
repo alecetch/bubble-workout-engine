@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
+import { type LayoutChangeEvent, StyleSheet, Text, TextInput, View } from "react-native";
 import { ApiError } from "../../api/client";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import type { SaveSegmentLogPayload, SaveSegmentLogResult } from "../../api/segmentLog";
 import { useSaveSegmentLogs, useSegmentExerciseLogs } from "../../api/hooks";
 import { useTimerStore } from "../../state/timer/useTimerStore";
+import { useSettingsStore } from "../../state/settings/useSettingsStore";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -18,6 +20,7 @@ import {
   type SetInputState,
 } from "./sessionUxLogic";
 import { getSegmentPresentation } from "./segmentCardLogic";
+import { getExerciseComplete, setExerciseComplete } from "../../utils/localWorkoutLog";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
@@ -38,6 +41,9 @@ type SegmentCardProps = {
   onAllSetsSaved: (segmentId: string) => void;
   onSubscriptionRequired?: () => void;
   onPrsDetected?: (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => void;
+  onExerciseCompleteChange?: (programExerciseId: string) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
+  onInlinePanelOpen?: (pageY: number) => void;
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
@@ -94,6 +100,28 @@ function findNextUncheckedSetKey(
   return null;
 }
 
+function isUnloadedExercise(exercise: Exercise): boolean {
+  return exercise.isUnloaded === true || exercise.isLoadable === false;
+}
+
+function formatExerciseSummary(
+  exercise: Exercise,
+  setInputs: SetInputState[] | undefined,
+  doneSetKeys: Set<string>,
+): string | null {
+  const exerciseKey = exercise.id ?? "";
+  const loggedSets = (setInputs ?? []).filter((_set, index) => doneSetKeys.has(`${exerciseKey}:${index}`));
+  if (loggedSets.length === 0) return null;
+  const last = loggedSets[loggedSets.length - 1];
+  const reps = parseInt(last.reps, 10);
+  if (!Number.isFinite(reps) || reps <= 0) return null;
+  const prescribed = getExerciseSetCount(exercise);
+  const prefix = loggedSets.length >= prescribed ? `${loggedSets.length} x ${reps}` : `${loggedSets.length}/${prescribed} sets - ${loggedSets.length} x ${reps}`;
+  if (isUnloadedExercise(exercise)) return `${prefix} (bodyweight) ✓`;
+  const weight = parseFloat(last.weight);
+  return `${prefix} @ ${Number.isFinite(weight) && weight > 0 ? weight : 0} kg ✓`;
+}
+
 export function SegmentCard({
   segment,
   isLogged,
@@ -105,6 +133,9 @@ export function SegmentCard({
   onAllSetsSaved,
   onSubscriptionRequired,
   onPrsDetected,
+  onExerciseCompleteChange,
+  onLayout,
+  onInlinePanelOpen,
 }: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
@@ -116,8 +147,9 @@ export function SegmentCard({
     segment.segmentDurationSeconds ?? parseMmssToSeconds(segment.segmentDurationMmss),
   );
   const exercises = Array.isArray(segment.exercises) ? segment.exercises : [];
-  const loadableExercises = exercises.filter((exercise) => exercise.isLoadable === true && exercise.id);
-  const hasLoadableExercises = loadableExercises.length > 0;
+  const loggableExercises = exercises.filter((exercise) => exercise.id);
+  const hasLoggableExercises = loggableExercises.length > 0;
+  const showRestTimer = useSettingsStore((state) => state.showRestTimer);
   const existingLogsQuery = useSegmentExerciseLogs(segment.id, programDayId, { userId });
   const saveLogsMutation = useSaveSegmentLogs();
   const [inlineLoggingOpen, setInlineLoggingOpen] = useState(false);
@@ -131,6 +163,10 @@ export function SegmentCard({
   const restEntry = useTimerStore((state) => state.entries[segment.id] ?? null);
   const [restDisplaySeconds, setRestDisplaySeconds] = useState(0);
   const [activeSetKey, setActiveSetKey] = useState<string | null>(null);
+  const [completedExerciseIds, setCompletedExerciseIds] = useState<Set<string>>(new Set());
+  const [showAdjustControls, setShowAdjustControls] = useState(false);
+  const panelScrolledRef = useRef(false);
+  const inlinePanelRef = useRef<View>(null);
   const prevRestRunning = useRef(false);
 
   const segmentTypeBadgeLabel =
@@ -158,7 +194,7 @@ export function SegmentCard({
   useEffect(() => {
     if (!inlineLoggingOpen || initialized || existingLogsQuery.isLoading) return;
     const existingRows = existingLogsQuery.data ?? [];
-    setInputMap(buildInitialSetInputMap(loadableExercises, existingRows));
+    setInputMap(buildInitialSetInputMap(loggableExercises, existingRows));
     setExerciseRirMap(
       existingRows.reduce<Record<string, number | null>>((acc, row) => {
         if (!row.programExerciseId) return acc;
@@ -168,9 +204,26 @@ export function SegmentCard({
       }, {}),
     );
     setDoneSetKeys(new Set());
-    setActiveSetKey(findNextUncheckedSetKey(loadableExercises, new Set()));
+    setActiveSetKey(findNextUncheckedSetKey(loggableExercises, new Set()));
     setInitialized(true);
-  }, [existingLogsQuery.data, existingLogsQuery.isLoading, inlineLoggingOpen, initialized, loadableExercises]);
+  }, [existingLogsQuery.data, existingLogsQuery.isLoading, inlineLoggingOpen, initialized, loggableExercises]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        loggableExercises.map(async (exercise) => ({
+          id: exercise.id ?? "",
+          complete: await getExerciseComplete(programDayId, exercise.id ?? ""),
+        })),
+      );
+      if (cancelled) return;
+      setCompletedExerciseIds(new Set(entries.filter((entry) => entry.complete).map((entry) => entry.id)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loggableExercises, programDayId]);
 
   useEffect(() => {
     if (!restEntry?.restIsRunning) {
@@ -203,25 +256,52 @@ export function SegmentCard({
   useEffect(() => {
     const restIsRunning = restEntry?.restIsRunning ?? false;
     if (prevRestRunning.current && !restIsRunning) {
-      setActiveSetKey(findNextUncheckedSetKey(loadableExercises, doneSetKeys));
+      setActiveSetKey(findNextUncheckedSetKey(loggableExercises, doneSetKeys));
     }
     prevRestRunning.current = restIsRunning;
-  }, [doneSetKeys, loadableExercises, restEntry?.restIsRunning]);
+  }, [doneSetKeys, loggableExercises, restEntry?.restIsRunning]);
 
   const restProgress =
     restEntry != null && restEntry.restTotalSeconds > 0
       ? Math.max(0, Math.min(1, restDisplaySeconds / restEntry.restTotalSeconds))
       : 0;
-  const showRestStrip = restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
+  const showRestStrip = showRestTimer && restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
   const totalSetCount = useMemo(() => {
     if (!initialized) {
-      return loadableExercises.reduce((sum, ex) => sum + getExerciseSetCount(ex), 0);
+      return loggableExercises.reduce((sum, ex) => sum + getExerciseSetCount(ex), 0);
     }
-    return loadableExercises.reduce((sum, ex) => {
+    return loggableExercises.reduce((sum, ex) => {
       const key = ex.id ?? "";
       return sum + (inputMap[key]?.length ?? getExerciseSetCount(ex));
     }, 0);
-  }, [initialized, inputMap, loadableExercises]);
+  }, [initialized, inputMap, loggableExercises]);
+
+  function restOverrideKey(programExerciseId: string): string {
+    return `${programDayId}:${programExerciseId}`;
+  }
+
+  function startExerciseRest(exercise: Exercise): void {
+    if (!showRestTimer) return;
+    const programExerciseId = exercise.id ?? "";
+    const overrideKey = restOverrideKey(programExerciseId);
+    const override = useTimerStore.getState().restOverrides?.[overrideKey];
+    useTimerStore.getState().initEntry({
+      segmentId: segment.id,
+      segmentTotal: null,
+      restTotal: override ?? exercise.restSeconds ?? 0,
+      restOverrideKey: overrideKey,
+    });
+    useTimerStore.getState().startRest(segment.id);
+  }
+
+  async function handleStopExercise(exercise: Exercise): Promise<void> {
+    const programExerciseId = exercise.id;
+    if (!programExerciseId) return;
+    await setExerciseComplete(programDayId, programExerciseId, true);
+    setCompletedExerciseIds((current) => new Set([...current, programExerciseId]));
+    setInlineLoggingOpen(false);
+    onExerciseCompleteChange?.(programExerciseId);
+  }
 
   function handleTimerPress(): void {
     if (initialDurationSeconds == null || initialDurationSeconds <= 0) return;
@@ -271,7 +351,7 @@ export function SegmentCard({
       rows: [{
         programExerciseId,
         orderIndex: setIndex + 1,
-        weightKg: Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null,
+        weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null),
         repsCompleted: Number.isFinite(parseInt(row.reps, 10)) ? parseInt(row.reps, 10) || null : null,
         rirActual: exerciseRir,
       }],
@@ -310,12 +390,7 @@ export function SegmentCard({
       });
     }
 
-    useTimerStore.getState().initEntry({
-      segmentId: segment.id,
-      segmentTotal: null,
-      restTotal: exercise.restSeconds ?? 90,
-    });
-    useTimerStore.getState().startRest(segment.id);
+    startExerciseRest(exercise);
 
     if (nextDoneSetKeys.size >= totalSetCount) {
       onAllSetsSaved(segment.id);
@@ -393,7 +468,7 @@ export function SegmentCard({
       rows: uncheckedRows.map(({ setIndex, row }) => ({
         programExerciseId,
         orderIndex: setIndex + 1,
-        weightKg: Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null,
+        weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null),
         repsCompleted: Number.isFinite(parseInt(row.reps, 10)) ? parseInt(row.reps, 10) || null : null,
         rirActual: exerciseRir,
       })),
@@ -435,12 +510,7 @@ export function SegmentCard({
       });
     }
 
-    useTimerStore.getState().initEntry({
-      segmentId: segment.id,
-      segmentTotal: null,
-      restTotal: exercise.restSeconds ?? 90,
-    });
-    useTimerStore.getState().startRest(segment.id);
+    startExerciseRest(exercise);
 
     if (nextDoneSetKeys.size >= totalSetCount) {
       onAllSetsSaved(segment.id);
@@ -448,7 +518,7 @@ export function SegmentCard({
   }
 
   return (
-    <View style={styles.card}>
+    <View style={styles.card} onLayout={onLayout}>
       <View style={styles.headerRow}>
         <View style={styles.headerCopy}>
           <Text style={styles.segmentName}>{segment.segmentName}</Text>
@@ -509,8 +579,15 @@ export function SegmentCard({
                   const programExerciseId = exercise.id ?? "";
                   const exerciseId = exercise.exerciseId ?? programExerciseId;
 
+                  const isComplete = completedExerciseIds.has(programExerciseId);
+                  const summary = isComplete
+                    ? formatExerciseSummary(exercise, inputMap[programExerciseId], doneSetKeys)
+                    : null;
                   return (
-                    <View key={exercise.id ?? `${segment.id}-exercise-${index}`} style={styles.exerciseRow}>
+                    <View
+                      key={exercise.id ?? `${segment.id}-exercise-${index}`}
+                      style={[styles.exerciseRow, isComplete && styles.exerciseRowComplete]}
+                    >
                       <PressableScale
                         style={styles.exerciseNamePressable}
                         onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
@@ -522,6 +599,11 @@ export function SegmentCard({
                       {line2 ? (
                         <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
                           {line2}
+                        </Text>
+                      ) : null}
+                      {summary ? (
+                        <Text style={styles.exerciseCompleteSummary} numberOfLines={1} ellipsizeMode="tail">
+                          {summary}
                         </Text>
                       ) : null}
                       {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
@@ -553,6 +635,34 @@ export function SegmentCard({
                           </PressableScale>
                         );
                       })()}
+                      {hasLoggableExercises ? (
+                        <PressableScale
+                          style={[
+                            styles.exerciseActionButton,
+                            inlineLoggingOpen && !isComplete && styles.exerciseActionButtonStop,
+                            isComplete && styles.exerciseActionButtonDisabled,
+                          ]}
+                          disabled={isComplete}
+                          onPress={() => {
+                            if (inlineLoggingOpen) {
+                              panelScrolledRef.current = false;
+                              void handleStopExercise(exercise);
+                              return;
+                            }
+                            setInlineLoggingOpen(true);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.exerciseActionLabel,
+                              inlineLoggingOpen && !isComplete && styles.exerciseActionLabelStop,
+                              isComplete && styles.exerciseActionLabelDisabled,
+                            ]}
+                          >
+                            {isComplete ? "Exercise Complete" : inlineLoggingOpen ? "Stop Exercise" : "Start Exercise"}
+                          </Text>
+                        </PressableScale>
+                      ) : null}
                     </View>
                   );
                 })
@@ -565,7 +675,18 @@ export function SegmentCard({
       </View>
 
       {inlineLoggingOpen ? (
-        <View style={styles.inlinePanel}>
+        <View
+          ref={inlinePanelRef}
+          style={styles.inlinePanel}
+          onLayout={() => {
+            if (!panelScrolledRef.current) {
+              panelScrolledRef.current = true;
+              inlinePanelRef.current?.measure((_x, _y, _w, _h, _pageX, pageY) => {
+                onInlinePanelOpen?.(pageY);
+              });
+            }
+          }}
+        >
           <View style={styles.inlinePanelHeader}>
             <View />
             <PressableScale style={styles.closeLink} onPress={() => setInlineLoggingOpen(false)}>
@@ -589,8 +710,38 @@ export function SegmentCard({
                   setRestDisplaySeconds(0);
                 }}
               >
-                <Text style={styles.restStripSkipLabel}>Skip</Text>
+                <Text style={styles.restStripSkipLabel}>Reset</Text>
               </PressableScale>
+              <PressableScale
+                style={styles.restAdjustChip}
+                onPress={() => setShowAdjustControls((current) => !current)}
+              >
+                <Text style={styles.restStripSkipLabel}>Adjust</Text>
+              </PressableScale>
+              {showAdjustControls ? (
+                <View style={styles.restAdjustControls}>
+                  {[
+                    { label: "-", delta: -15, longDelta: -60 },
+                    { label: "+", delta: 15, longDelta: 60 },
+                  ].map((button) => (
+                    <PressableScale
+                      key={button.label}
+                      style={styles.restAdjustButton}
+                      onPress={() => {
+                        const overrideKey = restEntry?.restOverrideKey ?? null;
+                        useTimerStore.getState().adjustRestDuration(segment.id, button.delta, overrideKey);
+                      }}
+                      onLongPress={() => {
+                        const overrideKey = restEntry?.restOverrideKey ?? null;
+                        useTimerStore.getState().adjustRestDuration(segment.id, button.longDelta, overrideKey);
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }}
+                    >
+                      <Text style={styles.restStripSkipLabel}>{button.label}</Text>
+                    </PressableScale>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -599,7 +750,7 @@ export function SegmentCard({
               <SkeletonBlock height={160} />
             </View>
           ) : (
-            loadableExercises.map((exercise) => {
+            loggableExercises.map((exercise) => {
               const exerciseKey = exercise.id ?? "";
               const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
               const setInputs = inputMap[exerciseKey] ?? Array.from({ length: getExerciseSetCount(exercise) }, () => ({
@@ -622,22 +773,28 @@ export function SegmentCard({
                             <Text style={styles.pbBadgeText}>PB</Text>
                           </View>
                         ) : null}
-                        <View style={styles.weightInputGroup}>
-                          <TextInput
-                            value={setInput.weight}
-                            onChangeText={(value) => {
-                              const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
-                              updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, weight: sanitized }));
-                            }}
-                            keyboardType="decimal-pad"
-                            placeholder="0"
-                            placeholderTextColor={colors.textSecondary}
-                            style={[styles.inputField, isDone && styles.inputFieldDone]}
-                          />
-                          <View style={styles.inputSuffixWrap}>
-                            <Text style={[styles.inputSuffix, isDone && styles.inputSuffixDone]}>kg</Text>
+                        {isUnloadedExercise(exercise) ? (
+                          <View style={styles.weightInputGroup}>
+                            <Text style={[styles.bodyweightDash, isDone && styles.inputFieldDone]}>—</Text>
                           </View>
-                        </View>
+                        ) : (
+                          <View style={styles.weightInputGroup}>
+                            <TextInput
+                              value={setInput.weight}
+                              onChangeText={(value) => {
+                                const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
+                                updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, weight: sanitized }));
+                              }}
+                              keyboardType="decimal-pad"
+                              placeholder="0"
+                              placeholderTextColor={colors.textSecondary}
+                              style={[styles.inputField, isDone && styles.inputFieldDone]}
+                            />
+                            <View style={styles.inputSuffixWrap}>
+                              <Text style={[styles.inputSuffix, isDone && styles.inputSuffixDone]}>kg</Text>
+                            </View>
+                          </View>
+                        )}
                         <View style={styles.repsInputGroup}>
                           <TextInput
                             value={setInput.reps}
@@ -745,14 +902,7 @@ export function SegmentCard({
         </View>
       ) : null}
 
-      {!isLogged && hasLoadableExercises ? (
-        <PressableScale
-          style={styles.logButton}
-          onPress={() => setInlineLoggingOpen(true)}
-        >
-          <Text style={styles.logButtonLabel}>{initialized ? "Resume" : "Start Exercise"}</Text>
-        </PressableScale>
-      ) : null}
+      {!isLogged && hasLoggableExercises && !inlineLoggingOpen ? null : null}
     </View>
   );
 }
@@ -882,6 +1032,10 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: 4,
   },
+  exerciseRowComplete: {
+    backgroundColor: colors.surface,
+    opacity: 0.65,
+  },
   exerciseNamePressable: {
     alignSelf: "flex-start",
   },
@@ -893,6 +1047,40 @@ const styles = StyleSheet.create({
   exerciseMeta: {
     color: colors.textSecondary,
     ...typography.small,
+  },
+  exerciseCompleteSummary: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  exerciseActionButton: {
+    alignSelf: "flex-start",
+    minHeight: 34,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: spacing.xs,
+  },
+  exerciseActionButtonStop: {
+    backgroundColor: colors.warning,
+  },
+  exerciseActionButtonDisabled: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  exerciseActionLabel: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "700",
+  },
+  exerciseActionLabelStop: {
+    color: colors.background,
+  },
+  exerciseActionLabelDisabled: {
+    color: colors.textSecondary,
   },
   restRow: {
     flexDirection: "row",
@@ -1022,6 +1210,12 @@ const styles = StyleSheet.create({
   },
   inputSuffixDone: {
     color: colors.textSecondary,
+  },
+  bodyweightDash: {
+    flex: 1,
+    color: colors.textPrimary,
+    ...typography.body,
+    textAlign: "center",
   },
   exerciseRirBlock: {
     gap: spacing.xs,
@@ -1153,6 +1347,23 @@ const styles = StyleSheet.create({
     color: colors.accent,
     ...typography.small,
     fontWeight: "600",
+  },
+  restAdjustChip: {
+    alignSelf: "flex-start",
+  },
+  restAdjustControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  restAdjustButton: {
+    minWidth: 28,
+    minHeight: 28,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   segmentRestRow: {
     flexDirection: "row",

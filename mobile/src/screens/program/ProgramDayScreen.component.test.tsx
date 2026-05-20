@@ -10,7 +10,7 @@ import { getProgramEndCheck } from "../../api/programCompletion";
 import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
-import { getSegmentLog, getWorkoutComplete, setWorkoutComplete } from "../../utils/localWorkoutLog";
+import { allExercisesComplete, getSegmentLog, getWorkoutComplete, setWorkoutComplete } from "../../utils/localWorkoutLog";
 import { captureAndShare } from "../../utils/shareCard";
 import {
   buildExercise,
@@ -120,6 +120,9 @@ vi.mock("../../utils/localWorkoutLog", () => ({
   setSegmentLog: vi.fn().mockResolvedValue(undefined),
   getWorkoutComplete: vi.fn().mockResolvedValue(false),
   setWorkoutComplete: vi.fn().mockResolvedValue(undefined),
+  getExerciseComplete: vi.fn().mockResolvedValue(false),
+  setExerciseComplete: vi.fn().mockResolvedValue(undefined),
+  allExercisesComplete: vi.fn().mockResolvedValue(true),
   hasAnySegmentLog: vi.fn().mockResolvedValue(false),
   getDayStatus: vi.fn().mockResolvedValue("scheduled"),
   _resetForTest: vi.fn(),
@@ -206,6 +209,7 @@ const getProgramEndCheckMock = vi.mocked(getProgramEndCheck);
 const getWorkoutCompleteMock = vi.mocked(getWorkoutComplete);
 const getSegmentLogMock = vi.mocked(getSegmentLog);
 const setWorkoutCompleteMock = vi.mocked(setWorkoutComplete);
+const allExercisesCompleteMock = vi.mocked(allExercisesComplete);
 const captureAndShareMock = vi.mocked(captureAndShare);
 
 const markDayMutateMock = vi.fn();
@@ -299,6 +303,7 @@ describe("ProgramDayScreen", () => {
     completeProgramMutateMock.mockResolvedValue({ ok: true });
     getWorkoutCompleteMock.mockResolvedValue(false);
     getSegmentLogMock.mockResolvedValue(null);
+    allExercisesCompleteMock.mockResolvedValue(true);
     setWorkoutCompleteMock.mockResolvedValue(undefined);
     captureAndShareMock.mockReset();
     captureAndShareMock.mockResolvedValue(undefined);
@@ -521,6 +526,17 @@ describe("ProgramDayScreen", () => {
 
     expect(await screen.findByRole("dialog", { name: "Session summary" })).toBeInTheDocument();
     expect(screen.getByText("Great work")).toBeInTheDocument();
+  });
+
+  it("calls allExercisesComplete on mount with the day's exercise IDs", async () => {
+    renderScreen();
+
+    await waitFor(() =>
+      expect(allExercisesCompleteMock).toHaveBeenCalledWith(
+        "day-1",
+        expect.arrayContaining(["ex-1", "ex-2"]),
+      ),
+    );
   });
 
   it("navigates to the end-check screen when completion with skips is available", async () => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { SectionCard } from "../../components/onboarding/SectionCard";
@@ -145,7 +145,7 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
           {loading ? (
             <Text style={styles.muted}>Loading your recommended split...</Text>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            <View style={styles.chipRow}>
               {currentFocuses.map((focus, index) => (
                 <PressableScale
                   key={`${index}-${focus}`}
@@ -157,7 +157,7 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
                   <Text style={styles.focusLabel}>{FOCUS_LABELS[focus] ?? focus}</Text>
                 </PressableScale>
               ))}
-            </ScrollView>
+            </View>
           )}
           {modified ? (
             <PressableScale
@@ -194,11 +194,14 @@ const styles = StyleSheet.create({
     ...typography.body,
   },
   chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
     paddingVertical: spacing.xs,
   },
   dayChip: {
-    width: 104,
+    flex: 1,
+    minWidth: 72,
     minHeight: 88,
     borderRadius: radii.card,
     borderWidth: 1,

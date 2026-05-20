@@ -9,7 +9,7 @@ describe("useTimerStore", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
-    useTimerStore.setState({ entries: {}, activeSegmentId: null });
+    useTimerStore.setState({ entries: {}, restOverrides: {}, activeSegmentId: null });
   });
 
   afterEach(() => {
