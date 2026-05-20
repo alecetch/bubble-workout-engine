@@ -52,7 +52,6 @@ import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
 import { equipmentRegenRouter } from "./src/routes/equipmentRegen.js";
-import { splitRecommendationRouter } from "./src/routes/splitRecommendation.js";
 import {
   uploadSingle,
   handleCheckInSubmit,
@@ -793,7 +792,6 @@ app.use("/api", programCompletionRouter);
 app.use("/api", programDayActionsRouter);
 app.use("/api", debugAllowedExercisesRouter);
 app.use("/api", referralRouter);
-app.use("/api", splitRecommendationRouter);
 
 // Canonical /api-prefixed mounts (new).
 app.get("/api/v1/history/programs", ...userAuth, createHistoryProgramsHandler(pool));
