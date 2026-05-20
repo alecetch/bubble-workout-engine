@@ -162,6 +162,26 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     dayBlockSemanticsByFocus[focus] = localSemantics;
   }
 
+  // Build the final merged block-semantics-by-focus map.
+  // pgcJson?.segmentation?.block_semantics_by_focus takes precedence (it's spread first),
+  // then dayBlockSemanticsByFocus overrides it per focus.
+  const mergedBlockSemanticsByFocus = {
+    ...(pgcJson?.segmentation?.block_semantics_by_focus ?? {}),
+    ...dayBlockSemanticsByFocus,
+  };
+
+  // Push and pull inherit upper_body block semantics; legs inherits lower_body.
+  // The guard prevents overwriting explicit PPL semantics defined in a future PGC config.
+  if (!mergedBlockSemanticsByFocus["push"] && mergedBlockSemanticsByFocus["upper_body"]) {
+    mergedBlockSemanticsByFocus["push"] = mergedBlockSemanticsByFocus["upper_body"];
+  }
+  if (!mergedBlockSemanticsByFocus["pull"] && mergedBlockSemanticsByFocus["upper_body"]) {
+    mergedBlockSemanticsByFocus["pull"] = mergedBlockSemanticsByFocus["upper_body"];
+  }
+  if (!mergedBlockSemanticsByFocus["legs"] && mergedBlockSemanticsByFocus["lower_body"]) {
+    mergedBlockSemanticsByFocus["legs"] = mergedBlockSemanticsByFocus["lower_body"];
+  }
+
   return {
     programType,
     schemaVersion,
@@ -179,10 +199,7 @@ export async function resolveCompiledConfig(dbClient, { programType, schemaVersi
     },
     segmentation: {
       blockSemantics: pgcJson?.segmentation?.block_semantics ?? null,
-      blockSemanticsByFocus: {
-        ...(pgcJson?.segmentation?.block_semantics_by_focus ?? {}),
-        ...dayBlockSemanticsByFocus,
-      },
+      blockSemanticsByFocus: mergedBlockSemanticsByFocus,
     },
     progression: {
       progressionByRank: pgcRow?.progression_by_rank_json ?? {},

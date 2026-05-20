@@ -160,7 +160,7 @@ describe("Step3ScheduleMetricsScreen", () => {
     expect(updateProfileMutateAsyncMock).not.toHaveBeenCalled();
   });
 
-  it("saves and navigates to ProgramReview on success", async () => {
+  it("saves and navigates to SplitReview on success", async () => {
     const navigation = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "Finish" }));
@@ -177,7 +177,7 @@ describe("Step3ScheduleMetricsScreen", () => {
         onboardingStepCompleted: 3,
         onboardingCompletedAt: expect.any(String),
       }));
-      expect(navigation.navigate).toHaveBeenCalledWith("ProgramReview");
+      expect(navigation.navigate).toHaveBeenCalledWith("SplitReview");
     });
   });
 

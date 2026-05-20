@@ -53,6 +53,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/onboarding/FocusPickerSheet.tsx",
+      "test": "src/screens/onboarding/SplitReviewScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/onboarding/MultilineField.tsx",
       "test": "src/components/onboarding/MultilineField.component.test.tsx",
       "status": "covered",
@@ -525,6 +535,16 @@
       "type": "screen",
       "source": "src/screens/onboarding/Step3ScheduleMetricsScreen.tsx",
       "test": "src/screens/onboarding/Step3ScheduleMetricsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/SplitReviewScreen.tsx",
+      "test": "src/screens/onboarding/SplitReviewScreen.component.test.tsx",
       "status": "covered",
       "tags": [
         "onboarding"

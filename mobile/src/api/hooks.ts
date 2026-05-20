@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "./client";
 import {
   useInfiniteQuery,
   useMutation,
@@ -710,4 +711,25 @@ export function usePhysiqueMilestones() {
     queryFn: getMilestones,
     staleTime: 5 * 60 * 1000,
   });
+}
+
+export type SplitRecommendationResponse = {
+  ok: boolean;
+  programType: string;
+  daysPerWeek: number;
+  recommendation: string[];
+  existingPreference: string[] | null;
+  existingModifiedByUser: boolean;
+};
+
+export function useSplitRecommendation(): UseQueryResult<SplitRecommendationResponse> {
+  return useQuery({
+    queryKey: ["split-recommendation"] as const,
+    queryFn: () => fetchSplitRecommendation(),
+    staleTime: 0,
+  });
+}
+
+function fetchSplitRecommendation(): Promise<SplitRecommendationResponse> {
+  return authenticatedFetch<SplitRecommendationResponse>("/api/split-recommendation");
 }

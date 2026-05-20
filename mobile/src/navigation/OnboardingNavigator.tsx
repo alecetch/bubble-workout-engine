@@ -21,6 +21,7 @@ import { SubstitutionProgressScreen } from "../screens/program/SubstitutionProgr
 import type { ExerciseDetailParams } from "../screens/program/ExerciseDetailScreen";
 import { ProgramEndCheckScreen } from "../screens/program/ProgramEndCheckScreen";
 import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
+import { SplitReviewScreen } from "../screens/onboarding/SplitReviewScreen";
 import { colors } from "../theme/colors";
 import { spacing } from "../theme/spacing";
 import { typography } from "../theme/typography";
@@ -33,6 +34,10 @@ export type OnboardingStackParamList = {
   Step2Equipment: undefined;
   Step2bBaselineLoads: undefined;
   Step3Schedule: undefined;
+  SplitReview: {
+    fromRecalibrate?: boolean;
+    programId?: string;
+  } | undefined;
   ProgramReview: {
     preserveDraft?: boolean;
   } | undefined;
@@ -119,6 +124,7 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="RecalibrateA" component={RecalibrateScreenA} options={stepTransitionOptions} />
       <Stack.Screen name="RecalibrateB" component={RecalibrateScreenB} options={stepTransitionOptions} />
       <Stack.Screen name="SubstitutionProgress" component={SubstitutionProgressScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="SplitReview" component={SplitReviewScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramReview" component={ProgramReviewScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreenDeferred} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramDay" component={ProgramDayScreenDeferred} options={{ ...stepTransitionOptions, headerShown: true }} />
