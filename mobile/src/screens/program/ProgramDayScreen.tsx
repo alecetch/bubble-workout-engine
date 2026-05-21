@@ -28,11 +28,13 @@ import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import {
   getSegmentLog,
+  allExercisesComplete,
   getWorkoutComplete,
   setSegmentLog,
   setWorkoutComplete,
   type SegmentLogEntry,
 } from "../../utils/localWorkoutLog";
+import { useSettingsStore } from "../../state/settings/useSettingsStore";
 import { captureAndShare } from "../../utils/shareCard";
 import { getAppStorage } from "../../utils/appStorage";
 
@@ -129,6 +131,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [segmentLogs, setSegmentLogs] = useState<Record<string, SegmentLogEntry>>({});
   const [segmentLogRows, setSegmentLogRows] = useState<Record<string, SaveSegmentLogPayload["rows"]>>({});
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
+  const [allExerciseCardsComplete, setAllExerciseCardsComplete] = useState(false);
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [swapSheetVisible, setSwapSheetVisible] = useState(false);
   const [swapTargetProgramExerciseId, setSwapTargetProgramExerciseId] = useState<string | null>(null);
@@ -145,10 +148,17 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [weekShareCardReady, setWeekShareCardReady] = useState(false);
   const [isSharingWeek, setIsSharingWeek] = useState(false);
   const weekCardRef = useRef<View>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollOffsetY = useRef(0);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
   const programId = dayQuery.data?.day?.programId ?? activeProgramId ?? "";
   const currentWeekNumber = dayQuery.data?.day?.weekNumber ?? null;
   const nav = navigation as unknown as NativeStackNavigationProp<ProgramsStackParamList>;
+  const hydrateSettings = useSettingsStore((state) => state.hydrate);
+
+  useEffect(() => {
+    void hydrateSettings();
+  }, [hydrateSettings]);
 
   useFocusEffect(
     useCallback(() => {
@@ -203,6 +213,15 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     return [...segments].sort((a, b) => a.orderInDay - b.orderInDay);
   }, [dayQuery.data?.segments]);
 
+  const allExerciseIds = useMemo(
+    () => orderedSegments.flatMap((segment) => segment.exercises.map((exercise) => exercise.id).filter((id): id is string => Boolean(id))),
+    [orderedSegments],
+  );
+
+  const refreshExerciseCompletion = useCallback(() => {
+    void allExercisesComplete(programDayId, allExerciseIds).then(setAllExerciseCardsComplete);
+  }, [allExerciseIds, programDayId]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -224,13 +243,14 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
 
       setSegmentLogs(logsMap);
       setWorkoutCompleteState(completion);
+      setAllExerciseCardsComplete(await allExercisesComplete(programDayId, allExerciseIds));
     }
 
     void loadLocalState();
     return () => {
       cancelled = true;
     };
-  }, [orderedSegments, programDayId]);
+  }, [allExerciseIds, orderedSegments, programDayId]);
 
   useEffect(() => {
     if (!workoutComplete || weekShareVisible || !programId || !userId) return;
@@ -554,9 +574,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   return (
     <View style={styles.root}>
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        onScroll={(e) => { scrollOffsetY.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={100}
       >
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>{day.label ?? "Workout Day"}</Text>
@@ -599,13 +622,23 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
               parent?.navigate("HomeTab", { screen: "Paywall" } as never);
             }}
             onPrsDetected={handlePrsDetected}
+            onExerciseCompleteChange={refreshExerciseCompletion}
+            onInlinePanelOpen={(pageY) => {
+              const targetScreenY = 100;
+              const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
+            }}
           />
         ))}
       </ScrollView>
 
       <View style={styles.bottomBar}>
         <PressableScale
-          style={[styles.completeButton, workoutComplete && styles.completeButtonDone]}
+          style={[
+            styles.completeButton,
+            workoutComplete && styles.completeButtonDone,
+            !workoutComplete && !allExerciseCardsComplete && styles.completeButtonDisabled,
+          ]}
           onPress={() => setSummaryVisible(true)}
         >
           <Text style={styles.completeButtonLabel}>Workout complete</Text>
@@ -949,6 +982,9 @@ const styles = StyleSheet.create({
   },
   completeButtonDone: {
     backgroundColor: colors.success,
+  },
+  completeButtonDisabled: {
+    opacity: 0.45,
   },
   completeButtonLabel: {
     color: colors.textPrimary,

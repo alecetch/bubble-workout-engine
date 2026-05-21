@@ -57,7 +57,8 @@
       "test": "src/screens/onboarding/SplitReviewScreen.component.test.tsx",
       "status": "covered",
       "tags": [
-        "onboarding"
+        "onboarding",
+        "split"
       ],
       "reason": ""
     },
@@ -503,6 +504,17 @@
     },
     {
       "type": "screen",
+      "source": "src/screens/onboarding/SplitReviewScreen.tsx",
+      "test": "src/screens/onboarding/SplitReviewScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding",
+        "split"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
       "source": "src/screens/onboarding/Step1GoalsScreen.tsx",
       "test": "src/screens/onboarding/Step1GoalsScreen.component.test.tsx",
       "status": "covered",
@@ -535,16 +547,6 @@
       "type": "screen",
       "source": "src/screens/onboarding/Step3ScheduleMetricsScreen.tsx",
       "test": "src/screens/onboarding/Step3ScheduleMetricsScreen.component.test.tsx",
-      "status": "covered",
-      "tags": [
-        "onboarding"
-      ],
-      "reason": ""
-    },
-    {
-      "type": "screen",
-      "source": "src/screens/onboarding/SplitReviewScreen.tsx",
-      "test": "src/screens/onboarding/SplitReviewScreen.component.test.tsx",
       "status": "covered",
       "tags": [
         "onboarding"

@@ -75,10 +75,9 @@ export function buildInitialSetInputMap(
   const initial: Record<string, SetInputState[]> = {};
 
   for (const ex of exercises) {
-    if (ex.isLoadable !== true) continue;
     const key = ex.id ?? "";
     const setCount = getExerciseSetCount(ex);
-    const prefillWeight = guidelinePrefill(ex);
+    const prefillWeight = ex.isLoadable === false || ex.isUnloaded === true ? "" : guidelinePrefill(ex);
     const prefillReps = repsPrefill(ex);
     initial[key] = Array.from({ length: setCount }, () => ({
       weight: prefillWeight,
@@ -108,13 +107,24 @@ export function buildSegmentLogRows(
 
   exercises.forEach((ex) => {
     const key = ex.id ?? "";
-    if (ex.isLoadable !== true) {
-      rows.push({
-        programExerciseId: key,
-        orderIndex: 1,
-        weightKg: null,
-        repsCompleted: null,
-        rirActual: null,
+    if (ex.isLoadable === false || ex.isUnloaded === true) {
+      const sets = inputMap[key] ?? [];
+      const fallbackSets = sets.length > 0
+        ? sets
+        : Array.from({ length: getExerciseSetCount(ex) }, () => ({
+            weight: "",
+            reps: repsPrefill(ex),
+            rirActual: null,
+          }));
+      fallbackSets.forEach((set, i) => {
+        const rRaw = parseInt(set.reps, 10);
+        rows.push({
+          programExerciseId: key,
+          orderIndex: i + 1,
+          weightKg: null,
+          repsCompleted: Number.isInteger(rRaw) && rRaw > 0 ? rRaw : null,
+          rirActual: set.rirActual ?? null,
+        });
       });
       return;
     }

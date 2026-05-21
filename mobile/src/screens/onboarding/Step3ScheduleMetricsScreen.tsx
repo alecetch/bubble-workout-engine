@@ -13,7 +13,6 @@ import { useErrorPulse } from "../../components/onboarding/useErrorPulse";
 import { DayChipRow } from "../../components/onboarding/DayChipRow";
 import { SelectField } from "../../components/onboarding/SelectField";
 import { NumericField } from "../../components/onboarding/NumericField";
-import { MultilineField } from "../../components/onboarding/MultilineField";
 import { hapticHeavy } from "../../components/interaction/haptics";
 import { useMe, useUpdateClientProfile } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -37,20 +36,18 @@ import type { OnboardingStackParamList } from "../../navigation/OnboardingNaviga
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Step3Schedule">;
 
-type SectionKey = "preferredDays" | "sessionSettings" | "bodyMetrics" | "scheduleConstraints";
+type SectionKey = "preferredDays" | "sessionSettings" | "bodyMetrics";
 
 const SECTION_ORDER: SectionKey[] = [
   "preferredDays",
   "sessionSettings",
   "bodyMetrics",
-  "scheduleConstraints",
 ];
 
 const SECTION_ERROR_KEYS: Record<SectionKey, string[]> = {
   preferredDays: ["preferredDays"],
   sessionSettings: ["minutesPerSession", "sex", "ageRange"],
   bodyMetrics: ["heightCm", "weightKg"],
-  scheduleConstraints: ["scheduleConstraints"],
 };
 
 export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Element {
@@ -59,13 +56,11 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
     preferredDays: 0,
     sessionSettings: 0,
     bodyMetrics: 0,
-    scheduleConstraints: 0,
   });
 
   const preferredDaysPulse = useErrorPulse();
   const sessionSettingsPulse = useErrorPulse();
   const bodyMetricsPulse = useErrorPulse();
-  const scheduleConstraintsPulse = useErrorPulse();
 
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? "";
@@ -159,12 +154,6 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
     updateValidation(nextDraft);
   };
 
-  const handleScheduleConstraintsChange = (scheduleConstraints: string): void => {
-    const nextDraft = { ...draft, scheduleConstraints };
-    setDraft({ scheduleConstraints });
-    updateValidation(nextDraft);
-  };
-
   const recordSectionLayout = (section: SectionKey) => (event: LayoutChangeEvent): void => {
     sectionOffsetsRef.current[section] = event.nativeEvent.layout.y;
   };
@@ -178,11 +167,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
       sessionSettingsPulse.pulse();
       return;
     }
-    if (section === "bodyMetrics") {
-      bodyMetricsPulse.pulse();
-      return;
-    }
-    scheduleConstraintsPulse.pulse();
+    bodyMetricsPulse.pulse();
   };
 
   const scrollToSection = (section: SectionKey): void => {
@@ -241,7 +226,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
         onboardingStepCompleted: 3,
         onboardingCompletedAt: new Date().toISOString(),
       });
-      navigation.navigate("SplitReview");
+      navigation.navigate("SplitReview", { daysPerWeek: draft.preferredDays.length || undefined });
     } catch {
       await hapticHeavy();
       setFieldErrors({ preferredDays: "Unable to save this step. Please try again." });
@@ -331,20 +316,6 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
         </SectionCard>
       </Animated.View>
 
-      <Animated.View
-        onLayout={recordSectionLayout("scheduleConstraints")}
-        style={scheduleConstraintsPulse.animatedStyle}
-      >
-        <SectionCard title="Schedule constraints" subtitle="Optional notes about your week.">
-          <MultilineField
-            label="Constraints"
-            value={draft.scheduleConstraints}
-            onChangeText={handleScheduleConstraintsChange}
-            placeholder="Travel days, fixed class times, recovery constraints..."
-            error={fieldErrors.scheduleConstraints}
-          />
-        </SectionCard>
-      </Animated.View>
     </OnboardingScaffold>
   );
 }

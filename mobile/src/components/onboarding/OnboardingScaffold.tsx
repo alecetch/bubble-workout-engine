@@ -27,6 +27,8 @@ type OnboardingScaffoldProps = {
   nextDisabled: boolean;
   isSaving: boolean;
   scrollViewRef?: RefObject<ScrollView | null>;
+  scrollViewTestID?: string;
+  nextTestID?: string;
 };
 
 const NAV_BAR_HEIGHT = 92;
@@ -43,6 +45,8 @@ export function OnboardingScaffold({
   nextDisabled,
   isSaving,
   scrollViewRef,
+  scrollViewTestID,
+  nextTestID,
 }: OnboardingScaffoldProps): React.JSX.Element {
   return (
     <KeyboardAvoidingView
@@ -56,6 +60,7 @@ export function OnboardingScaffold({
       </View>
 
       <ScrollView
+        testID={scrollViewTestID}
         ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -72,6 +77,7 @@ export function OnboardingScaffold({
         nextLabel={nextLabel}
         nextDisabled={nextDisabled}
         isSaving={isSaving}
+        nextTestID={nextTestID}
       />
     </KeyboardAvoidingView>
   );

@@ -167,8 +167,8 @@ appId: com.bubbleworkout.mobile
 - tapOn: "Finish"
 
 - extendedWaitUntil:
-    id: "split-review-screen"
-    timeout: 20000
+    visible: "Your training split"
+    timeout: 15000
 - tapOn:
     id: "split-continue-button"
 

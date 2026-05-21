@@ -248,12 +248,15 @@ function nextPreferredOffset(anchorIdx, prefs) {
   }
   return 0;
 }
-function scheduledOffsetDays(week, day, prefs) {
+function rotatePreferredDaysFromStart(startDow, prefs) {
+  if (!prefs.length) return [];
+  return [...prefs].sort((a, b) => ((a - startDow + 7) % 7) - ((b - startDow + 7) % 7));
+}
+function scheduledOffsetDaysFromStart(week, day, startDow, prefs) {
   const base = (week - 1) * 7;
   if (!prefs.length || prefs.length < day) return base + (day - 1);
-  const start = prefs[0];
   const target = prefs[day - 1];
-  return base + ((target - start + 7) % 7);
+  return base + ((target - startDow + 7) % 7);
 }
 
 /* ------------------ week narration helpers ------------------ */
@@ -597,6 +600,7 @@ export async function emitPlanRows({
   const anchorIdx = anchorDowFromMs(anchorMs);
   const startOff = nextPreferredOffset(anchorIdx, prefsIdx);
   const startDow = (anchorIdx + startOff) % 7;
+  const scheduledPrefsIdx = rotatePreferredDaysFromStart(startDow, prefsIdx);
 
   const prefLabels = [];
   for (let pi = 0; pi < prefsIdx.length; pi++) prefLabels.push(weekdayLabel(prefsIdx[pi]));
@@ -648,8 +652,8 @@ export async function emitPlanRows({
 
       globalDayIndex++;
 
-      const off = scheduledOffsetDays(wk2, dnum, prefsIdx);
-      const dowIdx = (startDow + (off % 7)) % 7;
+      const off = scheduledOffsetDaysFromStart(wk2, dnum, startDow, scheduledPrefsIdx);
+      const dowIdx = scheduledPrefsIdx.length >= dnum ? scheduledPrefsIdx[dnum - 1] : (startDow + (off % 7)) % 7;
 
       const pdKey = "PD_W" + wk2 + "_D" + dnum;
 
@@ -676,6 +680,7 @@ export async function emitPlanRows({
         s(mainText),
         s(secondaryText),
         s(finisherText),
+        s(baseDay.day_focus),
         String(off),
         weekdayLabel(dowIdx),
         s(pdKey),

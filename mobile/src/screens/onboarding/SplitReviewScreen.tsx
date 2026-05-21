@@ -1,362 +1,240 @@
-import React, { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useMe, useSplitRecommendation, useUpdateClientProfile } from "../../api/hooks";
-import { authenticatedFetch } from "../../api/client";
-import { FocusPickerSheet, FOCUS_LABELS } from "../../components/onboarding/FocusPickerSheet";
+import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { SectionCard } from "../../components/onboarding/SectionCard";
+import { FocusPickerSheet } from "../../components/onboarding/FocusPickerSheet";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
+import { patchProgramSplit, useClientProfile, useMe, useSplitRecommendation, useUpdateClientProfile } from "../../api/hooks";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "SplitReview">;
 
-function getBalanceWarning(focuses: string[]): string | null {
-  if (focuses.length === 0) return null;
+const FOCUS_LABELS: Record<string, string> = {
+  full_body: "Full Body",
+  upper_body: "Upper",
+  lower_body: "Lower",
+  push: "Push",
+  pull: "Pull",
+  legs: "Legs",
+};
 
-  // All same focus and it's upper or lower
-  const allSame = focuses.every((f) => f === focuses[0]);
-  if (allSame && (focuses[0] === "upper_body" || focuses[0] === "lower_body" || focuses[0] === "push" || focuses[0] === "pull" || focuses[0] === "legs")) {
+function sameSplit(a: string[], b: string[]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function balanceWarning(focuses: string[]): string | null {
+  if (focuses.length < 2) return null;
+  const allSame = focuses.every((focus) => focus === focuses[0]);
+  if (allSame && (focuses[0] === "upper_body" || focuses[0] === "lower_body")) {
     return "Consider mixing in a full body day to balance your training";
   }
-
-  // 3+ consecutive upper-only or lower-only days
-  const upperFocuses = new Set(["upper_body", "push", "pull"]);
-  const lowerFocuses = new Set(["lower_body", "legs"]);
-
-  let consecutiveUpper = 0;
-  let consecutiveLower = 0;
-  for (const f of focuses) {
-    if (upperFocuses.has(f)) {
-      consecutiveUpper++;
-      consecutiveLower = 0;
-    } else if (lowerFocuses.has(f)) {
-      consecutiveLower++;
-      consecutiveUpper = 0;
+  let streak = 1;
+  for (let i = 1; i < focuses.length; i += 1) {
+    const upperLower = focuses[i] === "upper_body" || focuses[i] === "lower_body";
+    if (upperLower && focuses[i] === focuses[i - 1]) {
+      streak += 1;
+      if (streak >= 3) return "Back-to-back focus days increase fatigue risk";
     } else {
-      consecutiveUpper = 0;
-      consecutiveLower = 0;
-    }
-    if (consecutiveUpper >= 3 || consecutiveLower >= 3) {
-      return "Back-to-back focus days increase fatigue risk";
+      streak = 1;
     }
   }
-
   return null;
 }
 
-export function SplitReviewScreen({ route, navigation }: Props): React.JSX.Element {
-  const params = route.params ?? {};
-  const fromRecalibrate = params.fromRecalibrate === true;
-  const programId = params.programId ?? null;
-
+export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Element {
+  const splitQuery = useSplitRecommendation({
+    daysPerWeek: route.params?.daysPerWeek,
+    programType: route.params?.programType,
+  });
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? "";
-  const splitQuery = useSplitRecommendation();
-  const updateClientProfile = useUpdateClientProfile(profileId || "");
-
+  const profileQuery = useClientProfile(profileId);
+  const updateProfile = useUpdateClientProfile(profileId);
   const [currentFocuses, setCurrentFocuses] = useState<string[]>([]);
   const [pickerOpenIndex, setPickerOpenIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const initialized = useRef(false);
-
-  // Initialize currentFocuses from API response.
-  useEffect(() => {
-    if (splitQuery.data && !initialized.current) {
-      initialized.current = true;
-      setCurrentFocuses(splitQuery.data.existingPreference ?? splitQuery.data.recommendation);
-    }
-  }, [splitQuery.data]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const recommendation = splitQuery.data?.recommendation ?? [];
+  const daysPerWeek = splitQuery.data?.daysPerWeek ?? recommendation.length;
   const programType = splitQuery.data?.programType ?? "hypertrophy";
-  const daysPerWeek = splitQuery.data?.daysPerWeek ?? 3;
 
-  const isModified =
-    currentFocuses.length > 0 &&
-    JSON.stringify(currentFocuses) !== JSON.stringify(recommendation);
+  useEffect(() => {
+    if (splitQuery.data) {
+      setCurrentFocuses(splitQuery.data.existingPreference ?? splitQuery.data.recommendation);
+    } else if (splitQuery.isError) {
+      const fallback = Array(route.params?.daysPerWeek || 3).fill("full_body");
+      setCurrentFocuses((prev) => (prev.length ? prev : fallback));
+    }
+  }, [splitQuery.data, splitQuery.isError, route.params?.daysPerWeek]);
 
-  const balanceWarning = getBalanceWarning(currentFocuses);
+  const dayLabels = useMemo(() => {
+    const preferredDays = Array.isArray(profileQuery.data?.preferredDays) ? profileQuery.data.preferredDays : [];
+    return currentFocuses.map((_, index) => {
+      const day = preferredDays[index];
+      return day ? String(day).slice(0, 3).toUpperCase() : `Day ${index + 1}`;
+    });
+  }, [currentFocuses, profileQuery.data?.preferredDays]);
+
+  const modified = !sameSplit(currentFocuses, recommendation);
+  const warning = balanceWarning(currentFocuses);
 
   async function handleContinue(): Promise<void> {
-    if (isSaving) return;
+    if (!currentFocuses.length || isSaving) return;
     setIsSaving(true);
-
-    const modifiedByUser =
-      JSON.stringify(currentFocuses) !== JSON.stringify(recommendation);
-
+    setSaveError(null);
     const preferredSplitJson = {
       day_focuses: currentFocuses,
-      modified_by_user: modifiedByUser,
+      modified_by_user: modified,
     };
-
-    if (profileId) {
-      try {
-        await updateClientProfile.mutateAsync({ preferredSplitJson } as Parameters<typeof updateClientProfile.mutateAsync>[0]);
-      } catch (err) {
-        console.error("[SplitReview] profile patch failed, proceeding", err);
+    try {
+      if (profileId) {
+        await updateProfile.mutateAsync({ preferredSplitJson });
       }
+    } catch (err) {
+      console.error("[SplitReview] profile patch failed, proceeding", err);
+      setSaveError("We could not save this split, but you can continue.");
     }
 
-    if (fromRecalibrate && programId) {
-      try {
-        await authenticatedFetch(`/api/programs/${programId}/split`, {
-          method: "PATCH",
-          body: { day_focuses: currentFocuses },
-        });
-      } catch (err) {
-        console.error("[SplitReview] split patch failed, proceeding", err);
+    if (route.params?.fromRecalibrate) {
+      if (!route.params.programId) {
+        setSaveError("Your split was saved, but no active program was found to update.");
+        setIsSaving(false);
+        return;
       }
-      setIsSaving(false);
-      navigation.popToTop();
-    } else {
-      setIsSaving(false);
-      navigation.navigate("ProgramReview");
+      try {
+        await patchProgramSplit(route.params.programId, currentFocuses);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Please try again.";
+        console.error("[SplitReview] split patch failed", err);
+        setSaveError(`Your split was saved, but the active program could not be updated. ${message}`);
+        setIsSaving(false);
+        return;
+      }
+      navigation.navigate("ProgramDashboard", { programId: route.params.programId });
+      return;
     }
+
+    navigation.navigate("ProgramReview");
+    setIsSaving(false);
   }
 
-  if (splitQuery.isLoading || meQuery.isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={styles.loadingText}>Loading your split...</Text>
-      </View>
-    );
-  }
-
-  if (splitQuery.isError) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Unable to load split recommendation.</Text>
-        <PressableScale style={styles.retryButton} onPress={() => void splitQuery.refetch()}>
-          <Text style={styles.retryLabel}>Retry</Text>
-        </PressableScale>
-      </View>
-    );
-  }
+  const loading = (splitQuery.isLoading || meQuery.isLoading) && !splitQuery.isError && !currentFocuses.length;
 
   return (
-    <View style={styles.root}>
-      <ScrollView
-        testID="split-review-screen"
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <>
+      <OnboardingScaffold
+        step={3}
+        title="Your training split"
+        subtitle={`We've recommended a split for your ${daysPerWeek || ""}-day ${programType} program. Tap any day to adjust.`}
+        errorBannerVisible={Boolean(saveError || splitQuery.isError)}
+        onBack={() => navigation.goBack()}
+        onNext={() => void handleContinue()}
+        nextLabel="Continue"
+        nextDisabled={loading || isSaving}
+        isSaving={isSaving}
+        scrollViewTestID="split-review-screen"
+        nextTestID="split-continue-button"
       >
-        <Text style={styles.title}>Your training split</Text>
-        <Text style={styles.subtitle}>
-          {"We've recommended a split for your "}
-          <Text style={styles.subtitleBold}>{daysPerWeek}</Text>
-          {"-day "}
-          <Text style={styles.subtitleBold}>{programType}</Text>
-          {" program.\nTap any day to adjust."}
-        </Text>
-
-        <SectionCard title="Training days">
-          <View style={styles.chipRow}>
-            {currentFocuses.map((focus, i) => (
-              <TouchableOpacity
-                key={i}
-                testID={`split-day-chip-${i}`}
-                style={styles.chip}
-                onPress={() => setPickerOpenIndex(i)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.chipDayLabel}>Day {i + 1}</Text>
-                <Text style={styles.chipFocusLabel}>{FOCUS_LABELS[focus] ?? focus}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+        <SectionCard title="Weekly focus" subtitle="Accept the recommendation or tune any training day.">
+          {loading ? (
+            <Text style={styles.muted}>Loading your recommended split...</Text>
+          ) : (
+            <View style={styles.chipRow}>
+              {currentFocuses.map((focus, index) => (
+                <PressableScale
+                  key={`${index}-${focus}`}
+                  testID={`split-day-chip-${index}`}
+                  style={styles.dayChip}
+                  onPress={() => setPickerOpenIndex(index)}
+                >
+                  <Text style={styles.dayLabel}>{dayLabels[index]}</Text>
+                  <Text style={styles.focusLabel}>{FOCUS_LABELS[focus] ?? focus}</Text>
+                </PressableScale>
+              ))}
+            </View>
+          )}
+          {modified ? (
+            <PressableScale
+              testID="split-reset-button"
+              style={styles.resetButton}
+              onPress={() => setCurrentFocuses(recommendation)}
+            >
+              <Text style={styles.resetLabel}>Reset to recommended</Text>
+            </PressableScale>
+          ) : null}
+          {warning ? <Text style={styles.warning}>{warning}</Text> : null}
+          {saveError ? <Text style={styles.warning}>{saveError}</Text> : null}
         </SectionCard>
+      </OnboardingScaffold>
 
-        {isModified ? (
-          <TouchableOpacity
-            testID="split-reset-button"
-            style={styles.resetLink}
-            onPress={() => {
-              setCurrentFocuses(recommendation);
-              initialized.current = true;
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.resetLinkText}>Reset to recommended</Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {balanceWarning ? (
-          <View style={styles.warningRow}>
-            <Text style={styles.warningText}>{"⚠ " + balanceWarning}</Text>
-          </View>
-        ) : null}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <PressableScale
-          testID="split-continue-button"
-          style={[styles.continueButton, isSaving && styles.continueButtonDisabled]}
-          onPress={() => void handleContinue()}
-          disabled={isSaving}
-        >
-          <Text style={styles.continueLabel}>
-            {isSaving ? "Saving..." : "Continue"}
-          </Text>
-        </PressableScale>
-      </View>
-
-      {pickerOpenIndex !== null ? (
-        <FocusPickerSheet
-          visible={pickerOpenIndex !== null}
-          currentFocus={currentFocuses[pickerOpenIndex] ?? "full_body"}
-          programType={programType}
-          daysPerWeek={daysPerWeek}
-          onSelect={(focus) => {
-            if (pickerOpenIndex !== null) {
-              const next = [...currentFocuses];
-              next[pickerOpenIndex] = focus;
-              setCurrentFocuses(next);
-            }
-          }}
-          onClose={() => setPickerOpenIndex(null)}
-        />
-      ) : null}
-    </View>
+      <FocusPickerSheet
+        visible={pickerOpenIndex !== null}
+        currentFocus={pickerOpenIndex == null ? "" : currentFocuses[pickerOpenIndex] ?? ""}
+        programType={programType}
+        daysPerWeek={daysPerWeek}
+        onSelect={(focus) => {
+          if (pickerOpenIndex == null) return;
+          setCurrentFocuses((current) => current.map((item, index) => (index === pickerOpenIndex ? focus : item)));
+        }}
+        onClose={() => setPickerOpenIndex(null)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl + 80,
-    gap: spacing.md,
-  },
-  title: {
-    color: colors.textPrimary,
-    ...typography.h2,
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
+  muted: {
     color: colors.textSecondary,
     ...typography.body,
-    marginBottom: spacing.md,
-  },
-  subtitleBold: {
-    color: colors.textPrimary,
-    fontWeight: "600",
   },
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  chip: {
-    backgroundColor: colors.card,
+  dayChip: {
+    flex: 1,
+    minWidth: 72,
+    minHeight: 88,
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    backgroundColor: colors.card,
     alignItems: "center",
-    minWidth: 70,
+    justifyContent: "center",
+    padding: spacing.sm,
+    gap: spacing.xs,
   },
-  chipDayLabel: {
+  dayLabel: {
     color: colors.textSecondary,
     ...typography.small,
-    marginBottom: 2,
+    fontWeight: "700",
   },
-  chipFocusLabel: {
+  focusLabel: {
     color: colors.textPrimary,
     ...typography.body,
-    fontWeight: "600",
+    fontWeight: "700",
     textAlign: "center",
   },
-  resetLink: {
-    alignSelf: "center",
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  resetLinkText: {
-    color: colors.accent,
-    ...typography.small,
-    textDecorationLine: "underline",
-  },
-  warningRow: {
-    backgroundColor: "rgba(250,204,21,0.08)",
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: "rgba(250,204,21,0.2)",
-    padding: spacing.md,
-  },
-  warningText: {
-    color: colors.warning,
-    ...typography.small,
-  },
-  footer: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.background,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  continueButton: {
-    minHeight: 52,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
+  resetButton: {
+    alignSelf: "flex-start",
+    minHeight: 40,
     justifyContent: "center",
-    alignItems: "center",
   },
-  continueButtonDisabled: {
-    opacity: 0.6,
-  },
-  continueLabel: {
-    color: colors.surface,
+  resetLabel: {
+    color: colors.accent,
     ...typography.body,
     fontWeight: "700",
   },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.md,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    ...typography.body,
-  },
-  errorText: {
-    color: colors.error,
-    ...typography.body,
-    textAlign: "center",
-  },
-  retryButton: {
-    minHeight: 44,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: spacing.lg,
-  },
-  retryLabel: {
-    color: colors.surface,
+  warning: {
+    color: colors.warning,
     ...typography.small,
-    fontWeight: "600",
   },
 });

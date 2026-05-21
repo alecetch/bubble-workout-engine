@@ -14,6 +14,53 @@ const GOAL_TO_PROGRAM_TYPE = {
   hyrox_workout: "hyrox",
 };
 
+const TEMPLATE_FOCUS_TO_SLUG = {
+  lower: "lower_body",
+  posterior: "lower_body",
+  lower_strength: "lower_body",
+  posterior_strength: "lower_body",
+  upper: "upper_body",
+  upper_strength: "upper_body",
+  full: "full_body",
+  push: "push",
+  pull: "pull",
+  legs: "legs",
+};
+
+function asJsonObject(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function deriveSplitFromConfig(configJson, daysPerWeek) {
+  const cfg = asJsonObject(configJson);
+  const builder = cfg?.builder && typeof cfg.builder === "object" ? cfg.builder : null;
+  const dpwKeys = builder?.day_templates_by_dpw?.[String(daysPerWeek)] ?? null;
+  const dayTemplates = Array.isArray(builder?.day_templates) ? builder.day_templates : [];
+  if (!Array.isArray(dpwKeys) || dpwKeys.length === 0 || dayTemplates.length === 0) {
+    return null;
+  }
+
+  const templateIndex = Object.fromEntries(
+    dayTemplates.map((template) => [safeString(template?.day_key), template]),
+  );
+  const recommendation = [];
+  for (const key of dpwKeys) {
+    const focus = safeString(templateIndex[safeString(key)]?.focus).toLowerCase();
+    const slug = TEMPLATE_FOCUS_TO_SLUG[focus];
+    if (!slug) return { recommendation: [], splitNotApplicable: true };
+    recommendation.push(slug);
+  }
+
+  return { recommendation, splitNotApplicable: false };
+}
+
 export function createSplitRecommendationHandlers(db) {
   async function getSplitRecommendation(req, res) {
     const { request_id } = req;
@@ -21,46 +68,64 @@ export function createSplitRecommendationHandlers(db) {
       const userId = safeString(req.auth?.user_id);
       if (!userId) throw new RequestValidationError("No user ID in token");
 
-      // Join through app_user to resolve subject_id → profile.
-      // preferred_days is text[] — its length is daysPerWeek.
-      // program_type_slug is the persisted program type.
-      // main_goals_slugs is used to derive programType if program_type_slug is absent.
       const result = await db.query(
-        `SELECT
-           cp.preferred_split_json,
-           cp.preferred_days,
-           cp.program_type_slug,
-           cp.main_goals_slugs
-         FROM client_profile cp
-         JOIN app_user au ON cp.user_id = au.id
-         WHERE au.subject_id = $1
-         LIMIT 1`,
+        `
+        SELECT cp.preferred_split_json, cp.preferred_days, cp.program_type_slug, cp.main_goals_slugs
+        FROM client_profile cp
+        JOIN app_user au ON au.id = cp.user_id
+        WHERE au.subject_id = $1
+        ORDER BY cp.created_at DESC
+        LIMIT 1
+        `,
         [userId],
       );
 
+      const qDays = parseInt(req.query?.daysPerWeek, 10);
+      const qType = safeString(req.query?.programType);
+
+      let daysPerWeek;
+      let programType;
+
       if (result.rowCount === 0) {
-        return res.status(404).json({
-          ok: false,
-          request_id,
-          code: "not_found",
-          error: "No profile found",
-        });
+        daysPerWeek = Number.isFinite(qDays) && qDays >= 1 && qDays <= 7 ? qDays : 3;
+        programType = qType || "hypertrophy";
+      } else {
+        const profile = result.rows[0];
+        const preferredDays = Array.isArray(profile.preferred_days) ? profile.preferred_days : [];
+        daysPerWeek = preferredDays.length || (Number.isFinite(qDays) && qDays >= 1 ? qDays : 3);
+        const goalSlugs = Array.isArray(profile.main_goals_slugs) ? profile.main_goals_slugs : [];
+        const goalDerivedType = goalSlugs.map((g) => GOAL_TO_PROGRAM_TYPE[g]).find(Boolean) ?? null;
+        programType = safeString(profile.program_type_slug) || goalDerivedType || qType || "hypertrophy";
       }
 
-      const profile = result.rows[0];
+      let recommendation = [];
+      let splitNotApplicable = false;
+      const configResult = await db.query(
+        `
+        SELECT program_generation_config_json
+        FROM program_generation_config
+        WHERE program_type = $1 AND is_active = TRUE
+        ORDER BY schema_version DESC, updated_at DESC
+        LIMIT 1
+        `,
+        [programType],
+      );
+      if (configResult.rowCount > 0) {
+        const derived = deriveSplitFromConfig(
+          configResult.rows[0]?.program_generation_config_json,
+          daysPerWeek,
+        );
+        if (derived) {
+          recommendation = derived.recommendation;
+          splitNotApplicable = derived.splitNotApplicable;
+        }
+      }
+      if (recommendation.length === 0 && !splitNotApplicable) {
+        recommendation = defaultSplitForProgram(programType, daysPerWeek);
+      }
 
-      // Derive daysPerWeek from preferred_days array length.
-      const preferredDays = Array.isArray(profile.preferred_days) ? profile.preferred_days : [];
-      const daysPerWeek = preferredDays.length || 3;
-
-      // Derive programType from program_type_slug or goals (same logic as generateProgramV2.js).
-      const goalSlugs = Array.isArray(profile.main_goals_slugs) ? profile.main_goals_slugs : [];
-      const goalDerivedType = goalSlugs.map((g) => GOAL_TO_PROGRAM_TYPE[g]).find(Boolean) ?? null;
-      const programType = safeString(profile.program_type_slug) || goalDerivedType || "hypertrophy";
-
-      const recommendation = defaultSplitForProgram(programType, daysPerWeek);
-
-      const existingSplit = profile.preferred_split_json ?? null;
+      const rawSplit = result.rows[0]?.preferred_split_json;
+      const existingSplit = rawSplit && typeof rawSplit === "object" ? rawSplit : null;
 
       return res.status(200).json({
         ok: true,
@@ -68,24 +133,15 @@ export function createSplitRecommendationHandlers(db) {
         programType,
         daysPerWeek,
         recommendation,
-        existingPreference: existingSplit?.day_focuses ?? null,
-        existingModifiedByUser: existingSplit?.modified_by_user ?? false,
+        splitNotApplicable,
+        existingPreference: Array.isArray(existingSplit?.day_focuses) ? existingSplit.day_focuses : null,
+        existingModifiedByUser: existingSplit?.modified_by_user === true,
       });
     } catch (err) {
       if (err instanceof RequestValidationError) {
-        return res.status(400).json({
-          ok: false,
-          request_id,
-          code: "validation_error",
-          error: err.message,
-        });
+        return res.status(400).json({ ok: false, request_id, code: "validation_error", error: err.message });
       }
-      return res.status(500).json({
-        ok: false,
-        request_id,
-        code: "internal_error",
-        error: publicInternalError(err),
-      });
+      return res.status(500).json({ ok: false, request_id, code: "internal_error", error: publicInternalError(err) });
     }
   }
 
@@ -95,8 +151,7 @@ export function createSplitRecommendationHandlers(db) {
 export const splitRecommendationRouter = express.Router();
 splitRecommendationRouter.use(requireAuth);
 
-const defaultHandlers = createSplitRecommendationHandlers(pool);
-
-// GET /api/split-recommendation
-// Returns the engine's recommended split for the current user's profile.
-splitRecommendationRouter.get("/split-recommendation", (req, res) => defaultHandlers.getSplitRecommendation(req, res));
+splitRecommendationRouter.get("/split-recommendation", (req, res) => {
+  const db = req.app?.locals?.pool ?? pool;
+  return createSplitRecommendationHandlers(db).getSplitRecommendation(req, res);
+});

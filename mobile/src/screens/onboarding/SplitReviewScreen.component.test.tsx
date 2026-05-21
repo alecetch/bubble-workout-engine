@@ -2,43 +2,61 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SplitReviewScreen } from "./SplitReviewScreen";
-import { useMe, useSplitRecommendation, useUpdateClientProfile } from "../../api/hooks";
-import { authenticatedFetch } from "../../api/client";
+
+const {
+  patchProgramSplitMock,
+  updateProfileMutateAsyncMock,
+  useClientProfileMock,
+  useMeMock,
+  useSplitRecommendationMock,
+  useUpdateClientProfileMock,
+} = vi.hoisted(() => ({
+  patchProgramSplitMock: vi.fn(),
+  updateProfileMutateAsyncMock: vi.fn(),
+  useClientProfileMock: vi.fn(),
+  useMeMock: vi.fn(),
+  useSplitRecommendationMock: vi.fn(),
+  useUpdateClientProfileMock: vi.fn(),
+}));
 
 vi.mock("../../api/hooks", () => ({
-  useMe: vi.fn(),
-  useSplitRecommendation: vi.fn(),
-  useUpdateClientProfile: vi.fn(),
+  patchProgramSplit: patchProgramSplitMock,
+  useClientProfile: useClientProfileMock,
+  useMe: useMeMock,
+  useSplitRecommendation: useSplitRecommendationMock,
+  useUpdateClientProfile: useUpdateClientProfileMock,
 }));
 
-vi.mock("../../api/client", () => ({
-  authenticatedFetch: vi.fn(),
-}));
-
-vi.mock("../../components/onboarding/FocusPickerSheet", () => ({
-  FocusPickerSheet: ({ visible, onSelect, onClose }: any) =>
-    visible ? (
-      <div>
-        <button type="button" onClick={() => onSelect("lower_body")}>
-          Pick lower_body
-        </button>
-        <button type="button" onClick={onClose}>
-          Close picker
-        </button>
-      </div>
-    ) : null,
-  FOCUS_LABELS: {
-    full_body: "Full Body",
-    upper_body: "Upper Body",
-    lower_body: "Lower Body",
-    push: "Push",
-    pull: "Pull",
-    legs: "Legs",
-  },
+vi.mock("../../components/onboarding/OnboardingScaffold", () => ({
+  OnboardingScaffold: ({
+    children,
+    onBack,
+    onNext,
+    nextLabel,
+    nextDisabled,
+    nextTestID,
+  }: {
+    children: React.ReactNode;
+    onBack: () => void;
+    onNext: () => void;
+    nextLabel: string;
+    nextDisabled: boolean;
+    nextTestID?: string;
+  }) => (
+    <div>
+      {children}
+      <button type="button" onClick={onBack}>
+        Back
+      </button>
+      <button type="button" data-testid={nextTestID} disabled={nextDisabled} onClick={onNext}>
+        {nextLabel}
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("../../components/onboarding/SectionCard", () => ({
-  SectionCard: ({ title, children }: any) => (
+  SectionCard: ({ title, children }: { title?: string; children: React.ReactNode }) => (
     <section>
       {title ? <h2>{title}</h2> : null}
       {children}
@@ -46,253 +64,134 @@ vi.mock("../../components/onboarding/SectionCard", () => ({
   ),
 }));
 
+vi.mock("../../components/onboarding/FocusPickerSheet", () => ({
+  FocusPickerSheet: ({
+    visible,
+    onSelect,
+    onClose,
+  }: {
+    visible: boolean;
+    onSelect: (focus: string) => void;
+    onClose: () => void;
+  }) =>
+    visible ? (
+      <div>
+        <button type="button" onClick={() => onSelect("legs")}>
+          Legs
+        </button>
+        <button type="button" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress, testID }: any) => (
-    <button
-      type="button"
-      data-testid={testID}
-      disabled={disabled}
-      onClick={() => onPress?.()}
-    >
+  PressableScale: ({ children, onPress, testID }: { children: React.ReactNode; onPress?: () => void; testID?: string }) => (
+    <button type="button" data-testid={testID} onClick={onPress}>
       {children}
     </button>
   ),
 }));
 
-const useMeMock = vi.mocked(useMe);
-const useSplitRecommendationMock = vi.mocked(useSplitRecommendation);
-const useUpdateClientProfileMock = vi.mocked(useUpdateClientProfile);
-const authenticatedFetchMock = vi.mocked(authenticatedFetch);
-
-const mutateAsyncMock = vi.fn();
-const navigateMock = vi.fn();
-const popToTopMock = vi.fn();
-const refetchMock = vi.fn();
-
-function buildNavigation() {
-  return {
-    navigate: navigateMock,
-    popToTop: popToTopMock,
+function renderScreen(routeParams?: Record<string, unknown>) {
+  const navigation = {
     goBack: vi.fn(),
-    replace: vi.fn(),
-  } as any;
-}
-
-function renderScreen(params: Record<string, unknown> = {}) {
-  return render(
+    navigate: vi.fn(),
+    popToTop: vi.fn(),
+  };
+  render(
     <SplitReviewScreen
-      route={{ params } as any}
-      navigation={buildNavigation()}
+      navigation={navigation as never}
+      route={{ params: routeParams ?? {} } as never}
     />,
   );
+  return navigation;
 }
-
-const defaultSplitData = {
-  ok: true,
-  programType: "hypertrophy",
-  daysPerWeek: 3,
-  recommendation: ["full_body", "full_body", "full_body"],
-  existingPreference: null,
-  existingModifiedByUser: false,
-};
 
 describe("SplitReviewScreen", () => {
   beforeEach(() => {
-    navigateMock.mockReset();
-    popToTopMock.mockReset();
-    mutateAsyncMock.mockReset();
-    authenticatedFetchMock.mockReset();
-    refetchMock.mockReset();
-
+    patchProgramSplitMock.mockReset();
+    patchProgramSplitMock.mockResolvedValue({ ok: true, updatedCount: 4 });
+    updateProfileMutateAsyncMock.mockReset();
+    updateProfileMutateAsyncMock.mockResolvedValue({});
     useMeMock.mockReturnValue({
       data: { id: "user-1", clientProfileId: "profile-1" },
       isLoading: false,
-      isError: false,
-    } as any);
-
+    });
+    useClientProfileMock.mockReturnValue({
+      data: { preferredDays: ["Mon", "Tue", "Thu", "Sat"] },
+      isLoading: false,
+    });
     useSplitRecommendationMock.mockReturnValue({
-      data: defaultSplitData,
+      data: {
+        programType: "hypertrophy",
+        daysPerWeek: 4,
+        recommendation: ["upper_body", "lower_body", "upper_body", "lower_body"],
+        existingPreference: null,
+        existingModifiedByUser: false,
+      },
       isLoading: false,
       isError: false,
-      refetch: refetchMock,
-    } as any);
-
+    });
     useUpdateClientProfileMock.mockReturnValue({
-      mutateAsync: mutateAsyncMock,
-    } as any);
-
-    mutateAsyncMock.mockResolvedValue({});
-    authenticatedFetchMock.mockResolvedValue({});
-  });
-
-  // ── Loading state ──────────────────────────────────────────────────────
-
-  it("shows loading indicator when split query is loading", () => {
-    useSplitRecommendationMock.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      isError: false,
-      refetch: refetchMock,
-    } as any);
-
-    renderScreen();
-
-    expect(screen.getByText("Loading your split...")).toBeTruthy();
-  });
-
-  // ── Error state ────────────────────────────────────────────────────────
-
-  it("shows error message and retry button when split query fails", () => {
-    useSplitRecommendationMock.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-      refetch: refetchMock,
-    } as any);
-
-    renderScreen();
-
-    expect(screen.getByText("Unable to load split recommendation.")).toBeTruthy();
-    expect(screen.getByText("Retry")).toBeTruthy();
-  });
-
-  it("calls refetch when Retry is pressed", async () => {
-    useSplitRecommendationMock.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-      refetch: refetchMock,
-    } as any);
-
-    renderScreen();
-
-    fireEvent.click(screen.getByText("Retry"));
-    expect(refetchMock).toHaveBeenCalledOnce();
-  });
-
-  // ── Happy path render ──────────────────────────────────────────────────
-
-  it("renders split chips for each day in recommendation", () => {
-    renderScreen();
-
-    expect(screen.getByText("Your training split")).toBeTruthy();
-    // 3 days → 3 chips labelled Day 1/2/3
-    expect(screen.getByText("Day 1")).toBeTruthy();
-    expect(screen.getByText("Day 2")).toBeTruthy();
-    expect(screen.getByText("Day 3")).toBeTruthy();
-    // All are full_body
-    expect(screen.getAllByText("Full Body").length).toBe(3);
-  });
-
-  it("does not show reset link when recommendation matches current focuses", () => {
-    renderScreen();
-    expect(screen.queryByText("Reset to recommended")).toBeNull();
-  });
-
-  it("does not show balance warning for 3 full_body days", () => {
-    renderScreen();
-    expect(screen.queryByText(/fatigue|balance/i)).toBeNull();
-  });
-
-  it("shows balance warning for all-upper days", () => {
-    useSplitRecommendationMock.mockReturnValue({
-      data: {
-        ...defaultSplitData,
-        recommendation: ["upper_body", "upper_body", "upper_body"],
-      },
-      isLoading: false,
-      isError: false,
-      refetch: refetchMock,
-    } as any);
-
-    renderScreen();
-
-    expect(screen.getByText(/mix.*full body|full body.*balance/i)).toBeTruthy();
-  });
-
-  // ── Reset to recommended ───────────────────────────────────────────────
-
-  it("shows reset link and clicking it restores recommendation", async () => {
-    renderScreen();
-
-    // Open picker for Day 1 and select lower_body
-    fireEvent.click(screen.getByTestId("split-day-chip-0"));
-    fireEvent.click(screen.getByText("Pick lower_body"));
-
-    // Reset link should appear
-    await waitFor(() => {
-      expect(screen.getByText("Reset to recommended")).toBeTruthy();
+      mutateAsync: updateProfileMutateAsyncMock,
+      isPending: false,
     });
+  });
 
-    // Click reset
+  it("renders one chip per recommended training day", () => {
+    renderScreen();
+
+    expect(screen.getByText("Weekly focus")).toBeInTheDocument();
+    expect(screen.getByText("MON")).toBeInTheDocument();
+    expect(screen.getAllByText("Upper")).toHaveLength(2);
+    expect(screen.getAllByText("Lower")).toHaveLength(2);
+  });
+
+  it("saves a custom split and navigates to ProgramReview", async () => {
+    const navigation = renderScreen();
+
+    fireEvent.click(screen.getByTestId("split-day-chip-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Legs" }));
+    fireEvent.click(screen.getByTestId("split-continue-button"));
+
+    await waitFor(() => {
+      expect(updateProfileMutateAsyncMock).toHaveBeenCalledWith({
+        preferredSplitJson: {
+          day_focuses: ["upper_body", "legs", "upper_body", "lower_body"],
+          modified_by_user: true,
+        },
+      });
+      expect(navigation.navigate).toHaveBeenCalledWith("ProgramReview");
+    });
+  });
+
+  it("resets to the recommendation after an edit", () => {
+    renderScreen();
+
+    fireEvent.click(screen.getByTestId("split-day-chip-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Legs" }));
+    expect(screen.getByText("Reset to recommended")).toBeInTheDocument();
+
     fireEvent.click(screen.getByText("Reset to recommended"));
-
-    // Reset link should disappear
-    await waitFor(() => {
-      expect(screen.queryByText("Reset to recommended")).toBeNull();
-    });
+    expect(screen.queryByText("Reset to recommended")).not.toBeInTheDocument();
   });
 
-  // ── Continue / navigation ──────────────────────────────────────────────
-
-  it("patches profile and navigates to ProgramReview on Continue (normal onboarding)", async () => {
-    renderScreen();
+  it("patches remaining program days on the recalibrate path", async () => {
+    const navigation = renderScreen({ fromRecalibrate: true, programId: "program-1" });
 
     fireEvent.click(screen.getByTestId("split-continue-button"));
 
     await waitFor(() => {
-      expect(mutateAsyncMock).toHaveBeenCalledOnce();
-      expect(navigateMock).toHaveBeenCalledWith("ProgramReview");
+      expect(patchProgramSplitMock).toHaveBeenCalledWith("program-1", [
+        "upper_body",
+        "lower_body",
+        "upper_body",
+        "lower_body",
+      ]);
+      expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", { programId: "program-1" });
+      expect(navigation.popToTop).not.toHaveBeenCalled();
     });
-  });
-
-  it("patches profile and program split then calls popToTop on fromRecalibrate", async () => {
-    renderScreen({ fromRecalibrate: true, programId: "prog-123" });
-
-    fireEvent.click(screen.getByTestId("split-continue-button"));
-
-    await waitFor(() => {
-      expect(mutateAsyncMock).toHaveBeenCalledOnce();
-      expect(authenticatedFetchMock).toHaveBeenCalledWith(
-        "/api/programs/prog-123/split",
-        expect.objectContaining({ method: "PATCH" }),
-      );
-      expect(popToTopMock).toHaveBeenCalledOnce();
-    });
-  });
-
-  it("still navigates even when profile patch fails", async () => {
-    mutateAsyncMock.mockRejectedValue(new Error("network error"));
-
-    renderScreen();
-
-    fireEvent.click(screen.getByTestId("split-continue-button"));
-
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith("ProgramReview");
-    });
-  });
-
-  // ── Existing preference ────────────────────────────────────────────────
-
-  it("initializes from existingPreference when set", () => {
-    useSplitRecommendationMock.mockReturnValue({
-      data: {
-        ...defaultSplitData,
-        existingPreference: ["upper_body", "lower_body", "upper_body"],
-        existingModifiedByUser: true,
-      },
-      isLoading: false,
-      isError: false,
-      refetch: refetchMock,
-    } as any);
-
-    renderScreen();
-
-    // Should show the existing preference chips, not the recommendation
-    expect(screen.getAllByText("Upper Body").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Lower Body")).toBeTruthy();
-    // Modified from recommendation → reset link visible
-    expect(screen.getByText("Reset to recommended")).toBeTruthy();
   });
 });

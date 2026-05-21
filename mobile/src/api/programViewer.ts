@@ -116,6 +116,7 @@ export type ProgramDayFullResponse = {
       notes?: string | null;
       equipment?: string[] | null;
       isLoadable?: boolean | null;
+      isUnloaded?: boolean | null;
       guidelineLoad?: {
         value: number;
         unit: string;
@@ -408,6 +409,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
                   .map(asString)
                   .filter((value): value is string => Boolean(value)),
             isLoadable: asNullableBoolean(rawExercise.is_loadable ?? rawExercise.isLoadable),
+            isUnloaded: asNullableBoolean(rawExercise.is_unloaded ?? rawExercise.isUnloaded) ?? false,
             guidelineLoad: rawExercise.guideline_load == null
               ? rawExercise.guideline_load === null
                 ? null

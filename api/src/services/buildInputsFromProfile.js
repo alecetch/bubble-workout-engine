@@ -138,6 +138,8 @@ export function buildInputsFromProfile(profile, exerciseRows, physiqueContext = 
         schedule_constraints: profile?.scheduleConstraints ?? "",
         physique_emphasis_slugs: emphasisSlugs,
         physique_emphasis_weights: emphasisWeights,
+        preferred_split_json: profile?.preferredSplitJson ?? profile?.preferred_split_json ?? null,
+        preferredSplitJson: profile?.preferredSplitJson ?? profile?.preferred_split_json ?? null,
       },
     },
     exercises: {

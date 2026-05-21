@@ -1,4 +1,3 @@
-import { authenticatedFetch } from "./client";
 import {
   useInfiniteQuery,
   useMutation,
@@ -114,6 +113,7 @@ import {
   type ReferralStats,
 } from "./referral";
 import { getEntitlement, type EntitlementResponse } from "./entitlement";
+import { authGetJson, authPatchJson } from "./client";
 import type { EquipmentPreset } from "../state/onboarding/types";
 
 export const queryKeys = {
@@ -156,6 +156,15 @@ export const queryKeys = {
   programEquipment: (programId: string | null) => ["programEquipment", programId] as const,
   referralInfo: ["referralInfo"] as const,
   referralStats: ["referralStats"] as const,
+  splitRecommendation: ["splitRecommendation"] as const,
+};
+
+export type SplitRecommendationResponse = {
+  programType: string;
+  daysPerWeek: number;
+  recommendation: string[];
+  existingPreference: string[] | null;
+  existingModifiedByUser: boolean;
 };
 
 export function useMe(): UseQueryResult<MeResponse> {
@@ -170,6 +179,31 @@ export function useReferenceData(): UseQueryResult<ReferenceDataResponse> {
     queryKey: queryKeys.referenceData,
     queryFn: getReferenceData,
   });
+}
+
+export function useSplitRecommendation(
+  params?: { daysPerWeek?: number; programType?: string },
+): UseQueryResult<SplitRecommendationResponse> {
+  const qs = new URLSearchParams();
+  if (params?.daysPerWeek) qs.set("daysPerWeek", String(params.daysPerWeek));
+  if (params?.programType) qs.set("programType", params.programType);
+  const search = qs.toString();
+  const url = search ? `/api/split-recommendation?${search}` : "/api/split-recommendation";
+  return useQuery({
+    queryKey: [...queryKeys.splitRecommendation, params?.daysPerWeek, params?.programType],
+    queryFn: () => authGetJson<SplitRecommendationResponse>(url),
+    staleTime: 0,
+  });
+}
+
+export function patchProgramSplit(
+  programId: string,
+  dayFocuses: string[],
+): Promise<{ ok: boolean; updatedCount: number }> {
+  return authPatchJson<{ ok: boolean; updatedCount: number }, { day_focuses: string[] }>(
+    `/api/programs/${programId}/split`,
+    { day_focuses: dayFocuses },
+  );
 }
 
 export function useClientProfile(profileId: string | null | undefined): UseQueryResult<ClientProfileServer> {
@@ -711,25 +745,4 @@ export function usePhysiqueMilestones() {
     queryFn: getMilestones,
     staleTime: 5 * 60 * 1000,
   });
-}
-
-export type SplitRecommendationResponse = {
-  ok: boolean;
-  programType: string;
-  daysPerWeek: number;
-  recommendation: string[];
-  existingPreference: string[] | null;
-  existingModifiedByUser: boolean;
-};
-
-export function useSplitRecommendation(): UseQueryResult<SplitRecommendationResponse> {
-  return useQuery({
-    queryKey: ["split-recommendation"] as const,
-    queryFn: () => fetchSplitRecommendation(),
-    staleTime: 0,
-  });
-}
-
-function fetchSplitRecommendation(): Promise<SplitRecommendationResponse> {
-  return authenticatedFetch<SplitRecommendationResponse>("/api/split-recommendation");
 }

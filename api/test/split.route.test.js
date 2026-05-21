@@ -26,15 +26,18 @@ function makeReq(overrides = {}) {
 
 // ── GET /split-recommendation ──────────────────────────────────────────────
 
-test("getSplitRecommendation returns 404 when no profile found", async () => {
+test("getSplitRecommendation returns 200 with defaults when no profile found", async () => {
   const db = { async query() { return { rows: [], rowCount: 0 }; } };
   const { getSplitRecommendation } = createSplitRecommendationHandlers(db);
   const res = mockRes();
 
   await getSplitRecommendation(makeReq(), res);
 
-  assert.equal(res.statusCode, 404);
-  assert.equal(res.body.code, "not_found");
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.programType, "hypertrophy");
+  assert.equal(res.body.daysPerWeek, 3);
+  assert.ok(Array.isArray(res.body.recommendation));
 });
 
 test("getSplitRecommendation returns 400 when no user_id in token", async () => {

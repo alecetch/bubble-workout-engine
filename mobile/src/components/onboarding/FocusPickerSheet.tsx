@@ -1,18 +1,15 @@
 import React from "react";
-import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PressableScale } from "../interaction/PressableScale";
 import { colors } from "../../theme/colors";
-import { radii } from "../../theme/components";
+import { radii, shadows } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 
-export const FOCUS_LABELS: Record<string, string> = {
+const BASE_OPTIONS = ["full_body", "upper_body", "lower_body"];
+const PPL_OPTIONS = ["full_body", "upper_body", "lower_body", "push", "pull", "legs"];
+
+const FOCUS_LABELS: Record<string, string> = {
   full_body: "Full Body",
   upper_body: "Upper Body",
   lower_body: "Lower Body",
@@ -20,9 +17,6 @@ export const FOCUS_LABELS: Record<string, string> = {
   pull: "Pull",
   legs: "Legs",
 };
-
-const BASE_OPTIONS = ["full_body", "upper_body", "lower_body"];
-const PPL_OPTIONS = ["full_body", "upper_body", "lower_body", "push", "pull", "legs"];
 
 type FocusPickerSheetProps = {
   visible: boolean;
@@ -41,44 +35,39 @@ export function FocusPickerSheet({
   onSelect,
   onClose,
 }: FocusPickerSheetProps): React.JSX.Element {
-  const options =
-    programType === "hypertrophy" && daysPerWeek >= 5 ? PPL_OPTIONS : BASE_OPTIONS;
+  const options = programType === "hypertrophy" && daysPerWeek >= 5 ? PPL_OPTIONS : BASE_OPTIONS;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>Choose focus</Text>
-          <ScrollView>
-            {options.map((option) => (
-              <PressableScale
-                key={option}
-                style={[
-                  styles.optionRow,
-                  currentFocus === option && styles.optionRowSelected,
-                ]}
-                onPress={() => {
-                  onSelect(option);
-                  onClose();
-                }}
-              >
-                <Text style={[
-                  styles.optionLabel,
-                  currentFocus === option && styles.optionLabelSelected,
-                ]}>
-                  {FOCUS_LABELS[option] ?? option}
-                </Text>
-                {currentFocus === option ? (
-                  <Text style={styles.checkmark}>✓</Text>
-                ) : null}
-              </PressableScale>
-            ))}
-          </ScrollView>
-          <PressableScale style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelLabel}>Cancel</Text>
-          </PressableScale>
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.card}>
+            <Text style={styles.title}>Choose focus</Text>
+            <Text style={styles.subtitle}>Pick the training focus for this day.</Text>
+            <View style={styles.options}>
+              {options.map((option) => {
+                const selected = currentFocus === option;
+                return (
+                  <PressableScale
+                    key={option}
+                    testID={`focus-option-${option}`}
+                    style={[styles.option, selected && styles.optionSelected]}
+                    onPress={() => {
+                      onSelect(option);
+                      onClose();
+                    }}
+                  >
+                    <Text style={styles.optionLabel}>{FOCUS_LABELS[option]}</Text>
+                    {selected ? <Text style={styles.check}>Check</Text> : null}
+                  </PressableScale>
+                );
+              })}
+            </View>
+            <PressableScale style={styles.closeButton} onPress={onClose}>
+              <Text style={styles.closeLabel}>Cancel</Text>
+            </PressableScale>
+          </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -90,69 +79,66 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15,23,42,0.72)",
     justifyContent: "flex-end",
   },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.card,
-    borderTopRightRadius: radii.card,
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+    padding: spacing.lg,
+  },
+  card: {
+    borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingBottom: spacing.xl,
-    paddingTop: spacing.sm,
-    maxHeight: "60%",
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    gap: spacing.md,
+    ...shadows.card,
   },
   title: {
     color: colors.textPrimary,
     ...typography.h3,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
   },
-  optionRow: {
-    flexDirection: "row",
+  subtitle: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  options: {
+    gap: spacing.sm,
+  },
+  option: {
+    minHeight: 52,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    flexDirection: "row",
   },
-  optionRowSelected: {
-    backgroundColor: "rgba(59,130,246,0.08)",
+  optionSelected: {
+    borderColor: colors.accent,
   },
   optionLabel: {
     color: colors.textPrimary,
     ...typography.body,
-  },
-  optionLabelSelected: {
-    color: colors.accent,
     fontWeight: "600",
   },
-  checkmark: {
-    color: colors.accent,
-    ...typography.body,
+  check: {
+    color: colors.success,
+    ...typography.small,
     fontWeight: "700",
   },
-  cancelButton: {
-    marginTop: spacing.md,
-    marginHorizontal: spacing.md,
-    minHeight: 44,
+  closeButton: {
+    minHeight: 48,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
   },
-  cancelLabel: {
+  closeLabel: {
     color: colors.textPrimary,
-    ...typography.small,
+    ...typography.body,
     fontWeight: "600",
   },
 });

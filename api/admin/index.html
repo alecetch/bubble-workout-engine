@@ -389,6 +389,7 @@
             <a href="/admin/rep-rules">Rep Rules</a>
             <a href="/admin/observability">Observability</a>
             <a href="/admin/preview">Preview</a>
+            <a href="/admin/program-quality">Program Quality</a>
             <a href="/admin/progression-sandbox">Progression Sandbox</a>
             <a href="/admin/users">Users</a>
             <a href="http://127.0.0.1:3000/" target="_blank">Website Preview ↗</a>
@@ -406,6 +407,12 @@
       </aside>
 
       <main class="editor">
+        <div id="sync-status-banner" style="display:none;padding:10px 20px;font-size:13px;border-radius:4px;margin:0 0 12px 0;">
+          <span id="sync-status-text"></span>
+          <button id="sync-now-btn" style="margin-left:12px;display:none;background:#d97706;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;width:auto;">
+            Sync Now
+          </button>
+        </div>
         <div class="editor-toolbar">
           <button id="sidebar-show-btn" class="sidebar-toggle-btn" type="button" hidden>Show Configs</button>
         </div>
@@ -632,6 +639,56 @@
         return data;
       }
 
+      async function checkSyncStatus() {
+        try {
+          const data = await apiFetch("/admin/sync-status");
+          const banner = document.getElementById("sync-status-banner");
+          const text = document.getElementById("sync-status-text");
+          const btn = document.getElementById("sync-now-btn");
+          if (!banner || !text || !btn) return;
+
+          banner.style.display = "block";
+          if (data.dirty) {
+            banner.style.background = "#451a03";
+            banner.style.color = "#fbbf24";
+            banner.style.border = "1px solid #92400e";
+            text.textContent = "Unsynced admin edits detected - seed files are out of date.";
+            btn.style.display = "inline";
+          } else {
+            banner.style.background = "#052e16";
+            banner.style.color = "#4ade80";
+            banner.style.border = "1px solid #166534";
+            const lastSynced = data.last_synced_at
+              ? new Date(data.last_synced_at).toLocaleString()
+              : "never";
+            text.textContent = `Seed files are up to date (last synced ${lastSynced}).`;
+            btn.style.display = "none";
+          }
+        } catch (_) {
+          const banner = document.getElementById("sync-status-banner");
+          if (banner) banner.style.display = "none";
+        }
+      }
+
+      async function syncAllToFlyway(btn) {
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = "Syncing...";
+        try {
+          const data = await apiFetch("/admin/sync-all-to-flyway", { method: "POST" });
+          const lines = data.files.map(f =>
+            `${f.ok ? "OK" : "FAILED"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
+          ).join("\n");
+          window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
+          await checkSyncStatus();
+        } catch (err) {
+          window.alert("Sync failed: " + (err.message || String(err)));
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      }
+
       function ensureBuilderAndSegmentation() {
         const root = state.jsonObj;
         if (!root.builder || typeof root.builder !== "object" || Array.isArray(root.builder)) {
@@ -798,7 +855,7 @@
             const focus = dt?.focus || "";
             return `<th style="text-align:center"><span>${escapeHtml(focus)}</span><br><span style="color:#888;font-size:0.8em">${escapeHtml(key)}</span></th>`;
           }).join("");
-          const rows = Array.from({length: 6}, (_, ri) => {
+          const rows = Array.from({length: 7}, (_, ri) => {
             const dpw = ri + 1;
             const selected = dpwByDpw[String(dpw)] || [];
             const cells = dayTemplates.map((dt, ci) => {
@@ -2234,6 +2291,7 @@
           }
           await loadConfigs(false);
           await loadConfig(state.selectedKey, { preserveDayTab: true });
+          await checkSyncStatus();
         } catch (err) {
           setStatus(err.message || "Save failed", "err");
         }
@@ -2248,6 +2306,7 @@
             await loadConfig(state.configs[0].config_key);
           }
           setStatus(`Loaded ${state.configs.length} configs`, "ok");
+          await checkSyncStatus();
         } catch (err) {
           setStatus(err.message || "Failed to load configs", "err");
         }
@@ -2307,21 +2366,10 @@
         duplicateBtn.addEventListener("click", duplicateConfig);
 
         document.getElementById("sync-all-btn").addEventListener("click", async () => {
-          const btn = document.getElementById("sync-all-btn");
-          btn.disabled = true;
-          btn.textContent = "Syncing…";
-          try {
-            const data = await apiFetch("/admin/sync-all-to-flyway", { method: "POST" });
-            const lines = data.files.map(f =>
-              `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
-            ).join("\n");
-            window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
-          } catch (err) {
-            window.alert("Sync failed: " + (err.message || String(err)));
-          } finally {
-            btn.disabled = false;
-            btn.textContent = "⬇ Sync All to Flyway";
-          }
+          await syncAllToFlyway(document.getElementById("sync-all-btn"));
+        });
+        document.getElementById("sync-now-btn").addEventListener("click", async () => {
+          await syncAllToFlyway(document.getElementById("sync-now-btn"));
         });
 
         window.addEventListener("beforeunload", (e) => {

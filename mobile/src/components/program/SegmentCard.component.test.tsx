@@ -1,6 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ApiError } from "../../api/client";
+import { _resetForTest } from "../../utils/localWorkoutLog";
 import { SegmentCard } from "./SegmentCard";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { useTimerStore } from "../../state/timer/useTimerStore";
@@ -185,5 +186,60 @@ describe("SegmentCard", () => {
     renderCard({ segment: makeSegment({}, [exercise]) });
 
     expect(screen.getByText("Deload this week")).toBeInTheDocument();
+  });
+});
+
+describe("SegmentCard — unloaded exercises, button state machine, and collapsed summary", () => {
+  beforeEach(() => {
+    mutateAsyncMock.mockClear();
+    mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
+    _resetForTest();
+    mockZustandSelector(useTimerStoreMock as any, {
+      entries: {},
+      initEntry: initEntryMock,
+      startRest: startRestMock,
+      stopRest: stopRestMock,
+    });
+  });
+
+  it("shows — in each set row instead of a weight input for unloaded exercises", async () => {
+    const exercise = makeExercise({ isLoadable: false });
+    renderCard({ segment: makeSegment({}, [exercise]) });
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+
+    expect(await screen.findByText("Close")).toBeInTheDocument();
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("kg").length).toBe(0);
+  });
+
+  it("shows Stop Exercise when the inline logging panel is open", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+
+    expect(await screen.findByText("Stop Exercise")).toBeInTheDocument();
+  });
+
+  it("shows Exercise Complete and is disabled after stopping the exercise", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Stop Exercise"));
+
+    expect(await screen.findByText("Exercise Complete")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exercise Complete" })).toBeDisabled();
+  });
+
+  it("collapsed summary shows bodyweight format for unloaded exercise", async () => {
+    const exercise = makeExercise({ isLoadable: false });
+    renderCard({ segment: makeSegment({}, [exercise]) });
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Log all sets as complete"));
+    fireEvent.click(await screen.findByText("Stop Exercise"));
+
+    expect(await screen.findByText("3 x 7 (bodyweight) ✓")).toBeInTheDocument();
   });
 });

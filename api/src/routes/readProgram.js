@@ -516,6 +516,7 @@ export function createReadProgramHandlers(options = pool) {
           pe.recommended_rest_seconds,
           pe.notes,
           pe.is_loadable,
+          (pe.is_loadable = FALSE) AS is_unloaded,
           pe.coaching_cues_json,
           pe.load_hint,
           pe.log_prompt,
