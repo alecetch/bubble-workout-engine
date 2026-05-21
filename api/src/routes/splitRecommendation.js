@@ -151,8 +151,7 @@ export function createSplitRecommendationHandlers(db) {
 export const splitRecommendationRouter = express.Router();
 splitRecommendationRouter.use(requireAuth);
 
-const defaultHandlers = createSplitRecommendationHandlers(pool);
-
-splitRecommendationRouter.get("/split-recommendation", (req, res) =>
-  defaultHandlers.getSplitRecommendation(req, res),
-);
+splitRecommendationRouter.get("/split-recommendation", (req, res) => {
+  const db = req.app?.locals?.pool ?? pool;
+  return createSplitRecommendationHandlers(db).getSplitRecommendation(req, res);
+});
