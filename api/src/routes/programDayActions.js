@@ -196,11 +196,13 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
 
       const conflictResult = await db.query(
         `
-        SELECT id
-        FROM program_calendar_day
-        WHERE program_id = $1
-          AND scheduled_date = $2::date
-          AND is_training_day = TRUE
+        SELECT pcd.id
+        FROM program_calendar_day pcd
+        JOIN program_day pd ON pd.id = pcd.program_day_id
+        WHERE pcd.program_id = $1
+          AND pcd.scheduled_date = $2::date
+          AND pcd.is_training_day = TRUE
+          AND pd.is_skipped = FALSE
         LIMIT 1
         `,
         [programId, targetDate],
@@ -216,6 +218,20 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
 
       client = typeof db.connect === "function" ? await db.connect() : db;
       if (client !== db) await client.query("BEGIN");
+
+      // Remove ghost calendar entries left by previously-rescheduled days on the target date.
+      // These have is_skipped = TRUE on program_day but still occupy the unique (program_id, scheduled_date) slot.
+      await client.query(
+        `
+        DELETE FROM program_calendar_day pcd
+        USING program_day pd
+        WHERE pcd.program_id = $1
+          AND pcd.scheduled_date = $2::date
+          AND pcd.program_day_id = pd.id
+          AND pd.is_skipped = TRUE
+        `,
+        [programId, targetDate],
+      );
 
       const insertResult = await client.query(
         `
