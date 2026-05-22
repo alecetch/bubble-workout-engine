@@ -128,10 +128,9 @@ appId: com.bubbleworkout.mobile
     visible: "Equipment setup"
     timeout: 10000
 - tapOn: "Commercial Gym"
-- scrollUntilVisible:
-    element:
-      text: "Search equipment"
-    direction: DOWN
+- extendedWaitUntil:
+    visible: "items included"
+    timeout: 10000
 - tapOn: "Next"
 
 - extendedWaitUntil:

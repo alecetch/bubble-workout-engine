@@ -26,6 +26,14 @@ vi.mock("../../components/onboarding/useErrorPulse", () => ({
   useErrorPulse: () => ({ animatedStyle: {}, pulse: vi.fn() }),
 }));
 
+vi.mock("../../components/interaction/PressableScale", () => ({
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
+      {children}
+    </button>
+  ),
+}));
+
 vi.mock("../../components/onboarding/PresetCardList", () => ({
   PresetCardList: ({
     options,
@@ -48,34 +56,6 @@ vi.mock("../../components/onboarding/PresetCardList", () => ({
         </button>
       ))}
     </div>
-  ),
-}));
-
-vi.mock("../../components/onboarding/EquipmentCategorySection", () => ({
-  EquipmentCategorySection: ({
-    category,
-    options,
-    selectedValues,
-    onToggleItem,
-  }: {
-    category: string;
-    options: Array<{ value: string; label: string }>;
-    selectedValues: string[];
-    onToggleItem: (value: string) => void;
-  }) => (
-    <section aria-label={category}>
-      {options.map((option) => (
-        <label key={option.value}>
-          <input
-            type="checkbox"
-            checked={selectedValues.includes(option.value)}
-            onChange={() => onToggleItem(option.value)}
-            aria-label={option.label}
-          />
-          {option.label}
-        </label>
-      ))}
-    </section>
   ),
 }));
 
@@ -155,7 +135,7 @@ function mockStore(draft: OnboardingDraft, overrides: Record<string, unknown> = 
 }
 
 function renderScreen() {
-  const navigation = { replace: vi.fn() };
+  const navigation = { replace: vi.fn(), navigate: vi.fn() };
   render(
     <Step2EquipmentScreen
       navigation={navigation as any}
@@ -197,6 +177,7 @@ describe("Step2EquipmentScreen", () => {
     } as any);
     mockStore(buildDraft());
   });
+
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
     await act(async () => {});
@@ -204,33 +185,12 @@ describe("Step2EquipmentScreen", () => {
     expect(await axe(document.body)).toHaveNoViolations();
   });
 
-
   it("renders preset cards from reference data", () => {
     renderScreen();
 
     expect(screen.getByText("Commercial Gym")).toBeInTheDocument();
     expect(screen.getByText("Home Gym")).toBeInTheDocument();
     expect(screen.getByText("Bodyweight")).toBeInTheDocument();
-  });
-
-  it("renders equipment items when a preset is selected", () => {
-    renderScreen();
-
-    expect(screen.getByText("Barbell")).toBeInTheDocument();
-    expect(screen.getByText("Dumbbell")).toBeInTheDocument();
-    expect(screen.getByText("Bench")).toBeInTheDocument();
-    expect(screen.getByText("Cable Machine")).toBeInTheDocument();
-  });
-
-  it("pre-checks items that are already in the draft", () => {
-    mockStore(buildDraft({ selectedEquipmentCodes: ["barbell", "bench"] }));
-
-    renderScreen();
-
-    expect(screen.getByRole("checkbox", { name: "Barbell" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Bench" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Dumbbell" })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Cable Machine" })).not.toBeChecked();
   });
 
   it("selecting a preset calls setDraft with the new preset code", () => {
@@ -259,37 +219,38 @@ describe("Step2EquipmentScreen", () => {
     });
   });
 
-  it("toggling an unchecked item adds it to the draft", () => {
-    mockStore(buildDraft({ selectedEquipmentCodes: [] }));
+  it("shows item count summary after a preset is selected and items load", async () => {
+    mockStore(buildDraft({ selectedEquipmentCodes: ["barbell", "dumbbell", "bench", "cable"] }));
 
     renderScreen();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Barbell" }));
 
-    expect(setDraftMock).toHaveBeenCalledWith({
-      selectedEquipmentCodes: ["barbell"],
-    });
+    expect(await screen.findByText("4 items included")).toBeInTheDocument();
   });
 
-  it("toggling a checked item removes it from the draft", () => {
-    mockStore(buildDraft({ selectedEquipmentCodes: ["barbell", "bench"] }));
+  it("shows Customise equipment button after preset selection", async () => {
+    mockStore(buildDraft({ selectedEquipmentCodes: ["barbell"] }));
 
     renderScreen();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Barbell" }));
 
-    expect(setDraftMock).toHaveBeenCalledWith({
-      selectedEquipmentCodes: ["bench"],
-    });
+    expect(await screen.findByRole("button", { name: "Customise equipment" })).toBeInTheDocument();
   });
 
-  it("filters equipment items from the search input", () => {
+  it("Customise equipment button navigates to Step2EquipmentDetail", async () => {
+    mockStore(buildDraft({ selectedEquipmentCodes: ["barbell"] }));
+    const navigation = renderScreen();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Customise equipment" }));
+
+    expect(navigation.navigate).toHaveBeenCalledWith("Step2EquipmentDetail");
+  });
+
+  it("does not show the summary card when no preset is selected", () => {
+    mockStore(buildDraft({ equipmentPresetCode: null, selectedEquipmentCodes: [] }));
+
     renderScreen();
 
-    fireEvent.change(screen.getByPlaceholderText("Search equipment"), { target: { value: "barbell" } });
-
-    expect(screen.getByText("Barbell")).toBeInTheDocument();
-    expect(screen.queryByText("Dumbbell")).not.toBeInTheDocument();
-    expect(screen.queryByText("Bench")).not.toBeInTheDocument();
-    expect(screen.queryByText("Cable Machine")).not.toBeInTheDocument();
+    expect(screen.queryByText(/items included/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Customise equipment" })).not.toBeInTheDocument();
   });
 
   it("Next calls mutation with correct payload and navigates to Step2bBaselineLoads for non-beginners", async () => {

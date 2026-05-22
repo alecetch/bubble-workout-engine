@@ -178,6 +178,10 @@ export function SegmentCard({
   const [expandedRoundIndices, setExpandedRoundIndices] = useState<Set<number>>(new Set());
   const [roundSaveError, setRoundSaveError] = useState<string | null>(null);
   const [showPostStopRir, setShowPostStopRir] = useState(false);
+  const allExercisesMarkedComplete =
+    loggableExercises.length > 0 &&
+    loggableExercises.every((ex) => (ex.id ? completedExerciseIds.has(ex.id) : false));
+  const showResumeButton = !inlineLoggingOpen && allExercisesMarkedComplete;
   const panelScrolledRef = useRef(false);
   const inlinePanelRef = useRef<View>(null);
   const prevRestRunning = useRef(false);
@@ -405,6 +409,21 @@ export function SegmentCard({
     setCompletedExerciseIds((current) => new Set([...current, ...ids]));
     closeInlinePanel({ clearInputs: false });
     ids.forEach((id) => onExerciseCompleteChange?.(id));
+  }
+
+  async function handleResumeExercise(): Promise<void> {
+    const ids = loggableExercises
+      .map((exercise) => exercise.id)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => setExerciseComplete(programDayId, id, false)));
+    setCompletedExerciseIds((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+    ids.forEach((id) => onExerciseCompleteChange?.(id));
+    setInlineLoggingOpen(true);
   }
 
   function buildRoundRows(roundIndex: number, includeRir: boolean): SaveSegmentLogPayload["rows"] {
@@ -1088,6 +1107,17 @@ export function SegmentCard({
                           </Text>
                         </PressableScale>
                       ) : null}
+                      {!isRoundBased && showResumeButton && index === 0 ? (
+                        <PressableScale
+                          style={[styles.exerciseActionButton, styles.exerciseActionButtonResume]}
+                          onPress={() => { void handleResumeExercise(); }}
+                          accessibilityLabel="Resume exercise"
+                        >
+                          <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelResume]}>
+                            Resume
+                          </Text>
+                        </PressableScale>
+                      ) : null}
                     </View>
                   );
 	                })
@@ -1095,16 +1125,13 @@ export function SegmentCard({
 	                <Text style={styles.exerciseMeta}>No exercises available.</Text>
 	              )}
               {isRoundBased && !inlineLoggingOpen && hasLoggableExercises ? (() => {
-                const allComplete = loggableExercises.every((exercise) =>
-                  exercise.id ? completedExerciseIds.has(exercise.id) : false,
-                );
                 return (
                   <PressableScale
                     style={[
                       styles.exerciseActionButton,
-                      allComplete && styles.exerciseActionButtonDisabled,
+                      allExercisesMarkedComplete && styles.exerciseActionButtonDisabled,
                     ]}
-                    disabled={allComplete}
+                    disabled={allExercisesMarkedComplete}
                     onPress={() => {
                       setInlineLoggingOpen(true);
                     }}
@@ -1112,14 +1139,25 @@ export function SegmentCard({
                     <Text
                       style={[
                         styles.exerciseActionLabel,
-                        allComplete && styles.exerciseActionLabelDisabled,
+                        allExercisesMarkedComplete && styles.exerciseActionLabelDisabled,
                       ]}
                     >
-                      {allComplete ? "Exercise Complete" : "Start Exercise"}
+                      {allExercisesMarkedComplete ? "Exercise Complete" : "Start Exercise"}
                     </Text>
                   </PressableScale>
                 );
               })() : null}
+              {isRoundBased && showResumeButton ? (
+                <PressableScale
+                  style={[styles.exerciseActionButton, styles.exerciseActionButtonResume]}
+                  onPress={() => { void handleResumeExercise(); }}
+                  accessibilityLabel="Resume exercise"
+                >
+                  <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelResume]}>
+                    Resume
+                  </Text>
+                </PressableScale>
+              ) : null}
 	            </View>
 	          )}
         </View>
@@ -1548,6 +1586,15 @@ const styles = StyleSheet.create({
     color: colors.background,
   },
   exerciseActionLabelDisabled: {
+    color: colors.textSecondary,
+  },
+  exerciseActionButtonResume: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  exerciseActionLabelResume: {
     color: colors.textSecondary,
   },
   restRow: {
