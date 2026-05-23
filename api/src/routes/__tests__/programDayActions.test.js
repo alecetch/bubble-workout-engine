@@ -132,6 +132,7 @@ test("rescheduleProgramDay creates calendar row and skips original day", async (
     async query(sql, params) {
       calls.push({ sql, params });
       if (/BEGIN|COMMIT/i.test(sql)) return { rowCount: 0, rows: [] };
+      if (/DELETE FROM program_calendar_day/i.test(sql)) return { rowCount: 0, rows: [] };
       if (/INSERT INTO program_calendar_day/i.test(sql)) {
         return {
           rowCount: 1,
@@ -168,6 +169,56 @@ test("rescheduleProgramDay creates calendar row and skips original day", async (
   assert.equal(res.body.calendarDay.rescheduled_from_day_id, PROGRAM_DAY_ID);
   assert.ok(calls.some((call) => /INSERT INTO program_calendar_day/i.test(call.sql)));
   assert.ok(calls.some((call) => /UPDATE program_day/i.test(call.sql)));
+});
+
+test("rescheduleProgramDay allows reschedule to date freed by a previously-rescheduled day", async () => {
+  // Scenario: Day X was rescheduled away from Monday (is_skipped = TRUE).
+  // A program_calendar_day row still exists for Monday but its program_day.is_skipped = TRUE.
+  // Rescheduling a different day to Monday should NOT return a conflict — the ghost entry
+  // is cleaned up inside the transaction and a new calendar row is inserted.
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/BEGIN|COMMIT/i.test(sql)) return { rowCount: 0, rows: [] };
+      if (/DELETE FROM program_calendar_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      if (/INSERT INTO program_calendar_day/i.test(sql)) {
+        return {
+          rowCount: 1,
+          rows: [{ id: "new-calendar-id", rescheduled_from_day_id: PROGRAM_DAY_ID }],
+        };
+      }
+      if (/UPDATE program_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      throw new Error("Unexpected tx query: " + sql);
+    },
+    release() {},
+  };
+  const handlers = createProgramDayActionHandlers({
+    async query(sql) {
+      // verifyProgramDay
+      if (/FROM program_day pd/i.test(sql)) {
+        return { rowCount: 1, rows: [makeDay()] };
+      }
+      // conflict check — returns 0 rows because is_skipped = FALSE filter excludes the ghost entry
+      if (/FROM program_calendar_day pcd/i.test(sql)) {
+        return { rowCount: 0, rows: [] };
+      }
+      throw new Error("Unexpected query: " + sql);
+    },
+    async connect() {
+      return client;
+    },
+  });
+  const res = mockRes();
+
+  await handlers.rescheduleProgramDay(
+    makeReq({ body: { targetDate: "2099-12-31" } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 201);
+  assert.ok(calls.some((call) => /DELETE FROM program_calendar_day/i.test(call.sql)));
+  assert.ok(calls.some((call) => /INSERT INTO program_calendar_day/i.test(call.sql)));
 });
 
 test("rescheduleProgramDay rejects date conflicts", async () => {
