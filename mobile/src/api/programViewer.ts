@@ -31,14 +31,21 @@ export type ProgramOverviewResponse = {
     weekNumber?: number | null;
     isTrainingDay: boolean;
     isSkipped?: boolean | null;
+    isBonus?: boolean | null;
+    dayLabel?: string | null;
   }>;
   selectedDayPreview?: {
     programDayId: string;
     label?: string;
     type?: string;
     sessionDuration?: number;
-    equipmentSlugs?: string[];
+    equipmentNames?: string[];
   };
+  bonusDayRecommendation?: {
+    programType: string;
+    programFocusTypes: string[];
+    recommendedFocusType: string | null;
+  } | null;
 };
 
 export type AdaptationDecision = {
@@ -158,6 +165,30 @@ function asString(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
+function capitalise(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function humaniseLabel(value: string): string {
+  return value
+    .split(/\b/)
+    .map((part) => (
+      /^[a-z]+(_[a-z]+)+$/.test(part)
+        ? part.split("_").filter(Boolean).map(capitalise).join(" ")
+        : part
+    ))
+    .join("");
+}
+
+function humaniseEquipmentFallback(value: string): string {
+  return value
+    .replace(/[-_]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(capitalise)
+    .join(" ");
+}
+
 function asNullableString(value: unknown): string | null | undefined {
   if (value === null) return null;
   return asString(value);
@@ -246,6 +277,8 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
   const rawCalendarDays = asArray(root.calendar_days ?? root.calendarDays);
   // Backend sends "selected_day" (not "selected_day_preview")
   const rawSelectedDayPreview = asObject(root.selected_day ?? root.selected_day_preview ?? root.selectedDayPreview);
+  const rawBonusRecommendation = root.bonus_day_recommendation ?? root.bonusDayRecommendation ?? null;
+  const bonusRecommendation = rawBonusRecommendation ? asObject(rawBonusRecommendation) : null;
 
   const programId =
     asString(rawProgram.id) ??
@@ -283,12 +316,24 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       // Default true: legacy rows without the field are training days.
       isTrainingDay: asNullableBoolean(day.is_training_day ?? day.isTrainingDay) ?? true,
       isSkipped: asNullableBoolean(day.is_skipped ?? day.isSkipped) ?? false,
+      isBonus: asNullableBoolean(day.is_bonus ?? day.isBonus) ?? false,
+      dayLabel: asNullableString(day.day_label ?? day.dayLabel),
     };
   });
 
   const selectedProgramDayId = asString(
     rawSelectedDayPreview.program_day_id ?? rawSelectedDayPreview.programDayId,
   );
+  const rawEquipmentNames = asArray(
+    rawSelectedDayPreview.equipment_names ?? rawSelectedDayPreview.equipmentNames,
+  )
+    .map(asString)
+    .filter((value): value is string => Boolean(value));
+  const rawEquipmentSlugs = asArray(
+    rawSelectedDayPreview.equipment_slugs ?? rawSelectedDayPreview.equipmentSlugs,
+  )
+    .map(asString)
+    .filter((value): value is string => Boolean(value));
 
   return {
     program: {
@@ -305,20 +350,33 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       ? {
           programDayId: selectedProgramDayId,
           // Backend sends day_label / day_type / session_duration_mins
-          label: asString(rawSelectedDayPreview.day_label ?? rawSelectedDayPreview.label),
+          label: humaniseLabel(asString(rawSelectedDayPreview.day_label ?? rawSelectedDayPreview.label) ?? ""),
           type: asString(rawSelectedDayPreview.day_type ?? rawSelectedDayPreview.type),
           sessionDuration: asNumber(
             rawSelectedDayPreview.session_duration_mins ??
             rawSelectedDayPreview.session_duration ??
             rawSelectedDayPreview.sessionDuration,
           ),
-          equipmentSlugs: asArray(
-            rawSelectedDayPreview.equipment_slugs ?? rawSelectedDayPreview.equipmentSlugs,
+          equipmentNames: rawEquipmentNames.length > 0
+            ? rawEquipmentNames
+            : rawEquipmentSlugs.map(humaniseEquipmentFallback),
+        }
+      : undefined,
+    bonusDayRecommendation: bonusRecommendation
+      ? {
+          programType:
+            asString(bonusRecommendation.programType ?? bonusRecommendation.program_type) ??
+            "hypertrophy",
+          programFocusTypes: asArray(
+            bonusRecommendation.programFocusTypes ?? bonusRecommendation.program_focus_types,
           )
             .map(asString)
             .filter((value): value is string => Boolean(value)),
+          recommendedFocusType: asNullableString(
+            bonusRecommendation.recommendedFocusType ?? bonusRecommendation.recommended_focus_type,
+          ) ?? null,
         }
-      : undefined,
+      : null,
   };
 }
 

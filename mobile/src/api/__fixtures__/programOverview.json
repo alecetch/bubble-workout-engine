@@ -31,6 +31,6 @@
     "day_label": "Lower Body",
     "day_type": "strength",
     "session_duration_mins": 45,
-    "equipment_slugs": ["barbell", "bench"]
+    "equipment_names": ["Barbell", "Bench"]
   }
 }

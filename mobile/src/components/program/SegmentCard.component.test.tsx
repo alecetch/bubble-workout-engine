@@ -65,11 +65,12 @@ function segmentCardElement(
       programDayId={props.programDayId ?? "day-1"}
       userId={props.userId}
       onViewExerciseDetail={props.onViewExerciseDetail ?? vi.fn()}
-      onAllSetsSaved={props.onAllSetsSaved ?? vi.fn()}
-      onSubscriptionRequired={props.onSubscriptionRequired}
-    />
-  );
-}
+	      onAllSetsSaved={props.onAllSetsSaved ?? vi.fn()}
+	      onSubscriptionRequired={props.onSubscriptionRequired}
+	      onInlinePanelClose={props.onInlinePanelClose}
+	    />
+	  );
+	}
 
 function renderCard(
   props: Partial<React.ComponentProps<typeof SegmentCard>> = {},
@@ -181,14 +182,55 @@ describe("SegmentCard", () => {
     expect(screen.queryByText("Start Exercise")).not.toBeInTheDocument();
   });
 
-  it("renders Stop Exercise at the bottom of the inline panel", async () => {
+  it('renders "Close Log" instead of "Stop Exercise"', async () => {
     renderCard();
 
     fireEvent.click(screen.getByText("Start Exercise"));
 
     expect(await screen.findByText("Set 1")).toBeInTheDocument();
-    expect(screen.getByText("Stop Exercise")).toBeInTheDocument();
+    expect(screen.getByText("Close Log")).toBeInTheDocument();
+    expect(screen.queryByText("Stop Exercise")).not.toBeInTheDocument();
     expect(screen.queryByText("Start Exercise")).not.toBeInTheDocument();
+  });
+
+  it("fills down weight to subsequent undone sets", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    expect(await screen.findByText("Set 1")).toBeInTheDocument();
+    const inputs = screen.getAllByPlaceholderText("0");
+
+    fireEvent.change(inputs[0], { target: { value: "100" } });
+
+    expect(inputs[0]).toHaveValue("100");
+    expect(inputs[2]).toHaveValue("100");
+    expect(inputs[4]).toHaveValue("100");
+  });
+
+  it("does not fill down into already-completed sets", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    expect(await screen.findByText("Set 1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Barbell Squat set 1 complete" }));
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    const inputs = screen.getAllByPlaceholderText("0");
+
+    fireEvent.change(inputs[2], { target: { value: "80" } });
+
+    expect(inputs[0]).not.toHaveValue("80");
+    expect(inputs[2]).toHaveValue("80");
+    expect(inputs[4]).toHaveValue("80");
+  });
+
+  it("calls onInlinePanelClose when Close Log is pressed", async () => {
+    const onClose = vi.fn();
+    renderCard({ onInlinePanelClose: onClose });
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Close Log"));
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it("treats an omitted loadability flag as loggable", async () => {
@@ -386,19 +428,19 @@ describe("SegmentCard — unloaded exercises, button state machine, and collapse
     expect(screen.queryAllByText("kg").length).toBe(0);
   });
 
-  it("shows Stop Exercise when the inline logging panel is open", async () => {
+  it("shows Close Log when the inline logging panel is open", async () => {
     renderCard();
 
     fireEvent.click(screen.getByText("Start Exercise"));
 
-    expect(await screen.findByText("Stop Exercise")).toBeInTheDocument();
+    expect(await screen.findByText("Close Log")).toBeInTheDocument();
   });
 
   it("shows Exercise Complete and is disabled after stopping the exercise", async () => {
     renderCard();
 
     fireEvent.click(screen.getByText("Start Exercise"));
-    fireEvent.click(await screen.findByText("Stop Exercise"));
+    fireEvent.click(await screen.findByText("Close Log"));
 
     expect(await screen.findByText("Exercise Complete")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Exercise Complete" })).toBeDisabled();
@@ -410,12 +452,12 @@ describe("SegmentCard — unloaded exercises, button state machine, and collapse
 
     fireEvent.click(screen.getByText("Start Exercise"));
     fireEvent.click(await screen.findByText("Log all sets as complete"));
-    fireEvent.click(await screen.findByText("Stop Exercise"));
+    fireEvent.click(await screen.findByText("Close Log"));
 
     expect(await screen.findByText("3 x 7 (bodyweight) ✓")).toBeInTheDocument();
   });
 
-  it("Resume button is absent before Stop Exercise is tapped", async () => {
+  it("Resume button is absent before Close Log is tapped", async () => {
     renderCard();
 
     expect(screen.queryByText("Resume")).not.toBeInTheDocument();
@@ -426,11 +468,11 @@ describe("SegmentCard — unloaded exercises, button state machine, and collapse
     expect(screen.queryByText("Resume")).not.toBeInTheDocument();
   });
 
-  it("Resume button appears after Stop Exercise is tapped", async () => {
+  it("Resume button appears after Close Log is tapped", async () => {
     renderCard();
 
     fireEvent.click(screen.getByText("Start Exercise"));
-    fireEvent.click(await screen.findByText("Stop Exercise"));
+    fireEvent.click(await screen.findByText("Close Log"));
 
     expect(await screen.findByText("Resume")).toBeInTheDocument();
   });
@@ -439,7 +481,7 @@ describe("SegmentCard — unloaded exercises, button state machine, and collapse
     renderCard();
 
     fireEvent.click(screen.getByText("Start Exercise"));
-    fireEvent.click(await screen.findByText("Stop Exercise"));
+    fireEvent.click(await screen.findByText("Close Log"));
     fireEvent.click(await screen.findByText("Resume"));
 
     expect(await screen.findByText("Set 1")).toBeInTheDocument();
@@ -450,7 +492,7 @@ describe("SegmentCard — unloaded exercises, button state machine, and collapse
     renderCard();
 
     fireEvent.click(screen.getByText("Start Exercise"));
-    fireEvent.click(await screen.findByText("Stop Exercise"));
+    fireEvent.click(await screen.findByText("Close Log"));
     await screen.findByText("Exercise Complete");
 
     fireEvent.click(screen.getByText("Resume"));
@@ -644,7 +686,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
     });
   });
 
-  it("Stop Exercise mid-way shows post-stop RIR prompt", async () => {
+  it("Close Log mid-way shows post-stop RIR prompt", async () => {
     await openSupersetPanel();
 
     for (let i = 0; i < 2; i += 1) {
@@ -653,16 +695,16 @@ describe("SegmentCard — round-based logging (superset)", () => {
       await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1));
     }
 
-    fireEvent.click(screen.getByText("Stop Exercise"));
+    fireEvent.click(screen.getByText("Close Log"));
 
     expect(await screen.findByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).toBeInTheDocument();
     expect(screen.getByText("Done")).toBeInTheDocument();
   });
 
-  it("Resume button appears after Stop Exercise on a superset (no rounds completed)", async () => {
+  it("Resume button appears after Close Log on a superset (no rounds completed)", async () => {
     await openSupersetPanel();
 
-    fireEvent.click(screen.getByText("Stop Exercise"));
+    fireEvent.click(screen.getByText("Close Log"));
 
     expect(await screen.findByText("Resume")).toBeInTheDocument();
   });
@@ -670,7 +712,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
   it("tapping Resume on a superset reopens the panel", async () => {
     await openSupersetPanel();
 
-    fireEvent.click(screen.getByText("Stop Exercise"));
+    fireEvent.click(screen.getByText("Close Log"));
     fireEvent.click(await screen.findByText("Resume"));
 
     expect(await screen.findByText("Round 1")).toBeInTheDocument();

@@ -11,7 +11,6 @@ import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { allExercisesComplete, getSegmentLog, getWorkoutComplete, setWorkoutComplete } from "../../utils/localWorkoutLog";
-import { captureAndShare } from "../../utils/shareCard";
 import {
   buildExercise,
   buildProgramDay,
@@ -21,12 +20,6 @@ import {
 } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
-
-const storeReviewMocks = vi.hoisted(() => ({
-  hasAction: vi.fn(),
-  isAvailableAsync: vi.fn(),
-  requestReview: vi.fn(),
-}));
 
 const appStorageMocks = vi.hoisted(() => ({
   getItem: vi.fn(),
@@ -58,12 +51,6 @@ vi.mock("expo-haptics", () => ({
   notificationAsync: vi.fn().mockResolvedValue(undefined),
   ImpactFeedbackStyle: { Medium: "medium", Light: "light", Heavy: "heavy" },
   NotificationFeedbackType: { Success: "success", Warning: "warning", Error: "error" },
-}));
-
-vi.mock("expo-store-review", () => ({
-  hasAction: storeReviewMocks.hasAction,
-  isAvailableAsync: storeReviewMocks.isAvailableAsync,
-  requestReview: storeReviewMocks.requestReview,
 }));
 
 vi.mock("../../api/hooks", () => ({
@@ -128,10 +115,6 @@ vi.mock("../../utils/localWorkoutLog", () => ({
   _resetForTest: vi.fn(),
 }));
 
-vi.mock("../../utils/shareCard", () => ({
-  captureAndShare: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("../../utils/appStorage", () => ({
   getAppStorage: () => ({
     getItem: appStorageMocks.getItem,
@@ -184,19 +167,6 @@ vi.mock("../../components/program/SessionSummaryModal", () => ({
     ) : null,
 }));
 
-vi.mock("../../components/sharing/WeekShareCard", () => ({
-  WeekShareCard: ({ cardRef, onReady }: any) => {
-    React.useEffect(() => {
-      cardRef.current = document.createElement("div");
-      onReady?.();
-      return () => {
-        cardRef.current = null;
-      };
-    }, [cardRef, onReady]);
-    return <div data-testid="week-share-card" />;
-  },
-}));
-
 const useProgramDayFullMock = vi.mocked(useProgramDayFull);
 const useEntitlementMock = vi.mocked(useEntitlement);
 const useMarkDayCompleteMock = vi.mocked(useMarkDayComplete);
@@ -210,7 +180,6 @@ const getWorkoutCompleteMock = vi.mocked(getWorkoutComplete);
 const getSegmentLogMock = vi.mocked(getSegmentLog);
 const setWorkoutCompleteMock = vi.mocked(setWorkoutComplete);
 const allExercisesCompleteMock = vi.mocked(allExercisesComplete);
-const captureAndShareMock = vi.mocked(captureAndShare);
 
 const markDayMutateMock = vi.fn();
 const completeProgramMutateMock = vi.fn();
@@ -305,19 +274,11 @@ describe("ProgramDayScreen", () => {
     getSegmentLogMock.mockResolvedValue(null);
     allExercisesCompleteMock.mockResolvedValue(true);
     setWorkoutCompleteMock.mockResolvedValue(undefined);
-    captureAndShareMock.mockReset();
-    captureAndShareMock.mockResolvedValue(undefined);
     getPrsFeedMock.mockResolvedValue({ rows: [], mode: "prs_28d", heaviest: null });
     appStorageMocks.getItem.mockReset();
     appStorageMocks.getItem.mockResolvedValue(null);
     appStorageMocks.setItem.mockReset();
     appStorageMocks.setItem.mockResolvedValue(undefined);
-    storeReviewMocks.hasAction.mockReset();
-    storeReviewMocks.hasAction.mockResolvedValue(true);
-    storeReviewMocks.isAvailableAsync.mockReset();
-    storeReviewMocks.isAvailableAsync.mockResolvedValue(true);
-    storeReviewMocks.requestReview.mockReset();
-    storeReviewMocks.requestReview.mockResolvedValue(undefined);
     getProgramOverviewMock.mockResolvedValue({
       calendarDays: [
         {
@@ -465,13 +426,34 @@ describe("ProgramDayScreen", () => {
   });
 
   it("navigates to ProgramDashboard after an ordinary workout completion", async () => {
+    getProgramOverviewMock.mockResolvedValueOnce({
+      calendarDays: [
+        {
+          isTrainingDay: true,
+          programDayId: "day-1",
+          weekNumber: 1,
+          status: "scheduled",
+        },
+        {
+          isTrainingDay: true,
+          programDayId: "day-2",
+          weekNumber: 1,
+          status: "scheduled",
+        },
+      ],
+    } as any);
     const { navigation } = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
-      expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", { programId: "prog-1" }),
+      expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", {
+        programId: "prog-1",
+        showReviewPrompt: undefined,
+        weekCompleteNumber: undefined,
+        weekCompleteSessions: undefined,
+      }),
     );
   });
 
@@ -511,32 +493,26 @@ describe("ProgramDayScreen", () => {
     expect(navigation.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
   });
 
-  it("shows an account-scoped review prompt after a PR and requests native review on tap", async () => {
+  it("defers the account-scoped review prompt to ProgramDashboard after a PR", async () => {
     getPrsFeedMock.mockResolvedValueOnce({
       rows: [{ exerciseName: "Back Squat", estimatedE1rmKg: 120 }],
     } as any);
 
-    renderScreen();
+    const { navigation } = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
-    expect(await screen.findByText("Nice PR.")).toBeInTheDocument();
-    expect(storeReviewMocks.requestReview).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Rate" }));
-
-    await waitFor(() => expect(storeReviewMocks.requestReview).toHaveBeenCalledTimes(1));
-    expect(appStorageMocks.setItem).toHaveBeenCalledWith("hasRequestedStoreReview:user-1", "true");
-    expect(
-      await screen.findByText(
-        "Thanks. If the rating sheet doesn't appear, your device may be limiting review prompts.",
+    await waitFor(() =>
+      expect(navigation.navigate).toHaveBeenCalledWith(
+        "ProgramDashboard",
+        expect.objectContaining({ programId: "prog-1", showReviewPrompt: true }),
       ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    );
+    expect(screen.queryByText("Nice PR.")).not.toBeInTheDocument();
   });
 
-  it("shares the week card from the week-complete banner", async () => {
+  it("defers the week-complete banner to ProgramDashboard", async () => {
     getProgramOverviewMock.mockResolvedValueOnce({
       calendarDays: [
         {
@@ -554,16 +530,22 @@ describe("ProgramDayScreen", () => {
       ],
     } as any);
 
-    renderScreen();
+    const { navigation } = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
-    expect(await screen.findByText("Week 1 complete!")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Share" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
-
-    await waitFor(() => expect(captureAndShareMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(navigation.navigate).toHaveBeenCalledWith(
+        "ProgramDashboard",
+        expect.objectContaining({
+          programId: "prog-1",
+          weekCompleteNumber: 1,
+          weekCompleteSessions: 2,
+        }),
+      ),
+    );
+    expect(screen.queryByText("Week 1 complete!")).not.toBeInTheDocument();
   });
 
   it("shows the session summary before completing the workout", async () => {

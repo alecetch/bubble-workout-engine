@@ -221,6 +221,56 @@ test("rescheduleProgramDay allows reschedule to date freed by a previously-resch
   assert.ok(calls.some((call) => /INSERT INTO program_calendar_day/i.test(call.sql)));
 });
 
+test("rescheduleProgramDay allows reschedule to a rest-day slot in the program calendar", async () => {
+  // The pipeline creates a program_calendar_day row for EVERY date in the program range,
+  // including rest days (is_training_day = FALSE, program_day_id = NULL).
+  // Those rows occupy the unique (program_id, scheduled_date) slot.
+  // The ghost DELETE must clear them before inserting the rescheduled training day.
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/BEGIN|COMMIT/i.test(sql)) return { rowCount: 0, rows: [] };
+      if (/DELETE FROM program_calendar_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      if (/INSERT INTO program_calendar_day/i.test(sql)) {
+        return {
+          rowCount: 1,
+          rows: [{ id: "new-calendar-id", rescheduled_from_day_id: PROGRAM_DAY_ID }],
+        };
+      }
+      if (/UPDATE program_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      throw new Error("Unexpected tx query: " + sql);
+    },
+    release() {},
+  };
+  const handlers = createProgramDayActionHandlers({
+    async query(sql) {
+      if (/FROM program_day pd/i.test(sql)) {
+        return { rowCount: 1, rows: [makeDay()] };
+      }
+      // conflict check — returns 0 because the rest-day row has is_training_day = FALSE and no linked program_day
+      if (/FROM program_calendar_day pcd/i.test(sql)) {
+        return { rowCount: 0, rows: [] };
+      }
+      throw new Error("Unexpected query: " + sql);
+    },
+    async connect() {
+      return client;
+    },
+  });
+  const res = mockRes();
+
+  await handlers.rescheduleProgramDay(
+    makeReq({ body: { targetDate: "2099-12-31" } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 201);
+  // The DELETE must have run to clear the rest-day slot
+  assert.ok(calls.some((call) => /DELETE FROM program_calendar_day/i.test(call.sql)));
+  assert.ok(calls.some((call) => /INSERT INTO program_calendar_day/i.test(call.sql)));
+});
+
 test("rescheduleProgramDay rejects date conflicts", async () => {
   const handlers = createProgramDayActionHandlers({
     async query(sql) {

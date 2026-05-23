@@ -385,6 +385,17 @@
     },
     {
       "type": "component",
+      "source": "src/components/today/BonusWorkoutSheet.tsx",
+      "test": "src/components/today/BonusWorkoutSheet.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "today",
+        "bonus-day"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/today/TodayWorkoutCard.tsx",
       "test": "src/components/today/TodayWorkoutCard.component.test.tsx",
       "status": "covered",

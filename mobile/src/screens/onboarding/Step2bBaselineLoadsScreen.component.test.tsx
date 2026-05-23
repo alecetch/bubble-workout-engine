@@ -50,10 +50,6 @@ vi.mock("../../components/onboarding/SectionCard", () => ({
   ),
 }));
 
-vi.mock("../../components/onboarding/SelectField", () => ({
-  SelectField: () => null,
-}));
-
 vi.mock("../../components/interaction/PressableScale", () => ({
   PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
     <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
@@ -357,5 +353,70 @@ describe("Step2bBaselineLoadsScreen", () => {
     renderScreen();
 
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  });
+
+  it("reps stepper shows a 'reps' label after the count", () => {
+    renderScreen();
+    expect(screen.getAllByText("reps")).toHaveLength(6);
+  });
+
+  it("exercise carousel advances and reverses through options", async () => {
+    const extraSquatOption = {
+      exerciseId: "ex-sq2",
+      estimationFamily: "squat",
+      isAnchorEligible: true,
+      anchorPriority: 2,
+      label: "Goblet Squat",
+      equipmentItemsSlugs: [],
+    };
+    useReferenceDataMock.mockReturnValue({
+      data: { anchorExercises: [...ANCHOR_EXERCISES, extraSquatOption] },
+      isLoading: false,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Back Squat")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Previous exercise" })[0]).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Next exercise" })[0]);
+    expect(screen.getByText("Goblet Squat")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Next exercise" })[0]).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Previous exercise" })[0]);
+    expect(screen.getByText("Back Squat")).toBeInTheDocument();
+  });
+
+  it("saves the exercise selected via the carousel", async () => {
+    const extraSquatOption = {
+      exerciseId: "ex-sq2",
+      estimationFamily: "squat",
+      isAnchorEligible: true,
+      anchorPriority: 2,
+      label: "Goblet Squat",
+      equipmentItemsSlugs: [],
+    };
+    useReferenceDataMock.mockReturnValue({
+      data: { anchorExercises: [...ANCHOR_EXERCISES, extraSquatOption] },
+      isLoading: false,
+      isError: false,
+    } as any);
+
+    const navigation = renderScreen();
+    fireEvent.click(screen.getAllByRole("button", { name: "Next exercise" })[0]);
+    changeSquatWeight("60");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anchorLifts: expect.arrayContaining([
+            expect.objectContaining({ estimationFamily: "squat", exerciseId: "ex-sq2", loadKg: 60 }),
+          ]),
+        }),
+      );
+      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+    });
   });
 });

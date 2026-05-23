@@ -2,8 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import * as StoreReview from "expo-store-review";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import { queryKeys, useCompleteProgram, useEntitlement, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getProgramEndCheck } from "../../api/programCompletion";
@@ -16,14 +15,13 @@ import { EquipmentOverrideSheet } from "../../components/program/EquipmentOverri
 import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
-import { WeekShareCard } from "../../components/sharing/WeekShareCard";
 import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
-import { componentStyles, radii } from "../../theme/components";
+import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import {
@@ -35,8 +33,7 @@ import {
   type SegmentLogEntry,
 } from "../../utils/localWorkoutLog";
 import { useSettingsStore } from "../../state/settings/useSettingsStore";
-import { captureAndShare } from "../../utils/shareCard";
-import { getAppStorage } from "../../utils/appStorage";
+import { hasRequestedStoreReview } from "../../utils/storeReview";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDay">;
 type Segment = ProgramDayFullResponse["segments"][number];
@@ -45,12 +42,6 @@ type WeekShareData = {
   sessionsCompleted: number;
   totalVolumeKg: number;
 };
-
-const REVIEW_PROMPT_KEY = "hasRequestedStoreReview";
-
-function reviewPromptKey(userId: string): string {
-  return `${REVIEW_PROMPT_KEY}:${userId}`;
-}
 
 function getCompletedWeekShareData(
   overview: Pick<ProgramOverviewResponse, "calendarDays">,
@@ -79,26 +70,6 @@ function getCompletedWeekShareData(
     sessionsCompleted: thisWeekTrainingDays.length,
     totalVolumeKg,
   };
-}
-
-async function hasRequestedStoreReview(userId: string | undefined): Promise<boolean> {
-  if (!userId) return false;
-  try {
-    const storage = getAppStorage();
-    const already = await storage.getItem(reviewPromptKey(userId));
-    return Boolean(already);
-  } catch {
-    return false;
-  }
-}
-
-async function markStoreReviewRequested(userId: string | undefined): Promise<void> {
-  if (!userId) return;
-  try {
-    await getAppStorage().setItem(reviewPromptKey(userId), "true");
-  } catch {
-    // Review prompt persistence is best-effort only.
-  }
 }
 
 const WEEKDAY_LABELS: Record<string, string> = {
@@ -140,19 +111,10 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [prHits, setPrHits] = useState<string[]>([]);
   const [prE1rmKg, setPrE1rmKg] = useState<number | null>(null);
-  const [reviewPromptVisible, setReviewPromptVisible] = useState(false);
-  const [reviewPromptMessage, setReviewPromptMessage] = useState<string | null>(null);
-  const [isRequestingReview, setIsRequestingReview] = useState(false);
-  const [weekShareVisible, setWeekShareVisible] = useState(false);
-  const [weekShareData, setWeekShareData] = useState<WeekShareData | null>(null);
-  const [weekShareCardReady, setWeekShareCardReady] = useState(false);
-  const [isSharingWeek, setIsSharingWeek] = useState(false);
-  const weekCardRef = useRef<View>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetY = useRef(0);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
   const programId = dayQuery.data?.day?.programId ?? activeProgramId ?? "";
-  const currentWeekNumber = dayQuery.data?.day?.weekNumber ?? null;
   const nav = navigation as unknown as NativeStackNavigationProp<ProgramsStackParamList>;
   const hydrateSettings = useSettingsStore((state) => state.hydrate);
 
@@ -252,49 +214,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     };
   }, [allExerciseIds, orderedSegments, programDayId]);
 
-  useEffect(() => {
-    if (!workoutComplete || weekShareVisible || !programId || !userId) return;
-    let cancelled = false;
-
-    async function loadCompletedWeekShare(): Promise<void> {
-      try {
-        const overview = await queryClient.fetchQuery({
-          queryKey: queryKeys.programOverview(programId, { userId }),
-          queryFn: () => getProgramOverview(programId, { userId }),
-          staleTime: 0,
-        });
-        if (cancelled) return;
-        const shareData = getCompletedWeekShareData(
-          overview,
-          currentWeekNumber,
-          programDayId,
-          computeSessionStatsFromLoggedRows(segmentLogRows).totalVolumeKg,
-        );
-        if (shareData) {
-          setWeekShareData(shareData);
-          setWeekShareCardReady(false);
-          setWeekShareVisible(true);
-        }
-      } catch {
-        // Week share prompt is best-effort.
-      }
-    }
-
-    void loadCompletedWeekShare();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    currentWeekNumber,
-    programDayId,
-    programId,
-    queryClient,
-    segmentLogRows,
-    userId,
-    weekShareVisible,
-    workoutComplete,
-  ]);
-
   async function handleSummaryDismiss(): Promise<void> {
     setSummaryVisible(false);
     try {
@@ -303,35 +222,32 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       setWorkoutCompleteState(true);
       setConfirmationText(null);
 
+      let shouldShowReview = false;
+      let weekCompleteNumber: number | undefined;
+      let weekCompleteSessions: number | undefined;
+
       if (userId && prHits.length === 0) {
-        void getPrsFeed(userId)
-          .then((feed) => {
-            const names = feed.rows.map((row) => row.exerciseName).filter(Boolean);
-            if (names.length > 0) {
-              setPrHits(names);
-              const bestE1rm = feed.rows.reduce(
-                (max, row) => Math.max(max, row.estimatedE1rmKg ?? 0),
-                0,
-              );
-              if (bestE1rm > 0) setPrE1rmKg(bestE1rm);
-              void hasRequestedStoreReview(userId).then((already) => {
-                if (!already) {
-                  setReviewPromptMessage(null);
-                  setReviewPromptVisible(true);
-                }
-              });
-            }
-          })
-          .catch(() => {});
+        try {
+          const feed = await getPrsFeed(userId);
+          const names = feed.rows.map((row) => row.exerciseName).filter(Boolean);
+          if (names.length > 0) {
+            setPrHits(names);
+            const bestE1rm = feed.rows.reduce(
+              (max, row) => Math.max(max, row.estimatedE1rmKg ?? 0),
+              0,
+            );
+            if (bestE1rm > 0) setPrE1rmKg(bestE1rm);
+            const already = await hasRequestedStoreReview(userId);
+            if (!already) shouldShowReview = true;
+          }
+        } catch {
+          // PR feed lookup is best-effort.
+        }
       }
 
       if (prHits.length > 0) {
-        void hasRequestedStoreReview(userId).then((already) => {
-          if (!already) {
-            setReviewPromptMessage(null);
-            setReviewPromptVisible(true);
-          }
-        });
+        const already = await hasRequestedStoreReview(userId);
+        if (!already) shouldShowReview = true;
       }
 
       if (!programId || !userId) return;
@@ -349,9 +265,8 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         computeSessionStats().totalVolumeKg,
       );
       if (shareData) {
-        setWeekShareData(shareData);
-        setWeekShareCardReady(false);
-        setWeekShareVisible(true);
+        weekCompleteNumber = shareData.weekNumber;
+        weekCompleteSessions = shareData.sessionsCompleted;
       }
 
       const endCheck = await queryClient.fetchQuery({
@@ -375,60 +290,15 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         return;
       }
 
-      nav.navigate("ProgramDashboard", { programId });
+      nav.navigate("ProgramDashboard", {
+        programId,
+        showReviewPrompt: shouldShowReview || undefined,
+        weekCompleteNumber,
+        weekCompleteSessions,
+      });
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
     }
-  }
-
-  async function handleShareWeek(): Promise<void> {
-    if (isSharingWeek) return;
-    if (!weekShareCardReady || !weekCardRef.current) {
-      Alert.alert("Share unavailable", "The week share card is still preparing. Please try again.");
-      return;
-    }
-    setIsSharingWeek(true);
-    try {
-      await captureAndShare(weekCardRef);
-    } catch (error) {
-      Alert.alert(
-        "Share unavailable",
-        error instanceof Error ? error.message : "Unable to share this card yet.",
-      );
-    } finally {
-      setIsSharingWeek(false);
-    }
-  }
-
-  function handleRateApp(): void {
-    if (isRequestingReview || !userId) return;
-    setIsRequestingReview(true);
-    setReviewPromptMessage("Thanks. If the rating sheet doesn't appear, your device may be limiting review prompts.");
-    void markStoreReviewRequested(userId);
-
-    void (async () => {
-      try {
-        const hasReviewAction =
-          typeof StoreReview.hasAction === "function"
-            ? await StoreReview.hasAction()
-            : await StoreReview.isAvailableAsync();
-        if (!hasReviewAction) {
-          setReviewPromptMessage("Review prompts aren't available in this build or on this device.");
-          return;
-        }
-        await StoreReview.requestReview();
-      } catch {
-        Alert.alert("Review unavailable", "We couldn't open the rating prompt right now.");
-      } finally {
-        setIsRequestingReview(false);
-      }
-    })();
-  }
-
-  function handleDismissReviewPrompt(): void {
-    void markStoreReviewRequested(userId);
-    setReviewPromptVisible(false);
-    setReviewPromptMessage(null);
   }
 
   async function handleUndoComplete(): Promise<void> {
@@ -573,6 +443,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
           displayChip: ex.adaptationDecision!.displayChip,
         }))
     : [];
+  const completeButtonTestId = allExerciseCardsComplete
+    ? "workout-complete-ready"
+    : "workout-complete-primary";
 
   return (
     <View style={styles.root}>
@@ -631,6 +504,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
               const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
               scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
             }}
+            onInlinePanelClose={(pageY) => {
+              const targetScreenY = 80;
+              const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
+            }}
           />
         ))}
       </ScrollView>
@@ -640,9 +518,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
           style={[
             styles.completeButton,
             workoutComplete && styles.completeButtonDone,
-            !workoutComplete && !allExerciseCardsComplete && styles.completeButtonDisabled,
           ]}
           onPress={() => setSummaryVisible(true)}
+          testID={completeButtonTestId}
         >
           <Text style={styles.completeButtonLabel}>Workout complete</Text>
         </PressableScale>
@@ -658,61 +536,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         ) : null}
         {confirmationText ? <Text style={styles.confirmationText}>{confirmationText}</Text> : null}
       </View>
-
-      {weekShareVisible && weekShareData ? (
-        <View style={styles.weekCompleteBanner}>
-          <View style={styles.weekCompleteContent}>
-            <Text style={styles.weekCompleteTitle}>Week {weekShareData.weekNumber} complete!</Text>
-            <Text style={styles.weekCompleteSubtitle}>
-              {weekShareData.sessionsCompleted} sessions completed
-            </Text>
-          </View>
-          <PressableScale
-            style={styles.weekShareButton}
-            onPress={() => {
-              void handleShareWeek();
-            }}
-            disabled={isSharingWeek}
-          >
-            <Text style={styles.weekShareButtonLabel}>
-              {isSharingWeek || !weekShareCardReady ? "..." : "Share"}
-            </Text>
-          </PressableScale>
-        </View>
-      ) : null}
-
-      {reviewPromptVisible ? (
-        <View style={styles.reviewPrompt}>
-          <View style={styles.reviewPromptContent}>
-            <Text style={styles.reviewPromptTitle}>{reviewPromptMessage ? "Thanks" : "Nice PR."}</Text>
-            <Text style={styles.reviewPromptText}>
-              {reviewPromptMessage ?? "Enjoying Formai? A quick rating helps us improve."}
-            </Text>
-          </View>
-          <View style={styles.reviewPromptActions}>
-            <PressableScale
-              style={styles.reviewSecondaryButton}
-              onPress={handleDismissReviewPrompt}
-              disabled={isRequestingReview}
-            >
-              <Text style={styles.reviewSecondaryLabel}>
-                {reviewPromptMessage ? "Done" : "Not now"}
-              </Text>
-            </PressableScale>
-            {!reviewPromptMessage ? (
-              <PressableScale
-                style={styles.reviewPrimaryButton}
-                onPress={handleRateApp}
-                disabled={isRequestingReview}
-              >
-                <Text style={styles.reviewPrimaryLabel}>
-                  {isRequestingReview ? "..." : "Rate"}
-                </Text>
-              </PressableScale>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
 
       <ExerciseSwapSheet
         visible={swapSheetVisible}
@@ -739,15 +562,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
           void handleSummaryDismiss();
         }}
       />
-      {weekShareData ? (
-        <WeekShareCard
-          weekNumber={weekShareData.weekNumber}
-          sessionsCompleted={weekShareData.sessionsCompleted}
-          totalVolumeKg={weekShareData.totalVolumeKg}
-          cardRef={weekCardRef}
-          onReady={() => setWeekShareCardReady(true)}
-        />
-      ) : null}
       <EquipmentOverrideSheet
         visible={equipmentSheetVisible}
         onClose={() => setEquipmentSheetVisible(false)}
@@ -871,97 +685,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     ...typography.small,
     lineHeight: 18,
-  },
-  weekCompleteBanner: {
-    ...componentStyles.celebrationPrompt,
-    position: "absolute",
-    left: spacing.lg,
-    right: spacing.lg,
-    bottom: 144,
-    zIndex: 5,
-    flexDirection: "row",
-    alignItems: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  weekCompleteContent: {
-    flex: 1,
-    gap: 4,
-  },
-  weekCompleteTitle: {
-    color: colors.textPrimary,
-    ...typography.h3,
-  },
-  weekCompleteSubtitle: {
-    color: colors.textSecondary,
-    ...typography.body,
-  },
-  weekShareButton: {
-    minHeight: 44,
-    borderRadius: radii.pill,
-    backgroundColor: colors.success,
-    paddingHorizontal: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  weekShareButtonLabel: {
-    color: colors.background,
-    ...typography.body,
-    fontWeight: "700",
-  },
-  reviewPrompt: {
-    ...componentStyles.celebrationPrompt,
-    position: "absolute",
-    left: spacing.lg,
-    right: spacing.lg,
-    bottom: 224,
-    zIndex: 6,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  reviewPromptContent: {
-    gap: spacing.xs,
-  },
-  reviewPromptTitle: {
-    color: colors.textPrimary,
-    ...typography.h3,
-  },
-  reviewPromptText: {
-    color: colors.textSecondary,
-    ...typography.body,
-    lineHeight: 22,
-  },
-  reviewPromptActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: spacing.sm,
-  },
-  reviewSecondaryButton: {
-    minHeight: 44,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reviewSecondaryLabel: {
-    color: colors.textSecondary,
-    ...typography.body,
-    fontWeight: "700",
-  },
-  reviewPrimaryButton: {
-    minHeight: 44,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reviewPrimaryLabel: {
-    color: colors.textPrimary,
-    ...typography.body,
-    fontWeight: "700",
   },
   bottomBar: {
     position: "absolute",

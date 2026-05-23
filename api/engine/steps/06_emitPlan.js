@@ -283,9 +283,30 @@ function buildWeekIndex(program) {
 
 /* ------------------ day narration helpers ------------------ */
 
+function humaniseFocusType(slug) {
+  const raw = s(slug);
+  if (!raw) return "";
+  return raw
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function humaniseSnakeTokens(value) {
+  const raw = s(value);
+  if (!raw) return "";
+  return raw
+    .split(/\b/)
+    .map((part) => (/^[a-z]+(_[a-z]+)+$/.test(part) ? humaniseFocusType(part) : part))
+    .join("");
+}
+
 function getDayLabel(baseDay, dayNum) {
-  if (baseDay && baseDay.narration && baseDay.narration.day_title) return s(baseDay.narration.day_title);
-  return "Day " + dayNum;
+  if (baseDay && baseDay.narration && baseDay.narration.day_title) {
+    return humaniseSnakeTokens(baseDay.narration.day_title);
+  }
+  return humaniseSnakeTokens("Day " + dayNum);
 }
 function getSegmentByPurpose(baseDay, purpose) {
   if (!baseDay || !Array.isArray(baseDay.segments)) return null;

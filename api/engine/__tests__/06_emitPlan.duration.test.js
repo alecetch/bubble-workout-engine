@@ -131,3 +131,53 @@ test("emitPlanRows keeps emitted training days on selected weekdays when start d
   assert.deepEqual(days.map((day) => day.scheduledOffsetDays), [0, 1, 5]);
 });
 
+function parseDayLabel(rows) {
+  const dayRow = rows.find((row) => row.startsWith("DAY|"));
+  assert.ok(dayRow, "expected a DAY row");
+  return dayRow.split("|")[4];
+}
+
+function makeProgramWithNarration(dayTitle) {
+  return {
+    program_type: "hypertrophy",
+    days_per_week: 1,
+    days: [
+      {
+        day_index: 1,
+        day_type: "hypertrophy",
+        duration_mins: 10,
+        narration: { day_title: dayTitle },
+        segments: [
+          {
+            segment_index: 1,
+            segment_type: "single",
+            purpose: "main",
+            rounds: 1,
+            items: [{ ex_id: "ex1", sets: 1, reps_prescribed: "8", rest_after_set_sec: 60 }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+test("emitPlanRows humanises snake_case tokens in narration day_title", async () => {
+  const out = await emitPlanRows({ program: makeProgramWithNarration("upper_body Build Volume") });
+  assert.equal(parseDayLabel(out.rows), "Upper Body Build Volume");
+});
+
+test("emitPlanRows leaves already-readable narration day_title unchanged", async () => {
+  const out = await emitPlanRows({ program: makeProgramWithNarration("Day 1 - Strength") });
+  assert.equal(parseDayLabel(out.rows), "Day 1 - Strength");
+});
+
+test("emitPlanRows humanises a bare snake_case slug in narration day_title", async () => {
+  const out = await emitPlanRows({ program: makeProgramWithNarration("lower_body") });
+  assert.equal(parseDayLabel(out.rows), "Lower Body");
+});
+
+test("emitPlanRows falls back to 'Day N' label when narration is absent", async () => {
+  const out = await emitPlanRows({ program: makeProgram() });
+  assert.equal(parseDayLabel(out.rows), "Day 1");
+});
+

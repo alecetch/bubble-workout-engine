@@ -14,6 +14,7 @@ export type CalendarDayPillItem = {
   isTrainingDay?: boolean | null;
   programDayId?: string | null;
   isSkipped?: boolean | null;
+  isBonus?: boolean | null;
 };
 
 export type ProgramDayStatus = "none" | "scheduled" | "started" | "complete" | "skipped";
@@ -92,6 +93,7 @@ export function CalendarDayPillRow({
           const selected = Boolean(day.programDayId) && day.programDayId === selectedProgramDayId;
           const isRecoveryDay = !day.programDayId || day.isTrainingDay === false;
           const isSkipped = day.isSkipped === true;
+          const isBonus = day.isBonus === true;
           const { weekday, dayNum } = formatCalendarParts(day);
           const status: ProgramDayStatus = day.programDayId
             ? isSkipped
@@ -124,6 +126,7 @@ export function CalendarDayPillRow({
                 <View style={styles.programDayDotPlaceholder} />
               ) : (
                 <View
+                  testID={isBonus ? `calendar-day-dot-bonus-${day.id}` : `calendar-day-dot-${day.id}`}
                   style={[
                     styles.programDayDot,
                     status === "complete"
@@ -132,7 +135,9 @@ export function CalendarDayPillRow({
                         ? styles.dotStarted
                         : status === "skipped"
                           ? styles.dotSkipped
-                          : styles.dotScheduled,
+                          : isBonus
+                            ? styles.dotBonus
+                            : styles.dotScheduled,
                   ]}
                 />
               )}
@@ -218,6 +223,10 @@ const styles = StyleSheet.create({
   },
   dotScheduled: {
     backgroundColor: "rgba(148,163,184,0.85)",
+  },
+  dotBonus: {
+    backgroundColor: colors.accent,
+    opacity: 0.5,
   },
   dotStarted: {
     backgroundColor: colors.warning,

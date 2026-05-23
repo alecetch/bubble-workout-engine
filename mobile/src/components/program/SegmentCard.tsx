@@ -47,6 +47,7 @@ type SegmentCardProps = {
   onExerciseCompleteChange?: (programExerciseId: string) => void;
   onLayout?: (event: LayoutChangeEvent) => void;
   onInlinePanelOpen?: (pageY: number) => void;
+  onInlinePanelClose?: (pageY: number) => void;
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
@@ -139,6 +140,7 @@ export function SegmentCard({
   onExerciseCompleteChange,
   onLayout,
   onInlinePanelOpen,
+  onInlinePanelClose,
 }: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
@@ -184,6 +186,7 @@ export function SegmentCard({
   const showResumeButton = !inlineLoggingOpen && allExercisesMarkedComplete;
   const panelScrolledRef = useRef(false);
   const inlinePanelRef = useRef<View>(null);
+  const cardRootRef = useRef<View>(null);
   const prevRestRunning = useRef(false);
   const pendingEmptyRoundRef = useRef(false);
 
@@ -409,6 +412,14 @@ export function SegmentCard({
     setCompletedExerciseIds((current) => new Set([...current, ...ids]));
     closeInlinePanel({ clearInputs: false });
     ids.forEach((id) => onExerciseCompleteChange?.(id));
+    const cardRoot = cardRootRef.current;
+    if (typeof cardRoot?.measureInWindow === "function") {
+      cardRoot.measureInWindow((_x, y) => {
+        onInlinePanelClose?.(y);
+      });
+    } else {
+      onInlinePanelClose?.(0);
+    }
   }
 
   async function handleResumeExercise(): Promise<void> {
@@ -575,6 +586,27 @@ export function SegmentCard({
 
   function buildSetKey(exercise: Exercise, setIndex: number): string {
     return `${exercise.id ?? exercise.exerciseId ?? exercise.name}:${setIndex}`;
+  }
+
+  function fillDown(
+    exerciseKey: string,
+    setIndex: number,
+    field: "weight" | "reps",
+    value: string,
+    exercise: Exercise,
+  ): void {
+    setInputMap((current) => {
+      const existing = current[exerciseKey] ?? [];
+      const next = [...existing];
+      next[setIndex] = { ...(next[setIndex] ?? { weight: "", reps: "", rirActual: null }), [field]: value };
+      for (let i = setIndex + 1; i < next.length; i += 1) {
+        const key = buildSetKey(exercise, i);
+        if (!doneSetKeys.has(key)) {
+          next[i] = { ...(next[i] ?? { weight: "", reps: "", rirActual: null }), [field]: value };
+        }
+      }
+      return { ...current, [exerciseKey]: next };
+    });
   }
 
   async function handleSetComplete(exercise: Exercise, setIndex: number): Promise<void> {
@@ -965,7 +997,7 @@ export function SegmentCard({
   }
 
   return (
-    <View style={styles.card} onLayout={onLayout}>
+    <View ref={cardRootRef} style={styles.card} onLayout={onLayout}>
       <View style={styles.headerRow}>
         <View style={styles.headerCopy}>
           <Text style={styles.segmentName}>{segment.segmentName}</Text>
@@ -1274,7 +1306,7 @@ export function SegmentCard({
                               value={setInput.weight}
                               onChangeText={(value) => {
                                 const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
-                                updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, weight: sanitized }));
+                                fillDown(exerciseKey, setIndex, "weight", sanitized, exercise);
                               }}
                               keyboardType="decimal-pad"
                               placeholder="0"
@@ -1291,7 +1323,7 @@ export function SegmentCard({
                             value={setInput.reps}
                             onChangeText={(value) => {
                               const sanitized = value.replace(/[^0-9]/g, "");
-                              updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, reps: sanitized }));
+                              fillDown(exerciseKey, setIndex, "reps", sanitized, exercise);
                             }}
                             keyboardType="numeric"
                             placeholder="0"
@@ -1388,7 +1420,7 @@ export function SegmentCard({
               onPress={() => { void handleStopInlinePanel(); }}
             >
               <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelStop]}>
-                Stop Exercise
+                Close Log
               </Text>
             </PressableScale>
           ) : null}

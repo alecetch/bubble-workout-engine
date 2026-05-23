@@ -6,7 +6,6 @@ import type { ReferenceDataResponse } from "../../api/referenceData";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { hapticHeavy } from "../../components/interaction/haptics";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
-import { SelectField } from "../../components/onboarding/SelectField";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import {
@@ -152,6 +151,7 @@ function RepsStepper({
         <Text style={styles.stepperBtnText}>-</Text>
       </PressableScale>
       <Text style={styles.stepperCount}>{value}</Text>
+      <Text style={styles.stepperRepsLabel}>reps</Text>
       <PressableScale
         style={[styles.stepperBtn, value === 30 && styles.stepperBtnDisabled]}
         disabled={value === 30}
@@ -180,40 +180,56 @@ function AnchorFamilyRow({
   onPatch: (partial: Partial<CardDraft>) => void;
 }): React.JSX.Element {
   const resolvedExerciseId = card.exerciseId ?? options[0]?.value ?? null;
-  const exerciseLabel =
-    options.find((option) => option.value === resolvedExerciseId)?.label ?? "Choose";
+  const currentIndex = Math.max(0, options.findIndex((opt) => opt.value === resolvedExerciseId));
+  const exerciseLabel = options[currentIndex]?.label ?? "—";
+  const canPrev = currentIndex > 0;
+  const canNext = currentIndex < options.length - 1;
 
   return (
     <View style={styles.anchorRow}>
-      <View style={styles.anchorLeft}>
-        <Text style={styles.anchorFamilyLabel} numberOfLines={1}>
-          {ESTIMATION_FAMILY_LABELS[family]}
+      <Text style={styles.anchorFamilyLabel}>{ESTIMATION_FAMILY_LABELS[family]}</Text>
+
+      <View style={styles.exercisePicker}>
+        <PressableScale
+          style={[styles.exerciseArrowBtn, !canPrev && styles.exerciseArrowDisabled]}
+          disabled={!canPrev}
+          onPress={() => canPrev && onPatch({ exerciseId: options[currentIndex - 1].value })}
+          accessibilityLabel="Previous exercise"
+        >
+          <Text style={styles.exerciseArrowText}>‹</Text>
+        </PressableScale>
+        <Text style={styles.exerciseNameLabel} numberOfLines={1}>
+          {exerciseLabel}
         </Text>
-        <SelectField
-          label="Exercise"
-          valueLabel={exerciseLabel}
-          placeholder="Choose"
-          options={options}
-          onSelect={(value) => onPatch({ exerciseId: value })}
-        />
+        <PressableScale
+          style={[styles.exerciseArrowBtn, !canNext && styles.exerciseArrowDisabled]}
+          disabled={!canNext}
+          onPress={() => canNext && onPatch({ exerciseId: options[currentIndex + 1].value })}
+          accessibilityLabel="Next exercise"
+        >
+          <Text style={styles.exerciseArrowText}>›</Text>
+        </PressableScale>
       </View>
-      <View style={styles.weightInputWrapper}>
-        <TextInput
-          testID={`weight-input-${family}`}
-          style={styles.weightInput}
-          value={card.loadText}
-          onChangeText={(text) => onPatch({ loadText: sanitizeDecimal(text) })}
-          keyboardType="decimal-pad"
-          textContentType="none"
-          autoComplete="off"
-          selectTextOnFocus
-          placeholder={toDisplayPlaceholder(family, levelKey, unit)}
-          placeholderTextColor={colors.textSecondary}
-          returnKeyType="done"
-        />
-        <Text style={styles.weightUnitLabel}>{unit}</Text>
+
+      <View style={styles.weightRepsRow}>
+        <View style={styles.weightInputWrapper}>
+          <TextInput
+            testID={`weight-input-${family}`}
+            style={styles.weightInput}
+            value={card.loadText}
+            onChangeText={(text) => onPatch({ loadText: sanitizeDecimal(text) })}
+            keyboardType="decimal-pad"
+            textContentType="none"
+            autoComplete="off"
+            selectTextOnFocus
+            placeholder={toDisplayPlaceholder(family, levelKey, unit)}
+            placeholderTextColor={colors.textSecondary}
+            returnKeyType="done"
+          />
+          <Text style={styles.weightUnitLabel}>{unit}</Text>
+        </View>
+        <RepsStepper value={card.reps} onChange={(reps) => onPatch({ reps })} />
       </View>
-      <RepsStepper value={card.reps} onChange={(reps) => onPatch({ reps })} />
     </View>
   );
 }
@@ -450,20 +466,50 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   anchorRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  anchorLeft: {
-    flex: 1,
-    minWidth: 0,
+    paddingVertical: spacing.sm,
     gap: spacing.xs,
   },
   anchorFamilyLabel: {
     color: colors.textSecondary,
     ...typography.small,
+  },
+  exercisePicker: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.pill,
+    backgroundColor: colors.background,
+    overflow: "hidden",
+  },
+  exerciseArrowBtn: {
+    width: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.xs,
+  },
+  exerciseArrowDisabled: {
+    opacity: 0.2,
+  },
+  exerciseArrowText: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "600",
+    lineHeight: 28,
+  },
+  exerciseNameLabel: {
+    flex: 1,
+    textAlign: "center",
+    color: colors.textPrimary,
+    ...typography.body,
+    paddingVertical: spacing.xs,
+  },
+  weightRepsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
   weightInputWrapper: {
     flexDirection: "row",
@@ -472,17 +518,17 @@ const styles = StyleSheet.create({
   },
   weightInput: {
     width: 72,
-    height: 44,
+    height: 40,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
     color: colors.textPrimary,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 0,
     textAlign: "center",
     textAlignVertical: "center",
-    ...typography.body,
+    fontSize: typography.body.fontSize,
+    fontWeight: typography.body.fontWeight,
   },
   weightUnitLabel: {
     color: colors.textSecondary,
@@ -513,10 +559,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   stepperCount: {
-    minWidth: 24,
+    minWidth: 20,
     textAlign: "center",
     color: colors.textPrimary,
     ...typography.body,
+  },
+  stepperRepsLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
   },
   saveError: {
     color: colors.warning,

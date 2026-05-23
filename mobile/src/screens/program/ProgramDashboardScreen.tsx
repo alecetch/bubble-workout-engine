@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as StoreReview from "expo-store-review";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -11,15 +12,18 @@ import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { DayPreviewCard } from "../../components/program/DayPreviewCard";
 import { WeekPillStrip, type WeekStatus } from "../../components/program/WeekPillStrip";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { WeekShareCard } from "../../components/sharing/WeekShareCard";
 import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
-import { radii } from "../../theme/components";
+import { componentStyles, radii } from "../../theme/components";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { captureAndShare } from "../../utils/shareCard";
+import { markStoreReviewRequested } from "../../utils/storeReview";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDashboard">;
 
@@ -66,6 +70,14 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const [dayStatusByProgramDayId, setDayStatusByProgramDayId] = useState<
     Record<string, ProgramDayStatus>
   >({});
+  const [reviewPromptVisible, setReviewPromptVisible] = useState(false);
+  const [reviewPromptMessage, setReviewPromptMessage] = useState<string | null>(null);
+  const [isRequestingReview, setIsRequestingReview] = useState(false);
+  const [weekBannerVisible, setWeekBannerVisible] = useState(false);
+  const [weekBannerData, setWeekBannerData] = useState<{ weekNumber: number; sessions: number } | null>(null);
+  const [weekShareCardReady, setWeekShareCardReady] = useState(false);
+  const [isSharingWeek, setIsSharingWeek] = useState(false);
+  const weekCardRef = useRef<View>(null);
 
   // ── Data layer ────────────────────────────────────────────────────────────
   //
@@ -267,6 +279,82 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
     navigation.navigate("RecalibrateA");
   }, [navigation]);
 
+  useFocusEffect(
+    useCallback(() => {
+      const p = route.params;
+      if (p?.showReviewPrompt) {
+        setReviewPromptVisible(true);
+      }
+      if (p?.weekCompleteNumber != null) {
+        setWeekBannerData({ weekNumber: p.weekCompleteNumber, sessions: p.weekCompleteSessions ?? 0 });
+        setWeekBannerVisible(true);
+        setWeekShareCardReady(false);
+      }
+      if (p?.showReviewPrompt || p?.weekCompleteNumber != null) {
+        navigation.setParams?.({
+          showReviewPrompt: undefined,
+          weekCompleteNumber: undefined,
+          weekCompleteSessions: undefined,
+        });
+      }
+    }, [
+      navigation,
+      route.params?.showReviewPrompt,
+      route.params?.weekCompleteNumber,
+      route.params?.weekCompleteSessions,
+    ]),
+  );
+
+  async function handleShareWeek(): Promise<void> {
+    if (isSharingWeek) return;
+    if (!weekShareCardReady || !weekCardRef.current) {
+      Alert.alert("Share unavailable", "The week share card is still preparing. Please try again.");
+      return;
+    }
+    setIsSharingWeek(true);
+    try {
+      await captureAndShare(weekCardRef);
+    } catch (error) {
+      Alert.alert(
+        "Share unavailable",
+        error instanceof Error ? error.message : "Unable to share this card yet.",
+      );
+    } finally {
+      setIsSharingWeek(false);
+    }
+  }
+
+  function handleRateApp(): void {
+    if (isRequestingReview || !userId) return;
+    setIsRequestingReview(true);
+    setReviewPromptMessage("Thanks. If the rating sheet doesn't appear, your device may be limiting review prompts.");
+    void markStoreReviewRequested(userId);
+
+    void (async () => {
+      try {
+        const hasReviewAction =
+          typeof StoreReview.hasAction === "function"
+            ? await StoreReview.hasAction()
+            : await StoreReview.isAvailableAsync();
+        if (!hasReviewAction) {
+          setReviewPromptMessage("Review prompts aren't available in this build or on this device.");
+          return;
+        }
+        await StoreReview.requestReview();
+      } catch {
+        Alert.alert("Review unavailable", "We couldn't open the rating prompt right now.");
+      } finally {
+        setIsRequestingReview(false);
+      }
+    })();
+  }
+
+  function handleDismissReviewPrompt(): void {
+    void markStoreReviewRequested(userId);
+    setReviewPromptVisible(false);
+    setReviewPromptMessage(null);
+  }
+
   const today = new Date().toISOString().slice(0, 10);
   const missedSessionCount = useMemo(() => {
     return calendarDays.filter((day) => {
@@ -335,13 +423,14 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const showEndCheckBanner = endCheck?.canCompleteWithSkips === true;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.heroCard}>
-        <Text style={styles.heroTitle}>{overview.program.title ?? "Training Program"}</Text>
-        {overview.program.summary ? (
-          <Text style={styles.heroSummary}>{overview.program.summary}</Text>
-        ) : null}
-      </View>
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTitle}>{overview.program.title ?? "Training Program"}</Text>
+          {overview.program.summary ? (
+            <Text style={styles.heroSummary}>{overview.program.summary}</Text>
+          ) : null}
+        </View>
 
       {showCompletionBanner ? (
         <PressableScale
@@ -396,30 +485,93 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
           isTrainingDay: day.isTrainingDay,
           programDayId: day.programDayId ?? undefined,
           isSkipped: day.isSkipped ?? false,
+          isBonus: day.isBonus ?? false,
         }))}
         selectedProgramDayId={selectedProgramDayId}
         onSelectProgramDay={onSelectProgramDay}
         dayStatusByProgramDayId={dayStatusByProgramDayId}
       />
 
-      <DayPreviewCard
-        programId={programId}
-        preview={{
-          programDayId: selectedProgramDayId,
-          label: activePreview?.label,
-          type: activePreview?.type,
-          sessionDuration: activePreview?.sessionDuration,
-          equipmentSlugs: activePreview?.equipmentSlugs,
-          isCompleted: ["complete", "completed"].includes(String(selectedCalendarDay?.status ?? "").toLowerCase()),
-        }}
-        onStartWorkout={() => {
-          if (!selectedProgramDayId) return;
-          navigation.navigate("ProgramDay", { programDayId: selectedProgramDayId });
-        }}
-        onSessionSkipped={refreshOverview}
-        onSessionRescheduled={refreshOverview}
-      />
-    </ScrollView>
+        <DayPreviewCard
+          programId={programId}
+          preview={{
+            programDayId: selectedProgramDayId,
+            label: activePreview?.label,
+            type: activePreview?.type,
+            sessionDuration: activePreview?.sessionDuration,
+            equipmentNames: activePreview?.equipmentNames,
+            isCompleted: ["complete", "completed"].includes(String(selectedCalendarDay?.status ?? "").toLowerCase()),
+          }}
+          onStartWorkout={() => {
+            if (!selectedProgramDayId) return;
+            navigation.navigate("ProgramDay", { programDayId: selectedProgramDayId });
+          }}
+          onSessionSkipped={refreshOverview}
+          onSessionRescheduled={refreshOverview}
+        />
+      </ScrollView>
+
+      {weekBannerData ? (
+        <WeekShareCard
+          weekNumber={weekBannerData.weekNumber}
+          sessionsCompleted={weekBannerData.sessions}
+          totalVolumeKg={0}
+          cardRef={weekCardRef}
+          onReady={() => setWeekShareCardReady(true)}
+        />
+      ) : null}
+
+      {weekBannerVisible && weekBannerData ? (
+        <View style={styles.weekCompleteBanner}>
+          <View style={styles.weekCompleteContent}>
+            <Text style={styles.weekCompleteTitle}>Week {weekBannerData.weekNumber} complete!</Text>
+            <Text style={styles.weekCompleteSubtitle}>{weekBannerData.sessions} sessions completed</Text>
+          </View>
+          <PressableScale
+            style={styles.weekShareButton}
+            onPress={() => { void handleShareWeek(); }}
+            disabled={isSharingWeek}
+          >
+            <Text style={styles.weekShareButtonLabel}>
+              {isSharingWeek || !weekShareCardReady ? "..." : "Share"}
+            </Text>
+          </PressableScale>
+        </View>
+      ) : null}
+
+      {reviewPromptVisible ? (
+        <View style={styles.reviewPrompt}>
+          <View style={styles.reviewPromptContent}>
+            <Text style={styles.reviewPromptTitle}>{reviewPromptMessage ? "Thanks" : "Nice PR."}</Text>
+            <Text style={styles.reviewPromptText}>
+              {reviewPromptMessage ?? "Enjoying Formai? A quick rating helps us improve."}
+            </Text>
+          </View>
+          <View style={styles.reviewPromptActions}>
+            <PressableScale
+              style={styles.reviewSecondaryButton}
+              onPress={handleDismissReviewPrompt}
+              disabled={isRequestingReview}
+            >
+              <Text style={styles.reviewSecondaryLabel}>
+                {reviewPromptMessage ? "Done" : "Not now"}
+              </Text>
+            </PressableScale>
+            {!reviewPromptMessage ? (
+              <PressableScale
+                style={styles.reviewPrimaryButton}
+                onPress={handleRateApp}
+                disabled={isRequestingReview}
+              >
+                <Text style={styles.reviewPrimaryLabel}>
+                  {isRequestingReview ? "..." : "Rate"}
+                </Text>
+              </PressableScale>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -535,5 +687,96 @@ const styles = StyleSheet.create({
   missedBannerCopy: {
     color: colors.textSecondary,
     ...typography.body,
+  },
+  weekCompleteBanner: {
+    ...componentStyles.celebrationPrompt,
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: 144,
+    zIndex: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  weekCompleteContent: {
+    flex: 1,
+    gap: 4,
+  },
+  weekCompleteTitle: {
+    color: colors.textPrimary,
+    ...typography.h3,
+  },
+  weekCompleteSubtitle: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  weekShareButton: {
+    minHeight: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  weekShareButtonLabel: {
+    color: colors.background,
+    ...typography.body,
+    fontWeight: "700",
+  },
+  reviewPrompt: {
+    ...componentStyles.celebrationPrompt,
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: 224,
+    zIndex: 6,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  reviewPromptContent: {
+    gap: spacing.xs,
+  },
+  reviewPromptTitle: {
+    color: colors.textPrimary,
+    ...typography.h3,
+  },
+  reviewPromptText: {
+    color: colors.textSecondary,
+    ...typography.body,
+    lineHeight: 22,
+  },
+  reviewPromptActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
+  },
+  reviewSecondaryButton: {
+    minHeight: 44,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reviewSecondaryLabel: {
+    color: colors.textSecondary,
+    ...typography.body,
+    fontWeight: "700",
+  },
+  reviewPrimaryButton: {
+    minHeight: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reviewPrimaryLabel: {
+    color: colors.textPrimary,
+    ...typography.body,
+    fontWeight: "700",
   },
 });
