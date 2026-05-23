@@ -8,7 +8,7 @@ function resetStore(): void {
     clientProfileId: null,
     draft: DEFAULT_ONBOARDING_DRAFT,
     currentStep: 1,
-    attempted: { step1: false, step2: false, step2b: false, step3: false },
+    attempted: { step1: false, step2: false, step2b: false, step3: false, step4: false },
     touched: {},
     fieldErrors: {},
     isSaving: false,

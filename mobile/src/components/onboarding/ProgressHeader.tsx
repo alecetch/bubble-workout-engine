@@ -5,15 +5,15 @@ import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 
 type ProgressHeaderProps = {
-  step: 1 | 2 | 3;
+  step: 1 | 2 | 3 | 4;
 };
 
 export function ProgressHeader({ step }: ProgressHeaderProps): React.JSX.Element {
   return (
     <View style={styles.container}>
-      <Text style={styles.stepLabel}>{`Step ${step} of 3`}</Text>
+      <Text style={styles.stepLabel}>{`Step ${step} of 4`}</Text>
       <View style={styles.barTrack}>
-        <View style={[styles.barFill, { width: `${(step / 3) * 100}%` }]} />
+        <View style={[styles.barFill, { width: `${(step / 4) * 100}%` }]} />
       </View>
     </View>
   );
