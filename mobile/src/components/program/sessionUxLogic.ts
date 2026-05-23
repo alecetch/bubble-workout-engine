@@ -145,6 +145,40 @@ export function buildSegmentLogRows(
   return rows;
 }
 
+function isUnloadedExercise(exercise: Exercise): boolean {
+  return exercise.isUnloaded === true || exercise.isLoadable === false;
+}
+
+export function formatRoundSummary(
+  exercises: Exercise[],
+  totalRounds: number,
+  completedRoundCount: number,
+  inputMap: Record<string, SetInputState[]>,
+  doneSetKeys: Set<string>,
+): string | null {
+  if (completedRoundCount === 0) return null;
+  const firstExercise = exercises.find((exercise) => exercise.id);
+  if (!firstExercise?.id) return null;
+  const completedRounds = Array.from({ length: totalRounds }, (_value, index) => index)
+    .filter((index) => exercises.some((exercise) => doneSetKeys.has(`${exercise.id ?? exercise.exerciseId ?? exercise.name}:${index}`)));
+  const lastRoundIndex = completedRounds[completedRounds.length - 1] ?? completedRoundCount - 1;
+  const last = inputMap[firstExercise.id]?.[lastRoundIndex];
+  if (!last) return null;
+  const reps = parseInt(last.reps, 10);
+  if (!Number.isInteger(reps) || reps <= 0) return null;
+
+  const prefix = completedRoundCount >= totalRounds
+    ? `${totalRounds} rounds`
+    : `${completedRoundCount}/${totalRounds} rounds`;
+  if (isUnloadedExercise(firstExercise)) {
+    return `${prefix} · bodyweight x ${reps} ✓`;
+  }
+
+  const weight = parseFloat(last.weight);
+  if (!Number.isFinite(weight) || weight <= 0) return null;
+  return `${prefix} · ${weight} kg x ${reps} ✓`;
+}
+
 export function computeSessionStatsFromSegments(
   orderedSegments: Segment[],
   segmentLogs: Record<string, unknown>,

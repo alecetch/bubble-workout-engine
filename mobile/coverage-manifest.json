@@ -288,9 +288,10 @@
       "test": "src/components/program/SegmentCard.component.test.tsx",
       "status": "covered",
       "tags": [
-        "program"
+        "program",
+        "round-based-logging"
       ],
-      "reason": ""
+      "reason": "SegmentCard component tests cover inline logging, rest timers, and round-based superset logging."
     },
     {
       "type": "component",
