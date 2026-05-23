@@ -219,16 +219,21 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
       client = typeof db.connect === "function" ? await db.connect() : db;
       if (client !== db) await client.query("BEGIN");
 
-      // Remove ghost calendar entries left by previously-rescheduled days on the target date.
-      // These have is_skipped = TRUE on program_day but still occupy the unique (program_id, scheduled_date) slot.
+      // Remove any existing calendar entry on the target date that doesn't block rescheduling:
+      // (a) rest-day entries (is_training_day = FALSE) have NULL program_day_id and freely yield to a rescheduled session;
+      // (b) ghost training-day entries left by a previously-rescheduled day whose program_day is now is_skipped = TRUE.
+      // Both occupy the unique (program_id, scheduled_date) slot and must be cleared before the INSERT.
       await client.query(
         `
-        DELETE FROM program_calendar_day pcd
-        USING program_day pd
-        WHERE pcd.program_id = $1
-          AND pcd.scheduled_date = $2::date
-          AND pcd.program_day_id = pd.id
-          AND pd.is_skipped = TRUE
+        DELETE FROM program_calendar_day
+        WHERE program_id = $1
+          AND scheduled_date = $2::date
+          AND (
+            is_training_day = FALSE
+            OR program_day_id IN (
+              SELECT id FROM program_day WHERE is_skipped = TRUE
+            )
+          )
         `,
         [programId, targetDate],
       );

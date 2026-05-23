@@ -27,7 +27,7 @@ function rawOverview(overrides: Record<string, unknown> = {}): Record<string, un
       day_label: "Day 1",
       day_type: "strength",
       session_duration_mins: 45,
-      equipment_slugs: ["barbell"],
+      equipment_names: ["Barbell"],
     },
     ...overrides,
   };
@@ -88,12 +88,36 @@ describe("programViewer overview normalization", () => {
     expect(overview.selectedDayPreview).toBeUndefined();
   });
 
-  it("normalizes equipment slugs on the selected day preview", async () => {
+  it("normalizes equipment names on the selected day preview", async () => {
     authGetJsonMock.mockResolvedValueOnce(
-      rawOverview({ selected_day: { program_day_id: "day-1", equipment_slugs: ["rack", "bands"] } }),
+      rawOverview({ selected_day: { program_day_id: "day-1", equipment_names: ["Rack", "Bands"] } }),
     );
     const overview = await getProgramOverview("prog-1", {});
-    expect(overview.selectedDayPreview?.equipmentSlugs).toEqual(["rack", "bands"]);
+    expect(overview.selectedDayPreview?.equipmentNames).toEqual(["Rack", "Bands"]);
+  });
+
+  it("falls back to readable equipment names from legacy selected day slugs", async () => {
+    authGetJsonMock.mockResolvedValueOnce(
+      rawOverview({ selected_day: { program_day_id: "day-1", equipment_slugs: ["barbell", "pullup_bar"] } }),
+    );
+    const overview = await getProgramOverview("prog-1", {});
+    expect(overview.selectedDayPreview?.equipmentNames).toEqual(["Barbell", "Pullup Bar"]);
+  });
+
+  it("humanises snake_case labels on the selected day preview", async () => {
+    authGetJsonMock.mockResolvedValueOnce(
+      rawOverview({ selected_day: { program_day_id: "day-1", day_label: "upper_body_strength" } }),
+    );
+    const overview = await getProgramOverview("prog-1", {});
+    expect(overview.selectedDayPreview?.label).toBe("Upper Body Strength");
+  });
+
+  it("leaves already-readable labels unchanged", async () => {
+    authGetJsonMock.mockResolvedValueOnce(
+      rawOverview({ selected_day: { program_day_id: "day-1", day_label: "Day 1 - Strength" } }),
+    );
+    const overview = await getProgramOverview("prog-1", {});
+    expect(overview.selectedDayPreview?.label).toBe("Day 1 - Strength");
   });
 
   it("coerces numeric session duration strings", async () => {
