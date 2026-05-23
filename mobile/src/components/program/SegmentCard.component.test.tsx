@@ -414,6 +414,50 @@ describe("SegmentCard — unloaded exercises, button state machine, and collapse
 
     expect(await screen.findByText("3 x 7 (bodyweight) ✓")).toBeInTheDocument();
   });
+
+  it("Resume button is absent before Stop Exercise is tapped", async () => {
+    renderCard();
+
+    expect(screen.queryByText("Resume")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await screen.findByText("Set 1");
+
+    expect(screen.queryByText("Resume")).not.toBeInTheDocument();
+  });
+
+  it("Resume button appears after Stop Exercise is tapped", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Stop Exercise"));
+
+    expect(await screen.findByText("Resume")).toBeInTheDocument();
+  });
+
+  it("tapping Resume reopens the inline logging panel", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Stop Exercise"));
+    fireEvent.click(await screen.findByText("Resume"));
+
+    expect(await screen.findByText("Set 1")).toBeInTheDocument();
+    expect(screen.queryByText("Resume")).not.toBeInTheDocument();
+  });
+
+  it("tapping Resume shows Start Exercise again and hides Exercise Complete", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Stop Exercise"));
+    await screen.findByText("Exercise Complete");
+
+    fireEvent.click(screen.getByText("Resume"));
+
+    await screen.findByText("Set 1");
+    expect(screen.queryByText("Exercise Complete")).not.toBeInTheDocument();
+  });
 });
 
 describe("SegmentCard — round-based logging (superset)", () => {
@@ -613,5 +657,23 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     expect(await screen.findByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).toBeInTheDocument();
     expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+
+  it("Resume button appears after Stop Exercise on a superset (no rounds completed)", async () => {
+    await openSupersetPanel();
+
+    fireEvent.click(screen.getByText("Stop Exercise"));
+
+    expect(await screen.findByText("Resume")).toBeInTheDocument();
+  });
+
+  it("tapping Resume on a superset reopens the panel", async () => {
+    await openSupersetPanel();
+
+    fireEvent.click(screen.getByText("Stop Exercise"));
+    fireEvent.click(await screen.findByText("Resume"));
+
+    expect(await screen.findByText("Round 1")).toBeInTheDocument();
+    expect(screen.queryByText("Resume")).not.toBeInTheDocument();
   });
 });

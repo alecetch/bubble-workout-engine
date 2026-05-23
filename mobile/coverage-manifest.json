@@ -536,6 +536,16 @@
     },
     {
       "type": "screen",
+      "source": "src/screens/onboarding/Step2EquipmentDetailScreen.tsx",
+      "test": "src/screens/onboarding/Step2EquipmentDetailScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
       "source": "src/screens/onboarding/Step2bBaselineLoadsScreen.tsx",
       "test": "src/screens/onboarding/Step2bBaselineLoadsScreen.component.test.tsx",
       "status": "covered",
@@ -728,6 +738,16 @@
       "type": "screen",
       "source": "src/screens/settings/EquipmentSettingsScreen.tsx",
       "test": "src/screens/settings/EquipmentSettingsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/EquipmentPresetDetailScreen.tsx",
+      "test": "src/screens/settings/EquipmentPresetDetailScreen.component.test.tsx",
       "status": "covered",
       "tags": [
         "settings"

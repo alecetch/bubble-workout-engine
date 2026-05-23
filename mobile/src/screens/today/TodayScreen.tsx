@@ -232,7 +232,7 @@ export function TodayScreen(): React.JSX.Element {
     );
   }
 
-  if (lifecycleState === "today_scheduled") {
+  if (lifecycleState === "today_scheduled" || lifecycleState === "today_started") {
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.greeting}>{greetingText()}</Text>
@@ -246,6 +246,7 @@ export function TodayScreen(): React.JSX.Element {
           label={todayPreview?.label ?? "Today's Workout"}
           type={todayPreview?.type ?? ""}
           sessionDuration={todayPreview?.sessionDuration ?? null}
+          actionLabel={lifecycleState === "today_started" ? "Resume Workout" : "Start Workout"}
           onStartWorkout={() => {
             if (!isActive) {
               navigation.navigate("HomeTab", { screen: "Paywall" } as never);

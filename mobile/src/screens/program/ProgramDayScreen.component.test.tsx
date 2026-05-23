@@ -464,6 +464,53 @@ describe("ProgramDayScreen", () => {
     expect(setWorkoutCompleteMock).toHaveBeenCalledWith("day-1", true);
   });
 
+  it("navigates to ProgramDashboard after an ordinary workout completion", async () => {
+    const { navigation } = renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
+
+    await waitFor(() =>
+      expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", { programId: "prog-1" }),
+    );
+  });
+
+  it("does not navigate to ProgramDashboard when lifecycleStatus is completed", async () => {
+    getProgramEndCheckMock.mockResolvedValueOnce({
+      lifecycleStatus: "completed",
+      isLastScheduledDayComplete: false,
+      missedWorkoutsCount: 0,
+      canCompleteWithSkips: false,
+    } as any);
+    const { navigation } = renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
+
+    await waitFor(() =>
+      expect(navigation.navigate).toHaveBeenCalledWith("ProgramComplete", { programId: "prog-1" }),
+    );
+    expect(navigation.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
+  });
+
+  it("does not navigate to ProgramDashboard when canCompleteWithSkips is true", async () => {
+    getProgramEndCheckMock.mockResolvedValueOnce({
+      lifecycleStatus: "active",
+      isLastScheduledDayComplete: true,
+      missedWorkoutsCount: 2,
+      canCompleteWithSkips: true,
+    } as any);
+    const { navigation } = renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
+
+    await waitFor(() =>
+      expect(navigation.navigate).toHaveBeenCalledWith("ProgramEndCheck", { programId: "prog-1" }),
+    );
+    expect(navigation.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
+  });
+
   it("shows an account-scoped review prompt after a PR and requests native review on tap", async () => {
     getPrsFeedMock.mockResolvedValueOnce({
       rows: [{ exerciseName: "Back Squat", estimatedE1rmKg: 120 }],

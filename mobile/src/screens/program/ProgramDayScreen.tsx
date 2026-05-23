@@ -372,7 +372,10 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
 
       if (endCheck.canCompleteWithSkips) {
         nav.navigate("ProgramEndCheck", { programId });
+        return;
       }
+
+      nav.navigate("ProgramDashboard", { programId });
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
     }
