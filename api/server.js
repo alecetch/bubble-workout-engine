@@ -56,6 +56,7 @@ import { equipmentRegenRouter } from "./src/routes/equipmentRegen.js";
 import {
   uploadSingle,
   handleCheckInSubmit,
+  handleTriggerAnalysis,
   physiqueReadRouter,
 } from "./src/routes/physiqueCheckIn.js";
 import {
@@ -765,6 +766,7 @@ app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/api", webhookRevenuecatRouter);
 app.use("/api/exercise", exerciseGuidanceRouter);
 app.post("/api/physique/check-in", ...entitledUserAuth, uploadSingle, handleCheckInSubmit);
+app.post("/api/physique/check-ins/:id/analyse", ...entitledUserAuth, handleTriggerAnalysis);
 app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
 app.use("/api", physiquePhotoRouter);
 // referralLandingRouter must come before any app.use("/api", ...userAuth, ...) mount —

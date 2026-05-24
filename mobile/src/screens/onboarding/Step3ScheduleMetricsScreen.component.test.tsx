@@ -118,12 +118,14 @@ describe("Step3ScheduleMetricsScreen", () => {
   });
 
 
-  it("renders schedule and metrics section headings", () => {
+  it("renders schedule headings without body metrics fields", () => {
     renderScreen();
 
     expect(screen.getByText("Preferred training days")).toBeInTheDocument();
     expect(screen.getByText("Session settings")).toBeInTheDocument();
-    expect(screen.getByText("Body metrics")).toBeInTheDocument();
+    expect(screen.queryByText("Body metrics")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("height-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("weight-input")).not.toBeInTheDocument();
     expect(screen.queryByText("Schedule constraints")).not.toBeInTheDocument();
   });
 
@@ -138,16 +140,15 @@ describe("Step3ScheduleMetricsScreen", () => {
 
     expect(screen.getByText("Preferred training days")).toBeInTheDocument();
     expect(screen.getByText("Session settings")).toBeInTheDocument();
-    expect(screen.getByText("Body metrics")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Finish" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 
-  it("disables Finish while saving", () => {
+  it("disables Next while saving", () => {
     mockStore(validDraft, { isSaving: true });
 
     renderScreen();
 
-    expect(screen.getByRole("button", { name: "Finish" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 
   it("blocks submission when age range is Under 18", () => {
@@ -156,28 +157,25 @@ describe("Step3ScheduleMetricsScreen", () => {
     renderScreen();
 
     expect(screen.getByText("You must be 18 or older to continue.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Finish" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     expect(updateProfileMutateAsyncMock).not.toHaveBeenCalled();
   });
 
-  it("saves and navigates to SplitReview on success", async () => {
+  it("saves schedule and navigates to Step4 on success", async () => {
     const navigation = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     await waitFor(() => {
       expect(updateProfileMutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
         preferredDays: ["Mon", "Wed"],
         minutesPerSession: 50,
-        heightCm: 180,
-        weightKg: 82,
         sex: "Male",
         ageRange: "25-34",
         scheduleConstraints: "No Sundays",
         onboardingStepCompleted: 3,
-        onboardingCompletedAt: expect.any(String),
       }));
-      expect(navigation.navigate).toHaveBeenCalledWith("SplitReview", { daysPerWeek: 2 });
+      expect(navigation.navigate).toHaveBeenCalledWith("Step4BodyMetrics");
     });
   });
 
@@ -185,7 +183,7 @@ describe("Step3ScheduleMetricsScreen", () => {
     updateProfileMutateAsyncMock.mockRejectedValueOnce(new Error("save failed"));
     const navigation = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     await waitFor(() => {
       expect(setFieldErrorsMock).toHaveBeenLastCalledWith({
