@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { DayChipRow } from "../../components/onboarding/DayChipRow";
@@ -35,6 +35,12 @@ import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { toTitleCase } from "../../utils/text";
+import {
+  cmToFeetInches,
+  feetInchesToCm,
+  kgToLbs,
+  lbsToKg,
+} from "../../utils/unitConversions";
 
 export type ChangeCategory = "goals" | "schedule" | "equipment" | "metrics";
 
@@ -227,6 +233,10 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [collapsedByCategory, setCollapsedByCategory] = useState<Record<string, boolean>>({});
+  const [recalUnitSystem, setRecalUnitSystem] = useState<"metric" | "imperial">("metric");
+  const [recalHeightFt, setRecalHeightFt] = useState("");
+  const [recalHeightIn, setRecalHeightIn] = useState("");
+  const [recalWeightLbs, setRecalWeightLbs] = useState("");
 
   const {
     referenceDataQuery,
@@ -248,11 +258,22 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
       weightKg: numberOrNull(profile.weightKg),
       sex: mapSex(profile.sex),
       ageRange: mapAge(profile.ageRange),
+      preferredUnit: String(profile.preferredUnit ?? "kg") === "lbs" ? "lbs" : "kg",
       equipmentPresetCode: String(profile.equipmentPreset ?? profile.equipmentPresetCode ?? "") || null,
       selectedEquipmentCodes: Array.isArray(profile.equipmentItemCodes)
         ? profile.equipmentItemCodes.map(String)
         : [],
     });
+    if (String(profile.preferredUnit ?? "kg") === "lbs") {
+      const height = cmToFeetInches(numberOrNull(profile.heightCm));
+      const lbs = kgToLbs(numberOrNull(profile.weightKg));
+      setRecalUnitSystem("imperial");
+      setRecalHeightFt(height ? String(height.feet) : "");
+      setRecalHeightIn(height ? String(height.inches) : "");
+      setRecalWeightLbs(lbs ? String(lbs) : "");
+    } else {
+      setRecalUnitSystem("metric");
+    }
     setSeededProfileId(profile.id);
   }, [profileQuery.data, seededProfileId]);
 
@@ -310,6 +331,7 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
       if (includes("metrics")) {
         payload.heightCm = draft.heightCm ?? null;
         payload.weightKg = draft.weightKg ?? null;
+        payload.preferredUnit = draft.preferredUnit ?? (recalUnitSystem === "imperial" ? "lbs" : "kg");
         payload.sex = draft.sex ?? null;
         payload.ageRange = draft.ageRange ?? null;
         payload.fitnessLevel = draft.fitnessLevel ?? null;
@@ -477,17 +499,94 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
 
       {includes("metrics") ? (
         <>
+          <View style={styles.unitToggle}>
+            <Pressable
+              style={[styles.unitBtn, recalUnitSystem === "metric" && styles.unitBtnActive]}
+              onPress={() => {
+                const cm = feetInchesToCm(numberOrNull(recalHeightFt), numberOrNull(recalHeightIn));
+                const kg = lbsToKg(numberOrNull(recalWeightLbs));
+                setDraft({ heightCm: cm, weightKg: kg, preferredUnit: "kg" });
+                setRecalUnitSystem("metric");
+              }}
+            >
+              <Text style={[styles.unitBtnLabel, recalUnitSystem === "metric" && styles.unitBtnLabelActive]}>
+                Metric (cm / kg)
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.unitBtn, recalUnitSystem === "imperial" && styles.unitBtnActive]}
+              onPress={() => {
+                const height = cmToFeetInches(draft.heightCm ?? null);
+                const lbs = kgToLbs(draft.weightKg ?? null);
+                setRecalHeightFt(height ? String(height.feet) : "");
+                setRecalHeightIn(height ? String(height.inches) : "");
+                setRecalWeightLbs(lbs ? String(lbs) : "");
+                setDraft({ preferredUnit: "lbs" });
+                setRecalUnitSystem("imperial");
+              }}
+            >
+              <Text style={[styles.unitBtnLabel, recalUnitSystem === "imperial" && styles.unitBtnLabelActive]}>
+                Imperial (ft, in / lbs)
+              </Text>
+            </Pressable>
+          </View>
           <SectionCard title="Body measurements">
-            <NumericField
-              label="Height (cm)"
-              value={draft.heightCm == null ? "" : String(draft.heightCm)}
-              onChangeText={(value) => setDraft({ heightCm: numberOrNull(value) })}
-            />
-            <NumericField
-              label="Weight (kg)"
-              value={draft.weightKg == null ? "" : String(draft.weightKg)}
-              onChangeText={(value) => setDraft({ weightKg: numberOrNull(value) })}
-            />
+            {recalUnitSystem === "metric" ? (
+              <>
+                <NumericField
+                  label="Height (cm)"
+                  testID="height-cm-input"
+                  value={draft.heightCm == null ? "" : String(draft.heightCm)}
+                  onChangeText={(value) => setDraft({ heightCm: numberOrNull(value) })}
+                />
+                <NumericField
+                  label="Weight (kg)"
+                  testID="weight-kg-input"
+                  value={draft.weightKg == null ? "" : String(draft.weightKg)}
+                  onChangeText={(value) => setDraft({ weightKg: numberOrNull(value) })}
+                />
+              </>
+            ) : (
+              <>
+                <View style={styles.ftInRow}>
+                  <View style={styles.ftField}>
+                    <NumericField
+                      label="Height (ft)"
+                      testID="height-ft-input"
+                      value={recalHeightFt}
+                      onChangeText={(value) => {
+                        setRecalHeightFt(value);
+                        setDraft({
+                          heightCm: feetInchesToCm(numberOrNull(value), numberOrNull(recalHeightIn)),
+                        });
+                      }}
+                    />
+                  </View>
+                  <View style={styles.inField}>
+                    <NumericField
+                      label="(in)"
+                      testID="height-in-input"
+                      value={recalHeightIn}
+                      onChangeText={(value) => {
+                        setRecalHeightIn(value);
+                        setDraft({
+                          heightCm: feetInchesToCm(numberOrNull(recalHeightFt), numberOrNull(value)),
+                        });
+                      }}
+                    />
+                  </View>
+                </View>
+                <NumericField
+                  label="Weight (lbs)"
+                  testID="weight-lbs-input"
+                  value={recalWeightLbs}
+                  onChangeText={(value) => {
+                    setRecalWeightLbs(value);
+                    setDraft({ weightKg: lbsToKg(numberOrNull(value)) });
+                  }}
+                />
+              </>
+            )}
           </SectionCard>
           <SectionCard title="About you">
             <SelectField
@@ -540,5 +639,40 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: spacing.md,
     ...typography.body,
+  },
+  unitToggle: {
+    flexDirection: "row",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    marginBottom: spacing.sm,
+  },
+  unitBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+    backgroundColor: colors.surface,
+  },
+  unitBtnActive: {
+    backgroundColor: colors.accent,
+  },
+  unitBtnLabel: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+  unitBtnLabelActive: {
+    color: colors.background,
+  },
+  ftInRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  ftField: {
+    flex: 1,
+  },
+  inField: {
+    flex: 1,
   },
 });

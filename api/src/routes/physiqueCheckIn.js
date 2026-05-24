@@ -44,84 +44,187 @@ export function uploadSingle(req, res, next) {
   });
 }
 
-export async function handleCheckInSubmit(req, res) {
-  const userId = req.auth.user_id;
-  let s3Key = null;
+export function createCheckInSubmitHandler({
+  db = pool,
+  putObjectFn = putObject,
+  deleteObjectFn = deleteObject,
+  getPresignedUrlFn = getPresignedUrl,
+  analysePhysiquePhotoFn = analysePhysiquePhoto,
+  fetchFn = fetch,
+} = {}) {
+  return async function handleCheckInSubmit(req, res) {
+    const userId = req.auth.user_id;
+    let s3Key = null;
 
-  if (!req.file) {
-    return res.status(400).json({ ok: false, code: "missing_photo", error: "Photo file is required." });
-  }
+    if (!req.file) {
+      return res.status(400).json({ ok: false, code: "missing_photo", error: "Photo file is required." });
+    }
 
-  const consentR = await pool.query(
-    `SELECT physique_consent_at FROM app_user WHERE id = $1`,
-    [userId],
-  );
-  if (!consentR.rows[0]?.physique_consent_at) {
-    return res.status(403).json({
-      ok: false,
-      code: "consent_required",
-      error: "You must accept the physique tracking terms before uploading a photo.",
-    });
-  }
-
-  try {
-    const timestamp = Date.now();
-    s3Key = `physique/${userId}/${timestamp}.jpg`;
-
-    await putObject(s3Key, req.file.buffer, "image/jpeg", PHYSIQUE_BUCKET);
-
-    const priorR = await pool.query(
-      `SELECT id, photo_s3_key, submitted_at
-       FROM physique_check_in
-       WHERE user_id = $1
-         AND submitted_at > now() - INTERVAL '30 days'
-       ORDER BY submitted_at DESC
-       LIMIT 1`,
+    const consentR = await db.query(
+      `SELECT physique_consent_at FROM app_user WHERE id = $1`,
       [userId],
     );
-    const priorRow = priorR.rows[0] ?? null;
+    const skipAnalysis = String(req.body?.skip_analysis ?? "").toLowerCase() === "true";
+    if (skipAnalysis && !consentR.rows[0]?.physique_consent_at) {
+      await db.query(
+        `UPDATE app_user SET physique_consent_at = now() WHERE id = $1`,
+        [userId],
+      );
+    }
+    if (!skipAnalysis && !consentR.rows[0]?.physique_consent_at) {
+      return res.status(403).json({
+        ok: false,
+        code: "consent_required",
+        error: "You must accept the physique tracking terms before uploading a photo.",
+      });
+    }
 
-    let priorPhotoForAnalysis = null;
-    if (priorRow) {
-      try {
-        const signedUrl = await getPresignedUrl(priorRow.photo_s3_key, 120, PHYSIQUE_BUCKET);
-        const priorResp = await fetch(signedUrl);
-        if (priorResp.ok) {
-          const buf = Buffer.from(await priorResp.arrayBuffer());
-          priorPhotoForAnalysis = {
-            base64: buf.toString("base64"),
-            submittedAt: new Date(priorRow.submitted_at).toISOString().split("T")[0],
-          };
+    try {
+      const timestamp = Date.now();
+      s3Key = `physique/${userId}/${timestamp}.jpg`;
+
+      await putObjectFn(s3Key, req.file.buffer, "image/jpeg", PHYSIQUE_BUCKET);
+
+      let analysis = null;
+      if (!skipAnalysis) {
+        const priorR = await db.query(
+          `SELECT id, photo_s3_key, submitted_at
+           FROM physique_check_in
+           WHERE user_id = $1
+             AND submitted_at > now() - INTERVAL '30 days'
+           ORDER BY submitted_at DESC
+           LIMIT 1`,
+          [userId],
+        );
+        const priorRow = priorR.rows[0] ?? null;
+
+        let priorPhotoForAnalysis = null;
+        if (priorRow) {
+          try {
+            const signedUrl = await getPresignedUrlFn(priorRow.photo_s3_key, 120, PHYSIQUE_BUCKET);
+            const priorResp = await fetchFn(signedUrl);
+            if (priorResp.ok) {
+              const buf = Buffer.from(await priorResp.arrayBuffer());
+              priorPhotoForAnalysis = {
+                base64: buf.toString("base64"),
+                submittedAt: new Date(priorRow.submitted_at).toISOString().split("T")[0],
+              };
+            }
+          } catch {
+            // Non-fatal - proceed without comparison
+          }
         }
-      } catch {
-        // Non-fatal - proceed without comparison
+        analysis = await analysePhysiquePhotoFn(req.file.buffer.toString("base64"), priorPhotoForAnalysis);
       }
+
+      const insertR = await db.query(
+        `INSERT INTO physique_check_in
+           (user_id, photo_s3_key, analysis_json, program_emphasis_json)
+         VALUES ($1, $2, $3::jsonb, $4::jsonb)
+         RETURNING id, submitted_at`,
+        [
+          userId,
+          s3Key,
+          analysis ? JSON.stringify(analysis) : null,
+          JSON.stringify(analysis?.emphasis_suggestions ?? []),
+        ],
+      );
+      const checkIn = insertR.rows[0];
+
+      return res.status(201).json({
+        ok: true,
+        check_in_id: checkIn.id,
+        submitted_at: checkIn.submitted_at,
+        analysis,
+      });
+    } catch (err) {
+      if (s3Key) {
+        deleteObjectFn(s3Key, PHYSIQUE_BUCKET).catch(() => {});
+      }
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
-
-    const analysis = await analysePhysiquePhoto(req.file.buffer.toString("base64"), priorPhotoForAnalysis);
-
-    const insertR = await pool.query(
-      `INSERT INTO physique_check_in
-         (user_id, photo_s3_key, analysis_json, program_emphasis_json)
-       VALUES ($1, $2, $3::jsonb, $4::jsonb)
-       RETURNING id, submitted_at`,
-      [userId, s3Key, JSON.stringify(analysis), JSON.stringify(analysis.emphasis_suggestions ?? [])],
-    );
-    const checkIn = insertR.rows[0];
-
-    return res.status(201).json({
-      ok: true,
-      check_in_id: checkIn.id,
-      submitted_at: checkIn.submitted_at,
-      analysis,
-    });
-  } catch (err) {
-    if (s3Key) {
-      deleteObject(s3Key, PHYSIQUE_BUCKET).catch(() => {});
-    }
-    return res.status(500).json({ ok: false, error: publicInternalError(err) });
-  }
+  };
 }
+
+export const handleCheckInSubmit = createCheckInSubmitHandler();
+
+export function createTriggerAnalysisHandler({
+  db = pool,
+  getPresignedUrlFn = getPresignedUrl,
+  analysePhysiquePhotoFn = analysePhysiquePhoto,
+  fetchFn = fetch,
+} = {}) {
+  return async function handleTriggerAnalysis(req, res) {
+    const userId = req.auth.user_id;
+    const { id } = req.params;
+
+    const checkInR = await db.query(
+      `SELECT id, photo_s3_key, analysis_json
+       FROM physique_check_in
+       WHERE id = $1 AND user_id = $2`,
+      [id, userId],
+    );
+    if (checkInR.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: "Check-in not found." });
+    }
+    const checkIn = checkInR.rows[0];
+    if (checkIn.analysis_json !== null) {
+      return res.status(409).json({ ok: false, error: "This check-in already has an analysis." });
+    }
+
+    try {
+      const signedUrl = await getPresignedUrlFn(checkIn.photo_s3_key, 120, PHYSIQUE_BUCKET);
+      const photoResp = await fetchFn(signedUrl);
+      if (!photoResp.ok) {
+        return res.status(502).json({ ok: false, error: "Could not retrieve photo for analysis." });
+      }
+      const photoBuf = Buffer.from(await photoResp.arrayBuffer());
+
+      const priorR = await db.query(
+        `SELECT id, photo_s3_key, submitted_at
+         FROM physique_check_in
+         WHERE user_id = $1
+           AND id != $2
+           AND submitted_at < (SELECT submitted_at FROM physique_check_in WHERE id = $2)
+         ORDER BY submitted_at DESC
+         LIMIT 1`,
+        [userId, id],
+      );
+      let priorPhotoForAnalysis = null;
+      if (priorR.rowCount > 0) {
+        try {
+          const priorUrl = await getPresignedUrlFn(priorR.rows[0].photo_s3_key, 120, PHYSIQUE_BUCKET);
+          const priorResp = await fetchFn(priorUrl);
+          if (priorResp.ok) {
+            const buf = Buffer.from(await priorResp.arrayBuffer());
+            priorPhotoForAnalysis = {
+              base64: buf.toString("base64"),
+              submittedAt: new Date(priorR.rows[0].submitted_at).toISOString().split("T")[0],
+            };
+          }
+        } catch {
+          // Non-fatal - proceed without comparison
+        }
+      }
+
+      const analysis = await analysePhysiquePhotoFn(photoBuf.toString("base64"), priorPhotoForAnalysis);
+
+      await db.query(
+        `UPDATE physique_check_in
+         SET analysis_json = $1::jsonb,
+             program_emphasis_json = $2::jsonb
+         WHERE id = $3`,
+        [JSON.stringify(analysis), JSON.stringify(analysis.emphasis_suggestions ?? []), id],
+      );
+
+      return res.json({ ok: true, analysis });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  };
+}
+
+export const handleTriggerAnalysis = createTriggerAnalysisHandler();
 
 export const physiqueReadRouter = express.Router();
 

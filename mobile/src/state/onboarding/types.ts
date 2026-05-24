@@ -99,16 +99,17 @@ export type OnboardingDraft = {
   anchorLifts: AnchorLiftEntry[];
   anchorLiftsSkipped: boolean;
   preferredUnit: "kg" | "lbs";
-  onboardingStepCompleted: 0 | 1 | 2 | 3;
+  onboardingStepCompleted: 0 | 1 | 2 | 3 | 4;
 };
 
-export type OnboardingStep = 1 | 2 | "2b" | 3;
+export type OnboardingStep = 1 | 2 | "2b" | 3 | 4;
 
 export type StepAttemptedState = {
   step1: boolean;
   step2: boolean;
   step2b: boolean;
   step3: boolean;
+  step4: boolean;
 };
 
 export type FieldErrors = Record<string, string>;
