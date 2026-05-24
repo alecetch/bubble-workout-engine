@@ -24,20 +24,35 @@ export type CheckInSubmitResponse = {
   ok: boolean;
   check_in_id: string;
   submitted_at: string;
-  analysis: PhysiqueAnalysis;
+  analysis: PhysiqueAnalysis | null;
 };
 
-export async function submitCheckIn(photoUri: string): Promise<CheckInSubmitResponse> {
+export async function submitCheckIn(
+  photoUri: string,
+  options?: { skipAnalysis?: boolean },
+): Promise<CheckInSubmitResponse> {
   const formData = new FormData();
   formData.append("photo", {
     uri: photoUri,
     name: "photo.jpg",
     type: "image/jpeg",
   } as unknown as Blob);
+  if (options?.skipAnalysis) {
+    formData.append("skip_analysis", "true");
+  }
 
   return authenticatedFetch<CheckInSubmitResponse>("/api/physique/check-in", {
     method: "POST",
     body: formData as unknown as Record<string, unknown>,
+  });
+}
+
+export async function triggerAnalysis(checkInId: string): Promise<{
+  ok: boolean;
+  analysis: PhysiqueAnalysis;
+}> {
+  return authenticatedFetch(`/api/physique/check-ins/${encodeURIComponent(checkInId)}/analyse`, {
+    method: "POST",
   });
 }
 

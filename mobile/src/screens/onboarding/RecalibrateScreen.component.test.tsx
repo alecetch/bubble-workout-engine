@@ -123,7 +123,12 @@ vi.mock("../../components/onboarding/MultilineField", () => ({
 }));
 
 vi.mock("../../components/onboarding/NumericField", () => ({
-  NumericField: () => null,
+  NumericField: ({ label, testID, value, onChangeText }: any) => (
+    <label>
+      {label}
+      <input data-testid={testID} value={value ?? ""} onChange={(event) => onChangeText?.(event.currentTarget.value)} />
+    </label>
+  ),
 }));
 
 vi.mock("../../components/onboarding/PresetCardList", () => ({
@@ -292,5 +297,20 @@ describe("RecalibrateScreenB", () => {
     expect(screen.getByText("No recalibration categories selected.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     expect(updateProfileMutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("shows metric and imperial toggles in the metrics section", async () => {
+    renderScreen(["metrics"]);
+
+    expect(await screen.findByText("Metric (cm / kg)")).toBeInTheDocument();
+    expect(screen.getByText("Imperial (ft, in / lbs)")).toBeInTheDocument();
+  });
+
+  it("switches metrics section to imperial height fields", async () => {
+    renderScreen(["metrics"]);
+
+    fireEvent.click(await screen.findByText("Imperial (ft, in / lbs)"));
+
+    expect(screen.getByTestId("height-ft-input")).toBeInTheDocument();
   });
 });
