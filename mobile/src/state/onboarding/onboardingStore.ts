@@ -155,7 +155,7 @@ export function fromProfile(profileLike: ProfileLike): OnboardingDraft {
       ? "lbs"
       : "kg",
     onboardingStepCompleted:
-      (Number(profileLike.onboardingStepCompleted ?? profileLike.onboarding_step_completed ?? 0) as 0 | 1 | 2 | 3) ||
+      (Number(profileLike.onboardingStepCompleted ?? profileLike.onboarding_step_completed ?? 0) as 0 | 1 | 2 | 3 | 4) ||
       0,
   };
 }
@@ -170,6 +170,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     step2: false,
     step2b: false,
     step3: false,
+    step4: false,
   },
   touched: {},
   fieldErrors: {},
@@ -231,6 +232,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
         step2: false,
         step2b: false,
         step3: false,
+        step4: false,
       },
       currentStep: 1,
       isSaving: false,

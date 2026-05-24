@@ -60,18 +60,6 @@ function validateStep3(draft: OnboardingDraft): FieldErrors {
     errors.minutesPerSession = ERROR_MESSAGES.minutesRequired;
   }
 
-  if (draft.heightCm == null) {
-    errors.heightCm = ERROR_MESSAGES.heightRequired;
-  } else if (draft.heightCm < 100 || draft.heightCm > 250) {
-    errors.heightCm = ERROR_MESSAGES.heightRange;
-  }
-
-  if (draft.weightKg == null) {
-    errors.weightKg = ERROR_MESSAGES.weightRequired;
-  } else if (draft.weightKg < 30 || draft.weightKg > 300) {
-    errors.weightKg = ERROR_MESSAGES.weightRange;
-  }
-
   if (!draft.sex) {
     errors.sex = ERROR_MESSAGES.sexRequired;
   }
@@ -85,6 +73,10 @@ function validateStep3(draft: OnboardingDraft): FieldErrors {
   return errors;
 }
 
+function validateStep4(_draft: OnboardingDraft): FieldErrors {
+  return {};
+}
+
 export function validateStep(step: OnboardingStep, draft: OnboardingDraft): {
   isValid: boolean;
   fieldErrors: FieldErrors;
@@ -96,7 +88,9 @@ export function validateStep(step: OnboardingStep, draft: OnboardingDraft): {
         ? validateStep2(draft)
         : step === "2b"
           ? {}
-          : validateStep3(draft);
+          : step === 3
+            ? validateStep3(draft)
+            : validateStep4(draft);
 
   return {
     isValid: Object.keys(fieldErrors).length === 0,
@@ -108,14 +102,17 @@ export function validateAll(draft: OnboardingDraft): {
   step1Valid: boolean;
   step2Valid: boolean;
   step3Valid: boolean;
+  step4Valid: boolean;
 } {
   const step1Valid = validateStep(1, draft).isValid;
   const step2Valid = validateStep(2, draft).isValid;
   const step3Valid = validateStep(3, draft).isValid;
+  const step4Valid = validateStep(4, draft).isValid;
 
   return {
     step1Valid,
     step2Valid,
     step3Valid,
+    step4Valid,
   };
 }

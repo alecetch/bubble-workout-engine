@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef } from "react";
 import {
   Animated,
   type LayoutChangeEvent,
@@ -12,7 +12,6 @@ import { SectionCard } from "../../components/onboarding/SectionCard";
 import { useErrorPulse } from "../../components/onboarding/useErrorPulse";
 import { DayChipRow } from "../../components/onboarding/DayChipRow";
 import { SelectField } from "../../components/onboarding/SelectField";
-import { NumericField } from "../../components/onboarding/NumericField";
 import { hapticHeavy } from "../../components/interaction/haptics";
 import { useMe, useUpdateClientProfile } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -28,7 +27,6 @@ import {
 } from "../../state/onboarding/types";
 import { validateStep } from "../../state/onboarding/validators";
 import { normalizeText } from "../../utils/normalizeText";
-import { parseNumberOrNull } from "../../utils/numbers";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
@@ -36,18 +34,16 @@ import type { OnboardingStackParamList } from "../../navigation/OnboardingNaviga
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Step3Schedule">;
 
-type SectionKey = "preferredDays" | "sessionSettings" | "bodyMetrics";
+type SectionKey = "preferredDays" | "sessionSettings";
 
 const SECTION_ORDER: SectionKey[] = [
   "preferredDays",
   "sessionSettings",
-  "bodyMetrics",
 ];
 
 const SECTION_ERROR_KEYS: Record<SectionKey, string[]> = {
   preferredDays: ["preferredDays"],
   sessionSettings: ["minutesPerSession", "sex", "ageRange"],
-  bodyMetrics: ["heightCm", "weightKg"],
 };
 
 export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Element {
@@ -55,12 +51,10 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
   const sectionOffsetsRef = useRef<Record<SectionKey, number>>({
     preferredDays: 0,
     sessionSettings: 0,
-    bodyMetrics: 0,
   });
 
   const preferredDaysPulse = useErrorPulse();
   const sessionSettingsPulse = useErrorPulse();
-  const bodyMetricsPulse = useErrorPulse();
 
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? "";
@@ -75,9 +69,6 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
   const setFieldErrors = useOnboardingStore((state) => state.setFieldErrors);
   const setAttempted = useOnboardingStore((state) => state.setAttempted);
   const setIsSaving = useOnboardingStore((state) => state.setIsSaving);
-
-  const [heightInput, setHeightInput] = useState(draft.heightCm == null ? "" : String(draft.heightCm));
-  const [weightInput, setWeightInput] = useState(draft.weightKg == null ? "" : String(draft.weightKg));
 
   const dayOptions = useMemo(
     () => DAYS_OF_WEEK.map((day) => ({ label: day, value: day })),
@@ -136,24 +127,6 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
     updateValidation(nextDraft);
   };
 
-  const handleHeightChange = (text: string): void => {
-    setHeightInput(text);
-    const parsed = parseNumberOrNull(text);
-    const heightCm = parsed == null ? null : Math.round(parsed);
-    const nextDraft = { ...draft, heightCm };
-    setDraft({ heightCm });
-    updateValidation(nextDraft);
-  };
-
-  const handleWeightChange = (text: string): void => {
-    setWeightInput(text);
-    const parsed = parseNumberOrNull(text);
-    const weightKg = parsed == null ? null : Number(parsed.toFixed(1));
-    const nextDraft = { ...draft, weightKg };
-    setDraft({ weightKg });
-    updateValidation(nextDraft);
-  };
-
   const recordSectionLayout = (section: SectionKey) => (event: LayoutChangeEvent): void => {
     sectionOffsetsRef.current[section] = event.nativeEvent.layout.y;
   };
@@ -163,11 +136,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
       preferredDaysPulse.pulse();
       return;
     }
-    if (section === "sessionSettings") {
-      sessionSettingsPulse.pulse();
-      return;
-    }
-    bodyMetricsPulse.pulse();
+    sessionSettingsPulse.pulse();
   };
 
   const scrollToSection = (section: SectionKey): void => {
@@ -218,15 +187,12 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
       await updateClientProfile.mutateAsync({
         preferredDays: draft.preferredDays,
         minutesPerSession: draft.minutesPerSession,
-        heightCm: draft.heightCm,
-        weightKg: draft.weightKg,
         sex: draft.sex,
         ageRange: draft.ageRange,
         scheduleConstraints: normalizeText(draft.scheduleConstraints),
         onboardingStepCompleted: 3,
-        onboardingCompletedAt: new Date().toISOString(),
       });
-      navigation.navigate("SplitReview", { daysPerWeek: draft.preferredDays.length || undefined });
+      navigation.navigate("Step4BodyMetrics");
     } catch {
       await hapticHeavy();
       setFieldErrors({ preferredDays: "Unable to save this step. Please try again." });
@@ -241,14 +207,14 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
   return (
     <OnboardingScaffold
       step={3}
-      title="Schedule and metrics"
-      subtitle="Set your schedule and body metrics so we can personalize volume and pacing."
+      title="Schedule"
+      subtitle="Set your training rhythm so we can personalize volume and pacing."
       errorBannerVisible={attemptedStep3 && Object.keys(fieldErrors).length > 0}
       onBack={handleBack}
       onNext={() => {
         void handleFinish();
       }}
-      nextLabel="Finish"
+      nextLabel="Next"
       nextDisabled={finishDisabled}
       isSaving={isSaving}
       scrollViewRef={scrollRef}
@@ -292,27 +258,6 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
           {under18Selected ? (
             <Text style={styles.blockingErrorText}>You must be 18 or older to continue.</Text>
           ) : null}
-        </SectionCard>
-      </Animated.View>
-
-      <Animated.View onLayout={recordSectionLayout("bodyMetrics")} style={bodyMetricsPulse.animatedStyle}>
-        <SectionCard title="Body metrics" subtitle="Used for plan calibration.">
-          <NumericField
-            label="Height (cm)"
-            testID="height-input"
-            value={heightInput}
-            onChangeText={handleHeightChange}
-            placeholder="e.g. 175"
-            error={fieldErrors.heightCm}
-          />
-          <NumericField
-            label="Weight (kg)"
-            testID="weight-input"
-            value={weightInput}
-            onChangeText={handleWeightChange}
-            placeholder="e.g. 72.5"
-            error={fieldErrors.weightKg}
-          />
         </SectionCard>
       </Animated.View>
 
