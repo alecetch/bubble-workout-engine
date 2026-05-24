@@ -2,9 +2,7 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getDocumentAsync } from "expo-document-picker";
 import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
-import { uploadTrainingHistoryCsv } from "../../api/trainingHistoryImport";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { Step2bBaselineLoadsScreen } from "./Step2bBaselineLoadsScreen";
 import { buildOnboardingStoreState, mockZustandSelector } from "../../__test-utils__";
@@ -52,24 +50,12 @@ vi.mock("../../components/onboarding/SectionCard", () => ({
   ),
 }));
 
-vi.mock("../../components/onboarding/SelectField", () => ({
-  SelectField: () => null,
-}));
-
 vi.mock("../../components/interaction/PressableScale", () => ({
   PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
     <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
-}));
-
-vi.mock("expo-document-picker", () => ({
-  getDocumentAsync: vi.fn(),
-}));
-
-vi.mock("../../api/trainingHistoryImport", () => ({
-  uploadTrainingHistoryCsv: vi.fn(),
 }));
 
 const ANCHOR_EXERCISES = [
@@ -140,16 +126,17 @@ const useMeMock = vi.mocked(useMe);
 const useReferenceDataMock = vi.mocked(useReferenceData);
 const useUpdateClientProfileMock = vi.mocked(useUpdateClientProfile);
 const useOnboardingStoreMock = vi.mocked(useOnboardingStore);
-const getDocumentAsyncMock = vi.mocked(getDocumentAsync);
-const uploadTrainingHistoryCsvMock = vi.mocked(uploadTrainingHistoryCsv);
 
 function mockStore(overrides: Record<string, unknown> = {}) {
-  const state = buildOnboardingStoreState({ selectedEquipmentCodes: [] }, {
-    setDraft: setDraftMock,
-    setAttempted: setAttemptedMock,
-    setIsSaving: setIsSavingMock,
-    ...overrides,
-  } as any);
+  const state = buildOnboardingStoreState(
+    { selectedEquipmentCodes: [], fitnessLevel: "Intermediate", preferredUnit: "kg" } as any,
+    {
+      setDraft: setDraftMock,
+      setAttempted: setAttemptedMock,
+      setIsSaving: setIsSavingMock,
+      ...overrides,
+    } as any,
+  );
   mockZustandSelector(useOnboardingStoreMock as any, state);
 }
 
@@ -162,14 +149,16 @@ function renderScreen(nav = makeNav()) {
   return nav;
 }
 
+function changeSquatWeight(value: string): void {
+  fireEvent.change(screen.getByTestId("weight-input-squat"), { target: { value } });
+}
+
 describe("Step2bBaselineLoadsScreen", () => {
   beforeEach(() => {
     mutateAsyncMock.mockReset().mockResolvedValue({});
     setAttemptedMock.mockReset();
     setDraftMock.mockReset();
     setIsSavingMock.mockReset();
-    getDocumentAsyncMock.mockReset();
-    uploadTrainingHistoryCsvMock.mockReset();
 
     useMeMock.mockReturnValue({
       data: { id: "user-1", clientProfileId: "profile-1" },
@@ -178,6 +167,7 @@ describe("Step2bBaselineLoadsScreen", () => {
     useReferenceDataMock.mockReturnValue({
       data: { anchorExercises: ANCHOR_EXERCISES },
       isLoading: false,
+      isError: false,
     } as any);
     useUpdateClientProfileMock.mockReturnValue({
       mutateAsync: mutateAsyncMock,
@@ -185,6 +175,7 @@ describe("Step2bBaselineLoadsScreen", () => {
     } as any);
     mockStore();
   });
+
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
     await act(async () => {});
@@ -192,74 +183,147 @@ describe("Step2bBaselineLoadsScreen", () => {
     expect(await axe(document.body)).toHaveNoViolations();
   });
 
-
-  it("renders known_weights mode by default with all family section titles", () => {
+  it("renders all family labels, default reps, and an enabled Continue button", () => {
     renderScreen();
 
-    expect(screen.getByText("Choose a setup method")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Known weights" })).toBeInTheDocument();
     for (const label of FAMILY_LABELS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+    expect(screen.getAllByText("3")).toHaveLength(6);
+    expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
 
-  it("renders loading indicator while reference data is loading", () => {
-    useReferenceDataMock.mockReturnValue({
-      data: undefined,
-      isLoading: true,
+  it("auto-skips on mount when no eligible exercises are available", async () => {
+    useReferenceDataMock.mockReturnValueOnce({
+      data: { anchorExercises: [] },
+      isLoading: false,
       isError: false,
     } as any);
-
-    renderScreen();
-
-    expect(screen.getByText("Choose a setup method")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
-    expect(screen.queryByText("No anchor lifts available")).not.toBeInTheDocument();
-  });
-
-  it("mode chips switch views", () => {
-    renderScreen();
-
-    fireEvent.click(screen.getByRole("button", { name: "Test mode" }));
-    expect(screen.getByText(/Lift 1 of 6/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Import history" }));
-    expect(screen.getByRole("button", { name: "Select CSV file" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Known weights" }));
-    expect(screen.getByText("Squat")).toBeInTheDocument();
-  });
-
-  it("in known_weights mode, step-level skip toggle saves with empty anchors", async () => {
     const navigation = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        anchorLifts: [],
+        anchorLiftsSkipped: true,
+        preferredUnit: "kg",
+      });
+      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+    });
+  });
+
+  it("skip link saves skipped anchors and navigates", async () => {
+    const navigation = renderScreen();
+
+    fireEvent.click(screen.getByText("Skip this step ->"));
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        anchorLifts: [],
+        anchorLiftsSkipped: true,
+        preferredUnit: "kg",
+      });
+      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+    });
+  });
+
+  it("reps stepper increments, decrements, and disables minus at 1", () => {
+    renderScreen();
+    const increment = screen.getAllByRole("button", { name: "Increase reps" })[0];
+    const decrement = screen.getAllByRole("button", { name: "Decrease reps" })[0];
+
+    fireEvent.click(increment);
+    expect(screen.getByText("4")).toBeInTheDocument();
+
+    fireEvent.click(decrement);
+    fireEvent.click(decrement);
+    expect(screen.getByText("2")).toBeInTheDocument();
+
+    fireEvent.click(decrement);
+    expect(decrement).toBeDisabled();
+  });
+
+  it("unit toggle converts kg placeholder to lbs", () => {
+    renderScreen();
+
+    expect(screen.getByPlaceholderText("e.g. 80")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use lbs" }));
+
+    expect(screen.getAllByText("lbs").length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText("e.g. 176")).toBeInTheDocument();
+  });
+
+  it("saves a kg load for the squat row", async () => {
+    const navigation = renderScreen();
+
+    changeSquatWeight("100");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        anchorLifts: expect.arrayContaining([
+          expect.objectContaining({
+            estimationFamily: "squat",
+            exerciseId: "ex-sq",
+            loadKg: 100,
+            reps: 3,
+            skipped: false,
+          }),
+        ]),
+        anchorLiftsSkipped: false,
+        preferredUnit: "kg",
+      });
+      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+    });
+  });
+
+  it("saves a lbs load converted to kg for the squat row", async () => {
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use lbs" }));
+    changeSquatWeight("220");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        anchorLifts: expect.arrayContaining([
+          expect.objectContaining({
+            estimationFamily: "squat",
+            loadKg: 99.8,
+            skipped: false,
+          }),
+        ]),
+        anchorLiftsSkipped: false,
+        preferredUnit: "lbs",
+      });
+    });
+  });
+
+  it("empty rows are saved as skipped", async () => {
+    renderScreen();
+
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => {
       expect(mutateAsyncMock).toHaveBeenCalledWith({
         anchorLifts: [],
         anchorLiftsSkipped: true,
+        preferredUnit: "kg",
       });
-      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
     });
   });
 
-  it("in known_weights mode, Continue saves all-skipped payload and navigates", async () => {
-    const navigation = renderScreen();
+  it("includes preferredUnit in the payload", async () => {
+    renderScreen();
 
+    fireEvent.click(screen.getByRole("button", { name: "Use lbs" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => {
-      expect(mutateAsyncMock).toHaveBeenCalledWith({
-        anchorLifts: [],
-        anchorLiftsSkipped: true,
-      });
-      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+      expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ preferredUnit: "lbs" }));
     });
   });
 
-  it("in known_weights mode, shows error text and does not navigate when save rejects", async () => {
+  it("shows an error and does not navigate when save rejects", async () => {
     mutateAsyncMock.mockRejectedValueOnce(new Error("network"));
     const navigation = renderScreen();
 
@@ -271,74 +335,88 @@ describe("Step2bBaselineLoadsScreen", () => {
     });
   });
 
-  it("in fitness_test mode, renders one family section title with counter", () => {
-    renderScreen();
-
-    fireEvent.click(screen.getByRole("button", { name: "Test mode" }));
-
-    expect(screen.getByText(/Lift 1 of 6/)).toBeInTheDocument();
-    expect(screen.getByText("Squat")).toBeInTheDocument();
-    expect(screen.queryByText("Hinge (Deadlift / RDL)")).not.toBeInTheDocument();
-  });
-
-  it('in fitness_test mode, "Skip this lift" button advances the counter', () => {
-    renderScreen();
-
-    fireEvent.click(screen.getByRole("button", { name: "Test mode" }));
-    expect(screen.getByText(/Lift 1 of 6/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Skip this lift" }));
-    expect(screen.getByText(/Lift 2 of 6/)).toBeInTheDocument();
-  });
-
-  it('in fitness_test mode, "Skip this lift" on the last family saves and navigates', async () => {
-    const navigation = renderScreen();
-
-    fireEvent.click(screen.getByRole("button", { name: "Test mode" }));
-    for (let index = 0; index < 6; index += 1) {
-      fireEvent.click(screen.getByRole("button", { name: "Skip this lift" }));
-    }
-
-    await waitFor(() => {
-      expect(mutateAsyncMock).toHaveBeenCalled();
-      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
-    });
-  });
-
-  it("in import_history mode, shows import summary after successful CSV upload", async () => {
-    getDocumentAsyncMock.mockResolvedValue({
-      canceled: false,
-      assets: [{ uri: "file:///tmp/data.csv", name: "data.csv", mimeType: "text/csv" }],
-    } as any);
-    uploadTrainingHistoryCsvMock.mockResolvedValue({
-      importId: "imp-1",
-      status: "complete",
-      derivedAnchorLifts: [],
-      warnings: [],
-      summary: {
-        totalRows: 120,
-        mappedRows: 110,
-        unmappedRows: 10,
-        derivedAnchors: 4,
-        savedAnchors: 4,
-      },
-    });
-
-    renderScreen();
-    fireEvent.click(screen.getByRole("button", { name: "Import history" }));
-    fireEvent.click(screen.getByRole("button", { name: "Select CSV file" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Rows processed: 120")).toBeInTheDocument();
-      expect(screen.getByText("Derived anchors: 4")).toBeInTheDocument();
-    });
-  });
-
   it("Back button navigates to Step2Equipment", () => {
     const navigation = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
     expect(navigation.replace).toHaveBeenCalledWith("Step2Equipment");
+  });
+
+  it("disables Continue while reference data is loading", () => {
+    useReferenceDataMock.mockReturnValueOnce({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  });
+
+  it("reps stepper shows a 'reps' label after the count", () => {
+    renderScreen();
+    expect(screen.getAllByText("reps")).toHaveLength(6);
+  });
+
+  it("exercise carousel advances and reverses through options", async () => {
+    const extraSquatOption = {
+      exerciseId: "ex-sq2",
+      estimationFamily: "squat",
+      isAnchorEligible: true,
+      anchorPriority: 2,
+      label: "Goblet Squat",
+      equipmentItemsSlugs: [],
+    };
+    useReferenceDataMock.mockReturnValue({
+      data: { anchorExercises: [...ANCHOR_EXERCISES, extraSquatOption] },
+      isLoading: false,
+      isError: false,
+    } as any);
+
+    renderScreen();
+
+    expect(screen.getByText("Back Squat")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Previous exercise" })[0]).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Next exercise" })[0]);
+    expect(screen.getByText("Goblet Squat")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Next exercise" })[0]).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Previous exercise" })[0]);
+    expect(screen.getByText("Back Squat")).toBeInTheDocument();
+  });
+
+  it("saves the exercise selected via the carousel", async () => {
+    const extraSquatOption = {
+      exerciseId: "ex-sq2",
+      estimationFamily: "squat",
+      isAnchorEligible: true,
+      anchorPriority: 2,
+      label: "Goblet Squat",
+      equipmentItemsSlugs: [],
+    };
+    useReferenceDataMock.mockReturnValue({
+      data: { anchorExercises: [...ANCHOR_EXERCISES, extraSquatOption] },
+      isLoading: false,
+      isError: false,
+    } as any);
+
+    const navigation = renderScreen();
+    fireEvent.click(screen.getAllByRole("button", { name: "Next exercise" })[0]);
+    changeSquatWeight("60");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anchorLifts: expect.arrayContaining([
+            expect.objectContaining({ estimationFamily: "squat", exerciseId: "ex-sq2", loadKg: 60 }),
+          ]),
+        }),
+      );
+      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+    });
   });
 });

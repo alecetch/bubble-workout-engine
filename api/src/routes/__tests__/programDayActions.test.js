@@ -132,6 +132,7 @@ test("rescheduleProgramDay creates calendar row and skips original day", async (
     async query(sql, params) {
       calls.push({ sql, params });
       if (/BEGIN|COMMIT/i.test(sql)) return { rowCount: 0, rows: [] };
+      if (/DELETE FROM program_calendar_day/i.test(sql)) return { rowCount: 0, rows: [] };
       if (/INSERT INTO program_calendar_day/i.test(sql)) {
         return {
           rowCount: 1,
@@ -168,6 +169,106 @@ test("rescheduleProgramDay creates calendar row and skips original day", async (
   assert.equal(res.body.calendarDay.rescheduled_from_day_id, PROGRAM_DAY_ID);
   assert.ok(calls.some((call) => /INSERT INTO program_calendar_day/i.test(call.sql)));
   assert.ok(calls.some((call) => /UPDATE program_day/i.test(call.sql)));
+});
+
+test("rescheduleProgramDay allows reschedule to date freed by a previously-rescheduled day", async () => {
+  // Scenario: Day X was rescheduled away from Monday (is_skipped = TRUE).
+  // A program_calendar_day row still exists for Monday but its program_day.is_skipped = TRUE.
+  // Rescheduling a different day to Monday should NOT return a conflict — the ghost entry
+  // is cleaned up inside the transaction and a new calendar row is inserted.
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/BEGIN|COMMIT/i.test(sql)) return { rowCount: 0, rows: [] };
+      if (/DELETE FROM program_calendar_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      if (/INSERT INTO program_calendar_day/i.test(sql)) {
+        return {
+          rowCount: 1,
+          rows: [{ id: "new-calendar-id", rescheduled_from_day_id: PROGRAM_DAY_ID }],
+        };
+      }
+      if (/UPDATE program_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      throw new Error("Unexpected tx query: " + sql);
+    },
+    release() {},
+  };
+  const handlers = createProgramDayActionHandlers({
+    async query(sql) {
+      // verifyProgramDay
+      if (/FROM program_day pd/i.test(sql)) {
+        return { rowCount: 1, rows: [makeDay()] };
+      }
+      // conflict check — returns 0 rows because is_skipped = FALSE filter excludes the ghost entry
+      if (/FROM program_calendar_day pcd/i.test(sql)) {
+        return { rowCount: 0, rows: [] };
+      }
+      throw new Error("Unexpected query: " + sql);
+    },
+    async connect() {
+      return client;
+    },
+  });
+  const res = mockRes();
+
+  await handlers.rescheduleProgramDay(
+    makeReq({ body: { targetDate: "2099-12-31" } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 201);
+  assert.ok(calls.some((call) => /DELETE FROM program_calendar_day/i.test(call.sql)));
+  assert.ok(calls.some((call) => /INSERT INTO program_calendar_day/i.test(call.sql)));
+});
+
+test("rescheduleProgramDay allows reschedule to a rest-day slot in the program calendar", async () => {
+  // The pipeline creates a program_calendar_day row for EVERY date in the program range,
+  // including rest days (is_training_day = FALSE, program_day_id = NULL).
+  // Those rows occupy the unique (program_id, scheduled_date) slot.
+  // The ghost DELETE must clear them before inserting the rescheduled training day.
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/BEGIN|COMMIT/i.test(sql)) return { rowCount: 0, rows: [] };
+      if (/DELETE FROM program_calendar_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      if (/INSERT INTO program_calendar_day/i.test(sql)) {
+        return {
+          rowCount: 1,
+          rows: [{ id: "new-calendar-id", rescheduled_from_day_id: PROGRAM_DAY_ID }],
+        };
+      }
+      if (/UPDATE program_day/i.test(sql)) return { rowCount: 1, rows: [] };
+      throw new Error("Unexpected tx query: " + sql);
+    },
+    release() {},
+  };
+  const handlers = createProgramDayActionHandlers({
+    async query(sql) {
+      if (/FROM program_day pd/i.test(sql)) {
+        return { rowCount: 1, rows: [makeDay()] };
+      }
+      // conflict check — returns 0 because the rest-day row has is_training_day = FALSE and no linked program_day
+      if (/FROM program_calendar_day pcd/i.test(sql)) {
+        return { rowCount: 0, rows: [] };
+      }
+      throw new Error("Unexpected query: " + sql);
+    },
+    async connect() {
+      return client;
+    },
+  });
+  const res = mockRes();
+
+  await handlers.rescheduleProgramDay(
+    makeReq({ body: { targetDate: "2099-12-31" } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 201);
+  // The DELETE must have run to clear the rest-day slot
+  assert.ok(calls.some((call) => /DELETE FROM program_calendar_day/i.test(call.sql)));
+  assert.ok(calls.some((call) => /INSERT INTO program_calendar_day/i.test(call.sql)));
 });
 
 test("rescheduleProgramDay rejects date conflicts", async () => {
@@ -210,6 +311,105 @@ test("startEquipmentSubstitution rejects empty equipment and wrong owner", async
   const ownerRes = mockRes();
   await handlers.startEquipmentSubstitution(
     makeReq({ body: { availableEquipmentCodes: ["barbell"] } }),
+    ownerRes,
+  );
+  assert.equal(ownerRes.statusCode, 403);
+});
+
+test("updateProgramSplit cycles valid focuses across unstarted days", async () => {
+  const calls = [];
+  const handlers = createProgramDayActionHandlers({
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/SELECT user_id, preferred_days_sorted_json FROM program/i.test(sql)) {
+        return { rowCount: 1, rows: [{ user_id: USER_ID }] };
+      }
+      if (/FROM program_day/i.test(sql) && /is_completed = FALSE/i.test(sql)) {
+        return {
+          rowCount: 3,
+          rows: [
+            { id: "11111111-1111-4111-8111-000000000001" },
+            { id: "11111111-1111-4111-8111-000000000002" },
+            { id: "11111111-1111-4111-8111-000000000003" },
+          ],
+        };
+      }
+      if (/UPDATE program_day pd/i.test(sql)) {
+        return { rowCount: 3, rows: [] };
+      }
+      throw new Error("Unexpected query");
+    },
+  });
+  const res = mockRes();
+
+  await handlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["upper_body", "lower_body"] } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.updatedCount, 3);
+  const updateCall = calls.find((call) => /UPDATE program_day pd/i.test(call.sql));
+  assert.deepEqual(updateCall.params[1], ["upper_body", "lower_body", "upper_body"]);
+});
+
+test("updateProgramSplit keeps focuses attached to selected weekdays after midweek starts", async () => {
+  const calls = [];
+  const handlers = createProgramDayActionHandlers({
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/SELECT user_id, preferred_days_sorted_json FROM program/i.test(sql)) {
+        return { rowCount: 1, rows: [{ user_id: USER_ID, preferred_days_sorted_json: ["Mon", "Wed", "Thu"] }] };
+      }
+      if (/FROM program_day/i.test(sql) && /is_completed = FALSE/i.test(sql)) {
+        return {
+          rowCount: 3,
+          rows: [
+            { id: "11111111-1111-4111-8111-000000000001", scheduled_weekday: "Wed" },
+            { id: "11111111-1111-4111-8111-000000000002", scheduled_weekday: "Thu" },
+            { id: "11111111-1111-4111-8111-000000000003", scheduled_weekday: "Mon" },
+          ],
+        };
+      }
+      if (/UPDATE program_day pd/i.test(sql)) {
+        return { rowCount: 3, rows: [] };
+      }
+      throw new Error("Unexpected query");
+    },
+  });
+  const res = mockRes();
+
+  await handlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["lower_body", "upper_body", "full_body"] } }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  const updateCall = calls.find((call) => /UPDATE program_day pd/i.test(call.sql));
+  assert.deepEqual(updateCall.params[1], ["upper_body", "full_body", "lower_body"]);
+});
+
+test("updateProgramSplit rejects invalid focuses and other users' programs", async () => {
+  const invalidHandlers = createProgramDayActionHandlers({
+    async query() {
+      throw new Error("should not query for invalid payload");
+    },
+  });
+  const invalidRes = mockRes();
+  await invalidHandlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["chest_day"] } }),
+    invalidRes,
+  );
+  assert.equal(invalidRes.statusCode, 400);
+
+  const ownerHandlers = createProgramDayActionHandlers({
+    async query() {
+      return { rowCount: 1, rows: [{ user_id: OTHER_USER_ID }] };
+    },
+  });
+  const ownerRes = mockRes();
+  await ownerHandlers.updateProgramSplit(
+    makeReq({ body: { day_focuses: ["upper_body"] } }),
     ownerRes,
   );
   assert.equal(ownerRes.statusCode, 403);

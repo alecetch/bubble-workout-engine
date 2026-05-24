@@ -24,6 +24,14 @@ test("returns today_complete when today's day status is complete", () => {
         todayIso: today,
     })).toBe("today_complete");
 });
+test("returns today_started when today's day status is started", () => {
+    expect(computeLifecycleState({
+        resolvedProgramId: "p1",
+        calendarDays: [{ calendarDate: today, isTrainingDay: true, programDayId: "d1" }],
+        dayStatusByProgramDayId: { d1: "started" },
+        todayIso: today,
+    })).toBe("today_started");
+});
 test("returns today_rest when no training day matches today's date", () => {
     expect(computeLifecycleState({
         resolvedProgramId: "p1",

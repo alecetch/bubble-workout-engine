@@ -32,6 +32,34 @@ function makeProgram(durationMins = 10) {
   };
 }
 
+function makeProgramWithDays(daysPerWeek) {
+  return {
+    program_type: "hypertrophy",
+    days_per_week: daysPerWeek,
+    days: Array.from({ length: daysPerWeek }, (_, index) => ({
+      day_index: index + 1,
+      day_type: "hypertrophy",
+      duration_mins: 10,
+      segments: [
+        {
+          segment_index: 1,
+          segment_type: "single",
+          purpose: "main",
+          rounds: 1,
+          items: [
+            {
+              ex_id: `ex${index + 1}`,
+              sets: 1,
+              reps_prescribed: "8",
+              rest_after_set_sec: 60,
+            },
+          ],
+        },
+      ],
+    })),
+  };
+}
+
 function parseSegRow(rows) {
   const segRow = rows.find((row) => row.startsWith("SEG|"));
   assert.ok(segRow, "expected a SEG row");
@@ -40,6 +68,20 @@ function parseSegRow(rows) {
     segment_duration_seconds: Number(cols[10]),
     segment_duration_mmss: cols[11],
   };
+}
+
+function parseDayRows(rows) {
+  return rows
+    .filter((row) => row.startsWith("DAY|"))
+    .map((row) => {
+      const cols = row.split("|");
+      return {
+        week: Number(cols[1]),
+        day: Number(cols[2]),
+        scheduledOffsetDays: Number(cols[12]),
+        scheduledWeekday: cols[13],
+      };
+    });
 }
 
 function mmssToSeconds(mmss) {
@@ -72,5 +114,70 @@ test("emitPlanRows writes minute-rounded SEG duration and matching MM:SS", async
   assert.equal(seg.segment_duration_mmss, "10:00");
   assert.equal(mmssToSeconds(seg.segment_duration_mmss), seg.segment_duration_seconds);
   assert.equal(seg.segment_duration_mmss.endsWith(":00"), true);
+});
+
+test("emitPlanRows keeps emitted training days on selected weekdays when start day rotates", async () => {
+  const anchorTuesdayMs = Date.UTC(2026, 4, 19);
+  const out = await emitPlanRows({
+    program: makeProgramWithDays(3),
+    anchorDayMs: anchorTuesdayMs,
+    preferredDaysJson: "Mon,Wed,Thu",
+    programLength: 1,
+  });
+
+  const days = parseDayRows(out.rows);
+
+  assert.deepEqual(days.map((day) => day.scheduledWeekday), ["Wed", "Thu", "Mon"]);
+  assert.deepEqual(days.map((day) => day.scheduledOffsetDays), [0, 1, 5]);
+});
+
+function parseDayLabel(rows) {
+  const dayRow = rows.find((row) => row.startsWith("DAY|"));
+  assert.ok(dayRow, "expected a DAY row");
+  return dayRow.split("|")[4];
+}
+
+function makeProgramWithNarration(dayTitle) {
+  return {
+    program_type: "hypertrophy",
+    days_per_week: 1,
+    days: [
+      {
+        day_index: 1,
+        day_type: "hypertrophy",
+        duration_mins: 10,
+        narration: { day_title: dayTitle },
+        segments: [
+          {
+            segment_index: 1,
+            segment_type: "single",
+            purpose: "main",
+            rounds: 1,
+            items: [{ ex_id: "ex1", sets: 1, reps_prescribed: "8", rest_after_set_sec: 60 }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+test("emitPlanRows humanises snake_case tokens in narration day_title", async () => {
+  const out = await emitPlanRows({ program: makeProgramWithNarration("upper_body Build Volume") });
+  assert.equal(parseDayLabel(out.rows), "Upper Body Build Volume");
+});
+
+test("emitPlanRows leaves already-readable narration day_title unchanged", async () => {
+  const out = await emitPlanRows({ program: makeProgramWithNarration("Day 1 - Strength") });
+  assert.equal(parseDayLabel(out.rows), "Day 1 - Strength");
+});
+
+test("emitPlanRows humanises a bare snake_case slug in narration day_title", async () => {
+  const out = await emitPlanRows({ program: makeProgramWithNarration("lower_body") });
+  assert.equal(parseDayLabel(out.rows), "Lower Body");
+});
+
+test("emitPlanRows falls back to 'Day N' label when narration is absent", async () => {
+  const out = await emitPlanRows({ program: makeProgram() });
+  assert.equal(parseDayLabel(out.rows), "Day 1");
 });
 

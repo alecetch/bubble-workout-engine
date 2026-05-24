@@ -8,6 +8,22 @@ vi.mock("./useSegmentTimer", () => ({
   useSegmentTimer: vi.fn(),
 }));
 
+const { adjustRestDurationMock } = vi.hoisted(() => ({
+  adjustRestDurationMock: vi.fn(),
+}));
+
+vi.mock("../../state/timer/useTimerStore", () => ({
+  useTimerStore: Object.assign(vi.fn(), {
+    getState: () => ({ adjustRestDuration: adjustRestDurationMock }),
+  }),
+}));
+
+vi.mock("expo-haptics", () => ({
+  impactAsync: vi.fn().mockResolvedValue(undefined),
+  ImpactFeedbackStyle: { Medium: "medium", Light: "light", Heavy: "heavy" },
+  NotificationFeedbackType: { Success: "success" },
+}));
+
 vi.mock("../interaction/PressableScale", () => ({
   PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
     <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
@@ -49,6 +65,7 @@ describe("PremiumTimer", () => {
     onStartPauseMock.mockReset();
     onResetMock.mockReset();
     onSwitchModeMock.mockReset();
+    adjustRestDurationMock.mockReset();
     mockTimer();
   });
 
@@ -99,5 +116,47 @@ describe("PremiumTimer", () => {
     render(<PremiumTimer segmentId="seg-1" suggestedRestSeconds={60} />);
 
     expect(screen.getByText("Rest done!")).toBeInTheDocument();
+  });
+
+  it("renders Reset label text in non-compact mode", () => {
+    render(<PremiumTimer segmentId="seg-1" />);
+
+    expect(screen.getByText("Reset")).toBeInTheDocument();
+  });
+
+  it("renders Adjust chip when suggestedRestSeconds is provided", () => {
+    render(<PremiumTimer segmentId="seg-1" suggestedRestSeconds={90} />);
+
+    expect(screen.getByRole("button", { name: "Adjust" })).toBeInTheDocument();
+  });
+
+  it("tapping Adjust chip reveals minus and plus adjustment buttons", () => {
+    render(<PremiumTimer segmentId="seg-1" suggestedRestSeconds={90} />);
+
+    expect(screen.queryByRole("button", { name: "-" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "+" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Adjust" }));
+
+    expect(screen.getByRole("button", { name: "-" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+" })).toBeInTheDocument();
+  });
+
+  it("tapping minus calls adjustRestDuration with -15", () => {
+    render(<PremiumTimer segmentId="seg-1" suggestedRestSeconds={90} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Adjust" }));
+    fireEvent.click(screen.getByRole("button", { name: "-" }));
+
+    expect(adjustRestDurationMock).toHaveBeenCalledWith("seg-1", -15);
+  });
+
+  it("tapping plus calls adjustRestDuration with +15", () => {
+    render(<PremiumTimer segmentId="seg-1" suggestedRestSeconds={90} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Adjust" }));
+    fireEvent.click(screen.getByRole("button", { name: "+" }));
+
+    expect(adjustRestDurationMock).toHaveBeenCalledWith("seg-1", 15);
   });
 });

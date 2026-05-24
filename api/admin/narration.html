@@ -362,6 +362,7 @@
           <a href="/admin/rep-rules">Rep Rules</a>
           <a href="/admin/observability">Observability</a>
           <a href="/admin/preview">Preview</a>
+          <a href="/admin/program-quality">Program Quality</a>
           <a href="/admin/progression-sandbox">Progression Sandbox</a>
           <a href="/admin/users">Users</a>
             <a href="/admin/coaches">Coaches</a>
@@ -380,6 +381,13 @@
         <button id="new-btn" class="secondary">+ New</button>
       </div>
       <div id="status"></div>
+    </div>
+
+    <div id="sync-status-banner" style="display:none;padding:10px 20px;font-size:13px;border-radius:4px;margin:0;">
+      <span id="sync-status-text"></span>
+      <button id="sync-now-btn" style="margin-left:12px;display:none;background:#d97706;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;">
+        Sync Now
+      </button>
     </div>
 
     <div class="filters">
@@ -1151,6 +1159,56 @@
       return data;
     }
 
+    async function checkSyncStatus() {
+      try {
+        const data = await apiFetchJson("/admin/sync-status", { method: "GET" });
+        const banner = document.getElementById("sync-status-banner");
+        const text = document.getElementById("sync-status-text");
+        const btn = document.getElementById("sync-now-btn");
+        if (!banner || !text || !btn) return;
+
+        banner.style.display = "block";
+        if (data.dirty) {
+          banner.style.background = "#451a03";
+          banner.style.color = "#fbbf24";
+          banner.style.border = "1px solid #92400e";
+          text.textContent = "Unsynced admin edits detected - seed files are out of date.";
+          btn.style.display = "inline";
+        } else {
+          banner.style.background = "#052e16";
+          banner.style.color = "#4ade80";
+          banner.style.border = "1px solid #166534";
+          const lastSynced = data.last_synced_at
+            ? new Date(data.last_synced_at).toLocaleString()
+            : "never";
+          text.textContent = `Seed files are up to date (last synced ${lastSynced}).`;
+          btn.style.display = "none";
+        }
+      } catch (_) {
+        const banner = document.getElementById("sync-status-banner");
+        if (banner) banner.style.display = "none";
+      }
+    }
+
+    async function syncAllToFlyway(btn) {
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = "Syncing...";
+      try {
+        const data = await apiFetchJson("/admin/sync-all-to-flyway", { method: "POST" });
+        const lines = data.files.map(f =>
+          `${f.ok ? "OK" : "FAILED"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
+        ).join("\n");
+        window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
+        await checkSyncStatus();
+      } catch (err) {
+        window.alert("Sync failed: " + (err.message || String(err)));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+
     async function loadTemplates() {
       const apiToken = token();
       if (!apiToken) {
@@ -1182,6 +1240,7 @@
         populateDynamicOptions();
         applyFilters();
         setStatus(`Loaded ${state.templates.length} narration templates.`, "ok");
+        await checkSyncStatus();
       } catch (err) {
         state.loaded = false;
         state.templates = [];
@@ -1491,12 +1550,16 @@
             `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
           ).join("\n");
           window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
+          await checkSyncStatus();
         } catch (err) {
           window.alert("Sync failed: " + (err.message || String(err)));
         } finally {
           btn.disabled = false;
           btn.textContent = "⬇ Sync All to Flyway";
         }
+      });
+      document.getElementById("sync-now-btn").addEventListener("click", async () => {
+        await syncAllToFlyway(document.getElementById("sync-now-btn"));
       });
     }
 

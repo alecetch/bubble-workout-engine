@@ -166,6 +166,19 @@ describe("SettingsScreen", () => {
   });
 });
 
+describe("workout section", () => {
+  beforeEach(() => {
+    resetSettingsMocks();
+  });
+
+  it("renders Show rest timer toggle in the WORKOUT section", () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+
+    expect(screen.getByText("Show rest timer")).toBeInTheDocument();
+    expect(screen.getByText("Display a countdown after each set")).toBeInTheDocument();
+  });
+});
+
 describe("loading states", () => {
   beforeEach(() => {
     resetSettingsMocks();

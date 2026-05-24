@@ -21,6 +21,7 @@ const profileFieldToColumn = new Map([
   ["preferredHeightUnit", "preferred_height_unit"],
   ["anchorLiftsSkipped", "anchor_lifts_skipped"],
   ["anchorLiftsCollectedAt", "anchor_lifts_collected_at"],
+  ["preferredSplitJson", "preferred_split_json"],
 ]);
 
 export function makeClientProfileService(db = defaultPool) {
@@ -171,5 +172,6 @@ export function toApiShape(row) {
     preferredHeightUnit: row.preferred_height_unit ?? "cm",
     anchorLiftsSkipped: row.anchor_lifts_skipped ?? false,
     anchorLiftsCollectedAt: row.anchor_lifts_collected_at ?? null,
+    preferredSplitJson: row.preferred_split_json ?? null,
   };
 }
