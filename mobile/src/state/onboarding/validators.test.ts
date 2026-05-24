@@ -69,13 +69,9 @@ test("validateStep(3) reports missing minutes per session", () => {
     const result = validateStep(3, { ...makeValidDraft(), minutesPerSession: null });
     expect(result.fieldErrors.minutesPerSession).toBe(ERROR_MESSAGES.minutesRequired);
 });
-test("validateStep(3) reports height below minimum", () => {
+test("validateStep(3) ignores body metric ranges", () => {
     const result = validateStep(3, { ...makeValidDraft(), heightCm: 99 });
-    expect(result.fieldErrors.heightCm).toBe(ERROR_MESSAGES.heightRange);
-});
-test("validateStep(3) reports height above maximum", () => {
-    const result = validateStep(3, { ...makeValidDraft(), heightCm: 251 });
-    expect(result.fieldErrors.heightCm).toBe(ERROR_MESSAGES.heightRange);
+    expect(result.fieldErrors.heightCm).toBe(undefined);
 });
 test("validateStep(3) accepts height at lower boundary", () => {
     const result = validateStep(3, { ...makeValidDraft(), heightCm: 100 });
@@ -85,13 +81,9 @@ test("validateStep(3) accepts height at upper boundary", () => {
     const result = validateStep(3, { ...makeValidDraft(), heightCm: 250 });
     expect(result.fieldErrors.heightCm).toBe(undefined);
 });
-test("validateStep(3) reports weight below minimum", () => {
+test("validateStep(3) ignores body weight ranges", () => {
     const result = validateStep(3, { ...makeValidDraft(), weightKg: 29 });
-    expect(result.fieldErrors.weightKg).toBe(ERROR_MESSAGES.weightRange);
-});
-test("validateStep(3) reports weight above maximum", () => {
-    const result = validateStep(3, { ...makeValidDraft(), weightKg: 301 });
-    expect(result.fieldErrors.weightKg).toBe(ERROR_MESSAGES.weightRange);
+    expect(result.fieldErrors.weightKg).toBe(undefined);
 });
 test("validateStep(3) reports missing sex", () => {
     const result = validateStep(3, { ...makeValidDraft(), sex: null });
@@ -105,11 +97,17 @@ test("validateStep(3) passes for valid draft", () => {
     const result = validateStep(3, makeValidDraft());
     expect(result.isValid).toBe(true);
 });
+test("validateStep(4) is always valid", () => {
+    const result = validateStep(4, { ...makeValidDraft(), heightCm: null, weightKg: null });
+    expect(result.isValid).toBe(true);
+    expect(result.fieldErrors).toEqual({});
+});
 test("validateAll reports all steps valid for valid draft", () => {
     expect(validateAll(makeValidDraft())).toEqual({
         step1Valid: true,
         step2Valid: true,
         step3Valid: true,
+        step4Valid: true,
     });
 });
 test("validateAll reports invalid step 1 independently", () => {

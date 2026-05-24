@@ -567,6 +567,16 @@
     },
     {
       "type": "screen",
+      "source": "src/screens/onboarding/Step4BodyMetricsScreen.tsx",
+      "test": "src/screens/onboarding/Step4BodyMetricsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
       "source": "src/screens/onboarding/Step3ScheduleMetricsScreen.tsx",
       "test": "src/screens/onboarding/Step3ScheduleMetricsScreen.component.test.tsx",
       "status": "covered",
@@ -574,6 +584,16 @@
         "onboarding"
       ],
       "reason": ""
+    },
+    {
+      "type": "util",
+      "source": "src/utils/pendingPhysiqueUpload.ts",
+      "test": null,
+      "status": "gap",
+      "tags": [
+        "physique"
+      ],
+      "reason": "Pure async-storage wrapper; covered by PhysiqueCheckInScreen test via mock"
     },
     {
       "type": "screen",

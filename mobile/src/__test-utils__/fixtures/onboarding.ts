@@ -39,7 +39,7 @@ export function buildOnboardingStoreState(
     clientProfileId: "profile-test-1",
     draft,
     currentStep: 1,
-    attempted: { step1: false, step2: false, step2b: false, step3: false },
+    attempted: { step1: false, step2: false, step2b: false, step3: false, step4: false },
     touched: {},
     fieldErrors: {},
     isSaving: false,

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,16 @@ import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { useEntitlement, usePhysiqueCheckIns } from "../../api/hooks";
-import { recordConsent, submitCheckIn, type PhysiqueAnalysis } from "../../api/physique";
+import {
+  recordConsent,
+  submitCheckIn,
+  triggerAnalysis,
+  type PhysiqueAnalysis,
+} from "../../api/physique";
+import {
+  clearPendingPhysiqueUpload,
+  getPendingPhysiqueUpload,
+} from "../../utils/pendingPhysiqueUpload";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -34,11 +43,31 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
   const [state, setState] = useState<ScreenState>({ phase: "consent" });
   const showPremiumUpsell = entitlementQuery.data?.subscription_status !== "active";
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (hasConsented && state.phase === "consent") {
       setState({ phase: "picker", hasConsented: true });
     }
   }, [hasConsented, state.phase]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function retryPendingUpload(): Promise<void> {
+      const pendingUri = await getPendingPhysiqueUpload();
+      if (!pendingUri || !mounted) return;
+      try {
+        await recordConsent();
+        await submitCheckIn(pendingUri, { skipAnalysis: true });
+        await clearPendingPhysiqueUpload();
+        await refetch();
+      } catch {
+        // Keep the queued URI for the next retry.
+      }
+    }
+    void retryPendingUpload();
+    return () => {
+      mounted = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleConsent = async (): Promise<void> => {
     try {
@@ -82,11 +111,73 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
     try {
       const response = await submitCheckIn(photoUri);
       await refetch();
+      if (!response.analysis) {
+        setState({ phase: "picker", hasConsented: true });
+        return;
+      }
       setState({ phase: "result", analysis: response.analysis, photoUri });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed.";
       setState({ phase: "error", message: msg });
     }
+  };
+
+  const handleRequestAnalysis = async (checkInId: string): Promise<void> => {
+    try {
+      await triggerAnalysis(checkInId);
+      await refetch();
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not start analysis.");
+    }
+  };
+
+  const renderCheckIns = (): React.JSX.Element | null => {
+    if (!checkInsData || checkInsData.check_ins.length === 0) return null;
+    return (
+      <View style={styles.timelineSection}>
+        <Text style={styles.sectionLabel}>Previous check-ins</Text>
+        {checkInsData.check_ins.map((checkIn) => (
+          <View key={checkIn.id} style={styles.checkInCard}>
+            {checkIn.photo_url ? (
+              <Image source={{ uri: checkIn.photo_url }} style={styles.checkInThumb} resizeMode="cover" />
+            ) : null}
+            <View style={styles.checkInInfo}>
+              {checkIn.analysis === null ? (
+                <>
+                  <Text style={styles.checkInLabel}>Starting point</Text>
+                  <Text style={styles.checkInDate}>
+                    {new Date(checkIn.submitted_at).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </Text>
+                  <PressableScale
+                    style={styles.requestAnalysisBtn}
+                    onPress={() => void handleRequestAnalysis(checkIn.id)}
+                  >
+                    <Text style={styles.requestAnalysisLabel}>Request analysis</Text>
+                  </PressableScale>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.checkInDate}>
+                    {new Date(checkIn.submitted_at).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </Text>
+                  <Text style={styles.checkInLabel}>
+                    {checkIn.analysis.observations[0] ?? "Analysed check-in"}
+                  </Text>
+                </>
+              )}
+            </View>
+          </View>
+        ))}
+      </View>
+    );
   };
 
   if (state.phase === "consent") {
@@ -151,21 +242,7 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
             </PressableScale>
           </>
         )}
-        {checkInsData && checkInsData.check_ins.length > 0 ? (
-          <View style={styles.timelineSection}>
-            <Text style={styles.sectionLabel}>Previous check-ins</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeline}>
-              {checkInsData.check_ins.map((ci) => (
-                <Image
-                  key={ci.id}
-                  source={{ uri: ci.photo_url ?? "" }}
-                  style={styles.thumbnailImage}
-                  resizeMode="cover"
-                />
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
+        {renderCheckIns()}
       </ScrollView>
     );
   }
@@ -322,13 +399,38 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  timeline: { flexGrow: 0 },
-  thumbnailImage: {
-    width: 72,
-    height: 96,
-    borderRadius: radii.card,
-    marginRight: spacing.sm,
+  checkInCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
     backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+  },
+  checkInThumb: {
+    width: 64,
+    height: 86,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+  },
+  checkInInfo: { flex: 1, gap: spacing.xs },
+  checkInLabel: { color: colors.textPrimary, ...typography.body, fontWeight: "600" },
+  checkInDate: { color: colors.textSecondary, ...typography.small },
+  requestAnalysisBtn: {
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignSelf: "flex-start",
+  },
+  requestAnalysisLabel: {
+    ...typography.small,
+    color: colors.accent,
+    fontWeight: "600",
   },
   card: {
     backgroundColor: colors.surface,

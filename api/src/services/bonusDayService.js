@@ -41,7 +41,7 @@ function toIsoDate(value) {
 }
 
 function toAnchorDayMs(dateString) {
-  return new Date(`${String(dateString).slice(0, 10)}T00:00:00.000Z`).getTime();
+  return new Date(`${toIsoDate(dateString)}T00:00:00.000Z`).getTime();
 }
 
 function weekdayForDate(dateString) {
@@ -49,7 +49,7 @@ function weekdayForDate(dateString) {
   return WEEKDAY_CODES[parsed.getUTCDay()] ?? "";
 }
 
-function daysBetween(startDate, targetDate) {
+export function daysBetween(startDate, targetDate) {
   return Math.floor((toAnchorDayMs(targetDate) - toAnchorDayMs(startDate)) / DAY_MS);
 }
 

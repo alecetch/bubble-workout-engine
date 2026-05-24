@@ -59,7 +59,7 @@ describe("OnboardingScaffold", () => {
 
   it("renders progress text", () => {
     renderScaffold();
-    expect(screen.getByText("Step 2 of 3")).toBeInTheDocument();
+    expect(screen.getByText("Step 2 of 4")).toBeInTheDocument();
   });
 
   it("does not render the error banner when hidden", () => {
