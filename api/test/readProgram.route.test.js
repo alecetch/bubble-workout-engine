@@ -178,7 +178,10 @@ test("programOverview defaults selected day to the earliest incomplete day", asy
         session_duration_mins: 50,
       }],
     },
-    { rowCount: 0, rows: [] },
+    { rowCount: 2, rows: [{ equipment_name: "Barbell" }, { equipment_name: "Pull-up bar" }] },
+    // bonus_day_recommendation queries (today has no scheduled session → todayIsRest = true)
+    { rowCount: 0, rows: [] },  // least-recently-trained focus type
+    { rowCount: 0, rows: [] },  // distinct focus types in program
   ]));
   const req = {
     request_id: "t",
@@ -193,6 +196,65 @@ test("programOverview defaults selected day to the earliest incomplete day", asy
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body?.selected_day?.program_day_id, "44444444-4444-4444-8444-444444444444");
+  assert.deepEqual(res.body?.selected_day?.equipment_names, ["Barbell", "Pull-up bar"]);
+});
+
+test("programOverview selected_day equipment_names falls back to raw slug when no equipment_items match", async () => {
+  const DAY_UUID = "44444444-4444-4444-8444-444444444444";
+  const handlers = createReadProgramHandlers(mockPool([
+    {
+      rowCount: 1,
+      rows: [{
+        program_id: VALID_UUID,
+        title: "Program",
+        summary: "Summary",
+        hero_image_key: null,
+        hero_image_url: null,
+      }],
+    },
+    { rowCount: 1, rows: [{ week_number: 1, focus: "Base", notes: null }] },
+    {
+      rowCount: 1,
+      rows: [{
+        id: "cal-1",
+        program_day_id: DAY_UUID,
+        scheduled_date: "2026-04-01",
+        week_number: 1,
+        is_training_day: true,
+        is_completed: false,
+      }],
+    },
+    { rowCount: 1, rows: [{ program_day_id: DAY_UUID }] },
+    {
+      rowCount: 1,
+      rows: [{
+        program_day_id: DAY_UUID,
+        program_id: VALID_UUID,
+        day_label: "Day 1",
+        day_type: "strength",
+        session_duration_mins: 50,
+      }],
+    },
+    // Equipment query returns the raw slug because no equipment_items row matched
+    // (COALESCE falls back to trim(slug_val))
+    { rowCount: 1, rows: [{ equipment_name: "unknown_gadget" }] },
+    // bonus_day_recommendation queries (today has no scheduled session → todayIsRest = true)
+    { rowCount: 0, rows: [] },  // least-recently-trained focus type
+    { rowCount: 0, rows: [] },  // distinct focus types in program
+  ]));
+  const req = {
+    request_id: "t",
+    params: { program_id: VALID_UUID },
+    query: { user_id: USER_UUID },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.programOverview(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body?.selected_day?.equipment_names, ["unknown_gadget"]);
 });
 
 test("dayFull non-UUID program_day_id returns 400", async () => {

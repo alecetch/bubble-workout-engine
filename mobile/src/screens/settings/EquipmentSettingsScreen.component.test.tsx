@@ -16,6 +16,8 @@ const {
   regenerateMutateAsyncMock,
   setOptionsMock,
   goBackMock,
+  navigateMock,
+  setParamsMock,
 } = vi.hoisted(() => ({
   useMeMock: vi.fn(),
   useActiveProgramsMock: vi.fn(),
@@ -28,6 +30,8 @@ const {
   regenerateMutateAsyncMock: vi.fn(),
   setOptionsMock: vi.fn(),
   goBackMock: vi.fn(),
+  navigateMock: vi.fn(),
+  setParamsMock: vi.fn(),
 }));
 
 vi.mock("../../api/hooks", () => ({
@@ -77,8 +81,17 @@ vi.mock("@react-navigation/native", async (importOriginal) => {
 function renderScreen() {
   return render(
     <EquipmentSettingsScreen
-      navigation={{ setOptions: setOptionsMock, goBack: goBackMock } as never}
-      route={{ key: "EquipmentSettings", name: "EquipmentSettings" } as never}
+      navigation={{ setOptions: setOptionsMock, goBack: goBackMock, navigate: navigateMock, setParams: setParamsMock } as never}
+      route={{ key: "EquipmentSettings", name: "EquipmentSettings", params: undefined } as never}
+    />,
+  );
+}
+
+function renderScreenWithAppliedPreset(presetCodeToApply: string) {
+  return render(
+    <EquipmentSettingsScreen
+      navigation={{ setOptions: setOptionsMock, goBack: goBackMock, navigate: navigateMock, setParams: setParamsMock } as never}
+      route={{ key: "EquipmentSettings", name: "EquipmentSettings", params: { presetCodeToApply } } as never}
     />,
   );
 }
@@ -93,6 +106,8 @@ describe("EquipmentSettingsScreen", () => {
     goBackMock.mockReset();
     updateClientProfileMutateAsyncMock.mockReset();
     regenerateMutateAsyncMock.mockReset();
+    navigateMock.mockReset();
+    setParamsMock.mockReset();
     vi.mocked(getProgramEquipment).mockReset();
 
     updateClientProfileMutateAsyncMock.mockResolvedValue({});
@@ -194,9 +209,29 @@ describe("EquipmentSettingsScreen", () => {
   });
 
   it("enables saving after a different preset is selected", async () => {
+    renderScreenWithAppliedPreset("bodyweight");
+
+    clickButton("Save changes");
+
+    expect(await screen.findByText("Apply equipment changes?")).toBeInTheDocument();
+  });
+
+  it("opens the preset detail screen from the preset list", () => {
     renderScreen();
 
     clickButton("No Equipment");
+
+    expect(navigateMock).toHaveBeenCalledWith("EquipmentPresetDetail", {
+      presetCode: "bodyweight",
+      presetLabel: "No Equipment",
+      isCurrentPreset: false,
+    });
+  });
+
+  it("applies a preset returned from the detail screen", async () => {
+    renderScreenWithAppliedPreset("bodyweight");
+
+    await waitFor(() => expect(setParamsMock).toHaveBeenCalledWith({ presetCodeToApply: undefined }));
     clickButton("Save changes");
 
     expect(await screen.findByText("Apply equipment changes?")).toBeInTheDocument();
@@ -205,7 +240,6 @@ describe("EquipmentSettingsScreen", () => {
   it("returns to the non-dirty state when the original preset is restored", () => {
     renderScreen();
 
-    clickButton("No Equipment");
     clickButton("Commercial Gym");
     clickButton("Save changes");
 
@@ -228,9 +262,8 @@ describe("EquipmentSettingsScreen", () => {
       }],
     });
 
-    renderScreen();
+    renderScreenWithAppliedPreset("bodyweight");
 
-    clickButton("No Equipment");
     clickButton("Save changes");
     clickButton("Yes, update all future workouts");
 
@@ -248,9 +281,8 @@ describe("EquipmentSettingsScreen", () => {
   });
 
   it("patches only the profile on the no-regen path", async () => {
-    renderScreen();
+    renderScreenWithAppliedPreset("bodyweight");
 
-    clickButton("No Equipment");
     clickButton("Save changes");
     clickButton("No, change only my default");
 
@@ -280,9 +312,8 @@ describe("EquipmentSettingsScreen", () => {
       }],
     });
 
-    renderScreen();
+    renderScreenWithAppliedPreset("bodyweight");
 
-    clickButton("No Equipment");
     clickButton("Save changes");
     clickButton("Yes, update all future workouts");
 

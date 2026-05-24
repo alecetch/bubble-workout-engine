@@ -35,6 +35,7 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
     onboarding_completed_at: "2026-01-01T00:00:00Z",
     program_type_slug: "strength",
     preferred_height_unit: "cm",
+    preferred_split_json: null,
   };
 
   assert.deepEqual(toApiShape(row), {
@@ -60,6 +61,7 @@ test("toApiShape maps all DB columns to camelCase API fields", () => {
     preferredHeightUnit: "cm",
     anchorLiftsSkipped: false,
     anchorLiftsCollectedAt: null,
+    preferredSplitJson: null,
   });
 });
 

@@ -121,6 +121,26 @@ describe("TodayScreen", () => {
     expect(screen.getByText("Lower Body")).toBeInTheDocument();
   });
 
+  it("renders a resume action for a started workout", async () => {
+    getDayStatusMock.mockResolvedValue("started");
+    useProgramOverviewMock.mockReturnValue({
+      data: overview(
+        [{ calendarDate: "2026-05-01", isTrainingDay: true, programDayId: "day-1", weekNumber: 1 }],
+        { programDayId: "day-1", label: "Lower Body", type: "strength", sessionDuration: 45 },
+      ),
+      isLoading: false,
+      isError: false,
+    } as any);
+    render(<TodayScreen />);
+    await flushEffects();
+    expect(screen.getByText("Resume Workout")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Resume Workout"));
+    expect(navigationMocks.navigate).toHaveBeenCalledWith("ProgramsTab", {
+      screen: "ProgramDay",
+      params: { programDayId: "day-1" },
+    });
+  });
+
   it("renders today's rest day", () => {
     useProgramOverviewMock.mockReturnValue({
       data: overview([{ calendarDate: "2026-05-01", isTrainingDay: false, weekNumber: 1 }]),

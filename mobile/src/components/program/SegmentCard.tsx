@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
+import { type LayoutChangeEvent, StyleSheet, Text, TextInput, View } from "react-native";
 import { ApiError } from "../../api/client";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import type { SaveSegmentLogPayload, SaveSegmentLogResult } from "../../api/segmentLog";
 import { useSaveSegmentLogs, useSegmentExerciseLogs } from "../../api/hooks";
 import { useTimerStore } from "../../state/timer/useTimerStore";
+import { useSettingsStore } from "../../state/settings/useSettingsStore";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -14,10 +16,14 @@ import { PressableScale } from "../interaction/PressableScale";
 import { SkeletonBlock } from "../feedback/SkeletonBlock";
 import {
   buildInitialSetInputMap,
+  formatRoundSummary,
   getExerciseSetCount,
+  guidelinePrefill,
+  repsPrefill,
   type SetInputState,
 } from "./sessionUxLogic";
-import { getSegmentPresentation } from "./segmentCardLogic";
+import { getSegmentPresentation, isRoundBasedSegment } from "./segmentCardLogic";
+import { getExerciseComplete, setExerciseComplete } from "../../utils/localWorkoutLog";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
@@ -38,6 +44,10 @@ type SegmentCardProps = {
   onAllSetsSaved: (segmentId: string) => void;
   onSubscriptionRequired?: () => void;
   onPrsDetected?: (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => void;
+  onExerciseCompleteChange?: (programExerciseId: string) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
+  onInlinePanelOpen?: (pageY: number) => void;
+  onInlinePanelClose?: (pageY: number) => void;
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
@@ -94,6 +104,28 @@ function findNextUncheckedSetKey(
   return null;
 }
 
+function isUnloadedExercise(exercise: Exercise): boolean {
+  return exercise.isUnloaded === true || exercise.isLoadable === false;
+}
+
+function formatExerciseSummary(
+  exercise: Exercise,
+  setInputs: SetInputState[] | undefined,
+  doneSetKeys: Set<string>,
+): string | null {
+  const exerciseKey = exercise.id ?? "";
+  const loggedSets = (setInputs ?? []).filter((_set, index) => doneSetKeys.has(`${exerciseKey}:${index}`));
+  if (loggedSets.length === 0) return null;
+  const last = loggedSets[loggedSets.length - 1];
+  const reps = parseInt(last.reps, 10);
+  if (!Number.isFinite(reps) || reps <= 0) return null;
+  const prescribed = getExerciseSetCount(exercise);
+  const prefix = loggedSets.length >= prescribed ? `${loggedSets.length} x ${reps}` : `${loggedSets.length}/${prescribed} sets - ${loggedSets.length} x ${reps}`;
+  if (isUnloadedExercise(exercise)) return `${prefix} (bodyweight) ✓`;
+  const weight = parseFloat(last.weight);
+  return `${prefix} @ ${Number.isFinite(weight) && weight > 0 ? weight : 0} kg ✓`;
+}
+
 export function SegmentCard({
   segment,
   isLogged,
@@ -105,6 +137,10 @@ export function SegmentCard({
   onAllSetsSaved,
   onSubscriptionRequired,
   onPrsDetected,
+  onExerciseCompleteChange,
+  onLayout,
+  onInlinePanelOpen,
+  onInlinePanelClose,
 }: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
@@ -116,8 +152,14 @@ export function SegmentCard({
     segment.segmentDurationSeconds ?? parseMmssToSeconds(segment.segmentDurationMmss),
   );
   const exercises = Array.isArray(segment.exercises) ? segment.exercises : [];
-  const loadableExercises = exercises.filter((exercise) => exercise.isLoadable === true && exercise.id);
-  const hasLoadableExercises = loadableExercises.length > 0;
+  const loggableExercises = useMemo(
+    () => exercises.filter((exercise) => exercise.id),
+    [exercises],
+  );
+  const hasLoggableExercises = loggableExercises.length > 0;
+  const isRoundBased = isRoundBasedSegment(segment.segmentType);
+  const totalRounds = presentation.roundsValue;
+  const showRestTimer = useSettingsStore((state) => state.showRestTimer);
   const existingLogsQuery = useSegmentExerciseLogs(segment.id, programDayId, { userId });
   const saveLogsMutation = useSaveSegmentLogs();
   const [inlineLoggingOpen, setInlineLoggingOpen] = useState(false);
@@ -131,7 +173,22 @@ export function SegmentCard({
   const restEntry = useTimerStore((state) => state.entries[segment.id] ?? null);
   const [restDisplaySeconds, setRestDisplaySeconds] = useState(0);
   const [activeSetKey, setActiveSetKey] = useState<string | null>(null);
+  const [completedExerciseIds, setCompletedExerciseIds] = useState<Set<string>>(new Set());
+  const [showAdjustControls, setShowAdjustControls] = useState(false);
+  const [activeRoundIndex, setActiveRoundIndex] = useState(0);
+  const [completedRoundIndices, setCompletedRoundIndices] = useState<Set<number>>(new Set());
+  const [expandedRoundIndices, setExpandedRoundIndices] = useState<Set<number>>(new Set());
+  const [roundSaveError, setRoundSaveError] = useState<string | null>(null);
+  const [showPostStopRir, setShowPostStopRir] = useState(false);
+  const allExercisesMarkedComplete =
+    loggableExercises.length > 0 &&
+    loggableExercises.every((ex) => (ex.id ? completedExerciseIds.has(ex.id) : false));
+  const showResumeButton = !inlineLoggingOpen && allExercisesMarkedComplete;
+  const panelScrolledRef = useRef(false);
+  const inlinePanelRef = useRef<View>(null);
+  const cardRootRef = useRef<View>(null);
   const prevRestRunning = useRef(false);
+  const pendingEmptyRoundRef = useRef(false);
 
   const segmentTypeBadgeLabel =
     segment.segmentType &&
@@ -158,7 +215,46 @@ export function SegmentCard({
   useEffect(() => {
     if (!inlineLoggingOpen || initialized || existingLogsQuery.isLoading) return;
     const existingRows = existingLogsQuery.data ?? [];
-    setInputMap(buildInitialSetInputMap(loadableExercises, existingRows));
+    if (isRoundBased) {
+      const nextInputMap = Object.fromEntries(
+        loggableExercises.map((exercise) => {
+          const key = exercise.id ?? "";
+          const prefilled = buildInitialSetInputMap([exercise], existingRows)[key] ?? [];
+          const prefillWeight = isUnloadedExercise(exercise) ? "" : guidelinePrefill(exercise);
+          const prefillReps = repsPrefill(exercise);
+          return [
+            key,
+            Array.from({ length: totalRounds }, (_value, index) => {
+              const existing = prefilled[index];
+              const hasExistingLog = existingRows.some((row) => row.programExerciseId === key && row.orderIndex === index + 1);
+              return hasExistingLog && existing
+                ? existing
+                : { weight: prefillWeight, reps: prefillReps, rirActual: null };
+            }),
+          ];
+        }),
+      );
+      setInputMap(nextInputMap);
+      setExerciseRirMap(
+        existingRows.reduce<Record<string, number | null>>((acc, row) => {
+          if (!row.programExerciseId) return acc;
+          if (row.orderIndex !== totalRounds) return acc;
+          acc[row.programExerciseId] = row.rirActual ?? null;
+          return acc;
+        }, {}),
+      );
+      setDoneSetKeys(new Set());
+      setCompletedRoundIndices(new Set());
+      setExpandedRoundIndices(new Set());
+      setActiveRoundIndex(0);
+      setRoundSaveError(null);
+      setShowPostStopRir(false);
+      pendingEmptyRoundRef.current = false;
+      if (loggableExercises.length === 0) return;
+      setInitialized(true);
+      return;
+    }
+    setInputMap(buildInitialSetInputMap(loggableExercises, existingRows));
     setExerciseRirMap(
       existingRows.reduce<Record<string, number | null>>((acc, row) => {
         if (!row.programExerciseId) return acc;
@@ -168,9 +264,35 @@ export function SegmentCard({
       }, {}),
     );
     setDoneSetKeys(new Set());
-    setActiveSetKey(findNextUncheckedSetKey(loadableExercises, new Set()));
+    setActiveSetKey(findNextUncheckedSetKey(loggableExercises, new Set()));
+    if (loggableExercises.length === 0) return;
     setInitialized(true);
-  }, [existingLogsQuery.data, existingLogsQuery.isLoading, inlineLoggingOpen, initialized, loadableExercises]);
+  }, [
+    existingLogsQuery.data,
+    existingLogsQuery.isLoading,
+    inlineLoggingOpen,
+    initialized,
+    isRoundBased,
+    loggableExercises,
+    totalRounds,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        loggableExercises.map(async (exercise) => ({
+          id: exercise.id ?? "",
+          complete: await getExerciseComplete(programDayId, exercise.id ?? ""),
+        })),
+      );
+      if (cancelled) return;
+      setCompletedExerciseIds(new Set(entries.filter((entry) => entry.complete).map((entry) => entry.id)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loggableExercises, programDayId]);
 
   useEffect(() => {
     if (!restEntry?.restIsRunning) {
@@ -203,25 +325,241 @@ export function SegmentCard({
   useEffect(() => {
     const restIsRunning = restEntry?.restIsRunning ?? false;
     if (prevRestRunning.current && !restIsRunning) {
-      setActiveSetKey(findNextUncheckedSetKey(loadableExercises, doneSetKeys));
+      setActiveSetKey(findNextUncheckedSetKey(loggableExercises, doneSetKeys));
     }
     prevRestRunning.current = restIsRunning;
-  }, [doneSetKeys, loadableExercises, restEntry?.restIsRunning]);
+  }, [doneSetKeys, loggableExercises, restEntry?.restIsRunning]);
 
   const restProgress =
     restEntry != null && restEntry.restTotalSeconds > 0
       ? Math.max(0, Math.min(1, restDisplaySeconds / restEntry.restTotalSeconds))
       : 0;
-  const showRestStrip = restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
+  const showRestStrip = showRestTimer && restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
   const totalSetCount = useMemo(() => {
     if (!initialized) {
-      return loadableExercises.reduce((sum, ex) => sum + getExerciseSetCount(ex), 0);
+      return loggableExercises.reduce((sum, ex) => sum + getExerciseSetCount(ex), 0);
     }
-    return loadableExercises.reduce((sum, ex) => {
+    return loggableExercises.reduce((sum, ex) => {
       const key = ex.id ?? "";
       return sum + (inputMap[key]?.length ?? getExerciseSetCount(ex));
     }, 0);
-  }, [initialized, inputMap, loadableExercises]);
+  }, [initialized, inputMap, loggableExercises]);
+
+  function restOverrideKey(programExerciseId: string): string {
+    return `${programDayId}:${programExerciseId}`;
+  }
+
+  function startExerciseRest(exercise: Exercise): void {
+    if (!showRestTimer) return;
+    const programExerciseId = exercise.id ?? "";
+    const overrideKey = restOverrideKey(programExerciseId);
+    const override = useTimerStore.getState().restOverrides?.[overrideKey];
+    const restTotal = override ?? exercise.restSeconds ?? 90;
+    useTimerStore.getState().initEntry({
+      segmentId: segment.id,
+      segmentTotal: null,
+      restTotal,
+      restOverrideKey: overrideKey,
+    });
+    useTimerStore.getState().startRest(segment.id);
+    setRestDisplaySeconds(restTotal);
+  }
+
+  function closeInlinePanel(options: { clearInputs?: boolean } = {}): void {
+    const clearInputs = options.clearInputs ?? true;
+    setInlineLoggingOpen(false);
+    setInitialized(false);
+    setShowAdjustControls(false);
+    setRoundSaveError(null);
+    setShowPostStopRir(false);
+    pendingEmptyRoundRef.current = false;
+    panelScrolledRef.current = false;
+    if (clearInputs) {
+      setActiveRoundIndex(0);
+      setCompletedRoundIndices(new Set());
+      setExpandedRoundIndices(new Set());
+      setInputMap({});
+      setExerciseRirMap({});
+      setDoneSetKeys(new Set());
+      setPbSetKeys(new Set());
+      setActiveSetKey(null);
+    }
+  }
+
+  async function handleStopExercise(exercise: Exercise): Promise<void> {
+    const programExerciseId = exercise.id;
+    if (!programExerciseId) return;
+    await setExerciseComplete(programDayId, programExerciseId, true);
+    setCompletedExerciseIds((current) => new Set([...current, programExerciseId]));
+    closeInlinePanel({ clearInputs: false });
+    onExerciseCompleteChange?.(programExerciseId);
+  }
+
+  async function handleStopInlinePanel(): Promise<void> {
+    const ids = loggableExercises
+      .map((exercise) => exercise.id)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) {
+      closeInlinePanel();
+      return;
+    }
+    if (isRoundBased && completedRoundIndices.size > 0 && completedRoundIndices.size < totalRounds) {
+      setShowPostStopRir(true);
+      setRoundSaveError(null);
+      return;
+    }
+    await Promise.all(ids.map((id) => setExerciseComplete(programDayId, id, true)));
+    setCompletedExerciseIds((current) => new Set([...current, ...ids]));
+    closeInlinePanel({ clearInputs: false });
+    ids.forEach((id) => onExerciseCompleteChange?.(id));
+    const cardRoot = cardRootRef.current;
+    if (typeof cardRoot?.measureInWindow === "function") {
+      cardRoot.measureInWindow((_x, y) => {
+        onInlinePanelClose?.(y);
+      });
+    } else {
+      onInlinePanelClose?.(0);
+    }
+  }
+
+  async function handleResumeExercise(): Promise<void> {
+    const ids = loggableExercises
+      .map((exercise) => exercise.id)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => setExerciseComplete(programDayId, id, false)));
+    setCompletedExerciseIds((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+    ids.forEach((id) => onExerciseCompleteChange?.(id));
+    setInlineLoggingOpen(true);
+  }
+
+  function buildRoundRows(roundIndex: number, includeRir: boolean): SaveSegmentLogPayload["rows"] {
+    return loggableExercises
+      .filter((exercise) => Boolean(exercise.id))
+      .map((exercise) => {
+        const exerciseKey = exercise.id ?? "";
+        const row = inputMap[exerciseKey]?.[roundIndex] ?? { weight: "", reps: "", rirActual: null };
+        const weightRaw = parseFloat(row.weight);
+        const repsRaw = parseInt(row.reps, 10);
+        return {
+          programExerciseId: exerciseKey,
+          orderIndex: roundIndex + 1,
+          weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(weightRaw) && weightRaw > 0 ? weightRaw : null),
+          repsCompleted: Number.isInteger(repsRaw) && repsRaw > 0 ? repsRaw : 0,
+          rirActual: includeRir ? (exerciseRirMap[exerciseKey] ?? null) : null,
+        };
+      });
+  }
+
+  async function handleRoundComplete(roundIndex: number): Promise<void> {
+    if (completedRoundIndices.has(roundIndex)) return;
+    const allEmpty = loggableExercises.every((exercise) => {
+      const row = inputMap[exercise.id ?? ""]?.[roundIndex];
+      return !row || (row.weight === "" && row.reps === "");
+    });
+    if (allEmpty && !pendingEmptyRoundRef.current) {
+      pendingEmptyRoundRef.current = true;
+      setRoundSaveError("No reps entered for this round. Tap again to save anyway.");
+      return;
+    }
+
+    pendingEmptyRoundRef.current = false;
+    setRoundSaveError(null);
+    const isLastRound = roundIndex === totalRounds - 1;
+    const rows = buildRoundRows(roundIndex, isLastRound);
+
+    try {
+      await saveLogsMutation.mutateAsync({
+        userId,
+        programId,
+        programDayId,
+        workoutSegmentId: segment.id,
+        rows,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 402) {
+        onSubscriptionRequired?.();
+        return;
+      }
+      setRoundSaveError("Failed to save — please try again.");
+      return;
+    }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDoneSetKeys((prev) => {
+      const next = new Set(prev);
+      loggableExercises.forEach((exercise) => next.add(buildSetKey(exercise, roundIndex)));
+      return next;
+    });
+    const firstExercise = loggableExercises[0];
+    if (firstExercise) {
+      startExerciseRest(firstExercise);
+    }
+    const nextCompleted = new Set([...completedRoundIndices, roundIndex]);
+    setCompletedRoundIndices(nextCompleted);
+    if (isLastRound) {
+      const ids = loggableExercises
+        .map((exercise) => exercise.id)
+        .filter((id): id is string => Boolean(id));
+      await Promise.all(ids.map((id) => setExerciseComplete(programDayId, id, true)));
+      setCompletedExerciseIds((current) => new Set([...current, ...ids]));
+      ids.forEach((id) => onExerciseCompleteChange?.(id));
+      onAllSetsSaved(segment.id);
+      closeInlinePanel({ clearInputs: false });
+      return;
+    }
+    const nextRoundIndex = roundIndex + 1;
+    setInputMap((prev) => {
+      const next: Record<string, SetInputState[]> = {};
+      for (const [key, sets] of Object.entries(prev)) {
+        const cloned = [...sets];
+        const prevRow = cloned[roundIndex] ?? { weight: "", reps: "", rirActual: null };
+        if (nextRoundIndex < cloned.length) {
+          cloned[nextRoundIndex] = {
+            weight: prevRow.weight,
+            reps: prevRow.reps,
+            rirActual: null,
+          };
+        }
+        next[key] = cloned;
+      }
+      return next;
+    });
+    setActiveRoundIndex(nextRoundIndex);
+  }
+
+  async function handlePostStopRirDone(): Promise<void> {
+    const lastCompletedRound = Math.max(...Array.from(completedRoundIndices));
+    if (Number.isFinite(lastCompletedRound) && lastCompletedRound >= 0) {
+      try {
+        await saveLogsMutation.mutateAsync({
+          userId,
+          programId,
+          programDayId,
+          workoutSegmentId: segment.id,
+          rows: buildRoundRows(lastCompletedRound, true),
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 402) {
+          onSubscriptionRequired?.();
+          return;
+        }
+      }
+    }
+
+    const ids = loggableExercises
+      .map((exercise) => exercise.id)
+      .filter((id): id is string => Boolean(id));
+    await Promise.all(ids.map((id) => setExerciseComplete(programDayId, id, true)));
+    setCompletedExerciseIds((current) => new Set([...current, ...ids]));
+    setShowPostStopRir(false);
+    closeInlinePanel({ clearInputs: false });
+    ids.forEach((id) => onExerciseCompleteChange?.(id));
+  }
 
   function handleTimerPress(): void {
     if (initialDurationSeconds == null || initialDurationSeconds <= 0) return;
@@ -250,6 +588,27 @@ export function SegmentCard({
     return `${exercise.id ?? exercise.exerciseId ?? exercise.name}:${setIndex}`;
   }
 
+  function fillDown(
+    exerciseKey: string,
+    setIndex: number,
+    field: "weight" | "reps",
+    value: string,
+    exercise: Exercise,
+  ): void {
+    setInputMap((current) => {
+      const existing = current[exerciseKey] ?? [];
+      const next = [...existing];
+      next[setIndex] = { ...(next[setIndex] ?? { weight: "", reps: "", rirActual: null }), [field]: value };
+      for (let i = setIndex + 1; i < next.length; i += 1) {
+        const key = buildSetKey(exercise, i);
+        if (!doneSetKeys.has(key)) {
+          next[i] = { ...(next[i] ?? { weight: "", reps: "", rirActual: null }), [field]: value };
+        }
+      }
+      return { ...current, [exerciseKey]: next };
+    });
+  }
+
   async function handleSetComplete(exercise: Exercise, setIndex: number): Promise<void> {
     const programExerciseId = exercise.id;
     if (!programExerciseId) return;
@@ -271,11 +630,13 @@ export function SegmentCard({
       rows: [{
         programExerciseId,
         orderIndex: setIndex + 1,
-        weightKg: Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null,
+        weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null),
         repsCompleted: Number.isFinite(parseInt(row.reps, 10)) ? parseInt(row.reps, 10) || null : null,
         rirActual: exerciseRir,
       }],
     };
+
+    startExerciseRest(exercise);
 
     let result: SaveSegmentLogResult;
     try {
@@ -309,14 +670,6 @@ export function SegmentCard({
         return next;
       });
     }
-
-    useTimerStore.getState().initEntry({
-      segmentId: segment.id,
-      segmentTotal: null,
-      restTotal: exercise.restSeconds ?? 90,
-    });
-    useTimerStore.getState().startRest(segment.id);
-
     if (nextDoneSetKeys.size >= totalSetCount) {
       onAllSetsSaved(segment.id);
     }
@@ -393,11 +746,13 @@ export function SegmentCard({
       rows: uncheckedRows.map(({ setIndex, row }) => ({
         programExerciseId,
         orderIndex: setIndex + 1,
-        weightKg: Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null,
+        weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null),
         repsCompleted: Number.isFinite(parseInt(row.reps, 10)) ? parseInt(row.reps, 10) || null : null,
         rirActual: exerciseRir,
       })),
     };
+
+    startExerciseRest(exercise);
 
     let result: SaveSegmentLogResult;
     try {
@@ -434,21 +789,215 @@ export function SegmentCard({
         return next;
       });
     }
-
-    useTimerStore.getState().initEntry({
-      segmentId: segment.id,
-      segmentTotal: null,
-      restTotal: exercise.restSeconds ?? 90,
-    });
-    useTimerStore.getState().startRest(segment.id);
-
     if (nextDoneSetKeys.size >= totalSetCount) {
       onAllSetsSaved(segment.id);
     }
   }
 
+  function formatRoundExerciseValue(exercise: Exercise, roundIndex: number): string | null {
+    const row = inputMap[exercise.id ?? ""]?.[roundIndex];
+    if (!row) return null;
+    const reps = parseInt(row.reps, 10);
+    if (!Number.isInteger(reps) || reps <= 0) return null;
+    if (isUnloadedExercise(exercise)) return `bodyweight x ${reps}`;
+    const weight = parseFloat(row.weight);
+    if (!Number.isFinite(weight) || weight <= 0) return `0 kg x ${reps}`;
+    return `${weight} kg x ${reps}`;
+  }
+
+  function renderRirPickerForExercise(exercise: Exercise): React.ReactNode {
+    const exerciseKey = exercise.id ?? "";
+    const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
+    return (
+      <View key={exerciseKey} style={styles.roundRirExerciseBlock}>
+        <Text style={styles.roundExerciseName} numberOfLines={1}>{exercise.name}</Text>
+        <View style={styles.rirPills}>
+          {RIR_OPTIONS.map((option) => {
+            const optionValue = option === "4+" ? 4 : Number(option);
+            const selected = exerciseRir === optionValue;
+            return (
+              <PressableScale
+                key={option}
+                containerStyle={styles.rirPillContainer}
+                style={[styles.rirPill, selected && styles.rirPillSelected]}
+                hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                accessibilityLabel={`${exercise.name} ${option} reps in reserve`}
+                onPress={() => {
+                  setExerciseRirMap((current) => ({
+                    ...current,
+                    [exerciseKey]: optionValue,
+                  }));
+                }}
+              >
+                <Text style={[styles.rirPillLabel, selected && styles.rirPillLabelSelected]}>
+                  {option}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  function renderRoundSummaryRow(roundIndex: number): React.ReactNode {
+    const expanded = expandedRoundIndices.has(roundIndex);
+    const summaryParts = loggableExercises
+      .map((exercise) => {
+        const value = formatRoundExerciseValue(exercise, roundIndex);
+        return value ? `${exercise.name} ${value}` : null;
+      })
+      .filter((value): value is string => Boolean(value));
+    return (
+      <PressableScale
+        key={roundIndex}
+        style={styles.roundSummaryRow}
+        onPress={() => {
+          setExpandedRoundIndices((current) => {
+            const next = new Set(current);
+            if (next.has(roundIndex)) {
+              next.delete(roundIndex);
+            } else {
+              next.add(roundIndex);
+            }
+            return next;
+          });
+        }}
+      >
+        <Text style={styles.roundSummaryLabel}>
+          {`Round ${roundIndex + 1} ✓${summaryParts.length > 0 ? `  ${summaryParts.join(" · ")}` : ""}`}
+        </Text>
+        {expanded ? (
+          <View style={styles.roundExpandedBlock}>
+            {loggableExercises.map((exercise) => (
+              <Text key={exercise.id ?? exercise.name} style={styles.roundLockedLabel}>
+                {`${exercise.name}: ${formatRoundExerciseValue(exercise, roundIndex) ?? "not logged"}`}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </PressableScale>
+    );
+  }
+
+  function renderRoundBasedPanel(): React.ReactNode {
+    return (
+      <>
+        {Array.from({ length: totalRounds }, (_value, roundIndex) => {
+          const isCompleted = completedRoundIndices.has(roundIndex);
+          const isActive = roundIndex === activeRoundIndex && !isCompleted && !showPostStopRir;
+          const isLocked = !isCompleted && !isActive;
+          const isLastRound = roundIndex === totalRounds - 1;
+
+          if (isCompleted) {
+            return renderRoundSummaryRow(roundIndex);
+          }
+
+          if (isLocked) {
+            return (
+              <View key={roundIndex} style={styles.roundLockedRow}>
+                <Text style={styles.roundLockedLabel}>
+                  {`Round ${roundIndex + 1} · complete round ${roundIndex} to unlock`}
+                </Text>
+              </View>
+            );
+          }
+
+          return (
+            <View key={roundIndex} style={styles.roundActiveBlock}>
+              <Text style={styles.roundActiveLabel}>{`Round ${roundIndex + 1}`}</Text>
+              {loggableExercises.map((exercise) => {
+                const exerciseKey = exercise.id ?? "";
+                const row = inputMap[exerciseKey]?.[roundIndex] ?? { weight: "", reps: "", rirActual: null };
+                return (
+                  <View key={exerciseKey} style={styles.roundExerciseRow}>
+                    <Text style={styles.roundExerciseName} numberOfLines={1}>{exercise.name}</Text>
+                    {isUnloadedExercise(exercise) ? (
+                      <View style={styles.weightInputGroup}>
+                        <Text style={styles.bodyweightDash}>—</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.weightInputGroup}>
+                        <TextInput
+                          value={row.weight}
+                          onChangeText={(value) => {
+                            const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
+                            updateSetInput(exerciseKey, roundIndex, (prev) => ({ ...prev, weight: sanitized }));
+                          }}
+                          keyboardType="decimal-pad"
+                          placeholder="0"
+                          placeholderTextColor={colors.textSecondary}
+                          style={styles.inputField}
+                        />
+                        <View style={styles.inputSuffixWrap}>
+                          <Text style={styles.inputSuffix}>kg</Text>
+                        </View>
+                      </View>
+                    )}
+                    <View style={styles.repsInputGroup}>
+                      <TextInput
+                        value={row.reps}
+                        onChangeText={(value) => {
+                          const sanitized = value.replace(/[^0-9]/g, "");
+                          updateSetInput(exerciseKey, roundIndex, (prev) => ({ ...prev, reps: sanitized }));
+                        }}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor={colors.textSecondary}
+                        style={styles.inputField}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+              {isLastRound ? (
+                <View style={styles.exerciseRirBlock}>
+                  <Text style={styles.exerciseRirQuestion}>
+                    How many more reps could you complete per set?
+                  </Text>
+                  {loggableExercises.map(renderRirPickerForExercise)}
+                  <View style={styles.rirHintRow}>
+                    <Text style={styles.rirHintText}>Too easy</Text>
+                    <Text style={styles.rirHintText}>Max effort</Text>
+                  </View>
+                </View>
+              ) : null}
+              {roundSaveError ? (
+                <Text style={styles.roundSaveError}>{roundSaveError}</Text>
+              ) : null}
+              <PressableScale
+                style={styles.markRoundButton}
+                onPress={() => { void handleRoundComplete(roundIndex); }}
+              >
+                <Text style={styles.markRoundButtonLabel}>Mark round complete</Text>
+              </PressableScale>
+            </View>
+          );
+        })}
+        {showPostStopRir ? (
+          <View style={styles.postStopRirBlock}>
+            <Text style={styles.exerciseRirQuestion}>
+              How many more reps could you complete per set?
+            </Text>
+            {loggableExercises.map(renderRirPickerForExercise)}
+            <View style={styles.rirHintRow}>
+              <Text style={styles.rirHintText}>Too easy</Text>
+              <Text style={styles.rirHintText}>Max effort</Text>
+            </View>
+            <PressableScale
+              style={styles.markRoundButton}
+              onPress={() => { void handlePostStopRirDone(); }}
+            >
+              <Text style={styles.markRoundButtonLabel}>Done</Text>
+            </PressableScale>
+          </View>
+        ) : null}
+      </>
+    );
+  }
+
   return (
-    <View style={styles.card}>
+    <View ref={cardRootRef} style={styles.card} onLayout={onLayout}>
       <View style={styles.headerRow}>
         <View style={styles.headerCopy}>
           <Text style={styles.segmentName}>{segment.segmentName}</Text>
@@ -509,8 +1058,19 @@ export function SegmentCard({
                   const programExerciseId = exercise.id ?? "";
                   const exerciseId = exercise.exerciseId ?? programExerciseId;
 
+                  const isComplete = completedExerciseIds.has(programExerciseId);
+                  const summary = isComplete
+                    ? isRoundBased
+                      ? index === 0
+                        ? formatRoundSummary(loggableExercises, totalRounds, completedRoundIndices.size, inputMap, doneSetKeys)
+                        : null
+                      : formatExerciseSummary(exercise, inputMap[programExerciseId], doneSetKeys)
+                    : null;
                   return (
-                    <View key={exercise.id ?? `${segment.id}-exercise-${index}`} style={styles.exerciseRow}>
+                    <View
+                      key={exercise.id ?? `${segment.id}-exercise-${index}`}
+                      style={[styles.exerciseRow, isComplete && styles.exerciseRowComplete]}
+                    >
                       <PressableScale
                         style={styles.exerciseNamePressable}
                         onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
@@ -522,6 +1082,11 @@ export function SegmentCard({
                       {line2 ? (
                         <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
                           {line2}
+                        </Text>
+                      ) : null}
+                      {summary ? (
+                        <Text style={styles.exerciseCompleteSummary} numberOfLines={1} ellipsizeMode="tail">
+                          {summary}
                         </Text>
                       ) : null}
                       {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
@@ -553,22 +1118,99 @@ export function SegmentCard({
                           </PressableScale>
                         );
                       })()}
+                      {!inlineLoggingOpen && hasLoggableExercises && !isRoundBased ? (
+                        <PressableScale
+                          style={[
+                            styles.exerciseActionButton,
+                            isComplete && styles.exerciseActionButtonDisabled,
+                          ]}
+                          disabled={isComplete}
+                          onPress={() => {
+                            setInlineLoggingOpen(true);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.exerciseActionLabel,
+                              isComplete && styles.exerciseActionLabelDisabled,
+                            ]}
+                          >
+                            {isComplete ? "Exercise Complete" : "Start Exercise"}
+                          </Text>
+                        </PressableScale>
+                      ) : null}
+                      {!isRoundBased && showResumeButton && index === 0 ? (
+                        <PressableScale
+                          style={[styles.exerciseActionButton, styles.exerciseActionButtonResume]}
+                          onPress={() => { void handleResumeExercise(); }}
+                          accessibilityLabel="Resume exercise"
+                        >
+                          <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelResume]}>
+                            Resume
+                          </Text>
+                        </PressableScale>
+                      ) : null}
                     </View>
                   );
-                })
-              ) : (
-                <Text style={styles.exerciseMeta}>No exercises available.</Text>
-              )}
-            </View>
-          )}
+	                })
+	              ) : (
+	                <Text style={styles.exerciseMeta}>No exercises available.</Text>
+	              )}
+              {isRoundBased && !inlineLoggingOpen && hasLoggableExercises ? (() => {
+                return (
+                  <PressableScale
+                    style={[
+                      styles.exerciseActionButton,
+                      allExercisesMarkedComplete && styles.exerciseActionButtonDisabled,
+                    ]}
+                    disabled={allExercisesMarkedComplete}
+                    onPress={() => {
+                      setInlineLoggingOpen(true);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.exerciseActionLabel,
+                        allExercisesMarkedComplete && styles.exerciseActionLabelDisabled,
+                      ]}
+                    >
+                      {allExercisesMarkedComplete ? "Exercise Complete" : "Start Exercise"}
+                    </Text>
+                  </PressableScale>
+                );
+              })() : null}
+              {isRoundBased && showResumeButton ? (
+                <PressableScale
+                  style={[styles.exerciseActionButton, styles.exerciseActionButtonResume]}
+                  onPress={() => { void handleResumeExercise(); }}
+                  accessibilityLabel="Resume exercise"
+                >
+                  <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelResume]}>
+                    Resume
+                  </Text>
+                </PressableScale>
+              ) : null}
+	            </View>
+	          )}
         </View>
       </View>
 
       {inlineLoggingOpen ? (
-        <View style={styles.inlinePanel}>
+        <View
+          ref={inlinePanelRef}
+          style={styles.inlinePanel}
+          onLayout={() => {
+            if (!panelScrolledRef.current) {
+              panelScrolledRef.current = true;
+              inlinePanelRef.current?.measure((_x, _y, _w, _h, _pageX, pageY) => {
+                onInlinePanelOpen?.(pageY);
+              });
+            }
+          }}
+        >
           <View style={styles.inlinePanelHeader}>
             <View />
-            <PressableScale style={styles.closeLink} onPress={() => setInlineLoggingOpen(false)}>
+            <PressableScale style={styles.closeLink} onPress={() => closeInlinePanel()}>
               <Text style={styles.closeLinkLabel}>Close</Text>
             </PressableScale>
           </View>
@@ -589,8 +1231,38 @@ export function SegmentCard({
                   setRestDisplaySeconds(0);
                 }}
               >
-                <Text style={styles.restStripSkipLabel}>Skip</Text>
+                <Text style={styles.restStripSkipLabel}>Reset</Text>
               </PressableScale>
+              <PressableScale
+                style={styles.restAdjustChip}
+                onPress={() => setShowAdjustControls((current) => !current)}
+              >
+                <Text style={styles.restStripSkipLabel}>Adjust</Text>
+              </PressableScale>
+              {showAdjustControls ? (
+                <View style={styles.restAdjustControls}>
+                  {[
+                    { label: "-", delta: -15, longDelta: -60 },
+                    { label: "+", delta: 15, longDelta: 60 },
+                  ].map((button) => (
+                    <PressableScale
+                      key={button.label}
+                      style={styles.restAdjustButton}
+                      onPress={() => {
+                        const overrideKey = restEntry?.restOverrideKey ?? null;
+                        useTimerStore.getState().adjustRestDuration(segment.id, button.delta, overrideKey);
+                      }}
+                      onLongPress={() => {
+                        const overrideKey = restEntry?.restOverrideKey ?? null;
+                        useTimerStore.getState().adjustRestDuration(segment.id, button.longDelta, overrideKey);
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }}
+                    >
+                      <Text style={styles.restStripSkipLabel}>{button.label}</Text>
+                    </PressableScale>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -598,8 +1270,10 @@ export function SegmentCard({
             <View style={styles.loadingBlock}>
               <SkeletonBlock height={160} />
             </View>
+          ) : isRoundBased ? (
+            renderRoundBasedPanel()
           ) : (
-            loadableExercises.map((exercise) => {
+            loggableExercises.map((exercise) => {
               const exerciseKey = exercise.id ?? "";
               const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
               const setInputs = inputMap[exerciseKey] ?? Array.from({ length: getExerciseSetCount(exercise) }, () => ({
@@ -622,28 +1296,34 @@ export function SegmentCard({
                             <Text style={styles.pbBadgeText}>PB</Text>
                           </View>
                         ) : null}
-                        <View style={styles.weightInputGroup}>
-                          <TextInput
-                            value={setInput.weight}
-                            onChangeText={(value) => {
-                              const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
-                              updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, weight: sanitized }));
-                            }}
-                            keyboardType="decimal-pad"
-                            placeholder="0"
-                            placeholderTextColor={colors.textSecondary}
-                            style={[styles.inputField, isDone && styles.inputFieldDone]}
-                          />
-                          <View style={styles.inputSuffixWrap}>
-                            <Text style={[styles.inputSuffix, isDone && styles.inputSuffixDone]}>kg</Text>
+                        {isUnloadedExercise(exercise) ? (
+                          <View style={styles.weightInputGroup}>
+                            <Text style={[styles.bodyweightDash, isDone && styles.inputFieldDone]}>—</Text>
                           </View>
-                        </View>
+                        ) : (
+                          <View style={styles.weightInputGroup}>
+                            <TextInput
+                              value={setInput.weight}
+                              onChangeText={(value) => {
+                                const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
+                                fillDown(exerciseKey, setIndex, "weight", sanitized, exercise);
+                              }}
+                              keyboardType="decimal-pad"
+                              placeholder="0"
+                              placeholderTextColor={colors.textSecondary}
+                              style={[styles.inputField, isDone && styles.inputFieldDone]}
+                            />
+                            <View style={styles.inputSuffixWrap}>
+                              <Text style={[styles.inputSuffix, isDone && styles.inputSuffixDone]}>kg</Text>
+                            </View>
+                          </View>
+                        )}
                         <View style={styles.repsInputGroup}>
                           <TextInput
                             value={setInput.reps}
                             onChangeText={(value) => {
                               const sanitized = value.replace(/[^0-9]/g, "");
-                              updateSetInput(exerciseKey, setIndex, (prev) => ({ ...prev, reps: sanitized }));
+                              fillDown(exerciseKey, setIndex, "reps", sanitized, exercise);
                             }}
                             keyboardType="numeric"
                             placeholder="0"
@@ -653,6 +1333,7 @@ export function SegmentCard({
                         </View>
                         <PressableScale
                           style={styles.checkboxButton}
+                          accessibilityLabel={`${exercise.name} set ${setIndex + 1} complete`}
                           onPress={() => { void handleSetComplete(exercise, setIndex); }}
                         >
                           <Ionicons
@@ -733,6 +1414,16 @@ export function SegmentCard({
               );
             })
           )}
+          {hasLoggableExercises ? (
+            <PressableScale
+              style={[styles.exerciseActionButton, styles.exerciseActionButtonStop, styles.inlineStopButton]}
+              onPress={() => { void handleStopInlinePanel(); }}
+            >
+              <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelStop]}>
+                Close Log
+              </Text>
+            </PressableScale>
+          ) : null}
         </View>
       ) : null}
 
@@ -745,14 +1436,7 @@ export function SegmentCard({
         </View>
       ) : null}
 
-      {!isLogged && hasLoadableExercises ? (
-        <PressableScale
-          style={styles.logButton}
-          onPress={() => setInlineLoggingOpen(true)}
-        >
-          <Text style={styles.logButtonLabel}>{initialized ? "Resume" : "Start Exercise"}</Text>
-        </PressableScale>
-      ) : null}
+      {!isLogged && hasLoggableExercises && !inlineLoggingOpen ? null : null}
     </View>
   );
 }
@@ -882,6 +1566,10 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: 4,
   },
+  exerciseRowComplete: {
+    backgroundColor: colors.surface,
+    opacity: 0.65,
+  },
   exerciseNamePressable: {
     alignSelf: "flex-start",
   },
@@ -893,6 +1581,53 @@ const styles = StyleSheet.create({
   exerciseMeta: {
     color: colors.textSecondary,
     ...typography.small,
+  },
+  exerciseCompleteSummary: {
+    color: colors.textSecondary,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  exerciseActionButton: {
+    alignSelf: "flex-start",
+    minHeight: 34,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: spacing.xs,
+  },
+  exerciseActionButtonStop: {
+    backgroundColor: colors.warning,
+  },
+  inlineStopButton: {
+    alignSelf: "stretch",
+    marginTop: spacing.sm,
+  },
+  exerciseActionButtonDisabled: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  exerciseActionLabel: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "700",
+  },
+  exerciseActionLabelStop: {
+    color: colors.background,
+  },
+  exerciseActionLabelDisabled: {
+    color: colors.textSecondary,
+  },
+  exerciseActionButtonResume: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  exerciseActionLabelResume: {
+    color: colors.textSecondary,
   },
   restRow: {
     flexDirection: "row",
@@ -1022,6 +1757,93 @@ const styles = StyleSheet.create({
   },
   inputSuffixDone: {
     color: colors.textSecondary,
+  },
+  bodyweightDash: {
+    flex: 1,
+    color: colors.textPrimary,
+    ...typography.body,
+    textAlign: "center",
+  },
+  roundActiveBlock: {
+    gap: spacing.sm,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+  },
+  roundActiveLabel: {
+    color: colors.textPrimary,
+    ...typography.label,
+    fontWeight: "700",
+  },
+  roundExerciseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  roundExerciseName: {
+    flex: 1,
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  roundLockedRow: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.sm,
+  },
+  roundLockedLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  roundSummaryRow: {
+    gap: spacing.xs,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+  },
+  roundSummaryLabel: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "700",
+  },
+  roundExpandedBlock: {
+    gap: spacing.xs,
+  },
+  roundRirExerciseBlock: {
+    gap: spacing.xs,
+  },
+  markRoundButton: {
+    alignSelf: "stretch",
+    minHeight: 38,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  markRoundButtonLabel: {
+    color: colors.background,
+    ...typography.label,
+    fontWeight: "700",
+  },
+  roundSaveError: {
+    color: colors.warning,
+    ...typography.small,
+    fontWeight: "600",
+  },
+  postStopRirBlock: {
+    gap: spacing.sm,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
   },
   exerciseRirBlock: {
     gap: spacing.xs,
@@ -1153,6 +1975,23 @@ const styles = StyleSheet.create({
     color: colors.accent,
     ...typography.small,
     fontWeight: "600",
+  },
+  restAdjustChip: {
+    alignSelf: "flex-start",
+  },
+  restAdjustControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  restAdjustButton: {
+    minWidth: 28,
+    minHeight: 28,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   segmentRestRow: {
     flexDirection: "row",

@@ -1,0 +1,20 @@
+{
+  "_comment": "Default review matrix. Capped at commercial_gym + minimal_equipment to keep preview run time bounded. Adjust to include more presets when running targeted reviews.",
+  "version": 1,
+  "default_matrix": {
+    "config_keys": ["hypertrophy_default_v1", "strength_default_v1"],
+    "program_types": ["hypertrophy", "strength"],
+    "fitness_ranks": [0, 1, 2, 3],
+    "equipment_presets": ["minimal_equipment", "commercial_gym"],
+    "days_per_week": [3, 5],
+    "duration_mins": [45, 60]
+  },
+  "thresholds": {
+    "slot_min_candidates_warning": 2,
+    "slot_min_candidates_critical": 1,
+    "rep_rule_fallback_only_critical": true,
+    "preview_generation_failure_critical": true,
+    "ai_review_score_min_warning": 7.0,
+    "ai_review_score_min_critical": 5.0
+  }
+}

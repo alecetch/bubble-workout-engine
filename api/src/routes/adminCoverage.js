@@ -8,7 +8,7 @@ export const adminCoverageRouter = express.Router();
 
 adminCoverageRouter.use(requireInternalToken);
 
-const PRESETS = [
+export const PRESETS = [
   { code: "no_equipment", label: "No Equipment", column: "no_equipment" },
   { code: "minimal_equipment", label: "Minimal Equipment", column: "minimal_equipment" },
   { code: "decent_home_gym", label: "Decent Home Gym", column: "decent_home_gym" },
@@ -16,7 +16,7 @@ const PRESETS = [
   { code: "crossfit_hyrox_gym", label: "CrossFit / HYROX Gym", column: "crossfit_hyrox_gym" },
 ];
 
-const RANKS = [
+export const RANKS = [
   { value: 0, label: "Beginner" },
   { value: 1, label: "Intermediate" },
   { value: 2, label: "Advanced" },
@@ -104,7 +104,7 @@ function buildPresetValuesSql(presets, startParam = 1) {
   };
 }
 
-async function fetchSlotCounts(client, presets, slot, excludedClasses) {
+export async function fetchSlotCounts(client, presets, slot, excludedClasses) {
   const sw = safeString(slot.sw) || null;
   const sw2 = safeString(slot.sw2) || null;
   const swAny = asArray(slot.swAny)
@@ -206,9 +206,12 @@ async function fetchSlotCounts(client, presets, slot, excludedClasses) {
   return counts;
 }
 
-adminCoverageRouter.get("/coverage-report", async (req, res) => {
-  try {
-    const equipmentRows = await pool.query(`
+export async function fetchCoverageReport({
+  db = pool,
+  config_key: requestedConfigKey = "",
+  program_type: requestedProgramType = "",
+} = {}) {
+  const equipmentRows = await db.query(`
       SELECT
         exercise_slug,
         no_equipment,
@@ -237,8 +240,8 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
       equipment_profile: deriveEquipmentProfile(presetSlugsByCode.get(p.code) ?? []),
     }));
 
-    const requestedConfigKey = safeString(req.query?.config_key);
-    const requestedProgramType = safeString(req.query?.program_type);
+    requestedConfigKey = safeString(requestedConfigKey);
+    requestedProgramType = safeString(requestedProgramType);
     const cfgFilters = ["is_active = true"];
     const cfgParams = [];
 
@@ -250,7 +253,7 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
       cfgFilters.push(`program_type = $${cfgParams.length}`);
     }
 
-    const cfgResult = await pool.query(
+    const cfgResult = await db.query(
       `
       SELECT
         config_key,
@@ -283,7 +286,7 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
             resolvedSummary.variant_matched = resolvedSlot !== slot;
             resolvedSummary.equipment_profile = preset.equipment_profile;
             resolvedByPreset[preset.code] = resolvedSummary;
-            const presetCounts = await fetchSlotCounts(pool, [preset], resolvedSlot, effectiveExcludedClasses);
+            const presetCounts = await fetchSlotCounts(db, [preset], resolvedSlot, effectiveExcludedClasses);
             for (const rank of RANKS) {
               counts[`${preset.code}_${rank.value}`] = presetCounts[`${preset.code}_${rank.value}`] ?? 0;
             }
@@ -311,7 +314,17 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
       }
     }
 
-    return res.json({ presets, ranks: RANKS, rows });
+    return { presets, ranks: RANKS, rows };
+}
+
+adminCoverageRouter.get("/coverage-report", async (req, res) => {
+  try {
+    const report = await fetchCoverageReport({
+      db: pool,
+      config_key: req.query?.config_key,
+      program_type: req.query?.program_type,
+    });
+    return res.json(report);
   } catch (err) {
     return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }

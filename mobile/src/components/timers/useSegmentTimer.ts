@@ -92,10 +92,11 @@ export function useSegmentTimer(params: UseSegmentTimerParams): UseSegmentTimerR
         entry.restStartedAtMs,
         entry.restIsRunning,
       );
-      const liveRestElapsed = Math.max(0, Math.min(liveRestElapsedRaw, restTotal));
+      const restTotalEffective = entry.restTotalSeconds;
+      const liveRestElapsed = Math.max(0, Math.min(liveRestElapsedRaw, restTotalEffective));
 
       const segmentRemaining = computeRemaining(segmentTotal, liveSegmentElapsed);
-      const restRemaining = computeRemaining(restTotal, liveRestElapsed);
+      const restRemaining = computeRemaining(restTotalEffective, liveRestElapsed);
 
       if (entry.segmentIsRunning && segmentRemaining === 0 && !finishedSegmentRef.current) {
         finishedSegmentRef.current = true;
@@ -114,7 +115,7 @@ export function useSegmentTimer(params: UseSegmentTimerParams): UseSegmentTimerR
       const progress =
         activeMode === "segment"
           ? computeProgress(segmentTotal, segmentRemaining)
-          : computeProgress(restTotal, restRemaining);
+          : computeProgress(restTotalEffective, restRemaining);
       const isRunning = activeMode === "segment" ? entry.segmentIsRunning : entry.restIsRunning;
       const segmentFinished = segmentTotal !== null && segmentRemaining === 0;
       const restFinished = restRemaining === 0 && liveRestElapsed > 0;

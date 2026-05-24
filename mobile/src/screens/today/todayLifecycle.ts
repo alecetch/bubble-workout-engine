@@ -3,6 +3,7 @@ import type { ProgramDayStatus } from "../../components/program/CalendarDayPillR
 export type TodayLifecycleState =
   | "no_program"
   | "today_scheduled"
+  | "today_started"
   | "today_complete"
   | "today_rest"
   | "program_complete";
@@ -32,6 +33,7 @@ export function computeLifecycleState(params: {
   if (todayTrainingDay?.programDayId) {
     const status = dayStatusByProgramDayId[todayTrainingDay.programDayId] ?? "scheduled";
     if (status === "complete") return "today_complete";
+    if (status === "started") return "today_started";
     return "today_scheduled";
   }
 

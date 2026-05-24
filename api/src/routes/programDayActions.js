@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
+import { VALID_FOCUS_SLUGS } from "../utils/splitRecommender.js";
 
 export const programDayActionsRouter = express.Router();
 
@@ -44,6 +45,37 @@ function validateFutureDate(value) {
     throw new RequestValidationError("targetDate must be a future date");
   }
   return targetDate;
+}
+
+const DOW_MAP = {
+  mon: 0, monday: 0,
+  tue: 1, tues: 1, tuesday: 1,
+  wed: 2, weds: 2, wednesday: 2,
+  thu: 3, thur: 3, thurs: 3, thursday: 3,
+  fri: 4, friday: 4,
+  sat: 5, saturday: 5,
+  sun: 6, sunday: 6,
+};
+
+function weekdayIndex(value) {
+  const key = safeString(value).trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(DOW_MAP, key) ? DOW_MAP[key] : null;
+}
+
+function rotateFocusesFromStart(dayFocuses, preferredDays, startWeekday) {
+  if (!Array.isArray(dayFocuses) || !Array.isArray(preferredDays) || dayFocuses.length !== preferredDays.length) {
+    return dayFocuses;
+  }
+  const startDow = weekdayIndex(startWeekday);
+  if (!Number.isInteger(startDow)) return dayFocuses;
+  const pairs = preferredDays.map((day, index) => ({
+    dayIdx: weekdayIndex(day),
+    focus: dayFocuses[index],
+  }));
+  if (pairs.some((pair) => !Number.isInteger(pair.dayIdx))) return dayFocuses;
+  return pairs
+    .sort((a, b) => ((a.dayIdx - startDow + 7) % 7) - ((b.dayIdx - startDow + 7) % 7))
+    .map((pair) => pair.focus);
 }
 
 async function verifyProgramDay(db, { programId, programDayId, userId }) {
@@ -164,11 +196,13 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
 
       const conflictResult = await db.query(
         `
-        SELECT id
-        FROM program_calendar_day
-        WHERE program_id = $1
-          AND scheduled_date = $2::date
-          AND is_training_day = TRUE
+        SELECT pcd.id
+        FROM program_calendar_day pcd
+        JOIN program_day pd ON pd.id = pcd.program_day_id
+        WHERE pcd.program_id = $1
+          AND pcd.scheduled_date = $2::date
+          AND pcd.is_training_day = TRUE
+          AND pd.is_skipped = FALSE
         LIMIT 1
         `,
         [programId, targetDate],
@@ -184,6 +218,25 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
 
       client = typeof db.connect === "function" ? await db.connect() : db;
       if (client !== db) await client.query("BEGIN");
+
+      // Remove any existing calendar entry on the target date that doesn't block rescheduling:
+      // (a) rest-day entries (is_training_day = FALSE) have NULL program_day_id and freely yield to a rescheduled session;
+      // (b) ghost training-day entries left by a previously-rescheduled day whose program_day is now is_skipped = TRUE.
+      // Both occupy the unique (program_id, scheduled_date) slot and must be cleared before the INSERT.
+      await client.query(
+        `
+        DELETE FROM program_calendar_day
+        WHERE program_id = $1
+          AND scheduled_date = $2::date
+          AND (
+            is_training_day = FALSE
+            OR program_day_id IN (
+              SELECT id FROM program_day WHERE is_skipped = TRUE
+            )
+          )
+        `,
+        [programId, targetDate],
+      );
 
       const insertResult = await client.query(
         `
@@ -482,11 +535,82 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
     }
   }
 
+  async function updateProgramSplit(req, res) {
+    const { request_id } = req;
+    try {
+      const userId = resolveUserId(req);
+      const programId = requireUuid(req.params.programId, "programId");
+      const dayFocuses = req.body?.day_focuses;
+      if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
+        return res.status(400).json({ ok: false, request_id, code: "validation_error", error: "day_focuses must be a non-empty array" });
+      }
+      for (const slug of dayFocuses) {
+        if (!VALID_FOCUS_SLUGS.has(slug)) {
+          return res.status(400).json({ ok: false, request_id, code: "validation_error", error: `Unknown focus slug: ${slug}` });
+        }
+      }
+
+      const programResult = await db.query("SELECT user_id, preferred_days_sorted_json FROM program WHERE id = $1", [programId]);
+      if (programResult.rowCount === 0) {
+        return res.status(404).json({ ok: false, request_id, code: "not_found", error: "Program not found" });
+      }
+      if (String(programResult.rows[0].user_id) !== String(userId)) {
+        return res.status(403).json({ ok: false, request_id, code: "forbidden", error: "Program does not belong to this user" });
+      }
+
+      const daysResult = await db.query(
+        `
+        SELECT id, scheduled_weekday
+        FROM program_day
+        WHERE program_id = $1
+          AND is_completed = FALSE
+          AND is_skipped IS NOT TRUE
+        ORDER BY week_number ASC, day_number ASC
+        `,
+        [programId],
+      );
+
+      if (daysResult.rowCount === 0) {
+        return res.status(200).json({ ok: true, request_id, updatedCount: 0 });
+      }
+
+      const ids = daysResult.rows.map((row) => row.id);
+      const rotatedDayFocuses = rotateFocusesFromStart(
+        dayFocuses,
+        programResult.rows[0].preferred_days_sorted_json,
+        daysResult.rows[0]?.scheduled_weekday,
+      );
+      const focuses = ids.map((_, index) => rotatedDayFocuses[index % rotatedDayFocuses.length]);
+      await db.query(
+        `
+        UPDATE program_day pd
+        SET focus_type = u.focus,
+            updated_at = now()
+        FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::text[]) AS focus) AS u
+        WHERE pd.id = u.id
+        `,
+        [ids, focuses],
+      );
+
+      return res.status(200).json({ ok: true, request_id, updatedCount: ids.length });
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+        details: mapped.details,
+      });
+    }
+  }
+
   return {
     skipProgramDay,
     rescheduleProgramDay,
     startEquipmentSubstitution,
     pollEquipmentSubstitution,
+    updateProgramSplit,
   };
 }
 
@@ -496,5 +620,83 @@ programDayActionsRouter.post("/programs/:programId/days/:programDayId/skip", han
 programDayActionsRouter.post("/programs/:programId/days/:programDayId/reschedule", handlers.rescheduleProgramDay);
 programDayActionsRouter.post("/programs/:programId/equipment-substitution", handlers.startEquipmentSubstitution);
 programDayActionsRouter.get("/programs/:programId/equipment-substitution/:jobId", handlers.pollEquipmentSubstitution);
+programDayActionsRouter.patch("/programs/:programId/split", handlers.updateProgramSplit);
+
+// PATCH /api/programs/:programId/split
+// Updates focus_type on all unstarted days using the user's new preferred split.
+programDayActionsRouter.patch("/programs/:programId/split", async (req, res) => {
+  const { request_id } = req;
+  try {
+    const userId = resolveUserId(req);
+    const programId = requireUuid(req.params.programId, "programId");
+    const dayFocuses = req.body?.day_focuses;
+
+    if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        request_id,
+        code: "validation_error",
+        error: "day_focuses must be a non-empty array",
+      });
+    }
+
+    // Verify program exists and belongs to user.
+    const progResult = await pool.query(
+      "SELECT user_id FROM program WHERE id = $1",
+      [programId],
+    );
+    if (progResult.rowCount === 0) {
+      return res.status(404).json({
+        ok: false,
+        request_id,
+        code: "not_found",
+        error: "Program not found",
+      });
+    }
+    if (String(progResult.rows[0].user_id) !== String(userId)) {
+      return res.status(403).json({
+        ok: false,
+        request_id,
+        code: "forbidden",
+        error: "Program does not belong to this user",
+      });
+    }
+
+    // Fetch all unstarted days ordered by position.
+    const daysResult = await pool.query(
+      `SELECT id FROM program_day
+       WHERE program_id = $1 AND is_completed = FALSE AND is_skipped = FALSE
+       ORDER BY week_number ASC, day_number ASC`,
+      [programId],
+    );
+
+    if (daysResult.rowCount === 0) {
+      return res.status(200).json({ ok: true, request_id, updatedCount: 0 });
+    }
+
+    // Assign focus cyclically across the unstarted days.
+    const ids = daysResult.rows.map((row, i) => ({ id: row.id, focus: dayFocuses[i % dayFocuses.length] }));
+
+    // Bulk update using unnest.
+    await pool.query(
+      `UPDATE program_day pd
+       SET focus_type = u.focus
+       FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::text[]) AS focus) AS u
+       WHERE pd.id = u.id`,
+      [ids.map((u) => u.id), ids.map((u) => u.focus)],
+    );
+
+    return res.status(200).json({ ok: true, request_id, updatedCount: ids.length });
+  } catch (err) {
+    const mapped = mapError(err);
+    return res.status(mapped.status).json({
+      ok: false,
+      request_id,
+      code: mapped.code,
+      error: mapped.message,
+      details: mapped.details,
+    });
+  }
+});
 
 export { createProgramDayActionHandlers, validateFutureDate };
