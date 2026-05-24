@@ -18,6 +18,7 @@ function makeRows({ withExercise = true } = {}) {
       "main",
       "secondary",
       "finisher",
+      "upper_body",
       "0",
       "Mon",
       "d1",

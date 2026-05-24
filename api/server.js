@@ -6,6 +6,7 @@ import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
 import { readProgramRouter } from "./src/routes/readProgram.js";
+import { bonusDayRouter } from "./src/routes/bonusDay.js";
 import { programExerciseRouter } from "./src/routes/programExercise.js";
 import { programCompletionRouter } from "./src/routes/programCompletion.js";
 import { programDayActionsRouter } from "./src/routes/programDayActions.js";
@@ -33,6 +34,7 @@ import { marketingRouter } from "./src/routes/marketingPages.js";
 import { websiteEnhancementsRouter } from "./src/routes/websiteEnhancements.js";
 import { contentHubRouter } from "./src/routes/contentHub.js";
 import { affiliateProgramRouter } from "./src/routes/affiliateProgram.js";
+import { splitRecommendationRouter } from "./src/routes/splitRecommendation.js";
 import { adminConfigsRouter } from "./src/routes/adminConfigs.js";
 import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
@@ -42,6 +44,7 @@ import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogu
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
+import { adminProgramQualityRouter } from "./src/routes/adminProgramQuality.js";
 import { adminProgressionSandboxRouter } from "./src/routes/adminProgressionSandbox.js";
 import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
@@ -77,6 +80,7 @@ import {
 } from "./src/services/clientProfileService.js";
 import { makeAnchorLiftService } from "./src/services/anchorLiftService.js";
 import { RequestValidationError } from "./src/utils/validate.js";
+import { VALID_FOCUS_SLUGS } from "./src/utils/splitRecommender.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -196,6 +200,7 @@ const profilePatchKeys = [
   "anchorLiftsSkipped",
   "anchorLiftsCollectedAt",
   "anchorLifts",
+  "preferredSplitJson",
 ];
 
 const presetColumnByCode = {
@@ -298,6 +303,7 @@ app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res
 app.get("/admin/rep-rules", adminCspMiddleware, (_req, res) => sendAdminPage(res, "rep-rules.html"));
 app.get("/admin/observability", adminCspMiddleware, (_req, res) => sendAdminPage(res, "observability.html"));
 app.get("/admin/preview", adminCspMiddleware, (_req, res) => sendAdminPage(res, "preview.html"));
+app.get("/admin/program-quality", adminCspMiddleware, (_req, res) => sendAdminPage(res, "program-quality.html"));
 app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "progression-sandbox.html"));
 app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(res, "seed-history.html"));
 app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
@@ -594,9 +600,6 @@ const handlePatchClientProfile = async (req, res) => {
   const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   let client;
   try {
-    client = await pool.connect();
-    await client.query("BEGIN");
-
     const anchorLifts = Array.isArray(patch.anchorLifts) ? patch.anchorLifts : undefined;
     const anchorLiftsSkipped = patch.anchorLiftsSkipped === undefined ? undefined : Boolean(patch.anchorLiftsSkipped);
     const shouldStampAnchorCollection = anchorLifts !== undefined || anchorLiftsSkipped !== undefined;
@@ -606,6 +609,31 @@ const handlePatchClientProfile = async (req, res) => {
       anchorLiftsCollectedAt: shouldStampAnchorCollection ? new Date().toISOString() : patch.anchorLiftsCollectedAt,
     };
     delete profilePatch.anchorLifts;
+
+    if (profilePatch.preferredSplitJson !== undefined) {
+      const dayFocuses = profilePatch.preferredSplitJson?.day_focuses;
+      if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
+        return res.status(400).json({
+          ok: false,
+          request_id: req.request_id,
+          code: "validation_error",
+          error: "day_focuses must be a non-empty array",
+        });
+      }
+      for (const slug of dayFocuses) {
+        if (!VALID_FOCUS_SLUGS.has(slug)) {
+          return res.status(400).json({
+            ok: false,
+            request_id: req.request_id,
+            code: "validation_error",
+            error: `Unknown focus slug: ${slug}`,
+          });
+        }
+      }
+    }
+
+    client = await pool.connect();
+    await client.query("BEGIN");
 
     const profileService = makeClientProfileService(client);
     const anchorLiftService = makeAnchorLiftService(client);
@@ -757,7 +785,9 @@ app.use("/api/import", trainingHistoryImportRouter);
 app.use("/api", workoutRemindersRouter);
 app.use("/api", segmentLogRouter);
 app.use("/api", readProgramRouter);
+app.use("/api", bonusDayRouter);
 app.use("/api", userAuth, equipmentRegenRouter);
+app.use("/api", splitRecommendationRouter);
 logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipment regeneration routes at /api");
 app.use("/api", programExerciseRouter);
 app.use("/api", programCompletionRouter);
@@ -792,6 +822,7 @@ app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminSyncRouter);
 app.use("/admin", ...adminOnly, adminPreviewRouter);
+app.use("/admin", ...adminOnly, adminProgramQualityRouter);
 app.use("/admin", ...adminOnly, adminProgressionSandboxRouter);
 app.use("/admin", ...adminOnly, adminUsersRouter);
 app.use("/admin", ...adminOnly, adminSeedHistoryRouter);

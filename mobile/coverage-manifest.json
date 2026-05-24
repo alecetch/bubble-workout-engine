@@ -53,6 +53,17 @@
     },
     {
       "type": "component",
+      "source": "src/components/onboarding/FocusPickerSheet.tsx",
+      "test": "src/screens/onboarding/SplitReviewScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding",
+        "split"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/onboarding/MultilineField.tsx",
       "test": "src/components/onboarding/MultilineField.component.test.tsx",
       "status": "covered",
@@ -277,9 +288,10 @@
       "test": "src/components/program/SegmentCard.component.test.tsx",
       "status": "covered",
       "tags": [
-        "program"
+        "program",
+        "round-based-logging"
       ],
-      "reason": ""
+      "reason": "SegmentCard component tests cover inline logging, rest timers, and round-based superset logging."
     },
     {
       "type": "component",
@@ -370,6 +382,17 @@
         "timers"
       ],
       "reason": "visual timer shell, covered through premium timer/countdown behaviour"
+    },
+    {
+      "type": "component",
+      "source": "src/components/today/BonusWorkoutSheet.tsx",
+      "test": "src/components/today/BonusWorkoutSheet.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "today",
+        "bonus-day"
+      ],
+      "reason": ""
     },
     {
       "type": "component",
@@ -493,6 +516,17 @@
     },
     {
       "type": "screen",
+      "source": "src/screens/onboarding/SplitReviewScreen.tsx",
+      "test": "src/screens/onboarding/SplitReviewScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding",
+        "split"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
       "source": "src/screens/onboarding/Step1GoalsScreen.tsx",
       "test": "src/screens/onboarding/Step1GoalsScreen.component.test.tsx",
       "status": "covered",
@@ -505,6 +539,16 @@
       "type": "screen",
       "source": "src/screens/onboarding/Step2EquipmentScreen.tsx",
       "test": "src/screens/onboarding/Step2EquipmentScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/onboarding/Step2EquipmentDetailScreen.tsx",
+      "test": "src/screens/onboarding/Step2EquipmentDetailScreen.component.test.tsx",
       "status": "covered",
       "tags": [
         "onboarding"
@@ -705,6 +749,16 @@
       "type": "screen",
       "source": "src/screens/settings/EquipmentSettingsScreen.tsx",
       "test": "src/screens/settings/EquipmentSettingsScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "settings"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/settings/EquipmentPresetDetailScreen.tsx",
+      "test": "src/screens/settings/EquipmentPresetDetailScreen.component.test.tsx",
       "status": "covered",
       "tags": [
         "settings"

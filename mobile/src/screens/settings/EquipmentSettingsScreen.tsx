@@ -59,7 +59,7 @@ function normalizeCodes(values: string[]): string[] {
   return [...values].map((value) => value.trim()).filter(Boolean).sort();
 }
 
-export function EquipmentSettingsScreen({ navigation }: Props): React.JSX.Element {
+export function EquipmentSettingsScreen({ navigation, route }: Props): React.JSX.Element {
   const meQuery = useMe();
   const activeProgramsQuery = useActivePrograms();
   const profileId = meQuery.data?.clientProfileId ?? null;
@@ -197,6 +197,22 @@ export function EquipmentSettingsScreen({ navigation }: Props): React.JSX.Elemen
     setSelectedItemCodes([]);
   }
 
+  function handleOpenPresetDetail(presetCode: string): void {
+    const presetLabel = presetOptions.find((preset) => preset.value === presetCode)?.title ?? presetCode;
+    navigation.navigate("EquipmentPresetDetail", {
+      presetCode,
+      presetLabel,
+      isCurrentPreset: presetCode === selectedPresetCode,
+    });
+  }
+
+  useEffect(() => {
+    const presetCodeToApply = route.params?.presetCodeToApply;
+    if (!presetCodeToApply) return;
+    handleSelectPreset(presetCodeToApply);
+    navigation.setParams({ presetCodeToApply: undefined });
+  }, [navigation, route.params?.presetCodeToApply]);
+
   function toggleEquipmentItem(code: string): void {
     setSelectedItemCodes((current) =>
       current.includes(code)
@@ -284,7 +300,7 @@ export function EquipmentSettingsScreen({ navigation }: Props): React.JSX.Elemen
           <PresetCardList
             options={presetOptions}
             selectedValue={selectedPresetCode}
-            onSelect={handleSelectPreset}
+            onSelect={handleOpenPresetDetail}
           />
 
           {selectedPresetCode ? (

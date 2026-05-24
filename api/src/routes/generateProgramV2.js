@@ -736,6 +736,32 @@ export function createGenerateProgramV2Handler({
       );
     }
 
+    // Phase 5d: Persist focus_type from pipeline output onto program_day rows.
+    // Uses the same week_number/day_number key pattern as Phase 5c (hero_media_id).
+    const dayFocusUpdates = [];
+    for (const wk of pipelineOut?.program?.weeks ?? []) {
+      for (const day of wk.days ?? []) {
+        if (day.day_focus) {
+          dayFocusUpdates.push([
+            day.day_focus,
+            created_program_id,
+            wk.week_index,
+            day.day_index,
+          ]);
+        }
+      }
+    }
+    for (const [focusType, progId, weekNum, dayNum] of dayFocusUpdates) {
+      await db.query(
+        `UPDATE program_day
+            SET focus_type = $1
+          WHERE program_id = $2
+            AND week_number = $3
+            AND day_number  = $4`,
+        [focusType, progId, weekNum, dayNum],
+      );
+    }
+
     // Phase 5b: Fill recovery (rest) days into program_calendar_day.
     // Must run after the program row has its final start_date + weeks_count
     // and after importEmitterPayload has committed the training-day rows.

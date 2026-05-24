@@ -21,6 +21,7 @@ export const DEFAULT_ONBOARDING_DRAFT: OnboardingDraft = {
   ageRange: null,
   anchorLifts: [],
   anchorLiftsSkipped: false,
+  preferredUnit: "kg",
   onboardingStepCompleted: 0,
 };
 

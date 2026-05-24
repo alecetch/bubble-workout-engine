@@ -5,7 +5,12 @@ import type { ExerciseDetailParams } from "../screens/program/ExerciseDetailScre
 
 export type ProgramsStackParamList = {
   ProgramHub: undefined;
-  ProgramDashboard: { programId?: string } | undefined;
+  ProgramDashboard: {
+    programId?: string;
+    showReviewPrompt?: boolean;
+    weekCompleteNumber?: number;
+    weekCompleteSessions?: number;
+  } | undefined;
   ProgramDay: { programDayId: string };
   ExerciseDetail: ExerciseDetailParams;
   ProgramEndCheck: { programId: string };
