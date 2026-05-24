@@ -13,13 +13,17 @@ export type TimerEntry = {
   restElapsedSeconds: number;
   restIsRunning: boolean;
   restStartedAtMs: number | null;
+  restOverrideKey?: string | null;
 };
 
 type TimerStoreState = {
   entries: Record<string, TimerEntry>;
+  restOverrides: Record<string, number>;
   activeSegmentId: string | null;
 
-  initEntry: (p: { segmentId: string; segmentTotal: number | null; restTotal: number }) => void;
+  initEntry: (p: { segmentId: string; segmentTotal: number | null; restTotal: number; restOverrideKey?: string | null }) => void;
+  setRestDuration: (segmentId: string, seconds: number, restOverrideKey?: string | null) => void;
+  adjustRestDuration: (segmentId: string, deltaSeconds: number, restOverrideKey?: string | null) => void;
   startSegment: (segmentId: string) => void;
   pauseSegment: (segmentId: string) => void;
   resetSegment: (segmentId: string) => void;
@@ -54,11 +58,28 @@ function commitElapsed(entry: TimerEntry, mode: "segment" | "rest"): TimerEntry 
 
 export const useTimerStore = create<TimerStoreState>((set) => ({
   entries: {},
+  restOverrides: {},
   activeSegmentId: null,
 
-  initEntry: ({ segmentId, segmentTotal, restTotal }) =>
+  initEntry: ({ segmentId, segmentTotal, restTotal, restOverrideKey = null }) =>
     set((state) => {
-      if (state.entries[segmentId]) return state;
+      const overrideTotal = restOverrideKey ? state.restOverrides[restOverrideKey] : undefined;
+      if (state.entries[segmentId]) {
+        const current = state.entries[segmentId];
+        const nextRestTotal = Math.max(0, Math.floor(overrideTotal ?? restTotal));
+        if (current.restTotalSeconds === nextRestTotal && current.restOverrideKey === restOverrideKey) return state;
+        return {
+          ...state,
+          entries: {
+            ...state.entries,
+            [segmentId]: {
+              ...current,
+              restTotalSeconds: nextRestTotal,
+              restOverrideKey,
+            },
+          },
+        };
+      }
 
       const nextEntry: TimerEntry = {
         segmentId,
@@ -67,10 +88,11 @@ export const useTimerStore = create<TimerStoreState>((set) => ({
         segmentElapsedSeconds: 0,
         segmentIsRunning: false,
         segmentStartedAtMs: null,
-        restTotalSeconds: Math.max(1, Math.floor(restTotal)),
+        restTotalSeconds: Math.max(0, Math.floor(overrideTotal ?? restTotal)),
         restElapsedSeconds: 0,
         restIsRunning: false,
         restStartedAtMs: null,
+        restOverrideKey,
       };
 
       return {
@@ -78,6 +100,63 @@ export const useTimerStore = create<TimerStoreState>((set) => ({
         entries: {
           ...state.entries,
           [segmentId]: nextEntry,
+        },
+      };
+    }),
+
+  setRestDuration: (segmentId, seconds, restOverrideKey = null) =>
+    set((state) => {
+      const entry = state.entries[segmentId];
+      const clamped = Math.max(0, Math.min(600, Math.floor(seconds)));
+      const nextOverrides = restOverrideKey
+        ? { ...state.restOverrides, [restOverrideKey]: clamped }
+        : state.restOverrides;
+      if (!entry) {
+        return { ...state, restOverrides: nextOverrides };
+      }
+      const committed = commitElapsed(entry, "rest");
+      return {
+        ...state,
+        restOverrides: nextOverrides,
+        entries: {
+          ...state.entries,
+          [segmentId]: {
+            ...committed,
+            restTotalSeconds: clamped,
+            restElapsedSeconds: Math.min(committed.restElapsedSeconds, clamped),
+            restStartedAtMs: entry.restIsRunning ? Date.now() : null,
+            restIsRunning: entry.restIsRunning,
+            restOverrideKey,
+          },
+        },
+      };
+    }),
+
+  adjustRestDuration: (segmentId, deltaSeconds, restOverrideKey = null) =>
+    set((state) => {
+      const entry = state.entries[segmentId];
+      const base = entry?.restTotalSeconds ?? (restOverrideKey ? state.restOverrides[restOverrideKey] : 0) ?? 0;
+      const clamped = Math.max(0, Math.min(600, Math.floor(base + deltaSeconds)));
+      const nextOverrides = restOverrideKey
+        ? { ...state.restOverrides, [restOverrideKey]: clamped }
+        : state.restOverrides;
+      if (!entry) {
+        return { ...state, restOverrides: nextOverrides };
+      }
+      const committed = commitElapsed(entry, "rest");
+      return {
+        ...state,
+        restOverrides: nextOverrides,
+        entries: {
+          ...state.entries,
+          [segmentId]: {
+            ...committed,
+            restTotalSeconds: clamped,
+            restElapsedSeconds: Math.min(committed.restElapsedSeconds, clamped),
+            restStartedAtMs: entry.restIsRunning ? Date.now() : null,
+            restIsRunning: entry.restIsRunning,
+            restOverrideKey,
+          },
         },
       };
     }),

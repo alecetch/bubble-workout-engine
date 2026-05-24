@@ -316,17 +316,6 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
           <Text style={styles.rowValue}>{formatValue(profile.ageRange as string | undefined)}</Text>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Constraints</Text>
-            <PressableScale style={styles.editButton} onPress={() => handleEdit("Step3Schedule")}>
-              <Text style={styles.editLabel}>Edit</Text>
-            </PressableScale>
-          </View>
-          <Text style={styles.rowLabel}>Schedule constraints</Text>
-          <Text style={styles.rowValue}>{formatValue(profile.scheduleConstraints as string | undefined)}</Text>
-        </View>
-
         {generationError ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerTitle}>Generation failed</Text>

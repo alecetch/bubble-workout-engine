@@ -40,6 +40,7 @@ const JSONB_FIELDS = new Set([
   "contraindications_json", "equipment_json", "preferred_in_json",
   "target_regions_json", "warmup_hooks", "coaching_cues_json",
   "technique_execution_json", "technique_mistakes_json",
+  "load_estimation_metadata",
 ]);
 const ARRAY_FIELDS = new Set(["contraindications_slugs", "equipment_items_slugs"]);
 const VALID_MOVEMENT_CLASSES = new Set([
@@ -74,6 +75,7 @@ function sqlArray(arr) {
 }
 
 function sqlJsonb(val) {
+  if (val === null || val === undefined) return "NULL";
   return `${sqlLiteral(JSON.stringify(val))}::jsonb`;
 }
 
@@ -108,9 +110,11 @@ function buildInsertSql(exercise) {
     "slug", "creator", "strength_primary_region", "strength_equivalent",
     "technique_cue", "technique_setup",
     "technique_execution_json", "technique_mistakes_json", "technique_video_url",
+    "load_estimation_metadata",
   ];
   const vals = COLS.map(k => {
     const v = exercise[k];
+    if (k === "load_estimation_metadata") return sqlJsonb(v);
     if (JSONB_FIELDS.has(k)) return sqlJsonb(v ?? (k === "preferred_in_json" ? [] : []));
     if (ARRAY_FIELDS.has(k)) return sqlArray(v ?? []);
     return sqlLiteral(v ?? null);
@@ -660,7 +664,7 @@ export async function exportExerciseCatalogueSnapshot() {
   return { content: buildSnapshotSql(state.exercises), rows: state.exercises.length };
 }
 
-function buildSnapshotSql(exercises) {
+export function buildSnapshotSql(exercises) {
   const ts = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
   const ids = exercises.map(ex => sqlLiteral(ex.exercise_id)).join(",\n  ");
   const deleteBlock = exercises.length === 0

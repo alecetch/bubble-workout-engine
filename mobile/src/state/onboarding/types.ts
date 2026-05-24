@@ -98,6 +98,7 @@ export type OnboardingDraft = {
   ageRange: AgeRange | null;
   anchorLifts: AnchorLiftEntry[];
   anchorLiftsSkipped: boolean;
+  preferredUnit: "kg" | "lbs";
   onboardingStepCompleted: 0 | 1 | 2 | 3;
 };
 
@@ -134,5 +135,6 @@ export const DEFAULT_ONBOARDING_DRAFT: OnboardingDraft = {
   ageRange: null,
   anchorLifts: [],
   anchorLiftsSkipped: false,
+  preferredUnit: "kg",
   onboardingStepCompleted: 0,
 };

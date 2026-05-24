@@ -69,4 +69,46 @@ describe("CalendarDayPillRow", () => {
     expect(screen.getAllByRole("button")[1]).not.toBeDisabled();
     expect(screen.getByText("5")).toBeInTheDocument();
   });
+
+  it("renders dotBonus style for a bonus training day", () => {
+    render(
+      <CalendarDayPillRow
+        days={[
+          {
+            id: "bonus",
+            scheduledDate: "2026-05-09",
+            isTrainingDay: true,
+            programDayId: "bonus-day",
+            isBonus: true,
+          },
+        ]}
+        selectedProgramDayId="bonus-day"
+        onSelectProgramDay={vi.fn()}
+        dayStatusByProgramDayId={{}}
+      />,
+    );
+
+    expect(screen.getByTestId("calendar-day-dot-bonus-bonus")).toBeInTheDocument();
+  });
+
+  it("does not render dotBonus for a non-bonus training day", () => {
+    render(
+      <CalendarDayPillRow
+        days={[
+          {
+            id: "regular",
+            scheduledDate: "2026-05-09",
+            isTrainingDay: true,
+            programDayId: "regular-day",
+          },
+        ]}
+        selectedProgramDayId="regular-day"
+        onSelectProgramDay={vi.fn()}
+        dayStatusByProgramDayId={{}}
+      />,
+    );
+
+    expect(screen.queryByTestId("calendar-day-dot-bonus-regular")).not.toBeInTheDocument();
+    expect(screen.getByTestId("calendar-day-dot-regular")).toBeInTheDocument();
+  });
 });

@@ -23,6 +23,11 @@ export function isWarmupOrCooldownSegment(segmentType?: string | null): boolean 
   return normalized === "warmup" || normalized === "cooldown";
 }
 
+export function isRoundBasedSegment(segmentType?: string | null): boolean {
+  const normalized = normalizeSegmentType(segmentType);
+  return normalized === "superset" || normalized === "giant_set";
+}
+
 export function coerceRounds(rounds?: number | null): number {
   const parsed = Number(rounds);
   if (!Number.isFinite(parsed) || parsed < 1) return 1;

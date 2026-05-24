@@ -15,6 +15,7 @@ type StickyNavBarProps = {
   nextLabel: string;
   nextDisabled: boolean;
   isSaving: boolean;
+  nextTestID?: string;
 };
 
 export function StickyNavBar({
@@ -23,6 +24,7 @@ export function StickyNavBar({
   nextLabel,
   nextDisabled,
   isSaving,
+  nextTestID,
 }: StickyNavBarProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useContext(BottomTabBarHeightContext);
@@ -52,6 +54,7 @@ export function StickyNavBar({
 
         <View style={styles.buttonSlot}>
           <PressableScale
+            testID={nextTestID}
             style={[styles.nextButton, nextBlocked && styles.nextButtonDisabled]}
             onPress={() => {
               void handleNext();

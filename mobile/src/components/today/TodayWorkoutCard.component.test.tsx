@@ -42,4 +42,17 @@ describe("TodayWorkoutCard", () => {
     fireEvent.click(screen.getByText("Start Workout"));
     expect(onStart).toHaveBeenCalledTimes(1);
   });
+
+  it("renders a custom action label for resumable workouts", () => {
+    render(
+      <TodayWorkoutCard
+        label="Day 4"
+        type="Strength"
+        sessionDuration={45}
+        actionLabel="Resume Workout"
+        onStartWorkout={() => {}}
+      />,
+    );
+    expect(screen.getByText("Resume Workout")).toBeInTheDocument();
+  });
 });

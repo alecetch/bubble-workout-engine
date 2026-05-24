@@ -95,11 +95,11 @@ test("emitter rows - PRG/DAY/EX column positions match importEmitterService expe
   assert.ok(dayRows.length >= 1, "at least one DAY row");
   const dayKeys = new Set();
   for (const day of dayRows) {
-    assert.equal(day.length, 14, "DAY row must have 14 columns");
+    assert.equal(day.length, 15, "DAY row must have 15 columns");
     assert.ok(Number(day[1]) >= 1, "DAY cols[1] = week_number must be >= 1");
     assert.ok(Number(day[2]) >= 1, "DAY cols[2] = day_number must be >= 1");
-    assert.ok(day[13]?.trim().length > 0, "DAY cols[13] = program_day_key must be non-empty");
-    dayKeys.add(day[13]);
+    assert.ok(day[14]?.trim().length > 0, "DAY cols[14] = program_day_key must be non-empty");
+    dayKeys.add(day[14]);
   }
 
   const segRows = parsed.filter((cols) => cols[0] === "SEG");
