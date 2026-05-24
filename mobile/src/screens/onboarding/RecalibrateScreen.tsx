@@ -4,13 +4,12 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { DayChipRow } from "../../components/onboarding/DayChipRow";
 import { EquipmentCategorySection } from "../../components/onboarding/EquipmentCategorySection";
-import { MultilineField } from "../../components/onboarding/MultilineField";
 import { NumericField } from "../../components/onboarding/NumericField";
 import { PillGrid } from "../../components/onboarding/PillGrid";
 import { PresetCardList } from "../../components/onboarding/PresetCardList";
 import { SectionCard } from "../../components/onboarding/SectionCard";
 import { SelectField } from "../../components/onboarding/SelectField";
-import { useClientProfile, useEquipmentItems, useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
+import { useActivePrograms, useClientProfile, useEquipmentItems, useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
 import { startEquipmentSubstitution } from "../../api/programDayActions";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -216,6 +215,8 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
   const profileQuery = useClientProfile(profileId);
   const updateProfile = useUpdateClientProfile(profileId);
   const activeProgramId = useSessionStore((state) => state.activeProgramId);
+  const activeProgramsQuery = useActivePrograms();
+  const resolvedActiveProgramId = activeProgramId ?? activeProgramsQuery.data?.primary_program_id ?? null;
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
 
   const [draft, setDraftState] = useState<Partial<OnboardingDraft>>({});
@@ -317,6 +318,28 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
       const updatedProfile = await updateProfile.mutateAsync(
         payload as Parameters<typeof updateProfile.mutateAsync>[0],
       );
+      const nextDaysCount = Array.isArray(draft.preferredDays) ? draft.preferredDays.length : 0;
+      const shouldReviewSplit = includes("schedule") && nextDaysCount > 0;
+
+      if (shouldReviewSplit) {
+        navigation.navigate("SplitReview", {
+          fromRecalibrate: true,
+          programId: resolvedActiveProgramId ?? undefined,
+          daysPerWeek: nextDaysCount,
+        });
+        return;
+      }
+
+      if (includes("schedule") && activeProgramId) {
+        const originalDaysCount = Array.isArray(profileQuery.data?.preferredDays)
+          ? profileQuery.data.preferredDays.length
+          : 0;
+        const newDaysCount = (draft.preferredDays ?? []).length;
+        if (newDaysCount !== originalDaysCount && newDaysCount > 0) {
+          navigation.navigate("SplitReview", { fromRecalibrate: true, programId: activeProgramId });
+          return;
+        }
+      }
 
       if (includes("goals") && programAction === "regenerate") {
         resetFromProfile({
@@ -339,14 +362,14 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
         return;
       }
 
-      if (includes("equipment") && equipmentChanged && activeProgramId && (draft.selectedEquipmentCodes?.length ?? 0) > 0) {
-        const { jobId } = await startEquipmentSubstitution(activeProgramId, draft.selectedEquipmentCodes ?? []);
-        navigation.navigate("SubstitutionProgress", { programId: activeProgramId, jobId });
+      if (includes("equipment") && equipmentChanged && resolvedActiveProgramId && (draft.selectedEquipmentCodes?.length ?? 0) > 0) {
+        const { jobId } = await startEquipmentSubstitution(resolvedActiveProgramId, draft.selectedEquipmentCodes ?? []);
+        navigation.navigate("SubstitutionProgress", { programId: resolvedActiveProgramId, jobId });
         return;
       }
 
-      if (activeProgramId) {
-        navigation.navigate("ProgramDashboard", { programId: activeProgramId });
+      if (resolvedActiveProgramId) {
+        navigation.navigate("ProgramDashboard", { programId: resolvedActiveProgramId });
       } else {
         navigation.popToTop();
       }
@@ -412,14 +435,6 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
               valueLabel={draft.minutesPerSession ? `${draft.minutesPerSession} min` : undefined}
               options={MINUTES_PER_SESSION.map((minutes) => ({ label: `${minutes} min`, value: String(minutes) }))}
               onSelect={(value) => setDraft({ minutesPerSession: Number(value) as MinutesPerSession })}
-            />
-          </SectionCard>
-          <SectionCard title="Any constraints?">
-            <MultilineField
-              label="Schedule constraints"
-              placeholder="e.g. no early mornings, rest on Sundays..."
-              value={draft.scheduleConstraints ?? ""}
-              onChangeText={(value) => setDraft({ scheduleConstraints: value })}
             />
           </SectionCard>
         </>

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../interaction/PressableScale";
@@ -8,6 +9,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { useTimerStore } from "../../state/timer/useTimerStore";
 
 export type PremiumTimerProps = {
   initialDurationSeconds?: number | null;
@@ -34,6 +36,7 @@ export function PremiumTimer({
   compact = false,
 }: PremiumTimerProps): React.JSX.Element {
   const [resetHighlighted, setResetHighlighted] = useState(false);
+  const [showAdjustControls, setShowAdjustControls] = useState(false);
   const resetHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resolvedSegmentId = segmentId ?? "__transient__";
   const restTotal = suggestedRestSeconds != null && suggestedRestSeconds > 0
@@ -170,8 +173,36 @@ export function PremiumTimer({
             size={compact ? 16 : 22}
             color={colors.textSecondary}
           />
+          {!compact ? <Text style={styles.controlLabel}>Reset</Text> : null}
         </PressableScale>
       </View>
+      {hasRestProp ? (
+        <View style={styles.adjustRow}>
+          <PressableScale style={styles.adjustChip} onPress={() => setShowAdjustControls((current) => !current)}>
+            <Text style={styles.adjustChipLabel}>Adjust</Text>
+          </PressableScale>
+          {showAdjustControls ? (
+            <>
+              {[
+                { label: "-", delta: -15, longDelta: -60 },
+                { label: "+", delta: 15, longDelta: 60 },
+              ].map((button) => (
+                <PressableScale
+                  key={button.label}
+                  style={styles.adjustButton}
+                  onPress={() => useTimerStore.getState().adjustRestDuration(resolvedSegmentId, button.delta)}
+                  onLongPress={() => {
+                    useTimerStore.getState().adjustRestDuration(resolvedSegmentId, button.longDelta);
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }}
+                >
+                  <Text style={styles.adjustChipLabel}>{button.label}</Text>
+                </PressableScale>
+              ))}
+            </>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -239,11 +270,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   button: {
-    width: 52,
+    minWidth: 52,
     height: 52,
     borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: spacing.sm,
   },
   buttonPrimary: {
     backgroundColor: colors.accent,
@@ -256,6 +288,38 @@ const styles = StyleSheet.create({
   resetButtonHighlighted: {
     borderColor: colors.accent,
     borderWidth: 2,
+  },
+  controlLabel: {
+    color: colors.textSecondary,
+    ...typography.label,
+  },
+  adjustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  adjustChip: {
+    minHeight: 30,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adjustButton: {
+    minWidth: 32,
+    minHeight: 30,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adjustChipLabel: {
+    color: colors.accent,
+    ...typography.small,
+    fontWeight: "700",
   },
   buttonDisabled: {
     opacity: 0.4,

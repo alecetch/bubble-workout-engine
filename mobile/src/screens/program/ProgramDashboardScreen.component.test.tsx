@@ -60,6 +60,25 @@ vi.mock("../../components/program/DayPreviewCard", () => ({
   DayPreviewCard: ({ preview }: any) => <div>Preview: {preview?.label ?? "No preview"}</div>,
 }));
 
+vi.mock("../../components/sharing/WeekShareCard", () => ({
+  WeekShareCard: ({ onReady }: any) => {
+    React.useEffect(() => {
+      onReady?.();
+    }, [onReady]);
+    return <div data-testid="week-share-card" />;
+  },
+}));
+
+vi.mock("../../utils/shareCard", () => ({
+  captureAndShare: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("expo-store-review", () => ({
+  hasAction: vi.fn().mockResolvedValue(true),
+  isAvailableAsync: vi.fn().mockResolvedValue(true),
+  requestReview: vi.fn().mockResolvedValue(undefined),
+}));
+
 const useProgramOverviewMock = vi.mocked(useProgramOverview);
 const useProgramEndCheckMock = vi.mocked(useProgramEndCheck);
 const useDayPreviewMock = vi.mocked(useDayPreview);
@@ -92,14 +111,16 @@ function data(overrides: Record<string, unknown> = {}) {
 
 function renderDashboard(
   navigation = { navigate: vi.fn(), getParent: vi.fn(() => null) },
+  params: Record<string, unknown> = { programId: "prog-1" },
 ) {
+  const navWithParams = { setParams: vi.fn(), ...navigation };
   ({ queryClient } = renderWithProviders(
     <ProgramDashboardScreen
-      route={{ params: { programId: "prog-1" } } as any}
-      navigation={navigation as any}
+      route={{ params } as any}
+      navigation={navWithParams as any}
     />,
   ));
-  return navigation;
+  return navWithParams;
 }
 
 describe("ProgramDashboardScreen", () => {
@@ -163,6 +184,26 @@ describe("ProgramDashboardScreen", () => {
   it("renders the program title", () => {
     renderDashboard();
     expect(screen.getByText("Strength Block")).toBeInTheDocument();
+  });
+
+  it("shows the review prompt when route.params.showReviewPrompt is true", () => {
+    renderDashboard(undefined, { programId: "prog-1", showReviewPrompt: true });
+
+    expect(screen.getByText("Nice PR.")).toBeInTheDocument();
+  });
+
+  it("shows the week-complete banner when weekCompleteNumber is set", () => {
+    renderDashboard(undefined, { programId: "prog-1", weekCompleteNumber: 2, weekCompleteSessions: 3 });
+
+    expect(screen.getByText("Week 2 complete!")).toBeInTheDocument();
+    expect(screen.getByText("3 sessions completed")).toBeInTheDocument();
+  });
+
+  it("does not show popup UI when no deferred params are passed", () => {
+    renderDashboard(undefined, { programId: "prog-1" });
+
+    expect(screen.queryByText("Nice PR.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/complete!/)).not.toBeInTheDocument();
   });
 
   it("renders completion banner and navigates to ProgramComplete", () => {

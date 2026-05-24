@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Program Quality - Admin</title>
+    <style>
+      :root { --bg:#f4f6f8; --panel:#fff; --border:#d8dee6; --text:#1f2937; --muted:#6b7280; --primary:#0f62fe; --critical:#b42318; --warning:#b45309; --suggestion:#1d4ed8; --ok:#0f766e; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+      .title { margin: 0; font-size: 22px; }
+      .nav { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
+      .nav a:hover { text-decoration: underline; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+      .controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 280px; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, button { font: inherit; }
+      input { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; width: auto; }
+      button.secondary { background: #fff; color: var(--primary); }
+      button:disabled { opacity: .6; cursor: wait; }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.err { color: var(--critical); }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+      .summary-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #fafbfd; }
+      .summary-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+      .summary-value { font-size: 24px; font-weight: 700; }
+      .critical { color: var(--critical); } .warning { color: var(--warning); } .suggestion { color: var(--suggestion); } .ok { color: var(--ok); }
+      details { margin-top: 10px; }
+      pre { overflow: auto; background: #0f172a; color: #e5e7eb; border-radius: 6px; padding: 10px; font-size: 12px; }
+      .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+      .tab-btn { border-color: var(--border); background: #fff; color: var(--text); }
+      .tab-btn.active { border-color: var(--primary); color: #fff; background: var(--primary); }
+      .panel { display: none; }
+      .panel.active { display: block; }
+      .table-wrap { overflow: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; min-width: 780px; }
+      th, td { border: 1px solid #ecf0f4; padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; }
+      th { background: #f9fbfd; }
+      .chip { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+      .chip-critical { background:#fde8e8; color:var(--critical); }
+      .chip-warning { background:#fef3c7; color:var(--warning); }
+      .chip-suggestion { background:#dbeafe; color:var(--suggestion); }
+      .chip-pass { background:#d1fae5; color:var(--ok); }
+      .muted { color: var(--muted); }
+      .empty { color: var(--muted); font-style: italic; padding: 12px 0; }
+      .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+      @media (max-width: 720px) { .top-row { display: block; } .nav { justify-content: flex-start; margin-top: 8px; } .control { min-width: 100%; } }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">Program Quality</h1>
+          <nav class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/coverage">Coverage</a>
+            <a href="/admin/health">Health</a>
+            <a href="/admin/narration">Narration</a>
+            <a href="/admin/rep-rules">Rep Rules</a>
+            <a href="/admin/preview">Preview</a>
+            <a href="/admin/program-quality" class="active">Program Quality</a>
+          </nav>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <button id="run-btn" type="button">Run Review</button>
+        </div>
+        <div id="status" class="status"></div>
+        <details id="matrix-details" hidden>
+          <summary>Matrix used</summary>
+          <pre id="matrix-pre"></pre>
+        </details>
+      </section>
+
+      <section class="section">
+        <div class="tabs" id="tabs"></div>
+        <div id="empty" class="empty">Run a review to populate the workbench.</div>
+        <div id="overview" class="panel"></div>
+        <div id="coverage" class="panel"></div>
+        <div id="narration" class="panel"></div>
+        <div id="rep-rules" class="panel"></div>
+        <div id="preview" class="panel"></div>
+        <div id="ai-packet" class="panel"></div>
+        <div id="fix-plan" class="panel"></div>
+      </section>
+    </div>
+
+    <script>
+      const STORAGE_KEY = "admin_program_quality_token";
+      const tabs = [
+        ["overview", "Overview"],
+        ["coverage", "Coverage"],
+        ["narration", "Narration"],
+        ["rep-rules", "Rep Rules"],
+        ["preview", "Preview Quality"],
+        ["ai-packet", "AI Packet"],
+        ["fix-plan", "Fix Plan"],
+      ];
+      const tokenInput = document.getElementById("token-input");
+      const runBtn = document.getElementById("run-btn");
+      const statusEl = document.getElementById("status");
+      let defaultMatrix = null;
+      let lastReview = null;
+
+      function getStoredToken() {
+        try { return window.sessionStorage.getItem(STORAGE_KEY) || ""; }
+        catch (err) { return ""; }
+      }
+      function setStoredToken(value) {
+        try { window.sessionStorage.setItem(STORAGE_KEY, value); }
+        catch (err) {}
+      }
+
+      tokenInput.value = getStoredToken();
+      tokenInput.addEventListener("change", () => setStoredToken(tokenInput.value.trim()));
+
+      function esc(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+      function headers(extra = {}) {
+        return { "content-type": "application/json", "x-internal-token": tokenInput.value.trim(), ...extra };
+      }
+      function setStatus(message, kind = "") {
+        statusEl.textContent = message;
+        statusEl.className = `status ${kind}`.trim();
+      }
+      function chip(value) {
+        const v = String(value || "suggestion");
+        return `<span class="chip chip-${esc(v)}">${esc(v)}</span>`;
+      }
+      function activateTab(id) {
+        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === id));
+        document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === id));
+      }
+      function renderTabs() {
+        document.getElementById("tabs").innerHTML = tabs.map(([id, label]) => `<button class="tab-btn" data-tab="${id}" type="button">${esc(label)}</button>`).join("");
+        document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => activateTab(b.dataset.tab)));
+      }
+      function table(columns, rows, empty) {
+        if (!rows.length) return `<div class="empty">${esc(empty)}</div>`;
+        return `<div class="table-wrap"><table><thead><tr>${columns.map((c) => `<th>${esc(c.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((c) => `<td>${c.render(row)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+      }
+      function allFindings(review) {
+        return Object.values((review && review.checks) || {}).flat();
+      }
+      function severityRank(severity) {
+        if (severity === "critical") return 0;
+        if (severity === "warning") return 1;
+        return 2;
+      }
+      function renderOverview(review) {
+        const s = review.summary;
+        document.getElementById("overview").innerHTML = `
+          <div class="summary-grid">
+            <div class="summary-card"><div class="summary-label">Status</div><div class="summary-value ${s.status === "pass" ? "ok" : s.status === "fail" ? "critical" : "warning"}">${esc(s.status)}</div></div>
+            <div class="summary-card"><div class="summary-label">Critical</div><div class="summary-value critical">${s.critical_count}</div></div>
+            <div class="summary-card"><div class="summary-label">Warning</div><div class="summary-value warning">${s.warning_count}</div></div>
+            <div class="summary-card"><div class="summary-label">Suggestion</div><div class="summary-value suggestion">${s.suggestion_count}</div></div>
+          </div>
+          <p class="muted">Last reviewed: ${esc(review.requested_at)}</p>
+          <button type="button" id="overview-run">Run Review</button>
+        `;
+        document.getElementById("overview-run").addEventListener("click", () => runReview());
+      }
+      function renderFindingsTable(host, rows, sourceHref, columns) {
+        document.getElementById(host).innerHTML = `<p><a href="${sourceHref}">Open source admin page</a></p>` + table(columns, rows, "No findings.");
+      }
+      function renderReview(review) {
+        lastReview = review;
+        document.getElementById("empty").hidden = true;
+        renderOverview(review);
+        renderFindingsTable("coverage", review.checks.slot_coverage || [], "/admin/coverage", [
+          { label: "Severity", render: (r) => chip(r.severity) },
+          { label: "Config Key", render: (r) => esc(r.config_key) },
+          { label: "Slot", render: (r) => esc(r.slot) },
+          { label: "Equipment Preset", render: (r) => esc(r.equipment_preset) },
+          { label: "Fitness Rank", render: (r) => esc(r.fitness_rank) },
+          { label: "Candidate Count", render: (r) => esc(r.candidate_count) },
+          { label: "Finding", render: (r) => esc(r.finding) },
+        ]);
+        renderFindingsTable("narration", review.checks.narration_coverage || [], "/admin/narration", [
+          { label: "Severity", render: (r) => chip(r.severity) },
+          { label: "Scope", render: (r) => esc(r.scope) },
+          { label: "Field", render: (r) => esc(r.field) },
+          { label: "Context", render: (r) => esc(r.context) },
+          { label: "Finding", render: (r) => esc(r.finding) },
+        ]);
+        renderFindingsTable("rep-rules", review.checks.rep_rule_coverage || [], "/admin/rep-rules", [
+          { label: "Severity", render: (r) => chip(r.severity) },
+          { label: "Config Key", render: (r) => esc(r.config_key) },
+          { label: "Context", render: (r) => esc(r.context) },
+          { label: "Finding", render: (r) => esc(r.finding) },
+          { label: "Recommendation", render: (r) => esc(r.recommendation) },
+        ]);
+        renderFindingsTable("preview", review.checks.preview_generation || [], "/admin/preview", [
+          { label: "Severity", render: (r) => chip(r.severity) },
+          { label: "Config + Matrix", render: (r) => esc(`${r.config_key} / ${r.program_type} / rank ${r.fitness_rank} / ${r.equipment_preset} / ${r.days_per_week}d / ${r.duration_mins}m`) },
+          { label: "Finding", render: (r) => esc(r.finding) },
+        ]);
+        renderAiPacket(review);
+        const sorted = allFindings(review).sort((a, b) =>
+          severityRank(a.severity) - severityRank(b.severity) ||
+          String(a.scope).localeCompare(String(b.scope))
+        );
+        document.getElementById("fix-plan").innerHTML = table([
+          { label: "Severity", render: (r) => chip(r.severity) },
+          { label: "Scope", render: (r) => esc(r.scope) },
+          { label: "Finding", render: (r) => esc(r.finding) },
+          { label: "Recommendation", render: (r) => esc(r.recommendation) },
+          { label: "Verification", render: (r) => esc(r.verification) },
+        ], sorted, "No fix plan items.");
+        activateTab("overview");
+      }
+      function renderAiPacket(review) {
+        const packet = review.ai_packet;
+        document.getElementById("ai-packet").innerHTML = `
+          <div class="actions">
+            <button id="download-packet" type="button">Download Packet</button>
+            <button id="copy-prompt" class="secondary" type="button">Copy Prompt Only</button>
+          </div>
+          ${packet ? `<pre>${esc(JSON.stringify({ exported_at: packet.exported_at, prompt_version: packet.prompt_version, finding_counts: review.summary, matrix: packet.context && packet.context.matrix }, null, 2))}</pre>` : `<div class="empty">Packet metadata appears here after downloading or copying.</div>`}
+        `;
+        document.getElementById("download-packet").addEventListener("click", downloadPacket);
+        document.getElementById("copy-prompt").addEventListener("click", copyPrompt);
+      }
+      function triggerJsonDownload(fileName, jsonText) {
+        const blob = new Blob([jsonText], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      async function loadMatrix() {
+        if (!tokenInput.value.trim()) {
+          throw new Error("Paste your internal API token first.");
+        }
+        const res = await fetch("/admin/api/program-quality/matrix", { headers: headers() });
+        if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+        const body = await res.json();
+        defaultMatrix = body.matrix.default_matrix;
+      }
+      async function runReview(extra = {}) {
+        if (!tokenInput.value.trim()) {
+          setStatus("Paste your internal API token first.", "err");
+          tokenInput.focus();
+          return;
+        }
+        runBtn.disabled = true;
+        setStatus("Running review...");
+        try {
+          if (!defaultMatrix) await loadMatrix();
+          const body = { ...defaultMatrix, include_preview_rows: false, include_ai_packet: false, ...extra };
+          document.getElementById("matrix-details").hidden = false;
+          document.getElementById("matrix-pre").textContent = JSON.stringify(body, null, 2);
+          const res = await fetch("/admin/api/program-quality/review", { method: "POST", headers: headers(), body: JSON.stringify(body) });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+          renderReview(json);
+          setStatus("Review complete.");
+        } catch (err) {
+          setStatus(err.message || String(err), "err");
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+      async function downloadPacket() {
+        setStatus("Preparing packet download...");
+        try {
+          const res = await fetch("/admin/api/program-quality/packet", { headers: headers() });
+          const packetText = await res.text();
+          let downloadedReview = null;
+          try {
+            downloadedReview = JSON.parse(packetText);
+          } catch {
+            throw new Error(packetText.slice(0, 200) || `HTTP ${res.status}`);
+          }
+          if (!res.ok) {
+            throw new Error(downloadedReview.error || `HTTP ${res.status}`);
+          }
+          triggerJsonDownload("program-quality-packet.json", JSON.stringify(downloadedReview, null, 2));
+          if (downloadedReview.ai_packet) {
+            lastReview = downloadedReview;
+            renderAiPacket(downloadedReview);
+          }
+          setStatus("Packet downloaded and metadata updated.");
+        } catch (err) {
+          setStatus(err.message || String(err), "err");
+        }
+      }
+      async function copyPrompt() {
+        if (!(lastReview && lastReview.ai_packet && lastReview.ai_packet.coaching_prompt)) {
+          await runReview({ include_ai_packet: true });
+        }
+        const prompt = (lastReview && lastReview.ai_packet && lastReview.ai_packet.coaching_prompt) || "";
+        await navigator.clipboard.writeText(prompt);
+        setStatus("Prompt copied.");
+      }
+      window.runProgramQualityReview = () => runReview();
+      renderTabs();
+      runBtn.addEventListener("click", () => runReview());
+      setStatus("Ready. Paste your internal API token, then run review.");
+    </script>
+  </body>
+</html>

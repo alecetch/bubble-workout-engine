@@ -7,7 +7,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const EXPECTED_COLS = {
   PRG: 9,
   WEEK: 4,
-  DAY: 14,
+  DAY: 15,
   SEG: 20,
   EX: 26,
 };
@@ -131,9 +131,10 @@ export function parseEmitterRows(rows) {
         block_format_main_text: s(cols[8]),
         block_format_secondary_text: s(cols[9]),
         block_format_finisher_text: s(cols[10]),
-        scheduled_offset_days: toInt(cols[11], 0),
-        scheduled_weekday: s(cols[12]),
-        program_day_key: s(cols[13]),
+        day_focus: s(cols[11]),
+        scheduled_offset_days: toInt(cols[12], 0),
+        scheduled_weekday: s(cols[13]),
+        program_day_key: s(cols[14]),
       });
       continue;
     }
@@ -576,11 +577,12 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
           block_format_main_text,
           block_format_secondary_text,
           block_format_finisher_text,
+          focus_type,
           scheduled_offset_days,
           scheduled_weekday,
           scheduled_date
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::date)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::date)
         RETURNING id
         `,
         [
@@ -597,6 +599,7 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
           d.block_format_main_text,
           d.block_format_secondary_text,
           d.block_format_finisher_text,
+          d.day_focus ?? null,
           d.scheduled_offset_days,
           d.scheduled_weekday,
           scheduled_date,
