@@ -16,7 +16,7 @@ import { StickyNavBar } from "./StickyNavBar";
 import { ErrorBanner } from "./ErrorBanner";
 
 type OnboardingScaffoldProps = {
-  step: 1 | 2 | 3;
+  step: 1 | 2 | 3 | 4;
   title: string;
   subtitle?: string;
   children: React.ReactNode;

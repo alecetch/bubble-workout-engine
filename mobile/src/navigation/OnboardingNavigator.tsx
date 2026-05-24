@@ -10,6 +10,7 @@ import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen
 import { Step2EquipmentDetailScreen } from "../screens/onboarding/Step2EquipmentDetailScreen";
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
+import { Step4BodyMetricsScreen } from "../screens/onboarding/Step4BodyMetricsScreen";
 import { SplitReviewScreen } from "../screens/onboarding/SplitReviewScreen";
 import {
   RecalibrateScreenA,
@@ -36,6 +37,7 @@ export type OnboardingStackParamList = {
   Step2EquipmentDetail: undefined;
   Step2bBaselineLoads: undefined;
   Step3Schedule: undefined;
+  Step4BodyMetrics: undefined;
   SplitReview: {
     fromRecalibrate?: boolean;
     programId?: string;
@@ -127,6 +129,7 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="Step2EquipmentDetail" component={Step2EquipmentDetailScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step2bBaselineLoads" component={Step2bBaselineLoadsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="Step4BodyMetrics" component={Step4BodyMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="SplitReview" component={SplitReviewScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramEndCheck" component={ProgramEndCheckScreen} options={stepTransitionOptions} />
       <Stack.Screen name="ProgramComplete" component={ProgramCompleteScreen} options={stepTransitionOptions} />
