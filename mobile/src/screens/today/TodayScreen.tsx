@@ -6,6 +6,7 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { RootTabParamList } from "../../navigation/AppTabs";
 import { TodayWorkoutCard } from "../../components/today/TodayWorkoutCard";
 import { WeekProgressBadge } from "../../components/today/WeekProgressBadge";
+import { BonusWorkoutSheet } from "../../components/today/BonusWorkoutSheet";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -44,6 +45,23 @@ function greetingText(): string {
   return "Good evening. Still time to train.";
 }
 
+function formatNextSessionLabel(
+  nextDay: { calendarDate?: string | null; programDayId?: string | null },
+  calendarDays: Array<{ programDayId?: string | null; dayLabel?: string | null }> = [],
+): string {
+  const dateStr = nextDay.calendarDate ?? "";
+  const label = calendarDays.find((day) => day.programDayId === nextDay.programDayId)?.dayLabel;
+  const dayName = dateStr
+    ? new Date(`${dateStr}T00:00:00Z`).toLocaleDateString("en-GB", {
+        weekday: "long",
+        timeZone: "UTC",
+      })
+    : "";
+  if (dayName && label) return `${dayName} - ${label}`;
+  if (dayName) return dayName;
+  return dateStr || "upcoming";
+}
+
 export function TodayScreen(): React.JSX.Element {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const queryClient = useQueryClient();
@@ -57,6 +75,11 @@ export function TodayScreen(): React.JSX.Element {
   const overviewQuery = useProgramOverview(resolvedProgramId ?? "", { userId });
   const calendarDays = overviewQuery.data?.calendarDays ?? [];
   const todayIso = useMemo(() => toLocalIsoDate(new Date()), []);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const todayWeekday = useMemo(() => {
+    const d = new Date(`${todayIso}T00:00:00Z`);
+    return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getUTCDay()] ?? "sun";
+  }, [todayIso]);
 
   const [dayStatusByProgramDayId, setDayStatusByProgramDayId] = useState<
     Record<string, ProgramDayStatus>
@@ -232,7 +255,7 @@ export function TodayScreen(): React.JSX.Element {
     );
   }
 
-  if (lifecycleState === "today_scheduled") {
+  if (lifecycleState === "today_scheduled" || lifecycleState === "today_started") {
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.greeting}>{greetingText()}</Text>
@@ -246,6 +269,7 @@ export function TodayScreen(): React.JSX.Element {
           label={todayPreview?.label ?? "Today's Workout"}
           type={todayPreview?.type ?? ""}
           sessionDuration={todayPreview?.sessionDuration ?? null}
+          actionLabel={lifecycleState === "today_started" ? "Resume Workout" : "Start Workout"}
           onStartWorkout={() => {
             if (!isActive) {
               navigation.navigate("HomeTab", { screen: "Paywall" } as never);
@@ -268,32 +292,28 @@ export function TodayScreen(): React.JSX.Element {
         <Text style={styles.title}>Today&apos;s workout is done.</Text>
         <Text style={styles.subtitle}>
           {nextScheduledDay
-            ? `Next: ${nextScheduledDay.calendarDate ?? "next session"}`
+            ? `Next: ${formatNextSessionLabel(nextScheduledDay, overviewQuery.data?.calendarDays)}`
             : "Rest and recover. See you next session."}
         </Text>
-        <PressableScale
-          style={styles.secondaryButton}
-          onPress={() => {
-            if (!isActive) {
-              navigation.navigate("HomeTab", { screen: "Paywall" } as never);
-              return;
-            }
-            navigation.navigate("ProgramsTab", { screen: "ProgramHub" } as never);
-          }}
-        >
-          <Text style={styles.secondaryLabel}>View Full Program</Text>
-        </PressableScale>
+        <WeekProgressBadge
+          weekNumber={currentWeekNumber}
+          totalWeeks={totalWeeks}
+          completedDaysThisWeek={completedDaysThisWeek}
+          totalDaysThisWeek={totalDaysThisWeek}
+        />
       </View>
     );
   }
 
   if (lifecycleState === "today_rest") {
+    const rec = overviewQuery.data?.bonusDayRecommendation;
+
     return (
       <View style={styles.centered}>
         <Text style={styles.title}>Rest day.</Text>
         <Text style={styles.subtitle}>
           {nextScheduledDay
-            ? `Next training: ${nextScheduledDay.calendarDate ?? "upcoming"}`
+            ? `Next: ${formatNextSessionLabel(nextScheduledDay, overviewQuery.data?.calendarDays)}`
             : "Enjoy the recovery."}
         </Text>
         <WeekProgressBadge
@@ -303,17 +323,32 @@ export function TodayScreen(): React.JSX.Element {
           totalDaysThisWeek={totalDaysThisWeek}
         />
         <PressableScale
-          style={styles.secondaryButton}
+          style={styles.primaryButton}
           onPress={() => {
             if (!isActive) {
               navigation.navigate("HomeTab", { screen: "Paywall" } as never);
               return;
             }
-            navigation.navigate("ProgramsTab", { screen: "ProgramHub" } as never);
+            setSheetOpen(true);
           }}
         >
-          <Text style={styles.secondaryLabel}>View Program</Text>
+          <Text style={styles.primaryLabel}>Add a bonus workout today</Text>
         </PressableScale>
+        <BonusWorkoutSheet
+          visible={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          onCreated={() => {
+            setSheetOpen(false);
+            void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+            void overviewQuery.refetch();
+          }}
+          programId={resolvedProgramId}
+          todayIso={todayIso}
+          todayWeekday={todayWeekday}
+          currentProgramType={rec?.programType ?? "hypertrophy"}
+          currentFocusTypes={rec?.programFocusTypes ?? []}
+          recommendedFocusType={rec?.recommendedFocusType}
+        />
       </View>
     );
   }

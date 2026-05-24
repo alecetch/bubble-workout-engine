@@ -271,6 +271,119 @@ function deriveExpectedCombos(blockSemantics) {
   return Array.from(deduped.values());
 }
 
+export async function fetchNarrationCoverageReport({ db = pool, program_type } = {}) {
+  const programType = safeString(program_type);
+  if (!programType) {
+    const err = new Error("program_type is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const cfgResult = await db.query(
+    `
+    SELECT config_key, program_generation_config_json
+    FROM public.program_generation_config
+    WHERE program_type = $1 AND is_active = true
+    ORDER BY updated_at DESC, config_key ASC
+    LIMIT 1
+    `,
+    [programType],
+  );
+
+  if (!cfgResult.rows?.length) {
+    const err = new Error("Active config not found for program_type");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const configRow = cfgResult.rows[0];
+  const configJson = isPlainObject(configRow.program_generation_config_json)
+    ? configRow.program_generation_config_json
+    : {};
+  const expectedCombos = deriveExpectedCombos(configJson?.segmentation?.block_semantics);
+  const dayFocusValues = [...new Set(
+    (configJson?.builder?.day_templates ?? [])
+      .map((t) => normalizeFocusValue(t?.focus))
+      .filter(Boolean),
+  )];
+  const staticDayCombos = STATIC_EXPECTED_COMBOS.filter((c) => c.scope === "day");
+  for (const df of dayFocusValues) {
+    for (const c of staticDayCombos) {
+      expectedCombos.push({ ...c, day_focus: df });
+    }
+  }
+
+  const templateResult = await db.query(
+    `
+    SELECT
+      template_id,
+      scope,
+      field,
+      purpose,
+      segment_type,
+      priority,
+      text_pool_json,
+      applies_json,
+      is_active,
+      created_at,
+      updated_at
+    FROM public.narration_template
+    WHERE is_active = true
+    ORDER BY priority ASC NULLS LAST, template_id ASC
+    `,
+  );
+
+  const templates = normalizeTemplates(templateResult.rows);
+  const knownFocusValues = [...dayFocusValues];
+  const knownFocusSet = new Set(knownFocusValues);
+  const orphanedTemplates = templates
+    .filter((template) => template.applies_day_focus)
+    .filter((template) => !knownFocusSet.has(normalizeFocusValue(template.applies_day_focus)))
+    .map((template) => ({
+      template_id: template.template_id,
+      applies_day_focus: template.applies_day_focus,
+      known_focus_values: knownFocusValues,
+    }));
+  const summary = { specific: 0, generic_fallback: 0, missing: 0 };
+
+  const expected = expectedCombos.map((combo) => {
+    const matchCtx = { program_type: programType, day_focus: combo.day_focus ?? "" };
+    const winner = findWinningTemplate(templates, combo, matchCtx);
+    let coverage = "missing";
+    let winningTemplateId = null;
+    let winningScore = null;
+
+    if (winner) {
+      winningTemplateId = winner.template.template_id;
+      winningScore = winner.score;
+      coverage = (winner.template.applies_program_type || winner.template.applies_day_focus)
+        ? "specific"
+        : "generic_fallback";
+    }
+
+    summary[coverage] += 1;
+    return {
+      scope: combo.scope,
+      field: combo.field,
+      purpose: combo.purpose,
+      segment_type: combo.segment_type,
+      day_focus: combo.day_focus ?? null,
+      coverage,
+      winning_template_id: winningTemplateId,
+      winning_score: winningScore,
+    };
+  });
+
+  return {
+    program_type: programType,
+    config_key: configRow.config_key,
+    expected,
+    missing_contexts: expected.filter((row) => row.coverage === "missing"),
+    orphaned_templates: orphanedTemplates,
+    summary,
+  };
+}
+
 async function fetchTemplateById(templateId) {
   const result = await pool.query(
     `

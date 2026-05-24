@@ -47,6 +47,13 @@ vi.mock("../../state/timer/useTimerStore", () => ({
 
 vi.mock("../../utils/localWorkoutLog", () => ({
   getDayStatus: vi.fn(),
+  getExerciseComplete: vi.fn().mockResolvedValue(false),
+  setExerciseComplete: vi.fn().mockResolvedValue(undefined),
+  allExercisesComplete: vi.fn().mockResolvedValue(true),
+  getWorkoutComplete: vi.fn().mockResolvedValue(false),
+  getSegmentLog: vi.fn().mockResolvedValue(null),
+  setSegmentLog: vi.fn().mockResolvedValue(undefined),
+  setWorkoutComplete: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({

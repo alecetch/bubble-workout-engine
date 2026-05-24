@@ -1,4 +1,4 @@
-import { getSegmentPresentation } from "./segmentCardLogic.js";
+import { getSegmentPresentation, isRoundBasedSegment } from "./segmentCardLogic.js";
 test("warmup segment shows notes-only behavior and no log button", () => {
     const out = getSegmentPresentation({
         segmentType: "warmup",
@@ -63,4 +63,10 @@ test("segment with rounds == 1 does not show rounds indicator", () => {
     });
     expect(out.showRoundsIndicator).toBe(false);
     expect(out.roundsValue).toBe(1);
+});
+test("isRoundBasedSegment returns true for supersets", () => {
+    expect(isRoundBasedSegment("superset")).toBe(true);
+});
+test("isRoundBasedSegment returns false for single segments", () => {
+    expect(isRoundBasedSegment("single")).toBe(false);
 });

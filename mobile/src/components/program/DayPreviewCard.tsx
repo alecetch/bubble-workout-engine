@@ -13,7 +13,7 @@ type DayPreview = {
   label?: string;
   type?: string;
   sessionDuration?: number;
-  equipmentSlugs?: string[];
+  equipmentNames?: string[];
   isCompleted?: boolean;
 };
 
@@ -128,22 +128,24 @@ export function DayPreviewCard({
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Day Preview</Text>
-      <Text style={styles.rowLabel}>Label</Text>
-      <Text style={styles.rowValue}>{preview?.label || "Select a scheduled workout day."}</Text>
-      <Text style={styles.rowLabel}>Type</Text>
-      <Text style={styles.rowValue}>{preview?.type || "Not set"}</Text>
-      <Text style={styles.rowLabel}>Duration</Text>
-      <Text style={styles.rowValue}>
-        {typeof preview?.sessionDuration === "number" ? `${preview.sessionDuration} min` : "Not set"}
-      </Text>
+      <View style={styles.headerRow}>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>Day Preview</Text>
+          <Text style={styles.dayLabel}>{preview?.label || "Select a scheduled workout day."}</Text>
+        </View>
+        {typeof preview?.sessionDuration === "number" ? (
+          <View style={styles.durationPill}>
+            <Text style={styles.durationPillText}>{preview.sessionDuration} min</Text>
+          </View>
+        ) : null}
+      </View>
 
       <Text style={styles.rowLabel}>Equipment</Text>
       <View style={styles.chipsWrap}>
-        {preview?.equipmentSlugs && preview.equipmentSlugs.length > 0 ? (
-          preview.equipmentSlugs.map((slug) => (
-            <View key={slug} style={styles.chip}>
-              <Text style={styles.chipLabel}>{slug}</Text>
+        {preview?.equipmentNames && preview.equipmentNames.length > 0 ? (
+          preview.equipmentNames.map((name) => (
+            <View key={name} style={styles.chip}>
+              <Text style={styles.chipLabel}>{name}</Text>
             </View>
           ))
         ) : (
@@ -195,6 +197,9 @@ export function DayPreviewCard({
           value={dateFromInput(targetDate)}
           mode="date"
           minimumDate={tomorrowDate()}
+          themeVariant="dark"
+          textColor={colors.textPrimary}
+          accentColor={colors.accent}
           onChange={handleDateChange}
         />
       ) : null}
@@ -214,7 +219,33 @@ const styles = StyleSheet.create({
   title: {
     color: colors.textPrimary,
     ...typography.h3,
-    marginBottom: spacing.xs,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  headerText: {
+    flex: 1,
+    gap: 2,
+  },
+  dayLabel: {
+    color: colors.textSecondary,
+    ...typography.body,
+  },
+  durationPill: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  durationPillText: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "700",
   },
   rowLabel: {
     color: colors.textSecondary,
@@ -262,16 +293,22 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderColor: colors.accent,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
     marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 0,
   },
   optionsButtonLabel: {
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",
+    lineHeight: 20,
+    textAlign: "center",
+    textAlignVertical: "center",
   },
   errorText: {
     color: colors.warning,

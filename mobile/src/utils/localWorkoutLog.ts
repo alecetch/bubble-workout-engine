@@ -68,6 +68,10 @@ function workoutDayCompleteKey(programDayId: string): string {
   return `workout:day-complete:${programDayId}`;
 }
 
+function exerciseCompleteKey(programDayId: string, programExerciseId: string): string {
+  return `workout:exercise-complete:${programDayId}:${programExerciseId}`;
+}
+
 export async function getSegmentLog(
   programDayId: string,
   segmentId: string,
@@ -117,6 +121,37 @@ export async function setWorkoutComplete(programDayId: string, value: boolean): 
     storage.setItem(workoutDayCompleteKey(programDayId), value ? "1" : "0"),
     value ? storage.setItem(workoutDayStartedKey(programDayId), "1") : Promise.resolve(),
   ]);
+}
+
+export async function getExerciseComplete(
+  programDayId: string,
+  programExerciseId: string,
+): Promise<boolean> {
+  const storage = getStorage();
+  const raw = await storage.getItem(exerciseCompleteKey(programDayId, programExerciseId));
+  return raw === "1";
+}
+
+export async function setExerciseComplete(
+  programDayId: string,
+  programExerciseId: string,
+  value: boolean,
+): Promise<void> {
+  const storage = getStorage();
+  await Promise.all([
+    storage.setItem(exerciseCompleteKey(programDayId, programExerciseId), value ? "1" : "0"),
+    value ? storage.setItem(workoutDayStartedKey(programDayId), "1") : Promise.resolve(),
+  ]);
+}
+
+export async function allExercisesComplete(
+  programDayId: string,
+  programExerciseIds: string[],
+): Promise<boolean> {
+  const complete = await Promise.all(
+    programExerciseIds.map((programExerciseId) => getExerciseComplete(programDayId, programExerciseId)),
+  );
+  return complete.every(Boolean);
 }
 
 export async function hasAnySegmentLog(

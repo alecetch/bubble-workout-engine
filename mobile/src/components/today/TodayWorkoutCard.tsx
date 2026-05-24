@@ -10,6 +10,7 @@ type TodayWorkoutCardProps = {
   label: string;
   type: string;
   sessionDuration: number | null;
+  actionLabel?: string;
   onStartWorkout: () => void;
 };
 
@@ -17,6 +18,7 @@ export function TodayWorkoutCard({
   label,
   type,
   sessionDuration,
+  actionLabel = "Start Workout",
   onStartWorkout,
 }: TodayWorkoutCardProps): React.JSX.Element {
   const metaParts = [
@@ -31,7 +33,7 @@ export function TodayWorkoutCard({
       <Text style={styles.dayLabel}>{label}</Text>
       {metaParts ? <Text style={styles.meta}>{metaParts}</Text> : null}
       <PressableScale style={styles.startButton} onPress={onStartWorkout}>
-        <Text style={styles.startLabel}>Start Workout</Text>
+        <Text style={styles.startLabel}>{actionLabel}</Text>
       </PressableScale>
     </View>
   );

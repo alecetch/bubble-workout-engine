@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Modal,
   SafeAreaView,
@@ -36,6 +36,7 @@ import { logOutPurchases } from "../../lib/purchases";
 import type { RootTabParamList } from "../../navigation/AppTabs";
 import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
 import { useSessionStore } from "../../state/session/sessionStore";
+import { useSettingsStore } from "../../state/settings/useSettingsStore";
 import { radii } from "../../theme/components";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
@@ -146,6 +147,9 @@ function SettingsRow({
 export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
   const clearSession = useSessionStore((state) => state.clearSession);
+  const showRestTimer = useSettingsStore((state) => state.showRestTimer);
+  const hydrateSettings = useSettingsStore((state) => state.hydrate);
+  const setShowRestTimer = useSettingsStore((state) => state.setShowRestTimer);
   const tabNavigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const entitlementQuery = useEntitlement();
   const meQuery = useMe();
@@ -157,6 +161,10 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [notifSaveError, setNotifSaveError] = useState<string | null>(null);
   const [dangerError, setDangerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void hydrateSettings();
+  }, [hydrateSettings]);
 
   const notifQuery = useQuery({
     queryKey: ["notificationPreferences"],
@@ -454,6 +462,27 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
                 />
               </>
             ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>WORKOUT</SectionLabel>
+          <View style={styles.sectionCard}>
+            <View style={styles.row}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Show rest timer</Text>
+                <Text style={styles.rowDescription}>Display a countdown after each set</Text>
+              </View>
+              <Switch
+                accessibilityLabel="Show rest timer"
+                value={showRestTimer}
+                onValueChange={(nextValue) => {
+                  void setShowRestTimer(nextValue);
+                }}
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor={colors.textPrimary}
+              />
+            </View>
           </View>
         </View>
 

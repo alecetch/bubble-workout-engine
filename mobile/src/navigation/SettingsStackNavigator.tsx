@@ -2,6 +2,7 @@ import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AccountNameScreen } from "../screens/settings/AccountNameScreen";
 import { ChangePasswordScreen } from "../screens/settings/ChangePasswordScreen";
+import { EquipmentPresetDetailScreen } from "../screens/settings/EquipmentPresetDetailScreen";
 import { NotificationTimeScreen } from "../screens/settings/NotificationTimeScreen";
 import { EquipmentSettingsScreen } from "../screens/settings/EquipmentSettingsScreen";
 import { SettingsScreen } from "../screens/settings/SettingsScreen";
@@ -13,7 +14,8 @@ export type SettingsStackParamList = {
   ChangePassword: undefined;
   NotificationTime: { currentTime: string };
   UnitPicker: { currentUnit: "kg" | "lbs"; currentHeightUnit: "cm" | "ft" };
-  EquipmentSettings: undefined;
+  EquipmentSettings: { presetCodeToApply?: string } | undefined;
+  EquipmentPresetDetail: { presetCode: string; presetLabel: string; isCurrentPreset?: boolean };
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -27,6 +29,7 @@ export function SettingsStackNavigator(): React.JSX.Element {
       <Stack.Screen name="NotificationTime" component={NotificationTimeScreen} />
       <Stack.Screen name="UnitPicker" component={UnitPickerScreen} />
       <Stack.Screen name="EquipmentSettings" component={EquipmentSettingsScreen} />
+      <Stack.Screen name="EquipmentPresetDetail" component={EquipmentPresetDetailScreen} />
     </Stack.Navigator>
   );
 }

@@ -1,4 +1,4 @@
-import { buildInitialSetInputMap, buildSegmentLogRows, computeSessionStatsFromLoggedRows, computeSessionStatsFromSegments, getExerciseSetCount, guidelinePrefill, parseRepsPrefill, parseWeightPrefill, repsPrefill, } from "./sessionUxLogic";
+import { buildInitialSetInputMap, buildSegmentLogRows, computeSessionStatsFromLoggedRows, computeSessionStatsFromSegments, formatRoundSummary, getExerciseSetCount, guidelinePrefill, parseRepsPrefill, parseWeightPrefill, repsPrefill, } from "./sessionUxLogic";
 test("guidelinePrefill prefers progression load over guideline load when both are present", () => {
     expect(guidelinePrefill({
         guidelineLoad: { value: 80 },
@@ -82,6 +82,44 @@ test("buildSegmentLogRows emits one row per set", () => {
     expect(rows.map((row) => row.orderIndex)).toEqual([1, 2, 3]);
     expect(rows[2].weightKg).toBe(102.5);
     expect(rows[2].repsCompleted).toBe(4);
+});
+test("formatRoundSummary formats completed round count from first exercise", () => {
+    const exercises = [
+        {
+            id: "pe-1",
+            name: "Back Squat",
+            exerciseId: "bb-squat",
+            isLoadable: true,
+        },
+        {
+            id: "pe-2",
+            name: "Romanian Deadlift",
+            exerciseId: "bb-rdl",
+            isLoadable: true,
+        },
+    ];
+    const done = new Set(["pe-1:0", "pe-2:0", "pe-1:1", "pe-2:1"]);
+    expect(formatRoundSummary(exercises as never, 4, 2, {
+        "pe-1": [
+            { weight: "80", reps: "8", rirActual: null },
+            { weight: "82.5", reps: "7", rirActual: null },
+        ],
+        "pe-2": [
+            { weight: "60", reps: "10", rirActual: null },
+            { weight: "62.5", reps: "9", rirActual: null },
+        ],
+    }, done)).toBe("2/4 rounds · 82.5 kg x 7 ✓");
+});
+test("formatRoundSummary formats unloaded first exercise", () => {
+    const exercises = [{
+        id: "pe-1",
+        name: "Push-up",
+        exerciseId: "push-up",
+        isLoadable: false,
+    }];
+    expect(formatRoundSummary(exercises as never, 1, 1, {
+        "pe-1": [{ weight: "", reps: "12", rirActual: null }],
+    }, new Set(["pe-1:0"]))).toBe("1 rounds · bodyweight x 12 ✓");
 });
 test("computeSessionStatsFromSegments uses logged segments only", () => {
     const stats = computeSessionStatsFromSegments([

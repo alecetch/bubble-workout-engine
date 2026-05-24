@@ -22,6 +22,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { useTimerStore } from "../../state/timer/useTimerStore";
+import { useSettingsStore } from "../../state/settings/useSettingsStore";
 import { typography } from "../../theme/typography";
 
 type Segment = ProgramDayFullResponse["segments"][number];
@@ -47,7 +48,7 @@ const EFFORT_OPTIONS = [
 function getDefaultActiveKey(
   exercises: Segment["exercises"],
 ): { exerciseId: string; setIndex: number } | null {
-  const firstLoadable = exercises.find((exercise) => exercise.isLoadable === true && exercise.id);
+  const firstLoadable = exercises.find((exercise) => exercise.id);
   if (!firstLoadable?.id) return null;
   return {
     exerciseId: firstLoadable.id,
@@ -58,6 +59,10 @@ function getDefaultActiveKey(
 function formatRestTimer(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function isUnloadedExercise(exercise: Segment["exercises"][number]): boolean {
+  return exercise.isUnloaded === true || exercise.isLoadable === false;
 }
 
 export function LogSegmentModal({
@@ -90,16 +95,17 @@ export function LogSegmentModal({
   const [restDisplaySeconds, setRestDisplaySeconds] = useState(0);
 
   const exercises = segment?.exercises ?? [];
-  const loadableExercises = exercises.filter((ex) => ex.isLoadable === true);
+  const loggableExercises = exercises.filter((ex) => ex.id);
+  const showRestTimer = useSettingsStore((state) => state.showRestTimer);
   const existingRows = existingLogsQuery.data ?? [];
-  const activeExercise = loadableExercises.find((ex) => ex.id === activeKey?.exerciseId) ?? null;
+  const activeExercise = loggableExercises.find((ex) => ex.id === activeKey?.exerciseId) ?? null;
   const activeEffort = activeKey
     ? (inputMap[activeKey.exerciseId]?.[activeKey.setIndex]?.rirActual ?? null)
     : null;
   const activeEffortCaption = EFFORT_OPTIONS.find((option) => option.value === activeEffort)?.caption ?? null;
 
   const saveMutation = useSaveSegmentLogs();
-  const defaultActiveKey = getDefaultActiveKey(loadableExercises);
+  const defaultActiveKey = getDefaultActiveKey(loggableExercises);
 
   useEffect(() => {
     if (!visible) {
@@ -151,7 +157,7 @@ export function LogSegmentModal({
   ]);
 
   const showRestStrip =
-    restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
+    showRestTimer && restEntry != null && (restEntry.restIsRunning || restDisplaySeconds > 0);
 
   const restProgress =
     restEntry != null && restEntry.restTotalSeconds > 0
@@ -260,7 +266,7 @@ export function LogSegmentModal({
                     setRestDisplaySeconds(0);
                   }}
                 >
-                  <Text style={styles.restStripSkipLabel}>Skip</Text>
+                  <Text style={styles.restStripSkipLabel}>Reset</Text>
                 </PressableScale>
               </View>
             ) : null}
@@ -298,10 +304,10 @@ export function LogSegmentModal({
 
             <View style={styles.divider} />
 
-            {loadableExercises.length > 0 ? (
+            {loggableExercises.length > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>ACTUAL</Text>
-                {loadableExercises.map((ex) => {
+                {loggableExercises.map((ex) => {
                   const key = ex.id ?? "";
                   const sets = inputMap[key] ?? [{ weight: "", reps: "", rirActual: null }];
                   return (
@@ -322,49 +328,62 @@ export function LogSegmentModal({
                             ) : null}
                           </View>
                           <View style={styles.inputsRow}>
-                            <View
-                              style={[
-                                styles.inputGroup,
-                                activeKey?.exerciseId === key &&
-                                  activeKey?.setIndex === i &&
-                                  styles.inputGroupHighlighted,
-                              ]}
-                            >
-                              <TextInput
-                                value={set.weight}
-                                onFocus={() => handleInputFocus(key, i, "weight")}
-                                onChangeText={(v) => {
-                                  const sanitized = v
-                                    .replace(/[^0-9.]/g, "")
-                                    .replace(/^(\d*\.?\d*).*$/, "$1");
-                                  setInputMap((current) => {
-                                    const prev = current[key] ?? [];
-                                    const next = [...prev];
-                                    next[i] = { ...(next[i] ?? { reps: "", rirActual: null }), weight: sanitized };
-                                    if (i === 0 && autoFillDownEnabled[key] && next.length > 1) {
-                                      for (let rowIndex = 1; rowIndex < next.length; rowIndex += 1) {
-                                        next[rowIndex] = {
-                                          ...(next[rowIndex] ?? { weight: "", reps: "", rirActual: null }),
-                                          weight: sanitized,
-                                        };
+                            {isUnloadedExercise(ex) ? (
+                              <View
+                                style={[
+                                  styles.inputGroup,
+                                  activeKey?.exerciseId === key &&
+                                    activeKey?.setIndex === i &&
+                                    styles.inputGroupHighlighted,
+                                ]}
+                              >
+                                <Text style={styles.bodyweightDash}>—</Text>
+                              </View>
+                            ) : (
+                              <View
+                                style={[
+                                  styles.inputGroup,
+                                  activeKey?.exerciseId === key &&
+                                    activeKey?.setIndex === i &&
+                                    styles.inputGroupHighlighted,
+                                ]}
+                              >
+                                <TextInput
+                                  value={set.weight}
+                                  onFocus={() => handleInputFocus(key, i, "weight")}
+                                  onChangeText={(v) => {
+                                    const sanitized = v
+                                      .replace(/[^0-9.]/g, "")
+                                      .replace(/^(\d*\.?\d*).*$/, "$1");
+                                    setInputMap((current) => {
+                                      const prev = current[key] ?? [];
+                                      const next = [...prev];
+                                      next[i] = { ...(next[i] ?? { reps: "", rirActual: null }), weight: sanitized };
+                                      if (i === 0 && autoFillDownEnabled[key] && next.length > 1) {
+                                        for (let rowIndex = 1; rowIndex < next.length; rowIndex += 1) {
+                                          next[rowIndex] = {
+                                            ...(next[rowIndex] ?? { weight: "", reps: "", rirActual: null }),
+                                            weight: sanitized,
+                                          };
+                                        }
                                       }
+                                      return { ...current, [key]: next };
+                                    });
+                                    if (i === 0 && sanitized.trim().length > 0) {
+                                      setPendingFillDownPrompt((current) => ({ ...current, [key]: true }));
                                     }
-                                    return { ...current, [key]: next };
-                                  });
-                                  if (i === 0 && sanitized.trim().length > 0) {
-                                    setPendingFillDownPrompt((current) => ({ ...current, [key]: true }));
-                                  }
-                                }}
-                                keyboardType="decimal-pad"
-                                textContentType="none"
-                                autoComplete="off"
-                                placeholder="0"
-                                placeholderTextColor={colors.textSecondary}
-                                style={styles.inputField}
-                                accessibilityLabel={`${ex.name} set ${i + 1} weight`}
-                              />
-                              <Text style={styles.inputSuffix}>kg</Text>
-                            </View>
+                                  }}
+                                  keyboardType="decimal-pad"
+                                  textContentType="none"
+                                  autoComplete="off"
+                                  placeholder="0"
+                                  placeholderTextColor={colors.textSecondary}
+                                  style={styles.inputField}
+                                  accessibilityLabel={`${ex.name} set ${i + 1} weight`}
+                                />
+                                <Text style={styles.inputSuffix}>kg</Text>
+                              </View>
+                            )}
                             <View
                               style={[
                                 styles.inputGroup,
@@ -676,6 +695,12 @@ const styles = StyleSheet.create({
     paddingRight: spacing.sm,
     color: colors.textSecondary,
     ...typography.small,
+  },
+  bodyweightDash: {
+    flex: 1,
+    color: colors.textPrimary,
+    ...typography.body,
+    textAlign: "center",
   },
   fillDownButton: {
     marginLeft: "auto",

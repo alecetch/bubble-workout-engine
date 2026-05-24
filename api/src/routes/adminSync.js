@@ -228,6 +228,59 @@ function writeSnapshot(filename, content) {
   }
 }
 
+function toIsoOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export async function getSyncStatus(db = pool) {
+  const { rows: auditRows } = await db.query(`
+    SELECT ts FROM admin_audit_log
+    WHERE action = 'sync_all_to_flyway'
+    ORDER BY ts DESC LIMIT 1
+  `);
+  const lastSyncedAt = auditRows[0]?.ts ?? null;
+
+  const { rows: editRows } = await db.query(`
+    SELECT MAX(latest) AS latest FROM (
+      SELECT MAX(updated_at) AS latest FROM narration_template
+      UNION ALL
+      SELECT MAX(updated_at) FROM program_rep_rule
+      UNION ALL
+      SELECT MAX(updated_at) FROM program_generation_config
+      UNION ALL
+      SELECT MAX(updated_at) FROM exercise_catalogue
+    ) sub
+  `);
+  const latestEditAt = editRows[0]?.latest ?? null;
+
+  const lastSyncedTime = lastSyncedAt === null ? null : new Date(lastSyncedAt).getTime();
+  const latestEditTime = latestEditAt === null ? null : new Date(latestEditAt).getTime();
+  const dirty = lastSyncedTime === null
+    || (latestEditTime !== null && latestEditTime > lastSyncedTime);
+
+  return {
+    dirty,
+    last_synced_at: toIsoOrNull(lastSyncedAt),
+    latest_edit_at: toIsoOrNull(latestEditAt),
+    message: dirty
+      ? "Unsynced changes detected. Run 'Sync All to Flyway' to protect your edits."
+      : "Seed files are up to date.",
+  };
+}
+
+// ── GET /admin/sync-status ───────────────────────────────────────────────
+
+adminSyncRouter.get("/sync-status", async (_req, res) => {
+  try {
+    const db = _req.app?.locals?.pool || pool;
+    return res.json(await getSyncStatus(db));
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: publicInternalError(err) });
+  }
+});
+
 // ── POST /admin/sync-all-to-flyway ─────────────────────────────────────────
 
 adminSyncRouter.post("/sync-all-to-flyway", async (req, res) => {

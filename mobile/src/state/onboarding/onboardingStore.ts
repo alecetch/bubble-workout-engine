@@ -151,6 +151,9 @@ export function fromProfile(profileLike: ProfileLike): OnboardingDraft {
     ageRange: toAgeRange(profileLike.ageRange ?? profileLike.age_range),
     anchorLifts: [],
     anchorLiftsSkipped: Boolean(profileLike.anchorLiftsSkipped ?? profileLike.anchor_lifts_skipped ?? false),
+    preferredUnit: String(profileLike.preferredUnit ?? profileLike.preferred_unit ?? "kg") === "lbs"
+      ? "lbs"
+      : "kg",
     onboardingStepCompleted:
       (Number(profileLike.onboardingStepCompleted ?? profileLike.onboarding_step_completed ?? 0) as 0 | 1 | 2 | 3) ||
       0,

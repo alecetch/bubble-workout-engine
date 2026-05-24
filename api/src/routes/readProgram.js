@@ -234,6 +234,7 @@ export function createReadProgramHandlers(options = pool) {
           p.program_summary AS summary,
           p.weeks_count,
           p.days_per_week,
+          p.program_type,
           p.start_date,
           p.status,
           p.hero_media_id,
@@ -291,6 +292,8 @@ export function createReadProgramHandlers(options = pool) {
           CASE WHEN c.rescheduled_from_day_id IS NOT NULL THEN FALSE
                ELSE COALESCE(d.is_skipped, FALSE)
           END AS is_skipped,
+          d.focus_type,
+          d.is_bonus,
           d.has_activity
         FROM program_calendar_day c
         LEFT JOIN program_day d
@@ -324,7 +327,7 @@ export function createReadProgramHandlers(options = pool) {
 
       // 5) Selected day preview (guard belongs to program)
       let selected_day = null;
-      let equipment_slugs = [];
+      let equipment_names = [];
 
       if (selectedDayId) {
         const dayR = await client.query(
@@ -352,23 +355,71 @@ export function createReadProgramHandlers(options = pool) {
         if (dayR.rowCount > 0) {
           selected_day = dayR.rows[0];
 
-          // Equipment slugs for selected day only (fast + good UX).
+          // Equipment names for selected day only (fast + good UX).
           const eqR = await client.query(
             `
-            SELECT equipment_items_slugs_csv
-            FROM program_exercise
-            WHERE program_day_id = $1
+            SELECT COALESCE(MIN(ei.name), trim(eq_slug.slug)) AS equipment_name
+            FROM program_exercise pe
+            CROSS JOIN LATERAL unnest(string_to_array(pe.equipment_items_slugs_csv, ',')) AS eq_slug(slug)
+            LEFT JOIN equipment_items ei ON ei.exercise_slug = trim(eq_slug.slug)
+            WHERE pe.program_day_id = $1
+              AND trim(eq_slug.slug) != ''
+            GROUP BY trim(eq_slug.slug)
+            ORDER BY equipment_name
             `,
             [selectedDayId],
           );
-          equipment_slugs = parseEquipmentSlugs(eqR.rows);
+          equipment_names = eqR.rows
+            .map((row) => safeString(row.equipment_name))
+            .filter(Boolean);
 
           selected_day = {
             ...selected_day,
-            equipment_slugs,
+            equipment_names,
           };
         }
       }
+
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const todayCalEntry = calR.rows.find((row) => {
+          const scheduledDate = row.scheduled_date?.toISOString?.().slice(0, 10)
+            || String(row.scheduled_date ?? "").slice(0, 10);
+          return scheduledDate === todayIso;
+        });
+        const todayIsRest = !todayCalEntry || todayCalEntry.is_training_day === false;
+
+        let bonus_day_recommendation = null;
+        if (todayIsRest) {
+          const recR = await client.query(
+            `SELECT focus_type, COUNT(*) AS count
+             FROM program_day
+             WHERE program_id = $1
+               AND scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
+               AND scheduled_date < CURRENT_DATE
+               AND is_completed = TRUE
+               AND focus_type IS NOT NULL
+             GROUP BY focus_type
+             ORDER BY count ASC
+             LIMIT 1`,
+            [program_id],
+          );
+
+          const focusTypesR = await client.query(
+            `SELECT DISTINCT focus_type
+             FROM program_day
+             WHERE program_id = $1
+               AND focus_type IS NOT NULL
+               AND is_bonus = FALSE
+             ORDER BY focus_type`,
+            [program_id],
+          );
+
+          bonus_day_recommendation = {
+            programType: program.program_type ?? "hypertrophy",
+            programFocusTypes: focusTypesR.rows.map((row) => row.focus_type).filter(Boolean),
+            recommendedFocusType: recR.rows[0]?.focus_type ?? null,
+          };
+        }
 
         return res.json({
           ok: true,
@@ -376,6 +427,7 @@ export function createReadProgramHandlers(options = pool) {
           weeks: weeksR.rows,
           calendar_days: calR.rows,
           selected_day,
+          bonus_day_recommendation,
         });
       } finally {
         client.release();
@@ -516,6 +568,7 @@ export function createReadProgramHandlers(options = pool) {
           pe.recommended_rest_seconds,
           pe.notes,
           pe.is_loadable,
+          (pe.is_loadable = FALSE) AS is_unloaded,
           pe.coaching_cues_json,
           pe.load_hint,
           pe.log_prompt,
@@ -934,7 +987,7 @@ const handlers = createReadProgramHandlers();
 readProgramRouter.use(requireAuth);
 
 // ---- GET /api/program/:program_id/overview ----
-// Returns: program header + weeks + calendar pills + selected day preview (incl equipment slugs).
+// Returns: program header + weeks + calendar pills + selected day preview (incl equipment names).
 readProgramRouter.get("/program/:program_id/overview", handlers.programOverview);
 
 // ---- GET /api/day/:program_day_id/full ----
