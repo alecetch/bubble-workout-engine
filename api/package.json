@@ -25,7 +25,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "luxon": "^3.7.2",
-    "marked": "^18.0.3",
+    "marked": "^18.0.4",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.7",
     "openai": "^6.35.0",
