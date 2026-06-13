@@ -1,0 +1,26 @@
+[
+  {
+    "event_id": "EVT1",
+    "event_name": "HYROX Test",
+    "gender": "male",
+    "nationality": "GBR",
+    "age_group": "30-34",
+    "division": "open",
+    "total_time": "1:00:00",
+    "work_time": "0:24:00",
+    "roxzone_time": "0:04:00",
+    "run_time": "0:32:00"
+  },
+  {
+    "event_id": "EVT1",
+    "event_name": "HYROX Test",
+    "gender": "male",
+    "nationality": "GBR",
+    "age_group": "30-34",
+    "division": "open",
+    "total_time": "1:00:00",
+    "work_time": "0:24:00",
+    "roxzone_time": "0:04:00",
+    "run_time": "0:32:00"
+  }
+]
