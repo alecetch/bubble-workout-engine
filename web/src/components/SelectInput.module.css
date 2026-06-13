@@ -1,0 +1,41 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.required {
+  color: var(--accent-red);
+  margin-left: 2px;
+}
+
+.select {
+  background: var(--bg-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-size: 15px;
+  transition: border-color 0.15s;
+  width: 100%;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.errorMsg {
+  font-size: 12px;
+  color: var(--accent-red);
+}

@@ -1,0 +1,75 @@
+.card {
+  padding: 20px;
+  background: var(--panel-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.rank {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: "Inter Tight", Inter, sans-serif;
+  color: var(--accent-blue);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.impact {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.high {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--accent-red);
+}
+
+.medium {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--accent-amber);
+}
+
+.low {
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--accent-cyan);
+}
+
+.why {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.example {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: var(--bg-850);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--accent-blue);
+}
+
+.exampleLabel {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
