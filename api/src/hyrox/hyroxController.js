@@ -3,7 +3,7 @@ import { analyseSubmission } from "./engine/hyroxAnalysisEngine.js";
 import { normaliseSubmission } from "./engine/segmentNormaliser.js";
 import { generateInsights } from "./insights/insightEngine.js";
 import { assembleReport } from "./reports/reportAssembler.js";
-import { sendHyroxEmail } from "./hyroxEmailService.js";
+import { createEmailLogEntry, sendHyroxEmail } from "./hyroxEmailService.js";
 
 function ageGroupFromAge(age) {
   const n = Number(age);
@@ -97,10 +97,11 @@ function submissionInput(body = {}) {
   };
 }
 
-function statusFromAnalysis(analysisJson) {
+function statusFromAnalysis(analysisJson, normalised) {
   if (analysisJson.analysisScope === "no_benchmark_data") return "degraded";
   if (analysisJson.analysisScope === "limited") return "limited";
-  if (analysisJson.analysisScope === "partial") return "partial";
+  const requiredSplits = (normalised?.completeness?.runSplits ?? 0) + (normalised?.completeness?.stationSplits ?? 0);
+  if (requiredSplits < 16) return "partial";
   return "complete";
 }
 
@@ -220,10 +221,11 @@ export async function analyse(req, res) {
     analysisJson.submissionId = submission.id;
     await persistAnalysis({ submissionId: submission.id, analysisJson, insights, emailReport, carouselA, carouselB });
 
-    sendHyroxEmail(submission, emailReport, pool, req.log ?? console)
+    const emailLogId = await createEmailLogEntry(submission.id, pool).catch(() => null);
+    sendHyroxEmail(submission, emailReport, pool, req.log ?? console, emailLogId)
       .catch((err) => (req.log ?? console).warn?.({ event: "hyrox.email_unhandled", err: err?.message }, "HYROX email dispatch failed"));
 
-    const status = unsupportedDivision ? "limited" : statusFromAnalysis(analysisJson);
+    const status = unsupportedDivision ? "limited" : statusFromAnalysis(analysisJson, normalised);
     return res.status(200).json({
       submissionId: submission.id,
       status,

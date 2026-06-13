@@ -117,10 +117,13 @@ async function dbReady(t) {
 }
 
 async function waitForEmailLog(submissionId) {
-  for (let i = 0; i < 20; i += 1) {
-    const result = await pool.query("SELECT status FROM hyrox_email_log WHERE submission_id = $1", [submissionId]);
+  for (let i = 0; i < 40; i += 1) {
+    const result = await pool.query(
+      "SELECT status FROM hyrox_email_log WHERE submission_id = $1 AND status != 'queued'",
+      [submissionId],
+    );
     if (result.rows.length) return result.rows[0];
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return null;
 }
@@ -135,6 +138,7 @@ test.beforeEach(() => {
 });
 
 test.after(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
   await pool.end();
 });
 
