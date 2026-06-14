@@ -1,0 +1,12 @@
+{
+  "submissionId": "doubles_result",
+  "athlete": { "sex": "male", "ageGroup": "30-34", "division": "doubles" },
+  "race": { "finishTimeSeconds": 4440, "division": "doubles" },
+  "roxzoneMode": "inferred_total",
+  "splits": [
+    { "segmentKey": "run_1", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_8", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "ski_erg", "type": "station", "timeSeconds": 300 },
+    { "segmentKey": "wall_balls", "type": "station", "timeSeconds": 300 }
+  ]
+}

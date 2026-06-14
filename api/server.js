@@ -68,6 +68,9 @@ import { buildPublicUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
+import { loadBenchmarkData } from "./src/hyrox/engine/benchmarkService.js";
+import { hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission } from "./src/hyrox/hyroxValidator.js";
+import * as hyroxController from "./src/hyrox/hyroxController.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
 import { requireAuth } from "./src/middleware/requireAuth.js";
 import { adminOnly, userAuth, entitledUserAuth, premiumUserAuth } from "./src/middleware/chains.js";
@@ -777,6 +780,8 @@ app.use(marketingRouter);
 app.use(websiteEnhancementsRouter);
 app.use(contentHubRouter);
 app.use(affiliateProgramRouter);
+app.post("/api/hyrox/analyse", hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission, hyroxController.analyse);
+app.get("/api/hyrox/health", hyroxController.health);
 app.use("/api", ...userAuth, physiqueReadRouter);
 app.use("/api", ...userAuth, physiqueScanRouter);
 app.use("/api", notificationPreferencesRouter);
@@ -874,4 +879,9 @@ app.use((err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, "0.0.0.0", () => logger.info({ event: "server.listening", port }, `API listening on :${port}`));
+app.listen(port, "0.0.0.0", () => {
+  logger.info({ event: "server.listening", port }, `API listening on :${port}`);
+  loadBenchmarkData(pool)
+    .then((summary) => logger.info({ event: "hyrox.benchmarks.loaded", ...summary }, "Loaded HYROX benchmark cache"))
+    .catch((err) => logger.warn({ event: "hyrox.benchmarks.load_failed", err: err?.message }, "HYROX benchmark cache unavailable"));
+});

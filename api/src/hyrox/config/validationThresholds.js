@@ -1,0 +1,48 @@
+export const VALIDATION_THRESHOLDS = Object.freeze({
+  totalTime: Object.freeze({ individualMin: 40 * 60, individualMax: 3 * 60 * 60 }),
+  aggregateTolerance: Object.freeze({
+    passSeconds: 2,
+    warningSeconds: 10,
+    totalPartialSeconds: 60,
+    roxzoneWarningSeconds: 15,
+  }),
+  plausibility: Object.freeze({
+    run_1: Object.freeze({ min: 150, max: 900 }),
+    run_2: Object.freeze({ min: 150, max: 900 }),
+    run_3: Object.freeze({ min: 150, max: 900 }),
+    run_4: Object.freeze({ min: 150, max: 900 }),
+    run_5: Object.freeze({ min: 150, max: 900 }),
+    run_6: Object.freeze({ min: 150, max: 900 }),
+    run_7: Object.freeze({ min: 150, max: 900 }),
+    run_8: Object.freeze({ min: 150, max: 1200 }),
+    ski_erg: Object.freeze({ min: 150, max: 900 }),
+    sled_push: Object.freeze({ min: 45, max: 720 }),
+    sled_pull: Object.freeze({ min: 45, max: 720 }),
+    burpee_broad_jump: Object.freeze({ min: 150, max: 1200 }),
+    row: Object.freeze({ min: 150, max: 900 }),
+    farmers_carry: Object.freeze({ min: 45, max: 600 }),
+    sandbag_lunges: Object.freeze({ min: 120, max: 1080 }),
+    wall_balls: Object.freeze({ min: 90, max: 1200 }),
+    roxzone_1: Object.freeze({ min: 0, max: 300 }),
+    roxzone_2: Object.freeze({ min: 0, max: 300 }),
+    roxzone_3: Object.freeze({ min: 0, max: 300 }),
+    roxzone_4: Object.freeze({ min: 0, max: 300 }),
+    roxzone_5: Object.freeze({ min: 0, max: 300 }),
+    roxzone_6: Object.freeze({ min: 0, max: 300 }),
+    roxzone_7: Object.freeze({ min: 0, max: 300 }),
+    roxzone_8: Object.freeze({ min: 0, max: 300 }),
+    roxzone_time: Object.freeze({ min: 0, max: 1200 }),
+  }),
+});
+
+export const INDIVIDUAL_BENCHMARK_DIVISIONS = Object.freeze(["open", "pro"]);
+export const MIN_EXACT_GROUP_SIZE = 20;
+export const PERFORMANCE_BANDS = Object.freeze([
+  { key: "sub_60", maxSeconds: 60 * 60 },
+  { key: "sub_65", maxSeconds: 65 * 60 },
+  { key: "sub_70", maxSeconds: 70 * 60 },
+  { key: "sub_75", maxSeconds: 75 * 60 },
+  { key: "sub_80", maxSeconds: 80 * 60 },
+  { key: "sub_90", maxSeconds: 90 * 60 },
+  { key: "sub_105", maxSeconds: 105 * 60 },
+]);

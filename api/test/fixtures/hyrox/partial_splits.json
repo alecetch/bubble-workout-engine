@@ -1,0 +1,22 @@
+{
+  "submissionId": "partial_splits",
+  "athlete": { "sex": "male", "ageGroup": "30-34", "division": "open" },
+  "race": { "finishTimeSeconds": 3930, "division": "open" },
+  "roxzoneMode": "inferred_total",
+  "splits": [
+    { "segmentKey": "run_1", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_2", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_3", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_4", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_5", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_6", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_7", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_8", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "ski_erg", "type": "station", "timeSeconds": 300 },
+    { "segmentKey": "sled_pull", "type": "station", "timeSeconds": 120 },
+    { "segmentKey": "burpee_broad_jump", "type": "station", "timeSeconds": 300 },
+    { "segmentKey": "row", "type": "station", "timeSeconds": 300 },
+    { "segmentKey": "farmers_carry", "type": "station", "timeSeconds": 120 },
+    { "segmentKey": "sandbag_lunges", "type": "station", "timeSeconds": 240 }
+  ]
+}
