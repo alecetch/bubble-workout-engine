@@ -67,6 +67,10 @@ export default defineConfig({
         functions: 57,
       },
     },
+    pool: "forks",
+    poolOptions: {
+      forks: { singleFork: true },
+    },
     projects: [
       {
         plugins: [react()],
