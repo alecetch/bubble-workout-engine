@@ -1,0 +1,45 @@
+.row {
+  display: grid;
+  grid-template-columns: 120px 1fr 110px 140px;
+  gap: 10px;
+  align-items: end;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.distanceLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: 12px;
+}
+
+.distanceSub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  display: block;
+  margin-top: 2px;
+}
+
+.historicNote {
+  font-size: 11px;
+  color: var(--accent-amber);
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .distanceLabel {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
+}
