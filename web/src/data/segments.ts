@@ -1,0 +1,52 @@
+import type { SegmentDefinition } from "../types";
+
+export const SEGMENTS: SegmentDefinition[] = [
+  { index: 1, segmentKey: "run_1", label: "1km Run", type: "run", distance: "1km" },
+  { index: 2, segmentKey: "ski_erg", label: "1km SkiErg", type: "station", distance: "1km" },
+  { index: 3, segmentKey: "run_2", label: "1km Run", type: "run", distance: "1km" },
+  { index: 4, segmentKey: "sled_push", label: "50m Sled Push", type: "station", distance: "50m" },
+  { index: 5, segmentKey: "run_3", label: "1km Run", type: "run", distance: "1km" },
+  { index: 6, segmentKey: "sled_pull", label: "50m Sled Pull", type: "station", distance: "50m" },
+  { index: 7, segmentKey: "run_4", label: "1km Run", type: "run", distance: "1km" },
+  { index: 8, segmentKey: "burpee_broad_jump", label: "80m Burpee Broad Jump", type: "station", distance: "80m" },
+  { index: 9, segmentKey: "run_5", label: "1km Run", type: "run", distance: "1km" },
+  { index: 10, segmentKey: "row", label: "1km Row", type: "station", distance: "1km" },
+  { index: 11, segmentKey: "run_6", label: "1km Run", type: "run", distance: "1km" },
+  { index: 12, segmentKey: "farmers_carry", label: "200m Farmers Carry", type: "station", distance: "200m" },
+  { index: 13, segmentKey: "run_7", label: "1km Run", type: "run", distance: "1km" },
+  { index: 14, segmentKey: "sandbag_lunges", label: "100m Sandbag Lunges", type: "station", distance: "100m" },
+  { index: 15, segmentKey: "run_8", label: "1km Run", type: "run", distance: "1km" },
+  { index: 16, segmentKey: "wall_balls", label: "100 Wall Balls", type: "station", distance: "100 reps" },
+];
+
+export const SAMPLE_FIXTURE = {
+  athlete: { name: "John", email: "john@example.com", gender: "male" as const, ageOnRaceDay: 60 },
+  race: { raceName: "HYROX Manchester", raceDate: "2024-04-20", division: "open" as const, finishTimeSeconds: 5117 },
+  splits: [
+    { index: 1, segmentKey: "run_1", label: "1km Run", type: "run" as const, timeSeconds: 323 },
+    { index: 2, segmentKey: "ski_erg", label: "1km SkiErg", type: "station" as const, timeSeconds: 342 },
+    { index: 3, segmentKey: "run_2", label: "1km Run", type: "run" as const, timeSeconds: 315 },
+    { index: 4, segmentKey: "sled_push", label: "50m Sled Push", type: "station" as const, timeSeconds: 191 },
+    { index: 5, segmentKey: "run_3", label: "1km Run", type: "run" as const, timeSeconds: 326 },
+    { index: 6, segmentKey: "sled_pull", label: "50m Sled Pull", type: "station" as const, timeSeconds: 242 },
+    { index: 7, segmentKey: "run_4", label: "1km Run", type: "run" as const, timeSeconds: 339 },
+    { index: 8, segmentKey: "burpee_broad_jump", label: "80m Burpee Broad Jump", type: "station" as const, timeSeconds: 128 },
+    { index: 9, segmentKey: "run_5", label: "1km Run", type: "run" as const, timeSeconds: 311 },
+    { index: 10, segmentKey: "row", label: "1km Row", type: "station" as const, timeSeconds: 281 },
+    { index: 11, segmentKey: "run_6", label: "1km Run", type: "run" as const, timeSeconds: 308 },
+    { index: 12, segmentKey: "farmers_carry", label: "200m Farmers Carry", type: "station" as const, timeSeconds: 173 },
+    { index: 13, segmentKey: "run_7", label: "1km Run", type: "run" as const, timeSeconds: 316 },
+    { index: 14, segmentKey: "sandbag_lunges", label: "100m Sandbag Lunges", type: "station" as const, timeSeconds: 198 },
+    { index: 15, segmentKey: "run_8", label: "1km Run", type: "run" as const, timeSeconds: 312 },
+    { index: 16, segmentKey: "wall_balls", label: "100 Wall Balls", type: "station" as const, timeSeconds: 391 },
+  ],
+  athleteContext: {
+    trainingAge: "1_3_years",
+    primaryBackground: "crossfit",
+    weeklyRunningVolume: "21_40_km",
+    weeklyStrengthSessions: "2_3",
+    targetFinishTimeSeconds: 4500,
+    additionalContext: "Recent shoulder irritation during high-volume wall balls.",
+  },
+  marketingConsent: false,
+};
