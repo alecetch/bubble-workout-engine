@@ -1,0 +1,13 @@
+.panel {
+  background: var(--panel-900);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  box-shadow: var(--shadow-panel);
+}
+
+@media (max-width: 768px) {
+  .panel {
+    padding: 20px;
+  }
+}

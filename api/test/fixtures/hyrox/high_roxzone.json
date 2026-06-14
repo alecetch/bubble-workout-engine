@@ -1,0 +1,17 @@
+{
+  "submissionId": "high_roxzone",
+  "athlete": { "sex": "male", "ageGroup": "30-34", "division": "open" },
+  "race": { "finishTimeSeconds": 4800, "division": "open" },
+  "roxzoneMode": "explicit_splits",
+  "athleteContext": { "previousHyroxRaces": 0 },
+  "splits": [
+    { "segmentKey": "run_1", "type": "run", "timeSeconds": 300 }, { "segmentKey": "ski_erg", "type": "station", "timeSeconds": 300 }, { "segmentKey": "roxzone_1", "type": "roxzone", "timeSeconds": 75 },
+    { "segmentKey": "run_2", "type": "run", "timeSeconds": 300 }, { "segmentKey": "sled_push", "type": "station", "timeSeconds": 120 }, { "segmentKey": "roxzone_2", "type": "roxzone", "timeSeconds": 75 },
+    { "segmentKey": "run_3", "type": "run", "timeSeconds": 300 }, { "segmentKey": "sled_pull", "type": "station", "timeSeconds": 120 }, { "segmentKey": "roxzone_3", "type": "roxzone", "timeSeconds": 75 },
+    { "segmentKey": "run_4", "type": "run", "timeSeconds": 300 }, { "segmentKey": "burpee_broad_jump", "type": "station", "timeSeconds": 300 }, { "segmentKey": "roxzone_4", "type": "roxzone", "timeSeconds": 75 },
+    { "segmentKey": "run_5", "type": "run", "timeSeconds": 300 }, { "segmentKey": "row", "type": "station", "timeSeconds": 300 }, { "segmentKey": "roxzone_5", "type": "roxzone", "timeSeconds": 75 },
+    { "segmentKey": "run_6", "type": "run", "timeSeconds": 300 }, { "segmentKey": "farmers_carry", "type": "station", "timeSeconds": 120 }, { "segmentKey": "roxzone_6", "type": "roxzone", "timeSeconds": 75 },
+    { "segmentKey": "run_7", "type": "run", "timeSeconds": 300 }, { "segmentKey": "sandbag_lunges", "type": "station", "timeSeconds": 240 }, { "segmentKey": "roxzone_7", "type": "roxzone", "timeSeconds": 75 },
+    { "segmentKey": "run_8", "type": "run", "timeSeconds": 300 }, { "segmentKey": "wall_balls", "type": "station", "timeSeconds": 300 }, { "segmentKey": "roxzone_8", "type": "roxzone", "timeSeconds": 75 }
+  ]
+}

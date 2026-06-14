@@ -8,7 +8,7 @@
     "dev:reset-program-data": "node ./scripts/dev_reset_program_data.mjs",
     "import:equipment-items": "tsx scripts/import-equipment-items.ts",
     "import:bubble": "node scripts/import_bubble_exports.mjs",
-    "test": "node --test",
+    "test": "EMAIL_PROVIDER=console node --test",
     "qa:history": "node scripts/history_qa_smoke.mjs",
     "qa:seeds": "node scripts/check_seeds.mjs",
     "qa:config": "node scripts/check_configs.mjs"
