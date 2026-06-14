@@ -1,0 +1,106 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.thead th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.row {
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.1s;
+}
+
+.row:hover {
+  background: rgba(14, 31, 52, 0.6);
+}
+
+.indexCell {
+  width: 32px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.typeTag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.run {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent-cyan);
+}
+
+.station {
+  background: rgba(15, 111, 255, 0.12);
+  color: var(--accent-blue);
+}
+
+.labelCell {
+  padding: 10px 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.labelInner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.segLabel {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.inputCell {
+  padding: 6px 10px;
+  width: 130px;
+}
+
+.input {
+  background: var(--bg-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+  transition: border-color 0.15s;
+  letter-spacing: 0.5px;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.input.missing {
+  border-color: var(--accent-amber);
+}
+
+.statusCell {
+  width: 20px;
+  padding: 0 10px;
+  text-align: center;
+  font-size: 14px;
+}
