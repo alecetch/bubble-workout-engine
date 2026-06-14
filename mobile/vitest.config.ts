@@ -61,6 +61,10 @@ export default defineConfig({
         functions: 57,
       },
     },
+    pool: "forks",
+    poolOptions: {
+      forks: { singleFork: true },
+    },
     projects: [
       {
         plugins: [react()],
@@ -74,10 +78,6 @@ export default defineConfig({
             "src/**/*.unit.test.{ts,tsx}",
             "src/**/__tests__/**/*.test.tsx",
           ],
-          pool: "forks",
-          poolOptions: {
-            forks: { singleFork: true },
-          },
         },
         resolve: {
           alias: { "react-native": "react-native-web" },
@@ -93,10 +93,6 @@ export default defineConfig({
             "src/**/*.component.test.ts",
             "src/**/*.unit.test.ts",
           ],
-          pool: "forks",
-          poolOptions: {
-            forks: { singleFork: true },
-          },
         },
       },
     ],
