@@ -1,0 +1,19 @@
+.card {
+  background: var(--panel-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+}
+
+.question {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+.required {
+  color: var(--accent-red);
+  margin-left: 2px;
+}

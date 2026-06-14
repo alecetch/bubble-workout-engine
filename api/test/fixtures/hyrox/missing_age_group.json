@@ -1,0 +1,18 @@
+{
+  "submissionId": "missing_age_group",
+  "athlete": { "sex": "male", "ageGroup": null, "division": "open" },
+  "race": { "finishTimeSeconds": 4440, "division": "open" },
+  "roxzoneMode": "explicit_splits",
+  "splits": [
+    { "segmentKey": "run_1", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "run_8", "type": "run", "timeSeconds": 300 },
+    { "segmentKey": "ski_erg", "type": "station", "timeSeconds": 300 },
+    { "segmentKey": "sled_push", "type": "station", "timeSeconds": 120 },
+    { "segmentKey": "sled_pull", "type": "station", "timeSeconds": 120 },
+    { "segmentKey": "burpee_broad_jump", "type": "station", "timeSeconds": 300 },
+    { "segmentKey": "row", "type": "station", "timeSeconds": 300 },
+    { "segmentKey": "farmers_carry", "type": "station", "timeSeconds": 120 },
+    { "segmentKey": "sandbag_lunges", "type": "station", "timeSeconds": 240 },
+    { "segmentKey": "wall_balls", "type": "station", "timeSeconds": 300 }
+  ]
+}

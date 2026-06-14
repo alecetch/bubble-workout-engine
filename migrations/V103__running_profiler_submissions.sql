@@ -1,0 +1,32 @@
+CREATE TABLE running_profiler_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  email TEXT,
+  display_name TEXT,
+  age INTEGER,
+  gender TEXT,
+  height_cm INTEGER,
+  weight_kg NUMERIC(5,2),
+  backgrounds JSONB NOT NULL DEFAULT '[]',
+  years_training TEXT,
+  weekly_running_volume TEXT,
+  runs_per_week TEXT,
+  strength_sessions_per_week TEXT,
+  hybrid_sessions_per_week TEXT,
+  primary_goals JSONB NOT NULL DEFAULT '[]',
+  current_concern TEXT,
+  typical_terrain TEXT,
+  injury_limitations TEXT,
+  body_composition_goal TEXT,
+  running_limiter TEXT,
+  main_competition_goal TEXT,
+  target_5k_seconds INTEGER,
+  target_10k_seconds INTEGER,
+  target_hyrox_seconds INTEGER,
+  additional_context TEXT,
+  marketing_consent BOOLEAN NOT NULL DEFAULT false,
+  source TEXT NOT NULL DEFAULT 'manual',
+  ip_hash TEXT
+);
+
+CREATE INDEX idx_running_profiler_submissions_created ON running_profiler_submissions (created_at DESC);
