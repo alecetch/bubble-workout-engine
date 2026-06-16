@@ -17,7 +17,7 @@ function limiterName(analysisJson = {}) {
 }
 
 function contentText(content) {
-  if (Array.isArray(content)) return content.join("\n");
+  if (Array.isArray(content)) return content.filter((item) => typeof item === "string").join("\n");
   return String(content ?? "");
 }
 
@@ -54,6 +54,52 @@ function renderHeader() {
           </td>
         </tr>
       </table>
+    </td>
+  </tr>`;
+}
+
+function renderMuscleGroupSection(sectionData) {
+  const content = Array.isArray(sectionData.content) ? sectionData.content : [sectionData.content];
+  const textItems = content.filter((item) => typeof item === "string");
+  const diagram = content.find((item) => item?.__type === "muscle_diagram_pair") ?? null;
+  const textHtml = textItems
+    .map((item) => `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 8px;">${esc(enforceTone(String(item)))}</p>`)
+    .join("");
+  const diagramHtml = diagram
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:16px 0;">
+        <tr>
+          <td align="center">
+            <table cellpadding="0" cellspacing="0" border="0" role="presentation">
+              <tr>
+                <td style="width:248px;vertical-align:top;">${diagram.frontSvg}</td>
+                <td style="width:16px;"></td>
+                <td style="width:248px;vertical-align:top;">${diagram.backSvg}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding-top:8px;">
+            <p style="margin:0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;">
+              <span style="color:#ef4444;">&#9632;</span> Limiter &nbsp;
+              <span style="color:#22c55e;">&#9632;</span> Asset &nbsp;
+              <span style="color:#f97316;">&#9632;</span> Mixed &nbsp;
+              <span style="color:#64748b;">&#9632;</span> Neutral
+            </p>
+          </td>
+        </tr>
+      </table>`
+    : "";
+  const titleText = esc(String(sectionData.title ?? "").toUpperCase());
+  return `
+  <tr>
+    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;">
+      <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">${titleText}</span>
+    </td>
+  </tr>
+  <tr>
+    <td style="background-color:#ffffff;padding:16px 32px 20px;border-bottom:1px solid #e2e8f0;">
+      ${textHtml}${diagramHtml}
     </td>
   </tr>`;
 }
@@ -574,6 +620,8 @@ function renderSection(section, analysisJson) {
       return "";
     case "race_split_breakdown":
       return renderSplitTable(section, analysisJson);
+    case "muscle_group_profile":
+      return renderMuscleGroupSection(section);
     default:
       return renderTextCard(section);
   }

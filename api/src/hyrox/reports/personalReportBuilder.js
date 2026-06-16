@@ -3,6 +3,7 @@ import { buildRecommendations, buildGapBreakdown, formatGapBreakdown } from "./r
 import { buildBackgroundSection } from "./backgroundPersonaliser.js";
 import { buildTrainingVolumeAdvice } from "./trainingVolumeAdvisor.js";
 import { buildRoxzoneSection } from "./roxzoneCommentary.js";
+import { renderMuscleDiagramPair } from "../engine/muscleDiagramRenderer.js";
 
 function hasContext(athleteContext) {
   return athleteContext && Object.keys(athleteContext).length > 0;
@@ -138,6 +139,22 @@ function buildSplitTableText(analysisJson, athleteContext = {}) {
   return lines;
 }
 
+function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
+  const { conclusion = {}, stationClassifications = [] } = muscleGroupProfile;
+  const content = [];
+  if (conclusion.headline) content.push(`${conclusion.headline}.`);
+  if (conclusion.body) content.push(conclusion.body);
+  if (conclusion.trainingHint) content.push(`Training focus: ${conclusion.trainingHint}`);
+  const diagramPair = renderMuscleDiagramPair(muscleGroupProfile, sex);
+  if (diagramPair) {
+    content.push({ __type: "muscle_diagram_pair", frontSvg: diagramPair.frontSvg, backSvg: diagramPair.backSvg });
+  }
+  content.push(...stationClassifications.map(
+    (station) => `${station.label}: ${station.classification} (${station.percentile != null ? `${Math.round(station.percentile)}th percentile` : "unranked"})`,
+  ));
+  return content;
+}
+
 export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}) {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
   const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
@@ -145,6 +162,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   const recommendations = buildRecommendations(analysisJson, insights, athleteContext);
   const gainSeconds = analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? 0;
   const ctxCopy = hasContext(athleteContext) ? contextCopy(analysisJson, athleteContext) : null;
+  const muscleGroupProfile = analysisJson.muscleGroupProfile ?? null;
   const sections = [];
   const summary = [];
 
@@ -186,6 +204,10 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     ? ` (${formatGain(limiterGap)} to benchmark median; ${formatGain(headlineGain)} to your target finish time)`
     : "";
   sections.push(section("time_potential", "Time Potential", `Estimated opportunity: ${formatGain(headlineGain)} potential gain.${clarification} This is an estimate, not a guarantee.`));
+  if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound) {
+    const sex = analysisJson.athlete?.sex ?? "male";
+    sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
+  }
   sections.push(section("running_fatigue", "Running and Fatigue Profile", analysisJson.runningAnalysis?.available ? `Run fade was ${formatPercent(analysisJson.runningAnalysis.runFadePct)}.` : "Run fade could not be calculated from the supplied splits."));
   const volumeAdvice = buildTrainingVolumeAdvice(analysisJson, athleteContext);
   if (volumeAdvice) {

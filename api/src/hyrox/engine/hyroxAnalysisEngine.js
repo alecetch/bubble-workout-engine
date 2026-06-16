@@ -10,6 +10,7 @@ import { analyseContext } from "./contextAnalyser.js";
 import { classifyArchetype } from "./archetypeClassifier.js";
 import { buildFocusAreas } from "./focusAreaBuilder.js";
 import { computeExactTargetMap, attachExactTargets } from "./splitTargetCalculator.js";
+import { analyseMuscleGroups } from "./muscleGroupAnalyser.js";
 
 function markSegmentRoles(segments, limiter, strength) {
   return segments.map((segment) => ({
@@ -117,6 +118,10 @@ export function analyseSubmission(input = {}) {
     contextAnalysis,
     timePotential,
   });
+  const muscleGroupProfile = analyseMuscleGroups({
+    stationBreakdown: rankedStations,
+    analysisScope: scope,
+  });
 
   return {
     submissionId: input.submissionId ?? null,
@@ -160,5 +165,6 @@ export function analyseSubmission(input = {}) {
     contextAnalysis,
     athleteArchetype,
     recommendedFocusAreas,
+    muscleGroupProfile,
   };
 }
