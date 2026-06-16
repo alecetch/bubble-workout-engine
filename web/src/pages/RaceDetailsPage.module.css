@@ -100,6 +100,52 @@
   gap: 14px;
 }
 
+.selectField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selectLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.required {
+  color: var(--accent-red);
+  margin-left: 2px;
+}
+
+.select {
+  width: 100%;
+  background: var(--bg-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 15px;
+  transition: border-color 0.15s;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.selectError {
+  border-color: var(--accent-red);
+}
+
+.errorMsg {
+  font-size: 12px;
+  color: var(--accent-red);
+  margin-top: 2px;
+}
+
 .actions {
   margin-top: 28px;
   display: flex;

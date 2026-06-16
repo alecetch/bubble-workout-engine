@@ -11,7 +11,8 @@ import { SplitImportPanel } from "../components/SplitImportPanel";
 import { loadDraft, saveDraft } from "../utils/storage";
 import { parseTimeToSeconds, formatSeconds } from "../utils/time";
 import { fetchHyroxResultsImport, trackEvent } from "../utils/api";
-import { normalizeName, saveImportedHyroxResult } from "../utils/hyroxImportDraft";
+import { ageGroupFromAge, normalizeAgeGroup, normalizeName, saveImportedHyroxResult } from "../utils/hyroxImportDraft";
+import { findHyroxEventByName, HYROX_KNOWN_EVENTS } from "../data/hyroxEvents";
 import type { HyroxCalculatorDraft } from "../types";
 import type { HyroxParseResult } from "../utils/hyroxResultsParser";
 import styles from "./RaceDetailsPage.module.css";
@@ -19,6 +20,7 @@ import styles from "./RaceDetailsPage.module.css";
 type Division = "open" | "pro" | "doubles" | "relay";
 
 const VALID_DIVISIONS: Division[] = ["open", "pro", "doubles", "relay"];
+const AGE_GROUP_OPTIONS = ["18-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69"];
 
 export function RaceDetailsPage() {
   const navigate = useNavigate();
@@ -28,11 +30,12 @@ export function RaceDetailsPage() {
   const [gender, setGender] = useState<"male" | "female">(
     draft?.athlete?.gender ?? "male",
   );
-  const [age, setAge] = useState(
-    draft?.athlete?.ageOnRaceDay ? String(draft.athlete.ageOnRaceDay) : "",
+  const [ageGroup, setAgeGroup] = useState(
+    normalizeAgeGroup(draft?.athlete?.ageGroup) ?? ageGroupFromAge(draft?.athlete?.ageOnRaceDay) ?? "",
   );
   const [raceName, setRaceName] = useState(draft?.race?.raceName ?? "");
   const [raceDate, setRaceDate] = useState(draft?.race?.raceDate ?? "");
+  const [knownEventName, setKnownEventName] = useState("");
   const [division, setDivision] = useState<Division>(draft?.race?.division ?? "open");
   const [finishTime, setFinishTime] = useState(
     draft?.race?.finishTimeSeconds
@@ -41,7 +44,7 @@ export function RaceDetailsPage() {
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [importSucceeded, setImportSucceeded] = useState(false);
-  const [importTab, setImportTab] = useState<"paste" | "url">("paste");
+  const [importTab, setImportTab] = useState<"paste" | "url">("url");
   const [importUrl, setImportUrl] = useState("");
   const [importUrlError, setImportUrlError] = useState<string | null>(null);
   const [importUrlLoading, setImportUrlLoading] = useState(false);
@@ -54,9 +57,8 @@ export function RaceDetailsPage() {
   function validate(): boolean {
     const errs: Record<string, string> = {};
 
-    const ageNum = parseInt(age, 10);
-    if (!age || isNaN(ageNum) || ageNum < 16 || ageNum > 80) {
-      errs.age = "Enter your age (16–80).";
+    if (!ageGroup) {
+      errs.ageGroup = "Select your age range.";
     }
 
     const parsedFinish = parseTimeToSeconds(finishTime);
@@ -71,7 +73,16 @@ export function RaceDetailsPage() {
   function applyImportedResult(result: HyroxParseResult) {
     const normalizedName = normalizeName(result.athleteName);
     if (normalizedName) setName(normalizedName);
-    if (result.raceName) setRaceName(result.raceName);
+    const importedAgeGroup = normalizeAgeGroup(result.ageGroup) ?? ageGroupFromAge(result.athleteAge);
+    if (importedAgeGroup) setAgeGroup(importedAgeGroup);
+    if (result.raceName) {
+      setRaceName(result.raceName);
+      const knownEvent = findHyroxEventByName(result.raceName);
+      if (knownEvent) {
+        setKnownEventName(knownEvent.name);
+        setRaceDate(knownEvent.startDate);
+      }
+    }
     if (result.division && VALID_DIVISIONS.includes(result.division)) {
       setDivision(result.division);
     }
@@ -120,7 +131,7 @@ export function RaceDetailsPage() {
       athlete: {
         name: normalizeName(name) ?? undefined,
         gender,
-        ageOnRaceDay: parseInt(age, 10),
+        ageGroup,
       },
       race: {
         raceName: raceName.trim() || undefined,
@@ -134,12 +145,26 @@ export function RaceDetailsPage() {
     void navigate("/hyrox-calculator/splits");
   }
 
+  function handleKnownEventChange(eventName: string) {
+    setKnownEventName(eventName);
+    const event = HYROX_KNOWN_EVENTS.find((item) => item.name === eventName);
+    if (!event) return;
+    setRaceName(event.name);
+    setRaceDate(event.startDate);
+  }
+
+  function applyKnownEventDateFromName(value: string) {
+    const event = findHyroxEventByName(value);
+    if (!event) return;
+    setKnownEventName(event.name);
+    if (!raceDate) setRaceDate(event.startDate);
+  }
+
   return (
     <Shell>
       <div className={styles.layout}>
-        {/* Left pitch column */}
         <div className={styles.pitchCol}>
-          <div className={styles.eyebrow}>Forma — Performance Engineer</div>
+          <div className={styles.eyebrow}>Forma - Performance Engineer</div>
           <h1 className={styles.headline}>
             Data in.
             <br />
@@ -149,7 +174,7 @@ export function RaceDetailsPage() {
           </h1>
           <p className={styles.subline}>
             Enter your HYROX race result and get a personalised performance
-            analysis delivered to your inbox — free.
+            analysis delivered to your inbox - free.
           </p>
           <ul className={styles.bullets}>
             {[
@@ -159,17 +184,14 @@ export function RaceDetailsPage() {
               "Understand your run/work balance and roxzone",
             ].map((b) => (
               <li key={b} className={styles.bullet}>
-                <span className={styles.bulletIcon}>→</span>
+                <span className={styles.bulletIcon}>-&gt;</span>
                 <span>{b}</span>
               </li>
             ))}
           </ul>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Link
-              to="/hyrox-calculator/sample-report"
-              className={styles.externalLink}
-            >
-              View Sample Report →
+            <Link to="/hyrox-calculator/sample-report" className={styles.externalLink}>
+              View Sample Report -&gt;
             </Link>
             <a
               href="https://results.hyrox.com"
@@ -177,23 +199,22 @@ export function RaceDetailsPage() {
               rel="noopener noreferrer"
               className={styles.externalLink}
             >
-              Need your results? Visit results.hyrox.com ↗
+              Need your results? Visit results.hyrox.com
             </a>
           </div>
         </div>
 
-        {/* Right form column */}
         <div className={styles.formCol}>
           <FormPanel>
             <h2 className={styles.formTitle}>Your Race Details</h2>
             <div className={styles.fields}>
               <div data-testid="inline-import-panel">
                 <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  <SecondaryButton type="button" onClick={() => setImportTab("paste")}>
-                    Paste
-                  </SecondaryButton>
                   <SecondaryButton type="button" onClick={() => setImportTab("url")}>
                     URL
+                  </SecondaryButton>
+                  <SecondaryButton type="button" onClick={() => setImportTab("paste")}>
+                    Paste
                   </SecondaryButton>
                 </div>
 
@@ -227,7 +248,7 @@ export function RaceDetailsPage() {
                         }}
                       >
                         <strong style={{ color: "var(--text-primary)" }}>Your results page is open in a new tab.</strong>
-                        <span> Press <kbd>Ctrl+A</kbd> to select all, <kbd>Ctrl+C</kbd> to copy, then paste below.</span>
+                        <span> Copy the page text that includes <strong>WORKOUT SUMMARY</strong> and, if shown, <strong>RACE REPLAY</strong>, then paste it below.</span>
                       </div>
                     )}
                     <SplitImportPanel onImport={handleInlineImport} onCancel={() => undefined} />
@@ -237,7 +258,7 @@ export function RaceDetailsPage() {
                 {importTab === "url" && !importSucceeded && (
                   <div>
                     <label style={{ display: "block", color: "var(--text-secondary)", marginBottom: 8 }}>
-                      Paste a link to your results page and we'll try to import automatically.
+                      Preferred: paste your results.hyrox.com result link and we'll import your result automatically.
                     </label>
                     <input
                       data-testid="inline-url-input"
@@ -300,17 +321,27 @@ export function RaceDetailsPage() {
                   value={gender}
                   onChange={(v) => setGender(v as "male" | "female")}
                 />
-                <TextInput
-                  label="Age on Race Day"
-                  type="number"
-                  required
-                  placeholder="e.g. 35"
-                  min={16}
-                  max={80}
-                  value={age}
-                  onChange={(e) => setAge(e.target.value)}
-                  error={errors.age}
-                />
+                <div className={styles.selectField}>
+                  <label htmlFor="age-group" className={styles.selectLabel}>
+                    Age Range <span className={styles.required}>*</span>
+                  </label>
+                  <select
+                    id="age-group"
+                    value={ageGroup}
+                    onChange={(event) => setAgeGroup(event.target.value)}
+                    className={`${styles.select} ${errors.ageGroup ? styles.selectError : ""}`}
+                  >
+                    <option value="">Select range</option>
+                    {AGE_GROUP_OPTIONS.map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
+                  {errors.ageGroup && (
+                    <div className={styles.errorMsg}>
+                      {errors.ageGroup}
+                    </div>
+                  )}
+                </div>
               </div>
               <SegmentedControl
                 label="Division"
@@ -322,9 +353,7 @@ export function RaceDetailsPage() {
                   { value: "relay", label: "Relay" },
                 ]}
                 value={division}
-                onChange={(v) =>
-                  setDivision(v as Division)
-                }
+                onChange={(v) => setDivision(v as Division)}
               />
               <TimeInput
                 label="Finish Time"
@@ -335,6 +364,24 @@ export function RaceDetailsPage() {
                 onChange={(e) => setFinishTime(e.target.value)}
                 error={errors.finishTime}
               />
+              <div className={styles.selectField}>
+                <label htmlFor="known-hyrox-event" className={styles.selectLabel}>
+                  HYROX Event
+                </label>
+                <select
+                  id="known-hyrox-event"
+                  value={knownEventName}
+                  onChange={(event) => handleKnownEventChange(event.target.value)}
+                  className={styles.select}
+                >
+                  <option value="">Select event</option>
+                  {HYROX_KNOWN_EVENTS.map((event) => (
+                    <option key={`${event.name}-${event.startDate}`} value={event.name}>
+                      {event.name} ({event.startDate})
+                    </option>
+                  ))}
+                </select>
+              </div>
               <TextInput
                 label="Athlete Name"
                 placeholder="Optional"
@@ -349,7 +396,11 @@ export function RaceDetailsPage() {
                 label="Race Name"
                 placeholder="e.g. HYROX Manchester"
                 value={raceName}
-                onChange={(e) => setRaceName(e.target.value)}
+                onChange={(e) => {
+                  setRaceName(e.target.value);
+                  setKnownEventName("");
+                }}
+                onBlur={(e) => applyKnownEventDateFromName(e.target.value)}
               />
               <TextInput
                 label="Race Date"
@@ -360,7 +411,7 @@ export function RaceDetailsPage() {
 
               <div className={styles.actions}>
                 <PrimaryButton type="button" fullWidth onClick={handleNext}>
-                  Next: Enter Your Splits →
+                  Next: Enter Your Splits -&gt;
                 </PrimaryButton>
               </div>
             </div>

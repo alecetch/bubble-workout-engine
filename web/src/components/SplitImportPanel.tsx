@@ -43,7 +43,8 @@ export function SplitImportPanel({ onImport, onCancel }: SplitImportPanelProps) 
     <div style={panelStyle}>
       <h2 style={{ marginTop: 0 }}>Import your results</h2>
       <p style={{ color: "var(--text-secondary)" }}>
-        Open your results on results.hyrox.com, press <kbd>Ctrl+A</kbd> to select all, then copy and paste below.
+        Open your result on results.hyrox.com and copy the page text that includes <strong>WORKOUT SUMMARY</strong> plus <strong>RACE REPLAY</strong> if it is shown.
+        Paste both sections below so we can import your splits and station entry/exit detail.
       </p>
       <textarea
         data-testid="paste-area"
@@ -79,7 +80,7 @@ export function SplitImportPanel({ onImport, onCancel }: SplitImportPanelProps) 
           To import your splits:
           <ol style={{ margin: "8px 0 0 20px", padding: 0, lineHeight: 1.8 }}>
             <li>Open the link in your browser</li>
-            <li>Press <kbd>Ctrl+A</kbd> (or <kbd>Cmd+A</kbd>) to select all</li>
+            <li>Select the page text that includes <strong>WORKOUT SUMMARY</strong> and, if available, <strong>RACE REPLAY</strong></li>
             <li>Copy (<kbd>Ctrl+C</kbd>)</li>
             <li>Paste the copied text here instead</li>
           </ol>
