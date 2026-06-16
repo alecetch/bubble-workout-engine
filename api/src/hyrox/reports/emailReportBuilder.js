@@ -611,27 +611,44 @@ function renderMuscleGroupSection(section) {
       return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;${border}">${esc(enforceTone(item))}</p>`;
     })
     .join("");
+  const diagramLabel = (text) =>
+    `<div style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;text-align:center;margin-bottom:6px;">${text}</div>`;
   const diagramHtml = diagram
-    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:16px 0 0;">
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:20px 0 0;">
         <tr>
           <td align="center">
             <table cellpadding="0" cellspacing="0" border="0" role="presentation">
               <tr>
-                <td style="width:248px;vertical-align:top;">${diagram.frontSvg}</td>
-                <td style="width:16px;"></td>
-                <td style="width:248px;vertical-align:top;">${diagram.backSvg}</td>
+                <td style="width:260px;vertical-align:top;">
+                  ${diagramLabel("Front")}
+                  ${diagram.frontSvg}
+                </td>
+                <td style="width:8px;"></td>
+                <td style="width:260px;vertical-align:top;">
+                  ${diagramLabel("Back")}
+                  ${diagram.backSvg}
+                </td>
+              </tr>
+              <tr>
+                <td colspan="3" style="padding-top:14px;text-align:center;">
+                  <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:0 auto;">
+                    <tr>
+                      <td style="padding:0 14px 0 0;">
+                        <span style="color:#ef4444;font-size:15px;vertical-align:middle;">&#9679;</span>
+                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">Focus area</span>
+                      </td>
+                      <td style="padding:0 14px 0 0;">
+                        <span style="color:#22c55e;font-size:15px;vertical-align:middle;">&#9679;</span>
+                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">Race strength</span>
+                      </td>
+                      <td>
+                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;font-style:italic;">Unshaded = no clear signal</span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
               </tr>
             </table>
-          </td>
-        </tr>
-        <tr>
-          <td align="center" style="padding-top:8px;">
-            <p style="margin:0;font-size:11px;color:#94a3b8;font-family:Arial,Helvetica,sans-serif;">
-              <span style="color:#ef4444;">&#9632;</span> Limiter &nbsp;
-              <span style="color:#22c55e;">&#9632;</span> Asset &nbsp;
-              <span style="color:#f97316;">&#9632;</span> Mixed &nbsp;
-              <span style="color:#64748b;">&#9632;</span> Neutral
-            </p>
           </td>
         </tr>
       </table>`
