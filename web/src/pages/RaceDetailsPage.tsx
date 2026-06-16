@@ -340,6 +340,10 @@ export function RaceDetailsPage() {
                 placeholder="Optional"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v) setName(v.replace(/\S+/g, (w) => w.toLowerCase().replace(/(^|[-'])(\w)/g, (_, s, c: string) => s + c.toUpperCase())));
+                }}
               />
               <TextInput
                 label="Race Name"
