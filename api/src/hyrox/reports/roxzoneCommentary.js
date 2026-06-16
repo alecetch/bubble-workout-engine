@@ -1,4 +1,5 @@
 import { formatGain, formatPercentile, formatTime } from "./copyFormatter.js";
+import { SEGMENT_MAP } from "../config/segmentMap.js";
 
 const TRANSITION_TIPS = Object.freeze([
   "Ways to cut transition time without adding training load:",
@@ -12,6 +13,7 @@ const TRANSITION_TIPS = Object.freeze([
 const PRO_ROXZONE_NOTE = "For context, pro athletes typically complete all transitions in around 3-4 minutes — a reminder of how much headroom exists to improve through race rehearsal alone, without adding training load.";
 
 const NEAR_MEDIAN_GAP_SECONDS = 30;
+const SEGMENT_LABELS = new Map(SEGMENT_MAP.map((segment) => [segment.segmentKey, segment.displayName]));
 
 function finiteNumber(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -27,6 +29,28 @@ function targetGapForRoxzone(rox, roxSegment) {
   return Number.isFinite(roxSegment?.timeGapToExactTargetSeconds)
     ? roxSegment.timeGapToExactTargetSeconds
     : rox.timeGapToMedianSeconds;
+}
+
+function stationLabel(stationKey) {
+  return SEGMENT_LABELS.get(stationKey) ?? String(stationKey ?? "").replace(/_/g, " ");
+}
+
+function entryExitLines(rox) {
+  if (!rox.entryExitAvailable) return [];
+  const lines = [];
+  const combined = Array.isArray(rox.stationOverhead) ? rox.stationOverhead[0] : null;
+  if (combined) {
+    lines.push(`Race replay detail: your slowest combined station entry and exit was ${stationLabel(combined.stationKey)} at ${formatTime(combined.totalSeconds)} (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`);
+  } else {
+    const entry = rox.worstEntry ?? null;
+    const exit = rox.worstExit ?? null;
+    if (entry) lines.push(`Race replay detail: your slowest station entry was ${stationLabel(entry.stationKey)} at ${formatTime(entry.seconds)}.`);
+    if (exit) lines.push(`Race replay detail: your slowest station exit was ${stationLabel(exit.stationKey)} at ${formatTime(exit.seconds)}.`);
+  }
+  if (rox.entryTrend === "rising") {
+    lines.push("Your station entries got slower later in the race, which usually points to navigation, breathing reset or setup friction under fatigue.");
+  }
+  return lines;
 }
 
 function buildInferredSection(rox, roxSegment) {
@@ -59,7 +83,10 @@ function buildInferredSection(rox, roxSegment) {
     lines.push("A percentile comparison is not available for this result.");
   }
 
-  lines.push("Note: transition time is estimated from unallocated race time - the engine cannot directly measure individual transitions.");
+  if (!rox.entryExitAvailable) {
+    lines.push("Note: transition time is estimated from unallocated race time - the engine cannot directly measure individual transitions.");
+  }
+  lines.push(...entryExitLines(rox));
   return lines;
 }
 
@@ -96,6 +123,7 @@ function buildExplicitSection(rox, roxSegment) {
     lines.push("A percentile comparison is not available for this result.");
   }
 
+  lines.push(...entryExitLines(rox));
   return lines;
 }
 

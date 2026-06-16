@@ -68,7 +68,7 @@ function contextForPipeline(body = {}) {
   };
 }
 
-function submissionInput(body = {}) {
+export function submissionInput(body = {}) {
   const athlete = body.athlete ?? {};
   const race = body.race ?? {};
   const ageGroup = athlete.ageGroup ?? ageGroupFromAge(athlete.ageOnRaceDay);
@@ -93,6 +93,7 @@ function submissionInput(body = {}) {
     },
     splits: body.splits ?? [],
     penalties: body.penalties ?? [],
+    raceReplay: body.raceReplay ?? [],
     athleteContext,
     roxzoneMode: body.roxzoneMode,
   };

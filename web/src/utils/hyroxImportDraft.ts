@@ -1,16 +1,22 @@
-import type { HyroxCalculatorDraft, HyroxPenalty, HyroxSplit } from "../types";
+import type { HyroxCalculatorDraft, HyroxPenalty, HyroxRaceReplaySplit, HyroxSplit } from "../types";
 import type { HyroxParseResult } from "./hyroxResultsParser";
 import { loadDraft, saveDraft } from "./storage";
 
 export function normalizeName(raw: string | null): string | null {
   if (!raw) return null;
+  function titleCase(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/\S+/g, (word) => word.replace(/(^|[-'])(\w)/g, (_, prefix: string, char: string) => `${prefix}${char.toUpperCase()}`));
+  }
   // HYROX exports names as "Last, First" — convert to "First Last"
   if (raw.includes(",")) {
     const [last, first] = raw.split(",").map((s) => s.trim());
-    if (first && last) return `${first} ${last}`;
-    return first || last || null;
+    if (first && last) return titleCase(`${first} ${last}`);
+    return first || last ? titleCase(first || last) : null;
   }
-  return raw;
+  return titleCase(raw);
 }
 
 export function saveImportedHyroxResult(result: HyroxParseResult): HyroxCalculatorDraft {
@@ -25,6 +31,11 @@ export function saveImportedHyroxResult(result: HyroxParseResult): HyroxCalculat
   const penalties: HyroxPenalty[] = result.penalties.map((penalty) => ({
     station: penalty.segmentKey,
     penaltySeconds: penalty.penaltySeconds,
+  }));
+  const raceReplay: HyroxRaceReplaySplit[] = (result.raceReplay ?? []).map((item) => ({
+    station: item.station,
+    entrySeconds: item.entrySeconds,
+    exitSeconds: item.exitSeconds,
   }));
 
   const normalizedName = normalizeName(result.athleteName);
@@ -43,6 +54,7 @@ export function saveImportedHyroxResult(result: HyroxParseResult): HyroxCalculat
     },
     splits,
     penalties,
+    raceReplay,
     roxzoneTimeSeconds: result.roxzoneSeconds ?? undefined,
   } as HyroxCalculatorDraft;
 

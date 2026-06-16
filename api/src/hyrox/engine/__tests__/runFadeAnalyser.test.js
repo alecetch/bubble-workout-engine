@@ -47,3 +47,53 @@ test("run1PacingDiagnosis is started_slightly_fast when run1VsMedianPct is 5-7%"
 
   assert.equal(result.run1PacingDiagnosis, "started_slightly_fast");
 });
+
+test("penaltyAdjustedSplitMap is used for fade while preserving penalty details", () => {
+  const splitMap = makeSplitMap([300, 300, 300, 300, 600, 300, 300, 295]);
+  const penaltyAdjustedSplitMap = makeSplitMap([300, 300, 300, 300, 300, 300, 300, 295]);
+
+  const result = analyseRunFade(
+    {
+      splitMap,
+      penaltyAdjustedSplitMap,
+      penalties: [{ runKey: "run_5", penaltySeconds: 300 }],
+    },
+    { primaryBenchmarkGroup: null },
+  );
+
+  assert.equal(result.penaltyCorrected, true);
+  assert.equal(result.runPattern, "even");
+  assert.deepEqual(result.penaltyAffectedRuns, [
+    { runKey: "run_5", penaltySeconds: 300, rawSeconds: 600, adjustedSeconds: 300 },
+  ]);
+});
+
+test("strong finish is reported when final run is among fastest adjusted splits", () => {
+  const result = analyseRunFade(
+    { splitMap: makeSplitMap([330, 325, 320, 318, 316, 314, 312, 290]) },
+    { primaryBenchmarkGroup: null },
+  );
+
+  assert.equal(result.strongFinish, true);
+  assert.equal(result.runPattern, "negative_split");
+});
+
+test("runPattern is positive_split when late avg is notably slower than early avg", () => {
+  const result = analyseRunFade(
+    { splitMap: makeSplitMap([280, 282, 284, 295, 310, 330, 350, 370]) },
+    { primaryBenchmarkGroup: null },
+  );
+
+  assert.equal(result.runPattern, "positive_split");
+  assert.equal(result.strongFinish, false);
+});
+
+test("no penalty produces penaltyCorrected false and empty penaltyAffectedRuns", () => {
+  const result = analyseRunFade(
+    { splitMap: makeSplitMap([300, 300, 300, 300, 300, 300, 300, 300]), penalties: [] },
+    { primaryBenchmarkGroup: null },
+  );
+
+  assert.equal(result.penaltyCorrected, false);
+  assert.deepEqual(result.penaltyAffectedRuns, []);
+});

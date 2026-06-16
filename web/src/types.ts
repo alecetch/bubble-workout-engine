@@ -11,6 +11,12 @@ export interface HyroxPenalty {
   penaltySeconds: number;
 }
 
+export interface HyroxRaceReplaySplit {
+  station: string;
+  entrySeconds: number | null;
+  exitSeconds: number | null;
+}
+
 export interface HyroxCalculatorDraft {
   athlete: {
     name?: string;
@@ -27,6 +33,7 @@ export interface HyroxCalculatorDraft {
   };
   splits: HyroxSplit[];
   penalties?: HyroxPenalty[];
+  raceReplay?: HyroxRaceReplaySplit[];
   athleteContext?: {
     trainingAge?: string;
     primaryBackground?: string;
@@ -54,6 +61,7 @@ export interface HyroxAnalysisRequest {
   };
   splits: HyroxSplit[];
   penalties?: HyroxPenalty[];
+  raceReplay?: HyroxRaceReplaySplit[];
   athleteContext?: {
     trainingAge?: string;
     primaryBackground?: string;

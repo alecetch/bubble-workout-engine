@@ -1,4 +1,5 @@
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
+import { STATION_KEYS } from "../config/segmentMap.js";
 import { formatGain, formatPercentile, formatTime, label } from "./copyFormatter.js";
 
 function daysToRace(athleteContext = {}) {
@@ -167,6 +168,28 @@ function safePush(items, item) {
   if (!item) return;
   if (items.some((existing) => existing.title === item.title)) return;
   if (items.length < 3) items.push({ ...item, priority: items.length + 1 });
+}
+
+function penaltyRecommendation(analysisJson = {}, timeHorizon) {
+  const penalties = analysisJson.penalties ?? [];
+  const totalPenalty = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
+  if (totalPenalty < 120) return null;
+  const affectedStations = penalties
+    .map((penalty) => {
+      const runNum = String(penalty.runKey ?? penalty.segmentKey ?? "").match(/\d+/)?.[0];
+      return runNum ? STATION_KEYS[Number(runNum) - 2] : null;
+    })
+    .filter(Boolean);
+  const stationCopy = affectedStations.length > 0
+    ? ` around ${affectedStations.map((station) => label(station)).join(", ")}`
+    : "";
+  return {
+    title: "Penalty avoidance",
+    actionId: "penalty_avoidance",
+    rationale: `Avoid the penalt${penalties.length > 1 ? "ies" : "y"}${stationCopy}: this result includes ${formatGain(totalPenalty)} of recorded penalties, which is a direct race-day execution gain before any fitness improvement.`,
+    timeHorizon,
+    safetyNote: null,
+  };
 }
 
 export function buildRecommendations(analysisJson = {}, insights = [], athleteContext = {}) {

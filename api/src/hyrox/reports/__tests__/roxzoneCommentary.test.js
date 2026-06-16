@@ -88,4 +88,28 @@ describe("buildRoxzoneSection", () => {
     const lines = asArray(buildRoxzoneSection(analysis)).join("\n");
     assert.match(lines, /5%/);
   });
+
+  it("includes race replay entry and exit detail when available", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "inferred_total",
+        totalSeconds: 300,
+        percentOfTotalTime: 0.06,
+        percentile: 35,
+        timeGapToMedianSeconds: 60,
+        entryExitAvailable: true,
+        entryTrend: "rising",
+        stationOverhead: [
+          { stationKey: "sandbag_lunges", entrySeconds: 61, exitSeconds: 78, totalSeconds: 139 },
+        ],
+      },
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).join("\n");
+    assert.match(lines, /Race replay detail/i);
+    assert.match(lines, /Sandbag Lunges/);
+    assert.match(lines, /2:19/);
+    assert.match(lines, /got slower later/i);
+    assert.doesNotMatch(lines, /estimated from unallocated/i);
+  });
 });

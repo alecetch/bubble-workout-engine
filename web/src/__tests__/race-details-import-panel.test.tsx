@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { RaceDetailsPage } from "../pages/RaceDetailsPage";
-import { clearDraft, loadDraft } from "../utils/storage";
+import { clearDraft, loadDraft, saveDraft } from "../utils/storage";
 import { fetchHyroxResultsImport } from "../utils/api";
 import { FULL_PAGE_TEXT } from "./hyrox-results-parser.test";
 
@@ -49,8 +49,23 @@ describe("RaceDetailsPage inline import panel", () => {
 
     expect(screen.getByTestId("import-success-badge")).toBeInTheDocument();
     expect(screen.queryByTestId("manual-entry-separator")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/athlete name/i)).toHaveValue("Gaston Vanadia");
     expect(screen.getByLabelText(/finish time/i)).toHaveValue("1:35:38");
+    expect(loadDraft()?.athlete?.name).toBe("Gaston Vanadia");
     expect(loadDraft()?.splits?.length).toBeGreaterThan(0);
+  });
+
+  test("Existing draft athlete name renders in title case", () => {
+    saveDraft({
+      athlete: { name: "gaston vanadia", gender: "male", ageOnRaceDay: 35 },
+      race: { division: "open", finishTimeSeconds: 5738 },
+      splits: [],
+      marketingConsent: false,
+    });
+
+    renderPage();
+
+    expect(screen.getByLabelText(/athlete name/i)).toHaveValue("Gaston Vanadia");
   });
 
   test("URL tab renders on Screen 1", () => {

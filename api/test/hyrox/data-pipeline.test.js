@@ -135,8 +135,8 @@ test("doubles_record is stored but excluded from individual benchmark sets", () 
   assert.equal(validation.benchmarkEligibility.overall, false);
 });
 
-test("SEGMENT_MAP has exactly 24 entries", () => {
-  assert.equal(SEGMENT_MAP.length, 24);
+test("SEGMENT_MAP has exactly 40 entries", () => {
+  assert.equal(SEGMENT_MAP.length, 40);
 });
 
 test("STATION_KEYS has exactly 8 entries", () => {

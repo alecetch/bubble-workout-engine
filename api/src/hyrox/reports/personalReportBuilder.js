@@ -69,9 +69,47 @@ function penaltyNote(analysisJson) {
     ? ` Adjusted time without penalt${penalties.length > 1 ? "ies" : "y"}: ${formatTime(adjustedSeconds)}.`
     : "";
   const penaltyList = penalties
-    .map((penalty) => `${label(penalty.station)} (+${formatGain(penalty.penaltySeconds)})`)
+    .map((penalty) => {
+      const runNum = String(penalty.runKey ?? penalty.station ?? "").match(/\d+/)?.[0];
+      const runLabel = runNum ? `Run ${runNum}` : label(penalty.runKey ?? penalty.station ?? "");
+      return `${runLabel} (+${formatGain(penalty.penaltySeconds)})`;
+    })
     .join(", ");
   return `${penalties.length} penalt${penalties.length > 1 ? "ies" : "y"} recorded: ${penaltyList}.${adjustedLabel} This analysis is based on your actual recorded time.`;
+}
+
+function runNumber(runKey) {
+  const match = String(runKey ?? "").match(/^run_(\d)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function pacingNarrative(runPattern) {
+  if (runPattern === "strong_finish") return "You finished the run sequence strongly, which points to controlled pacing and useful late-race reserve.";
+  if (runPattern === "negative_split") return "Your later runs were faster than your early runs, suggesting disciplined pacing rather than a durability collapse.";
+  if (runPattern === "even") return "Your run pacing was relatively even, so the bigger opportunity is likely station execution or transition efficiency.";
+  if (runPattern === "positive_split") return "Your run profile faded through the race, which usually points to pacing discipline, station fatigue, or both.";
+  return null;
+}
+
+function runningFatigueContent(analysisJson) {
+  const running = analysisJson.runningAnalysis ?? {};
+  const content = [];
+  const affectedRuns = running.penaltyAffectedRuns ?? [];
+  if (affectedRuns.length > 0) {
+    for (const penalty of affectedRuns) {
+      const number = runNumber(penalty.runKey);
+      const labelText = number ? `Run ${number}` : label(penalty.runKey);
+      content.push(`${labelText} included a ${formatTime(penalty.penaltySeconds)} penalty. Your penalty-corrected split was ${formatTime(penalty.adjustedSeconds)}, so pacing analysis separates race execution from raw recorded time.`);
+    }
+  }
+  content.push(
+    running.available
+      ? `Run fade was ${formatPercent(running.runFadePct)}.`
+      : "Run fade could not be calculated from the supplied splits.",
+  );
+  const narrative = pacingNarrative(running.runPattern);
+  if (narrative) content.push(narrative);
+  return content;
 }
 
 function buildSplitTableText(analysisJson, athleteContext = {}) {
@@ -216,7 +254,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     const sex = analysisJson.athlete?.sex ?? "male";
     sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
   }
-  sections.push(section("running_fatigue", "Running and Fatigue Profile", analysisJson.runningAnalysis?.available ? `Run fade was ${formatPercent(analysisJson.runningAnalysis.runFadePct)}.` : "Run fade could not be calculated from the supplied splits."));
+  sections.push(section("running_fatigue", "Running and Fatigue Profile", runningFatigueContent(analysisJson)));
   const volumeAdvice = buildTrainingVolumeAdvice(analysisJson, athleteContext);
   if (volumeAdvice) {
     const content = [];

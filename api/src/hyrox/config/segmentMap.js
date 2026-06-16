@@ -23,8 +23,26 @@ export const SEGMENT_MAP = Object.freeze([
   { rawField: "run_8", segmentKey: "run_8", type: "run", displayName: "Run 8", raceOrder: 15 },
   { rawField: "work_8", segmentKey: "wall_balls", type: "station", displayName: "Wall Balls", raceOrder: 16 },
   { rawField: "roxzone_8", segmentKey: "roxzone_8", type: "roxzone", displayName: "Roxzone 8", raceOrder: null },
+  { rawField: "entry_1", segmentKey: "entry_1", type: "entry", displayName: "SkiErg Entry", raceOrder: null },
+  { rawField: "exit_1",  segmentKey: "exit_1",  type: "exit",  displayName: "SkiErg Exit", raceOrder: null },
+  { rawField: "entry_2", segmentKey: "entry_2", type: "entry", displayName: "Sled Push Entry", raceOrder: null },
+  { rawField: "exit_2",  segmentKey: "exit_2",  type: "exit",  displayName: "Sled Push Exit", raceOrder: null },
+  { rawField: "entry_3", segmentKey: "entry_3", type: "entry", displayName: "Sled Pull Entry", raceOrder: null },
+  { rawField: "exit_3",  segmentKey: "exit_3",  type: "exit",  displayName: "Sled Pull Exit", raceOrder: null },
+  { rawField: "entry_4", segmentKey: "entry_4", type: "entry", displayName: "Burpee BBJ Entry", raceOrder: null },
+  { rawField: "exit_4",  segmentKey: "exit_4",  type: "exit",  displayName: "Burpee BBJ Exit", raceOrder: null },
+  { rawField: "entry_5", segmentKey: "entry_5", type: "entry", displayName: "Row Entry", raceOrder: null },
+  { rawField: "exit_5",  segmentKey: "exit_5",  type: "exit",  displayName: "Row Exit", raceOrder: null },
+  { rawField: "entry_6", segmentKey: "entry_6", type: "entry", displayName: "Farmers Carry Entry", raceOrder: null },
+  { rawField: "exit_6",  segmentKey: "exit_6",  type: "exit",  displayName: "Farmers Carry Exit", raceOrder: null },
+  { rawField: "entry_7", segmentKey: "entry_7", type: "entry", displayName: "Sandbag Lunges Entry", raceOrder: null },
+  { rawField: "exit_7",  segmentKey: "exit_7",  type: "exit",  displayName: "Sandbag Lunges Exit", raceOrder: null },
+  { rawField: "entry_8", segmentKey: "entry_8", type: "entry", displayName: "Wall Balls Entry", raceOrder: null },
+  { rawField: "exit_8",  segmentKey: "exit_8",  type: "exit",  displayName: "Wall Balls Exit", raceOrder: null },
 ]);
 
 export const STATION_KEYS = Object.freeze(SEGMENT_MAP.filter((s) => s.type === "station").map((s) => s.segmentKey));
 export const RUN_KEYS = Object.freeze(SEGMENT_MAP.filter((s) => s.type === "run").map((s) => s.segmentKey));
 export const ROXZONE_KEYS = Object.freeze(SEGMENT_MAP.filter((s) => s.type === "roxzone").map((s) => s.segmentKey));
+export const ENTRY_KEYS = Object.freeze(SEGMENT_MAP.filter((s) => s.type === "entry").map((s) => s.segmentKey));
+export const EXIT_KEYS = Object.freeze(SEGMENT_MAP.filter((s) => s.type === "exit").map((s) => s.segmentKey));

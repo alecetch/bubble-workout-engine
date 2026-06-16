@@ -115,6 +115,27 @@ describe("parseHyroxResults", () => {
     expect(result.splits.map((split) => split.segmentKey)).toEqual(["ski_erg", "wall_balls"]);
   });
 
+  test("parses race replay rows from pasted page content", () => {
+    const replayText = [
+      FULL_PAGE_TEXT,
+      "Rox In\t00:05:00",
+      "1000m SkiErg In\t00:00:08",
+      "1000m SkiErg Out\t00:04:42",
+      "Rox Out\t00:00:29",
+      "50m Sled Push In\t00:00:04",
+      "Rox Out\t00:00:36",
+      "100m Sandbag Lunges In\t00:01:01",
+      "Rox Out\t00:01:18",
+    ].join("\n");
+
+    const result = parseHyroxResults(replayText);
+    expect(result.raceReplay).toEqual([
+      { station: "ski_erg", entrySeconds: 8, exitSeconds: 29 },
+      { station: "sled_push", entrySeconds: 4, exitSeconds: 36 },
+      { station: "sandbag_lunges", entrySeconds: 61, exitSeconds: 78 },
+    ]);
+  });
+
   test("maps divisions and warnings", () => {
     const pro = parseHyroxResults(`Division\tPRO\n${SPLITS_ONLY}`);
     expect(pro.division).toBe("pro");

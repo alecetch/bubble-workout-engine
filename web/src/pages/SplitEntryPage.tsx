@@ -18,6 +18,7 @@ export function SplitEntryPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
   const finishSeconds = draft?.race?.finishTimeSeconds ?? 0;
+  const raceReplay = draft?.raceReplay ?? [];
 
   // Raw string values per segment key
   const [rawValues, setRawValues] = useState<Record<string, string>>(() => {
@@ -100,6 +101,37 @@ export function SplitEntryPage() {
                   Clear All
                 </button>
               </div>
+            </div>
+            <div
+              data-testid="race-replay-main-status"
+              style={{
+                marginBottom: 16,
+                padding: "12px 14px",
+                borderRadius: 8,
+                border: "1px solid var(--border-subtle)",
+                background: "rgba(8,167,245,0.08)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <strong style={{ display: "block", color: "var(--text-primary)", marginBottom: 6 }}>
+                Race Replay
+              </strong>
+              {raceReplay.length > 0 ? (
+                <div>
+                  Imported {raceReplay.length} station replay row{raceReplay.length === 1 ? "" : "s"}.
+                  <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                    {raceReplay.map((item) => (
+                      <div key={item.station}>
+                        {item.station.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}: In{" "}
+                        {item.entrySeconds != null ? formatSeconds(item.entrySeconds) : "-"} / Out{" "}
+                        {item.exitSeconds != null ? formatSeconds(item.exitSeconds) : "-"}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>Not imported. Use the URL import path to capture race replay entry/exit data.</div>
+              )}
             </div>
             <div className={styles.tableScroll}>
               <SplitTable
