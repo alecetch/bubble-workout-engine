@@ -61,14 +61,17 @@ describe("muscleDiagramRenderer", () => {
     assert.ok(result.backSvg.includes("#gluteus_maximus path { fill: #22c55e; }"), "asset colour in style block");
   });
 
-  it("injects #94a3b8 grey fill for a group with no signal (overrides decorative SVG gradients)", () => {
+  it("greys all gradient paths via base reset and known neutral groups", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [],
       primaryLimiters: [],
       primaryAssets: [],
     }, "male");
-    assert.ok(result.frontSvg.includes("#brachioradialis path { fill: #94a3b8; }"), "neutral muscle gets grey override");
+    // Broad base reset catches unmapped SVG elements (sternocleidomastoid, tibialis, etc.)
+    assert.ok(result.frontSvg.includes('path[fill^="url("] { fill: #94a3b8; }'), "base reset rule present");
+    // Known map groups also get explicit grey
+    assert.ok(result.frontSvg.includes("#brachioradialis path { fill: #94a3b8; }"), "mapped neutral group gets grey override");
     assert.ok(!result.frontSvg.includes("#ef4444"), "no red on a profile with no signals");
     assert.ok(!result.frontSvg.includes("#22c55e"), "no green on a profile with no signals");
   });

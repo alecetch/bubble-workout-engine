@@ -2,119 +2,138 @@ import { MUSCLE_GROUP_LABELS, MUSCLE_GROUP_MAP, TRAINING_HINTS } from "../config
 
 const MAP_BY_KEY = new Map(MUSCLE_GROUP_MAP.map((entry) => [entry.segmentKey, entry]));
 
-function classifyPercentile(percentile) {
-  if (!Number.isFinite(percentile)) return "neutral";
-  if (percentile < 40) return "weak";
-  if (percentile > 60) return "strong";
-  return "neutral";
+// Relative classification: split this athlete's own stations into bottom/top thirds by percentile.
+// This always produces signals regardless of absolute benchmark standing — an athlete at the 30th
+// percentile across the board still has relative strengths and weaknesses worth coaching.
+function relativeClassify(stations) {
+  const sorted = [...stations].sort((a, b) => (a.percentile ?? 50) - (b.percentile ?? 50));
+  const cutSize = Math.max(1, Math.ceil(sorted.length / 3));
+  const weakKeys = new Set(sorted.slice(0, cutSize).map((s) => s.segmentKey));
+  const strongKeys = new Set(sorted.slice(-cutSize).map((s) => s.segmentKey));
+  return new Map(
+    sorted.map((s) => [
+      s.segmentKey,
+      weakKeys.has(s.segmentKey) ? "weak" : strongKeys.has(s.segmentKey) ? "strong" : "neutral",
+    ]),
+  );
 }
 
-function buildHeadline(primaryLimiters, primaryAssets) {
+function buildHeadline(primaryLimiters, primaryAssets, allBelowBenchmark) {
   const limiterLabels = primaryLimiters.map((id) => MUSCLE_GROUP_LABELS[id]);
   const assetLabels = primaryAssets.map((id) => MUSCLE_GROUP_LABELS[id]);
-  if (limiterLabels.length === 0 && assetLabels.length === 0) return "No clear muscle group pattern - focus on your biggest individual gap";
-  if (limiterLabels.length === 0) return `Your ${assetLabels[0]} stations are consistently strong`;
-  if (limiterLabels.length >= 2) return `${limiterLabels[0]} and ${limiterLabels[1]} are the common thread across your weakest stations`;
-  if (assetLabels.length === 0) return `${limiterLabels[0]} is the common thread across your weakest stations`;
-  return `${limiterLabels[0]} limits your weakest stations; your ${assetLabels[0]} is a clear strength`;
+  if (limiterLabels.length === 0 && assetLabels.length === 0) {
+    return "No clear muscle group pattern — focus on your biggest individual gap";
+  }
+  if (limiterLabels.length === 0) {
+    return `Your ${assetLabels[0]} stations are consistently your strongest`;
+  }
+  const assetClause = assetLabels.length > 0
+    ? allBelowBenchmark
+      ? `; your ${assetLabels[0]} is your relative strength`
+      : `; your ${assetLabels[0]} is a clear strength`
+    : "";
+  if (limiterLabels.length >= 2) {
+    return `${limiterLabels[0]} and ${limiterLabels[1]} are the common thread across your weakest stations${assetClause}`;
+  }
+  return `${limiterLabels[0]} is the common thread across your weakest stations${assetClause}`;
 }
 
-function buildBody(stationClassifications, primaryLimiters, primaryAssets) {
-  const weakStations = stationClassifications.filter((station) => station.classification === "weak").map((station) => station.label);
-  const strongStations = stationClassifications.filter((station) => station.classification === "strong").map((station) => station.label);
+function buildBody(stationClassifications, primaryLimiters, primaryAssets, allBelowBenchmark) {
+  const weakStations = stationClassifications.filter((s) => s.relativeClass === "weak");
+  const strongStations = stationClassifications.filter((s) => s.relativeClass === "strong");
+
   if (primaryLimiters.length === 0) {
     if (primaryAssets.length === 0) return null;
-    const assetLabel = MUSCLE_GROUP_LABELS[primaryAssets[0]];
-    return `${strongStations.join(", ")} all recruit the ${assetLabel} as a primary driver - an area where you have a meaningful advantage over your benchmark group.`;
+    return `${strongStations.map((s) => s.label).join(", ")} all draw heavily on ${MUSCLE_GROUP_LABELS[primaryAssets[0]]} — your most consistent performing group.`;
   }
+
   const limiterLabel = MUSCLE_GROUP_LABELS[primaryLimiters[0]];
-  const parts = [`${weakStations.join(", ")} - all heavily reliant on the ${limiterLabel} - sit below the 40th percentile.`];
+  const parts = [
+    `${weakStations.map((s) => s.label).join(", ")} — all relying heavily on ${limiterLabel} — are your lowest-ranked stations.`,
+  ];
+
   if (primaryAssets.length > 0) {
-    parts.push(`By contrast, your ${MUSCLE_GROUP_LABELS[primaryAssets[0]]} events (${strongStations.join(", ")}) are well above benchmark.`);
+    const assetLabel = MUSCLE_GROUP_LABELS[primaryAssets[0]];
+    const strongList = strongStations.map((s) => s.label).join(", ");
+    if (allBelowBenchmark) {
+      parts.push(`${strongList} recruit ${assetLabel} and are your comparatively stronger stations — there is still ground to close to benchmark, but this is the foundation to build from.`);
+    } else {
+      parts.push(`By contrast, ${strongList} — driven by ${assetLabel} — are your strongest benchmarked stations.`);
+    }
   }
-  parts.push(`A targeted ${limiterLabel.toLowerCase()} strength-endurance block is likely the highest-leverage cross-station investment.`);
+
+  parts.push(`A targeted ${limiterLabel.toLowerCase()} strength-endurance block is the highest-leverage cross-station investment.`);
   return parts.join(" ");
 }
 
 export function analyseMuscleGroups(analysisResult = {}) {
   if (analysisResult.analysisScope === "limited") return { available: false };
+
   const stations = (analysisResult.stationBreakdown ?? []).filter(
-    (station) => station.confidence !== "low" && MAP_BY_KEY.has(station.segmentKey),
+    (s) => s.confidence !== "low" && MAP_BY_KEY.has(s.segmentKey) && Number.isFinite(s.percentile),
   );
   if (stations.length < 3) return { available: false };
 
-  const stationClassifications = stations.map((station) => {
-    const mapping = MAP_BY_KEY.get(station.segmentKey);
-    return {
-      segmentKey: station.segmentKey,
-      label: station.label,
-      classification: classifyPercentile(station.percentile),
-      percentile: station.percentile,
-      primaryGroups: mapping.primary,
-    };
-  });
+  const relClassMap = relativeClassify(stations);
 
-  const weakCount = stationClassifications.filter((station) => station.classification === "weak").length;
-  const strongCount = stationClassifications.filter((station) => station.classification === "strong").length;
-  if (weakCount === 0 && strongCount === 0) {
-    return {
-      available: true,
-      patternFound: false,
-      stationCount: stations.length,
-      stationClassifications,
-      muscleGroupSignals: [],
-      primaryLimiters: [],
-      primaryAssets: [],
-      conclusion: {
-        headline: "No clear muscle group pattern - focus on your biggest individual gap",
-        body: null,
-        trainingHint: null,
-      },
-    };
-  }
+  const stationClassifications = stations.map((s) => ({
+    segmentKey: s.segmentKey,
+    label: s.label,
+    relativeClass: relClassMap.get(s.segmentKey) ?? "neutral",
+    percentile: s.percentile,
+    primaryGroups: MAP_BY_KEY.get(s.segmentKey).primary,
+  }));
 
+  // Score each muscle group by how many of the athlete's relative-weak/strong stations it drives
   const groupCounters = {};
   for (const groupId of Object.keys(MUSCLE_GROUP_LABELS)) {
     groupCounters[groupId] = { groupId, label: MUSCLE_GROUP_LABELS[groupId], weakCount: 0, strongCount: 0 };
   }
   for (const station of stationClassifications) {
     for (const groupId of station.primaryGroups) {
-      if (station.classification === "weak") groupCounters[groupId].weakCount += 1;
-      if (station.classification === "strong") groupCounters[groupId].strongCount += 1;
+      if (station.relativeClass === "weak") groupCounters[groupId].weakCount++;
+      if (station.relativeClass === "strong") groupCounters[groupId].strongCount++;
     }
   }
 
-  const muscleGroupSignals = Object.values(groupCounters).map((counter) => {
-    let signal = "neutral";
-    if (counter.weakCount >= 2 && counter.weakCount > counter.strongCount) signal = "limiter";
-    else if (counter.strongCount >= 2 && counter.strongCount > counter.weakCount) signal = "asset";
-    else if (counter.weakCount >= 1 && counter.strongCount >= 1) signal = "mixed";
-    return { ...counter, signal };
-  });
-  const rankedLimiters = muscleGroupSignals
-    .filter((group) => group.signal === "limiter")
-    .sort((a, b) => b.weakCount - a.weakCount || a.strongCount - b.strongCount);
-  const limiters = rankedLimiters
-    .filter((group, index, groups) => index === 0 || group.weakCount === groups[0].weakCount)
-    .slice(0, 2);
-  const assets = muscleGroupSignals
-    .filter((group) => group.signal === "asset")
+  // Limiter: most appearances in relative-weak stations (weak must meet or exceed strong count)
+  const primaryLimiters = Object.values(groupCounters)
+    .filter((g) => g.weakCount > 0 && g.weakCount >= g.strongCount)
+    .sort((a, b) => b.weakCount - a.weakCount || a.strongCount - b.strongCount)
+    .slice(0, 2)
+    .map((g) => g.groupId);
+
+  // Asset: most appearances in relative-strong stations (strong must strictly exceed weak count)
+  const primaryAssets = Object.values(groupCounters)
+    .filter((g) => g.strongCount > 0 && g.strongCount > g.weakCount)
     .sort((a, b) => b.strongCount - a.strongCount || a.weakCount - b.weakCount)
-    .slice(0, 1);
-  const primaryLimiters = limiters.map((group) => group.groupId);
-  const primaryAssets = assets.map((group) => group.groupId);
-  const headline = buildHeadline(primaryLimiters, primaryAssets);
-  const body = buildBody(stationClassifications, primaryLimiters, primaryAssets);
-  const trainingHint = primaryLimiters[0] ? TRAINING_HINTS[primaryLimiters[0]] ?? null : null;
+    .slice(0, 1)
+    .map((g) => g.groupId);
+
+  const muscleGroupSignals = Object.values(groupCounters).map((g) => ({
+    ...g,
+    signal: primaryLimiters.includes(g.groupId) ? "limiter"
+      : primaryAssets.includes(g.groupId) ? "asset"
+      : "neutral",
+  }));
+
+  // Flag when even the "strong" stations are below the 50th percentile — used to soften copy
+  const allBelowBenchmark = stationClassifications.every((s) => (s.percentile ?? 0) < 50);
+
+  const patternFound = primaryLimiters.length > 0 || primaryAssets.length > 0;
 
   return {
     available: true,
-    patternFound: true,
+    patternFound,
     stationCount: stations.length,
     stationClassifications,
     muscleGroupSignals,
     primaryLimiters,
     primaryAssets,
-    conclusion: { headline, body, trainingHint },
+    conclusion: {
+      headline: buildHeadline(primaryLimiters, primaryAssets, allBelowBenchmark),
+      body: buildBody(stationClassifications, primaryLimiters, primaryAssets, allBelowBenchmark),
+      trainingHint: primaryLimiters[0] ? (TRAINING_HINTS[primaryLimiters[0]] ?? null) : null,
+    },
   };
 }

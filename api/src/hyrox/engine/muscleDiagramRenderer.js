@@ -59,14 +59,18 @@ const MUSCLE_DIAGRAM_MAP = Object.freeze({
 function buildStyleBlock(muscleGroupSignals = [], diagramKey) {
   const idMap = MUSCLE_DIAGRAM_MAP[diagramKey] ?? {};
   const signalMap = new Map(muscleGroupSignals.map((signal) => [signal.groupId, signal.signal]));
-  const rules = [];
+  // Base reset greys every gradient-filled path in the SVG (specificity 0,1,0).
+  // ID-specific rules below win the cascade (specificity 1,0,1), so signal colours still apply.
+  // This catches muscles not in MUSCLE_DIAGRAM_MAP (sternocleidomastoid, tibialis, etc.) that
+  // would otherwise bleed through their original blue/purple/dark-blue gradient fills.
+  const rules = [`path[fill^="url("] { fill: ${NEUTRAL_FILL}; }`];
   for (const [groupId, svgIds] of Object.entries(idMap)) {
     const colour = SIGNAL_COLOUR[signalMap.get(groupId)] ?? NEUTRAL_FILL;
     for (const id of svgIds) {
       rules.push(`#${id} path { fill: ${colour}; }`);
     }
   }
-  return rules.length > 0 ? `<style>${rules.join(" ")}</style>` : "";
+  return `<style>${rules.join(" ")}</style>`;
 }
 
 function stripInteractive(svgString) {

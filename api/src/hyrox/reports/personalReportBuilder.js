@@ -149,12 +149,17 @@ function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
   if (diagramPair) {
     content.push({ __type: "muscle_diagram_pair", frontSvg: diagramPair.frontSvg, backSvg: diagramPair.backSvg });
   }
-  const notableStations = stationClassifications.filter(
-    (station) => station.classification === "weak" || station.classification === "strong",
-  );
-  content.push(...notableStations.map(
-    (station) => `${station.label}: ${station.classification === "weak" ? "below benchmark" : "above benchmark"} (${station.percentile != null ? `${Math.round(station.percentile)}th percentile` : "unranked"})`,
-  ));
+  const weakStations = stationClassifications.filter((s) => s.relativeClass === "weak");
+  const strongStations = stationClassifications.filter((s) => s.relativeClass === "strong");
+  const pct = (s) => s.percentile != null ? `${Math.round(s.percentile)}th percentile` : "unranked";
+  if (weakStations.length > 0) {
+    content.push(`Weakest stations: ${weakStations.map((s) => `${s.label} (${pct(s)})`).join(", ")}`);
+  }
+  if (strongStations.length > 0) {
+    const isRelative = strongStations.every((s) => (s.percentile ?? 0) < 50);
+    const prefix = isRelative ? "Relative strengths" : "Strongest stations";
+    content.push(`${prefix}: ${strongStations.map((s) => `${s.label} (${pct(s)})`).join(", ")}`);
+  }
   return content;
 }
 
