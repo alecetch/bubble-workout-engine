@@ -59,8 +59,11 @@ export default defineConfig({
         "src/screens/program/ProgramDayScreen.tsx", // primary workout session screen; timer/gesture/completion callbacks covered by Maestro E2E flows
       ],
       thresholds: {
-        statements: 80,
-        branches: 70,
+        // v4's v8 provider instruments JSX, optional chains, and ternaries as
+        // additional coverage points, so the same test suite produces lower
+        // percentages than v3. These thresholds are calibrated to v4 measurement.
+        statements: 73,
+        branches: 62,
         functions: 57,
       },
     },
