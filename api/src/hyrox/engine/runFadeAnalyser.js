@@ -22,14 +22,36 @@ function interpretFade(fadePct, benchmarkMedianFadePct) {
   return "late_fade_present";
 }
 
+function classifyRunPattern(adjustedSplits) {
+  const clean = adjustedSplits.filter(Number.isFinite);
+  if (clean.length < 6) return { runPattern: "insufficient_data", strongFinish: false };
+  const sorted = [...clean].sort((a, b) => a - b);
+  const run8 = adjustedSplits[7];
+  const strongFinish = Number.isFinite(run8) && run8 <= sorted[1];
+  const earlyAvg = mean(adjustedSplits.slice(0, 3).filter(Number.isFinite));
+  const lateAvg = mean(adjustedSplits.slice(5, 8).filter(Number.isFinite));
+  const fadePct = earlyAvg ? ((lateAvg - earlyAvg) / earlyAvg) * 100 : null;
+  if (!Number.isFinite(fadePct)) return { runPattern: "insufficient_data", strongFinish };
+  if (fadePct < -2) return { runPattern: "negative_split", strongFinish };
+  if (fadePct <= 2) return { runPattern: "even", strongFinish };
+  return { runPattern: strongFinish ? "strong_finish" : "positive_split", strongFinish };
+}
+
 export function analyseRunFade(normalisedSubmission, benchmarkContext) {
-  const splits = RUN_KEYS.map((key) => normalisedSubmission.splitMap?.get(key)?.timeSeconds);
+  const activeSplitMap = normalisedSubmission.penaltyAdjustedSplitMap ?? normalisedSubmission.splitMap;
+  const penaltyAffectedRuns = (normalisedSubmission.penalties ?? []).map((penalty) => ({
+    ...penalty,
+    rawSeconds: normalisedSubmission.splitMap?.get(penalty.runKey)?.timeSeconds ?? null,
+    adjustedSeconds: activeSplitMap?.get(penalty.runKey)?.timeSeconds ?? null,
+  }));
+  const penaltyCorrected = normalisedSubmission.penaltyAdjustedSplitMap != null && penaltyAffectedRuns.length > 0;
+  const splits = RUN_KEYS.map((key) => activeSplitMap?.get(key)?.timeSeconds);
   const present = splits.filter(Number.isFinite);
-  if (present.length < 2) return { available: false };
+  if (present.length < 2) return { available: false, penaltyCorrected, penaltyAffectedRuns };
 
   const run1 = splits[0];
   const run8 = splits[7];
-  if (!Number.isFinite(run1) || !Number.isFinite(run8)) return { available: false };
+  if (!Number.isFinite(run1) || !Number.isFinite(run8)) return { available: false, penaltyCorrected, penaltyAffectedRuns };
 
   const fullCalculation = splits.every(Number.isFinite);
   const earlyAvgSeconds = fullCalculation ? mean(splits.slice(0, 3)) : run1;
@@ -39,8 +61,7 @@ export function analyseRunFade(normalisedSubmission, benchmarkContext) {
   const benchmarkStats = getBenchmarkStats(benchmarkContext?.primaryBenchmarkGroup?.key, "run_fade_pct");
   const benchmarkMedianFadePct = benchmarkStats?.medianSeconds ?? benchmarkStats?.p50Seconds ?? null;
   const roundedRunFadePct = Number.isFinite(runFadePct) ? Math.round(runFadePct * 10) / 10 : null;
-  const presentSplits = splits.filter(Number.isFinite);
-  const medianRunSeconds = presentSplits.length >= 4 ? medianOfSplits(presentSplits) : null;
+  const medianRunSeconds = present.length >= 4 ? medianOfSplits(present) : null;
   const run1VsMedianPct = (Number.isFinite(run1) && Number.isFinite(medianRunSeconds) && medianRunSeconds > 0)
     ? Math.round(((medianRunSeconds - run1) / medianRunSeconds) * 100 * 10) / 10
     : null;
@@ -61,6 +82,8 @@ export function analyseRunFade(normalisedSubmission, benchmarkContext) {
     }
   }
 
+  const { runPattern, strongFinish } = classifyRunPattern(splits);
+
   return {
     available: true,
     partialCalculation: !fullCalculation,
@@ -75,5 +98,9 @@ export function analyseRunFade(normalisedSubmission, benchmarkContext) {
     run1VsMedianPct,
     run1VsBenchmarkMedianPct,
     run1PacingDiagnosis,
+    penaltyCorrected,
+    penaltyAffectedRuns,
+    runPattern,
+    strongFinish,
   };
 }

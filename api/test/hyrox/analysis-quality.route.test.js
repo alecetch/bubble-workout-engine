@@ -3,6 +3,7 @@ import test from "node:test";
 import { RUN_KEYS, STATION_KEYS } from "../../src/hyrox/config/segmentMap.js";
 import { setBenchmarkData } from "../../src/hyrox/engine/benchmarkService.js";
 import { analyseSubmission } from "../../src/hyrox/engine/hyroxAnalysisEngine.js";
+import { assembleReport } from "../../src/hyrox/reports/reportAssembler.js";
 import { buildPersonalReport } from "../../src/hyrox/reports/personalReportBuilder.js";
 import { formatGain } from "../../src/hyrox/reports/copyFormatter.js";
 
@@ -197,4 +198,30 @@ test("recommended focus areas include likely contributors when multiple gaps exi
   const content = Array.isArray(recommendations?.content) ? recommendations.content.join("\n") : String(recommendations?.content ?? "");
 
   assert.match(content, /Likely contributors/);
+});
+
+test("race replay creates visible roxzone commentary in the email report", () => {
+  const raceReplay = [
+    { station: "ski_erg", entrySeconds: 8, exitSeconds: 29 },
+    { station: "sled_push", entrySeconds: 4, exitSeconds: 36 },
+    { station: "sled_pull", entrySeconds: 14, exitSeconds: 29 },
+    { station: "burpee_broad_jump", entrySeconds: 34, exitSeconds: 22 },
+    { station: "row", entrySeconds: 39, exitSeconds: 18 },
+    { station: "farmers_carry", entrySeconds: 47, exitSeconds: 19 },
+    { station: "sandbag_lunges", entrySeconds: 61, exitSeconds: 78 },
+    { station: "wall_balls", entrySeconds: 12, exitSeconds: null },
+  ];
+  const analysis = analyseSubmission(qualitySubmission({ raceReplay }));
+  const report = assembleReport({
+    raceResult: analysis.race,
+    analysisJson: analysis,
+    insights: [],
+    athleteContext: { displayName: "Quality Test" },
+    outputType: "email_report",
+  });
+
+  assert.equal(analysis.roxzoneAnalysis.entryExitAvailable, true);
+  assert.match(report.emailHtml, /ROXZONE AND EXECUTION PROFILE/i);
+  assert.match(report.emailHtml, /Race replay detail/i);
+  assert.match(report.emailHtml, /Sandbag Lunges/i);
 });

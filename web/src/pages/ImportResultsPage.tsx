@@ -90,6 +90,7 @@ export function ImportResultsPage() {
                 <div data-testid="parse-confirm" style={{ marginTop: 16, color: "var(--text-secondary)" }}>
                   <strong style={{ color: "var(--text-primary)" }}>Import summary</strong>
                   <div>Splits: {urlResult.splits.length} / 16</div>
+                  <div>Race Replay: {urlResult.raceReplay?.length ? `${urlResult.raceReplay.length} stations` : "Not imported"}</div>
                   <div>Penalties: {urlResult.penalties.length || "None"}</div>
                   <PrimaryButton type="button" data-testid="confirm-btn" onClick={() => handleImport(urlResult)}>
                     Looks right? Continue →

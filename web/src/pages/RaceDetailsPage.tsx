@@ -24,7 +24,7 @@ export function RaceDetailsPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
 
-  const [name, setName] = useState(draft?.athlete?.name ?? "");
+  const [name, setName] = useState(normalizeName(draft?.athlete?.name ?? null) ?? "");
   const [gender, setGender] = useState<"male" | "female">(
     draft?.athlete?.gender ?? "male",
   );
@@ -118,7 +118,7 @@ export function RaceDetailsPage() {
     const finishSeconds = parseTimeToSeconds(finishTime) ?? 0;
     const updated: Partial<HyroxCalculatorDraft> = {
       athlete: {
-        name: name.trim() || undefined,
+        name: normalizeName(name) ?? undefined,
         gender,
         ageOnRaceDay: parseInt(age, 10),
       },
@@ -341,8 +341,8 @@ export function RaceDetailsPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={(e) => {
-                  const v = e.target.value.trim();
-                  if (v) setName(v.replace(/\S+/g, (w) => w.toLowerCase().replace(/(^|[-'])(\w)/g, (_, s, c: string) => s + c.toUpperCase())));
+                  const normalized = normalizeName(e.target.value);
+                  if (normalized) setName(normalized);
                 }}
               />
               <TextInput

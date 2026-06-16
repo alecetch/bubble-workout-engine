@@ -18,12 +18,52 @@ const SPLITS_SCHEMA = [
 ];
 
 const STATION_BY_NUMBER = ["ski_erg", "sled_push", "sled_pull", "burpee_broad_jump", "row", "farmers_carry", "sandbag_lunges", "wall_balls"];
+const REPLAY_STATIONS = [
+  { station: "ski_erg", labels: ["SkiErg", "Ski Erg", "Ski-Erg"] },
+  { station: "sled_push", labels: ["Sled Push"] },
+  { station: "sled_pull", labels: ["Sled Pull"] },
+  { station: "burpee_broad_jump", labels: ["Burpee Broad Jump"] },
+  { station: "row", labels: ["Row", "Rowing"] },
+  { station: "farmers_carry", labels: ["Farmers Carry", "Farmer's Carry"] },
+  { station: "sandbag_lunges", labels: ["Sandbag Lunges"] },
+  { station: "wall_balls", labels: ["Wall Balls"] },
+];
 
 function extractByClass(html, cls) {
   const safe = cls.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`<td[^>]+class="(?:[^"]*\\s)?${safe}(?:\\s[^"]*|)"[^>]*>([^<]*)<\\/td>`, "i");
   const m = html.match(re);
   return m ? m[1].trim() : null;
+}
+
+function extractRowByClass(html, cls) {
+  const safe = cls.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`<tr[^>]*class="[^"]*${safe}[^"]*"[^>]*>([\\s\\S]*?)<\\/tr>`, "i");
+  return html.match(re)?.[1] ?? null;
+}
+
+function decodeEntities(value) {
+  return String(value ?? "")
+    .replace(/&nbsp;|&#160;/g, " ")
+    .replace(/&ndash;|&#8211;/g, "-")
+    .replace(/&mdash;|&#8212;/g, "-")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'");
+}
+
+function stripTags(value) {
+  return decodeEntities(value).replace(/<[^>]*>/g, "").trim();
+}
+
+function parseRankFromRow(rowHtml) {
+  if (!rowHtml) return null;
+  const cells = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((match) => stripTags(match[1]));
+  const last = cells[cells.length - 1] ?? "";
+  const n = Number(last.replace(/[^\d]/g, ""));
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 function parseHms(value) {
@@ -49,7 +89,95 @@ function parsePenaltyText(raw) {
 }
 
 function emptyResult() {
-  return { success: false, confidence: "low", splits: [], roxzoneSeconds: null, finishTimeSeconds: null, penalties: [], athleteName: null, ageGroup: null, raceName: null, division: "open", warnings: [] };
+  return { success: false, confidence: "low", splits: [], roxzoneSeconds: null, finishTimeSeconds: null, penalties: [], raceReplay: [], athleteName: null, athleteAge: null, ageGroup: null, raceName: null, division: "open", warnings: [] };
+}
+
+function parseAge(value) {
+  const match = String(value ?? "").match(/\b([1-9]\d?)\b/);
+  const age = Number(match?.[1]);
+  return Number.isInteger(age) && age >= 16 && age <= 80 ? age : null;
+}
+
+function extractAge(html) {
+  const direct = extractByClass(html, "f-__age")
+    ?? extractByClass(html, "f-_age")
+    ?? extractByClass(html, "f-age");
+  const directAge = parseAge(direct);
+  if (directAge !== null) return directAge;
+
+  const labelled = String(html ?? "").match(/<tr[^>]*>[\s\S]*?<th[^>]*>\s*Age\s*<\/th>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/i);
+  return parseAge(stripTags(labelled?.[1] ?? ""));
+}
+
+function normaliseReplayLabel(value) {
+  return stripTags(value)
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\b(?:1000|200|100|80|50)\s*m\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function replayTextLines(html) {
+  return decodeEntities(html)
+    .replace(/<\/(?:tr|td|th|div|li|p)>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function extractReplayRowsFromText(html) {
+  const lines = replayTextLines(html);
+  const rows = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const sameLineTime = parseHms(line);
+    if (sameLineTime !== null && /(?:\brox\s+(?:in|out)\b|\b(?:in|out)\b)/i.test(line)) {
+      rows.push({ label: normaliseReplayLabel(line.replace(/\b\d{1,2}:[0-5]\d(?::[0-5]\d)?\b.*$/, "")), timeSeconds: sameLineTime });
+      continue;
+    }
+
+    const next = lines[i + 1] ?? "";
+    const nextTime = parseHms(next);
+    if (nextTime !== null && /(?:\brox\s+(?:in|out)\b|\b(?:in|out)\b)/i.test(line)) {
+      rows.push({ label: normaliseReplayLabel(line), timeSeconds: nextTime });
+      i += 1;
+    }
+  }
+  return rows;
+}
+
+function extractReplayRows(html) {
+  const htmlRows = [...String(html ?? "").matchAll(/<tr[^>]*>\s*<th[^>]*class=["'][^"']*desc[^"']*["'][^>]*>([\s\S]*?)<\/th>\s*<td[^>]*class=["'][^"']*diff[^"']*["'][^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi)]
+    .map((match) => ({ label: stripTags(match[1]), timeSeconds: parseHms(stripTags(match[2])) }))
+    .filter((row) => row.label);
+  const rows = [...htmlRows, ...extractReplayRowsFromText(html)];
+  const seen = new Set();
+  return rows.filter((row) => {
+    const key = `${normaliseReplayLabel(row.label)}:${row.timeSeconds ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function parseRaceReplay(html) {
+  const rows = extractReplayRows(html).map((row) => ({ ...row, label: normaliseReplayLabel(row.label) }));
+  if (rows.length === 0) return [];
+
+  return REPLAY_STATIONS.map((station) => {
+    const labels = station.labels.map(normaliseReplayLabel);
+    const entryIndex = rows.findIndex((row) => labels.some((label) => row.label === `${label} in` || row.label.endsWith(` ${label} in`)));
+    const exitIndex = entryIndex >= 0
+      ? rows.findIndex((row, rowIndex) => rowIndex > entryIndex && row.label.toLowerCase() === "rox out")
+      : -1;
+    return {
+      station: station.station,
+      entrySeconds: entryIndex >= 0 ? rows[entryIndex].timeSeconds : null,
+      exitSeconds: exitIndex >= 0 ? rows[exitIndex].timeSeconds : null,
+    };
+  }).filter((row) => row.entrySeconds !== null || row.exitSeconds !== null);
 }
 
 export function parseHyroxResultsHtml(html) {
@@ -58,13 +186,15 @@ export function parseHyroxResultsHtml(html) {
     for (const def of SPLITS_SCHEMA) {
       const timeSeconds = parseHms(extractByClass(html, def.cls));
       if (timeSeconds !== null) {
-        splits.push({ segmentKey: def.segmentKey, label: def.label, type: def.type, index: def.index, timeSeconds });
+        const fieldRank = def.type === "station" ? parseRankFromRow(extractRowByClass(html, def.cls)) : null;
+        splits.push({ segmentKey: def.segmentKey, label: def.label, type: def.type, index: def.index, timeSeconds, fieldRank });
       }
     }
 
     const finishTimeSeconds = parseHms(extractByClass(html, "f-time_finish_netto"));
     const roxzoneSeconds = parseHms(extractByClass(html, "f-time_60"));
     const athleteName = extractByClass(html, "f-__fullname") || null;
+    const athleteAge = extractAge(html);
     const ageGroup = extractByClass(html, "f-_type_age_class") || null;
     const raceName = extractByClass(html, "f-__meeting") || null;
 
@@ -80,6 +210,11 @@ export function parseHyroxResultsHtml(html) {
       if (penalty) penalties.push(penalty);
     }
 
+    const raceReplay = parseRaceReplay(html);
+    const roxzoneFieldRank = parseRankFromRow(extractRowByClass(html, "f-time_60"));
+    const runTotalFieldRank = parseRankFromRow(extractRowByClass(html, "f-time_49"));
+    const bestRunLapFieldRank = parseRankFromRow(extractRowByClass(html, "f-time_50"));
+
     const warnings = [];
     if (division === "pro") warnings.push("division_pro_not_yet_benchmarked");
     if (division === "doubles" || division === "relay") warnings.push("division_doubles_not_supported");
@@ -90,7 +225,7 @@ export function parseHyroxResultsHtml(html) {
     const confidence = count === 16 ? "high" : count >= 8 ? "partial" : "low";
     if (count >= 8 && count < 16) warnings.push(`partial_splits_${count}_found`);
 
-    return { success: count >= 8, confidence, splits, roxzoneSeconds, finishTimeSeconds, penalties, athleteName, ageGroup, raceName, division, warnings };
+    return { success: count >= 8, confidence, splits, roxzoneSeconds, roxzoneFieldRank, runTotalFieldRank, bestRunLapFieldRank, finishTimeSeconds, penalties, raceReplay, athleteName, athleteAge, ageGroup, raceName, division, warnings };
   } catch {
     return emptyResult();
   }

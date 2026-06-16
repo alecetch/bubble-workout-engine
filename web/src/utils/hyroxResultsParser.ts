@@ -19,7 +19,13 @@ export interface HyroxParseResult {
   roxzoneSeconds: number | null;
   finishTimeSeconds: number | null;
   penalties: HyroxImportPenalty[];
+  raceReplay?: Array<{
+    station: string;
+    entrySeconds: number | null;
+    exitSeconds: number | null;
+  }>;
   athleteName: string | null;
+  athleteAge: number | null;
   ageGroup: string | null;
   raceName: string | null;
   division: "open" | "pro" | "doubles" | "relay" | null;
@@ -46,6 +52,16 @@ const SPLITS: Array<Omit<HyroxImportSplit, "timeSeconds"> & { patterns: RegExp[]
 ];
 
 const STATION_BY_NUMBER = ["ski_erg", "sled_push", "sled_pull", "burpee_broad_jump", "row", "farmers_carry", "sandbag_lunges", "wall_balls"];
+const REPLAY_STATIONS = [
+  { station: "ski_erg", labels: ["SkiErg", "Ski Erg", "Ski-Erg"] },
+  { station: "sled_push", labels: ["Sled Push"] },
+  { station: "sled_pull", labels: ["Sled Pull"] },
+  { station: "burpee_broad_jump", labels: ["Burpee Broad Jump"] },
+  { station: "row", labels: ["Row", "Rowing"] },
+  { station: "farmers_carry", labels: ["Farmers Carry", "Farmer's Carry"] },
+  { station: "sandbag_lunges", labels: ["Sandbag Lunges"] },
+  { station: "wall_balls", labels: ["Wall Balls"] },
+];
 
 function emptyResult(): HyroxParseResult {
   return {
@@ -55,7 +71,9 @@ function emptyResult(): HyroxParseResult {
     roxzoneSeconds: null,
     finishTimeSeconds: null,
     penalties: [],
+    raceReplay: [],
     athleteName: null,
+    athleteAge: null,
     ageGroup: null,
     raceName: null,
     division: null,
@@ -140,6 +158,51 @@ function parsePenalties(lines: string[]): HyroxImportPenalty[] {
   return penalties;
 }
 
+function parseAge(value: string): number | null {
+  const match = String(value ?? "").match(/\b([1-9]\d?)\b/);
+  const age = Number(match?.[1]);
+  return Number.isInteger(age) && age >= 16 && age <= 80 ? age : null;
+}
+
+function normaliseReplayLabel(value: string): string {
+  return value
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\b(?:1000|200|100|80|50)\s*m\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function parseRaceReplay(lines: string[]): HyroxParseResult["raceReplay"] {
+  const replayRows = lines
+    .map((line) => {
+      const timeIdx = findTimeIndex(line);
+      if (timeIdx < 0) return null;
+      const label = normaliseReplayLabel(line.slice(0, timeIdx));
+      const timeSeconds = parseHms(line.slice(timeIdx));
+      return label && timeSeconds !== null ? { label, timeSeconds } : null;
+    })
+    .filter((row): row is { label: string; timeSeconds: number } => Boolean(row));
+
+  const hasReplayMarkers = replayRows.some((row) => /\brox\s+(in|out)\b/.test(row.label) || /\b(in|out)\b$/.test(row.label));
+  if (!hasReplayMarkers) return [];
+
+  return REPLAY_STATIONS.map((station) => {
+    const stationLabels = station.labels.map(normaliseReplayLabel);
+    const entryIndex = replayRows.findIndex((row) =>
+      stationLabels.some((label) => row.label === `${label} in` || row.label.endsWith(` ${label} in`)),
+    );
+    const roxOutIndex = entryIndex >= 0
+      ? replayRows.findIndex((row, index) => index > entryIndex && row.label === "rox out")
+      : -1;
+    return {
+      station: station.station,
+      entrySeconds: entryIndex >= 0 ? replayRows[entryIndex].timeSeconds : null,
+      exitSeconds: roxOutIndex >= 0 ? replayRows[roxOutIndex].timeSeconds : null,
+    };
+  }).filter((row) => row.entrySeconds !== null || row.exitSeconds !== null);
+}
+
 function pairLabelWithTime(lines: string[]): string[] {
   const out: string[] = [];
   let i = 0;
@@ -172,6 +235,7 @@ export function parseHyroxResults(rawText: string): HyroxParseResult {
       const split = matchSplit(line);
       if (split) splitsByKey.set(split.segmentKey, split);
       if (/^name\b/i.test(line)) result.athleteName = lineValue(line) || null;
+      if (/^age\b(?!\s+group\b)/i.test(line)) result.athleteAge = parseAge(lineValue(line));
       if (/^age\s+group\b/i.test(line)) result.ageGroup = lineValue(line) || null;
       if (/^race\b/i.test(line)) result.raceName = lineValue(line) || null;
       if (/^division\b/i.test(line)) result.division = parseDivision(lineValue(line));
@@ -181,6 +245,7 @@ export function parseHyroxResults(rawText: string): HyroxParseResult {
 
     result.splits = Array.from(splitsByKey.values()).sort((a, b) => a.index - b.index);
     result.penalties = parsePenalties(lines);
+    result.raceReplay = parseRaceReplay(lines);
     if (!result.division) result.division = parseDivision(null);
 
     if (result.division === "pro") result.warnings.push("division_pro_not_yet_benchmarked");

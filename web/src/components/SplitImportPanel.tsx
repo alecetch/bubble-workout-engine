@@ -112,6 +112,7 @@ export function SplitImportPanel({ onImport, onCancel }: SplitImportPanelProps) 
           <div>Athlete: {result.athleteName ?? "Not found"}</div>
           <div>Finish time: {result.finishTimeSeconds ? formatSeconds(result.finishTimeSeconds, "HH:MM:SS") : "Not found"}</div>
           <div>Splits: {result.splits.length} / 16</div>
+          <div>Race Replay: {result.raceReplay?.length ? `${result.raceReplay.length} stations` : "Not imported"}</div>
           <div>Penalties: {result.penalties.length ? result.penalties.map((p) => `${p.segmentKey} ${p.penaltySeconds}s`).join(", ") : "None"}</div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
             <PrimaryButton type="button" data-testid="confirm-btn" onClick={confirm}>

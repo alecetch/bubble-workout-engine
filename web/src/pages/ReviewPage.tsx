@@ -51,7 +51,7 @@ export function ReviewPage() {
     );
   }
 
-  const { athlete, race, splits = [], penalties = [], athleteContext, marketingConsent = false } = draft;
+  const { athlete, race, splits = [], penalties = [], raceReplay = [], athleteContext, marketingConsent = false } = draft;
 
   const splitTotal = splits.reduce((sum, s) => sum + (s.timeSeconds ?? 0), 0);
   const roxzone = race.finishTimeSeconds - splitTotal;
@@ -89,6 +89,7 @@ export function ReviewPage() {
       },
       splits,
       penalties,
+      raceReplay,
       athleteContext,
       marketingConsent,
     };

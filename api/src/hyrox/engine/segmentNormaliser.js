@@ -1,6 +1,7 @@
 import { RUN_KEYS, ROXZONE_KEYS, SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 
 const SEGMENT_BY_KEY = new Map(SEGMENT_MAP.map((segment) => [segment.segmentKey, segment]));
+const STATION_TO_REPLAY_INDEX = Object.freeze({ ski_erg: 1, sled_push: 2, sled_pull: 3, burpee_broad_jump: 4, row: 5, farmers_carry: 6, sandbag_lunges: 7, wall_balls: 8 });
 
 function finiteOrNull(value) {
   const n = Number(value);
@@ -13,12 +14,23 @@ function normaliseSplit(split) {
   const type = split?.type ?? mapped?.type ?? null;
   const timeSeconds = finiteOrNull(split?.timeSeconds);
   if (!segmentKey || !type || timeSeconds === null) return null;
-  return {
-    segmentKey,
-    type,
-    label: mapped?.displayName ?? segmentKey,
-    timeSeconds,
-  };
+  const normalised = { segmentKey, type, label: mapped?.displayName ?? segmentKey, timeSeconds };
+  if (Number.isInteger(Number(split?.fieldRank)) && Number(split.fieldRank) > 0) normalised.fieldRank = Number(split.fieldRank);
+  return normalised;
+}
+
+function raceReplaySplits(raceReplay) {
+  if (!Array.isArray(raceReplay)) return [];
+  const splits = [];
+  for (const item of raceReplay) {
+    const index = STATION_TO_REPLAY_INDEX[String(item?.station ?? "").trim()];
+    if (!index) continue;
+    const entrySeconds = finiteOrNull(item?.entrySeconds);
+    const exitSeconds = finiteOrNull(item?.exitSeconds);
+    if (entrySeconds !== null) splits.push({ segmentKey: `entry_${index}`, type: "entry", timeSeconds: entrySeconds });
+    if (exitSeconds !== null) splits.push({ segmentKey: `exit_${index}`, type: "exit", timeSeconds: exitSeconds });
+  }
+  return splits;
 }
 
 function sumByKeys(splitMap, keys) {
@@ -38,16 +50,24 @@ function buildAggregateSegments({ runTime, workTime, roxzoneTime, finishTime }) 
 }
 
 export function normaliseSubmission(input = {}) {
-  const suppliedSplits = Array.isArray(input.splits) ? input.splits.map(normaliseSplit).filter(Boolean) : [];
+  const rawSplits = Array.isArray(input.splits) ? input.splits : [];
+  const suppliedSplits = [...rawSplits, ...raceReplaySplits(input.raceReplay)].map(normaliseSplit).filter(Boolean);
   const penalties = Array.isArray(input.penalties)
     ? input.penalties
         .map((penalty) => ({
-          station: String(penalty?.station ?? "").trim(),
+          runKey: String(penalty?.runKey ?? penalty?.segmentKey ?? penalty?.station ?? "").trim(),
           penaltySeconds: finiteOrNull(penalty?.penaltySeconds),
         }))
-        .filter((penalty) => penalty.station && penalty.penaltySeconds !== null)
+        .filter((penalty) => penalty.runKey && RUN_KEYS.includes(penalty.runKey) && penalty.penaltySeconds !== null)
     : [];
   const splitMap = new Map(suppliedSplits.map((split) => [split.segmentKey, split]));
+  const penaltyAdjustedSplitMap = new Map(splitMap);
+  for (const { runKey, penaltySeconds } of penalties) {
+    const original = splitMap.get(runKey);
+    if (original && Number.isFinite(original.timeSeconds)) {
+      penaltyAdjustedSplitMap.set(runKey, { ...original, timeSeconds: Math.max(0, original.timeSeconds - penaltySeconds) });
+    }
+  }
   const finishTimeSeconds = finiteOrNull(input.race?.finishTimeSeconds);
   const runTime = sumByKeys(splitMap, RUN_KEYS);
   const workTime = sumByKeys(splitMap, STATION_KEYS);
@@ -75,13 +95,6 @@ export function normaliseSubmission(input = {}) {
     roxzoneTime = null;
   }
 
-  const aggregateSegments = buildAggregateSegments({
-    runTime,
-    workTime,
-    roxzoneTime,
-    finishTime: finishTimeSeconds,
-  });
-
   return {
     ...input,
     athlete: {
@@ -97,7 +110,8 @@ export function normaliseSubmission(input = {}) {
     splits: suppliedSplits,
     penalties,
     splitMap,
-    aggregateSegments,
+    penaltyAdjustedSplitMap,
+    aggregateSegments: buildAggregateSegments({ runTime, workTime, roxzoneTime, finishTime: finishTimeSeconds }),
     runTimeSeconds: runTime,
     workTimeSeconds: workTime,
     roxzoneTimeSeconds: roxzoneTime,
