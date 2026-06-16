@@ -9,6 +9,7 @@ import { analyseRoxzone } from "./roxzoneAnalyser.js";
 import { analyseContext } from "./contextAnalyser.js";
 import { classifyArchetype } from "./archetypeClassifier.js";
 import { buildFocusAreas } from "./focusAreaBuilder.js";
+import { computeExactTargetMap, attachExactTargets } from "./splitTargetCalculator.js";
 
 function markSegmentRoles(segments, limiter, strength) {
   return segments.map((segment) => ({
@@ -16,6 +17,22 @@ function markSegmentRoles(segments, limiter, strength) {
     isBiggestLimiter: segment.segmentKey === limiter?.segmentKey,
     isBiggestStrength: segment.segmentKey === strength?.segmentKey,
   }));
+}
+
+function stationBreakdown(segments) {
+  return segments
+    .filter((segment) => segment.type === "station" && Number.isFinite(segment.percentile))
+    .sort((a, b) =>
+      (b.timeGapToExactTargetSeconds ?? b.timeGapToMedianSeconds ?? 0) -
+      (a.timeGapToExactTargetSeconds ?? a.timeGapToMedianSeconds ?? 0)
+    )
+    .map((segment) => ({
+      segmentKey: segment.segmentKey,
+      label: segment.label,
+      percentile: segment.percentile,
+      timeGapSeconds: Math.round(segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? 0),
+      confidence: segment.confidence,
+    }));
 }
 
 function workRunBalance(normalised) {
@@ -72,13 +89,21 @@ export function analyseSubmission(input = {}) {
   const benchmarkContext = selectBenchmarkGroups(normalised);
   const scope = analysisScope(input, normalised, benchmarkContext);
 
-  const baseSegments = benchmarkContext.available ? calculateSegmentStats(normalised, benchmarkContext) : [];
+  const rawSegments = benchmarkContext.available ? calculateSegmentStats(normalised, benchmarkContext) : [];
+  const targetFinishSeconds = input.athleteContext?.targetFinishTimeSeconds ?? null;
+  const exactTargetMap = computeExactTargetMap(
+    rawSegments,
+    targetFinishSeconds,
+    Boolean(benchmarkContext.goalBenchmarkGroup),
+  );
+  const baseSegments = attachExactTargets(rawSegments, exactTargetMap);
   const runFadeAnalysis = analyseRunFade(normalised, benchmarkContext);
   const roxzoneAnalysis = analyseRoxzone(normalised, benchmarkContext);
   const scores = calculateScores(baseSegments, normalised, runFadeAnalysis);
   const limiter = findBiggestLimiter(baseSegments);
   const strength = findBiggestStrength(baseSegments);
   const segments = markSegmentRoles(baseSegments, limiter, strength);
+  const rankedStations = stationBreakdown(segments);
   const strengths = strength ? [strength] : [];
   const limiters = limiter ? [limiter] : [];
   const timePotential = calculateTimePotential(segments, normalised, benchmarkContext, limiter);
@@ -97,6 +122,8 @@ export function analyseSubmission(input = {}) {
     submissionId: input.submissionId ?? null,
     analysisVersion: HYROX_ANALYSIS_VERSION,
     analysisScope: scope,
+    athlete: normalised.athlete,
+    race: normalised.race,
     dataQuality: dataQuality(normalised, benchmarkContext),
     benchmarkContext: {
       primaryBenchmarkGroup: benchmarkContext.primaryBenchmarkGroup,
@@ -107,7 +134,10 @@ export function analyseSubmission(input = {}) {
       biggestLimiter: limiter ? {
         segmentKey: limiter.segmentKey,
         label: limiter.label,
+        type: limiter.type,
         timeGapSeconds: limiter.timeGapSeconds,
+        percentile: limiter.percentile,
+        confidence: limiter.confidence,
       } : null,
       biggestStrength: strength ? {
         segmentKey: strength.segmentKey,
@@ -119,8 +149,10 @@ export function analyseSubmission(input = {}) {
     },
     scores,
     segments,
+    stationBreakdown: rankedStations,
     strengths,
     limiters,
+    penalties: normalised.penalties ?? [],
     timePotential,
     runningAnalysis: runFadeAnalysis,
     roxzoneAnalysis,

@@ -7,12 +7,12 @@ function confidenceAtLeastLow(segment) {
 }
 
 function preferLimiter(a, b) {
+  if (a.type === "aggregate" && b.type === "station") return 1;
+  if (b.type === "aggregate" && a.type === "station") return -1;
   const gapDiff = Math.abs(a.timeGapToMedianSeconds - b.timeGapToMedianSeconds);
   if (gapDiff <= BENCHMARK_THRESHOLDS.limiterTieSeconds) {
     return (a.percentile ?? 100) - (b.percentile ?? 100);
   }
-  if (a.type === "station" && b.type === "aggregate" && a.timeGapToMedianSeconds >= b.timeGapToMedianSeconds - 5) return -1;
-  if (b.type === "station" && a.type === "aggregate" && b.timeGapToMedianSeconds >= a.timeGapToMedianSeconds - 5) return 1;
   return b.timeGapToMedianSeconds - a.timeGapToMedianSeconds;
 }
 
@@ -63,7 +63,7 @@ export function calculateTimePotential(segmentStats, normalisedSubmission, bench
     ? segmentStats.find((segment) => segment.segmentKey === limiter.segmentKey)
     : segmentStats.find((segment) => segment.segmentKey === findBiggestLimiter(segmentStats)?.segmentKey);
 
-  if (!selectedLimiter || selectedLimiter.type !== "station") {
+  if (!selectedLimiter || !["station", "aggregate"].includes(selectedLimiter.type)) {
     return {
       headlineGainSeconds: 0,
       conservativeGainSeconds: 0,
@@ -76,9 +76,11 @@ export function calculateTimePotential(segmentStats, normalisedSubmission, bench
 
   const conservativeGainSeconds = Math.max(0, selectedLimiter.userSeconds - (selectedLimiter.benchmarkMedianSeconds ?? selectedLimiter.userSeconds));
   const competitiveGainSeconds = Math.max(0, selectedLimiter.userSeconds - (selectedLimiter.benchmarkTopQuartileSeconds ?? selectedLimiter.userSeconds));
-  const goalBasedGainSeconds = Number.isFinite(selectedLimiter.goalBenchmarkSeconds)
-    ? Math.max(0, selectedLimiter.userSeconds - selectedLimiter.goalBenchmarkSeconds)
-    : null;
+  const goalBasedGainSeconds = Number.isFinite(selectedLimiter.timeGapToExactTargetSeconds)
+    ? Math.max(0, selectedLimiter.timeGapToExactTargetSeconds)
+    : Number.isFinite(selectedLimiter.goalBenchmarkSeconds)
+      ? Math.max(0, selectedLimiter.userSeconds - selectedLimiter.goalBenchmarkSeconds)
+      : null;
   const headlineGainSeconds = goalBasedGainSeconds ?? conservativeGainSeconds;
   const finish = normalisedSubmission.race?.finishTimeSeconds ?? null;
 

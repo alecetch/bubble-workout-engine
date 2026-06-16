@@ -7,6 +7,13 @@ function mean(values) {
   return clean.reduce((sum, value) => sum + value, 0) / clean.length;
 }
 
+function medianOfSplits(values) {
+  const clean = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (clean.length === 0) return null;
+  const mid = Math.floor(clean.length / 2);
+  return clean.length % 2 !== 0 ? clean[mid] : (clean[mid - 1] + clean[mid]) / 2;
+}
+
 function interpretFade(fadePct, benchmarkMedianFadePct) {
   if (!Number.isFinite(fadePct)) return "not_available";
   if (fadePct <= 2) return "even_pacing";
@@ -31,15 +38,42 @@ export function analyseRunFade(normalisedSubmission, benchmarkContext) {
   const runFadeAbsolute = run8 - run1;
   const benchmarkStats = getBenchmarkStats(benchmarkContext?.primaryBenchmarkGroup?.key, "run_fade_pct");
   const benchmarkMedianFadePct = benchmarkStats?.medianSeconds ?? benchmarkStats?.p50Seconds ?? null;
+  const roundedRunFadePct = Number.isFinite(runFadePct) ? Math.round(runFadePct * 10) / 10 : null;
+  const presentSplits = splits.filter(Number.isFinite);
+  const medianRunSeconds = presentSplits.length >= 4 ? medianOfSplits(presentSplits) : null;
+  const run1VsMedianPct = (Number.isFinite(run1) && Number.isFinite(medianRunSeconds) && medianRunSeconds > 0)
+    ? Math.round(((medianRunSeconds - run1) / medianRunSeconds) * 100 * 10) / 10
+    : null;
+  const benchmarkRun1Stats = getBenchmarkStats(benchmarkContext?.primaryBenchmarkGroup?.key, "run_1");
+  const benchmarkRun1Median = benchmarkRun1Stats?.medianSeconds ?? benchmarkRun1Stats?.p50Seconds ?? null;
+  const run1VsBenchmarkMedianPct = (Number.isFinite(run1) && Number.isFinite(benchmarkRun1Median) && benchmarkRun1Median > 0)
+    ? Math.round(((benchmarkRun1Median - run1) / benchmarkRun1Median) * 100 * 10) / 10
+    : null;
+
+  let run1PacingDiagnosis = "unavailable";
+  if (Number.isFinite(run1VsMedianPct)) {
+    if (run1VsMedianPct > 7 && Number.isFinite(roundedRunFadePct) && roundedRunFadePct >= 8) {
+      run1PacingDiagnosis = "started_too_fast";
+    } else if (run1VsMedianPct > 4) {
+      run1PacingDiagnosis = "started_slightly_fast";
+    } else {
+      run1PacingDiagnosis = "appropriate";
+    }
+  }
 
   return {
     available: true,
     partialCalculation: !fullCalculation,
     earlyAvgSeconds,
     lateAvgSeconds,
-    runFadePct: Number.isFinite(runFadePct) ? Math.round(runFadePct * 10) / 10 : null,
+    runFadePct: roundedRunFadePct,
     runFadeAbsolute,
     benchmarkMedianFadePct,
     interpretation: interpretFade(runFadePct, benchmarkMedianFadePct),
+    run1Seconds: Number.isFinite(run1) ? run1 : null,
+    medianRunSeconds,
+    run1VsMedianPct,
+    run1VsBenchmarkMedianPct,
+    run1PacingDiagnosis,
   };
 }

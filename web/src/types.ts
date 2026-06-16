@@ -6,12 +6,18 @@ export interface HyroxSplit {
   timeSeconds: number;
 }
 
+export interface HyroxPenalty {
+  station: string;
+  penaltySeconds: number;
+}
+
 export interface HyroxCalculatorDraft {
   athlete: {
     name?: string;
-    email: string;
+    email?: string;
     gender: "male" | "female";
     ageOnRaceDay: number;
+    ageGroup?: string;
   };
   race: {
     raceName?: string;
@@ -20,6 +26,7 @@ export interface HyroxCalculatorDraft {
     finishTimeSeconds: number;
   };
   splits: HyroxSplit[];
+  penalties?: HyroxPenalty[];
   athleteContext?: {
     trainingAge?: string;
     primaryBackground?: string;
@@ -37,6 +44,7 @@ export interface HyroxAnalysisRequest {
     email: string;
     sex: "male" | "female";
     ageOnRaceDay: number;
+    ageGroup?: string;
   };
   race: {
     raceName?: string;
@@ -45,6 +53,7 @@ export interface HyroxAnalysisRequest {
     finishTimeSeconds: number;
   };
   splits: HyroxSplit[];
+  penalties?: HyroxPenalty[];
   athleteContext?: {
     trainingAge?: string;
     primaryBackground?: string;

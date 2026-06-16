@@ -1,4 +1,5 @@
 import type { HyroxAnalysisRequest, HyroxAnalysisResponse } from "../types";
+import type { HyroxParseResult } from "./hyroxResultsParser";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -55,6 +56,17 @@ export async function submitHyroxAnalysis(
   }
 
   return res.json() as Promise<HyroxAnalysisResponse>;
+}
+
+export async function fetchHyroxResultsImport(
+  url: string,
+): Promise<{ success: boolean; reason?: string; parsed?: HyroxParseResult }> {
+  const res = await fetch(`${BASE_URL}/api/hyrox/import-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  return res.json() as Promise<{ success: boolean; reason?: string; parsed?: HyroxParseResult }>;
 }
 
 export function trackEvent(name: string, props?: Record<string, unknown>): void {

@@ -71,6 +71,8 @@ import { pool } from "./src/db.js";
 import { loadBenchmarkData } from "./src/hyrox/engine/benchmarkService.js";
 import { hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission } from "./src/hyrox/hyroxValidator.js";
 import * as hyroxController from "./src/hyrox/hyroxController.js";
+import { importUrl } from "./src/hyrox/hyroxImportController.js";
+import { hyroxCarouselHandler } from "./src/hyrox/hyroxCarouselController.js";
 import { runningIpRateLimiter, validateRunningSubmission } from "./src/hyrox/running/runningValidator.js";
 import * as runningController from "./src/hyrox/running/runningController.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
@@ -783,7 +785,10 @@ app.use(websiteEnhancementsRouter);
 app.use(contentHubRouter);
 app.use(affiliateProgramRouter);
 app.post("/api/hyrox/analyse", hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission, hyroxController.analyse);
+app.post("/api/hyrox/import-url", hyroxIpRateLimiter, importUrl);
 app.get("/api/hyrox/health", hyroxController.health);
+app.get("/hyrox/carousel/:submissionId", hyroxCarouselHandler);
+app.get("/api/hyrox/carousel/:submissionId", hyroxCarouselHandler);
 app.post("/api/running/analyse", runningIpRateLimiter, validateRunningSubmission, runningController.analyse);
 app.get("/api/running/health", runningController.health);
 app.use("/api", ...userAuth, physiqueReadRouter);
@@ -883,9 +888,14 @@ app.use((err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, "0.0.0.0", () => {
+const server = app.listen(port, "0.0.0.0", () => {
   logger.info({ event: "server.listening", port }, `API listening on :${port}`);
   loadBenchmarkData(pool)
     .then((summary) => logger.info({ event: "hyrox.benchmarks.loaded", ...summary }, "Loaded HYROX benchmark cache"))
     .catch((err) => logger.warn({ event: "hyrox.benchmarks.load_failed", err: err?.message }, "HYROX benchmark cache unavailable"));
 });
+// Prevent keep-alive race condition with Vite's proxy (and any upstream load balancer).
+// Node.js 18+ defaults to 5 s, which is shorter than Vite's proxy idle window, causing
+// "socket hang up" errors when a connection is reused just as Express closes it.
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;

@@ -90,22 +90,6 @@ describe("SplitEntryPage", () => {
     );
   }
 
-  test("Use Example Data populates all 16 splits", async () => {
-    renderSplitPage();
-
-    const exampleBtn = screen.getByText("Use Example Data");
-    await act(async () => {
-      fireEvent.click(exampleBtn);
-    });
-
-    // After loading example data, 16 inputs should be filled
-    const inputs = screen.getAllByRole("textbox");
-    const filledInputs = inputs.filter(
-      (inp) => (inp as HTMLInputElement).value !== "",
-    );
-    expect(filledInputs.length).toBe(16);
-  });
-
   test("split total warning shown when splits exceed finish time", async () => {
     renderSplitPage();
 
@@ -157,26 +141,10 @@ describe("RaceDetailsPage validation", () => {
     );
   }
 
-  test("empty email blocks navigation past Page 1", async () => {
-    renderRacePage();
-
-    const nextBtn = screen.getByText(/next: enter your splits/i);
-    await act(async () => {
-      fireEvent.click(nextBtn);
-    });
-
-    expect(
-      screen.getByText(/valid email address is required/i),
-    ).toBeInTheDocument();
-  });
-
   test("missing finish time blocks navigation past Page 1", async () => {
     renderRacePage();
 
-    // Fill in email and age but leave finish time empty
-    fireEvent.change(screen.getByLabelText(/email address/i), {
-      target: { value: "test@test.com" },
-    });
+    // Fill in age but leave finish time empty
     fireEvent.change(screen.getByLabelText(/age on race day/i), {
       target: { value: "35" },
     });

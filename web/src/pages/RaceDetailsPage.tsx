@@ -6,20 +6,25 @@ import { TextInput } from "../components/TextInput";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { TimeInput } from "../components/TimeInput";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { SecondaryButton } from "../components/SecondaryButton";
+import { SplitImportPanel } from "../components/SplitImportPanel";
 import { loadDraft, saveDraft } from "../utils/storage";
 import { parseTimeToSeconds, formatSeconds } from "../utils/time";
-import { trackEvent } from "../utils/api";
+import { fetchHyroxResultsImport, trackEvent } from "../utils/api";
+import { normalizeName, saveImportedHyroxResult } from "../utils/hyroxImportDraft";
 import type { HyroxCalculatorDraft } from "../types";
+import type { HyroxParseResult } from "../utils/hyroxResultsParser";
 import styles from "./RaceDetailsPage.module.css";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+type Division = "open" | "pro" | "doubles" | "relay";
+
+const VALID_DIVISIONS: Division[] = ["open", "pro", "doubles", "relay"];
 
 export function RaceDetailsPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
 
   const [name, setName] = useState(draft?.athlete?.name ?? "");
-  const [email, setEmail] = useState(draft?.athlete?.email ?? "");
   const [gender, setGender] = useState<"male" | "female">(
     draft?.athlete?.gender ?? "male",
   );
@@ -28,15 +33,19 @@ export function RaceDetailsPage() {
   );
   const [raceName, setRaceName] = useState(draft?.race?.raceName ?? "");
   const [raceDate, setRaceDate] = useState(draft?.race?.raceDate ?? "");
-  const [division, setDivision] = useState<
-    "open" | "pro" | "doubles" | "relay"
-  >(draft?.race?.division ?? "open");
+  const [division, setDivision] = useState<Division>(draft?.race?.division ?? "open");
   const [finishTime, setFinishTime] = useState(
     draft?.race?.finishTimeSeconds
       ? formatSeconds(draft.race.finishTimeSeconds)
       : "",
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [importSucceeded, setImportSucceeded] = useState(false);
+  const [importTab, setImportTab] = useState<"paste" | "url">("paste");
+  const [importUrl, setImportUrl] = useState("");
+  const [importUrlError, setImportUrlError] = useState<string | null>(null);
+  const [importUrlLoading, setImportUrlLoading] = useState(false);
+  const [importOpenedUrl, setImportOpenedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     trackEvent("hyrox_calculator_started");
@@ -44,10 +53,6 @@ export function RaceDetailsPage() {
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
-
-    if (!email || !EMAIL_RE.test(email.trim())) {
-      errs.email = "Valid email address is required.";
-    }
 
     const ageNum = parseInt(age, 10);
     if (!age || isNaN(ageNum) || ageNum < 16 || ageNum > 80) {
@@ -63,6 +68,50 @@ export function RaceDetailsPage() {
     return Object.keys(errs).length === 0;
   }
 
+  function applyImportedResult(result: HyroxParseResult) {
+    const normalizedName = normalizeName(result.athleteName);
+    if (normalizedName) setName(normalizedName);
+    if (result.raceName) setRaceName(result.raceName);
+    if (result.division && VALID_DIVISIONS.includes(result.division)) {
+      setDivision(result.division);
+    }
+    if (result.finishTimeSeconds && result.finishTimeSeconds > 0) {
+      setFinishTime(formatSeconds(result.finishTimeSeconds));
+    }
+  }
+
+  function handleInlineImport(result: HyroxParseResult) {
+    saveImportedHyroxResult(result);
+    applyImportedResult(result);
+    setImportSucceeded(true);
+    setErrors({});
+    setImportUrlError(null);
+  }
+
+  async function handleUrlFetch() {
+    setImportUrlError(null);
+    if (!importUrl.startsWith("https://results.hyrox.com/")) {
+      setImportUrlError("Enter a valid results.hyrox.com URL.");
+      return;
+    }
+
+    setImportUrlLoading(true);
+    const response: Awaited<ReturnType<typeof fetchHyroxResultsImport>> = await fetchHyroxResultsImport(importUrl).catch(() => ({
+      success: false,
+      reason: "fetch_failed",
+    }));
+    setImportUrlLoading(false);
+
+    if (response.success && response.parsed && response.parsed.confidence !== "low") {
+      handleInlineImport(response.parsed);
+      return;
+    }
+
+    window.open(importUrl, "_blank", "noopener");
+    setImportOpenedUrl(importUrl);
+    setImportTab("paste");
+  }
+
   function handleNext() {
     if (!validate()) return;
 
@@ -70,7 +119,6 @@ export function RaceDetailsPage() {
     const updated: Partial<HyroxCalculatorDraft> = {
       athlete: {
         name: name.trim() || undefined,
-        email: email.trim(),
         gender,
         ageOnRaceDay: parseInt(age, 10),
       },
@@ -139,21 +187,108 @@ export function RaceDetailsPage() {
           <FormPanel>
             <h2 className={styles.formTitle}>Your Race Details</h2>
             <div className={styles.fields}>
-              <TextInput
-                label="Athlete Name"
-                placeholder="Optional"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <TextInput
-                label="Email Address"
-                type="email"
-                required
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                error={errors.email}
-              />
+              <div data-testid="inline-import-panel">
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <SecondaryButton type="button" onClick={() => setImportTab("paste")}>
+                    Paste
+                  </SecondaryButton>
+                  <SecondaryButton type="button" onClick={() => setImportTab("url")}>
+                    URL
+                  </SecondaryButton>
+                </div>
+
+                {importSucceeded && (
+                  <div
+                    data-testid="import-success-badge"
+                    style={{
+                      marginBottom: 16,
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(34,197,94,0.45)",
+                      background: "rgba(34,197,94,0.12)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    Imported from results.hyrox.com - fields pre-filled below
+                  </div>
+                )}
+
+                {importTab === "paste" && (
+                  <>
+                    {importOpenedUrl && !importSucceeded && (
+                      <div
+                        style={{
+                          marginBottom: 16,
+                          padding: "12px 16px",
+                          borderRadius: 8,
+                          background: "rgba(245,158,11,0.12)",
+                          border: "1px solid rgba(245,158,11,0.45)",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        <strong style={{ color: "var(--text-primary)" }}>Your results page is open in a new tab.</strong>
+                        <span> Press <kbd>Ctrl+A</kbd> to select all, <kbd>Ctrl+C</kbd> to copy, then paste below.</span>
+                      </div>
+                    )}
+                    <SplitImportPanel onImport={handleInlineImport} onCancel={() => undefined} />
+                  </>
+                )}
+
+                {importTab === "url" && !importSucceeded && (
+                  <div>
+                    <label style={{ display: "block", color: "var(--text-secondary)", marginBottom: 8 }}>
+                      Paste a link to your results page and we'll try to import automatically.
+                    </label>
+                    <input
+                      data-testid="inline-url-input"
+                      type="url"
+                      placeholder="https://results.hyrox.com/season-8/?..."
+                      value={importUrl}
+                      onChange={(event) => setImportUrl(event.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: 12,
+                        borderRadius: 8,
+                        border: "1px solid var(--border-subtle)",
+                        background: "var(--bg-950)",
+                        color: "var(--text-primary)",
+                      }}
+                    />
+                    {importUrlError && (
+                      <div data-testid="inline-url-error" style={{ color: "var(--accent-red)", marginTop: 8 }}>
+                        {importUrlError}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 16 }}>
+                      <PrimaryButton
+                        type="button"
+                        data-testid="inline-url-fetch"
+                        loading={importUrlLoading}
+                        onClick={() => void handleUrlFetch()}
+                      >
+                        Fetch Results
+                      </PrimaryButton>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {!importSucceeded && (
+                <div
+                  data-testid="manual-entry-separator"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--text-muted)",
+                    fontSize: 13,
+                    padding: "4px 0 2px",
+                  }}
+                >
+                  - Or enter manually below -
+                </div>
+              )}
+
               <div className={styles.row2}>
                 <SegmentedControl
                   label="Gender"
@@ -177,18 +312,6 @@ export function RaceDetailsPage() {
                   error={errors.age}
                 />
               </div>
-              <TextInput
-                label="Race Name"
-                placeholder="e.g. HYROX Manchester"
-                value={raceName}
-                onChange={(e) => setRaceName(e.target.value)}
-              />
-              <TextInput
-                label="Race Date"
-                type="date"
-                value={raceDate}
-                onChange={(e) => setRaceDate(e.target.value)}
-              />
               <SegmentedControl
                 label="Division"
                 required
@@ -200,7 +323,7 @@ export function RaceDetailsPage() {
                 ]}
                 value={division}
                 onChange={(v) =>
-                  setDivision(v as "open" | "pro" | "doubles" | "relay")
+                  setDivision(v as Division)
                 }
               />
               <TimeInput
@@ -211,6 +334,24 @@ export function RaceDetailsPage() {
                 value={finishTime}
                 onChange={(e) => setFinishTime(e.target.value)}
                 error={errors.finishTime}
+              />
+              <TextInput
+                label="Athlete Name"
+                placeholder="Optional"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <TextInput
+                label="Race Name"
+                placeholder="e.g. HYROX Manchester"
+                value={raceName}
+                onChange={(e) => setRaceName(e.target.value)}
+              />
+              <TextInput
+                label="Race Date"
+                type="date"
+                value={raceDate}
+                onChange={(e) => setRaceDate(e.target.value)}
               />
 
               <div className={styles.actions}>

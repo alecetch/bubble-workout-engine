@@ -92,6 +92,7 @@ function submissionInput(body = {}) {
       source: race.source ?? "manual",
     },
     splits: body.splits ?? [],
+    penalties: body.penalties ?? [],
     athleteContext,
     roxzoneMode: body.roxzoneMode,
   };
@@ -186,8 +187,10 @@ function limitedAnalysis(body, normalised, reason) {
     benchmarkContext: { primaryBenchmarkGroup: null, fallbacksUsed: [], goalBenchmarkGroup: null },
     race: { finishTimeSeconds: body.race?.finishTimeSeconds, division: body.race?.division },
     segments: [],
+    stationBreakdown: [],
     strengths: [],
     limiters: [],
+    penalties: normalised.penalties ?? [],
     headline: { biggestLimiter: null, biggestStrength: null, headlineGainSeconds: 0, projectedTimeSeconds: body.race?.finishTimeSeconds ?? null },
     scores: {},
     timePotential: { headlineGainSeconds: 0, newProjectedTimeSeconds: body.race?.finishTimeSeconds ?? null },
@@ -210,6 +213,8 @@ export async function analyse(req, res) {
       : analyseSubmission(input);
     analysisJson.race = { ...(analysisJson.race ?? {}), ...input.race };
     analysisJson.athlete = { ...(analysisJson.athlete ?? {}), ...input.athlete };
+    const submission = await persistSubmission(body, normalised);
+    analysisJson.submissionId = submission.id;
 
     const insights = unsupportedDivision ? [] : generateInsights(analysisJson, input.athleteContext);
     const emailReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "email_report" });
@@ -217,8 +222,6 @@ export async function analyse(req, res) {
     const carouselA = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "carousel_a" });
     const carouselB = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "carousel_b" });
 
-    const submission = await persistSubmission(body, normalised);
-    analysisJson.submissionId = submission.id;
     await persistAnalysis({ submissionId: submission.id, analysisJson, insights, emailReport, carouselA, carouselB });
 
     const emailLogId = await createEmailLogEntry(submission.id, pool).catch(() => null);
