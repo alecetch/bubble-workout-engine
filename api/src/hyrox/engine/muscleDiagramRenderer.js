@@ -15,7 +15,6 @@ function loadSvg(filename) {
 const SIGNAL_COLOUR = Object.freeze({
   limiter: "#ef4444",
   asset: "#22c55e",
-  mixed: "#f97316",
 });
 
 const MUSCLE_DIAGRAM_MAP = Object.freeze({
@@ -86,7 +85,16 @@ function prepareSvg(rawSvg, styleBlock) {
 export function renderMuscleDiagramPair(muscleGroupProfile, sex = "male") {
   if (!muscleGroupProfile?.available) return null;
   const prefix = sex === "female" ? "woman" : "man";
-  const signals = muscleGroupProfile.muscleGroupSignals ?? [];
+
+  // Only colour primary limiters (red) and primary assets (green).
+  // Mixed and secondary signals produce noise — the diagram should guide focus, not categorise everything.
+  const focused = new Set([
+    ...(muscleGroupProfile.primaryLimiters ?? []),
+    ...(muscleGroupProfile.primaryAssets ?? []),
+  ]);
+  const signals = (muscleGroupProfile.muscleGroupSignals ?? []).filter(
+    (s) => focused.has(s.groupId),
+  );
 
   return {
     frontSvg: prepareSvg(

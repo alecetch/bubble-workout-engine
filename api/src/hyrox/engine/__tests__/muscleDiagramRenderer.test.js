@@ -24,6 +24,8 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "posterior_chain", signal: "limiter" }],
+      primaryLimiters: ["posterior_chain"],
+      primaryAssets: [],
     }, "female");
     assert.ok(result.backSvg.includes("hamstrings2"), "woman-back uses hamstrings2, not hamstrings");
   });
@@ -32,6 +34,8 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "posterior_chain", signal: "limiter" }],
+      primaryLimiters: ["posterior_chain"],
+      primaryAssets: [],
     }, "male");
     assert.ok(!result.backSvg.includes("#hamstrings2 path"), "man-back uses hamstrings, not hamstrings2");
     assert.ok(result.backSvg.includes("#hamstrings path { fill: #ef4444; }"));
@@ -41,6 +45,8 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "upper_back_pull", signal: "limiter" }],
+      primaryLimiters: ["upper_back_pull"],
+      primaryAssets: [],
     }, "male");
     assert.ok(result.frontSvg.includes("#trapezius path { fill: #ef4444; }"), "limiter colour in style block");
   });
@@ -49,6 +55,8 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "posterior_chain", signal: "asset" }],
+      primaryLimiters: [],
+      primaryAssets: ["posterior_chain"],
     }, "male");
     assert.ok(result.backSvg.includes("#gluteus_maximus path { fill: #22c55e; }"), "asset colour in style block");
   });

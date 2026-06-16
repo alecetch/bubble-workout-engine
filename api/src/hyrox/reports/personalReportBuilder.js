@@ -149,8 +149,11 @@ function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
   if (diagramPair) {
     content.push({ __type: "muscle_diagram_pair", frontSvg: diagramPair.frontSvg, backSvg: diagramPair.backSvg });
   }
-  content.push(...stationClassifications.map(
-    (station) => `${station.label}: ${station.classification} (${station.percentile != null ? `${Math.round(station.percentile)}th percentile` : "unranked"})`,
+  const notableStations = stationClassifications.filter(
+    (station) => station.classification === "weak" || station.classification === "strong",
+  );
+  content.push(...notableStations.map(
+    (station) => `${station.label}: ${station.classification === "weak" ? "below benchmark" : "above benchmark"} (${station.percentile != null ? `${Math.round(station.percentile)}th percentile` : "unranked"})`,
   ));
   return content;
 }
