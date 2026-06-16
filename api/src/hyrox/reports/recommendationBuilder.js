@@ -41,7 +41,7 @@ function formatPacePerKm(seconds) {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
-function buildGapBreakdown(analysisJson = {}) {
+export function buildGapBreakdown(analysisJson = {}) {
   const GAP_THRESHOLD = 30;
   const contributors = [];
 
@@ -84,7 +84,7 @@ function buildGapBreakdown(analysisJson = {}) {
   return sorted.length >= 2 ? sorted : [];
 }
 
-function formatGapBreakdown(items) {
+export function formatGapBreakdown(items) {
   const parts = items.map((item, index) => `${index + 1}/ ${item.label} (${formatGain(item.gainSeconds)})`);
   return `Likely contributors: ${parts.join(" ")}`;
 }

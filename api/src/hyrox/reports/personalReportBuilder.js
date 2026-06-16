@@ -1,5 +1,5 @@
 import { formatGain, formatPercent, formatPercentile, formatTime, label } from "./copyFormatter.js";
-import { buildRecommendations } from "./recommendationBuilder.js";
+import { buildRecommendations, buildGapBreakdown, formatGapBreakdown } from "./recommendationBuilder.js";
 import { buildBackgroundSection } from "./backgroundPersonaliser.js";
 import { buildTrainingVolumeAdvice } from "./trainingVolumeAdvisor.js";
 import { buildRoxzoneSection } from "./roxzoneCommentary.js";
@@ -208,7 +208,9 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
 
   const horizonLabel = recommendations[0]?.timeHorizon ?? null;
   const recItems = recommendations.map((item) => `${item.priority}. ${item.title}: ${item.rationale}${item.safetyNote ? ` ${item.safetyNote}` : ""}`);
-  const recContent = horizonLabel ? [`Training focus - ${horizonLabel}:`, ...recItems] : recItems;
+  const gapItems = buildGapBreakdown(analysisJson);
+  const recContent = horizonLabel ? [`Training focus - ${horizonLabel}:`, ...recItems] : [...recItems];
+  if (gapItems.length >= 2) recContent.push(formatGapBreakdown(gapItems));
   sections.push({
     sectionKey: "recommended_focus_areas",
     title: "Recommended Focus Areas",
