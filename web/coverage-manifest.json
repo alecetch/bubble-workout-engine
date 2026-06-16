@@ -1,0 +1,12 @@
+[
+  {
+    "file": "src/pages/ImportResultsPage.tsx",
+    "status": "covered",
+    "testFile": "src/__tests__/import-results-page.test.tsx"
+  },
+  {
+    "file": "src/components/SplitImportPanel.tsx",
+    "status": "covered",
+    "testFile": "src/__tests__/import-results-page.test.tsx"
+  }
+]

@@ -206,6 +206,7 @@ test("POST /api/hyrox/analyse with complete valid splits persists submission and
     assert.equal(submissions.rows.length, 1);
     const analyses = await pool.query("SELECT * FROM hyrox_analyses WHERE submission_id = $1", [json.submissionId]);
     assert.equal(analyses.rows.length, 1);
+    assert.match(analyses.rows[0].report_json.emailHtml, new RegExp(`/hyrox/carousel/${json.submissionId}`));
     const emailLog = await waitForEmailLog(json.submissionId);
     assert.ok(["sent", "failed"].includes(emailLog?.status));
   } finally {

@@ -5,7 +5,7 @@ import { FormPanel } from "../components/FormPanel";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
 import { SideStepper } from "../components/SideStepper";
-import { loadDraft, clearDraft } from "../utils/storage";
+import { loadDraft, clearDraft, saveDraft } from "../utils/storage";
 import { formatSeconds } from "../utils/time";
 import {
   submitHyroxAnalysis,
@@ -16,12 +16,24 @@ import { trackEvent } from "../utils/api";
 import type { HyroxAnalysisRequest } from "../types";
 import styles from "./ReviewPage.module.css";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function toTitleCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatContextValue(raw: string): string {
+  return toTitleCase(raw.replace(/(\d+)_(\d+)/g, "$1-$2").replace(/_/g, " "));
+}
+
 export function ReviewPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
   const honeypotRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [email, setEmail] = useState(draft?.athlete?.email ?? "");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<
     Array<{ field: string; message: string }>
   >([]);
@@ -39,7 +51,7 @@ export function ReviewPage() {
     );
   }
 
-  const { athlete, race, splits = [], athleteContext, marketingConsent = false } = draft;
+  const { athlete, race, splits = [], penalties = [], athleteContext, marketingConsent = false } = draft;
 
   const splitTotal = splits.reduce((sum, s) => sum + (s.timeSeconds ?? 0), 0);
   const roxzone = race.finishTimeSeconds - splitTotal;
@@ -47,19 +59,27 @@ export function ReviewPage() {
   const missingSplits = 16 - splits.filter((s) => s.timeSeconds > 0).length;
 
   async function handleSubmit() {
+    if (!email || !EMAIL_RE.test(email.trim())) {
+      setEmailError("A valid email address is required.");
+      setLoading(false);
+      return;
+    }
+    setEmailError(null);
     // Honeypot check — silently discard if populated
     if (honeypotRef.current?.value) return;
 
     setSubmitError(null);
     setValidationErrors([]);
     setLoading(true);
+    saveDraft({ athlete: { ...athlete, email: email.trim() } });
 
     const payload: HyroxAnalysisRequest = {
       athlete: {
         name: athlete.name,
-        email: athlete.email,
+        email: email.trim(),
         sex: athlete.gender,
         ageOnRaceDay: athlete.ageOnRaceDay,
+        ageGroup: athlete.ageGroup,
       },
       race: {
         raceName: race.raceName,
@@ -68,6 +88,7 @@ export function ReviewPage() {
         finishTimeSeconds: race.finishTimeSeconds,
       },
       splits,
+      penalties,
       athleteContext,
       marketingConsent,
     };
@@ -119,9 +140,8 @@ export function ReviewPage() {
             <div className={styles.reviewRows}>
               <ReviewRow
                 label="Athlete"
-                value={athlete.name ?? athlete.email}
+                value={athlete.name ? toTitleCase(athlete.name) : "Not supplied"}
               />
-              <ReviewRow label="Email" value={athlete.email} />
               <ReviewRow label="Division" value={race.division.toUpperCase()} />
               <ReviewRow
                 label="Finish Time"
@@ -157,25 +177,25 @@ export function ReviewPage() {
                 {athleteContext.trainingAge && (
                   <ReviewRow
                     label="Training Age"
-                    value={athleteContext.trainingAge.replace(/_/g, " ")}
+                    value={formatContextValue(athleteContext.trainingAge)}
                   />
                 )}
                 {athleteContext.primaryBackground && (
                   <ReviewRow
                     label="Background"
-                    value={athleteContext.primaryBackground.replace(/_/g, " ")}
+                    value={formatContextValue(athleteContext.primaryBackground)}
                   />
                 )}
                 {athleteContext.weeklyRunningVolume && (
                   <ReviewRow
                     label="Weekly Running"
-                    value={athleteContext.weeklyRunningVolume.replace(/_/g, " ")}
+                    value={formatContextValue(athleteContext.weeklyRunningVolume)}
                   />
                 )}
                 {athleteContext.weeklyStrengthSessions && (
                   <ReviewRow
                     label="Strength Sessions"
-                    value={athleteContext.weeklyStrengthSessions.replace(/_/g, " ")}
+                    value={formatContextValue(athleteContext.weeklyStrengthSessions)}
                   />
                 )}
                 {athleteContext.targetFinishTimeSeconds && (
@@ -218,6 +238,36 @@ export function ReviewPage() {
             <div className={styles.errorMsg}>{submitError}</div>
           )}
 
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>
+              Where should we send your analysis? *
+            </label>
+            <input
+              data-testid="email-input"
+              type="email"
+              required
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailError(null);
+              }}
+              style={{
+                width: "100%",
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid var(--border-subtle)",
+                background: "var(--bg-950)",
+                color: "var(--text-primary)",
+              }}
+            />
+            {emailError && (
+              <div data-testid="email-error" style={{ color: "var(--accent-red)", marginTop: 6, fontSize: 13 }}>
+                {emailError}
+              </div>
+            )}
+          </div>
+
           <div className={styles.submitArea}>
             <div className={styles.backRow}>
               <SecondaryButton
@@ -244,7 +294,7 @@ export function ReviewPage() {
                 color: "var(--text-muted)",
               }}
             >
-              Your report will be sent to {athlete.email}
+              Your report will be sent to {email}
             </p>
           </div>
         </FormPanel>

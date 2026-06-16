@@ -10,7 +10,7 @@ import { SideStepper } from "../components/SideStepper";
 import { loadDraft, saveDraft } from "../utils/storage";
 import { parseTimeToSeconds, formatSeconds } from "../utils/time";
 import { trackEvent } from "../utils/api";
-import { SEGMENTS, SAMPLE_FIXTURE } from "../data/segments";
+import { SEGMENTS } from "../data/segments";
 import type { HyroxSplit } from "../types";
 import styles from "./SplitEntryPage.module.css";
 
@@ -64,16 +64,6 @@ export function SplitEntryPage() {
     });
   }
 
-  function handleLoadExample() {
-    const map: Record<string, string> = {};
-    for (const s of SAMPLE_FIXTURE.splits) {
-      map[s.segmentKey] = formatSeconds(s.timeSeconds);
-    }
-    setRawValues(map);
-    const splits: HyroxSplit[] = SAMPLE_FIXTURE.splits;
-    saveDraft({ splits });
-  }
-
   function handleClearAll() {
     setRawValues({});
     saveDraft({ splits: [] });
@@ -102,13 +92,6 @@ export function SplitEntryPage() {
             <div className={styles.tableHeader}>
               <h2 className={styles.tableTitle}>Enter Your Split Times</h2>
               <div className={styles.utilityActions}>
-                <button
-                  type="button"
-                  className={styles.utilBtn}
-                  onClick={handleLoadExample}
-                >
-                  Use Example Data
-                </button>
                 <button
                   type="button"
                   className={styles.utilBtn}

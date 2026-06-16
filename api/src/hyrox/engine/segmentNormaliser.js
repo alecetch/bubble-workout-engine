@@ -39,6 +39,14 @@ function buildAggregateSegments({ runTime, workTime, roxzoneTime, finishTime }) 
 
 export function normaliseSubmission(input = {}) {
   const suppliedSplits = Array.isArray(input.splits) ? input.splits.map(normaliseSplit).filter(Boolean) : [];
+  const penalties = Array.isArray(input.penalties)
+    ? input.penalties
+        .map((penalty) => ({
+          station: String(penalty?.station ?? "").trim(),
+          penaltySeconds: finiteOrNull(penalty?.penaltySeconds),
+        }))
+        .filter((penalty) => penalty.station && penalty.penaltySeconds !== null)
+    : [];
   const splitMap = new Map(suppliedSplits.map((split) => [split.segmentKey, split]));
   const finishTimeSeconds = finiteOrNull(input.race?.finishTimeSeconds);
   const runTime = sumByKeys(splitMap, RUN_KEYS);
@@ -87,6 +95,7 @@ export function normaliseSubmission(input = {}) {
       finishTimeSeconds,
     },
     splits: suppliedSplits,
+    penalties,
     splitMap,
     aggregateSegments,
     runTimeSeconds: runTime,
