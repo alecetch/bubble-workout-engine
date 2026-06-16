@@ -25,6 +25,9 @@ export function buildBackgroundSection(analysisJson = {}, athleteContext = {}) {
 
   const limiterKey = analysisJson.headline?.biggestLimiter?.segmentKey ?? null;
   const limiterType = analysisJson.headline?.biggestLimiter?.type ?? null;
+  const hasStationBreakdownData = Array.isArray(analysisJson.stationBreakdown);
+  const hasStationEvidence = (analysisJson.stationBreakdown ?? [])
+    .some((s) => s.confidence !== "low" && s.timeGapSeconds > 0);
   const isRunLimiter = limiterKey?.startsWith("run") || limiterKey === "run_time";
   const isStationLimiter = limiterType === "station" || limiterKey === "work_time";
   const noLimiter = !isRunLimiter && !isStationLimiter;
@@ -32,6 +35,10 @@ export function buildBackgroundSection(analysisJson = {}, athleteContext = {}) {
   const aligned = background === "running" || background === "crossfit"
     ? isStationLimiter || noLimiter
     : isRunLimiter || noLimiter;
+
+  if (hasStationBreakdownData && aligned && !hasStationEvidence && background === "running") {
+    return "Without clear station split data, the training volume picture is the clearest signal available - focus there first.";
+  }
 
   return BACKGROUND_COPY[background][aligned ? "aligned" : "inverted"];
 }

@@ -35,6 +35,16 @@ function ordinalSuffix(n) {
   return "th";
 }
 
+export function formatOrdinal(n) {
+  const abs = Math.abs(Math.round(Number(n)));
+  if (!Number.isFinite(abs)) return null;
+  const teens = abs % 100;
+  if (teens >= 11 && teens <= 13) return `${abs}th`;
+  const remainder = abs % 10;
+  const suffix = remainder === 1 ? "st" : remainder === 2 ? "nd" : remainder === 3 ? "rd" : "th";
+  return `${abs}${suffix}`;
+}
+
 export function formatPercentile(p) {
   const n = Number(p);
   if (!Number.isFinite(n)) return null;

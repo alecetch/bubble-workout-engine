@@ -1,4 +1,4 @@
-import { formatGain, formatPercent, formatPercentile, formatTime, label } from "./copyFormatter.js";
+import { formatGain, formatOrdinal, formatPercent, formatPercentile, formatTime, label } from "./copyFormatter.js";
 import { buildRecommendations, buildGapBreakdown, formatGapBreakdown } from "./recommendationBuilder.js";
 import { buildBackgroundSection } from "./backgroundPersonaliser.js";
 import { buildTrainingVolumeAdvice } from "./trainingVolumeAdvisor.js";
@@ -11,6 +11,32 @@ function hasContext(athleteContext) {
 
 function section(sectionKey, title, content) {
   return { sectionKey, title, content };
+}
+
+const SECTION_KEY_MAP = Object.freeze({
+  station_breakdown: "biggest_limiter",
+  split_table: "race_split_breakdown",
+  muscle_group: "muscle_group_profile",
+  background_context: "athlete_background",
+  recommendations: "recommended_focus_areas",
+});
+
+function actualSectionKey(sectionKey) {
+  return SECTION_KEY_MAP[sectionKey] ?? sectionKey;
+}
+
+function orderSections(sections, interpretation) {
+  if (!interpretation?.sectionOrder) return sections;
+  const remaining = [...sections];
+  const ordered = [];
+  for (const requestedKey of interpretation.sectionOrder) {
+    const key = actualSectionKey(requestedKey);
+    const index = remaining.findIndex((candidate) => candidate.sectionKey === key);
+    if (index >= 0) ordered.push(...remaining.splice(index, 1));
+  }
+  const ctaIndex = remaining.findIndex((candidate) => candidate.sectionKey === "cta");
+  const cta = ctaIndex >= 0 ? remaining.splice(ctaIndex, 1) : [];
+  return [...ordered, ...remaining, ...cta];
 }
 
 function segment(analysisJson, key) {
@@ -76,6 +102,27 @@ function penaltyNote(analysisJson) {
     })
     .join(", ");
   return `${penalties.length} penalt${penalties.length > 1 ? "ies" : "y"} recorded: ${penaltyList}.${adjustedLabel} This analysis is based on your actual recorded time.`;
+}
+
+function penaltyCalloutSection(analysisJson = {}, interpretation = null) {
+  const penalties = analysisJson.penalties ?? [];
+  const total = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
+  if (total < 60) return null;
+  const adjustedTime = interpretation?.penaltyInterpretation?.adjustedFinishTime;
+  const content = [
+    `${formatGain(total)} in penalties recorded.${adjustedTime ? ` Your adjusted race time was ${adjustedTime}.` : ""}`,
+  ];
+  const affectedRuns = penalties
+    .map((penalty) => {
+      const runNum = String(penalty.runKey ?? penalty.station ?? penalty.segmentKey ?? "").match(/\d+/)?.[0];
+      return runNum ? `Run ${runNum}` : null;
+    })
+    .filter(Boolean);
+  if (affectedRuns.length > 0) {
+    content.push(`The penalty appeared in ${affectedRuns.join(", ")}.`);
+  }
+  content.push("Before chasing fitness gains, reclaim this time through cleaner station execution.");
+  return section("penalty_callout", "Penalty Analysis", content);
 }
 
 function runNumber(runKey) {
@@ -189,7 +236,7 @@ function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
   }
   const weakStations = stationClassifications.filter((s) => s.relativeClass === "weak");
   const strongStations = stationClassifications.filter((s) => s.relativeClass === "strong");
-  const pct = (s) => s.percentile != null ? `${Math.round(s.percentile)}th percentile` : "unranked";
+  const pct = (s) => s.percentile != null ? `${formatOrdinal(s.percentile)} percentile` : "unranked";
   if (weakStations.length > 0) {
     content.push(`Weakest stations: ${weakStations.map((s) => `${s.label} (${pct(s)})`).join(", ")}`);
   }
@@ -201,7 +248,17 @@ function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
   return content;
 }
 
-export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}) {
+function shouldIncludeRunFadeInSummary(analysisJson, interpretation) {
+  if (!analysisJson.runningAnalysis?.runFadePct || analysisJson.runningAnalysis.runFadePct < 8) return false;
+  if (!interpretation) return true;
+  const categories = new Set([
+    interpretation.primaryThesis?.category,
+    ...(interpretation.secondaryTheses ?? []).map((thesis) => thesis.category),
+  ]);
+  return categories.has("running") || categories.has("pacing");
+}
+
+export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null) {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
   const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
   const total = segment(analysisJson, "total_time");
@@ -212,9 +269,13 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   const sections = [];
   const summary = [];
 
-  if (limiter) summary.push(`${limiter.label} is the biggest estimated opportunity, with ${formatGain(gainSeconds)} potential gain.`);
-  if (analysisJson.runningAnalysis?.runFadePct >= 8) summary.push(`Run fade was ${formatPercent(analysisJson.runningAnalysis.runFadePct)}, so fatigue resistance and pacing deserve attention.`);
-  if (ctxCopy) summary.push(ctxCopy);
+  if (interpretation?.summaryBullets?.length) {
+    summary.push(...interpretation.summaryBullets);
+  } else {
+    if (limiter) summary.push(`${limiter.label} is the biggest estimated opportunity, with ${formatGain(gainSeconds)} potential gain.`);
+    if (shouldIncludeRunFadeInSummary(analysisJson, interpretation)) summary.push(`Run fade was ${formatPercent(analysisJson.runningAnalysis.runFadePct)}, so fatigue resistance and pacing deserve attention.`);
+    if (ctxCopy) summary.push(ctxCopy);
+  }
   sections.push(section("executive_summary", "Executive Summary", summary.slice(0, 3)));
 
   const snapshot = [
@@ -225,6 +286,8 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   const pNote = penaltyNote(analysisJson);
   if (pNote) snapshot.push(pNote);
   sections.push(section("race_snapshot", "Race Snapshot", snapshot));
+  const penaltySection = penaltyCalloutSection(analysisJson, interpretation);
+  if (penaltySection) sections.push(penaltySection);
 
   sections.push(section("biggest_strength", "Biggest Strength", strength ? `${strength.label} is the strongest benchmarked area at ${formatPercentile(strength.percentile) ?? "a strong percentile"}.` : "No single high-confidence strength dominated this result."));
   sections.push(section("biggest_limiter", "Station Breakdown", stationBreakdownSection(analysisJson)));
@@ -287,5 +350,5 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   });
   sections.push(section("cta", "Next Step", "Use Forma to build a training plan targeting your bottleneck."));
 
-  return { sections, recommendations };
+  return { sections: orderSections(sections, interpretation), recommendations };
 }
