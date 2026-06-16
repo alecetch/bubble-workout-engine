@@ -58,52 +58,6 @@ function renderHeader() {
   </tr>`;
 }
 
-function renderMuscleGroupSection(sectionData) {
-  const content = Array.isArray(sectionData.content) ? sectionData.content : [sectionData.content];
-  const textItems = content.filter((item) => typeof item === "string");
-  const diagram = content.find((item) => item?.__type === "muscle_diagram_pair") ?? null;
-  const textHtml = textItems
-    .map((item) => `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 8px;">${esc(enforceTone(String(item)))}</p>`)
-    .join("");
-  const diagramHtml = diagram
-    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:16px 0;">
-        <tr>
-          <td align="center">
-            <table cellpadding="0" cellspacing="0" border="0" role="presentation">
-              <tr>
-                <td style="width:248px;vertical-align:top;">${diagram.frontSvg}</td>
-                <td style="width:16px;"></td>
-                <td style="width:248px;vertical-align:top;">${diagram.backSvg}</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td align="center" style="padding-top:8px;">
-            <p style="margin:0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;">
-              <span style="color:#ef4444;">&#9632;</span> Limiter &nbsp;
-              <span style="color:#22c55e;">&#9632;</span> Asset &nbsp;
-              <span style="color:#f97316;">&#9632;</span> Mixed &nbsp;
-              <span style="color:#64748b;">&#9632;</span> Neutral
-            </p>
-          </td>
-        </tr>
-      </table>`
-    : "";
-  const titleText = esc(String(sectionData.title ?? "").toUpperCase());
-  return `
-  <tr>
-    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;">
-      <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">${titleText}</span>
-    </td>
-  </tr>
-  <tr>
-    <td style="background-color:#ffffff;padding:16px 32px 20px;border-bottom:1px solid #e2e8f0;">
-      ${textHtml}${diagramHtml}
-    </td>
-  </tr>`;
-}
-
 function renderHero(analysisJson, greetingName) {
   const limiter = analysisJson.headline?.biggestLimiter ?? null;
   const gainSeconds = analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? null;
@@ -596,6 +550,73 @@ function renderFooter() {
     <td style="background-color:#0d1422;padding:22px 32px;border-radius:0 0 8px 8px;text-align:center;">
       <p style="color:#8fa0ba;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.04em;margin:0 0 6px;">FORMA &nbsp;&#183;&nbsp; forma.fit &nbsp;&#183;&nbsp; Performance Analytics for Hybrid Athletes</p>
       <p style="color:#4a5568;font-family:Arial,Helvetica,sans-serif;font-size:10px;margin:0;">This analysis is for guidance only. Individual results vary.</p>
+    </td>
+  </tr>`;
+}
+
+function renderMuscleGroupSection(section) {
+  const content = Array.isArray(section.content) ? section.content : [section.content];
+  const textItems = content.filter((item) => typeof item === "string");
+  const diagram = content.find((item) => item?.__type === "muscle_diagram_pair") ?? null;
+  const paragraphs = textItems
+    .filter(Boolean)
+    .map((item, index) => {
+      const border = index > 0 ? "border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;" : "";
+      return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;${border}">${esc(enforceTone(item))}</p>`;
+    })
+    .join("");
+  const diagramLabel = (text) =>
+    `<div style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;text-align:center;margin-bottom:6px;">${text}</div>`;
+  const diagramHtml = diagram
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:20px 0 0;">
+        <tr>
+          <td align="center">
+            <table cellpadding="0" cellspacing="0" border="0" role="presentation">
+              <tr>
+                <td style="width:260px;vertical-align:top;">
+                  ${diagramLabel("Front")}
+                  ${diagram.frontSvg}
+                </td>
+                <td style="width:8px;"></td>
+                <td style="width:260px;vertical-align:top;">
+                  ${diagramLabel("Back")}
+                  ${diagram.backSvg}
+                </td>
+              </tr>
+              <tr>
+                <td colspan="3" style="padding-top:14px;text-align:center;">
+                  <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:0 auto;">
+                    <tr>
+                      <td style="padding:0 14px 0 0;">
+                        <span style="color:#ef4444;font-size:15px;vertical-align:middle;">&#9679;</span>
+                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">Focus area</span>
+                      </td>
+                      <td style="padding:0 14px 0 0;">
+                        <span style="color:#22c55e;font-size:15px;vertical-align:middle;">&#9679;</span>
+                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">Race strength</span>
+                      </td>
+                      <td>
+                        <span style="color:#94a3b8;font-size:15px;vertical-align:middle;">&#9679;</span>
+                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">No signal</span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>`
+    : "";
+  return `
+  <tr>
+    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;">
+      <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">MUSCLE GROUP PROFILE</span>
+    </td>
+  </tr>
+  <tr>
+    <td style="background-color:#ffffff;padding:16px 32px 20px;border-bottom:1px solid #e2e8f0;">
+      ${paragraphs}${diagramHtml}
     </td>
   </tr>`;
 }

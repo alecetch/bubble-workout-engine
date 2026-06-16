@@ -149,9 +149,17 @@ function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
   if (diagramPair) {
     content.push({ __type: "muscle_diagram_pair", frontSvg: diagramPair.frontSvg, backSvg: diagramPair.backSvg });
   }
-  content.push(...stationClassifications.map(
-    (station) => `${station.label}: ${station.classification} (${station.percentile != null ? `${Math.round(station.percentile)}th percentile` : "unranked"})`,
-  ));
+  const weakStations = stationClassifications.filter((s) => s.relativeClass === "weak");
+  const strongStations = stationClassifications.filter((s) => s.relativeClass === "strong");
+  const pct = (s) => s.percentile != null ? `${Math.round(s.percentile)}th percentile` : "unranked";
+  if (weakStations.length > 0) {
+    content.push(`Weakest stations: ${weakStations.map((s) => `${s.label} (${pct(s)})`).join(", ")}`);
+  }
+  if (strongStations.length > 0) {
+    const isRelative = strongStations.every((s) => (s.percentile ?? 0) < 50);
+    const prefix = isRelative ? "Relative strengths" : "Strongest stations";
+    content.push(`${prefix}: ${strongStations.map((s) => `${s.label} (${pct(s)})`).join(", ")}`);
+  }
   return content;
 }
 
@@ -197,6 +205,10 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
         targetFinishTimeSeconds: athleteContext.targetFinishTimeSeconds ?? athleteContext.targetTimeSeconds ?? analysisJson.race?.targetTimeSeconds ?? null,
       },
     });
+  }
+  if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound) {
+    const sex = analysisJson.athlete?.sex ?? "male";
+    sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
   }
   const headlineGain = analysisJson.timePotential?.headlineGainSeconds ?? 0;
   const limiterGap = limiter?.timeGapSeconds ?? 0;

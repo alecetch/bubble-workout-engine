@@ -24,6 +24,8 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "posterior_chain", signal: "limiter" }],
+      primaryLimiters: ["posterior_chain"],
+      primaryAssets: [],
     }, "female");
     assert.ok(result.backSvg.includes("hamstrings2"), "woman-back uses hamstrings2, not hamstrings");
   });
@@ -32,6 +34,8 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "posterior_chain", signal: "limiter" }],
+      primaryLimiters: ["posterior_chain"],
+      primaryAssets: [],
     }, "male");
     assert.ok(!result.backSvg.includes("#hamstrings2 path"), "man-back uses hamstrings, not hamstrings2");
     assert.ok(result.backSvg.includes("#hamstrings path { fill: #ef4444; }"));
@@ -41,6 +45,8 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "upper_back_pull", signal: "limiter" }],
+      primaryLimiters: ["upper_back_pull"],
+      primaryAssets: [],
     }, "male");
     assert.ok(result.frontSvg.includes("#trapezius path { fill: #ef4444; }"), "limiter colour in style block");
   });
@@ -49,16 +55,25 @@ describe("muscleDiagramRenderer", () => {
     const result = renderMuscleDiagramPair({
       available: true,
       muscleGroupSignals: [{ groupId: "posterior_chain", signal: "asset" }],
+      primaryLimiters: [],
+      primaryAssets: ["posterior_chain"],
     }, "male");
     assert.ok(result.backSvg.includes("#gluteus_maximus path { fill: #22c55e; }"), "asset colour in style block");
   });
 
-  it("does not inject a fill rule for a neutral group", () => {
+  it("greys all gradient paths via base reset and known neutral groups", () => {
     const result = renderMuscleDiagramPair({
       available: true,
-      muscleGroupSignals: [{ groupId: "grip_forearm", signal: "neutral" }],
+      muscleGroupSignals: [],
+      primaryLimiters: [],
+      primaryAssets: [],
     }, "male");
-    assert.ok(!result.frontSvg.includes("#brachioradialis path { fill:"), "neutral muscle has no override");
+    // Broad base reset catches unmapped SVG elements (sternocleidomastoid, tibialis, etc.)
+    assert.ok(result.frontSvg.includes('path[fill^="url("] { fill: #94a3b8; }'), "base reset rule present");
+    // Known map groups also get explicit grey
+    assert.ok(result.frontSvg.includes("#brachioradialis path { fill: #94a3b8; }"), "mapped neutral group gets grey override");
+    assert.ok(!result.frontSvg.includes("#ef4444"), "no red on a profile with no signals");
+    assert.ok(!result.frontSvg.includes("#22c55e"), "no green on a profile with no signals");
   });
 
   it("strips script tags from output SVGs", () => {
