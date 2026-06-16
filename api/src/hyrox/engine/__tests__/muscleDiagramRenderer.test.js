@@ -61,12 +61,16 @@ describe("muscleDiagramRenderer", () => {
     assert.ok(result.backSvg.includes("#gluteus_maximus path { fill: #22c55e; }"), "asset colour in style block");
   });
 
-  it("does not inject a fill rule for a neutral group", () => {
+  it("injects #94a3b8 grey fill for a group with no signal (overrides decorative SVG gradients)", () => {
     const result = renderMuscleDiagramPair({
       available: true,
-      muscleGroupSignals: [{ groupId: "grip_forearm", signal: "neutral" }],
+      muscleGroupSignals: [],
+      primaryLimiters: [],
+      primaryAssets: [],
     }, "male");
-    assert.ok(!result.frontSvg.includes("#brachioradialis path { fill:"), "neutral muscle has no override");
+    assert.ok(result.frontSvg.includes("#brachioradialis path { fill: #94a3b8; }"), "neutral muscle gets grey override");
+    assert.ok(!result.frontSvg.includes("#ef4444"), "no red on a profile with no signals");
+    assert.ok(!result.frontSvg.includes("#22c55e"), "no green on a profile with no signals");
   });
 
   it("strips script tags from output SVGs", () => {

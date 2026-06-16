@@ -17,6 +17,10 @@ const SIGNAL_COLOUR = Object.freeze({
   asset: "#22c55e",
 });
 
+// Applied to every known muscle group that carries no signal, overriding the SVG's decorative gradients.
+// Without this, the original blue/purple/dark-blue fills look like meaningful signals.
+const NEUTRAL_FILL = "#94a3b8";
+
 const MUSCLE_DIAGRAM_MAP = Object.freeze({
   man_front: {
     posterior_chain: ["gastrocnemius"],
@@ -57,8 +61,7 @@ function buildStyleBlock(muscleGroupSignals = [], diagramKey) {
   const signalMap = new Map(muscleGroupSignals.map((signal) => [signal.groupId, signal.signal]));
   const rules = [];
   for (const [groupId, svgIds] of Object.entries(idMap)) {
-    const colour = SIGNAL_COLOUR[signalMap.get(groupId)];
-    if (!colour) continue;
+    const colour = SIGNAL_COLOUR[signalMap.get(groupId)] ?? NEUTRAL_FILL;
     for (const id of svgIds) {
       rules.push(`#${id} path { fill: ${colour}; }`);
     }

@@ -642,7 +642,8 @@ function renderMuscleGroupSection(section) {
                         <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">Race strength</span>
                       </td>
                       <td>
-                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;font-style:italic;">Unshaded = no clear signal</span>
+                        <span style="color:#94a3b8;font-size:15px;vertical-align:middle;">&#9679;</span>
+                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">No signal</span>
                       </td>
                     </tr>
                   </table>
