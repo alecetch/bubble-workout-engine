@@ -198,6 +198,10 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
       },
     });
   }
+  if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound) {
+    const sex = analysisJson.athlete?.sex ?? "male";
+    sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
+  }
   const headlineGain = analysisJson.timePotential?.headlineGainSeconds ?? 0;
   const limiterGap = limiter?.timeGapSeconds ?? 0;
   const clarification = Math.abs(headlineGain - limiterGap) > 30
