@@ -7,6 +7,7 @@ import { buildPersonalReport } from "./personalReportBuilder.js";
 import { buildBrowserSummary } from "./browserSummaryBuilder.js";
 import { buildEmailReport } from "./emailReportBuilder.js";
 import { deepEnforceTone } from "./copyFormatter.js";
+import { buildInterpretation } from "../interpretation/hyroxInterpretationEngine.js";
 
 function athlete(raceResult = {}, athleteContext = {}, analysisJson = {}) {
   return {
@@ -97,8 +98,9 @@ export function assembleReport(request = {}) {
     ];
   } else if (outputType === "email_report") {
     report.templateId = "PERSONAL_REPORT";
-    const personal = buildPersonalReport(analysisJson, resolved, athleteContext);
-    const email = buildEmailReport(personal, analysisJson, athleteContext);
+    const interpretation = buildInterpretation(analysisJson, athleteContext);
+    const personal = buildPersonalReport(analysisJson, resolved, athleteContext, interpretation);
+    const email = buildEmailReport(personal, analysisJson, athleteContext, interpretation);
     report.sections = personal.sections;
     report.recommendations = personal.recommendations;
     report.emailSubject = email.subject;

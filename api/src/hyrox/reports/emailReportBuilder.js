@@ -21,6 +21,34 @@ function contentText(content) {
   return String(content ?? "");
 }
 
+function thesisSectionKey(category) {
+  const map = {
+    penalty: "penalty_callout",
+    station_capacity: "biggest_limiter",
+    running: "running_fatigue",
+    roxzone: "roxzone_execution",
+    pacing: "running_fatigue",
+    muscle_group: "muscle_group_profile",
+    data_quality: "executive_summary",
+  };
+  return map[category] ?? null;
+}
+
+function sectionAccentColor(sectionKey, interpretation) {
+  if (sectionKey === "penalty_callout") return "#e53e3e";
+  if (!interpretation) return "#e2e8f0";
+  const primaryKey = thesisSectionKey(interpretation.primaryThesis?.category);
+  const secondaryKeys = (interpretation.secondaryTheses ?? []).map((thesis) => thesisSectionKey(thesis.category));
+  if (sectionKey === primaryKey) return "#08a7f5";
+  if (secondaryKeys.includes(sectionKey)) return "#f59e0b";
+  return "#e2e8f0";
+}
+
+function headingDot(accentColor) {
+  if (accentColor !== "#08a7f5" && accentColor !== "#f59e0b") return "";
+  return `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${accentColor};margin-right:6px;vertical-align:middle;"></span>`;
+}
+
 function renderHeader() {
   return `<tr>
     <td style="${inlineStyle({
@@ -58,14 +86,25 @@ function renderHeader() {
   </tr>`;
 }
 
-function renderHero(analysisJson, greetingName) {
+function buildFallbackHeroCopy(analysisJson = {}) {
   const limiter = analysisJson.headline?.biggestLimiter ?? null;
   const gainSeconds = analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? null;
-  const gain = gainSeconds != null ? formatGain(gainSeconds) : null;
-  const headlineText = limiter
-    ? `${esc(String(limiter.label ?? "").toUpperCase())} IS YOUR BIGGEST OPPORTUNITY`
-    : "YOUR HYROX ANALYSIS IS READY";
-  const heroNumber = gain
+  const showGain = Number.isFinite(gainSeconds) && gainSeconds > 0;
+  const gainDisplay = showGain ? formatGain(gainSeconds) : null;
+  return {
+    headline: limiter
+      ? `${String(limiter.label ?? "").toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`
+      : "YOUR HYROX ANALYSIS IS READY",
+    subline: gainDisplay ? "estimated time opportunity against your benchmark group." : null,
+    gainDisplay,
+  };
+}
+
+function renderHero(analysisJson, greetingName, interpretation = null) {
+  const heroCopy = interpretation?.heroCopy ?? buildFallbackHeroCopy(analysisJson);
+  const headlineText = esc(heroCopy.headline ?? "YOUR HYROX ANALYSIS IS READY");
+  const showGain = heroCopy.gainDisplay != null;
+  const heroNumber = showGain
     ? `<div style="${inlineStyle({
         "font-family": "'Courier New',Courier,monospace",
         "font-size": "56px",
@@ -73,8 +112,10 @@ function renderHero(analysisJson, greetingName) {
         color: "#08a7f5",
         "line-height": "1",
         margin: "8px 0 12px",
-      })}">${esc(gain)}</div>
-      <div style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;margin-bottom:0;">estimated time opportunity against your benchmark group.</div>`
+      })}">${esc(heroCopy.gainDisplay)}</div>`
+    : "";
+  const subline = heroCopy.subline
+    ? `<div style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;margin-bottom:0;">${esc(heroCopy.subline)}</div>`
     : "";
 
   return `<tr>
@@ -95,6 +136,7 @@ function renderHero(analysisJson, greetingName) {
         "margin-bottom": "4px",
       })}">${headlineText}</div>
       ${heroNumber}
+      ${subline}
     </td>
   </tr>`;
 }
@@ -170,7 +212,7 @@ function renderStrengthCard(section) {
   </tr>
   <tr>
     <td style="background-color:#ffffff;padding:16px 32px 20px 35px;border-bottom:1px solid #e2e8f0;">
-      <p style="color:#0f172a;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;margin:0;">${text}</p>
+      <p style="color:#0f172a;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0;">${text}</p>
     </td>
   </tr>`;
 }
@@ -238,24 +280,44 @@ function renderTimePotential(section) {
   </tr>`;
 }
 
-function renderTextCard(section) {
+function renderTextCard(section, interpretation = null) {
+  const accentColor = sectionAccentColor(section.sectionKey, interpretation);
   const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
   const paragraphs = items
     .filter(Boolean)
     .map((item, index) => {
       const border = index > 0 ? "border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;" : "";
-      return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;${border}">${esc(enforceTone(String(item)))}</p>`;
+      return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0;${border}">${esc(enforceTone(String(item)))}</p>`;
     })
     .join("");
   const titleText = esc(String(section.title ?? "").toUpperCase());
   return `
   <tr>
-    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;">
-      <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">${titleText}</span>
+    <td style="background-color:#f8fafc;padding:6px 32px;border-top:1px solid #e2e8f0;border-left:3px solid ${accentColor};">
+      ${headingDot(accentColor)}<span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">${titleText}</span>
     </td>
   </tr>
   <tr>
     <td style="background-color:#ffffff;padding:16px 32px 20px;border-bottom:1px solid #e2e8f0;">
+      ${paragraphs}
+    </td>
+  </tr>`;
+}
+
+function renderPenaltyCallout(section) {
+  const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
+  const paragraphs = items
+    .filter(Boolean)
+    .map((item) => `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
+    .join("");
+  return `
+  <tr>
+    <td style="background-color:#fff5f5;padding:6px 32px;border-top:1px solid #e2e8f0;border-left:3px solid #e53e3e;">
+      <span style="color:#e53e3e;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">PENALTY ANALYSIS</span>
+    </td>
+  </tr>
+  <tr>
+    <td style="background-color:#ffffff;padding:16px 32px 20px 35px;border-bottom:1px solid #e2e8f0;">
       ${paragraphs}
     </td>
   </tr>`;
@@ -302,7 +364,7 @@ function renderRecommendations(section) {
   function renderContributorsTable(contributors) {
     if (!Array.isArray(contributors) || contributors.length < 2) return "";
     const rows = contributors.map((contributor, index) => `<tr>
-      <td style="padding:2px 32px 2px 40px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.5;">
+      <td style="padding:2px 32px 2px 40px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.65;">
         <span style="font-family:'Courier New',Courier,monospace;font-size:11px;color:#08a7f5;margin-right:6px;">${esc(letters[index] ?? String(index + 1))}/</span>
         <strong style="color:#0f172a;">${esc(contributor.label)}</strong>
         <span> - ${esc(enforceTone(contributor.copy))}</span>
@@ -322,7 +384,7 @@ function renderRecommendations(section) {
           ${badge(String(item.priority))}
           <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;color:#0f172a;text-transform:uppercase;vertical-align:middle;">${esc(enforceTone(item.title))}</span>
         </div>
-        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0 0 0 32px;">${esc(enforceTone(item.rationale ?? ""))}</p>
+        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;margin:0 0 0 32px;">${esc(enforceTone(item.rationale ?? ""))}</p>
         ${renderContributorsTable(item.contributors)}
         ${renderRunGapNote(item.runGapNote)}
       </td>
@@ -337,7 +399,7 @@ function renderRecommendations(section) {
           ${badge(num)}
           <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;color:#0f172a;text-transform:uppercase;vertical-align:middle;">${esc(enforceTone(title))}</span>
         </div>
-        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0 0 0 32px;">${esc(enforceTone(rationale))}</p>
+        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;margin:0 0 0 32px;">${esc(enforceTone(rationale))}</p>
       </td>
     </tr>`;
   }).join("");
@@ -621,7 +683,7 @@ function renderMuscleGroupSection(section) {
   </tr>`;
 }
 
-function renderSection(section, analysisJson) {
+function renderSection(section, analysisJson, interpretation = null) {
   switch (section.sectionKey) {
     case "executive_summary":
       return renderExecutiveSummary(section);
@@ -639,16 +701,18 @@ function renderSection(section, analysisJson) {
       return renderCta(section, analysisJson);
     case "race_snapshot":
       return "";
+    case "penalty_callout":
+      return renderPenaltyCallout(section, interpretation);
     case "race_split_breakdown":
       return renderSplitTable(section, analysisJson);
     case "muscle_group_profile":
       return renderMuscleGroupSection(section);
     default:
-      return renderTextCard(section);
+      return renderTextCard(section, interpretation);
   }
 }
 
-export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}) {
+export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null) {
   const limiter = limiterName(analysisJson);
   const subject = limiter ? `Your HYROX bottleneck is ${limiter}` : "Your HYROX analysis is ready";
   const rawName = athleteContext.firstName ?? athleteContext.displayName ?? null;
@@ -660,7 +724,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     .map((section) => `${section.title}\n${contentText(section.content)}`)
     .join("\n\n");
   const textBody = enforceTone(`${greeting}\n\n${textSections}`);
-  const sectionRows = sections.map((section) => renderSection(section, analysisJson)).join("");
+  const sectionRows = sections.map((section) => renderSection(section, analysisJson, interpretation)).join("");
   const outerTableStyle = inlineStyle({
     width: "100%",
     "border-collapse": "collapse",
@@ -687,7 +751,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
       <td align="center" style="padding:24px 12px;">
         <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="${innerTableStyle}">
           ${renderHeader()}
-          ${renderHero(analysisJson, greetingName)}
+          ${renderHero(analysisJson, greetingName, interpretation)}
           ${renderMetricStrip(analysisJson, athleteContext)}
           ${sectionRows}
           ${renderFooter()}
