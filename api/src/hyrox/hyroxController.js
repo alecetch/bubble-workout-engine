@@ -199,6 +199,7 @@ function limitedAnalysis(body, normalised, reason) {
     workRunBalance: {},
     athleteArchetype: null,
     recommendedFocusAreas: [],
+    muscleGroupProfile: { available: false },
   };
 }
 
@@ -236,6 +237,7 @@ export async function analyse(req, res) {
       analysisScope: analysisJson.analysisScope,
       reportSentTo: submission.email,
       browserSummary: webReport.browserSummary,
+      muscleGroupProfile: analysisJson.muscleGroupProfile,
       carouselDataAvailable: Boolean(carouselA.carousel || carouselA.slides),
       analysisVersion: analysisJson.analysisVersion,
     });
