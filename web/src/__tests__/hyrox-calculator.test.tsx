@@ -144,9 +144,9 @@ describe("RaceDetailsPage validation", () => {
   test("missing finish time blocks navigation past Page 1", async () => {
     renderRacePage();
 
-    // Fill in age but leave finish time empty
-    fireEvent.change(screen.getByLabelText(/age on race day/i), {
-      target: { value: "35" },
+    // Fill in age range but leave finish time empty
+    fireEvent.change(screen.getByLabelText(/age range/i), {
+      target: { value: "35-39" },
     });
 
     const nextBtn = screen.getByText(/next: enter your splits/i);
