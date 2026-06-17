@@ -49,6 +49,7 @@ import { adminProgressionSandboxRouter } from "./src/routes/adminProgressionSand
 import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
+import { adminHyroxRouter } from "./src/routes/adminHyrox.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
@@ -315,6 +316,7 @@ app.get("/admin/program-quality", adminCspMiddleware, (_req, res) => sendAdminPa
 app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "progression-sandbox.html"));
 app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(res, "seed-history.html"));
 app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
+app.get("/admin/hyrox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox.html"));
 app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
 // /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
 app.get("/admin/users", (req, res, next) => {
@@ -842,6 +844,7 @@ app.use("/admin", ...adminOnly, adminProgramQualityRouter);
 app.use("/admin", ...adminOnly, adminProgressionSandboxRouter);
 app.use("/admin", ...adminOnly, adminUsersRouter);
 app.use("/admin", ...adminOnly, adminSeedHistoryRouter);
+app.use("/admin", ...adminOnly, adminHyroxRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates

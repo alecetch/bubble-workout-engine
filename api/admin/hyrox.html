@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HYROX Submissions</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --danger: #dc3545;
+        --ok: #0f766e;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 22px; }
+      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
+      .nav a:hover { text-decoration: underline; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+      .controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 240px; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, button { font: inherit; }
+      input { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); }
+      .table-wrap { overflow-x: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ecf0f4; padding: 8px 10px; text-align: left; font-size: 13px; vertical-align: middle; }
+      th { background: #f9fbfd; font-weight: 600; white-space: nowrap; }
+      tr:hover td { background: #f5f8ff; }
+      .badge { display: inline-block; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600; }
+      .badge-yes { background: #d1fae5; color: #065f46; }
+      .badge-no  { background: #f1f5f9; color: #94a3b8; }
+      .preview-link { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 12px; }
+      .preview-link:hover { text-decoration: underline; }
+      .mono { font-family: Consolas, monospace; font-size: 11px; color: var(--muted); }
+      .empty { color: var(--muted); font-style: italic; padding: 12px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">HYROX Submissions</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/coverage">Coverage</a>
+            <a href="/admin/health">Health</a>
+            <a href="/admin/exercises">Exercises</a>
+            <a href="/admin/narration">Narration</a>
+            <a href="/admin/rep-rules">Rep Rules</a>
+            <a href="/admin/observability">Observability</a>
+            <a href="/admin/preview">Preview</a>
+            <a href="/admin/program-quality">Program Quality</a>
+            <a href="/admin/seed-history">Seed History</a>
+            <a href="/admin/progression-sandbox">Progression Sandbox</a>
+            <a href="/admin/users">Users</a>
+            <a href="/admin/coaches">Coaches</a>
+            <a href="/admin/coach-portal">Coach Portal</a>
+            <a href="/admin/hyrox" class="active">HYROX</a>
+            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
+            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <div class="control">
+            <label for="email-input">Filter by email (optional)</label>
+            <input id="email-input" type="text" placeholder="e.g. user@example.com" />
+          </div>
+          <button id="load-btn" type="button">Load</button>
+        </div>
+        <div id="main-status" class="status"></div>
+      </section>
+
+      <section class="section">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Division</th>
+                <th>Finish</th>
+                <th>Race</th>
+                <th>Submitted</th>
+                <th>Carousel</th>
+                <th>Preview</th>
+              </tr>
+            </thead>
+            <tbody id="submissions-body">
+              <tr><td colspan="8" class="empty">Enter your token and click Load.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_internal_api_token";
+      const tokenInput = document.getElementById("token-input");
+      const emailInput = document.getElementById("email-input");
+      const loadBtn = document.getElementById("load-btn");
+      const statusEl = document.getElementById("main-status");
+      const tbody = document.getElementById("submissions-body");
+
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) tokenInput.value = saved;
+
+      function setStatus(msg, kind = "") {
+        statusEl.textContent = msg;
+        statusEl.className = `status ${kind}`;
+      }
+
+      function esc(v) {
+        return String(v ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function formatSeconds(secs) {
+        if (!secs) return "—";
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        return `${m}:${String(s).padStart(2, "0")}`;
+      }
+
+      function formatDate(iso) {
+        if (!iso) return "—";
+        return new Date(iso).toLocaleString(undefined, {
+          year: "numeric", month: "short", day: "numeric",
+          hour: "2-digit", minute: "2-digit",
+        });
+      }
+
+      function renderRows(submissions) {
+        if (!submissions.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="empty">No submissions found.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = submissions.map((s) => {
+          const badge = s.has_carousel
+            ? '<span class="badge badge-yes">Yes</span>'
+            : '<span class="badge badge-no">No</span>';
+          const preview = s.has_carousel
+            ? `<a class="preview-link" href="/api/hyrox/carousel/${esc(s.submission_id)}" target="_blank">Open ↗</a>`
+            : '<span style="color:var(--muted);font-size:12px">—</span>';
+          return `<tr>
+            <td>${esc(s.email)}</td>
+            <td>${esc(s.display_name || "—")}</td>
+            <td>${esc(s.division)}</td>
+            <td>${esc(formatSeconds(s.finish_time_seconds))}</td>
+            <td>${esc(s.race_name || "—")}</td>
+            <td>${esc(formatDate(s.created_at))}</td>
+            <td>${badge}</td>
+            <td>${preview}</td>
+          </tr>`;
+        }).join("");
+      }
+
+      async function loadSubmissions() {
+        const token = tokenInput.value.trim();
+        if (!token) { setStatus("Paste your x-internal-token first.", "err"); return; }
+        sessionStorage.setItem(STORAGE_KEY, token);
+
+        const email = emailInput.value.trim();
+        const qs = email ? `?email=${encodeURIComponent(email)}` : "";
+        setStatus("Loading…");
+        try {
+          const res = await fetch(`/admin/hyrox/submissions${qs}`, {
+            headers: { "x-internal-token": token },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          renderRows(data.submissions || []);
+          setStatus(`Loaded ${(data.submissions || []).length} submission(s)`, "ok");
+        } catch (err) {
+          setStatus(err.message || "Load failed", "err");
+        }
+      }
+
+      loadBtn.addEventListener("click", loadSubmissions);
+      emailInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadSubmissions(); });
+    </script>
+  </body>
+</html>
