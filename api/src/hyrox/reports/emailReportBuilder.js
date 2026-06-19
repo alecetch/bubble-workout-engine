@@ -134,8 +134,7 @@ function buildFallbackHeroCopy(analysisJson = {}) {
 function renderHero(analysisJson, greetingName, interpretation = null) {
   const fallbackCopy = buildFallbackHeroCopy(analysisJson);
   const heroCopy = interpretation?.heroCopy ?? fallbackCopy;
-  const limiter = analysisJson.headline?.biggestLimiter ?? null;
-  const headlineText = esc(limiter ? fallbackCopy.headline : (heroCopy.headline ?? "YOUR HYROX ANALYSIS IS READY"));
+  const headlineText = esc(heroCopy.headline ?? "YOUR HYROX ANALYSIS IS READY");
   const showGain = heroCopy.gainDisplay != null;
   const heroNumber = showGain
     ? `<div style="${inlineStyle({
@@ -147,9 +146,8 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
         margin: "8px 0 12px",
       })}">${esc(heroCopy.gainDisplay)}</div>`
     : "";
-  const sublineText = limiter ? fallbackCopy.subline : heroCopy.subline;
-  const subline = sublineText
-    ? `<div style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;margin-bottom:0;">${esc(sublineText)}</div>`
+  const subline = heroCopy.subline
+    ? `<div style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;margin-bottom:0;">${esc(heroCopy.subline)}</div>`
     : "";
 
   return `<tr>
@@ -397,7 +395,7 @@ function renderRoxzoneExecution(section, interpretation = null) {
   return `
   <tr>
 	    <td style="background-color:#f8fafc;padding:6px 24px;border-top:1px solid #e2e8f0;border-left:3px solid ${accentColor};">
-	      ${headingDot(accentColor)}<span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">ROXZONE EXECUTION</span>
+	      ${headingDot(accentColor)}<span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">ROXZONE AND EXECUTION PROFILE</span>
     </td>
   </tr>
   <tr>
