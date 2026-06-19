@@ -212,7 +212,7 @@ function thesis(category, analysisJson = {}, overrides = {}) {
   return { ...base, ...overrides };
 }
 
-function selectPrimaryCategory(analysisJson = {}) {
+export function selectPrimaryCategory(analysisJson = {}) {
   const penalty = totalPenaltySeconds(analysisJson);
   const stationGap = totalStationGapSeconds(analysisJson);
   const runGap = totalRunGapSeconds(analysisJson);
@@ -337,7 +337,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}) {
   }
   return {
     headline: `${String(lLabel).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`,
-    subline: gainDisplay ? `${gainDisplay} against your benchmark group.` : null,
+    subline: gainDisplay ? "estimated opportunity against your target benchmark group." : null,
     gainDisplay,
   };
 }
@@ -360,7 +360,9 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
     const adjusted = penalty?.adjustedFinishTime ? ` Your adjusted time was ${penalty.adjustedFinishTime}.` : "";
     bullets.push(`${formatGain(penalty?.totalPenaltySeconds)} of penalties cost you an estimated ${formatGain(penalty?.totalPenaltySeconds)} of race time.${adjusted}`);
   } else if (category === "station_capacity") {
-    bullets.push(`${limiterLabel(analysisJson)} is your biggest gap - ${formatGain(stationGap)} against your benchmark group.`);
+    const gain = headlineGainSeconds(analysisJson);
+    const gainCopy = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : formatGain(stationGap);
+    bullets.push(`${limiterLabel(analysisJson)} is your biggest opportunity - ${gainCopy} against your target benchmark group.`);
   } else if (category === "running") {
     bullets.push(`Your cumulative run gap (${formatGain(runGap)}) exceeds your station gap (${formatGain(stationGap)}).`);
   } else if (category === "roxzone") {
@@ -373,8 +375,6 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
 
   const second = secondaryEvidence(secondaryTheses);
   if (second) bullets.push(second);
-  else if (category !== "running" && runGap > 0) bullets.push(`Running contributed ${formatGain(runGap)} of positive gap across the race.`);
-  else if (stationGap > 0) bullets.push(`Station work contributed ${formatGain(stationGap)} of positive gap across the race.`);
 
   if (category === "penalty" || secondaryTheses.some((t) => t.category === "penalty")) {
     bullets.push("Priority action: eliminate penalties through station-specific technique work under fatigue.");
