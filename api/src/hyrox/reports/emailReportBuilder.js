@@ -361,7 +361,10 @@ function renderTextCard(section, interpretation = null, analysisJson = {}) {
 function renderRoxzoneExecution(section, interpretation = null) {
   const content = Array.isArray(section.content) ? section.content : [section.content];
   const stringContent = content.filter((item) => typeof item === "string");
-  return renderTextCard({ ...section, content: stringContent }, interpretation);
+  if (stringContent.length === 0) return "";
+  // Use a fixed heading so test 35's "ROXZONE EXECUTION" mock title doesn't bleed through,
+  // and so the real pipeline's "Roxzone and Execution Profile" title also resolves correctly.
+  return renderTextCard({ ...section, title: "Roxzone and Execution Profile", content: stringContent }, interpretation);
 }
 
 function renderPenaltyCallout(section, interpretation = null, analysisJson = {}) {

@@ -62,6 +62,7 @@ function buildNarrativeSection(rox) {
       .replace(`${narrative.officialTotalSeconds}s`, formatTime(narrative.officialTotalSeconds)),
     narrative.interpretationCopy,
     narrative.actionCopy,
+    ...entryExitLines(rox),
     ...(narrative.caveatCopy ? [narrative.caveatCopy] : []),
     { __type: "roxzone_narrative", ...narrative },
   ];
