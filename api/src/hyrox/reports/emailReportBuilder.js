@@ -360,79 +360,8 @@ function renderTextCard(section, interpretation = null, analysisJson = {}) {
 
 function renderRoxzoneExecution(section, interpretation = null) {
   const content = Array.isArray(section.content) ? section.content : [section.content];
-  const narrative = content.find((item) => item?.__type === "roxzone_narrative") ?? null;
-  if (!narrative) return renderTextCard(section, interpretation);
-
-  const accentColor = sectionAccentColor(section.sectionKey, interpretation);
-  const textItems = content.filter((item) => typeof item === "string");
-  const paragraphs = textItems
-    .filter(Boolean)
-    .map((item, index) => {
-      const border = index > 0 ? "border-top:1px solid #e2e8f0;padding-top:10px;margin-top:10px;" : "";
-      return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;margin:0;${border}">${esc(enforceTone(String(item)))}</p>`;
-    })
-    .join("");
-
-  const total = formatTime(narrative.replayTotalSeconds);
-  const official = Number.isFinite(narrative.officialTotalSeconds) ? formatTime(narrative.officialTotalSeconds) : "N/A";
-  const diff = Number.isFinite(narrative.roundingDifferenceSeconds)
-    ? `${narrative.roundingDifferenceSeconds > 0 ? "+" : narrative.roundingDifferenceSeconds < 0 ? "-" : ""}${formatTime(Math.abs(narrative.roundingDifferenceSeconds))}`
-    : "N/A";
-  const rows = (narrative.displayRows ?? []).map((row) => {
-    const muted = row.measurable ? "" : "color:#94a3b8;";
-    const valueColor = row.measurable ? "#0f172a" : "#94a3b8";
-    const entry = Number.isFinite(row.entrySeconds) ? formatTime(row.entrySeconds) : "N/A";
-    const exit = Number.isFinite(row.exitSeconds) ? formatTime(row.exitSeconds) : "N/A";
-    const rox = Number.isFinite(row.roxzoneSeconds) ? formatTime(row.roxzoneSeconds) : "N/A";
-    return `<tr>
-      <td style="padding:7px 8px 7px 12px;border-bottom:1px solid #f1f5f9;font-family:Arial,Helvetica,sans-serif;font-size:12px;${muted}">${esc(row.label)}</td>
-      <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:${valueColor};">${esc(entry)}</td>
-      <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:${valueColor};">${esc(exit)}</td>
-      <td style="padding:7px 10px 7px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;color:${valueColor};">${esc(rox)}</td>
-    </tr>`;
-  }).join("");
-
-  return `
-  <tr>
-	    <td style="background-color:#f8fafc;padding:6px 24px;border-top:1px solid #e2e8f0;border-left:3px solid ${accentColor};">
-	      ${headingDot(accentColor)}<span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">ROXZONE AND EXECUTION PROFILE</span>
-    </td>
-  </tr>
-  <tr>
-	    <td style="background-color:#ffffff;padding:16px 24px 20px;border-bottom:1px solid #e2e8f0;">
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:0 0 14px;">
-        <tr>
-          <td style="background-color:#ecfdf5;border:1px solid #bbf7d0;border-radius:4px;padding:12px;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
-              <tr>
-                <td style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#166534;">Replay RoxZone Total</td>
-                <td style="text-align:right;font-family:'Courier New',Courier,monospace;font-size:24px;font-weight:700;color:#166534;">${esc(total)}</td>
-              </tr>
-              <tr>
-                <td colspan="2" style="padding-top:5px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#64748b;">Official ${esc(official)} | Official - Replay ${esc(diff)}</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-      ${paragraphs}
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin-top:14px;border:1px solid #e2e8f0;">
-        <tr style="background-color:#f1f5f9;">
-          <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Station</th>
-          <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">In</th>
-          <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Out</th>
-          <th style="padding:7px 10px 7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">RoxZone</th>
-        </tr>
-        ${rows}
-        <tr style="background-color:#f8fafc;">
-          <td style="padding:8px 8px 8px 12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#0f172a;">Total</td>
-          <td style="padding:8px;"></td>
-          <td style="padding:8px;"></td>
-          <td style="padding:8px 10px 8px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;color:#0f172a;">${esc(total)}</td>
-        </tr>
-      </table>
-    </td>
-  </tr>`;
+  const stringContent = content.filter((item) => typeof item === "string");
+  return renderTextCard({ ...section, content: stringContent }, interpretation);
 }
 
 function renderPenaltyCallout(section, interpretation = null, analysisJson = {}) {
@@ -1355,8 +1284,10 @@ function renderSection(section, analysisJson, interpretation = null) {
       return renderExecutiveSummary(section);
     case "biggest_strength":
       return renderStrengthCard(section);
-    case "biggest_limiter":
-      return renderStationBreakdown(section);
+    case "biggest_limiter": {
+      const { penaltiesAreMaterial } = penaltyContext(analysisJson);
+      return penaltiesAreMaterial ? renderStationBreakdown(section) : "";
+    }
     case "time_potential":
       return renderTimePotential(section);
     case "athlete_background":
