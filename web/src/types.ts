@@ -34,6 +34,7 @@ export interface HyroxCalculatorDraft {
   splits: HyroxSplit[];
   penalties?: HyroxPenalty[];
   raceReplay?: HyroxRaceReplaySplit[];
+  roxzoneTimeSeconds?: number;
   athleteContext?: {
     trainingAge?: string;
     primaryBackground?: string;

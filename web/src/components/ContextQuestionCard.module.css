@@ -5,15 +5,51 @@
   padding: 20px 24px;
 }
 
+.questionRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(8, 167, 245, 0.12);
+  border: 1px solid rgba(8, 167, 245, 0.28);
+  color: var(--accent-cyan);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .question {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 14px;
   line-height: 1.4;
 }
 
 .required {
   color: var(--accent-red);
   margin-left: 2px;
+}
+
+@media (min-width: 769px) {
+  .card {
+    padding: 14px 16px;
+  }
+
+  .questionRow {
+    margin-bottom: 10px;
+  }
+
+  .question {
+    line-height: 1.3;
+  }
 }

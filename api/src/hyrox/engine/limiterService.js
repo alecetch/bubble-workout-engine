@@ -6,14 +6,22 @@ function confidenceAtLeastLow(segment) {
   return (CONFIDENCE_RANK[segment.confidence] ?? 0) >= 1;
 }
 
+// When a goal benchmark is available, prefer the gap to the athlete's target over the gap to the
+// age-group median. This keeps the headline limiter consistent with what the split table shows.
+function effectiveGapSeconds(segment) {
+  return segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
+}
+
 function preferLimiter(a, b) {
   if (a.type === "aggregate" && b.type === "station") return 1;
   if (b.type === "aggregate" && a.type === "station") return -1;
-  const gapDiff = Math.abs(a.timeGapToMedianSeconds - b.timeGapToMedianSeconds);
+  const gapA = effectiveGapSeconds(a) ?? 0;
+  const gapB = effectiveGapSeconds(b) ?? 0;
+  const gapDiff = Math.abs(gapA - gapB);
   if (gapDiff <= BENCHMARK_THRESHOLDS.limiterTieSeconds) {
     return (a.percentile ?? 100) - (b.percentile ?? 100);
   }
-  return b.timeGapToMedianSeconds - a.timeGapToMedianSeconds;
+  return gapB - gapA;
 }
 
 function toLimiter(segment) {
@@ -22,7 +30,7 @@ function toLimiter(segment) {
     segmentKey: segment.segmentKey,
     label: segment.label,
     type: segment.type,
-    timeGapSeconds: Math.round(segment.timeGapToMedianSeconds),
+    timeGapSeconds: Math.round(effectiveGapSeconds(segment) ?? segment.timeGapToMedianSeconds),
     percentile: segment.percentile,
     benchmarkGroupUsed: segment.benchmarkGroupUsed,
     benchmarkValueSeconds: segment.benchmarkValueSeconds,
@@ -33,7 +41,10 @@ function toLimiter(segment) {
 export function findBiggestLimiter(segmentStats) {
   const candidates = segmentStats
     .filter((segment) => confidenceAtLeastLow(segment))
-    .filter((segment) => Number.isFinite(segment.timeGapToMedianSeconds) && segment.timeGapToMedianSeconds > 0)
+    .filter((segment) => {
+      const gap = effectiveGapSeconds(segment);
+      return Number.isFinite(gap) && gap > 0;
+    })
     .filter((segment) => segment.segmentKey !== "total_time")
     .filter((segment) => !segment.segmentKey.startsWith("roxzone_"))
     .sort(preferLimiter);
@@ -63,7 +74,7 @@ export function calculateTimePotential(segmentStats, normalisedSubmission, bench
     ? segmentStats.find((segment) => segment.segmentKey === limiter.segmentKey)
     : segmentStats.find((segment) => segment.segmentKey === findBiggestLimiter(segmentStats)?.segmentKey);
 
-  if (!selectedLimiter || !["station", "aggregate"].includes(selectedLimiter.type)) {
+  if (!selectedLimiter || !["station", "aggregate", "run"].includes(selectedLimiter.type)) {
     return {
       headlineGainSeconds: 0,
       conservativeGainSeconds: 0,

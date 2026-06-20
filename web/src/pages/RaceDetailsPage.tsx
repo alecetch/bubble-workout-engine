@@ -1,20 +1,21 @@
-import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Shell } from "../components/Shell";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { FormPanel } from "../components/FormPanel";
-import { TextInput } from "../components/TextInput";
-import { SegmentedControl } from "../components/SegmentedControl";
-import { TimeInput } from "../components/TimeInput";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
+import { SegmentedControl } from "../components/SegmentedControl";
+import { Shell } from "../components/Shell";
+import { SideStepper } from "../components/SideStepper";
 import { SplitImportPanel } from "../components/SplitImportPanel";
-import { loadDraft, saveDraft } from "../utils/storage";
-import { parseTimeToSeconds, formatSeconds } from "../utils/time";
+import { TextInput } from "../components/TextInput";
+import { TimeInput } from "../components/TimeInput";
+import { findHyroxEventByName } from "../data/hyroxEvents";
+import type { HyroxCalculatorDraft } from "../types";
 import { fetchHyroxResultsImport, trackEvent } from "../utils/api";
 import { ageGroupFromAge, normalizeAgeGroup, normalizeName, saveImportedHyroxResult } from "../utils/hyroxImportDraft";
-import { findHyroxEventByName, HYROX_KNOWN_EVENTS } from "../data/hyroxEvents";
-import type { HyroxCalculatorDraft } from "../types";
 import type { HyroxParseResult } from "../utils/hyroxResultsParser";
+import { loadDraft, saveDraft } from "../utils/storage";
+import { formatSeconds, parseTimeToSeconds } from "../utils/time";
 import styles from "./RaceDetailsPage.module.css";
 
 type Division = "open" | "pro" | "doubles" | "relay";
@@ -22,25 +23,27 @@ type Division = "open" | "pro" | "doubles" | "relay";
 const VALID_DIVISIONS: Division[] = ["open", "pro", "doubles", "relay"];
 const AGE_GROUP_OPTIONS = ["18-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69"];
 
+function formatDivisionLabel(value: Division): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export function RaceDetailsPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
 
   const [name, setName] = useState(normalizeName(draft?.athlete?.name ?? null) ?? "");
-  const [gender, setGender] = useState<"male" | "female">(
-    draft?.athlete?.gender ?? "male",
-  );
+  const [gender, setGender] = useState<"male" | "female">(draft?.athlete?.gender ?? "male");
   const [ageGroup, setAgeGroup] = useState(
     normalizeAgeGroup(draft?.athlete?.ageGroup) ?? ageGroupFromAge(draft?.athlete?.ageOnRaceDay) ?? "",
   );
   const [raceName, setRaceName] = useState(draft?.race?.raceName ?? "");
   const [raceDate, setRaceDate] = useState(draft?.race?.raceDate ?? "");
-  const [knownEventName, setKnownEventName] = useState("");
   const [division, setDivision] = useState<Division>(draft?.race?.division ?? "open");
   const [finishTime, setFinishTime] = useState(
-    draft?.race?.finishTimeSeconds
-      ? formatSeconds(draft.race.finishTimeSeconds)
-      : "",
+    draft?.race?.finishTimeSeconds ? formatSeconds(draft.race.finishTimeSeconds) : "",
+  );
+  const [targetFinishTime, setTargetFinishTime] = useState(
+    draft?.athleteContext?.targetFinishTimeSeconds ? formatSeconds(draft.athleteContext.targetFinishTimeSeconds) : "",
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [importSucceeded, setImportSucceeded] = useState(false);
@@ -50,6 +53,16 @@ export function RaceDetailsPage() {
   const [importUrlLoading, setImportUrlLoading] = useState(false);
   const [importOpenedUrl, setImportOpenedUrl] = useState<string | null>(null);
 
+  const parsedFinishTime = parseTimeToSeconds(finishTime);
+  const parsedTargetFinishTime = parseTimeToSeconds(targetFinishTime);
+  const isTargetFasterThanFinish = parsedFinishTime !== null && parsedTargetFinishTime !== null && parsedTargetFinishTime < parsedFinishTime;
+  const isFormValid = Boolean(ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && isTargetFasterThanFinish);
+  const targetFinishTimeWarning =
+    targetFinishTime && parsedFinishTime !== null && parsedTargetFinishTime !== null && !isTargetFasterThanFinish
+      ? "Target time should be faster than your current finish time."
+      : undefined;
+  const importedSummary = [name, division ? formatDivisionLabel(division) : "", finishTime].filter(Boolean).join(" · ");
+
   useEffect(() => {
     trackEvent("hyrox_calculator_started");
   }, []);
@@ -58,12 +71,19 @@ export function RaceDetailsPage() {
     const errs: Record<string, string> = {};
 
     if (!ageGroup) {
-      errs.ageGroup = "Select your age range.";
+      errs.ageGroup = "Select your age group.";
     }
 
     const parsedFinish = parseTimeToSeconds(finishTime);
     if (!finishTime || parsedFinish === null) {
       errs.finishTime = "Enter finish time, e.g. 1:25:17 or 85:17";
+    }
+
+    const parsedTarget = parseTimeToSeconds(targetFinishTime);
+    if (!targetFinishTime || parsedTarget === null) {
+      errs.targetFinishTime = "Enter target finish time, e.g. 55:00 or 1:05:00";
+    } else if (parsedFinish !== null && parsedTarget >= parsedFinish) {
+      errs.targetFinishTime = "Target time should be faster than your current finish time.";
     }
 
     setErrors(errs);
@@ -79,7 +99,6 @@ export function RaceDetailsPage() {
       setRaceName(result.raceName);
       const knownEvent = findHyroxEventByName(result.raceName);
       if (knownEvent) {
-        setKnownEventName(knownEvent.name);
         setRaceDate(knownEvent.startDate);
       }
     }
@@ -102,7 +121,7 @@ export function RaceDetailsPage() {
   async function handleUrlFetch() {
     setImportUrlError(null);
     if (!importUrl.startsWith("https://results.hyrox.com/")) {
-      setImportUrlError("Enter a valid results.hyrox.com URL.");
+      setImportUrlError("We could not import that result. Check the URL or enter the details manually.");
       return;
     }
 
@@ -115,9 +134,13 @@ export function RaceDetailsPage() {
 
     if (response.success && response.parsed && response.parsed.confidence !== "low") {
       handleInlineImport(response.parsed);
+      if (response.eventDate) {
+        setRaceDate(response.eventDate);
+      }
       return;
     }
 
+    setImportUrlError("We could not import that result. Check the URL or enter the details manually.");
     window.open(importUrl, "_blank", "noopener");
     setImportOpenedUrl(importUrl);
     setImportTab("paste");
@@ -127,6 +150,7 @@ export function RaceDetailsPage() {
     if (!validate()) return;
 
     const finishSeconds = parseTimeToSeconds(finishTime) ?? 0;
+    const targetFinishTimeSeconds = parseTimeToSeconds(targetFinishTime) ?? 0;
     const updated: Partial<HyroxCalculatorDraft> = {
       athlete: {
         name: normalizeName(name) ?? undefined,
@@ -139,32 +163,28 @@ export function RaceDetailsPage() {
         division,
         finishTimeSeconds: finishSeconds,
       },
+      athleteContext: {
+        ...(draft?.athleteContext ?? {}),
+        targetFinishTimeSeconds,
+      },
     };
     saveDraft(updated);
     trackEvent("race_details_completed");
     void navigate("/hyrox-calculator/splits");
   }
 
-  function handleKnownEventChange(eventName: string) {
-    setKnownEventName(eventName);
-    const event = HYROX_KNOWN_EVENTS.find((item) => item.name === eventName);
-    if (!event) return;
-    setRaceName(event.name);
-    setRaceDate(event.startDate);
-  }
-
   function applyKnownEventDateFromName(value: string) {
     const event = findHyroxEventByName(value);
     if (!event) return;
-    setKnownEventName(event.name);
     if (!raceDate) setRaceDate(event.startDate);
   }
 
   return (
     <Shell>
+      <SideStepper current={1} />
       <div className={styles.layout}>
         <div className={styles.pitchCol}>
-          <div className={styles.eyebrow}>Forma - Performance Engineer</div>
+          <div className={styles.eyebrow}>FREE HYROX ANALYSIS</div>
           <h1 className={styles.headline}>
             Data in.
             <br />
@@ -173,23 +193,26 @@ export function RaceDetailsPage() {
             Performance up.
           </h1>
           <p className={styles.subline}>
-            Enter your HYROX race result and get a personalised performance
-            analysis delivered to your inbox - free.
+            Paste your HYROX result and Forma turns your race into a clear
+            benchmarked analysis: where you lost time, what you did well, and
+            what to train next.
           </p>
-          <ul className={styles.bullets}>
+          <ul className={styles.benefits}>
             {[
-              "Identify your biggest time limiter across 16 segments",
-              "Benchmark against athletes in your age group and division",
-              "Get a clear training focus for your next event",
-              "Understand your run/work balance and roxzone",
-            ].map((b) => (
-              <li key={b} className={styles.bullet}>
-                <span className={styles.bulletIcon}>-&gt;</span>
-                <span>{b}</span>
+              ["Benchmark", "Compare your race with a relevant target group."],
+              ["Bottleneck", "Find the stations, runs or transitions costing the most."],
+              ["Training direction", "Get a practical focus before your next block."],
+            ].map(([title, body]) => (
+              <li key={title} className={styles.benefit}>
+                <span className={styles.benefitIcon}>✓</span>
+                <span>
+                  <strong>{title}</strong>
+                  {body}
+                </span>
               </li>
             ))}
           </ul>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className={styles.linkStack}>
             <Link to="/hyrox-calculator/sample-report" className={styles.externalLink}>
               View Sample Report -&gt;
             </Link>
@@ -205,49 +228,45 @@ export function RaceDetailsPage() {
         </div>
 
         <div className={styles.formCol}>
-          <FormPanel>
-            <h2 className={styles.formTitle}>Your Race Details</h2>
+          <FormPanel className={styles.racePanel}>
+            <div className={styles.panelHeader}>
+              <h2 className={styles.formTitle}>Race details</h2>
+              <p className={styles.formIntro}>Paste your HYROX result URL or enter your race manually.</p>
+            </div>
+
             <div className={styles.fields}>
               <div data-testid="inline-import-panel">
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  <SecondaryButton type="button" onClick={() => setImportTab("url")}>
-                    URL
-                  </SecondaryButton>
-                  <SecondaryButton type="button" onClick={() => setImportTab("paste")}>
-                    Paste
-                  </SecondaryButton>
+                <div className={styles.importTabs}>
+                  <button
+                    type="button"
+                    className={`${styles.importTab} ${importTab === "url" ? styles.importTabActive : ""}`}
+                    onClick={() => setImportTab("url")}
+                    disabled={importUrlLoading}
+                  >
+                    Import URL
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.importTab} ${importTab === "paste" ? styles.importTabActive : ""}`}
+                    onClick={() => setImportTab("paste")}
+                    disabled={importUrlLoading}
+                  >
+                    Manual
+                  </button>
                 </div>
 
                 {importSucceeded && (
-                  <div
-                    data-testid="import-success-badge"
-                    style={{
-                      marginBottom: 16,
-                      padding: "10px 12px",
-                      borderRadius: 8,
-                      border: "1px solid rgba(34,197,94,0.45)",
-                      background: "rgba(34,197,94,0.12)",
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    Imported from results.hyrox.com - fields pre-filled below
+                  <div data-testid="import-success-badge" className={styles.importSuccess}>
+                    <div className={styles.successTitle}>✓ Result imported</div>
+                    <div className={styles.successMeta}>{importedSummary || "Fields pre-filled below"}</div>
                   </div>
                 )}
 
                 {importTab === "paste" && (
                   <>
                     {importOpenedUrl && !importSucceeded && (
-                      <div
-                        style={{
-                          marginBottom: 16,
-                          padding: "12px 16px",
-                          borderRadius: 8,
-                          background: "rgba(245,158,11,0.12)",
-                          border: "1px solid rgba(245,158,11,0.45)",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        <strong style={{ color: "var(--text-primary)" }}>Your results page is open in a new tab.</strong>
+                      <div className={styles.importWarning}>
+                        <strong>Your results page is open in a new tab.</strong>
                         <span> Copy the page text that includes <strong>WORKOUT SUMMARY</strong> and, if shown, <strong>RACE REPLAY</strong>, then paste it below.</span>
                       </div>
                     )}
@@ -256,168 +275,182 @@ export function RaceDetailsPage() {
                 )}
 
                 {importTab === "url" && !importSucceeded && (
-                  <div>
-                    <label style={{ display: "block", color: "var(--text-secondary)", marginBottom: 8 }}>
-                      Preferred: paste your results.hyrox.com result link and we'll import your result automatically.
+                  <div className={styles.urlImport}>
+                    <label className={styles.urlLabel} htmlFor="hyrox-result-url">
+                      HYROX result URL
                     </label>
                     <input
+                      id="hyrox-result-url"
                       data-testid="inline-url-input"
                       type="url"
-                      placeholder="https://results.hyrox.com/season-8/?..."
+                      placeholder="https://results.hyrox.com/..."
                       value={importUrl}
                       onChange={(event) => setImportUrl(event.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: 12,
-                        borderRadius: 8,
-                        border: "1px solid var(--border-subtle)",
-                        background: "var(--bg-950)",
-                        color: "var(--text-primary)",
-                      }}
+                      disabled={importUrlLoading}
+                      className={styles.urlInput}
                     />
                     {importUrlError && (
-                      <div data-testid="inline-url-error" style={{ color: "var(--accent-red)", marginTop: 8 }}>
+                      <div data-testid="inline-url-error" className={styles.importError}>
                         {importUrlError}
                       </div>
                     )}
-                    <div style={{ marginTop: 16 }}>
-                      <PrimaryButton
+                    <div className={styles.importAction}>
+                      <SecondaryButton
                         type="button"
                         data-testid="inline-url-fetch"
-                        loading={importUrlLoading}
+                        disabled={importUrlLoading}
                         onClick={() => void handleUrlFetch()}
                       >
-                        Fetch Results
-                      </PrimaryButton>
+                        {importUrlLoading ? "Importing result..." : "Import result"}
+                      </SecondaryButton>
                     </div>
                   </div>
                 )}
               </div>
 
               {!importSucceeded && (
-                <div
-                  data-testid="manual-entry-separator"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "var(--text-muted)",
-                    fontSize: 13,
-                    padding: "4px 0 2px",
-                  }}
-                >
-                  - Or enter manually below -
+                <div data-testid="manual-entry-separator" className={styles.manualSeparator}>
+                  Or enter manually below
                 </div>
               )}
 
-              <div className={styles.row2}>
+              <div className={styles.fieldGroup}>
+                <div className={styles.groupTitle}>Race setup</div>
+                <div className={styles.row2}>
+                  <SegmentedControl
+                    label="Gender"
+                    required
+                    options={[
+                      { value: "male", label: "Male" },
+                      { value: "female", label: "Female" },
+                    ]}
+                    value={gender}
+                    onChange={(v) => setGender(v as "male" | "female")}
+                  />
+                  <div className={styles.selectField}>
+                    <label htmlFor="age-group" className={styles.selectLabel}>
+                      Age Group <span className={styles.required}>*</span>
+                    </label>
+                    <select
+                      id="age-group"
+                      value={ageGroup}
+                      onChange={(event) => setAgeGroup(event.target.value)}
+                      className={`${styles.select} ${errors.ageGroup ? styles.selectError : ""}`}
+                    >
+                      <option value="">Select range</option>
+                      {AGE_GROUP_OPTIONS.map((value) => (
+                        <option key={value} value={value}>{value}</option>
+                      ))}
+                    </select>
+                    {errors.ageGroup && <div className={styles.errorMsg}>{errors.ageGroup}</div>}
+                  </div>
+                </div>
                 <SegmentedControl
-                  label="Gender"
+                  label="Division"
                   required
                   options={[
-                    { value: "male", label: "Male" },
-                    { value: "female", label: "Female" },
+                    { value: "open", label: "Open" },
+                    { value: "pro", label: "Pro" },
+                    { value: "doubles", label: "Doubles" },
+                    { value: "relay", label: "Relay" },
                   ]}
-                  value={gender}
-                  onChange={(v) => setGender(v as "male" | "female")}
+                  value={division}
+                  onChange={(v) => setDivision(v as Division)}
                 />
-                <div className={styles.selectField}>
-                  <label htmlFor="age-group" className={styles.selectLabel}>
-                    Age Range <span className={styles.required}>*</span>
-                  </label>
-                  <select
-                    id="age-group"
-                    value={ageGroup}
-                    onChange={(event) => setAgeGroup(event.target.value)}
-                    className={`${styles.select} ${errors.ageGroup ? styles.selectError : ""}`}
-                  >
-                    <option value="">Select range</option>
-                    {AGE_GROUP_OPTIONS.map((value) => (
-                      <option key={value} value={value}>{value}</option>
-                    ))}
-                  </select>
-                  {errors.ageGroup && (
-                    <div className={styles.errorMsg}>
-                      {errors.ageGroup}
-                    </div>
-                  )}
+                <div className={styles.benchmarkNote}>
+                  Benchmark: your age group, gender and division set the comparison group.
                 </div>
               </div>
-              <SegmentedControl
-                label="Division"
-                required
-                options={[
-                  { value: "open", label: "Open" },
-                  { value: "pro", label: "Pro" },
-                  { value: "doubles", label: "Doubles" },
-                  { value: "relay", label: "Relay" },
-                ]}
-                value={division}
-                onChange={(v) => setDivision(v as Division)}
-              />
-              <TimeInput
-                label="Finish Time"
-                required
-                placeholder="1:25:17 or 85:17"
-                hint="HH:MM:SS or MM:SS (e.g. 85:17 for 1h 25m 17s)"
-                value={finishTime}
-                onChange={(e) => setFinishTime(e.target.value)}
-                error={errors.finishTime}
-              />
-              <div className={styles.selectField}>
-                <label htmlFor="known-hyrox-event" className={styles.selectLabel}>
-                  HYROX Event
-                </label>
-                <select
-                  id="known-hyrox-event"
-                  value={knownEventName}
-                  onChange={(event) => handleKnownEventChange(event.target.value)}
-                  className={styles.select}
-                >
-                  <option value="">Select event</option>
-                  {HYROX_KNOWN_EVENTS.map((event) => (
-                    <option key={`${event.name}-${event.startDate}`} value={event.name}>
-                      {event.name} ({event.startDate})
-                    </option>
-                  ))}
-                </select>
+
+              <div className={styles.fieldGroup}>
+                <div className={styles.groupTitle}>Result</div>
+                <div className={styles.row2}>
+                  <TimeInput
+                    label="Finish Time"
+                    required
+                    placeholder="1:25:17 or 85:17"
+                    hint="Your official race finish time."
+                    value={finishTime}
+                    onChange={(e) => setFinishTime(e.target.value)}
+                    error={errors.finishTime}
+                  />
+                  <TimeInput
+                    label="Target finish time"
+                    required
+                    placeholder="55:00"
+                    hint="Used to calculate the time gaps needed to reach your goal."
+                    value={targetFinishTime}
+                    onChange={(e) => setTargetFinishTime(e.target.value)}
+	                    error={errors.targetFinishTime || targetFinishTimeWarning}
+                  />
+                </div>
+                <TextInput
+                  label="Athlete Name"
+                  placeholder="Optional"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onBlur={(e) => {
+                    const normalized = normalizeName(e.target.value);
+                    if (normalized) setName(normalized);
+                  }}
+                />
+                <div className={styles.row2}>
+                  <TextInput
+                    label="Race Name"
+                    placeholder="e.g. HYROX Manchester"
+                    value={raceName}
+                    onChange={(e) => setRaceName(e.target.value)}
+                    onBlur={(e) => applyKnownEventDateFromName(e.target.value)}
+                  />
+                  <TextInput
+                    label="Race Date"
+                    type="date"
+                    value={raceDate}
+                    onChange={(e) => setRaceDate(e.target.value)}
+                  />
+                </div>
               </div>
-              <TextInput
-                label="Athlete Name"
-                placeholder="Optional"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={(e) => {
-                  const normalized = normalizeName(e.target.value);
-                  if (normalized) setName(normalized);
-                }}
-              />
-              <TextInput
-                label="Race Name"
-                placeholder="e.g. HYROX Manchester"
-                value={raceName}
-                onChange={(e) => {
-                  setRaceName(e.target.value);
-                  setKnownEventName("");
-                }}
-                onBlur={(e) => applyKnownEventDateFromName(e.target.value)}
-              />
-              <TextInput
-                label="Race Date"
-                type="date"
-                value={raceDate}
-                onChange={(e) => setRaceDate(e.target.value)}
-              />
 
               <div className={styles.actions}>
-                <PrimaryButton type="button" fullWidth onClick={handleNext}>
-                  Next: Enter Your Splits -&gt;
+                <PrimaryButton type="button" fullWidth onClick={handleNext} disabled={!isFormValid}>
+                  Next: Check Splits
                 </PrimaryButton>
+                <p className={styles.ctaReassurance}>No account needed. Email capture happens at review.</p>
               </div>
+            </div>
+          </FormPanel>
+
+          <FormPanel className={styles.previewPanel}>
+            <div className={styles.previewEyebrow}>WHAT YOU&apos;LL GET</div>
+            <h2 className={styles.previewTitle}>A race report that tells you what to train next.</h2>
+            <div className={styles.mockInsight}>
+              <div className={styles.mockLabel}>Projected insight</div>
+              <div className={styles.mockTitle}>Wall Balls cost you the most time</div>
+              <div className={styles.mockMeta}>Stations +11:39 · Running +4:27 · RoxZone −0:04</div>
+            </div>
+            <div className={styles.previewRows}>
+              <PreviewRow label="Biggest gap" value="Wall Balls" />
+              <PreviewRow label="Best segment" value="Run 6" />
+              <PreviewRow label="Training focus" value="Station durability" />
             </div>
           </FormPanel>
         </div>
       </div>
+
+      <div className={styles.mobileStickyCta}>
+        <PrimaryButton type="button" fullWidth onClick={handleNext} disabled={!isFormValid}>
+          Next: Check Splits
+        </PrimaryButton>
+      </div>
     </Shell>
+  );
+}
+
+function PreviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.previewRow}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }

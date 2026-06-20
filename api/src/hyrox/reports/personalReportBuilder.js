@@ -26,7 +26,20 @@ function actualSectionKey(sectionKey) {
 }
 
 function orderSections(sections, interpretation) {
-  if (!interpretation?.sectionOrder) return sections;
+  const placeAfter = (items, anchorKey, moveKeys) => {
+    const result = items.filter((item) => !moveKeys.includes(item.sectionKey));
+    const moving = moveKeys
+      .map((key) => items.find((item) => item.sectionKey === key))
+      .filter(Boolean);
+    const anchorIndex = result.findIndex((item) => item.sectionKey === anchorKey);
+    if (anchorIndex < 0 || moving.length === 0) return result;
+    result.splice(anchorIndex + 1, 0, ...moving);
+    return result;
+  };
+
+  if (!interpretation?.sectionOrder) {
+    return placeAfter(sections, "race_split_breakdown", ["recommended_focus_areas", "training_volume", "muscle_group_profile"]);
+  }
   const remaining = [...sections];
   const ordered = [];
   for (const requestedKey of interpretation.sectionOrder) {
@@ -36,7 +49,7 @@ function orderSections(sections, interpretation) {
   }
   const ctaIndex = remaining.findIndex((candidate) => candidate.sectionKey === "cta");
   const cta = ctaIndex >= 0 ? remaining.splice(ctaIndex, 1) : [];
-  return [...ordered, ...remaining, ...cta];
+  return placeAfter([...ordered, ...remaining, ...cta], "race_split_breakdown", ["recommended_focus_areas", "training_volume", "muscle_group_profile"]);
 }
 
 function segment(analysisJson, key) {
@@ -289,8 +302,6 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   const penaltySection = penaltyCalloutSection(analysisJson, interpretation);
   if (penaltySection) sections.push(penaltySection);
 
-  sections.push(section("biggest_strength", "Biggest Strength", strength ? `${strength.label} is the strongest benchmarked area at ${formatPercentile(strength.percentile) ?? "a strong percentile"}.` : "No single high-confidence strength dominated this result."));
-  sections.push(section("biggest_limiter", "Station Breakdown", stationBreakdownSection(analysisJson)));
   const splitSegments = (analysisJson.segments ?? []).filter(
     (row) => (row.type === "run" || row.type === "station") && Number.isFinite(row.userSeconds),
   );
@@ -307,36 +318,6 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
       },
     });
   }
-  const headlineGain = analysisJson.timePotential?.headlineGainSeconds ?? 0;
-  const limiterGap = limiter?.timeGapSeconds ?? 0;
-  const clarification = Math.abs(headlineGain - limiterGap) > 30
-    ? ` (${formatGain(limiterGap)} to benchmark median; ${formatGain(headlineGain)} to your target finish time)`
-    : "";
-  sections.push(section("time_potential", "Time Potential", `Estimated opportunity: ${formatGain(headlineGain)} potential gain.${clarification} This is an estimate, not a guarantee.`));
-  if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound) {
-    const sex = analysisJson.athlete?.sex ?? "male";
-    sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
-  }
-  sections.push(section("running_fatigue", "Running and Fatigue Profile", runningFatigueContent(analysisJson)));
-  const volumeAdvice = buildTrainingVolumeAdvice(analysisJson, athleteContext);
-  if (volumeAdvice) {
-    const content = [];
-    if (volumeAdvice.runningAdvice?.copy) content.push(volumeAdvice.runningAdvice.copy);
-    if (volumeAdvice.strengthAdvice?.copy) content.push(volumeAdvice.strengthAdvice.copy);
-    if (content.length > 0) {
-      sections.push(section("training_volume", "Training Volume Assessment", content));
-    }
-  }
-  const backgroundCopy = buildBackgroundSection(analysisJson, athleteContext);
-  if (backgroundCopy) {
-    sections.push(section("athlete_background", "Your Background in Context", backgroundCopy));
-  }
-  sections.push(section("roxzone_execution", "Roxzone and Execution Profile", buildRoxzoneSection(analysisJson)));
-
-  if (ctxCopy) {
-    sections.push(section("training_context", "Training Context Interpretation", ctxCopy));
-  }
-
   const horizonLabel = recommendations[0]?.timeHorizon ?? null;
   const recItems = recommendations.map((item) => `${item.priority}. ${item.title}: ${item.rationale}${item.safetyNote ? ` ${item.safetyNote}` : ""}`);
   const gapItems = buildGapBreakdown(analysisJson);
@@ -348,7 +329,39 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     content: recContent,
     richRecommendations: recommendations,
   });
-  sections.push(section("cta", "Next Step", "Use Forma to build a training plan targeting your bottleneck."));
+  const volumeAdvice = buildTrainingVolumeAdvice(analysisJson, athleteContext);
+  if (volumeAdvice) {
+    const content = [];
+    if (volumeAdvice.runningAdvice?.copy) content.push(volumeAdvice.runningAdvice.copy);
+    if (volumeAdvice.strengthAdvice?.copy) content.push(volumeAdvice.strengthAdvice.copy);
+    if (content.length > 0) {
+      sections.push(section("training_volume", "Training Volume Assessment", content));
+    }
+  }
+  if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound) {
+    const sex = analysisJson.athlete?.sex ?? "male";
+    sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
+  }
+  sections.push(section("running_fatigue", "Running and Fatigue Profile", runningFatigueContent(analysisJson)));
+  sections.push(section("biggest_strength", "Biggest Strength", strength ? `${strength.label} is the strongest benchmarked area at ${formatPercentile(strength.percentile) ?? "a strong percentile"}.` : "No single high-confidence strength dominated this result."));
+  sections.push(section("biggest_limiter", "Station Breakdown", stationBreakdownSection(analysisJson)));
+  const headlineGain = analysisJson.timePotential?.headlineGainSeconds ?? 0;
+  const limiterGap = limiter?.timeGapSeconds ?? 0;
+  const clarification = Math.abs(headlineGain - limiterGap) > 30
+    ? ` (${formatGain(limiterGap)} to benchmark median; ${formatGain(headlineGain)} to your target finish time)`
+    : "";
+  sections.push(section("time_potential", "Time Potential", `Estimated opportunity: ${formatGain(headlineGain)} potential gain.${clarification} This is an estimate, not a guarantee.`));
+  const backgroundCopy = buildBackgroundSection(analysisJson, athleteContext);
+  if (backgroundCopy) {
+    sections.push(section("athlete_background", "Your Background in Context", backgroundCopy));
+  }
+  sections.push(section("roxzone_execution", "Roxzone and Execution Profile", buildRoxzoneSection(analysisJson)));
+
+  if (ctxCopy) {
+    sections.push(section("training_context", "Training Context Interpretation", ctxCopy));
+  }
+
+  sections.push(section("cta", "Next Step", "Use Forma to build a plan targeting your biggest opportunities."));
 
   return { sections: orderSections(sections, interpretation), recommendations };
 }

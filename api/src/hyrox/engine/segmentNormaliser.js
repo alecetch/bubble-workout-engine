@@ -4,6 +4,7 @@ const SEGMENT_BY_KEY = new Map(SEGMENT_MAP.map((segment) => [segment.segmentKey,
 const STATION_TO_REPLAY_INDEX = Object.freeze({ ski_erg: 1, sled_push: 2, sled_pull: 3, burpee_broad_jump: 4, row: 5, farmers_carry: 6, sandbag_lunges: 7, wall_balls: 8 });
 
 function finiteOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }

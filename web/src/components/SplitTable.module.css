@@ -55,6 +55,11 @@
   color: var(--text-secondary);
 }
 
+.typeHead,
+.typeCell {
+  width: 84px;
+}
+
 .labelInner {
   display: flex;
   flex-direction: column;
@@ -103,4 +108,53 @@
   padding: 0 10px;
   text-align: center;
   font-size: 14px;
+}
+
+@media (min-width: 769px) {
+  .thead th {
+    padding: 3px 7px;
+    font-size: 10px;
+  }
+
+  .indexCell {
+    padding: 4px 7px;
+    font-size: 11px;
+  }
+
+  .labelCell {
+    padding: 4px 7px;
+  }
+
+  .labelInner {
+    gap: 0;
+  }
+
+  .inputCell {
+    padding: 3px 7px;
+    width: 108px;
+  }
+
+  .input {
+    padding: 4px 7px;
+    font-size: 12px;
+  }
+
+  .segLabel {
+    font-size: 12px;
+  }
+
+  .typeTag {
+    display: inline-flex;
+  }
+
+  .statusCell {
+    padding: 0 7px;
+  }
+}
+
+@media (max-width: 768px) {
+  .typeHead,
+  .typeCell {
+    display: none;
+  }
 }
