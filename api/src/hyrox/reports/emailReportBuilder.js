@@ -1343,12 +1343,10 @@ function renderSection(section, analysisJson, interpretation = null) {
     "executive_summary",
     "race_snapshot",
     "biggest_strength",
-    "biggest_limiter",
     "time_potential",
     "running_fatigue",
     "athlete_background",
     "training_context",
-    "roxzone_execution",
   ]);
   if (SUPPRESSED_IN_EMAIL.has(section.sectionKey)) return "";
 
