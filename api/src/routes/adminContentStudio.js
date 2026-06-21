@@ -5,6 +5,7 @@ import { analyseRaceEvent } from "../contentStudio/raceEventAnalyser.js";
 import { generateContentInsights } from "../contentStudio/contentInsightEngine.js";
 import { generateContentForMode } from "../contentStudio/contentModeDispatcher.js";
 import { generateCaption } from "../contentStudio/captionGenerator.js";
+import { fetchDivisions, scrapeLeaderboard } from "../contentStudio/hyroxScraper.js";
 
 export const adminContentStudioRouter = express.Router();
 
@@ -331,6 +332,97 @@ adminContentStudioRouter.get("/content-studio/jobs/:jobId/export", async (req, r
     };
     res.setHeader("Content-Disposition", `attachment; filename="forma-content-${rows[0].id.slice(0, 8)}.json"`);
     return res.json(exportPayload);
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── HYROX results scraping ─────────────────────────────────────────────────────
+
+adminContentStudioRouter.get("/content-studio/hyrox-events", async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, season, event_name, city, country, start_date, results_page_key
+       FROM hyrox_events
+       WHERE has_results = true AND results_page_key IS NOT NULL
+       ORDER BY start_date DESC NULLS LAST, season DESC, event_name`,
+    );
+    return res.json({
+      ok: true,
+      events: rows.map((r) => ({
+        id: r.id,
+        season: r.season,
+        eventName: r.event_name,
+        city: r.city,
+        country: r.country,
+        startDate: r.start_date,
+        resultsPageKey: r.results_page_key,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+adminContentStudioRouter.get("/content-studio/hyrox-events/:resultsPageKey/divisions", async (req, res) => {
+  const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
+  try {
+    const divisions = await fetchDivisions(resultsPageKey);
+    return res.json({ ok: true, divisions });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scrape", express.json(), async (req, res) => {
+  const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
+  const division = String(req.body?.division ?? "").trim();
+  if (!division) return res.status(400).json({ ok: false, error: "division is required" });
+
+  try {
+    const rows = await scrapeLeaderboard(resultsPageKey, division, 50);
+    if (!rows.length) return res.status(422).json({ ok: false, error: "Scrape returned no rows" });
+
+    const divisionType = rows[0].division;
+    const sex = rows[0].sex;
+    const analysis = await analyseRaceEvent(rows, divisionType, sex, pool);
+
+    // Look up event metadata from hyrox_events table
+    const evRow = await pool.query(
+      "SELECT event_name, start_date, season FROM hyrox_events WHERE results_page_key = $1 LIMIT 1",
+      [resultsPageKey],
+    );
+    const eventName = evRow.rows[0]?.event_name ?? resultsPageKey;
+    const eventDate = evRow.rows[0]?.start_date ?? null;
+    const season = evRow.rows[0]?.season ?? null;
+
+    const result = await pool.query(
+      `INSERT INTO cs_race_events (
+        event_name, event_date, season, division, sex,
+        athlete_count, raw_data_json, analysis_json, status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, 'analysed')
+       RETURNING *`,
+      [
+        `${eventName} — ${division}`,
+        eventDate,
+        season,
+        divisionType,
+        sex,
+        rows.length,
+        JSON.stringify(rows),
+        JSON.stringify(analysis),
+      ],
+    );
+
+    return res.json({
+      ok: true,
+      raceEventId: result.rows[0].id,
+      athleteCount: rows.length,
+      division: divisionType,
+      sex,
+      eventName: result.rows[0].event_name,
+    });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
