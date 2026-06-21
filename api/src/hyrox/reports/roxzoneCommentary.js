@@ -53,7 +53,25 @@ function entryExitLines(rox) {
   return lines;
 }
 
+function buildNarrativeSection(rox) {
+  const narrative = rox.roxzoneNarrative;
+  if (!narrative?.available) return null;
+  return [
+    narrative.summaryCopy
+      .replace(`${narrative.replayTotalSeconds}s`, formatTime(narrative.replayTotalSeconds))
+      .replace(`${narrative.officialTotalSeconds}s`, formatTime(narrative.officialTotalSeconds)),
+    narrative.interpretationCopy,
+    narrative.actionCopy,
+    ...entryExitLines(rox),
+    ...(narrative.caveatCopy ? [narrative.caveatCopy] : []),
+    { __type: "roxzone_narrative", ...narrative },
+  ];
+}
+
 function buildInferredSection(rox, roxSegment) {
+  const narrativeSection = buildNarrativeSection(rox);
+  if (narrativeSection) return narrativeSection;
+
   const percentile = finiteNumber(rox.percentile);
   const pctOfTotal = percentOfTotal(rox);
   const targetGap = targetGapForRoxzone(rox, roxSegment);
@@ -91,6 +109,9 @@ function buildInferredSection(rox, roxSegment) {
 }
 
 function buildExplicitSection(rox, roxSegment) {
+  const narrativeSection = buildNarrativeSection(rox);
+  if (narrativeSection) return narrativeSection;
+
   const percentile = finiteNumber(rox.percentile);
   const pctOfTotal = percentOfTotal(rox);
   const targetGap = targetGapForRoxzone(rox, roxSegment);

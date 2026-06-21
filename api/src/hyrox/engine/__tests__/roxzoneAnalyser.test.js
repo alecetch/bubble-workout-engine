@@ -35,6 +35,25 @@ test("worstExit is sandbag_lunges for example race", () => {
   assert.equal(result.worstExit.stationKey, "sandbag_lunges");
 });
 
+test("builds roxzone narrative with replay total, official difference, and display rows", () => {
+  const normalised = submissionWithReplay([5, 3, 11, 13, 17, 45, 49, 278], [31, 24, 24, 6, 17, 11, 15, null]);
+  const result = analyseRoxzone({ ...normalised, roxzoneTimeSeconds: 273 }, {});
+  assert.equal(result.roxzoneNarrative.available, true);
+  assert.equal(result.roxzoneNarrative.replayTotalSeconds, 271);
+  assert.equal(result.roxzoneNarrative.officialTotalSeconds, 273);
+  assert.equal(result.roxzoneNarrative.roundingDifferenceSeconds, 2);
+  assert.equal(result.roxzoneNarrative.displayRows.length, 8);
+  assert.deepEqual(result.roxzoneNarrative.displayRows[7], {
+    stationKey: "wall_balls",
+    label: "Wall Balls",
+    entrySeconds: null,
+    exitSeconds: null,
+    roxzoneSeconds: null,
+    measurable: false,
+  });
+  assert.ok(result.roxzoneNarrative.scenarioTags.includes("late_race_drift"));
+});
+
 test("no entry/exit splits reports unavailable", () => {
   const result = analyseRoxzone(normaliseSubmission({ race: { finishTimeSeconds: 5000 }, splits: [] }), {});
   assert.equal(result.entryExitAvailable, false);

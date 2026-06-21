@@ -43,7 +43,7 @@ export function SplitImportPanel({ onImport, onCancel }: SplitImportPanelProps) 
     <div style={panelStyle}>
       <h2 style={{ marginTop: 0 }}>Import your results</h2>
       <p style={{ color: "var(--text-secondary)" }}>
-        Open your result on results.hyrox.com and copy the page text that includes <strong>WORKOUT SUMMARY</strong> plus <strong>RACE REPLAY</strong> if it is shown.
+        Open your result on results.hyrox.com and copy the page text that includes <strong>WORKOUT SUMMARY</strong> plus <strong>ROXZONE REPLAY</strong> if it is shown.
         Paste both sections below so we can import your splits and station entry/exit detail.
       </p>
       <textarea
@@ -80,7 +80,7 @@ export function SplitImportPanel({ onImport, onCancel }: SplitImportPanelProps) 
           To import your splits:
           <ol style={{ margin: "8px 0 0 20px", padding: 0, lineHeight: 1.8 }}>
             <li>Open the link in your browser</li>
-            <li>Select the page text that includes <strong>WORKOUT SUMMARY</strong> and, if available, <strong>RACE REPLAY</strong></li>
+            <li>Select the page text that includes <strong>WORKOUT SUMMARY</strong> and, if available, <strong>ROXZONE REPLAY</strong></li>
             <li>Copy (<kbd>Ctrl+C</kbd>)</li>
             <li>Paste the copied text here instead</li>
           </ol>
@@ -113,7 +113,7 @@ export function SplitImportPanel({ onImport, onCancel }: SplitImportPanelProps) 
           <div>Athlete: {result.athleteName ?? "Not found"}</div>
           <div>Finish time: {result.finishTimeSeconds ? formatSeconds(result.finishTimeSeconds, "HH:MM:SS") : "Not found"}</div>
           <div>Splits: {result.splits.length} / 16</div>
-          <div>Race Replay: {result.raceReplay?.length ? `${result.raceReplay.length} stations` : "Not imported"}</div>
+          <div>RoxZone replay: {result.raceReplay?.length ? `${result.raceReplay.length} stations` : "Not imported"}</div>
           <div>Penalties: {result.penalties.length ? result.penalties.map((p) => `${p.segmentKey} ${p.penaltySeconds}s`).join(", ") : "None"}</div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
             <PrimaryButton type="button" data-testid="confirm-btn" onClick={confirm}>
