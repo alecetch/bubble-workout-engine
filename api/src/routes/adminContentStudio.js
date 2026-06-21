@@ -364,6 +364,21 @@ adminContentStudioRouter.get("/content-studio/hyrox-events", async (_req, res) =
   }
 });
 
+// Debug route — returns raw Puppeteer page snapshot for a given results URL
+adminContentStudioRouter.get("/content-studio/debug-page", async (req, res) => {
+  const url = String(req.query.url ?? "").trim();
+  if (!url.startsWith("https://results.hyrox.com/")) {
+    return res.status(400).json({ error: "url must start with https://results.hyrox.com/" });
+  }
+  const { debugPage } = await import("../contentStudio/hyroxScraper.js");
+  try {
+    const info = await debugPage(url);
+    return res.json(info);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 adminContentStudioRouter.get("/content-studio/hyrox-events/:resultsPageKey/divisions", async (req, res) => {
   const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
   const season = req.query.season ? Number(req.query.season) : null;
