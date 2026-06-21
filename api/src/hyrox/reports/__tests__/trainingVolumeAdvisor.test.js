@@ -95,7 +95,7 @@ test("strength copy names the biggest limiter", () => {
 
 test("running background appends strength-side addendum", () => {
   const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000 }), { weeklyStrengthSessions: "2_3", primaryBackground: "running" });
-  assert.match(advice.strengthAdvice.copy, /runner|running background/i);
+  assert.match(advice.strengthAdvice.copy, /stronger running base/i);
 });
 
 test("strength sports background appends running-side addendum", () => {

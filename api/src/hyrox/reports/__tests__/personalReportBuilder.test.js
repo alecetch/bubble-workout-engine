@@ -109,13 +109,16 @@ describe("buildPersonalReport - race_split_breakdown section", () => {
     assert.ok(tableSection.content.some((line) => line.includes("Total RoxZone Time")), "RoxZone row expected");
   });
 
-  it("section appears after biggest_limiter and before time_potential", () => {
+  it("orders focus sections after split table while still building suppressed text sections", () => {
     const analysis = minimalAnalysis({ segments: makeSegments(16) });
     const { sections } = buildPersonalReport(analysis, [], {});
     const limiterIdx = sections.findIndex((section) => section.sectionKey === "biggest_limiter");
     const tableIdx = sections.findIndex((section) => section.sectionKey === "race_split_breakdown");
+    const recIdx = sections.findIndex((section) => section.sectionKey === "recommended_focus_areas");
     const potentialIdx = sections.findIndex((section) => section.sectionKey === "time_potential");
-    assert.ok(limiterIdx < tableIdx, "table should come after biggest_limiter");
+    assert.ok(limiterIdx > tableIdx, "suppressed station breakdown should still be built after split table");
+    assert.ok(tableIdx < recIdx, "recommendations should come after split table");
+    assert.ok(recIdx < limiterIdx, "recommendations should come before suppressed station breakdown");
     assert.ok(tableIdx < potentialIdx, "table should come before time_potential");
   });
 });

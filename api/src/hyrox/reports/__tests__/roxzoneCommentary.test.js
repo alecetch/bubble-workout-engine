@@ -112,4 +112,33 @@ describe("buildRoxzoneSection", () => {
     assert.match(lines, /got slower later/i);
     assert.doesNotMatch(lines, /estimated from unallocated/i);
   });
+
+  it("uses roxzone narrative copy and rounded checkpoint caveat when available", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "inferred_total",
+        totalSeconds: 273,
+        percentOfTotalTime: 0.056,
+        roxzoneNarrative: {
+          available: true,
+          replayTotalSeconds: 271,
+          officialTotalSeconds: 273,
+          roundingDifferenceSeconds: 2,
+          summaryCopy: "Your Race Replay rows add up to 271s of measurable RoxZone time, versus 273s officially.",
+          interpretationCopy: "The biggest RoxZone story is around Sandbag Lunges.",
+          actionCopy: "Prioritise compromised Sandbag Lunges practice.",
+          caveatCopy: "Race Replay checkpoint rows are rounded before summing, so the station-by-station total may differ by a few seconds from the official RoxZone total.",
+          displayRows: [],
+        },
+      },
+    };
+    const result = buildRoxzoneSection(analysis);
+    const lines = asArray(result).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /4:31/);
+    assert.match(lines, /4:33/);
+    assert.match(lines, /Sandbag Lunges/);
+    assert.match(lines, /rounded before summing/i);
+    assert.ok(asArray(result).some((item) => item?.__type === "roxzone_narrative"));
+  });
 });

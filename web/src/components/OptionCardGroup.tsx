@@ -3,6 +3,7 @@ import styles from "./OptionCardGroup.module.css";
 interface OptionCard {
   value: string;
   label: string;
+  sublabel?: string;
 }
 
 interface OptionCardGroupProps {
@@ -39,7 +40,8 @@ export function OptionCardGroup({
               .join(" ")}
             onClick={() => onChange(opt.value)}
           >
-            {opt.label}
+            <span className={styles.optionLabel}>{opt.label}</span>
+            {opt.sublabel && <span className={styles.optionSub}>{opt.sublabel}</span>}
           </button>
         ))}
       </div>

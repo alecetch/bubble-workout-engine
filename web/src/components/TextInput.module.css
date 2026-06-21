@@ -46,3 +46,14 @@
   color: var(--accent-red);
   margin-top: 2px;
 }
+
+@media (min-width: 769px) {
+  .field {
+    gap: 4px;
+  }
+
+  .input {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
