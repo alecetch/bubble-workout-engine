@@ -93,6 +93,12 @@
           <summary style="font-weight:600;cursor:pointer;font-size:14px">⚡ Scrape from HYROX Results</summary>
           <div style="margin-top:10px">
             <div class="form-grid">
+              <div class="control">
+                <label for="scrape-season">Season</label>
+                <select id="scrape-season">
+                  <option value="">— all seasons —</option>
+                </select>
+              </div>
               <div class="control wide">
                 <label for="scrape-race">Race</label>
                 <select id="scrape-race">
@@ -100,12 +106,16 @@
                 </select>
               </div>
               <div class="control wide">
-                <label for="scrape-division">Division</label>
+                <label for="scrape-division">Division (auto-detected)</label>
                 <select id="scrape-division" disabled>
-                  <option value="">— select race first —</option>
+                  <option value="">— click Load Divisions —</option>
                 </select>
               </div>
               <button id="fetch-divisions-btn" type="button" disabled>Load Divisions</button>
+              <div class="control wide">
+                <label for="scrape-division-manual">Or type division name exactly as shown on results.hyrox.com</label>
+                <input id="scrape-division-manual" type="text" placeholder="e.g. HYROX Men - Saturday" />
+              </div>
               <button id="scrape-btn" type="button" disabled>Scrape Top 50</button>
             </div>
             <div id="scrape-status" class="status"></div>
@@ -516,43 +526,106 @@
         event.target.closest(".chip")?.remove();
       });
       // ── Scrape from HYROX Results ──────────────────────────────────────────
+      const scrapeSeasonEl = document.getElementById("scrape-season");
       const scrapeRaceEl = document.getElementById("scrape-race");
       const scrapeDivisionEl = document.getElementById("scrape-division");
+      const scrapeDivisionManualEl = document.getElementById("scrape-division-manual");
       const fetchDivisionsBtn = document.getElementById("fetch-divisions-btn");
       const scrapeBtn = document.getElementById("scrape-btn");
       const scrapeStatusEl = document.getElementById("scrape-status");
 
+      let allHyroxEvents = [];
+
+      // Season 8 = 25/26, Season 7 = 24/25, …, Season 1 = 18/19
+      function seasonLabel(n) {
+        const y1 = (2017 + n) % 100;
+        const y2 = (2018 + n) % 100;
+        return `Season ${String(y1).padStart(2,"0")}/${String(y2).padStart(2,"0")} (S${n})`;
+      }
+
+      function selectedSeason() {
+        const opt = scrapeRaceEl.options[scrapeRaceEl.selectedIndex];
+        return opt?.dataset?.season || scrapeSeasonEl.value || null;
+      }
+
+      function activeDivision() {
+        return scrapeDivisionManualEl.value.trim() || scrapeDivisionEl.value || "";
+      }
+
+      function rebuildRaceDropdown() {
+        const filterSeason = scrapeSeasonEl.value ? Number(scrapeSeasonEl.value) : null;
+        const filtered = filterSeason
+          ? allHyroxEvents.filter((e) => e.season === filterSeason)
+          : allHyroxEvents;
+        scrapeRaceEl.innerHTML = '<option value="">— select a race —</option>';
+        filtered.forEach((e) => {
+          const opt = document.createElement("option");
+          opt.value = e.resultsPageKey;
+          opt.textContent = e.resultsPageKey;
+          if (e.season) opt.dataset.season = e.season;
+          scrapeRaceEl.appendChild(opt);
+        });
+        // Reset downstream controls
+        scrapeDivisionEl.innerHTML = '<option value="">— click Load Divisions —</option>';
+        scrapeDivisionEl.disabled = true;
+        scrapeDivisionManualEl.value = "";
+        fetchDivisionsBtn.disabled = true;
+        updateScrapeBtn();
+      }
+
       async function loadHyroxEvents() {
         try {
           const data = await api("/hyrox-events");
-          scrapeRaceEl.innerHTML = '<option value="">— select a race —</option>';
-          (data.events || []).forEach((e) => {
+          allHyroxEvents = data.events || [];
+
+          // Build season filter dropdown from distinct seasons in the data
+          const seasons = [...new Set(allHyroxEvents.map((e) => e.season).filter(Boolean))].sort((a, b) => b - a);
+          scrapeSeasonEl.innerHTML = '<option value="">— all seasons —</option>';
+          seasons.forEach((n) => {
             const opt = document.createElement("option");
-            opt.value = e.resultsPageKey;
-            opt.textContent = `${e.eventName} (${e.season ? "S" + e.season : ""})`;
-            scrapeRaceEl.appendChild(opt);
+            opt.value = n;
+            opt.textContent = seasonLabel(n);
+            scrapeSeasonEl.appendChild(opt);
           });
+
+          // Default to the latest season that has results
+          const latestWithResults = seasons[0];
+          if (latestWithResults) scrapeSeasonEl.value = latestWithResults;
+
+          rebuildRaceDropdown();
         } catch (err) {
           status(scrapeStatusEl, `Could not load races: ${err.message}`, "err");
         }
       }
 
+      scrapeSeasonEl.addEventListener("change", rebuildRaceDropdown);
+
+      function updateScrapeBtn() {
+        scrapeBtn.disabled = !scrapeRaceEl.value || !activeDivision();
+      }
+
       scrapeRaceEl.addEventListener("change", () => {
         scrapeDivisionEl.innerHTML = '<option value="">— click Load Divisions —</option>';
         scrapeDivisionEl.disabled = true;
-        scrapeBtn.disabled = true;
+        scrapeDivisionManualEl.value = "";
         fetchDivisionsBtn.disabled = !scrapeRaceEl.value;
+        updateScrapeBtn();
       });
 
       fetchDivisionsBtn.addEventListener("click", async () => {
         const key = scrapeRaceEl.value;
         if (!key) return;
-        status(scrapeStatusEl, "Fetching divisions from results.hyrox.com…");
+        status(scrapeStatusEl, "Fetching divisions from results.hyrox.com… (may take up to 45 s)");
         fetchDivisionsBtn.disabled = true;
         try {
-          const data = await api(`/hyrox-events/${encodeURIComponent(key)}/divisions`);
+          const season = selectedSeason();
+          const qs = season ? `?season=${season}` : "";
+          const data = await api(`/hyrox-events/${encodeURIComponent(key)}/divisions${qs}`);
           const divisions = data.divisions || [];
-          if (!divisions.length) { status(scrapeStatusEl, "No divisions found — the race may not have results yet.", "err"); return; }
+          if (!divisions.length) {
+            status(scrapeStatusEl, "Auto-detection found no divisions — type the division name manually below.", "err");
+            return;
+          }
           scrapeDivisionEl.innerHTML = '<option value="">— pick a division —</option>';
           divisions.forEach((d) => {
             const opt = document.createElement("option");
@@ -561,29 +634,30 @@
             scrapeDivisionEl.appendChild(opt);
           });
           scrapeDivisionEl.disabled = false;
-          status(scrapeStatusEl, `Found ${divisions.length} division(s). Pick one and click Scrape Top 50.`, "ok");
+          status(scrapeStatusEl, `Found ${divisions.length} division(s). Pick one or type manually, then click Scrape Top 50.`, "ok");
         } catch (err) {
-          status(scrapeStatusEl, err.message, "err");
+          status(scrapeStatusEl, `${err.message} — type the division name manually below.`, "err");
         } finally {
           fetchDivisionsBtn.disabled = false;
+          updateScrapeBtn();
         }
       });
 
-      scrapeDivisionEl.addEventListener("change", () => {
-        scrapeBtn.disabled = !scrapeDivisionEl.value;
-      });
+      scrapeDivisionEl.addEventListener("change", updateScrapeBtn);
+      scrapeDivisionManualEl.addEventListener("input", updateScrapeBtn);
 
       scrapeBtn.addEventListener("click", async () => {
         const key = scrapeRaceEl.value;
-        const division = scrapeDivisionEl.value;
+        const division = activeDivision();
         if (!key || !division) return;
-        status(scrapeStatusEl, `Scraping "${division}" from ${key}… (may take 20–40 s)`);
+        const season = selectedSeason();
+        status(scrapeStatusEl, `Scraping "${division}" from ${key}… (may take 30–60 s)`);
         scrapeBtn.disabled = true;
         try {
           const data = await api(`/hyrox-events/${encodeURIComponent(key)}/scrape`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ division }),
+            body: JSON.stringify({ division, ...(season ? { season: Number(season) } : {}) }),
           });
           status(scrapeStatusEl, `Done — ${data.athleteCount} athletes scraped (${data.division} / ${data.sex}). Race "${data.eventName}" added.`, "ok");
           selectedRaceId = data.raceEventId;

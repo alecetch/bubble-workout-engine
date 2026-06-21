@@ -1,12 +1,14 @@
 const RESULTS_BASE = "https://results.hyrox.com/";
 const FETCH_TIMEOUT_MS = 15000;
-const PUPPETEER_TIMEOUT_MS = 30000;
+const PUPPETEER_TIMEOUT_MS = 45000;
 const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"];
 
-function buildEventUrl(resultsPageKey, division = null) {
-  const params = new URLSearchParams({ event_main_group: resultsPageKey });
-  if (division) params.set("event_sub_group", division);
-  return `${RESULTS_BASE}?${params}`;
+// Use encodeURIComponent (not URLSearchParams) so spaces become %20, not +
+function buildEventUrl(resultsPageKey, division = null, seasonNum = null) {
+  const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
+  let url = `${base}?event_main_group=${encodeURIComponent(resultsPageKey)}`;
+  if (division) url += `&event_sub_group=${encodeURIComponent(division)}`;
+  return url;
 }
 
 async function fetchHtml(url) {
@@ -30,25 +32,30 @@ async function fetchHtml(url) {
   }
 }
 
-// Parse division links from the static HTML the Raceresult platform renders
-function parseDivisionsFromHtml(html) {
+// Parse division links from static HTML.
+// Rules:
+//   - link has event_sub_group AND event_main_group === resultsPageKey  → include
+//   - link has event_sub_group AND no event_main_group (relative link)  → include
+//   - link has event_sub_group AND event_main_group for a DIFFERENT event → exclude
+function parseDivisionsFromHtml(html, resultsPageKey) {
   const divisions = new Set();
 
-  // Pattern 1: query param links — href="?event_main_group=X&event_sub_group=DIVISION"
-  const linkRe = /event_sub_group=([^"&\s]+)/gi;
-  for (const match of html.matchAll(linkRe)) {
-    const value = decodeURIComponent(match[1].replace(/\+/g, " ")).trim();
-    if (value) divisions.add(value);
-  }
+  const hrefRe = /href="([^"]+)"/gi;
+  for (const hrefMatch of html.matchAll(hrefRe)) {
+    const href = hrefMatch[1];
+    if (!href.includes("event_sub_group=")) continue;
 
-  // Pattern 2: <option value="DIVISION">
-  const optionRe = /<option[^>]+value="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
-  for (const match of html.matchAll(optionRe)) {
-    const value = match[1].trim();
-    // Filter out numeric contest IDs and empty values; keep human-readable division names
-    if (value && !/^\d+$/.test(value) && value.length < 120) {
-      divisions.add(value);
+    const mainGroupMatch = href.match(/event_main_group=([^"&\s]+)/);
+    if (mainGroupMatch) {
+      const mainGroup = decodeURIComponent(mainGroupMatch[1].replace(/\+/g, " ")).trim();
+      if (mainGroup !== resultsPageKey) continue; // explicitly a different event
     }
+    // No event_main_group in href → relative link, accept it
+
+    const subGroupMatch = href.match(/event_sub_group=([^"&\s]+)/);
+    if (!subGroupMatch) continue;
+    const value = decodeURIComponent(subGroupMatch[1].replace(/\+/g, " ")).trim();
+    if (value) divisions.add(value);
   }
 
   return [...divisions].filter((d) => /hyrox|open|pro|double|mixed|relay|women|men/i.test(d));
@@ -87,44 +94,123 @@ async function launchBrowser() {
   return puppeteer.launch({ headless: "new", args: BROWSER_ARGS });
 }
 
-export async function fetchDivisions(resultsPageKey) {
-  const url = buildEventUrl(resultsPageKey);
+// Debug helper — finds the HTML context around HYROX division names
+export async function debugPage(targetUrl) {
+  const parsed = new URL(targetUrl);
+  const mainGroup = parsed.searchParams.get("event_main_group");
+  const seasonNum = parsed.pathname.match(/season-(\d+)/)?.[1] ?? "8";
+  const url = `https://results.hyrox.com/season-${seasonNum}/?event_main_group=${encodeURIComponent(mainGroup)}`;
+
+  const html = await fetchHtml(url);
+
+  // Find 300-char window around each HYROX match to see surrounding HTML tags
+  const contexts = [];
+  const re = /HYROX[^<"&\r\n]{0,80}/g;
+  let m;
+  const seen = new Set();
+  while ((m = re.exec(html)) !== null) {
+    const key = m[0].trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const start = Math.max(0, m.index - 200);
+    const end = Math.min(html.length, m.index + 200);
+    contexts.push({ match: key, context: html.slice(start, end).replace(/\s+/g, " ") });
+  }
+
+  // Also find every <a href that references event_sub_group anywhere in the page
+  const allSubGroupHrefs = [...html.matchAll(/href="([^"]*event_sub_group[^"]*)"/gi)]
+    .map((m2) => m2[1]);
+
+  // Any occurrence of event_sub_group in any format (JS vars, JSON, etc)
+  const subGroupOccurrences = [...html.matchAll(/event_sub_group[=:%"']{1,3}([^<"&\s]{3,})/gi)]
+    .map((m2) => decodeURIComponent(m2[1].replace(/\+/g, " ")));
+
+  return { url, length: html.length, contexts, allSubGroupHrefs, subGroupOccurrences };
+}
+
+export async function fetchDivisions(resultsPageKey, season = null) {
+  // Always use the root URL with event_main_group — the season-index page (/season-N/)
+  // lists all events and contaminates the results with other events' sub-groups.
+  const url = buildEventUrl(resultsPageKey, null, null);
 
   // Fast path: plain HTTP fetch + HTML parse
   try {
     const html = await fetchHtml(url);
-    const divisions = parseDivisionsFromHtml(html);
+    const divisions = parseDivisionsFromHtml(html, resultsPageKey);
     if (divisions.length > 0) return divisions;
   } catch {
     // fall through to puppeteer
   }
 
-  // Slow path: puppeteer (handles JS-rendered sites)
+  // Slow path: puppeteer (handles JS-rendered content)
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    await page.setDefaultTimeout(PUPPETEER_TIMEOUT_MS);
-    await page.goto(url, { waitUntil: "networkidle2" });
+    page.setDefaultNavigationTimeout(PUPPETEER_TIMEOUT_MS);
+    page.on("pageerror", () => {});
 
-    const divisions = await page.evaluate(() => {
+    // networkidle2 waits for the page's AJAX calls to settle before we try to read links
+    await page.goto(url, { waitUntil: "networkidle2", timeout: PUPPETEER_TIMEOUT_MS }).catch(() => {});
+
+    // After network settles, wait up to 15 s for division links or a contest select to appear
+    await Promise.race([
+      page.waitForFunction(
+        (rpk) => {
+          return [...document.querySelectorAll("a[href]")].some((a) => {
+            try {
+              const u = new URL(a.href, location.href);
+              const mainGroup = u.searchParams.get("event_main_group");
+              const subGroup = u.searchParams.get("event_sub_group");
+              return subGroup && (mainGroup === null || mainGroup === rpk);
+            } catch { return false; }
+          });
+        },
+        { timeout: 15000 },
+        resultsPageKey,
+      ),
+      page.waitForFunction(
+        () => {
+          const sel = document.querySelector('select[name="event_sub_group"], select[name="contest_id"], select.contest-select');
+          return sel && sel.options.length > 1;
+        },
+        { timeout: 15000 },
+      ),
+    ]).catch(() => {});
+
+    const divisions = await page.evaluate((rpk) => {
       const results = new Set();
-      // Look for event_sub_group in any link href
+
+      // Strategy 1: links with event_sub_group that either match our event or are relative
       document.querySelectorAll("a[href]").forEach((a) => {
-        const match = a.href.match(/event_sub_group=([^&]+)/);
-        if (match) results.add(decodeURIComponent(match[1].replace(/\+/g, " ")));
+        try {
+          const u = new URL(a.href, location.href);
+          const mainGroup = u.searchParams.get("event_main_group");
+          const subGroup = u.searchParams.get("event_sub_group");
+          if (!subGroup) return;
+          // Accept if: no event_main_group (relative), or explicitly our event
+          if (mainGroup === null || mainGroup === rpk) results.add(subGroup);
+        } catch { /* ignore malformed hrefs */ }
       });
-      // Look for select options
-      document.querySelectorAll("select option").forEach((opt) => {
-        const v = opt.value.trim();
-        if (v && !/^\d+$/.test(v)) results.add(v);
-      });
-      // Look for tab/button labels that look like divisions
-      document.querySelectorAll("[data-contest], .contest-item, .division-tab").forEach((el) => {
-        const v = (el.dataset.contest ?? el.textContent ?? "").trim();
-        if (v) results.add(v);
-      });
+
+      // Strategy 2: a <select> dedicated to contest/division selection (already scoped to the event)
+      const selectSelectors = [
+        'select[name="event_sub_group"]',
+        'select[name="contest_id"]',
+        'select[name="contest"]',
+        "select.contest-select",
+        "select.division-select",
+      ];
+      for (const sel of selectSelectors) {
+        document.querySelectorAll(`${sel} option`).forEach((opt) => {
+          const t = (opt.textContent || "").trim();
+          const v = (opt.value || "").trim();
+          if (t && t.length > 2 && !/^[-–]+$/.test(t)) results.add(t);
+          else if (v && !/^\d+$/.test(v)) results.add(v);
+        });
+      }
+
       return [...results];
-    });
+    }, resultsPageKey);
 
     return divisions.filter((d) => /hyrox|open|pro|double|mixed|relay|women|men/i.test(d));
   } finally {
@@ -132,8 +218,8 @@ export async function fetchDivisions(resultsPageKey) {
   }
 }
 
-export async function scrapeLeaderboard(resultsPageKey, division, limit = 50) {
-  const url = buildEventUrl(resultsPageKey, division);
+export async function scrapeLeaderboard(resultsPageKey, division, limit = 50, season = null) {
+  const url = buildEventUrl(resultsPageKey, division, season);
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
