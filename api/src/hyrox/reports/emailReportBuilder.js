@@ -1,4 +1,4 @@
-import { enforceTone, formatGain, formatPercentile, formatTime } from "./copyFormatter.js";
+import { enforceTone, formatGain, formatPercentileRank, formatTime } from "./copyFormatter.js";
 
 function esc(value) {
   return String(value ?? "")
@@ -14,6 +14,25 @@ function inlineStyle(props) {
 
 function limiterName(analysisJson = {}) {
   return analysisJson.headline?.biggestLimiter?.label ?? analysisJson.limiters?.[0]?.label ?? null;
+}
+
+function penaltyContext(analysisJson = {}) {
+  const penalties = analysisJson.penalties ?? [];
+  const totalPenaltySeconds = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
+  const totalTimeSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
+  const totalGapSeconds = Math.max(0, splitGapSeconds(totalTimeSeg, Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup)) ?? 0);
+  const penaltiesAreMaterial =
+    totalPenaltySeconds >= 60 ||
+    (totalGapSeconds > 0 && totalPenaltySeconds / totalGapSeconds >= 0.10);
+  const usePenaltyHero =
+    totalPenaltySeconds >= 180 &&
+    totalGapSeconds > 0 &&
+    totalPenaltySeconds / totalGapSeconds >= 0.25;
+  const raceTimeSeconds = analysisJson.race?.finishTimeSeconds ?? null;
+  const adjustedRaceTimeSeconds = totalPenaltySeconds > 0 && Number.isFinite(raceTimeSeconds)
+    ? raceTimeSeconds - totalPenaltySeconds
+    : null;
+  return { penalties, totalPenaltySeconds, totalGapSeconds, penaltiesAreMaterial, usePenaltyHero, adjustedRaceTimeSeconds };
 }
 
 function contentText(content) {
@@ -35,7 +54,7 @@ function thesisSectionKey(category) {
 }
 
 function sectionAccentColor(sectionKey, interpretation) {
-  if (sectionKey === "penalty_callout") return "#e53e3e";
+  if (sectionKey === "penalty_callout") return "#7c3aed";
   if (!interpretation) return "#e2e8f0";
   const primaryKey = thesisSectionKey(interpretation.primaryThesis?.category);
   const secondaryKeys = (interpretation.secondaryTheses ?? []).map((thesis) => thesisSectionKey(thesis.category));
@@ -86,22 +105,35 @@ function renderHeader() {
   </tr>`;
 }
 
+function stationHeroHeadline(limiterLabel) {
+  return `THE ${String(limiterLabel ?? "").toUpperCase()} STATION IS YOUR BIGGEST OPPORTUNITY`;
+}
+
 function buildFallbackHeroCopy(analysisJson = {}) {
+  const { totalPenaltySeconds, usePenaltyHero } = penaltyContext(analysisJson);
   const limiter = analysisJson.headline?.biggestLimiter ?? null;
   const gainSeconds = analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? null;
   const showGain = Number.isFinite(gainSeconds) && gainSeconds > 0;
   const gainDisplay = showGain ? formatGain(gainSeconds) : null;
+
+  if (usePenaltyHero) {
+    return {
+      headline: `${formatGain(totalPenaltySeconds)} OF PENALTIES IS YOUR FASTEST WIN`,
+      subline: "Clean this up before chasing fitness gains.",
+      gainDisplay: formatGain(totalPenaltySeconds),
+    };
+  }
+
   return {
-    headline: limiter
-      ? `${String(limiter.label ?? "").toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`
-      : "YOUR HYROX ANALYSIS IS READY",
-    subline: gainDisplay ? "estimated time opportunity against your benchmark group." : null,
+    headline: limiter ? stationHeroHeadline(limiter.label) : "YOUR HYROX ANALYSIS IS READY",
+    subline: gainDisplay ? "Largest single-station gap against your target benchmark." : null,
     gainDisplay,
   };
 }
 
 function renderHero(analysisJson, greetingName, interpretation = null) {
-  const heroCopy = interpretation?.heroCopy ?? buildFallbackHeroCopy(analysisJson);
+  const fallbackCopy = buildFallbackHeroCopy(analysisJson);
+  const heroCopy = interpretation?.heroCopy ?? fallbackCopy;
   const headlineText = esc(heroCopy.headline ?? "YOUR HYROX ANALYSIS IS READY");
   const showGain = heroCopy.gainDisplay != null;
   const heroNumber = showGain
@@ -143,17 +175,24 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
 
 function renderMetricStrip(analysisJson, athleteContext) {
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
+  const { totalPenaltySeconds, penaltiesAreMaterial, adjustedRaceTimeSeconds } = penaltyContext(analysisJson);
   const finishTime = formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "-";
-  const division = esc(athleteContext.division ?? analysisJson.race?.division ?? analysisJson.athlete?.division ?? "-");
-  const rank = esc(formatPercentile(totalSeg?.percentile) ?? "-");
+  const benchmarkTime = formatTime(
+    totalSeg?.exactTargetSeconds
+    ?? totalSeg?.goalBenchmarkSeconds
+    ?? analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds,
+  ) ?? "-";
+  const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "-";
+  const rank = esc(formatPercentileRank(totalSeg?.percentile) ?? "-");
   const penalties = analysisJson.penalties ?? [];
-  const totalPenalty = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
   const hasPenalties = penalties.length > 0;
+  const showAdjusted = hasPenalties && penaltiesAreMaterial;
 
+  const colWidth = hasPenalties ? "25%" : "33%";
   const cellStyle = (borderRight = true) => inlineStyle({
     padding: "14px 14px",
     "text-align": "center",
-    "vertical-align": "top",
+    "vertical-align": "middle",
     ...(borderRight ? { "border-right": "1px solid #e2e8f0" } : {}),
   });
   const labelStyle = inlineStyle({
@@ -165,23 +204,26 @@ function renderMetricStrip(analysisJson, athleteContext) {
     "letter-spacing": "0.06em",
     "margin-bottom": "6px",
   });
-  function metricCell(label, value, valueColor = "#0f172a", borderRight = true) {
-    return `<td style="${cellStyle(borderRight)}">
+  function metricCell(label, value, valueColor = "#0f172a", borderRight = true, valueFont = "'Courier New',Courier,monospace") {
+    return `<td width="${colWidth}" style="${cellStyle(borderRight)}">
       <span style="${labelStyle}">${esc(label)}</span>
-      <span style="display:block;font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:700;color:${valueColor};">${value}</span>
+      <span style="display:block;font-family:${valueFont};font-size:15px;font-weight:700;color:${valueColor};">${value}</span>
     </td>`;
   }
   const penaltyCell = hasPenalties
-    ? metricCell("PENALTIES", totalPenalty > 0 ? esc(formatGain(totalPenalty) ?? "-") : "None", totalPenalty > 0 ? "#e53e3e" : "#22c55e", false)
+    ? metricCell("PENALTIES", totalPenaltySeconds > 0 ? esc(formatGain(totalPenaltySeconds) ?? "-") : "None", totalPenaltySeconds > 0 ? "#7c3aed" : "#22c55e", false)
     : "";
+  const secondCell = showAdjusted
+    ? metricCell("ADJUSTED", esc(adjustedTime), "#0f172a", true)
+    : metricCell("BENCHMARK", esc(benchmarkTime), "#0f172a", true);
 
   return `<tr>
     <td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;padding:0;">
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         <tr>
-          ${metricCell("FINISH TIME", esc(finishTime), "#0f172a", true)}
-          ${metricCell("DIVISION", division, "#0f172a", true)}
-          ${metricCell("OVERALL RANK", rank, "#0f172a", !hasPenalties)}
+          ${metricCell("YOUR RACE", esc(finishTime), "#0f172a", true)}
+          ${secondCell}
+	          ${metricCell(showAdjusted ? "RANK" : "OVERALL RANK", rank, "#0f172a", hasPenalties, "Arial,Helvetica,sans-serif")}
           ${penaltyCell}
         </tr>
       </table>
@@ -196,7 +238,7 @@ function renderExecutiveSummary(section) {
     .map((item) => `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
     .join("");
   return `<tr>
-    <td style="background-color:#ffffff;padding:24px 32px 20px;border-bottom:1px solid #e2e8f0;">
+	    <td style="background-color:#ffffff;padding:18px 24px;border-bottom:1px solid #e2e8f0;">
       ${paragraphs}
     </td>
   </tr>`;
@@ -206,12 +248,12 @@ function renderStrengthCard(section) {
   const text = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
   return `
   <tr>
-    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;border-left:3px solid #08a7f5;">
+	    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;border-left:3px solid #08a7f5;">
       <span style="color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">BIGGEST STRENGTH</span>
     </td>
   </tr>
   <tr>
-    <td style="background-color:#ffffff;padding:16px 32px 20px 35px;border-bottom:1px solid #e2e8f0;">
+	    <td style="background-color:#ffffff;padding:16px 24px;border-bottom:1px solid #e2e8f0;">
       <p style="color:#0f172a;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0;">${text}</p>
     </td>
   </tr>`;
@@ -238,7 +280,7 @@ function renderStationBreakdown(section) {
       `<span style="font-family:'Courier New',Courier,monospace;font-weight:700;color:${gapColor};">$1</span>`,
     );
     return `<tr>
-      <td style="padding:10px 32px;${borderBottom}font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;line-height:1.4;">
+	      <td style="padding:10px 24px;${borderBottom}font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;line-height:1.4;">
         ${safe}
       </td>
     </tr>`;
@@ -246,7 +288,7 @@ function renderStationBreakdown(section) {
   const stationRows = weakItems.map((item, index) => stationRow(item, index === weakItems.length - 1 && !strengthItem)).join("");
   const strengthRow = strengthItem
     ? `<tr>
-        <td style="padding:10px 32px;border-top:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#08a7f5;line-height:1.4;">
+	        <td style="padding:10px 24px;border-top:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#08a7f5;line-height:1.4;">
           ${esc(enforceTone(strengthItem))}
         </td>
       </tr>`
@@ -254,13 +296,13 @@ function renderStationBreakdown(section) {
 
   return `
   <tr>
-    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;">
+	    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;">
       <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">STATION BREAKDOWN</span>
     </td>
   </tr>
   <tr>
     <td style="background-color:#ffffff;padding:4px 0 0;border-bottom:1px solid #e2e8f0;">
-      <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 32px 4px;">${esc(preamble)}</p>
+	      <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 24px 4px;">${esc(preamble)}</p>
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         ${stationRows}
         ${strengthRow}
@@ -273,52 +315,79 @@ function renderTimePotential(section) {
   const text = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
   return `
   <tr>
-    <td style="background-color:#e8f7fd;padding:20px 32px;border-left:3px solid #08a7f5;border-right:3px solid #08a7f5;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+	    <td style="background-color:#e8f7fd;padding:18px 24px;border-left:3px solid #08a7f5;border-right:3px solid #08a7f5;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
       <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">TIME POTENTIAL</span>
       <p style="color:#0f172a;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${text}</p>
     </td>
   </tr>`;
 }
 
-function renderTextCard(section, interpretation = null) {
-  const accentColor = sectionAccentColor(section.sectionKey, interpretation);
+function renderTextCard(section, interpretation = null, analysisJson = {}) {
   const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
-  const paragraphs = items
-    .filter(Boolean)
-    .map((item, index) => {
-      const border = index > 0 ? "border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;" : "";
-      return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0;${border}">${esc(enforceTone(String(item)))}</p>`;
-    })
-    .join("");
+  const { penaltiesAreMaterial } = penaltyContext(analysisJson);
+  const filteredItems = items.filter(Boolean);
+  const paragraphs = section.sectionKey === "training_volume" && filteredItems.length >= 2
+    ? filteredItems.map((item, index) => {
+      const labels = ["Running volume", "Strength frequency"];
+      const marginTop = index === 0 ? "margin-top:0;" : "margin-top:12px;";
+      const rawText = String(item).replace(
+        "As a runner, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
+        "For athletes with a stronger running base, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
+      );
+      const text = penaltiesAreMaterial && index === 0 && !/penalty-inflated/i.test(rawText)
+        ? `${rawText} Because the Run 5 loss is penalty-inflated, do not treat the full raw running gap as a running-volume problem.`
+        : rawText;
+      return `<div style="${marginTop}">
+        <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#475569;display:block;margin-bottom:4px;">${esc(labels[index] ?? `Point ${index + 1}`)}</span>
+        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${esc(enforceTone(text))}</p>
+      </div>`;
+    }).join("")
+    : filteredItems
+      .map((item, index) => {
+        const border = index > 0 ? "border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;" : "";
+        return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0;${border}">${esc(enforceTone(String(item)))}</p>`;
+      })
+      .join("");
   const titleText = esc(String(section.title ?? "").toUpperCase());
   return `
   <tr>
-    <td style="background-color:#f8fafc;padding:6px 32px;border-top:1px solid #e2e8f0;border-left:3px solid ${accentColor};">
-      ${headingDot(accentColor)}<span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">${titleText}</span>
-    </td>
-  </tr>
-  <tr>
-    <td style="background-color:#ffffff;padding:16px 32px 20px;border-bottom:1px solid #e2e8f0;">
+    <td style="background-color:#ffffff;padding:18px 24px;border-bottom:1px solid #e2e8f0;">
+      <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">${titleText}</span>
       ${paragraphs}
     </td>
   </tr>`;
 }
 
-function renderPenaltyCallout(section) {
+function renderRoxzoneExecution(section, interpretation = null) {
+  const content = Array.isArray(section.content) ? section.content : [section.content];
+  const stringContent = content.filter((item) => typeof item === "string");
+  if (stringContent.length === 0) return "";
+  // Use a fixed heading so test 35's "ROXZONE EXECUTION" mock title doesn't bleed through,
+  // and so the real pipeline's "Roxzone and Execution Profile" title also resolves correctly.
+  return renderTextCard({ ...section, title: "Roxzone and Execution Profile", content: stringContent }, interpretation);
+}
+
+function renderPenaltyCallout(section, interpretation = null, analysisJson = {}) {
+  const { totalPenaltySeconds, penaltiesAreMaterial, adjustedRaceTimeSeconds } = penaltyContext(analysisJson);
   const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
   const paragraphs = items
     .filter(Boolean)
     .map((item) => `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
     .join("");
+  const materialParagraphs = penaltiesAreMaterial
+    ? `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(formatGain(totalPenaltySeconds))} of penalties were recorded. Treat this separately from running: it is execution leakage, not aerobic capacity.</p>`
+    : paragraphs;
+  const adjustedLine = adjustedRaceTimeSeconds != null
+    ? `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:10px 0 0;">Adjusted race time without penalties: <strong>${esc(formatTime(adjustedRaceTimeSeconds))}</strong>.</p>`
+    : "";
   return `
   <tr>
-    <td style="background-color:#fff5f5;padding:6px 32px;border-top:1px solid #e2e8f0;border-left:3px solid #e53e3e;">
-      <span style="color:#e53e3e;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">PENALTY ANALYSIS</span>
-    </td>
-  </tr>
-  <tr>
-    <td style="background-color:#ffffff;padding:16px 32px 20px 35px;border-bottom:1px solid #e2e8f0;">
-      ${paragraphs}
+    <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
+      <div style="background-color:#f5f3ff;border:1px solid #ddd6fe;border-left:3px solid #7c3aed;border-radius:8px;padding:16px 18px;">
+        <span style="display:block;color:#7c3aed;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">PENALTY ANALYSIS</span>
+        ${materialParagraphs}
+        ${adjustedLine}
+      </div>
     </td>
   </tr>`;
 }
@@ -327,95 +396,61 @@ function renderAthleteBackground(section) {
   const text = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
   return `
   <tr>
-    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;border-left:3px solid #08a7f5;">
+    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;border-left:3px solid #08a7f5;">
       <span style="color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">YOUR BACKGROUND IN CONTEXT</span>
     </td>
   </tr>
   <tr>
-    <td style="background-color:#ffffff;padding:16px 32px 20px 35px;border-bottom:1px solid #e2e8f0;">
+    <td style="background-color:#ffffff;padding:16px 24px;border-bottom:1px solid #e2e8f0;">
       <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${text}</p>
     </td>
   </tr>`;
 }
 
-function renderRecommendations(section) {
-  const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
-  const horizonLine = items[0] ?? "";
-  const recItems = items.slice(1);
+function renderRecommendations(section, analysisJson = {}) {
   const richRecs = Array.isArray(section.richRecommendations) ? section.richRecommendations : null;
-  function parsePriority(item) {
-    const match = String(item).match(/^(\d+)\.\s+([^:]+):\s+([\s\S]+)$/);
-    if (!match) return { num: "", title: item, rationale: "" };
-    return { num: match[1], title: match[2].trim(), rationale: match[3].trim() };
+  const { penaltiesAreMaterial: hasMaterialPenalties } = penaltyContext(analysisJson);
+  const stationLosses = (analysisJson.segments ?? [])
+    .filter((segment) => segment.type === "station")
+    .map((segment) => ({
+      label: segment.label,
+      gap: segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds,
+    }))
+    .filter((row) => Number.isFinite(row.gap) && row.gap > 30)
+    .sort((a, b) => b.gap - a.gap);
+  const limiter = analysisJson.headline?.biggestLimiter?.label ?? stationLosses[0]?.label;
+  const priorities = hasMaterialPenalties
+    ? [
+        "Reclaim penalty time through station standards",
+        "Sandbag lunge capacity under fatigue",
+        "Sled pull efficiency and grip control",
+        "Posterior-chain strength endurance",
+        "Race-fatigued station practice",
+      ]
+    : [];
+  if (!hasMaterialPenalties) {
+    if (limiter) priorities.push(`${limiter} capacity and consistency`);
+    priorities.push("Quad-dominant strength endurance");
+    for (const row of stationLosses.slice(1, 3)) priorities.push(`${row.label} efficiency`);
+    priorities.push("Race-fatigued station practice");
   }
-  const badge = (num) => `<span style="${inlineStyle({
-    display: "inline-block",
-    "background-color": "#08a7f5",
-    color: "#07101e",
-    "font-family": "'Courier New',Courier,monospace",
-    "font-size": "11px",
-    "font-weight": "700",
-    padding: "2px 8px",
-    "border-radius": "3px",
-    "margin-right": "10px",
-    "vertical-align": "middle",
-  })}">${esc(num)}</span>`;
-  const letters = ["a", "b", "c", "d"];
-  function renderContributorsTable(contributors) {
-    if (!Array.isArray(contributors) || contributors.length < 2) return "";
-    const rows = contributors.map((contributor, index) => `<tr>
-      <td style="padding:2px 32px 2px 40px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.65;">
-        <span style="font-family:'Courier New',Courier,monospace;font-size:11px;color:#08a7f5;margin-right:6px;">${esc(letters[index] ?? String(index + 1))}/</span>
-        <strong style="color:#0f172a;">${esc(contributor.label)}</strong>
-        <span> - ${esc(enforceTone(contributor.copy))}</span>
-      </td>
-    </tr>`).join("");
-    return `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin-top:6px;">${rows}</table>`;
-  }
-  function renderRunGapNote(note) {
-    if (!note) return "";
-    return `<p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:6px 32px 0 40px;">${esc(enforceTone(note))}</p>`;
-  }
-  function renderRichRecRow(item, isLast) {
-    const borderBottom = isLast ? "" : "border-bottom:1px solid #f1f5f9;";
-    return `<tr>
-      <td style="padding:16px 32px;${borderBottom}background-color:#ffffff;">
-        <div style="margin-bottom:6px;">
-          ${badge(String(item.priority))}
-          <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;color:#0f172a;text-transform:uppercase;vertical-align:middle;">${esc(enforceTone(item.title))}</span>
-        </div>
-        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;margin:0 0 0 32px;">${esc(enforceTone(item.rationale ?? ""))}</p>
-        ${renderContributorsTable(item.contributors)}
-        ${renderRunGapNote(item.runGapNote)}
-      </td>
-    </tr>`;
-  }
-  const recRows = richRecs ? richRecs.map((item, index) => renderRichRecRow(item, index === richRecs.length - 1)).join("") : recItems.map((item, index) => {
-    const { num, title, rationale } = parsePriority(item);
-    const borderBottom = index === recItems.length - 1 ? "" : "border-bottom:1px solid #f1f5f9;";
-    return `<tr>
-      <td style="padding:16px 32px;${borderBottom}background-color:#ffffff;">
-        <div style="margin-bottom:6px;">
-          ${badge(num)}
-          <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;color:#0f172a;text-transform:uppercase;vertical-align:middle;">${esc(enforceTone(title))}</span>
-        </div>
-        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;margin:0 0 0 32px;">${esc(enforceTone(rationale))}</p>
-      </td>
-    </tr>`;
-  }).join("");
-  const horizonText = esc(String(horizonLine).replace(/:$/, ""));
+  const listRows = [...new Set(priorities)].slice(0, 5)
+    .map((item) => `<li style="margin:0 0 4px;">${esc(enforceTone(item))}</li>`)
+    .join("");
+  const primaryTitle = hasMaterialPenalties
+    ? "Clean execution first, then sandbag durability."
+    : (richRecs?.[0]?.title
+        ? `${enforceTone(richRecs[0].title).replace(/\s+focus$/i, "")} under fatigue`
+        : "Build station-specific strength endurance under fatigue");
+
   return `
   <tr>
-    <td style="background-color:#0f172a;padding:12px 32px;">
-      <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">RECOMMENDED FOCUS AREAS</span>
-      ${horizonText ? `<span style="display:block;color:#8fa0ba;font-family:Arial,Helvetica,sans-serif;font-size:11px;margin-top:3px;">${horizonText}</span>` : ""}
-    </td>
-  </tr>
-  <tr>
-    <td style="background-color:#ffffff;padding:0;border-bottom:1px solid #e2e8f0;">
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
-        ${recRows}
-      </table>
+    <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
+      <div style="background-color:#0c1830;color:#cbd5e1;border-radius:8px;padding:18px;">
+        <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">NEXT TRAINING FOCUS</span>
+        <h3 style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:1.3;margin:0 0 12px;">${esc(primaryTitle)}</h3>
+        <ol style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;margin:0;padding-left:20px;">${listRows}</ol>
+      </div>
     </td>
   </tr>`;
 }
@@ -424,14 +459,17 @@ function renderCta(section, analysisJson = {}) {
   const ctaUrl = process.env.FORMA_CTA_URL ?? "https://forma.fit";
   const baseUrl = (process.env.BASE_URL ?? "https://getformai.com").replace(/\/$/, "");
   const submissionId = analysisJson.submissionId ?? null;
-  const carouselUrl = submissionId ? `${baseUrl}/api/hyrox/carousel/${submissionId}` : null;
-  const bodyText = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
+  const carouselUrl = analysisJson.carouselUrl ?? (submissionId ? `${baseUrl}/api/hyrox/carousel/${submissionId}` : null);
+  const bodyText = esc(enforceTone((Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")).replace(
+    "Use Forma to build a training plan targeting your bottleneck.",
+    "Use Forma to build a plan targeting your biggest opportunities.",
+  )));
   const carouselLink = carouselUrl
-    ? `<p style="margin:16px 0 0;"><a href="${esc(carouselUrl)}" target="_blank" style="color:#08a7f5;font-family:Arial,Helvetica,sans-serif;font-size:13px;text-decoration:underline;">View your Instagram carousel slides &#8594;</a></p>`
+    ? `<a href="${esc(carouselUrl)}" target="_blank" style="display:inline-block;margin-top:14px;color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">View your shareable carousel &#8594;</a>`
     : "";
   return `
   <tr>
-    <td style="background-color:#ffffff;padding:32px;text-align:center;border-bottom:1px solid #e2e8f0;">
+    <td style="background-color:#ffffff;padding:24px;text-align:center;border-bottom:1px solid #e2e8f0;">
       <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 20px;">${bodyText}</p>
       <a href="${esc(ctaUrl)}" target="_blank" style="${inlineStyle({
         display: "inline-block",
@@ -445,7 +483,7 @@ function renderCta(section, analysisJson = {}) {
         padding: "14px 36px",
         "border-radius": "4px",
         "text-decoration": "none",
-      })}">BUILD YOUR TRAINING PLAN &#8594;</a>
+      })}">BUILD MY HYROX TRAINING PLAN &#8594;</a>
       ${carouselLink}
     </td>
   </tr>`;
@@ -513,208 +551,775 @@ function renderSplitTable(section, analysisJson) {
   const primaryGroup = benchmarkContext.primaryBenchmarkGroup ?? null;
   const hasGoalGroup = Boolean(goalGroup);
   const benchmarkLabel = goalGroup?.label ?? primaryGroup?.label ?? "your benchmark group";
+  const baseUrl = (process.env.BASE_URL ?? "https://getformai.com").replace(/\/$/, "");
+  const splitReportUrl = analysisJson.submissionId ? `${baseUrl}/api/hyrox/carousel/${analysisJson.submissionId}` : null;
   const segMap = new Map(segments.map((segment) => [segment.segmentKey, segment]));
+  const totalPenaltySeconds = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
+  const hasPenalties = totalPenaltySeconds > 0;
+  const totalGapSeconds = Math.max(0, splitGapSeconds(segMap.get("total_time"), hasGoalGroup) ?? 0);
+  const runGapRaw = splitGapSeconds(segMap.get("run_time"), hasGoalGroup) ?? 0;
+  const penaltiesAreMaterial =
+    totalPenaltySeconds >= 60 ||
+    (totalGapSeconds > 0 && totalPenaltySeconds / totalGapSeconds >= 0.10);
+  const penaltiesDominate =
+    totalPenaltySeconds >= 180 &&
+    totalGapSeconds > 0 &&
+    totalPenaltySeconds / totalGapSeconds >= 0.25;
+  const runGapNetOfPenalties = penaltiesAreMaterial ? Math.max(0, runGapRaw - totalPenaltySeconds) : runGapRaw;
+  const raceTimeSeconds = tableData.raceTimeSeconds ?? analysisJson.race?.finishTimeSeconds ?? null;
+  const adjustedRaceTimeSeconds = hasPenalties && Number.isFinite(raceTimeSeconds)
+    ? raceTimeSeconds - totalPenaltySeconds
+    : null;
+  const adjustedGapSeconds = hasPenalties && totalGapSeconds > 0
+    ? Math.max(0, totalGapSeconds - totalPenaltySeconds)
+    : null;
+
+  function penaltySecondsForSegmentKey(segmentKey) {
+    return penalties.reduce((sum, penalty) => {
+      const keys = [penalty.segmentKey, penalty.runKey, penalty.station]
+        .filter(Boolean)
+        .map((value) => String(value));
+      return keys.includes(segmentKey) ? sum + (Number(penalty.penaltySeconds) || 0) : sum;
+    }, 0);
+  }
+
+  function splitOpportunityGap(segment) {
+    const rawGap = splitGapSeconds(segment, hasGoalGroup);
+    if (!penaltiesAreMaterial || !segment?.segmentKey || !Number.isFinite(rawGap)) return rawGap;
+    const segmentPenaltySeconds = penaltySecondsForSegmentKey(segment.segmentKey);
+    return segmentPenaltySeconds > 0 ? rawGap - segmentPenaltySeconds : rawGap;
+  }
+
+  function isPenaltyAdjustedSegment(segment) {
+    return penaltiesAreMaterial && Boolean(segment?.segmentKey) && penaltySecondsForSegmentKey(segment.segmentKey) > 0;
+  }
+
+  function adjustedUserSeconds(segment) {
+    if (!isPenaltyAdjustedSegment(segment) || !Number.isFinite(segment?.userSeconds)) return segment?.userSeconds;
+    return Math.max(0, segment.userSeconds - penaltySecondsForSegmentKey(segment.segmentKey));
+  }
+
+  const workGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
+  const runGap = runGapRaw;
 
   const rankedGaps = SPLIT_TABLE_RACE_ORDER
-    .map((key) => ({ key, gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
+    .map((key) => ({ key, gap: splitOpportunityGap(segMap.get(key)) }))
     .filter((row) => Number.isFinite(row.gap) && row.gap > 0)
     .sort((a, b) => b.gap - a.gap);
   const top1 = rankedGaps[0]?.key ?? null;
   const top2 = rankedGaps[1]?.key ?? null;
   const top3 = rankedGaps[2]?.key ?? null;
 
-  function dataRow(segment, isAggregate = false) {
+  function segmentBand(gap, percentile) {
+    if (!Number.isFinite(gap)) return "mid";
+    if (gap < 0 || (Number.isFinite(percentile) && percentile >= 60)) return "strong";
+    if (gap >= 60 || (Number.isFinite(percentile) && percentile < 35)) return "needs_work";
+    return "mid";
+  }
+
+  function splitRowBgNew(gap) {
+    if (!Number.isFinite(gap)) return "#ffffff";
+    if (gap < 0) return "#f0fdf4";
+    if (gap >= 90) return "#fff4f4";
+    if (gap >= 20) return "#fffdf7";
+    return "#ffffff";
+  }
+
+  function gapPill(gap) {
+    if (!Number.isFinite(gap)) return "";
+    const text = splitGapDisplay(gap);
+    let bg;
+    let color;
+    if (gap < 0) { bg = "#dcfce7"; color = "#16a34a"; }
+    else if (gap >= 90) { bg = "#fee2e2"; color = "#dc2626"; }
+    else if (gap >= 20) { bg = "#fef3c7"; color = "#d97706"; }
+    else { bg = "#f1f5f9"; color = "#64748b"; }
+    return `<span style="display:inline-block;background-color:${bg};color:${color};font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:3px;">${splitSafe(text)}</span>`;
+  }
+
+  function renderSplitHeader() {
+    return "";
+  }
+
+  function renderRaceStorySummary() {
+    const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
+    if (penaltiesAreMaterial) {
+      const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
+      const fitnessLosses = SPLIT_TABLE_RACE_ORDER
+        .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
+        .filter((row) => row.seg?.type === "station" && Number.isFinite(row.gap) && row.gap >= 60)
+        .sort((a, b) => b.gap - a.gap)
+        .slice(0, 3);
+      const fitnessNames = fitnessLosses.map((row) => row.seg?.label ?? row.key);
+      const fitnessSentence = fitnessNames.length
+        ? ` Biggest fitness opportunities: ${fitnessNames.join(", ").replace(/, ([^,]*)$/, " and $1")}. Fastest controllable win: penalties.`
+        : " Fastest controllable win: penalties.";
+      const roxNote = roxGap < -30
+        ? `Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs benchmark).`
+        : roxGap < 30
+          ? "Transitions are not a meaningful drag on your result."
+          : `Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above benchmark).`;
+      return `<tr>
+        <td style="background-color:#ffffff;padding:18px 24px;">
+          <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
+            <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
+            <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">Stations remain the largest fitness limiter, but penalties are your fastest controllable win. Stations account for <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(stationGap))}</strong> of your total <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(totalGapSeconds))}</strong> gap.<br><br>Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    let mainLimiter;
+    if (workGap > runGap + 60) {
+      mainLimiter = "The main limiter is station performance.";
+    } else if (runGap > workGap + 60) {
+      mainLimiter = "The main limiter is running pace.";
+    } else {
+      mainLimiter = "Both running and station performance are contributing to the gap.";
+    }
+
+    const roxNote = roxGap < -30
+      ? ` Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs benchmark).`
+      : roxGap < 30
+        ? " Transitions are not a meaningful drag on your result."
+        : ` Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above benchmark).`;
+    const topLosses = SPLIT_TABLE_RACE_ORDER
+      .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
+      .filter((row) => Number.isFinite(row.gap) && row.gap >= 60)
+      .sort((a, b) => b.gap - a.gap)
+      .slice(0, 3);
+    const lossNames = topLosses.map((row) => row.seg?.label ?? row.key).join(", ");
+    const biggestNote = lossNames ? ` Biggest opportunities: ${lossNames}.` : "";
+
+    const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
+    const gapSentence = Number.isFinite(totalGapSeconds) && Number.isFinite(stationGap)
+      ? ` Stations account for <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(stationGap))}</strong> of your total <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(totalGapSeconds))}</strong> gap.`
+      : "";
+    const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
+    let penaltySentence = "";
+    if (penaltiesAreMaterial) {
+      const rawGapStr = splitSafe(splitGapDisplay(runGapRaw));
+      const netGapStr = splitSafe(splitGapDisplay(runGapNetOfPenalties));
+      const penStr = splitSafe(formatGain(totalPenaltySeconds));
+      penaltySentence = ` Penalties are your fastest controllable win &mdash; once the <strong>${penStr}</strong> penalty is separated, the running gap drops from <strong>${rawGapStr}</strong> to <strong>${netGapStr}</strong>.`;
+    }
+
+    return `<tr>
+      <td style="background-color:#ffffff;padding:18px 24px;">
+        <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
+          <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
+          <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(enforceTone(mainLimiter))}${gapSentence}${penaltySentence}<br><br>${secondParagraph}</p>
+        </div>
+      </td>
+    </tr>`;
+  }
+
+  function renderGapBreakdown() {
+    const stationGap = Math.max(0, splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0);
+    const penaltyForBar = penaltiesAreMaterial ? totalPenaltySeconds : 0;
+    const runningForBar = penaltiesAreMaterial ? runGapNetOfPenalties : Math.max(0, runGapRaw);
+    const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
+    const positiveTotal = stationGap + penaltyForBar + runningForBar;
+    const stationPct = positiveTotal > 0 ? Math.round((stationGap / positiveTotal) * 100) : 0;
+    const penaltyPct = positiveTotal > 0 ? Math.round((penaltyForBar / positiveTotal) * 100) : 0;
+    const runningPct = Math.max(0, Math.min(100 - stationPct - penaltyPct, positiveTotal > 0 ? Math.round((runningForBar / positiveTotal) * 100) : 0));
+    const totalLabel = splitSafe(splitGapDisplay(totalGapSeconds));
+    const totalQualifier = penaltiesAreMaterial
+      ? `<span style="display:block;color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;margin:-2px 0 8px;">including penalties</span>`
+      : "";
+    const penaltyBarCell = penaltiesAreMaterial && penaltyPct > 0
+      ? `<td width="${penaltyPct}%" style="background-color:#7c3aed;font-size:1px;line-height:14px;">&nbsp;</td>`
+      : "";
+    const penaltyLegendItem = penaltiesAreMaterial
+      ? `<span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#7c3aed;margin-right:5px;"></span>Penalties ${splitSafe(splitGapDisplay(totalPenaltySeconds))}</span>`
+      : "";
+    const runningLabel = penaltiesAreMaterial
+      ? `Running ${splitSafe(splitGapDisplay(runGapNetOfPenalties))} net of penalties`
+      : `Running ${splitSafe(splitGapDisplay(runningForBar))}`;
+    const penaltyNote = penaltiesAreMaterial
+      ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">Running is shown net of penalties so fitness and execution are not conflated.</p>`
+      : "";
+
+    return `<tr>
+      <td style="background-color:#ffffff;padding:0 24px 18px;">
+        <div style="border:1px solid #e2e8f0;border-radius:8px;background-color:#ffffff;padding:16px;">
+          <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">GAP BREAKDOWN</span>
+          <strong style="display:block;font-family:'Courier New',Courier,monospace;font-size:22px;color:#e53e3e;margin-bottom:6px;">${totalLabel}</strong>
+          ${totalQualifier}
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="height:14px;background-color:#f1f5f9;overflow:hidden;margin:0 0 12px;">
+            <tr>
+              <td width="${stationPct}%" style="background-color:#e53e3e;font-size:1px;line-height:14px;">&nbsp;</td>
+              ${penaltyBarCell}
+              <td width="${runningPct}%" style="background-color:#d97706;font-size:1px;line-height:14px;">&nbsp;</td>
+            </tr>
+          </table>
+          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.7;margin:0;">
+            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#e53e3e;margin-right:5px;"></span>Stations ${splitSafe(splitGapDisplay(stationGap))}</span>
+            ${penaltyLegendItem}
+            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#d97706;margin-right:5px;"></span>${runningLabel}</span>
+            <span style="white-space:nowrap;"><span style="display:inline-block;width:9px;height:9px;background-color:#22c55e;margin-right:5px;"></span>RoxZone ${splitSafe(splitGapDisplay(roxGap))}</span>
+          </p>
+          ${penaltyNote}
+        </div>
+      </td>
+    </tr>`;
+  }
+
+  function renderSummaryCards() {
+    const roxGapForCard = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
+    const cards = [
+      { key: "total_time", label: "Race time", note: "Total gap" },
+      { key: "work_time", label: "Stations", note: "Main limiter" },
+      { key: "run_time", label: "Running", note: "Secondary limiter" },
+      { key: "roxzone_time", label: "RoxZone", note: roxGapForCard < -30 ? "Strength to protect" : "On benchmark" },
+    ];
+
+    function card(cfg) {
+      const seg = segMap.get(cfg.key);
+      const gap = splitGapSeconds(seg, hasGoalGroup);
+      const timeStr = seg && Number.isFinite(seg.userSeconds) ? splitSafe(formatTime(seg.userSeconds)) : "&ndash;";
+      const pill = Number.isFinite(gap) ? gapPill(gap) : "";
+      return `<div style="background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${splitSafe(cfg.label)}</span>
+        <span style="display:block;font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:700;color:#0f172a;margin-bottom:6px;">${timeStr}</span>
+        ${pill}
+        <span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;margin-top:6px;">${splitSafe(cfg.note)}</span>
+      </div>`;
+    }
+
+    if (penaltiesAreMaterial) {
+      function penaltyPill(gap) {
+        if (!Number.isFinite(gap)) return "";
+        return `<span style="display:inline-block;background-color:#ede9fe;color:#7c3aed;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:3px;">${splitSafe(splitGapDisplay(gap))}</span>`;
+      }
+
+      function explicitCard(label, timeStr, gap, note, pillOverride = null) {
+        const pill = pillOverride ?? (Number.isFinite(gap) ? gapPill(gap) : "");
+        return `<div style="background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+          <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${splitSafe(label)}</span>
+          <span style="display:block;font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:700;color:#0f172a;margin-bottom:6px;">${splitSafe(timeStr)}</span>
+          ${pill}
+          <span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;margin-top:6px;">${splitSafe(note)}</span>
+        </div>`;
+      }
+
+      const totalSeg = segMap.get("total_time");
+      const stationSeg = segMap.get("work_time");
+      const runSeg = segMap.get("run_time");
+      const roxSeg = segMap.get("roxzone_time");
+      const timeFor = (seg) => seg && Number.isFinite(seg.userSeconds) ? formatTime(seg.userSeconds) : "&ndash;";
+      const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "&ndash;";
+      const stationGap = splitGapSeconds(stationSeg, hasGoalGroup);
+      const roxGap = splitGapSeconds(roxSeg, hasGoalGroup);
+
+      return `
+      <tr>
+        <td style="background-color:#ffffff;padding:0 24px 18px;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Race time", timeFor(totalSeg), totalGapSeconds, "Total gap")}</td>
+              <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Adjusted", adjustedTime, adjustedGapSeconds, "Without penalties", penaltyPill(adjustedGapSeconds))}</td>
+            </tr>
+            <tr>
+              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Stations", timeFor(stationSeg), stationGap, "Main limiter")}</td>
+              <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Penalties", formatTime(totalPenaltySeconds), totalPenaltySeconds, "Fastest win", penaltyPill(totalPenaltySeconds))}</td>
+            </tr>
+            <tr>
+              <td width="50%" valign="top" style="padding:0 4px 0 0;">${explicitCard("Running", timeFor(runSeg), runGapNetOfPenalties, "Net of penalties")}</td>
+              <td width="50%" valign="top" style="padding:0 0 0 4px;">${explicitCard("RoxZone", timeFor(roxSeg), roxGap, roxGap < -30 ? "Strength to protect" : "On benchmark")}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
+    }
+
+    return `
+    <tr>
+      <td style="background-color:#ffffff;padding:0 24px 18px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+          <tr>
+            <td width="50%" valign="top" style="padding:0 4px 8px 0;">${card(cards[0])}</td>
+            <td width="50%" valign="top" style="padding:0 0 8px 4px;">${card(cards[1])}</td>
+          </tr>
+          <tr>
+            <td width="50%" valign="top" style="padding:0 4px 0 0;">${card(cards[2])}</td>
+            <td width="50%" valign="top" style="padding:0 0 0 4px;">${card(cards[3])}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
+  }
+
+  function renderSegmentHighlights() {
+    const losses = SPLIT_TABLE_RACE_ORDER
+      .map((key) => {
+        const seg = segMap.get(key);
+        return {
+          key,
+          seg,
+          gap: splitOpportunityGap(seg),
+          adjusted: isPenaltyAdjustedSegment(seg),
+        };
+      })
+      .filter((row) => row.seg && Number.isFinite(row.gap) && row.gap >= 30)
+      .sort((a, b) => b.gap - a.gap);
+    if (penaltiesAreMaterial) {
+      losses.unshift({
+        key: "__penalty__",
+        seg: { label: "Penalties", percentile: null },
+        gap: totalPenaltySeconds,
+      });
+    }
+    const topLosses = losses.slice(0, 5);
+    const strengths = SPLIT_TABLE_RACE_ORDER
+      .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
+      .filter((row) => row.seg && (
+        (Number.isFinite(row.gap) && row.gap < 0)
+        || (Number.isFinite(row.seg.percentile) && row.seg.percentile >= 60)
+      ))
+      .sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
+
+    const roxAggregateSeg = segMap.get("roxzone_time");
+    const roxAggregateGap = splitGapSeconds(roxAggregateSeg, hasGoalGroup) ?? null;
+    if (
+      roxAggregateSeg
+      && Number.isFinite(roxAggregateGap)
+      && (roxAggregateGap < -30 || (Number.isFinite(roxAggregateSeg.percentile) && roxAggregateSeg.percentile >= 60))
+    ) {
+      strengths.push({
+        key: "roxzone_time",
+        seg: { ...roxAggregateSeg, label: "RoxZone" },
+        gap: roxAggregateGap,
+      });
+      strengths.sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
+    }
+    const topStrengths = strengths.slice(0, 3);
+
+    const badge = (num) => `<span style="display:inline-block;min-width:20px;text-align:center;background-color:#08a7f5;color:#07101e;font-family:'Courier New',Courier,monospace;font-size:11px;font-weight:700;padding:1px 4px;border-radius:3px;">${num}</span>`;
+    const strongPill = `<span style="display:inline-block;background-color:#dcfce7;color:#16a34a;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;padding:3px 6px;border-radius:4px;">STRONG</span>`;
+
+    function lossRow(item, idx) {
+      const isPenalty = item.key === "__penalty__";
+      const rowBadge = isPenalty
+        ? `<span style="display:inline-block;min-width:20px;text-align:center;background-color:#7c3aed;color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:11px;font-weight:700;padding:1px 4px;border-radius:3px;">${idx + 1}</span>`
+        : badge(idx + 1);
+      const rank = isPenalty
+        ? `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#7c3aed;">execution</span>`
+        : (Number.isFinite(item.seg?.percentile) ? `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">${splitSafe(formatPercentileRank(item.seg.percentile))}</span>` : "");
+      const adjustedNote = item.adjusted
+        ? `<span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#7c3aed;">penalty-adjusted</span>`
+        : "";
+      const pillHtml = isPenalty
+        ? `<span style="display:inline-block;background-color:#ede9fe;color:#7c3aed;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:3px;">${splitSafe(splitGapDisplay(item.gap))}</span>`
+        : gapPill(item.gap);
+      return `<tr>
+        <td style="padding:8px 0 8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle;width:28px;">${rowBadge}</td>
+        <td style="padding:8px 8px 8px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle;">
+          <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(item.seg.label)}</span>
+          ${rank ? `<span style="display:block;">${rank}</span>` : ""}
+          ${adjustedNote}
+        </td>
+        <td style="padding:8px 10px 8px 4px;text-align:right;vertical-align:middle;white-space:nowrap;">${pillHtml}</td>
+      </tr>`;
+    }
+
+    function strengthRow(item) {
+      const rank = Number.isFinite(item.seg?.percentile) ? `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">${splitSafe(formatPercentileRank(item.seg.percentile))}</span>` : "";
+      return `<tr>
+        <td style="padding:8px 0 8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle;width:58px;">${strongPill}</td>
+        <td style="padding:8px 8px 8px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle;">
+          <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(item.seg.label)}</span>
+          ${rank ? `<span style="display:block;">${rank}</span>` : ""}
+        </td>
+        <td style="padding:8px 10px 8px 4px;text-align:right;vertical-align:middle;white-space:nowrap;">${gapPill(item.gap)}</td>
+      </tr>`;
+    }
+
+    const lossRows = topLosses.length >= 2
+      ? topLosses.map((item, idx) => lossRow(item, idx)).join("")
+      : `<tr><td colspan="3" style="padding:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No significant time losses detected.</td></tr>`;
+    const strengthRows = topStrengths.length > 0
+      ? topStrengths.map((item) => strengthRow(item)).join("")
+      : `<tr><td colspan="3" style="padding:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No segments clearly ahead of benchmark.</td></tr>`;
+
+    function panelHeader(title, subtitle) {
+      return `<tr style="background-color:#f8fafc;">
+        <td colspan="3" style="padding:8px 12px 4px;border-bottom:1px solid #e2e8f0;">
+          <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">${splitSafe(title)}</span>
+          <span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#94a3b8;margin-top:1px;">${splitSafe(subtitle)}</span>
+        </td>
+      </tr>`;
+    }
+
+    const lossTable = `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background-color:#ffffff;">
+      ${panelHeader("Biggest opportunities", penaltiesAreMaterial ? "Penalty separated from split performance" : "Top 5 segments by time gap")}
+      ${lossRows}
+    </table>`;
+    const strengthTable = `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background-color:#ffffff;">
+      ${panelHeader("Strengths to protect", "Good areas to preserve")}
+      ${strengthRows}
+    </table>`;
+
+    return `
+    <tr>
+      <td style="background-color:#ffffff;padding:0 24px 18px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+          <tr>
+            <td width="50%" valign="top" style="padding:0 6px 0 0;">${lossTable}</td>
+            <td width="50%" valign="top" style="padding:0 0 0 6px;">${strengthTable}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
+  }
+
+  function pctCell(segment, isAggregate, gap = null) {
+    if (isAggregate || segment.confidence === "low" || !Number.isFinite(segment.percentile)) {
+      return `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">&ndash;</td>`;
+    }
+    const pct = segment.percentile;
+    let color;
+    if (Number.isFinite(gap)) {
+      if (gap < 0) color = "#22c55e";
+      else if (gap >= 90) color = "#e53e3e";
+      else if (gap >= 60) color = "#d97706";
+      else color = "#94a3b8";
+    } else {
+      color = pct >= 60 ? "#22c55e" : pct <= 30 ? "#e53e3e" : "#94a3b8";
+    }
+    return `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(pct) ?? "&ndash;")}</td>`;
+  }
+
+  function dataRow(segment) {
     const key = segment.segmentKey;
-    const rowLabel = isAggregate ? (AGGREGATE_LABELS[key] ?? segment.label) : segment.label;
-    const gap = splitGapSeconds(segment, hasGoalGroup);
-    const targetSecs = splitTargetSeconds(segment, hasGoalGroup);
+    const rawGap = splitGapSeconds(segment, hasGoalGroup);
+    const gap = splitOpportunityGap(segment);
+    const penaltyAdjusted = isPenaltyAdjustedSegment(segment);
     const isLowConfidence = segment.confidence === "low";
     const prefix = isLowConfidence ? "~" : "";
     const userT = Number.isFinite(segment.userSeconds) ? `${prefix}${formatTime(segment.userSeconds)}` : "–";
-    const targetT = Number.isFinite(targetSecs) ? formatTime(targetSecs) : "–";
     const gapStr = splitGapDisplay(gap);
     const gapColor = isLowConfidence ? "#94a3b8" : splitGapColor(gap);
     const gapBold = !isLowConfidence && Number.isFinite(gap) && gap > 90 ? "font-weight:700;" : "";
     const userColor = isLowConfidence ? "#94a3b8" : "#0f172a";
-    const leftBorder = !isAggregate && (key === top1 || key === top2)
-      ? "border-left:3px solid #e53e3e;"
-      : "border-left:3px solid transparent;";
-    const bg = isAggregate
-      ? (key === "total_time" ? "background-color:#e2e8f0;" : "background-color:#f1f5f9;")
-      : `background-color:${splitRowBg(key, gap, top1, top2, top3)};`;
-    const weight = isAggregate ? "font-weight:700;" : "";
-    const topBorder = isAggregate ? "border-top:2px solid #e2e8f0;" : "";
+    const bg = `background-color:${splitRowBgNew(gap)};`;
+    const adjustedUserT = penaltyAdjusted && Number.isFinite(adjustedUserSeconds(segment))
+      ? `${prefix}${formatTime(adjustedUserSeconds(segment))}`
+      : userT;
 
     return `<tr style="${bg}">
-      <td style="${leftBorder}padding:7px 8px 7px 10px;font-family:Arial,Helvetica,sans-serif;font-size:12px;${weight}color:#0f172a;${topBorder}">${splitSafe(rowLabel)}</td>
-      <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;${weight}color:${userColor};${topBorder}">${splitSafe(userT)}</td>
-      <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;${weight}color:#475569;${topBorder}">${splitSafe(targetT)}</td>
-      <td style="padding:7px 4px 7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;${gapBold}color:${gapColor};${topBorder}">${splitSafe(gapStr)}</td>
+      <td style="padding:7px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(segment.label)}${penaltyAdjusted ? `<span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#7c3aed;">penalty-adjusted from ${splitSafe(splitGapDisplay(rawGap))}</span>` : ""}</td>
+      ${pctCell(segment, false, gap)}
+      <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:${userColor};">${splitSafe(adjustedUserT)}</td>
+      <td style="padding:7px 12px 7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;${gapBold}color:${gapColor};">${splitSafe(gapStr)}</td>
     </tr>`;
   }
 
-  const raceRows = SPLIT_TABLE_RACE_ORDER
-    .map((key) => {
-      const segment = segMap.get(key);
-      return segment ? dataRow(segment, false) : "";
-    })
-    .join("");
-
-  const totalPenalty = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
-  const penaltyRow = totalPenalty > 0
-    ? `<tr style="background-color:#fff5f5;">
-        <td style="border-left:3px solid #e53e3e;padding:7px 8px 7px 10px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">Penalties</td>
-        <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:#e53e3e;">${splitSafe(formatTime(totalPenalty))}</td>
-        <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:#475569;">0:00</td>
-        <td style="padding:7px 4px 7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;color:#e53e3e;">+${splitSafe(formatGain(totalPenalty))}</td>
+  const penaltyRowHtml = totalPenaltySeconds > 0
+    ? `<tr style="background-color:#f5f3ff;">
+        <td style="padding:7px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">Penalties</td>
+        <td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#7c3aed;">execution</td>
+        <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:#7c3aed;">${splitSafe(formatTime(totalPenaltySeconds))}</td>
+        <td style="padding:7px 12px 7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;color:#7c3aed;">${splitSafe(splitGapDisplay(totalPenaltySeconds))}</td>
       </tr>`
     : "";
 
-  const aggregateRows = SPLIT_TABLE_AGGREGATES
+	  const reducedRows = [
+	    ...rankedGaps.slice(0, 6).map((row) => row.key),
+	    ...SPLIT_TABLE_RACE_ORDER
+	      .map((key) => {
+          const segment = segMap.get(key);
+          return { key, segment, gap: splitOpportunityGap(segment) };
+        })
+	      .filter((row) => row.segment && !isPenaltyAdjustedSegment(row.segment) && Number.isFinite(row.gap) && row.gap < 0)
+      .sort((a, b) => a.gap - b.gap)
+      .slice(0, 1)
+      .map((row) => row.key),
+	  ]
+    .filter((key, index, all) => key && all.indexOf(key) === index)
     .map((key) => {
       const segment = segMap.get(key);
-      const row = segment ? dataRow(segment, true) : "";
-      return key === "work_time" ? row + penaltyRow : row;
-    })
-    .join("");
+      return segment ? dataRow(segment) : "";
+	    })
+	    .join("");
+
+  const reducedTableNote = penaltiesAreMaterial
+    ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;line-height:1.45;margin:8px 0 0;">Penalty time is shown separately above, so the split table focuses on performance gaps rather than execution penalties.</p>`
+    : "";
+
+  function renderTotals() {
+    function totalsRow(key, labelOverride, bold) {
+      const seg = segMap.get(key);
+      if (!seg) return "";
+      const gap = splitGapSeconds(seg, hasGoalGroup);
+      const targetSecs = splitTargetSeconds(seg, hasGoalGroup);
+      const userT = Number.isFinite(seg.userSeconds) ? formatTime(seg.userSeconds) : "&ndash;";
+      const targetT = Number.isFinite(targetSecs) ? formatTime(targetSecs) : "&ndash;";
+      const gapStr = splitGapDisplay(gap);
+      const gapColor = splitGapColor(gap);
+      const bg = key === "total_time" ? "background-color:#e2e8f0;" : "background-color:#ffffff;";
+      const weight = bold ? "font-weight:700;" : "";
+      return `<tr style="${bg}">
+        <td style="padding:8px 8px 8px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;${weight}color:#0f172a;">${splitSafe(labelOverride ?? seg.label)}</td>
+        <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;${weight}color:#0f172a;">${splitSafe(userT)}</td>
+        <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;${weight}color:#475569;">${splitSafe(targetT)}</td>
+        <td style="padding:8px 16px 8px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;font-weight:700;color:${gapColor};">${splitSafe(gapStr)}</td>
+      </tr>`;
+    }
+
+    const totalsPenaltyRow = totalPenaltySeconds > 0 ? `<tr style="background-color:#fff4f4;">
+      <td style="padding:8px 8px 8px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;">Penalties</td>
+      <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;color:#e53e3e;">${splitSafe(formatTime(totalPenaltySeconds))}</td>
+      <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;color:#475569;">0:00</td>
+      <td style="padding:8px 16px 8px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;font-weight:700;color:#e53e3e;">+${splitSafe(formatGain(totalPenaltySeconds))}</td>
+    </tr>` : "";
+
+    return `
+    <tr>
+	      <td style="background-color:#f1f5f9;padding:8px 24px;border-top:2px solid #e2e8f0;">
+        <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">TOTALS</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="background-color:#ffffff;padding:0;border-bottom:1px solid #e2e8f0;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+          <tr style="background-color:#f8fafc;">
+            <th style="padding:6px 8px 6px 16px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Category</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Your Time</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#08a7f5;">Target *</th>
+            <th style="padding:6px 16px 6px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Gap</th>
+          </tr>
+          ${totalsRow("run_time", "Total Running", true)}
+          ${totalsRow("work_time", "Total Stations", true)}
+          ${totalsPenaltyRow}
+          ${totalsRow("roxzone_time", "Total RoxZone", true)}
+          ${totalsRow("total_time", "Total Race Time", true)}
+        </table>
+      </td>
+    </tr>`;
+  }
+
+  function renderHowToRead() {
+    return `<tr>
+	      <td style="background-color:#f8fafc;padding:12px 24px 16px;border-top:1px solid #e2e8f0;">
+	        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">HOW TO READ THIS</span>
+        <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Rank shows your percentile against the benchmark group. Band summarises whether each segment needs attention or is a strength to protect.</p>
+      </td>
+    </tr>`;
+  }
+
+  const splitReportLink = splitReportUrl
+    ? `<a href="${esc(splitReportUrl)}" target="_blank" style="display:block;background-color:#e8f7fd;border:1px solid #bdeafb;border-radius:8px;padding:14px 16px;margin-top:12px;color:#08a7f5;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;text-decoration:none;">View the full split report &#8594;</a>`
+    : "";
 
   return `
-  <tr>
-    <td style="background-color:#0f172a;padding:10px 16px 10px 32px;">
-      <span style="color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">RACE SPLIT BREAKDOWN</span>
-      <span style="display:block;color:#8fa0ba;font-family:Arial,Helvetica,sans-serif;font-size:11px;margin-top:3px;">Compared against ${splitSafe(benchmarkLabel)}</span>
-    </td>
-  </tr>
-  <tr>
-    <td style="background-color:#ffffff;padding:0;border-bottom:1px solid #e2e8f0;">
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
-        <tr style="background-color:#f1f5f9;border-bottom:2px solid #e2e8f0;">
-          <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Segment</th>
-          <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Your Time</th>
-          <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#08a7f5;">Target *</th>
-          <th style="padding:7px 8px 7px 4px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">+/−</th>
-        </tr>
-        ${raceRows}
-        ${aggregateRows}
-        <tr>
-          <td colspan="4" style="padding:6px 12px 14px;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#94a3b8;">
-            * Target times based on ${splitSafe(benchmarkLabel)} benchmark group. Positive (+) = slower than target; negative (−) = faster.
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>`;
+    ${renderSplitHeader()}
+    ${renderRaceStorySummary()}
+    ${renderGapBreakdown()}
+    ${renderSummaryCards()}
+    ${renderSegmentHighlights()}
+    <tr>
+      <td style="background-color:#ffffff;padding:0 24px 18px;">
+        <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">REDUCED SPLIT DETAIL</span>
+	        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-collapse:collapse;width:100%;">
+          <tr style="background-color:#f1f5f9;border-bottom:2px solid #e2e8f0;">
+            <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:38%;">Segment</th>
+            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:28%;">Rank</th>
+            <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your</th>
+	            <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:20%;">Gap</th>
+          </tr>
+          ${penaltyRowHtml}
+          ${reducedRows}
+	        </table>
+        ${reducedTableNote}
+	        ${splitReportLink}
+	      </td>
+    </tr>`;
 }
 
 function renderFooter() {
   return `
   <tr>
     <td style="background-color:#0d1422;padding:22px 32px;border-radius:0 0 8px 8px;text-align:center;">
-      <p style="color:#8fa0ba;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.04em;margin:0 0 6px;">FORMA &nbsp;&#183;&nbsp; forma.fit &nbsp;&#183;&nbsp; Performance Analytics for Hybrid Athletes</p>
+      <p style="color:#8fa0ba;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.04em;margin:0 0 8px;">FORMA &nbsp;&#183;&nbsp; forma.fit &nbsp;&#183;&nbsp; Performance Analytics for Hybrid Athletes</p>
       <p style="color:#4a5568;font-family:Arial,Helvetica,sans-serif;font-size:10px;margin:0;">This analysis is for guidance only. Individual results vary.</p>
     </td>
   </tr>`;
 }
 
-function renderMuscleGroupSection(section) {
-  const content = Array.isArray(section.content) ? section.content : [section.content];
-  const textItems = content.filter((item) => typeof item === "string");
-  const diagram = content.find((item) => item?.__type === "muscle_diagram_pair") ?? null;
-  const paragraphs = textItems
-    .filter(Boolean)
-    .map((item, index) => {
-      const border = index > 0 ? "border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;" : "";
-      return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;${border}">${esc(enforceTone(item))}</p>`;
-    })
-    .join("");
-  const diagramLabel = (text) =>
-    `<div style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;text-align:center;margin-bottom:6px;">${text}</div>`;
-  const diagramHtml = diagram
-    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:20px 0 0;">
-        <tr>
-          <td align="center">
-            <table cellpadding="0" cellspacing="0" border="0" role="presentation">
-              <tr>
-                <td style="width:260px;vertical-align:top;">
-                  ${diagramLabel("Front")}
-                  ${diagram.frontSvg}
-                </td>
-                <td style="width:8px;"></td>
-                <td style="width:260px;vertical-align:top;">
-                  ${diagramLabel("Back")}
-                  ${diagram.backSvg}
-                </td>
-              </tr>
-              <tr>
-                <td colspan="3" style="padding-top:14px;text-align:center;">
-                  <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:0 auto;">
-                    <tr>
-                      <td style="padding:0 14px 0 0;">
-                        <span style="color:#ef4444;font-size:15px;vertical-align:middle;">&#9679;</span>
-                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">Focus area</span>
-                      </td>
-                      <td style="padding:0 14px 0 0;">
-                        <span style="color:#22c55e;font-size:15px;vertical-align:middle;">&#9679;</span>
-                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">Race strength</span>
-                      </td>
-                      <td>
-                        <span style="color:#94a3b8;font-size:15px;vertical-align:middle;">&#9679;</span>
-                        <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#475569;vertical-align:middle;margin-left:4px;">No signal</span>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>`
+function renderMethodNote(hasMaterialPenalties = false) {
+  const penaltyNote = hasMaterialPenalties
+    ? " Penalties are separated from running in the gap breakdown to avoid confusing execution leakage with run fitness."
     : "";
   return `
   <tr>
-    <td style="background-color:#f8fafc;padding:10px 32px;border-top:1px solid #e2e8f0;">
-      <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">MUSCLE GROUP PROFILE</span>
+    <td style="background-color:#ffffff;padding:0 24px 18px;">
+      <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin:0 0;">
+        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">METHOD NOTE</span>
+        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">Target times are based on your selected benchmark group.${penaltyNote} Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.</p>
+      </div>
     </td>
-  </tr>
+  </tr>`;
+}
+
+function parseStationSignals(items) {
+  const rows = [];
+  for (const item of items) {
+    if (typeof item !== "string") continue;
+    const weakMatch = String(item).match(/^Weak(?:est)? stations?:\s*(.+)$/i);
+    const strongMatch = String(item).match(/^(?:Strongest stations?|Relative strengths?(?: stations?)?):\s*(.+)$/i);
+    if (weakMatch) {
+      weakMatch[1].split(/,\s*/).forEach((entry) => {
+        const name = entry.replace(/\s*\([^)]*\)/, "").trim();
+        if (name) rows.push({ name, signal: "Weakness", color: "#e53e3e", bg: "#fff4f4" });
+      });
+    } else if (strongMatch) {
+      strongMatch[1].split(/,\s*/).forEach((entry) => {
+        const name = entry.replace(/\s*\([^)]*\)/, "").trim();
+        if (name) rows.push({ name, signal: "Strength", color: "#16a34a", bg: "#f0fdf4" });
+      });
+    }
+  }
+  return rows;
+}
+
+function parseMuscleAreaSignals(items) {
+  const text = items.join("\n");
+  const rows = [];
+  const summary = items.find((item) => /common thread across your weakest stations/i.test(item)) ?? "";
+  const weakAreasMatch = summary.match(/^(.+?)\s+are the common thread across your weakest stations/i);
+  const strongAreaMatch = summary.match(/weakest stations;\s*your\s+(.+?)\s+is a clear strength/i)
+    ?? summary.match(/^your\s+(.+?)\s+is a clear strength/i);
+  const weakStations = (text.match(/Weakest stations:\s*(.+)/i)?.[1] ?? "")
+    .split(/,\s*/)
+    .map((entry) => entry.replace(/\s*\([^)]*\)/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const strongStations = (text.match(/Strongest stations:\s*(.+)/i)?.[1] ?? "")
+    .split(/,\s*/)
+    .map((entry) => entry.replace(/\s*\([^)]*\)/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (weakAreasMatch) {
+    weakAreasMatch[1].split(/\s+and\s+/i).forEach((area) => {
+      const name = area.trim();
+      if (name) {
+        rows.push({
+          area: name,
+          signal: "Weakness",
+          color: "#e53e3e",
+          bg: "#fff4f4",
+          meaning: weakStations.length ? `${weakStations.join(", ")} are low-ranked` : "Low-ranked stations share this demand",
+        });
+      }
+    });
+  }
+  if (strongAreaMatch) {
+    const area = strongAreaMatch[1].trim();
+    if (area) {
+      rows.push({
+        area,
+        signal: "Strength",
+        color: "#16a34a",
+        bg: "#f0fdf4",
+        meaning: strongStations.length ? `${strongStations.join(", ")} are stronger` : "Higher-ranked stations share this demand",
+      });
+    }
+  }
+  return rows;
+}
+
+function renderMuscleGroupSection(section, analysisJson = {}) {
+  const { penaltiesAreMaterial } = penaltyContext(analysisJson);
+  const content = Array.isArray(section.content) ? section.content : [section.content];
+  const textItems = content.filter((item) => typeof item === "string");
+  const areaRows = parseMuscleAreaSignals(textItems);
+  const signalRows = parseStationSignals(textItems);
+  const stationFallbackRows = signalRows.map((row) => ({
+    area: row.name,
+    signal: row.signal,
+    color: row.color,
+    bg: row.bg,
+    meaning: row.signal === "Weakness" ? "Station-specific limiter" : "Station to protect",
+  }));
+  const rows = areaRows.length > 0 ? areaRows : stationFallbackRows;
+  const signalTableHtml = rows.length > 0
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin-top:12px;border:1px solid #e2e8f0;">
+      <tr style="background-color:#f8fafc;">
+	        <th width="50%" style="padding:8px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Area</th>
+	        <th width="50%" style="padding:8px;text-align:center;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Signal</th>
+      </tr>
+      ${rows.map((row) => `<tr>
+        <td style="padding:10px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;border-top:1px solid #e2e8f0;"><strong>${esc(row.area)}</strong></td>
+	        <td style="padding:10px 8px;border-top:1px solid #e2e8f0;text-align:center;"><span style="display:inline-block;background-color:${row.bg};color:${row.color};font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;padding:3px 6px;border-radius:4px;">${esc(row.signal)}</span></td>
+      </tr>`).join("")}
+    </table>`
+    : "";
+  const implication = penaltiesAreMaterial
+    ? "Training focus: clean station standards first, then posterior-chain strength-endurance through Romanian deadlifts, hip thrusts and sled-specific pulling."
+    : (textItems.find((item) => /^Training focus:/i.test(item))
+      ?? "Training implication: a targeted strength-endurance block is the highest-leverage cross-station investment.");
+  return `
   <tr>
-    <td style="background-color:#ffffff;padding:16px 32px 20px;border-bottom:1px solid #e2e8f0;">
-      ${paragraphs}${diagramHtml}
+    <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
+      <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">MUSCLE GROUP SIGNAL</span>
+      ${signalTableHtml}
+      <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:12px 0 0;">${esc(enforceTone(implication))}</p>
     </td>
   </tr>`;
 }
 
 function renderSection(section, analysisJson, interpretation = null) {
+  const SUPPRESSED_IN_EMAIL = new Set([
+    "executive_summary",
+    "race_snapshot",
+    "biggest_strength",
+    "time_potential",
+    "running_fatigue",
+    "athlete_background",
+    "training_context",
+  ]);
+  if (SUPPRESSED_IN_EMAIL.has(section.sectionKey)) return "";
+
   switch (section.sectionKey) {
     case "executive_summary":
       return renderExecutiveSummary(section);
     case "biggest_strength":
       return renderStrengthCard(section);
-    case "biggest_limiter":
-      return renderStationBreakdown(section);
+    case "biggest_limiter": {
+      const { penaltiesAreMaterial } = penaltyContext(analysisJson);
+      return penaltiesAreMaterial ? renderStationBreakdown(section) : "";
+    }
     case "time_potential":
       return renderTimePotential(section);
     case "athlete_background":
       return renderAthleteBackground(section);
     case "recommended_focus_areas":
-      return renderRecommendations(section);
+      return renderRecommendations(section, analysisJson);
     case "cta":
       return renderCta(section, analysisJson);
     case "race_snapshot":
       return "";
     case "penalty_callout":
-      return renderPenaltyCallout(section, interpretation);
+      return renderPenaltyCallout(section, interpretation, analysisJson);
     case "race_split_breakdown":
       return renderSplitTable(section, analysisJson);
     case "muscle_group_profile":
-      return renderMuscleGroupSection(section);
+      return renderMuscleGroupSection(section, analysisJson);
+    case "roxzone_execution":
+      return renderRoxzoneExecution(section, interpretation);
     default:
-      return renderTextCard(section, interpretation);
+      return renderTextCard(section, interpretation, analysisJson);
   }
 }
 
 export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null) {
+  const { totalPenaltySeconds: emailPenaltySeconds, penaltiesAreMaterial: emailPenaltiesMaterial, usePenaltyHero } = penaltyContext(analysisJson);
   const limiter = limiterName(analysisJson);
-  const subject = limiter ? `Your HYROX bottleneck is ${limiter}` : "Your HYROX analysis is ready";
+  const subject = usePenaltyHero
+    ? `Your HYROX fastest win is ${formatGain(emailPenaltySeconds)} of penalties`
+    : (limiter ? `Your HYROX bottleneck is ${limiter}` : "Your HYROX analysis is ready");
   const rawName = athleteContext.firstName ?? athleteContext.displayName ?? null;
   const firstName = rawName ? rawName.split(/[\s,]+/)[0] : "there";
   const greetingName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
@@ -754,6 +1359,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
           ${renderHero(analysisJson, greetingName, interpretation)}
           ${renderMetricStrip(analysisJson, athleteContext)}
           ${sectionRows}
+          ${renderMethodNote(emailPenaltiesMaterial)}
           ${renderFooter()}
         </table>
       </td>

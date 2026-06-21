@@ -27,7 +27,7 @@ function makeAnalysis(overrides = {}) {
 function assertShared(result) {
   assert.equal(result.sectionOrder[0], "executive_summary");
   assert.equal(result.sectionOrder.at(-1), "recommendations");
-  assert.ok(result.summaryBullets.length >= 2);
+  assert.ok(result.summaryBullets.length >= 1);
   assert.ok(["high", "medium", "low"].includes(result.primaryThesis.confidence));
 }
 
@@ -61,6 +61,13 @@ test("strong runner with weak stations selects station capacity thesis", () => {
   assert.equal(result.primaryThesis.category, "station_capacity");
   assert.ok(result.sectionOrder[2] === "station_breakdown" || result.sectionOrder[2] === "biggest_strength");
   assert.doesNotMatch(result.heroCopy.headline, /ANALYSIS IS READY/);
+  assert.equal(result.heroCopy.gainDisplay, "4:10");
+  assert.ok(!result.heroCopy.subline.includes("4:10"), "hero subline should not repeat the hero metric");
+  assert.match(result.heroCopy.subline, /target benchmark group/);
+  assert.match(result.summaryBullets[0], /4:10/);
+  assert.match(result.summaryBullets[0], /target benchmark group/);
+  assert.doesNotMatch(result.summaryBullets[0], /4:10.*4:10/);
+  assert.equal(result.summaryBullets.some((bullet) => /Running contributed/i.test(bullet)), false);
   assertShared(result);
 });
 

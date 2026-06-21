@@ -42,6 +42,39 @@ function enrichedAnalysis(overrides = {}) {
   };
 }
 
+const targetStationAnalysis = Object.freeze({
+  headline: {
+    biggestLimiter: {
+      segmentKey: "wall_balls",
+      label: "Wall Balls",
+      type: "station",
+      percentile: 8,
+      timeGapSeconds: 324,
+      confidence: "high",
+    },
+  },
+  timePotential: { goalBasedGainSeconds: 324, headlineGainSeconds: 324 },
+  stationBreakdown: [
+    { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: 324, confidence: "high", percentile: 8 },
+    { segmentKey: "burpee_broad_jump", label: "Burpee Broad Jump", timeGapSeconds: 259, confidence: "high", percentile: 18 },
+    { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", timeGapSeconds: 180, confidence: "high", percentile: 25 },
+  ],
+  segments: [
+    { segmentKey: "wall_balls", timeGapToExactTargetSeconds: 324 },
+    { segmentKey: "burpee_broad_jump", timeGapToExactTargetSeconds: 259 },
+    { segmentKey: "sandbag_lunges", timeGapToExactTargetSeconds: 180 },
+  ],
+  benchmarkContext: {
+    goalBenchmarkGroup: { key: "open_f_sub_70", label: "1:10:00 finishers" },
+  },
+  scores: { engineScore: 55, strengthScore: 60 },
+  penalties: [],
+  roxzoneAnalysis: { available: false },
+  runningAnalysis: { available: false },
+});
+
+const targetAthleteContext = Object.freeze({ targetFinishTimeSeconds: 4200 });
+
 test("past race does not force taper recommendations", () => {
   const recommendations = buildRecommendations(mockAnalysis, [], { raceDate: "2020-01-01" });
 
@@ -54,6 +87,31 @@ test("unknown race date does not force taper recommendations", () => {
 
   assert.notEqual(recommendations[0]?.actionId, "maintain_taper");
   assert.equal(recommendations.some((item) => /Race day is close/i.test(item.rationale)), false);
+});
+
+test("station limiter rationale with target time uses accurate phrasing", () => {
+  const recs = buildRecommendations(targetStationAnalysis, [], targetAthleteContext);
+  const first = recs[0];
+  assert.ok(!first.rationale.includes("across your stations and penalties"),
+    `rationale should not say "across your stations and penalties", got: ${first.rationale}`);
+  assert.ok(first.rationale.includes("approximately"),
+    `rationale should include "approximately", got: ${first.rationale}`);
+});
+
+test("title station is excluded from contributors list", () => {
+  const recs = buildRecommendations(targetStationAnalysis, [], targetAthleteContext);
+  const first = recs[0];
+  const contributorLabels = (first.contributors ?? []).map((c) => c.label);
+  assert.ok(!contributorLabels.includes("Wall Balls"),
+    `contributors should not include title station "Wall Balls", got: ${JSON.stringify(contributorLabels)}`);
+});
+
+test("other high-gap stations remain in contributors after deduplication", () => {
+  const recs = buildRecommendations(targetStationAnalysis, [], targetAthleteContext);
+  const first = recs[0];
+  const contributorLabels = (first.contributors ?? []).map((c) => c.label);
+  assert.ok(contributorLabels.some((l) => l === "Burpee Broad Jump"),
+    `contributors should still contain "Burpee Broad Jump", got: ${JSON.stringify(contributorLabels)}`);
 });
 
 test("past race recommendations share the next-block horizon", () => {
@@ -73,7 +131,7 @@ test("station contributors array is populated when two stations exceed threshold
   }), [], {});
 
   const labels = (recommendations[0].contributors ?? []).map((contributor) => contributor.label);
-  assert.ok(labels.includes("Wall Balls"), "Wall Balls should be in contributors");
+  assert.ok(!labels.includes("Wall Balls"), "Title station should not repeat in contributors");
   assert.ok(labels.includes("Sandbag Lunges"), "Sandbag Lunges should be in contributors");
   assert.doesNotMatch(recommendations[0].rationale, /Likely contributors/);
 });
@@ -94,7 +152,7 @@ test("station and penalty contributors appear in contributors array, not rationa
 
   const labels = (recommendations[0].contributors ?? []).map((contributor) => contributor.label);
   assert.ok(labels.includes("Penalties"), "Penalties should be in contributors");
-  assert.ok(labels.includes("Wall Balls"), "Wall Balls should be in contributors");
+  assert.ok(!labels.includes("Wall Balls"), "Title station should not repeat in contributors");
   assert.doesNotMatch(recommendations[0].rationale, /Penalties/);
 });
 

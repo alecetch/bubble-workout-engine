@@ -46,7 +46,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .metric-label { color: var(--muted-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 9px; }
 .metric-value { font-family: var(--font-mono); font-size: 20px; font-weight: 800; text-transform: uppercase; }
 .swipe-prompt { position: absolute; left: 70px; top: 594px; font-size: 18px; font-weight: 700; color: var(--text); z-index: 2; }
-.athlete-image { position: absolute; right: 66px; bottom: 22px; width: 250px; max-height: 420px; object-fit: contain; opacity: 0.42; filter: contrast(1.05) brightness(0.75); z-index: 1; }
+.athlete-image { position: absolute; right: 0; bottom: 0; width: 340px; max-height: 560px; object-fit: contain; opacity: 0.88; filter: contrast(1.12); mix-blend-mode: lighten; z-index: 1; }
 .athlete-image:not([src]), .athlete-image[src=""] { display: none; }
 .slide-hook::after {
   content: "";
@@ -135,7 +135,7 @@ const RENDERER_JS = `
     const rows = get('slides.1.stations') || [];
     rows.forEach(row => {
       const delta = String(row.delta ?? '');
-      const deltaClass = delta.startsWith('-') ? 'danger' : delta === '0' ? '' : 'blue';
+      const deltaClass = row.tone === 'positive' ? 'blue' : row.tone === 'negative' ? 'danger' : '';
       const item = document.createElement('div');
       item.className = 'race-row';
       item.innerHTML = '<div class="name">' + (row.name ?? '') + '</div><div class="time">' + (row.time ?? '') + '</div><div class="delta ' + deltaClass + '">' + delta + '</div>';
@@ -224,17 +224,17 @@ export function buildCarouselPage(carouselData = {}) {
       <h2 class="slide-title">HOW THE RACE UNFOLDED</h2>
       <div class="flow-summary">
         <div class="summary-box positive">
-          <div class="summary-label">BIGGEST GAIN</div>
+          <div class="summary-label">FASTEST GAP</div>
           <div><span data-field="slides.1.biggest_gain.station">-</span> <span data-field="slides.1.biggest_gain.delta">-</span></div>
         </div>
         <div class="summary-box negative">
-          <div class="summary-label">BIGGEST LOSS</div>
+          <div class="summary-label">BIGGEST GAP</div>
           <div><span data-field="slides.1.biggest_loss.station">-</span> <span data-field="slides.1.biggest_loss.delta">-</span></div>
         </div>
       </div>
-      <div class="table-head pos-head">TIME</div>
+      <div class="table-head pos-head">GAP</div>
       <div class="race-table" data-repeat="slides.1.stations"></div>
-      <div class="legend"><span class="blue">BLUE</span> = TIME AHEAD OF MEDIAN &nbsp;&nbsp;&nbsp;&nbsp; <span class="danger">RED</span> = TIME BEHIND MEDIAN</div>
+      <div class="legend"><span class="blue">BLUE</span> = FASTER THAN <span data-field="slides.1.comparison_basis">TARGET</span> &nbsp;&nbsp;&nbsp;&nbsp; <span class="danger">RED</span> = SLOWER THAN <span data-field="slides.1.comparison_basis">TARGET</span></div>
       <div class="footer">FORMA &nbsp;|&nbsp; THE PERFORMANCE ENGINEER</div>
     </section>
 
