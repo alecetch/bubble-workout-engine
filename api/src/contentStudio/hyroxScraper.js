@@ -94,48 +94,38 @@ async function launchBrowser() {
   return puppeteer.launch({ headless: "new", args: BROWSER_ARGS });
 }
 
-// Debug helper — inspects the Mika Timing AJAX API to find division endpoints
+// Debug helper — finds the HTML context around HYROX division names
 export async function debugPage(targetUrl) {
-  const results = {};
-
-  // Try multiple URL variants
   const parsed = new URL(targetUrl);
   const mainGroup = parsed.searchParams.get("event_main_group");
-  const seasonMatch = parsed.pathname.match(/season-(\d+)/);
+  const seasonNum = parsed.pathname.match(/season-(\d+)/)?.[1] ?? "8";
+  const url = `https://results.hyrox.com/season-${seasonNum}/?event_main_group=${encodeURIComponent(mainGroup)}`;
 
-  // Guess season from URL or default
-  const seasonNum = seasonMatch ? seasonMatch[1] : "8";
+  const html = await fetchHtml(url);
 
-  const urlsToProbe = [
-    targetUrl,
-    `https://results.hyrox.com/season-${seasonNum}/?event_main_group=${encodeURIComponent(mainGroup)}`,
-    // Mika Timing AJAX content endpoints
-    `https://results.hyrox.com/season-${seasonNum}/?content=main_nav&event=events_hyrox&event_main_group=${encodeURIComponent(mainGroup)}`,
-    `https://results.hyrox.com/season-${seasonNum}/?content=list_main_event&event=events_hyrox&event_main_group=${encodeURIComponent(mainGroup)}`,
-    `https://results.hyrox.com/season-${seasonNum}/?content=nav_event_main_group&event=events_hyrox&event_main_group=${encodeURIComponent(mainGroup)}`,
-  ];
-
-  for (const url of urlsToProbe) {
-    try {
-      const html = await fetchHtml(url);
-      const subGroups = [...html.matchAll(/event_sub_group=([^"&\s<>]+)/gi)]
-        .map((m) => decodeURIComponent(m[1].replace(/\+/g, " ")));
-      const hyroxMatches = [...html.matchAll(/HYROX[^<"]{0,60}/g)]
-        .map((m) => m[0].trim())
-        .filter((v, i, a) => a.indexOf(v) === i)
-        .slice(0, 30);
-      // Look for JSON blobs in <script> tags
-      const jsonBlobs = [...html.matchAll(/<script[^>]*>([\s\S]{50,2000}?)<\/script>/gi)]
-        .map((m) => m[1].trim())
-        .filter((s) => s.includes("sub_group") || s.includes("contest") || s.includes("HYROX"))
-        .slice(0, 3);
-      results[url] = { length: html.length, subGroups, hyroxMatches, jsonBlobs };
-    } catch (err) {
-      results[url] = { error: err.message };
-    }
+  // Find 300-char window around each HYROX match to see surrounding HTML tags
+  const contexts = [];
+  const re = /HYROX[^<"&\r\n]{0,80}/g;
+  let m;
+  const seen = new Set();
+  while ((m = re.exec(html)) !== null) {
+    const key = m[0].trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const start = Math.max(0, m.index - 200);
+    const end = Math.min(html.length, m.index + 200);
+    contexts.push({ match: key, context: html.slice(start, end).replace(/\s+/g, " ") });
   }
 
-  return results;
+  // Also find every <a href that references event_sub_group anywhere in the page
+  const allSubGroupHrefs = [...html.matchAll(/href="([^"]*event_sub_group[^"]*)"/gi)]
+    .map((m2) => m2[1]);
+
+  // Any occurrence of event_sub_group in any format (JS vars, JSON, etc)
+  const subGroupOccurrences = [...html.matchAll(/event_sub_group[=:%"']{1,3}([^<"&\s]{3,})/gi)]
+    .map((m2) => decodeURIComponent(m2[1].replace(/\+/g, " ")));
+
+  return { url, length: html.length, contexts, allSubGroupHrefs, subGroupOccurrences };
 }
 
 export async function fetchDivisions(resultsPageKey, season = null) {
