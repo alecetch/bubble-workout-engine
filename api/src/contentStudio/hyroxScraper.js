@@ -32,22 +32,25 @@ async function fetchHtml(url) {
   }
 }
 
-// Parse division links from static HTML, scoped strictly to our event.
-// The season-index page lists many events; we must only extract event_sub_group
-// values from hrefs that ALSO carry event_main_group=<resultsPageKey>.
+// Parse division links from static HTML.
+// Rules:
+//   - link has event_sub_group AND event_main_group === resultsPageKey  → include
+//   - link has event_sub_group AND no event_main_group (relative link)  → include
+//   - link has event_sub_group AND event_main_group for a DIFFERENT event → exclude
 function parseDivisionsFromHtml(html, resultsPageKey) {
   const divisions = new Set();
 
-  // Match every href attribute and inspect both query params together
   const hrefRe = /href="([^"]+)"/gi;
   for (const hrefMatch of html.matchAll(hrefRe)) {
     const href = hrefMatch[1];
     if (!href.includes("event_sub_group=")) continue;
 
     const mainGroupMatch = href.match(/event_main_group=([^"&\s]+)/);
-    if (!mainGroupMatch) continue;
-    const mainGroup = decodeURIComponent(mainGroupMatch[1].replace(/\+/g, " ")).trim();
-    if (mainGroup !== resultsPageKey) continue;
+    if (mainGroupMatch) {
+      const mainGroup = decodeURIComponent(mainGroupMatch[1].replace(/\+/g, " ")).trim();
+      if (mainGroup !== resultsPageKey) continue; // explicitly a different event
+    }
+    // No event_main_group in href → relative link, accept it
 
     const subGroupMatch = href.match(/event_sub_group=([^"&\s]+)/);
     if (!subGroupMatch) continue;
@@ -122,7 +125,9 @@ export async function fetchDivisions(resultsPageKey, season = null) {
           return [...document.querySelectorAll("a[href]")].some((a) => {
             try {
               const u = new URL(a.href, location.href);
-              return u.searchParams.get("event_main_group") === rpk && u.searchParams.get("event_sub_group");
+              const mainGroup = u.searchParams.get("event_main_group");
+              const subGroup = u.searchParams.get("event_sub_group");
+              return subGroup && (mainGroup === null || mainGroup === rpk);
             } catch { return false; }
           });
         },
@@ -141,13 +146,15 @@ export async function fetchDivisions(resultsPageKey, season = null) {
     const divisions = await page.evaluate((rpk) => {
       const results = new Set();
 
-      // Strategy 1: links that carry BOTH our event_main_group AND event_sub_group
+      // Strategy 1: links with event_sub_group that either match our event or are relative
       document.querySelectorAll("a[href]").forEach((a) => {
         try {
           const u = new URL(a.href, location.href);
           const mainGroup = u.searchParams.get("event_main_group");
           const subGroup = u.searchParams.get("event_sub_group");
-          if (mainGroup === rpk && subGroup) results.add(subGroup);
+          if (!subGroup) return;
+          // Accept if: no event_main_group (relative), or explicitly our event
+          if (mainGroup === null || mainGroup === rpk) results.add(subGroup);
         } catch { /* ignore malformed hrefs */ }
       });
 
