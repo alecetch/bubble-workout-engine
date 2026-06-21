@@ -5,7 +5,7 @@ import { analyseRaceEvent } from "../contentStudio/raceEventAnalyser.js";
 import { generateContentInsights } from "../contentStudio/contentInsightEngine.js";
 import { generateContentForMode } from "../contentStudio/contentModeDispatcher.js";
 import { generateCaption } from "../contentStudio/captionGenerator.js";
-import { fetchDivisions, scrapeLeaderboard } from "../contentStudio/hyroxScraper.js";
+import { fetchDivisions, scrapeLeaderboard, enrichAthleteSplits } from "../contentStudio/hyroxScraper.js";
 
 export const adminContentStudioRouter = express.Router();
 
@@ -58,7 +58,7 @@ adminContentStudioRouter.post("/content-studio/races/upload", csvTextParser, asy
     const result = await pool.query(
       `INSERT INTO cs_race_events (
         event_name, event_date, season, division, sex, uploaded_by,
-        athlete_count, raw_data_json, analysis_json, status
+	        athlete_count, raw_data_json, analysis_json, status
       )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, 'analysed')
        RETURNING *`,
@@ -115,7 +115,11 @@ adminContentStudioRouter.post("/content-studio/races/:raceEventId/auto-pick", as
     const raceResult = await pool.query("SELECT * FROM cs_race_events WHERE id = $1", [req.params.raceEventId]);
     if (!raceResult.rows.length) return res.status(404).json({ ok: false, error: "Race event not found" });
     const race = raceResult.rows[0];
-    const analysis = race.analysis_json ?? await analyseRaceEvent(race.raw_data_json, race.division, race.sex, pool);
+    // Always re-analyse from raw data so new trigger fields (hasRoxzoneSplits, roxzoneRank, etc.)
+    // are computed even for races stored before these features were deployed.
+    const analysis = await analyseRaceEvent(race.raw_data_json, race.division, race.sex, pool);
+    // Persist refreshed analysis so the generate route also benefits without re-running.
+    await pool.query("UPDATE cs_race_events SET analysis_json = $1::jsonb WHERE id = $2", [JSON.stringify(analysis), race.id]);
     const insights = generateContentInsights(analysis);
 
     const jobResult = await pool.query(
@@ -220,12 +224,15 @@ adminContentStudioRouter.post("/content-studio/races/:raceEventId/generate", exp
     const raceRow = await pool.query("SELECT * FROM cs_race_events WHERE id = $1", [req.params.raceEventId]);
     if (!raceRow.rows.length) return res.status(404).json({ ok: false, error: "Race event not found" });
     const raceEvent = raceRow.rows[0];
-    if (!raceEvent.analysis_json) return res.status(400).json({ ok: false, error: "Race not yet analysed - run auto-pick first" });
+    if (!raceEvent.raw_data_json?.length) return res.status(400).json({ ok: false, error: "Race has no athlete data - scrape or upload first" });
 
     const athletes = (await pool.query("SELECT * FROM cs_athletes ORDER BY full_name")).rows;
+    // Always re-analyse so generate always reflects the latest analyser code (new fields, new correlations).
+    const freshAnalysis = await analyseRaceEvent(raceEvent.raw_data_json, raceEvent.division, raceEvent.sex, pool);
+    await pool.query("UPDATE cs_race_events SET analysis_json = $1::jsonb WHERE id = $2", [JSON.stringify(freshAnalysis), raceEvent.id]);
     const raceAnalysis = {
-      ...raceEvent.analysis_json,
-      _insights: generateContentInsights(raceEvent.analysis_json),
+      ...freshAnalysis,
+      _insights: generateContentInsights(freshAnalysis),
     };
     const generatedContent = await generateContentForMode(mode, raceAnalysis, modeParams, athletes);
     const { caption, handles, hashtags } = generateCaption(generatedContent, raceEvent, athletes);
@@ -433,15 +440,24 @@ adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scra
   const division = String(req.body?.division ?? "").trim();
   const contestId = String(req.body?.contestId ?? "").trim() || null;
   const season = req.body?.season ? Number(req.body.season) : null;
+  const sexRaw = String(req.body?.sex ?? "").trim().toLowerCase();
+  const requestedSex = sexRaw === "female" ? "female" : sexRaw === "male" ? "male" : null;
+  const enrichSplits = req.body?.enrichSplits !== false;
   if (!division) return res.status(400).json({ ok: false, error: "division is required" });
   if (!contestId) return res.status(400).json({ ok: false, error: "contestId is required — select a division from the list" });
 
   try {
-    const rows = await scrapeLeaderboard(resultsPageKey, division, 50, season, contestId);
+    const scraper = req.app.locals.contentStudioScraper ?? { scrapeLeaderboard, enrichAthleteSplits };
+    let rows = await scraper.scrapeLeaderboard(resultsPageKey, division, 50, season, contestId, requestedSex);
+    if (enrichSplits && rows.some((athlete) => athlete.athleteId)) {
+      rows = await scraper.enrichAthleteSplits(rows, resultsPageKey, contestId, season);
+    }
     if (!rows.length) return res.status(422).json({ ok: false, error: "Scrape returned no rows" });
+    const splitsCount = rows.filter((athlete) => Object.keys(athlete.splits ?? {}).length > 0).length;
+    const splitCoverage = rows.length > 0 ? splitsCount / rows.length : 0;
 
     const divisionType = rows[0].division;
-    const sex = rows[0].sex;
+    const sex = requestedSex ?? rows[0].sex;
     const analysis = await analyseRaceEvent(rows, divisionType, sex, pool);
 
     // Look up event metadata from hyrox_events table
@@ -456,9 +472,9 @@ adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scra
     const result = await pool.query(
       `INSERT INTO cs_race_events (
         event_name, event_date, season, division, sex,
-        athlete_count, raw_data_json, analysis_json, status
+		        athlete_count, raw_data_json, analysis_json, scrape_meta_json, status
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, 'analysed')
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, 'analysed')
        RETURNING *`,
       [
         `${eventName} — ${division}`,
@@ -469,6 +485,14 @@ adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scra
         rows.length,
         JSON.stringify(rows),
         JSON.stringify(analysis),
+        JSON.stringify({
+          resultsPageKey,
+          contestId,
+          season: dbSeason,
+          scrapedAt: new Date().toISOString(),
+          splitCoverage,
+          source: "mika_timing",
+        }),
       ],
     );
 
@@ -476,6 +500,7 @@ adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scra
       ok: true,
       raceEventId: result.rows[0].id,
       athleteCount: rows.length,
+      splitCoverage,
       division: divisionType,
       sex,
       eventName: result.rows[0].event_name,

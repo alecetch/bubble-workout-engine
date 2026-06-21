@@ -27,7 +27,7 @@ export function athleteRows({ winnerStrongStation = false, sledDecides = false }
       rank,
       name: `Athlete ${rank}`,
       instagramHandle: `@athlete${rank}`,
-      finishTimeSeconds: splitTotal + 120 + index * 5,
+      finishTimeSeconds: index === 0 ? splitTotal - 500 : splitTotal + 120 + index * 5,
       roxzoneSeconds: 120,
       splits,
       division: "open",

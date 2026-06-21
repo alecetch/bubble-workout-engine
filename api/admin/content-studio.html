@@ -111,6 +111,14 @@
                   <option value="">— click Load Divisions —</option>
                 </select>
               </div>
+              <div class="control">
+                <label for="scrape-sex">Gender</label>
+                <select id="scrape-sex">
+                  <option value="male">Men</option>
+                  <option value="female">Women</option>
+                  <option value="both">Both (2 events)</option>
+                </select>
+              </div>
               <button id="fetch-divisions-btn" type="button" disabled>Load Divisions</button>
               <div class="control wide" id="scrape-manual-group" style="display:none">
                 <label for="scrape-division-manual">Division name (if auto-detect failed)</label>
@@ -724,6 +732,7 @@
       const scrapeSeasonEl = document.getElementById("scrape-season");
       const scrapeRaceEl = document.getElementById("scrape-race");
       const scrapeDivisionEl = document.getElementById("scrape-division");
+      const scrapeSexEl = document.getElementById("scrape-sex");
       const scrapeDivisionManualEl = document.getElementById("scrape-division-manual");
       const scrapeContestIdManualEl = document.getElementById("scrape-contest-id-manual");
       const scrapeManualGroupEl = document.getElementById("scrape-manual-group");
@@ -860,19 +869,52 @@
       scrapeBtn.addEventListener("click", async () => {
         const key = scrapeRaceEl.value;
         const division = activeDivisionLabel();
-        const contestId = activeContestId();
-        if (!key || !division || !contestId) return;
-        const season = selectedSeason();
+	        const contestId = activeContestId();
+	        if (!key || !division || !contestId) return;
+	        const season = selectedSeason();
+	        const sexValue = scrapeSexEl.value;
+	        if (sexValue === "both") {
+	        scrapeStatusEl.innerHTML = `Phase 1/2: Scraping ${sexValue} leaderboard...<br>Phase 2/2: Fetching splits for 50 athletes (~30s)...`;
+	        scrapeStatusEl.className = "status";
+	        scrapeBtn.disabled = true;
+	          try {
+	            const results = [];
+	            for (const sex of ["male", "female"]) {
+	              scrapeStatusEl.innerHTML = `Phase 1/2: Scraping ${sex} leaderboard...<br>Phase 2/2: Fetching splits for 50 athletes (~30s)...`;
+	              scrapeStatusEl.className = "status";
+	              const data = await api(`/hyrox-events/${encodeURIComponent(key)}/scrape`, {
+	                method: "POST",
+	                headers: { "content-type": "application/json" },
+	                body: JSON.stringify({ division, contestId, sex, ...(season ? { season: Number(season) } : {}) }),
+	              });
+	              results.push(data);
+	            }
+	            const totalAthletes = results.reduce((sum, item) => sum + (item.athleteCount || 0), 0);
+	            const weightedCoverage = totalAthletes
+	              ? results.reduce((sum, item) => sum + (item.splitCoverage || 0) * (item.athleteCount || 0), 0) / totalAthletes
+	              : 0;
+	            const withSplits = Math.round(weightedCoverage * totalAthletes);
+	            status(scrapeStatusEl, `Done - ${totalAthletes} athletes, ${withSplits} with full splits (${Math.round(weightedCoverage * 100)}% coverage). Race added.`, "ok");
+	            selectedRaceId = results[results.length - 1]?.raceEventId ?? null;
+	            selectedRaceEl.textContent = `Selected race: ${results.length} ${division} events created`;
+	            await loadAll();
+	          } catch (err) {
+	            status(scrapeStatusEl, err.message, "err");
+	          } finally {
+	            scrapeBtn.disabled = false;
+	          }
+	          return;
+	        }
         status(scrapeStatusEl, `Scraping "${division}" from ${key}… (may take 30–60 s)`);
         scrapeBtn.disabled = true;
         try {
           const data = await api(`/hyrox-events/${encodeURIComponent(key)}/scrape`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ division, contestId, ...(season ? { season: Number(season) } : {}) }),
+	            body: JSON.stringify({ division, contestId, sex: sexValue, ...(season ? { season: Number(season) } : {}) }),
           });
-          status(scrapeStatusEl, `Done — ${data.athleteCount} athletes scraped (${data.division} / ${data.sex}). Race "${data.eventName}" added.`, "ok");
-          selectedRaceId = data.raceEventId;
+          status(scrapeStatusEl, `Done — ${data.athleteCount} athletes, ${Math.round((data.splitCoverage || 0) * data.athleteCount)} with full splits (${Math.round((data.splitCoverage || 0) * 100)}% coverage). Race "${data.eventName}" added.`, "ok");
+	          selectedRaceId = data.raceEventId;
           selectedRaceEl.textContent = `Selected race: ${data.eventName} — ${data.division}`;
           await loadAll();
         } catch (err) {

@@ -96,7 +96,7 @@ test("content studio upload, auto-pick, and athlete registry flow", async (t) =>
       headers: { "content-type": "text/csv" },
       body: csvBody(),
     });
-    assert.equal(upload.response.status, 200);
+    assert.equal(upload.response.status, 200, JSON.stringify(upload.body));
     assert.ok(upload.body.raceEventId);
     assert.equal(upload.body.status, "analysed");
     raceEventId = upload.body.raceEventId;

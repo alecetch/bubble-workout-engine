@@ -87,10 +87,20 @@ export function podiumBreakdownGenerator(raceAnalysis) {
     },
   ]);
 
+  // Prefer insights that name one of the podium athletes; fall back to top-scoring generic ones.
+  const podiumNames = new Set(podium.map((a) => a.name));
+  const podiumInsights = (raceAnalysis._insights ?? []).filter((i) => i.athletesInvolved?.some((n) => podiumNames.has(n)));
+  const selectedInsights = podiumInsights.length >= 2
+    ? podiumInsights.slice(0, 3)
+    : [
+        ...podiumInsights,
+        ...(raceAnalysis._insights ?? []).filter((i) => !podiumInsights.includes(i)).slice(0, 3 - podiumInsights.length),
+      ];
+
   return {
     modeKey: "podium_breakdown",
     headline,
-    selectedInsights: [],
+    selectedInsights,
     carouselSlides: slides,
     captionDraft: `${headline}.\n\n${decisive ? `Most decisive station: ${stationLabel(decisive)}.` : "The podium was balanced."}\n\nKnow your numbers -> forma.fit`,
     suggestedHandles: [],

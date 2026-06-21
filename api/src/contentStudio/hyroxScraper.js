@@ -122,7 +122,11 @@ function parseListRows(html) {
     const timeM = item.match(/type-time[^>]*>[\s\S]*?<\/div>\s*([\d:]+)\s*<\/div>/i);
     const time = timeM ? timeM[1].trim() : null;
 
-    rows.push({ rank, name, time });
+    // idp can contain underscores (e.g. LR3MS4JI4F6779_CWL) and href uses &amp; in HTML
+    const idpM = item.match(/type-fullname[^>]*>[\s\S]*?<a[^>]+href="[^"]*(?:[?&]|&amp;)idp=([A-Za-z0-9_]+)/i);
+    const athleteId = idpM ? idpM[1].trim() : null;
+
+    rows.push({ rank, name, time, athleteId });
   }
   return rows;
 }
@@ -165,15 +169,16 @@ export async function fetchDivisions(resultsPageKey, season = null) {
 
 // Scrapes the leaderboard via POST to the Mika Timing list form.
 // Returns athlete rows ready for analyseRaceEvent.
-export async function scrapeLeaderboard(resultsPageKey, divisionLabel, limit = 50, season = null, contestId = null) {
+export async function scrapeLeaderboard(resultsPageKey, divisionLabel, limit = 50, season = null, contestId = null, sex = null) {
   if (!contestId) {
     throw new Error("contestId is required — fetch divisions first to get the contest ID");
   }
 
-  const sex = normaliseDivisionSex(divisionLabel);
+  const normalisedSex = sex ?? normaliseDivisionSex(divisionLabel);
   const divisionType = normaliseDivisionType(divisionLabel);
+  const sexCode = normalisedSex === "male" ? "M" : normalisedSex === "female" ? "W" : "";
 
-  const html = await postListForm(resultsPageKey, contestId, season, { numResults: Math.min(limit, 50) });
+  const html = await postListForm(resultsPageKey, contestId, season, { sex: sexCode, numResults: Math.min(limit, 50) });
   const rawRows = parseListRows(html);
 
   if (rawRows.length === 0) {
@@ -187,9 +192,154 @@ export async function scrapeLeaderboard(resultsPageKey, divisionLabel, limit = 5
     finishTimeSeconds: parseTime(row.time),
     roxzoneSeconds: null,
     splits: {},
+    athleteId: row.athleteId,
     division: divisionType,
-    sex,
+    sex: normalisedSex,
   }));
+}
+
+function buildDetailUrl(athleteId, contestId, seasonNum) {
+  const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
+  return `${base}?content=detail&fpid=list&pid=list&idp=${athleteId}&lang=EN_CAP&event=${contestId}&pidp=ranking_nav`;
+}
+
+const WORKOUT_SUMMARY_MAP = {
+  "f-time_01": "run_1",
+  "f-time_02": "run_2",
+  "f-time_03": "run_3",
+  "f-time_04": "run_4",
+  "f-time_05": "run_5",
+  "f-time_06": "run_6",
+  "f-time_07": "run_7",
+  "f-time_08": "run_8",
+  "f-time_11": "skierg",
+  "f-time_12": "sled_push",
+  "f-time_13": "sled_pull",
+  "f-time_14": "burpee_bj",
+  "f-time_15": "row",
+  "f-time_16": "farmers_carry",
+  "f-time_17": "sandbag_lunge",
+  "f-time_18": "wall_balls",
+};
+
+const WORKOUT_TOTALS_MAP = {
+  "f-time_49": "runTotalSeconds",
+  "f-time_50": "bestRunLapSeconds",
+  "f-time_60": "roxzoneSeconds",
+};
+
+export function parseWorkoutSummary(html) {
+  const splits = {};
+  const splitRanks = {};
+  const totals = {};
+  const boxMatch = html.match(/<div[^>]+id="detail-box-other"[^>]*>([\s\S]*?)<\/div>\s*(?=<div|$)/i)
+    ?? html.match(/<div[^>]+id="detail-box-other"[^>]*>([\s\S]*)<\/div>/i);
+  if (!boxMatch) return { splits, splitRanks, ...totals };
+
+  const section = boxMatch[1];
+  const rowRe = /<tr[^>]*class="([^"]*f-time_\d+[^"]*)"[^>]*>([\s\S]*?)<\/tr>/gi;
+  for (const m of section.matchAll(rowRe)) {
+    const classM = m[1].match(/\bf-time_(\d+)\b/);
+    if (!classM) continue;
+    const key = `f-time_${classM[1]}`;
+    const inner = m[2];
+    const timeM = inner.match(/<td[^>]*class="[^"]*f-time_\d+[^"]*"[^>]*>\s*([\d:]+)\s*<\/td>/i)
+      ?? inner.match(/<td[^>]*>\s*([\d:]+)\s*<\/td>/i);
+    const seconds = timeM ? parseTime(timeM[1]) : null;
+    const placeM = inner.match(/<td[^>]*class="\s*last\s*"[^>]*>\s*(\d+|â€“|–|-)\s*<\/td>/i);
+    const place = placeM && /^\d+$/.test(placeM[1].trim()) ? parseInt(placeM[1], 10) : null;
+
+    if (WORKOUT_SUMMARY_MAP[key] && seconds !== null) {
+      splits[WORKOUT_SUMMARY_MAP[key]] = seconds;
+      if (place !== null) splitRanks[WORKOUT_SUMMARY_MAP[key]] = place;
+    } else if (WORKOUT_TOTALS_MAP[key] && seconds !== null) {
+      totals[WORKOUT_TOTALS_MAP[key]] = seconds;
+    }
+  }
+
+  return { splits, splitRanks, ...totals };
+}
+
+// Per-station roxzone transitions. Each station has 4 race-replay rows:
+//   Rox In (f-time_84+4n):     Diff = run leg time to reach corral — NOT a transition, skip
+//   Station In (f-time_85+4n): Diff = seconds from corral entry to starting the machine = rox_in
+//   Station Out (f-time_51+n): Diff = exercise time — captured in WORKOUT_SUMMARY_MAP, skip
+//   Rox Out (f-time_86+4n):    Diff = seconds from finishing machine to exiting corral = rox_out
+const RACE_REPLAY_MAP = {
+  "f-time_85": "skierg_rox_in",
+  "f-time_86": "skierg_rox_out",
+  "f-time_88": "sled_push_rox_in",
+  "f-time_89": "sled_push_rox_out",
+  "f-time_91": "sled_pull_rox_in",
+  "f-time_92": "sled_pull_rox_out",
+  "f-time_94": "burpee_bj_rox_in",
+  "f-time_95": "burpee_bj_rox_out",
+  "f-time_97": "row_rox_in",
+  "f-time_98": "row_rox_out",
+  "f-time_100": "farmers_carry_rox_in",
+  "f-time_101": "farmers_carry_rox_out",
+  "f-time_103": "sandbag_lunge_rox_in",
+  "f-time_104": "sandbag_lunge_rox_out",
+  "f-time_106": "wall_balls_rox_in",
+  "f-time_107": "wall_balls_rox_out",
+};
+
+export function parseRaceReplay(html) {
+  const roxzoneSplits = {};
+  const boxMatch = html.match(/<div[^>]+id="detail-box-splits"[^>]*>([\s\S]*?)<\/div>\s*(?=<div|$)/i)
+    ?? html.match(/<div[^>]+id="detail-box-splits"[^>]*>([\s\S]*)<\/div>/i);
+  if (!boxMatch) return roxzoneSplits;
+
+  const section = boxMatch[1];
+  const rowRe = /<tr[^>]*class="([^"]*f-time_\d+[^"]*)"[^>]*>([\s\S]*?)<\/tr>/gi;
+  for (const m of section.matchAll(rowRe)) {
+    const classM = m[1].match(/\bf-time_(\d+)\b/);
+    if (!classM) continue;
+    const key = `f-time_${classM[1]}`;
+    if (!RACE_REPLAY_MAP[key]) continue;
+    const tds = [...m[2].matchAll(/<td[^>]*>\s*([^<]*)\s*<\/td>/gi)].map((td) => td[1].trim());
+    const seconds = parseTime(tds[tds.length - 1]);
+    if (seconds !== null) roxzoneSplits[RACE_REPLAY_MAP[key]] = seconds;
+  }
+  return roxzoneSplits;
+}
+
+const ENRICH_BATCH_SIZE = 5;
+const ENRICH_BATCH_DELAY_MS = 300;
+
+export async function enrichAthleteSplits(athletes, _resultsPageKey, contestId, season) {
+  const enrichable = athletes.filter((athlete) => athlete.athleteId);
+  const enriched = [...athletes];
+
+  for (let i = 0; i < enrichable.length; i += ENRICH_BATCH_SIZE) {
+    const batch = enrichable.slice(i, i + ENRICH_BATCH_SIZE);
+    await Promise.all(batch.map(async (athlete) => {
+      try {
+        const html = await fetchHtml(buildDetailUrl(athlete.athleteId, contestId, season));
+        const summary = parseWorkoutSummary(html);
+        const roxzoneSplits = parseRaceReplay(html);
+        const idx = enriched.findIndex((candidate) => candidate.athleteId === athlete.athleteId);
+        if (idx !== -1) {
+          enriched[idx] = {
+            ...enriched[idx],
+            splits: summary.splits,
+            splitRanks: summary.splitRanks ?? {},
+            roxzoneSplits,
+            runTotalSeconds: summary.runTotalSeconds ?? null,
+            bestRunLapSeconds: summary.bestRunLapSeconds ?? null,
+            ...(summary.roxzoneSeconds != null ? { roxzoneSeconds: summary.roxzoneSeconds } : {}),
+          };
+        }
+      } catch {
+        // Best-effort enrichment: keep sparse leaderboard data if detail parsing fails.
+      }
+    }));
+    if (i + ENRICH_BATCH_SIZE < enrichable.length) {
+      await new Promise((resolve) => setTimeout(resolve, ENRICH_BATCH_DELAY_MS));
+    }
+  }
+
+  return enriched;
 }
 
 // Debug helper
