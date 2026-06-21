@@ -146,10 +146,30 @@
             <tbody id="races-body"><tr><td colspan="7" class="empty">Load race events.</td></tr></tbody>
           </table>
         </div>
+
+        <!-- Athlete viewer — appears when View Athletes is clicked -->
+        <div id="athlete-viewer" style="display:none;margin-top:12px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <h3 style="margin:0;font-size:15px" id="athlete-viewer-title">Athletes</h3>
+            <button id="close-athlete-viewer" type="button" style="padding:4px 10px;font-size:12px">✕ Close</button>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 8px">Click <strong>Quick Add</strong> to pre-fill the Athlete Registry form. Athletes already in the registry are marked ✓.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Name</th><th>Time</th><th>Registry</th><th></th></tr></thead>
+              <tbody id="athlete-viewer-body"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section class="section">
         <h2>Auto-Pick Results</h2>
+        <!-- Smart suggestions populated after auto-pick -->
+        <div id="smart-suggestions" style="display:none;margin-bottom:14px">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 8px">Based on race data — click Generate to create content immediately.</p>
+          <div id="suggestions-grid" class="mode-grid"></div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>#</th><th>Insight Type</th><th>Headline</th><th>Composite</th><th>Confidence</th><th>Novelty</th><th>Share</th><th>Risk</th><th>Evidence</th></tr></thead>
@@ -256,6 +276,7 @@
       const hashtagList = document.getElementById("hashtag-list");
       let selectedRaceId = null;
       let currentJobId = null;
+      let loadedAthletes = [];
       let currentStatus = "draft";
       let currentSlides = [];
       let currentSlideIndex = 0;
@@ -291,8 +312,132 @@
       function renderRaces(races) {
         racesBody.innerHTML = races.length ? races.map((r) => `<tr>
           <td>${esc(r.eventName)}</td><td>${esc(r.division)}</td><td>${esc(r.sex)}</td><td>${esc(fmtDate(r.eventDate))}</td>
-          <td>${esc(r.athleteCount)}</td><td>${esc(r.status)}</td><td><button data-select="${esc(r.id)}" data-name="${esc(r.eventName)}" type="button">Generate Content</button> <button data-auto="${esc(r.id)}" type="button">Auto-Pick</button></td>
+          <td>${esc(r.athleteCount)}</td><td>${esc(r.status)}</td>
+          <td style="white-space:nowrap">
+            <button data-view-athletes="${esc(r.id)}" data-race-name="${esc(r.eventName)}" type="button">View Athletes</button>
+            <button data-auto="${esc(r.id)}" data-auto-name="${esc(r.eventName)}" type="button">Auto-Pick</button>
+            <button data-select="${esc(r.id)}" data-name="${esc(r.eventName)}" type="button">Generate Content</button>
+          </td>
         </tr>`).join("") : '<tr><td colspan="7" class="empty">No races yet.</td></tr>';
+      }
+
+      function formatTime(seconds) {
+        if (seconds == null || !Number.isFinite(seconds)) return "—";
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        const pad = (n) => String(n).padStart(2, "0");
+        return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+      }
+
+      // "Lastname, Firstname" → "Firstname Lastname"
+      function flipName(name) {
+        if (!name || !name.includes(",")) return name;
+        const [last, first] = name.split(",", 2).map((s) => s.trim());
+        return first ? `${first} ${last}` : last;
+      }
+
+      function renderAthleteViewer(rawRows, raceName) {
+        document.getElementById("athlete-viewer-title").textContent = `Athletes — ${raceName}`;
+        const registryNames = new Set(loadedAthletes.map((a) => a.full_name.toLowerCase()));
+        function inRegistry(name) {
+          return registryNames.has(name.toLowerCase()) || registryNames.has(flipName(name).toLowerCase());
+        }
+        document.getElementById("athlete-viewer-body").innerHTML = rawRows.length
+          ? rawRows.map((a) => {
+              const known = inRegistry(a.name);
+              const display = flipName(a.name);
+              return `<tr>
+                <td>${esc(String(a.rank))}</td>
+                <td>${esc(display)}</td>
+                <td>${esc(formatTime(a.finishTimeSeconds))}</td>
+                <td style="text-align:center">${known ? "✓" : ""}</td>
+                <td>${known ? "" : `<button data-quick-add="${esc(a.name)}" data-display-name="${esc(display)}" type="button" style="padding:3px 8px;font-size:12px">Quick Add</button>`}</td>
+              </tr>`;
+            }).join("")
+          : '<tr><td colspan="5" class="empty">No athlete data.</td></tr>';
+        document.getElementById("athlete-viewer").style.display = "block";
+        document.getElementById("athlete-viewer").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      function renderSmartSuggestions(rawRows, insights) {
+        const el = document.getElementById("smart-suggestions");
+        const grid = document.getElementById("suggestions-grid");
+        if (!rawRows.length) { el.style.display = "none"; return; }
+
+        const top = rawRows.slice(0, 3);
+        const winner = top[0] ? flipName(top[0].name) : null;
+        const second = top[1] ? flipName(top[1].name) : null;
+        const third = top[2] ? flipName(top[2].name) : null;
+
+        // Pick myth if one fired
+        const mythInsight = insights.find((i) => i.type.startsWith("myth_"));
+        let mythKey = null;
+        if (mythInsight?.type === "myth_sleds_decide") mythKey = "sleds";
+        else if (mythInsight?.type === "myth_wallballs_decide") mythKey = "wall_balls";
+        else if (mythInsight?.type === "myth_running_doesnt_matter" || mythInsight?.type === "myth_stations_decide") mythKey = "running";
+
+        const suggestions = [
+          winner && {
+            label: "Athlete Spotlight",
+            desc: winner,
+            mode: "athlete_spotlight",
+            params: { athleteName: winner },
+            emoji: "🥇",
+          },
+          winner && second && {
+            label: "Head-to-Head",
+            desc: `${winner} vs ${second}`,
+            mode: "head_to_head",
+            params: { athleteA: winner, athleteB: second },
+            emoji: "⚔️",
+          },
+          second && third && {
+            label: "H2H — 2nd vs 3rd",
+            desc: `${second} vs ${third}`,
+            mode: "head_to_head",
+            params: { athleteA: second, athleteB: third },
+            emoji: "⚔️",
+          },
+          {
+            label: "Podium Breakdown",
+            desc: `${winner || "top 3"}${second ? `, ${second}` : ""}${third ? `, ${third}` : ""}`,
+            mode: "podium_breakdown",
+            params: {},
+            emoji: "🏆",
+          },
+          {
+            label: "Race Breakdown",
+            desc: "Summarise the race-level data story",
+            mode: "race_breakdown",
+            params: {},
+            emoji: "📊",
+          },
+          mythKey && {
+            label: "Myth Buster",
+            desc: mythInsight.headline,
+            mode: "myth_buster",
+            params: { myth: mythKey },
+            emoji: "💥",
+          },
+          winner && {
+            label: "What We Can Learn",
+            desc: "Extract practical lessons from the podium",
+            mode: "what_we_learn",
+            params: {},
+            emoji: "💡",
+          },
+        ].filter(Boolean);
+
+        grid.innerHTML = suggestions.map((s) =>
+          `<div class="mode-card">
+            <div class="mode-title">${s.emoji} ${esc(s.label)}</div>
+            <div style="font-size:12px;color:var(--muted)">${esc(s.desc)}</div>
+            <button data-suggest-mode="${esc(s.mode)}" data-suggest-params="${esc(JSON.stringify(s.params))}" type="button">Generate</button>
+          </div>`
+        ).join("");
+
+        el.style.display = "block";
       }
       function renderInsights(insights) {
         insightsBody.innerHTML = insights.length ? insights.map((i, idx) => `<tr>
@@ -399,8 +544,9 @@
         status(mainStatus, "Loading...");
         try {
           const [races, athletes] = await Promise.all([api("/races"), api("/athletes")]);
+          loadedAthletes = athletes.athletes || [];
           renderRaces(races.races || []);
-          renderAthletes(athletes.athletes || []);
+          renderAthletes(loadedAthletes);
           renderModeCards();
           await loadJobs();
           status(mainStatus, "Loaded", "ok");
@@ -451,13 +597,37 @@
           selectedRaceEl.textContent = `Selected race: ${event.target.dataset.name || selectId}`;
           return;
         }
+
+        const viewId = event.target?.dataset?.viewAthletes;
+        if (viewId) {
+          selectedRaceId = viewId;
+          const raceName = event.target.dataset.raceName || viewId;
+          status(mainStatus, "Loading athlete list...");
+          try {
+            const data = await api(`/races/${viewId}`);
+            renderAthleteViewer(data.rawRows || [], raceName);
+            status(mainStatus, `Showing ${(data.rawRows || []).length} athletes from ${raceName}.`, "ok");
+          } catch (err) { status(mainStatus, err.message, "err"); }
+          return;
+        }
+
         const id = event.target?.dataset?.auto;
         if (!id) return;
+        selectedRaceId = id;
+        const raceName = event.target.dataset.autoName || id;
+        selectedRaceEl.textContent = `Selected race: ${raceName}`;
         status(mainStatus, "Running Auto-Pick...");
         try {
-          const data = await api(`/races/${id}/auto-pick`, { method: "POST" });
-          renderInsights(data.insights || []);
-          status(mainStatus, `Auto-Pick returned ${(data.insights || []).length} insight(s).`, "ok");
+          const [autoPickData, raceData] = await Promise.all([
+            api(`/races/${id}/auto-pick`, { method: "POST" }),
+            api(`/races/${id}`),
+          ]);
+          const insights = autoPickData.insights || [];
+          const rawRows = raceData.rawRows || [];
+          renderSmartSuggestions(rawRows, insights);
+          renderInsights(insights);
+          status(mainStatus, `Auto-Pick: ${insights.length} insight(s). See suggestions above.`, "ok");
+          document.getElementById("smart-suggestions").scrollIntoView({ behavior: "smooth", block: "start" });
         } catch (err) { status(mainStatus, err.message, "err"); }
       });
       athletesBody.addEventListener("click", async (event) => {
@@ -467,6 +637,29 @@
           await api(`/athletes/${id}`, { method: "DELETE" });
           await loadAll();
         } catch (err) { status(athleteStatus, err.message, "err"); }
+      });
+
+      document.getElementById("athlete-viewer").addEventListener("click", (event) => {
+        const rawName = event.target?.dataset?.quickAdd;
+        const displayName = event.target?.dataset?.displayName;
+        if (!rawName) return;
+        document.getElementById("athlete-name").value = displayName || rawName;
+        document.getElementById("athlete-handle").value = "";
+        document.getElementById("athlete-followers").value = "";
+        document.querySelector(".section:has(#athlete-name)").scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById("athlete-handle").focus();
+      });
+
+      document.getElementById("close-athlete-viewer").addEventListener("click", () => {
+        document.getElementById("athlete-viewer").style.display = "none";
+      });
+
+      document.getElementById("suggestions-grid").addEventListener("click", (event) => {
+        const mode = event.target?.dataset?.suggestMode;
+        if (!mode) return;
+        const params = JSON.parse(event.target.dataset.suggestParams || "{}");
+        generateContent(mode, params);
+        document.querySelector(".section:has(#slide-preview)").scrollIntoView({ behavior: "smooth", block: "start" });
       });
       modeGrid.addEventListener("click", (event) => {
         const mode = event.target?.dataset?.generate;
