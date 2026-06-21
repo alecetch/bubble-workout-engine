@@ -94,26 +94,48 @@ async function launchBrowser() {
   return puppeteer.launch({ headless: "new", args: BROWSER_ARGS });
 }
 
-// Debug helper — shows both plain-fetch HTML and Puppeteer page structure
-export async function debugPage(url) {
-  // Plain HTTP fetch (same path as hyroxImportController)
-  let fetchResult = null;
-  try {
-    const html = await fetchHtml(url);
-    fetchResult = {
-      ok: true,
-      length: html.length,
-      // First 3000 chars of raw HTML
-      htmlSnippet: html.slice(0, 3000),
-      // All event_sub_group occurrences in raw HTML
-      subGroupMatches: [...html.matchAll(/event_sub_group=([^"&\s<>]+)/gi)]
-        .map((m) => decodeURIComponent(m[1].replace(/\+/g, " "))),
-    };
-  } catch (err) {
-    fetchResult = { ok: false, error: err.message };
+// Debug helper — inspects the Mika Timing AJAX API to find division endpoints
+export async function debugPage(targetUrl) {
+  const results = {};
+
+  // Try multiple URL variants
+  const parsed = new URL(targetUrl);
+  const mainGroup = parsed.searchParams.get("event_main_group");
+  const seasonMatch = parsed.pathname.match(/season-(\d+)/);
+
+  // Guess season from URL or default
+  const seasonNum = seasonMatch ? seasonMatch[1] : "8";
+
+  const urlsToProbe = [
+    targetUrl,
+    `https://results.hyrox.com/season-${seasonNum}/?event_main_group=${encodeURIComponent(mainGroup)}`,
+    // Mika Timing AJAX content endpoints
+    `https://results.hyrox.com/season-${seasonNum}/?content=main_nav&event=events_hyrox&event_main_group=${encodeURIComponent(mainGroup)}`,
+    `https://results.hyrox.com/season-${seasonNum}/?content=list_main_event&event=events_hyrox&event_main_group=${encodeURIComponent(mainGroup)}`,
+    `https://results.hyrox.com/season-${seasonNum}/?content=nav_event_main_group&event=events_hyrox&event_main_group=${encodeURIComponent(mainGroup)}`,
+  ];
+
+  for (const url of urlsToProbe) {
+    try {
+      const html = await fetchHtml(url);
+      const subGroups = [...html.matchAll(/event_sub_group=([^"&\s<>]+)/gi)]
+        .map((m) => decodeURIComponent(m[1].replace(/\+/g, " ")));
+      const hyroxMatches = [...html.matchAll(/HYROX[^<"]{0,60}/g)]
+        .map((m) => m[0].trim())
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .slice(0, 30);
+      // Look for JSON blobs in <script> tags
+      const jsonBlobs = [...html.matchAll(/<script[^>]*>([\s\S]{50,2000}?)<\/script>/gi)]
+        .map((m) => m[1].trim())
+        .filter((s) => s.includes("sub_group") || s.includes("contest") || s.includes("HYROX"))
+        .slice(0, 3);
+      results[url] = { length: html.length, subGroups, hyroxMatches, jsonBlobs };
+    } catch (err) {
+      results[url] = { error: err.message };
+    }
   }
 
-  return { fetchResult };
+  return results;
 }
 
 export async function fetchDivisions(resultsPageKey, season = null) {
