@@ -112,9 +112,10 @@ export async function fetchDivisions(resultsPageKey, season = null) {
     page.setDefaultNavigationTimeout(PUPPETEER_TIMEOUT_MS);
     page.on("pageerror", () => {});
 
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: PUPPETEER_TIMEOUT_MS });
+    // networkidle2 waits for the page's AJAX calls to settle before we try to read links
+    await page.goto(url, { waitUntil: "networkidle2", timeout: PUPPETEER_TIMEOUT_MS }).catch(() => {});
 
-    // Wait for division links scoped to our event, OR for a contest <select> with options
+    // After network settles, wait up to 15 s for division links or a contest select to appear
     await Promise.race([
       page.waitForFunction(
         (rpk) => {
@@ -125,7 +126,7 @@ export async function fetchDivisions(resultsPageKey, season = null) {
             } catch { return false; }
           });
         },
-        { timeout: PUPPETEER_TIMEOUT_MS },
+        { timeout: 15000 },
         resultsPageKey,
       ),
       page.waitForFunction(
@@ -133,9 +134,8 @@ export async function fetchDivisions(resultsPageKey, season = null) {
           const sel = document.querySelector('select[name="event_sub_group"], select[name="contest_id"], select.contest-select');
           return sel && sel.options.length > 1;
         },
-        { timeout: PUPPETEER_TIMEOUT_MS },
+        { timeout: 15000 },
       ),
-      new Promise((resolve) => setTimeout(resolve, 10000)),
     ]).catch(() => {});
 
     const divisions = await page.evaluate((rpk) => {

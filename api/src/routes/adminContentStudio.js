@@ -396,7 +396,7 @@ adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scra
     );
     const eventName = evRow.rows[0]?.event_name ?? resultsPageKey;
     const eventDate = evRow.rows[0]?.start_date ?? null;
-    const season = evRow.rows[0]?.season ?? null;
+    const dbSeason = evRow.rows[0]?.season ?? season; // prefer DB value, fall back to request value
 
     const result = await pool.query(
       `INSERT INTO cs_race_events (
@@ -408,7 +408,7 @@ adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scra
       [
         `${eventName} — ${division}`,
         eventDate,
-        season,
+        dbSeason,
         divisionType,
         sex,
         rows.length,
