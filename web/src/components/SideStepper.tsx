@@ -8,7 +8,7 @@ const STEPS = [
 ];
 
 interface SideStepperProps {
-  current: number; // 1-based
+  current: number;
 }
 
 export function SideStepper({ current }: SideStepperProps) {
@@ -25,12 +25,11 @@ export function SideStepper({ current }: SideStepperProps) {
         ]
           .filter(Boolean)
           .join(" ");
+
         return (
           <div key={step.label} style={{ display: "flex", alignItems: "center" }}>
             <div className={cls}>
-              <div className={styles.circle}>
-                {isDone ? "✓" : String(num)}
-              </div>
+              <div className={styles.circle}>{isDone ? "✓" : String(num)}</div>
               <span className={styles.label}>{step.label}</span>
             </div>
             {i < STEPS.length - 1 && <div className={styles.connector} />}

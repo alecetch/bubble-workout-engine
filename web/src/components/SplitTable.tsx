@@ -20,6 +20,7 @@ export function SplitTable({
         <tr>
           <th>#</th>
           <th>Segment</th>
+          <th className={styles.typeHead}>Type</th>
           <th>Time</th>
           <th></th>
         </tr>
@@ -38,15 +39,17 @@ export function SplitTable({
               <td className={styles.labelCell}>
                 <div className={styles.labelInner}>
                   <span className={styles.segLabel}>{seg.label}</span>
-                  <span
-                    className={[
-                      styles.typeTag,
-                      seg.type === "run" ? styles.run : styles.station,
-                    ].join(" ")}
-                  >
-                    {seg.type === "run" ? "RUN" : "STATION"}
-                  </span>
                 </div>
+              </td>
+              <td className={styles.typeCell}>
+                <span
+                  className={[
+                    styles.typeTag,
+                    seg.type === "run" ? styles.run : styles.station,
+                  ].join(" ")}
+                >
+                  {seg.type === "run" ? "RUN" : "STATION"}
+                </span>
               </td>
               <td className={styles.inputCell}>
                 <input

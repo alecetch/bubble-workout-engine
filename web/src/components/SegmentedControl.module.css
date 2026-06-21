@@ -49,3 +49,14 @@
   color: #fff;
   font-weight: 600;
 }
+
+@media (min-width: 769px) {
+  .wrapper {
+    gap: 4px;
+  }
+
+  .option {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
