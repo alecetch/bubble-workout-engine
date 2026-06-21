@@ -112,9 +112,11 @@
                 </select>
               </div>
               <button id="fetch-divisions-btn" type="button" disabled>Load Divisions</button>
-              <div class="control wide">
-                <label for="scrape-division-manual">Or type division name exactly as shown on results.hyrox.com</label>
-                <input id="scrape-division-manual" type="text" placeholder="e.g. HYROX Men - Saturday" />
+              <div class="control wide" id="scrape-manual-group" style="display:none">
+                <label for="scrape-division-manual">Division name (if auto-detect failed)</label>
+                <input id="scrape-division-manual" type="text" placeholder="e.g. HYROX PRO" />
+                <label for="scrape-contest-id-manual" style="margin-top:6px">Contest ID (option value from page source)</label>
+                <input id="scrape-contest-id-manual" type="text" placeholder="e.g. HPRO_LR3MS4JI1682" />
               </div>
               <button id="scrape-btn" type="button" disabled>Scrape Top 50</button>
             </div>
@@ -530,6 +532,8 @@
       const scrapeRaceEl = document.getElementById("scrape-race");
       const scrapeDivisionEl = document.getElementById("scrape-division");
       const scrapeDivisionManualEl = document.getElementById("scrape-division-manual");
+      const scrapeContestIdManualEl = document.getElementById("scrape-contest-id-manual");
+      const scrapeManualGroupEl = document.getElementById("scrape-manual-group");
       const fetchDivisionsBtn = document.getElementById("fetch-divisions-btn");
       const scrapeBtn = document.getElementById("scrape-btn");
       const scrapeStatusEl = document.getElementById("scrape-status");
@@ -548,8 +552,15 @@
         return opt?.dataset?.season || scrapeSeasonEl.value || null;
       }
 
-      function activeDivision() {
-        return scrapeDivisionManualEl.value.trim() || scrapeDivisionEl.value || "";
+      function activeDivisionLabel() {
+        if (scrapeDivisionManualEl.value.trim()) return scrapeDivisionManualEl.value.trim();
+        const idx = scrapeDivisionEl.selectedIndex;
+        return idx > 0 ? (scrapeDivisionEl.options[idx]?.textContent?.trim() ?? "") : "";
+      }
+
+      function activeContestId() {
+        if (scrapeContestIdManualEl.value.trim()) return scrapeContestIdManualEl.value.trim();
+        return scrapeDivisionEl.value || ""; // option.value stores contestId
       }
 
       function rebuildRaceDropdown() {
@@ -569,6 +580,8 @@
         scrapeDivisionEl.innerHTML = '<option value="">— click Load Divisions —</option>';
         scrapeDivisionEl.disabled = true;
         scrapeDivisionManualEl.value = "";
+        scrapeContestIdManualEl.value = "";
+        scrapeManualGroupEl.style.display = "none";
         fetchDivisionsBtn.disabled = true;
         updateScrapeBtn();
       }
@@ -601,13 +614,15 @@
       scrapeSeasonEl.addEventListener("change", rebuildRaceDropdown);
 
       function updateScrapeBtn() {
-        scrapeBtn.disabled = !scrapeRaceEl.value || !activeDivision();
+        scrapeBtn.disabled = !scrapeRaceEl.value || !activeDivisionLabel() || !activeContestId();
       }
 
       scrapeRaceEl.addEventListener("change", () => {
         scrapeDivisionEl.innerHTML = '<option value="">— click Load Divisions —</option>';
         scrapeDivisionEl.disabled = true;
         scrapeDivisionManualEl.value = "";
+        scrapeContestIdManualEl.value = "";
+        scrapeManualGroupEl.style.display = "none";
         fetchDivisionsBtn.disabled = !scrapeRaceEl.value;
         updateScrapeBtn();
       });
@@ -623,18 +638,20 @@
           const data = await api(`/hyrox-events/${encodeURIComponent(key)}/divisions${qs}`);
           const divisions = data.divisions || [];
           if (!divisions.length) {
-            status(scrapeStatusEl, "Auto-detection found no divisions — type the division name manually below.", "err");
+            scrapeManualGroupEl.style.display = "block";
+            status(scrapeStatusEl, "Auto-detection found no divisions — enter the division name and contest ID manually below.", "err");
             return;
           }
           scrapeDivisionEl.innerHTML = '<option value="">— pick a division —</option>';
           divisions.forEach((d) => {
             const opt = document.createElement("option");
-            opt.value = d;
-            opt.textContent = d;
+            opt.value = d.contestId;   // contestId is the option value (e.g. HPRO_LR3MS4JI1682)
+            opt.textContent = d.label; // human label (e.g. "HYROX PRO")
             scrapeDivisionEl.appendChild(opt);
           });
           scrapeDivisionEl.disabled = false;
-          status(scrapeStatusEl, `Found ${divisions.length} division(s). Pick one or type manually, then click Scrape Top 50.`, "ok");
+          scrapeManualGroupEl.style.display = "none";
+          status(scrapeStatusEl, `Found ${divisions.length} division(s). Pick one then click Scrape Top 50.`, "ok");
         } catch (err) {
           status(scrapeStatusEl, `${err.message} — type the division name manually below.`, "err");
         } finally {
@@ -645,11 +662,13 @@
 
       scrapeDivisionEl.addEventListener("change", updateScrapeBtn);
       scrapeDivisionManualEl.addEventListener("input", updateScrapeBtn);
+      scrapeContestIdManualEl.addEventListener("input", updateScrapeBtn);
 
       scrapeBtn.addEventListener("click", async () => {
         const key = scrapeRaceEl.value;
-        const division = activeDivision();
-        if (!key || !division) return;
+        const division = activeDivisionLabel();
+        const contestId = activeContestId();
+        if (!key || !division || !contestId) return;
         const season = selectedSeason();
         status(scrapeStatusEl, `Scraping "${division}" from ${key}… (may take 30–60 s)`);
         scrapeBtn.disabled = true;
@@ -657,7 +676,7 @@
           const data = await api(`/hyrox-events/${encodeURIComponent(key)}/scrape`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ division, ...(season ? { season: Number(season) } : {}) }),
+            body: JSON.stringify({ division, contestId, ...(season ? { season: Number(season) } : {}) }),
           });
           status(scrapeStatusEl, `Done — ${data.athleteCount} athletes scraped (${data.division} / ${data.sex}). Race "${data.eventName}" added.`, "ok");
           selectedRaceId = data.raceEventId;

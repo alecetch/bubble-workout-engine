@@ -364,6 +364,44 @@ adminContentStudioRouter.get("/content-studio/hyrox-events", async (_req, res) =
   }
 });
 
+// Debug route — raw-fetches any results.hyrox.com URL and returns info about the HTML
+adminContentStudioRouter.get("/content-studio/debug-fetch", async (req, res) => {
+  const url = String(req.query.url ?? "").trim();
+  if (!url.startsWith("https://results.hyrox.com/")) {
+    return res.status(400).json({ error: "url must start with https://results.hyrox.com/" });
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const fetchRes = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const html = await fetchRes.text();
+    const fPosCount = (html.match(/f-__pos/g) ?? []).length;
+    const tableMatch = html.match(/<table[^>]*class="[^"]*list[^"]*"[^>]*>/i);
+    const tbodyMatch = html.match(/<tbody[^>]*>([\s\S]{0,800})/i);
+    const trCount = (html.match(/<tr/gi) ?? []).length;
+    const pidSnippet = (html.match(/pid=\w+/g) ?? []).slice(0, 10);
+    const midSlice = html.slice(Math.floor(html.length / 2), Math.floor(html.length / 2) + 1500);
+    // Extract AJAX/fetch/XHR patterns from inline scripts
+    const scriptBlocks = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
+    const ajaxPatterns = scriptBlocks.flatMap((s) => [
+      ...(s.match(/(?:ajax|fetch|xhr|url)[^;'"]{0,80}/gi) ?? []),
+      ...(s.match(/["'][^"']*(?:pid|event)[^"']*["']/g) ?? []),
+    ]).slice(0, 20);
+    const jsUrls = [...html.matchAll(/src="([^"]*\.js[^"]*)"/gi)].map((m) => m[1]).filter((u) => u.includes("mika") || u.includes("results") || u.includes("live"));
+    return res.json({ url, status: fetchRes.status, htmlLength: html.length, fPosCount, trCount, tableMatch: !!tableMatch, tbodySnippet: tbodyMatch ? tbodyMatch[1].slice(0, 600) : null, pidSnippet, ajaxPatterns, jsUrls, midSlice });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Debug route — returns raw Puppeteer page snapshot for a given results URL
 adminContentStudioRouter.get("/content-studio/debug-page", async (req, res) => {
   const url = String(req.query.url ?? "").trim();
@@ -393,11 +431,13 @@ adminContentStudioRouter.get("/content-studio/hyrox-events/:resultsPageKey/divis
 adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scrape", express.json(), async (req, res) => {
   const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
   const division = String(req.body?.division ?? "").trim();
+  const contestId = String(req.body?.contestId ?? "").trim() || null;
   const season = req.body?.season ? Number(req.body.season) : null;
   if (!division) return res.status(400).json({ ok: false, error: "division is required" });
+  if (!contestId) return res.status(400).json({ ok: false, error: "contestId is required — select a division from the list" });
 
   try {
-    const rows = await scrapeLeaderboard(resultsPageKey, division, 50, season);
+    const rows = await scrapeLeaderboard(resultsPageKey, division, 50, season, contestId);
     if (!rows.length) return res.status(422).json({ ok: false, error: "Scrape returned no rows" });
 
     const divisionType = rows[0].division;

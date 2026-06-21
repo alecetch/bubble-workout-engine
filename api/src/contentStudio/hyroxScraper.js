@@ -1,27 +1,58 @@
 const RESULTS_BASE = "https://results.hyrox.com/";
-const FETCH_TIMEOUT_MS = 15000;
-const PUPPETEER_TIMEOUT_MS = 45000;
-const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"];
+const FETCH_TIMEOUT_MS = 30000;
 
-// Use encodeURIComponent (not URLSearchParams) so spaces become %20, not +
-function buildEventUrl(resultsPageKey, division = null, seasonNum = null) {
+const FETCH_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+// Build the event index URL (shows division picker in static HTML)
+function buildIndexUrl(resultsPageKey, seasonNum) {
   const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
-  let url = `${base}?event_main_group=${encodeURIComponent(resultsPageKey)}`;
-  if (division) url += `&event_sub_group=${encodeURIComponent(division)}`;
-  return url;
+  return `${base}?event_main_group=${encodeURIComponent(resultsPageKey)}`;
 }
 
 async function fetchHtml(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
+    const res = await fetch(url, { headers: FETCH_HEADERS, signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// POST multipart form to get the leaderboard HTML.
+// The Mika Timing list page renders server-side only when submitted via POST form.
+async function postListForm(resultsPageKey, contestId, seasonNum, { sex = "", numResults = 50 } = {}) {
+  const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
+  const url = `${base}?pid=list&pidp=ranking_nav`;
+
+  const body = new FormData();
+  body.append("lang", "EN_CAP");
+  body.append("startpage", "start_responsive");
+  body.append("startpage_type", "lists");
+  body.append("event_main_group", resultsPageKey);
+  body.append("event", contestId);
+  body.append("ranking", "time_finish_netto");
+  body.append("search[age_class]", "%");
+  if (sex) body.append("search[sex]", sex);
+  body.append("num_results", String(numResults));
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
     const res = await fetch(url, {
+      method: "POST",
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
+        ...FETCH_HEADERS,
+        "Referer": buildIndexUrl(resultsPageKey, seasonNum),
       },
+      body,
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -32,33 +63,68 @@ async function fetchHtml(url) {
   }
 }
 
-// Parse division links from static HTML.
-// Rules:
-//   - link has event_sub_group AND event_main_group === resultsPageKey  → include
-//   - link has event_sub_group AND no event_main_group (relative link)  → include
-//   - link has event_sub_group AND event_main_group for a DIFFERENT event → exclude
+// Parse the Mika Timing event index page to extract divisions for a specific event.
+// The static HTML contains:
+//   <select id="default-lists-event" name="event">
+//     <optgroup label="2026 Buenos Aires">
+//       <option value="HPRO_LR3MS4JI1682">HYROX PRO</option>
+//       ...
+//     </optgroup>
+//   </select>
 function parseDivisionsFromHtml(html, resultsPageKey) {
-  const divisions = new Set();
+  const divisions = [];
 
-  const hrefRe = /href="([^"]+)"/gi;
-  for (const hrefMatch of html.matchAll(hrefRe)) {
-    const href = hrefMatch[1];
-    if (!href.includes("event_sub_group=")) continue;
+  const selectRe = /<select[^>]+(?:id="default-lists-event"|name="event")[^>]*>([\s\S]*?)<\/select>/i;
+  const selectMatch = html.match(selectRe);
+  if (!selectMatch) return [];
 
-    const mainGroupMatch = href.match(/event_main_group=([^"&\s]+)/);
-    if (mainGroupMatch) {
-      const mainGroup = decodeURIComponent(mainGroupMatch[1].replace(/\+/g, " ")).trim();
-      if (mainGroup !== resultsPageKey) continue; // explicitly a different event
-    }
-    // No event_main_group in href → relative link, accept it
+  const escapedKey = resultsPageKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const optgroupRe = new RegExp(
+    `<optgroup[^>]+label="${escapedKey}"[^>]*>([\\s\\S]*?)<\\/optgroup>`,
+    "i",
+  );
+  const optgroupMatch = selectMatch[1].match(optgroupRe);
+  if (!optgroupMatch) return [];
 
-    const subGroupMatch = href.match(/event_sub_group=([^"&\s]+)/);
-    if (!subGroupMatch) continue;
-    const value = decodeURIComponent(subGroupMatch[1].replace(/\+/g, " ")).trim();
-    if (value) divisions.add(value);
+  const optionRe = /<option[^>]+value="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
+  let m;
+  while ((m = optionRe.exec(optgroupMatch[1])) !== null) {
+    const contestId = m[1].trim();
+    const label = m[2].trim();
+    if (contestId && label) divisions.push({ label, contestId });
   }
 
-  return [...divisions].filter((d) => /hyrox|open|pro|double|mixed|relay|women|men/i.test(d));
+  return divisions;
+}
+
+// Parse a Mika Timing list HTML page.
+// The list uses <ul>/<li> structure, NOT <table>/<tr>.
+// Each athlete row is: <li class="... list-group-item row ...">
+// Rank:  <div class="... place-primary numeric ...">1</div>
+// Name:  <h4 class="... type-fullname ..."><a ...>Lastname, Firstname</a></h4>
+// Time:  <div class="... type-time ..."><div class="...">Total</div>00:57:01</div>
+function parseListRows(html) {
+  const rows = [];
+  const liRe = /<li class="[^"]*list-group-item row[^"]*">([\s\S]*?)(?=<li class="|<\/ul>)/gi;
+  for (const liMatch of html.matchAll(liRe)) {
+    const item = liMatch[1];
+
+    const rankM = item.match(/place-primary numeric[^>]*>(\d+)<\/div>/i);
+    if (!rankM) continue;
+    const rank = parseInt(rankM[1], 10);
+    if (!Number.isFinite(rank) || rank < 1) continue;
+
+    const nameM = item.match(/type-fullname[^>]*><a[^>]*>([^<]+)<\/a>/i);
+    const name = nameM ? nameM[1].trim() : null;
+    if (!name) continue;
+
+    // Time is the text node after the inner label div inside type-time
+    const timeM = item.match(/type-time[^>]*>[\s\S]*?<\/div>\s*([\d:]+)\s*<\/div>/i);
+    const time = timeM ? timeM[1].trim() : null;
+
+    rows.push({ rank, name, time });
+  }
+  return rows;
 }
 
 // Parse time string "H:MM:SS" or "MM:SS" → seconds
@@ -71,231 +137,68 @@ function parseTime(str) {
   return null;
 }
 
-function normaliseDivisionSex(divisionLabel) {
-  const lower = divisionLabel.toLowerCase();
-  if (lower.includes("women") || lower.includes("female")) return "female";
+function normaliseDivisionSex(label) {
+  const lower = label.toLowerCase();
+  if (lower.includes("women") || lower.includes("female") || lower.includes("woman")) return "female";
   return "male";
 }
 
-function normaliseDivisionType(divisionLabel) {
-  const lower = divisionLabel.toLowerCase();
+function normaliseDivisionType(label) {
+  const lower = label.toLowerCase();
+  if (lower.includes("pro") && lower.includes("double")) return "doubles_pro";
   if (lower.includes("pro")) return "pro";
   if (lower.includes("double") && lower.includes("mixed")) return "doubles_mixed";
-  if (lower.includes("double") && (lower.includes("women") || lower.includes("female"))) return "doubles_women";
-  if (lower.includes("double")) return "doubles_men";
-  if (lower.includes("relay")) return "relay";
+  if (lower.includes("double")) return "doubles";
+  if (lower.includes("relay") || lower.includes("team relay")) return "relay";
+  if (lower.includes("adaptive")) return "adaptive";
   return "open";
 }
 
-// ─── Puppeteer scraping ────────────────────────────────────────────────────────
+// ─── Public API ───────────────────────────────────────────────────────────────
 
-async function launchBrowser() {
-  const { default: puppeteer } = await import("puppeteer");
-  return puppeteer.launch({ headless: "new", args: BROWSER_ARGS });
+// Returns [{ label: "HYROX PRO", contestId: "HPRO_LR3MS4JI1682" }, ...]
+export async function fetchDivisions(resultsPageKey, season = null) {
+  const url = buildIndexUrl(resultsPageKey, season);
+  const html = await fetchHtml(url);
+  return parseDivisionsFromHtml(html, resultsPageKey);
 }
 
-// Debug helper — finds the HTML context around HYROX division names
+// Scrapes the leaderboard via POST to the Mika Timing list form.
+// Returns athlete rows ready for analyseRaceEvent.
+export async function scrapeLeaderboard(resultsPageKey, divisionLabel, limit = 50, season = null, contestId = null) {
+  if (!contestId) {
+    throw new Error("contestId is required — fetch divisions first to get the contest ID");
+  }
+
+  const sex = normaliseDivisionSex(divisionLabel);
+  const divisionType = normaliseDivisionType(divisionLabel);
+
+  const html = await postListForm(resultsPageKey, contestId, season, { numResults: Math.min(limit, 50) });
+  const rawRows = parseListRows(html);
+
+  if (rawRows.length === 0) {
+    throw new Error("No results found — the leaderboard may not be available yet or the contest ID is incorrect");
+  }
+
+  return rawRows.slice(0, limit).map((row) => ({
+    rank: row.rank,
+    name: row.name,
+    instagramHandle: null,
+    finishTimeSeconds: parseTime(row.time),
+    roxzoneSeconds: null,
+    splits: {},
+    division: divisionType,
+    sex,
+  }));
+}
+
+// Debug helper
 export async function debugPage(targetUrl) {
   const parsed = new URL(targetUrl);
   const mainGroup = parsed.searchParams.get("event_main_group");
   const seasonNum = parsed.pathname.match(/season-(\d+)/)?.[1] ?? "8";
-  const url = `https://results.hyrox.com/season-${seasonNum}/?event_main_group=${encodeURIComponent(mainGroup)}`;
-
+  const url = buildIndexUrl(mainGroup, seasonNum);
   const html = await fetchHtml(url);
-
-  // Find 300-char window around each HYROX match to see surrounding HTML tags
-  const contexts = [];
-  const re = /HYROX[^<"&\r\n]{0,80}/g;
-  let m;
-  const seen = new Set();
-  while ((m = re.exec(html)) !== null) {
-    const key = m[0].trim();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const start = Math.max(0, m.index - 200);
-    const end = Math.min(html.length, m.index + 200);
-    contexts.push({ match: key, context: html.slice(start, end).replace(/\s+/g, " ") });
-  }
-
-  // Also find every <a href that references event_sub_group anywhere in the page
-  const allSubGroupHrefs = [...html.matchAll(/href="([^"]*event_sub_group[^"]*)"/gi)]
-    .map((m2) => m2[1]);
-
-  // Any occurrence of event_sub_group in any format (JS vars, JSON, etc)
-  const subGroupOccurrences = [...html.matchAll(/event_sub_group[=:%"']{1,3}([^<"&\s]{3,})/gi)]
-    .map((m2) => decodeURIComponent(m2[1].replace(/\+/g, " ")));
-
-  return { url, length: html.length, contexts, allSubGroupHrefs, subGroupOccurrences };
-}
-
-export async function fetchDivisions(resultsPageKey, season = null) {
-  // Always use the root URL with event_main_group — the season-index page (/season-N/)
-  // lists all events and contaminates the results with other events' sub-groups.
-  const url = buildEventUrl(resultsPageKey, null, null);
-
-  // Fast path: plain HTTP fetch + HTML parse
-  try {
-    const html = await fetchHtml(url);
-    const divisions = parseDivisionsFromHtml(html, resultsPageKey);
-    if (divisions.length > 0) return divisions;
-  } catch {
-    // fall through to puppeteer
-  }
-
-  // Slow path: puppeteer (handles JS-rendered content)
-  const browser = await launchBrowser();
-  try {
-    const page = await browser.newPage();
-    page.setDefaultNavigationTimeout(PUPPETEER_TIMEOUT_MS);
-    page.on("pageerror", () => {});
-
-    // networkidle2 waits for the page's AJAX calls to settle before we try to read links
-    await page.goto(url, { waitUntil: "networkidle2", timeout: PUPPETEER_TIMEOUT_MS }).catch(() => {});
-
-    // After network settles, wait up to 15 s for division links or a contest select to appear
-    await Promise.race([
-      page.waitForFunction(
-        (rpk) => {
-          return [...document.querySelectorAll("a[href]")].some((a) => {
-            try {
-              const u = new URL(a.href, location.href);
-              const mainGroup = u.searchParams.get("event_main_group");
-              const subGroup = u.searchParams.get("event_sub_group");
-              return subGroup && (mainGroup === null || mainGroup === rpk);
-            } catch { return false; }
-          });
-        },
-        { timeout: 15000 },
-        resultsPageKey,
-      ),
-      page.waitForFunction(
-        () => {
-          const sel = document.querySelector('select[name="event_sub_group"], select[name="contest_id"], select.contest-select');
-          return sel && sel.options.length > 1;
-        },
-        { timeout: 15000 },
-      ),
-    ]).catch(() => {});
-
-    const divisions = await page.evaluate((rpk) => {
-      const results = new Set();
-
-      // Strategy 1: links with event_sub_group that either match our event or are relative
-      document.querySelectorAll("a[href]").forEach((a) => {
-        try {
-          const u = new URL(a.href, location.href);
-          const mainGroup = u.searchParams.get("event_main_group");
-          const subGroup = u.searchParams.get("event_sub_group");
-          if (!subGroup) return;
-          // Accept if: no event_main_group (relative), or explicitly our event
-          if (mainGroup === null || mainGroup === rpk) results.add(subGroup);
-        } catch { /* ignore malformed hrefs */ }
-      });
-
-      // Strategy 2: a <select> dedicated to contest/division selection (already scoped to the event)
-      const selectSelectors = [
-        'select[name="event_sub_group"]',
-        'select[name="contest_id"]',
-        'select[name="contest"]',
-        "select.contest-select",
-        "select.division-select",
-      ];
-      for (const sel of selectSelectors) {
-        document.querySelectorAll(`${sel} option`).forEach((opt) => {
-          const t = (opt.textContent || "").trim();
-          const v = (opt.value || "").trim();
-          if (t && t.length > 2 && !/^[-–]+$/.test(t)) results.add(t);
-          else if (v && !/^\d+$/.test(v)) results.add(v);
-        });
-      }
-
-      return [...results];
-    }, resultsPageKey);
-
-    return divisions.filter((d) => /hyrox|open|pro|double|mixed|relay|women|men/i.test(d));
-  } finally {
-    await browser.close();
-  }
-}
-
-export async function scrapeLeaderboard(resultsPageKey, division, limit = 50, season = null) {
-  const url = buildEventUrl(resultsPageKey, division, season);
-  const browser = await launchBrowser();
-  try {
-    const page = await browser.newPage();
-    await page.setDefaultTimeout(PUPPETEER_TIMEOUT_MS);
-    await page.goto(url, { waitUntil: "networkidle2" });
-
-    // Wait for results to appear — try several common Raceresult selectors
-    await Promise.race([
-      page.waitForSelector("table.list tbody tr", { timeout: PUPPETEER_TIMEOUT_MS }),
-      page.waitForSelector(".list-row", { timeout: PUPPETEER_TIMEOUT_MS }),
-      page.waitForSelector("tr.list-row", { timeout: PUPPETEER_TIMEOUT_MS }),
-      page.waitForSelector(".f-__pos", { timeout: PUPPETEER_TIMEOUT_MS }),
-    ]).catch(() => {});
-
-    const rows = await page.evaluate((maxRows) => {
-      function cellText(el) {
-        return (el?.textContent ?? "").replace(/\s+/g, " ").trim();
-      }
-
-      // Strategy 1: Raceresult standard list table — rows with f- class cells
-      const fRows = document.querySelectorAll("tr");
-      const results = [];
-      for (const row of fRows) {
-        if (results.length >= maxRows) break;
-        const posEl = row.querySelector("[class*='f-__pos'], td.pos, td:first-child");
-        const nameEl = row.querySelector("[class*='f-__fullname'], td.name, [class*='f-name']");
-        const timeEl = row.querySelector("[class*='f-time_finish'], td.finish, [class*='f-finish']");
-        if (!posEl || !nameEl || !timeEl) continue;
-        const rank = parseInt(cellText(posEl), 10);
-        const name = cellText(nameEl);
-        const time = cellText(timeEl);
-        if (!rank || !name || !time || name === "Name") continue;
-        results.push({ rank, name, time });
-      }
-      if (results.length > 0) return results;
-
-      // Strategy 2: Generic table — first table on the page with rank, name, time columns
-      const tables = document.querySelectorAll("table");
-      for (const table of tables) {
-        const rows2 = table.querySelectorAll("tbody tr");
-        if (rows2.length < 3) continue;
-        for (const row of rows2) {
-          if (results.length >= maxRows) break;
-          const cells = [...row.querySelectorAll("td")].map(cellText);
-          if (cells.length < 3) continue;
-          const rank = parseInt(cells[0], 10);
-          if (!Number.isInteger(rank) || rank < 1) continue;
-          // Heuristic: look for a cell with H:MM:SS or MM:SS format
-          const timeCell = cells.find((c) => /^\d{1,2}:\d{2}(:\d{2})?$/.test(c));
-          const nameCell = cells.find((c, i) => i > 0 && c.length > 3 && !/^\d/.test(c) && !c.includes(":"));
-          if (!timeCell || !nameCell) continue;
-          results.push({ rank, name: nameCell, time: timeCell });
-        }
-        if (results.length > 0) break;
-      }
-      return results;
-    }, limit);
-
-    if (rows.length === 0) {
-      throw new Error("No results found on page — the division may not exist or the page did not load correctly");
-    }
-
-    const sex = normaliseDivisionSex(division);
-    const divisionType = normaliseDivisionType(division);
-
-    return rows.slice(0, limit).map((row) => ({
-      rank: row.rank,
-      name: row.name,
-      instagramHandle: null,
-      finishTimeSeconds: parseTime(row.time),
-      roxzoneSeconds: null,
-      splits: {},
-      division: divisionType,
-      sex,
-    }));
-  } finally {
-    await browser.close();
-  }
+  const divisions = parseDivisionsFromHtml(html, mainGroup);
+  return { url, htmlLength: html.length, divisions };
 }
