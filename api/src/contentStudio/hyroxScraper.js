@@ -94,34 +94,26 @@ async function launchBrowser() {
   return puppeteer.launch({ headless: "new", args: BROWSER_ARGS });
 }
 
-// Debug helper — loads a URL and returns page structure so we can identify selectors
+// Debug helper — shows both plain-fetch HTML and Puppeteer page structure
 export async function debugPage(url) {
-  const browser = await launchBrowser();
+  // Plain HTTP fetch (same path as hyroxImportController)
+  let fetchResult = null;
   try {
-    const page = await browser.newPage();
-    page.setDefaultNavigationTimeout(PUPPETEER_TIMEOUT_MS);
-    page.on("pageerror", () => {});
-    await page.goto(url, { waitUntil: "networkidle2", timeout: PUPPETEER_TIMEOUT_MS }).catch(() => {});
-    // Give JS a bit more time after network idle
-    await new Promise((r) => setTimeout(r, 3000));
-    return await page.evaluate(() => {
-      const links = [...document.querySelectorAll("a[href]")]
-        .map((a) => a.href)
-        .filter((h) => h.includes("event_sub_group") || h.includes("event_main_group"));
-      const selects = [...document.querySelectorAll("select")].map((s) => ({
-        name: s.name, id: s.id, className: s.className,
-        options: [...s.options].map((o) => ({ value: o.value, text: o.textContent.trim() })),
-      }));
-      const buttons = [...document.querySelectorAll("button, [role=button], [onclick]")]
-        .slice(0, 30)
-        .map((b) => ({ tag: b.tagName, text: b.textContent.trim().slice(0, 80), onclick: b.getAttribute("onclick") }));
-      // Grab all text nodes that look like division names
-      const bodyText = document.body.innerText.slice(0, 3000);
-      return { url: location.href, title: document.title, links, selects, buttons, bodyText };
-    });
-  } finally {
-    await browser.close();
+    const html = await fetchHtml(url);
+    fetchResult = {
+      ok: true,
+      length: html.length,
+      // First 3000 chars of raw HTML
+      htmlSnippet: html.slice(0, 3000),
+      // All event_sub_group occurrences in raw HTML
+      subGroupMatches: [...html.matchAll(/event_sub_group=([^"&\s<>]+)/gi)]
+        .map((m) => decodeURIComponent(m[1].replace(/\+/g, " "))),
+    };
+  } catch (err) {
+    fetchResult = { ok: false, error: err.message };
   }
+
+  return { fetchResult };
 }
 
 export async function fetchDivisions(resultsPageKey, season = null) {
