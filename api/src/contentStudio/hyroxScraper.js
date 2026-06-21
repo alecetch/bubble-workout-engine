@@ -123,7 +123,6 @@ export async function debugPage(url) {
     await browser.close();
   }
 }
-}
 
 export async function fetchDivisions(resultsPageKey, season = null) {
   // Always use the root URL with event_main_group — the season-index page (/season-N/)
