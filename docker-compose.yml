@@ -14,7 +14,9 @@ services:
       retries: 20
 
   api:
-    image: node:20
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
     env_file:
       - ./api/.env
     working_dir: /app
@@ -30,9 +32,13 @@ services:
       export PGUSER=\"$$POSTGRES_USER\";
       export PGPASSWORD=\"$$POSTGRES_PASSWORD\";
       export PGDATABASE=\"$$POSTGRES_DB\";
+      export PUPPETEER_CACHE_DIR=/app/node_modules/.cache/puppeteer;
       if [ ! -f node_modules/.package-lock.snapshot ] || ! cmp -s package-lock.json node_modules/.package-lock.snapshot; then
         npm ci &&
         cp package-lock.json node_modules/.package-lock.snapshot;
+      fi;
+      if ! node -e \"require('puppeteer').executablePath()\" >/dev/null 2>&1; then
+        npx puppeteer browsers install chrome;
       fi;
       npm start
       "
@@ -40,6 +46,7 @@ services:
       PORT: 3000
       PGHOST: db
       PGPORT: 5432
+      PUPPETEER_CACHE_DIR: /app/node_modules/.cache/puppeteer
     ports:
       - "3000:3000"
     depends_on:

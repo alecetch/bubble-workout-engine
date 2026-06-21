@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forma Content Studio</title>
+    <style>
+      :root { --bg:#f4f6f8; --panel:#fff; --border:#d8dee6; --text:#1f2937; --muted:#6b7280; --primary:#0f62fe; --danger:#dc3545; --ok:#0f766e; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 22px; }
+      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
+      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
+      .controls, .form-grid { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 180px; }
+      .control.wide { min-width: 280px; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, button, select { font: inherit; }
+      input, select { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; background: #fff; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+      button.danger { background: var(--danger); border-color: var(--danger); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      h2 { margin: 0 0 10px; font-size: 18px; }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); }
+      .table-wrap { overflow-x: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ecf0f4; padding: 8px 10px; text-align: left; font-size: 13px; vertical-align: middle; }
+      th { background: #f9fbfd; font-weight: 600; white-space: nowrap; }
+      tr:hover td { background: #f5f8ff; }
+      .empty { color: var(--muted); font-style: italic; padding: 12px; text-align: center; }
+      details { max-width: 360px; }
+      summary { color: var(--primary); cursor: pointer; }
+      .score { font-family: Consolas, monospace; }
+      .mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+      .mode-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: grid; gap: 8px; background: #fbfcfe; }
+      .mode-title { font-weight: 700; }
+      .review-grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr) minmax(260px, 1fr); gap: 12px; align-items: start; }
+      .slide-preview { min-height: 360px; border: 1px solid var(--border); border-radius: 8px; padding: 18px; background: #111827; color: #fff; display: grid; align-content: center; gap: 12px; }
+      .slide-preview h2 { font-size: 28px; line-height: 1.08; margin: 0; }
+      .slide-preview .subline { color: #cbd5e1; font-size: 15px; }
+      .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+      .metric-box { border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 8px; background: rgba(255,255,255,.06); }
+      .metric-box strong { display: block; font-size: 20px; }
+      .metric-box span { color: #cbd5e1; font-size: 12px; }
+      .badge { display: inline-block; border-radius: 4px; padding: 3px 7px; font-size: 12px; font-weight: 700; }
+      .badge-draft { background: #e5e7eb; color: #374151; }
+      .badge-pending_review { background: #fef3c7; color: #92400e; }
+      .badge-approved, .badge-BUSTED { background: #d1fae5; color: #065f46; }
+      .badge-exported { background: #dbeafe; color: #1e40af; }
+      .badge-CONFIRMED { background: #fee2e2; color: #991b1b; }
+      .badge-NUANCED { background: #fef3c7; color: #92400e; }
+      textarea { width: 100%; min-height: 210px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: inherit; }
+      .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+      .chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; background: #f8fafc; font-size: 12px; }
+      .selected-race { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+      @media (max-width: 1000px) { .review-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">Forma Content Studio</h1>
+          <div class="nav">
+            <a href="/admin-ui/index.html">Config Editor</a>
+            <a href="/admin/hyrox">HYROX</a>
+            <a href="/admin/content-studio" class="active">Content Studio</a>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control wide">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <button id="load-btn" type="button">Load</button>
+        </div>
+        <div id="main-status" class="status"></div>
+      </section>
+
+      <section class="section">
+        <h2>Race Events</h2>
+        <div class="form-grid">
+          <div class="control wide"><label for="csv-input">CSV file</label><input id="csv-input" type="file" accept=".csv,text/csv" /></div>
+          <div class="control wide"><label for="event-name">Event name</label><input id="event-name" type="text" placeholder="HYROX London" /></div>
+          <div class="control"><label for="event-date">Date</label><input id="event-date" type="date" /></div>
+          <div class="control"><label for="season">Season</label><input id="season" type="number" min="2000" max="2100" placeholder="2026" /></div>
+          <div class="control"><label for="division">Division</label><select id="division"><option value="open">Open</option><option value="pro">Pro</option><option value="doubles">Doubles</option></select></div>
+          <div class="control"><label for="sex">Sex</label><select id="sex"><option value="male">Male</option><option value="female">Female</option></select></div>
+          <button id="upload-btn" type="button">Upload CSV</button>
+        </div>
+        <div id="upload-status" class="status"></div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Event Name</th><th>Division</th><th>Sex</th><th>Date</th><th>Athletes</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="races-body"><tr><td colspan="7" class="empty">Load race events.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Auto-Pick Results</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Insight Type</th><th>Headline</th><th>Composite</th><th>Confidence</th><th>Novelty</th><th>Share</th><th>Risk</th><th>Evidence</th></tr></thead>
+            <tbody id="insights-body"><tr><td colspan="9" class="empty">Run Auto-Pick on a race.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Athlete Registry</h2>
+        <div class="form-grid">
+          <div class="control wide"><label for="athlete-name">Name</label><input id="athlete-name" type="text" /></div>
+          <div class="control"><label for="athlete-handle">Handle</label><input id="athlete-handle" type="text" placeholder="@athlete" /></div>
+          <div class="control"><label for="athlete-followers">Followers</label><input id="athlete-followers" type="number" min="0" /></div>
+          <div class="control"><label for="athlete-sex">Sex</label><select id="athlete-sex"><option value=""></option><option value="male">Male</option><option value="female">Female</option></select></div>
+          <div class="control"><label for="athlete-division">Division</label><select id="athlete-division"><option value=""></option><option value="open">Open</option><option value="pro">Pro</option><option value="doubles">Doubles</option></select></div>
+          <button id="add-athlete-btn" type="button">Add</button>
+        </div>
+        <div id="athlete-status" class="status"></div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Name</th><th>Handle</th><th>Followers</th><th>Division</th><th>Last Featured</th><th>Delete</th></tr></thead>
+            <tbody id="athletes-body"><tr><td colspan="6" class="empty">Load athletes.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Mode Selection</h2>
+        <div id="selected-race" class="selected-race">Select a race event to generate content.</div>
+        <div id="mode-grid" class="mode-grid"></div>
+      </section>
+
+      <section class="section">
+        <h2>Generated Content Review</h2>
+        <div class="review-grid">
+          <div>
+            <h2>Insights</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>Headline</th><th>Composite</th><th>Confidence</th><th>Novelty</th><th>Evidence</th></tr></thead>
+                <tbody id="generated-insights-body"><tr><td colspan="6" class="empty">Generate content to review insights.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h2>Carousel Preview</h2>
+            <div class="controls" style="margin-bottom:8px">
+              <button id="prev-slide-btn" type="button">Prev</button>
+              <span id="slide-counter" class="score">Slide - of -</span>
+              <button id="next-slide-btn" type="button">Next</button>
+            </div>
+            <div id="slide-preview" class="slide-preview"><h2>No slide selected</h2></div>
+            <details style="margin-top:8px;max-width:none"><summary>Raw slide JSON</summary><pre id="slide-json"></pre></details>
+          </div>
+          <div>
+            <h2>Caption & Approval</h2>
+            <div style="margin-bottom:8px">Status: <span id="job-status" class="badge badge-draft">draft</span></div>
+            <textarea id="caption-text"></textarea>
+            <h3>Handles</h3>
+            <div id="handle-list" class="chips"></div>
+            <h3>Hashtags</h3>
+            <div id="hashtag-list" class="chips"></div>
+            <div class="controls" style="margin-top:10px">
+              <button id="submit-job-btn" type="button">Submit for Review</button>
+              <button id="approve-job-btn" type="button">Approve</button>
+              <button id="reject-job-btn" type="button" class="danger">Reject</button>
+              <button id="export-job-btn" type="button">Export</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Content Jobs History</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Race Event</th><th>Mode</th><th>Headline</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody id="jobs-body"><tr><td colspan="6" class="empty">Load jobs.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_internal_api_token";
+      const tokenInput = document.getElementById("token-input");
+      const mainStatus = document.getElementById("main-status");
+      const uploadStatus = document.getElementById("upload-status");
+      const athleteStatus = document.getElementById("athlete-status");
+      const racesBody = document.getElementById("races-body");
+      const insightsBody = document.getElementById("insights-body");
+      const athletesBody = document.getElementById("athletes-body");
+      const jobsBody = document.getElementById("jobs-body");
+      const modeGrid = document.getElementById("mode-grid");
+      const selectedRaceEl = document.getElementById("selected-race");
+      const generatedInsightsBody = document.getElementById("generated-insights-body");
+      const slidePreview = document.getElementById("slide-preview");
+      const slideCounter = document.getElementById("slide-counter");
+      const slideJson = document.getElementById("slide-json");
+      const captionText = document.getElementById("caption-text");
+      const jobStatus = document.getElementById("job-status");
+      const handleList = document.getElementById("handle-list");
+      const hashtagList = document.getElementById("hashtag-list");
+      let selectedRaceId = null;
+      let currentJobId = null;
+      let currentStatus = "draft";
+      let currentSlides = [];
+      let currentSlideIndex = 0;
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) tokenInput.value = saved;
+      const modes = [
+        ["athlete_spotlight", "Athlete Spotlight", "Turn one athlete's race data into a profile story."],
+        ["head_to_head", "Head-to-Head", "Compare two athletes segment by segment."],
+        ["podium_breakdown", "Podium Breakdown", "Explain what separated the top three."],
+        ["race_breakdown", "Race Breakdown", "Summarise the race-level data story."],
+        ["myth_buster", "Myth Buster", "Test a common HYROX belief against the data."],
+        ["what_we_learn", "What We Can Learn", "Extract practical lessons from the podium."],
+      ];
+
+      function token() {
+        const value = tokenInput.value.trim();
+        if (value) sessionStorage.setItem(STORAGE_KEY, value);
+        return value;
+      }
+      function esc(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
+      function status(el, msg, kind = "") { el.textContent = msg; el.className = `status ${kind}`; }
+      function fmtDate(v) { return v ? new Date(v).toLocaleDateString() : "-"; }
+      function score(v) { return Number.isFinite(v) ? v.toFixed(2) : "-"; }
+      function badge(statusValue) { return `<span class="badge badge-${esc(statusValue)}">${esc(statusValue)}</span>`; }
+      async function api(path, options = {}) {
+        const t = token();
+        if (!t) throw new Error("Paste your x-internal-token first.");
+        const res = await fetch(`/api/admin/content-studio${path}`, { ...options, headers: { "x-internal-token": t, ...(options.headers || {}) } });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+      function renderRaces(races) {
+        racesBody.innerHTML = races.length ? races.map((r) => `<tr>
+          <td>${esc(r.eventName)}</td><td>${esc(r.division)}</td><td>${esc(r.sex)}</td><td>${esc(fmtDate(r.eventDate))}</td>
+          <td>${esc(r.athleteCount)}</td><td>${esc(r.status)}</td><td><button data-select="${esc(r.id)}" data-name="${esc(r.eventName)}" type="button">Generate Content</button> <button data-auto="${esc(r.id)}" type="button">Auto-Pick</button></td>
+        </tr>`).join("") : '<tr><td colspan="7" class="empty">No races yet.</td></tr>';
+      }
+      function renderInsights(insights) {
+        insightsBody.innerHTML = insights.length ? insights.map((i, idx) => `<tr>
+          <td>${idx + 1}</td><td>${esc(i.type)}</td><td>${esc(i.headline)}</td>
+          <td class="score">${score(i.scores?.compositeScore)}</td><td class="score">${score(i.scores?.confidenceScore)}</td>
+          <td class="score">${score(i.scores?.noveltyScore)}</td><td class="score">${score(i.scores?.shareabilityScore)}</td><td class="score">${score(i.scores?.riskScore)}</td>
+          <td><details><summary>Evidence</summary>${(i.evidence || []).map((e) => `<div>${esc(e)}</div>`).join("")}</details></td>
+        </tr>`).join("") : '<tr><td colspan="9" class="empty">No insights triggered.</td></tr>';
+      }
+      function renderAthletes(athletes) {
+        athletesBody.innerHTML = athletes.length ? athletes.map((a) => `<tr>
+          <td>${esc(a.full_name)}</td><td>${esc(a.instagram_handle || "-")}</td><td>${esc(a.instagram_follower_count ?? "-")}</td><td>${esc(a.division || "-")}</td>
+          <td>${esc(fmtDate(a.last_featured_at))}</td><td><button class="danger" data-delete="${esc(a.id)}" type="button">Delete</button></td>
+        </tr>`).join("") : '<tr><td colspan="6" class="empty">No athletes yet.</td></tr>';
+      }
+      function renderModeCards() {
+        modeGrid.innerHTML = modes.map(([key, name, desc]) => {
+          const params = key === "athlete_spotlight"
+            ? '<input data-param="athleteName" type="text" placeholder="Athlete name" />'
+            : key === "head_to_head"
+              ? '<input data-param="athleteA" type="text" placeholder="Athlete A" /><input data-param="athleteB" type="text" placeholder="Athlete B" />'
+              : key === "myth_buster"
+                ? '<select data-param="myth"><option value="sleds">Sleds</option><option value="wall_balls">Wall Balls</option><option value="running">Running</option><option value="stations">Stations</option></select>'
+                : "";
+          return `<div class="mode-card" data-mode-card="${key}">
+            <div class="mode-title">${esc(name)}</div>
+            <div>${esc(desc)}</div>
+            ${params}
+            <button data-generate="${key}" type="button">Generate</button>
+          </div>`;
+        }).join("");
+      }
+      function renderGeneratedInsights(insights) {
+        generatedInsightsBody.innerHTML = insights?.length ? insights.map((i, idx) => `<tr>
+          <td>${idx + 1}</td><td>${esc(i.headline)}</td><td class="score">${score(i.scores?.compositeScore)}</td>
+          <td class="score">${score(i.scores?.confidenceScore)}</td><td class="score">${score(i.scores?.noveltyScore)}</td>
+          <td><details><summary>Evidence</summary>${(i.evidence || []).map((e) => `<div>${esc(e)}</div>`).join("")}</details></td>
+        </tr>`).join("") : '<tr><td colspan="6" class="empty">No ranked insights for this mode.</td></tr>';
+      }
+      function renderSlide() {
+        const slide = currentSlides[currentSlideIndex];
+        if (!slide) {
+          slidePreview.innerHTML = "<h2>No slide selected</h2>";
+          slideCounter.textContent = "Slide - of -";
+          slideJson.textContent = "";
+          return;
+        }
+        const f = slide.dataFields || {};
+        const metrics = (f.metrics || []).map((m) => `<div class="metric-box"><span>${esc(m.label)}</span><strong>${esc(m.value)}</strong><span>${esc(m.context || "")}</span></div>`).join("");
+        const bullets = (f.bullets || []).map((b) => `<li>${esc(b)}</li>`).join("");
+        const deltas = (f.segmentDeltas || []).map((d) => `<div class="metric-box"><span>${esc(d.segment)}</span><strong>${esc(d.deltaSeconds)}s</strong><span>${esc(d.winner)}</span></div>`).join("");
+        slidePreview.innerHTML = `
+          ${f.verdict ? `<span class="badge badge-${esc(f.verdict)}">${esc(f.verdict)}</span>` : ""}
+          <h2>${esc(f.headline || "")}</h2>
+          ${f.subline ? `<p class="subline">${esc(f.subline)}</p>` : ""}
+          ${metrics || deltas ? `<div class="metrics-grid">${metrics}${deltas}</div>` : ""}
+          ${bullets ? `<ul>${bullets}</ul>` : ""}
+        `;
+        slideCounter.textContent = `Slide ${currentSlideIndex + 1} of ${currentSlides.length}`;
+        slideJson.textContent = JSON.stringify(slide, null, 2);
+      }
+      function renderGeneratedContent(data) {
+        currentJobId = data.jobId;
+        currentStatus = data.status || "draft";
+        currentSlides = data.carouselSlides || [];
+        currentSlideIndex = 0;
+        captionText.value = data.captionDraft || "";
+        handleList.innerHTML = (data.suggestedHandles || []).map((handle) => `<label class="chip"><input type="checkbox" checked /> ${esc(handle)}</label>`).join("") || '<span class="empty">No handles</span>';
+        hashtagList.innerHTML = (data.suggestedHashtags || []).map((tag) => `<span class="chip">${esc(tag)} <button data-remove-tag="${esc(tag)}" type="button">x</button></span>`).join("");
+        renderGeneratedInsights(data.selectedInsights || []);
+        renderJobStatus();
+        renderSlide();
+        loadJobs();
+      }
+      function renderJobStatus() {
+        jobStatus.textContent = currentStatus;
+        jobStatus.className = `badge badge-${currentStatus}`;
+        document.getElementById("submit-job-btn").style.display = currentStatus === "draft" ? "" : "none";
+        document.getElementById("approve-job-btn").style.display = currentStatus === "pending_review" ? "" : "none";
+        document.getElementById("reject-job-btn").style.display = currentStatus === "pending_review" ? "" : "none";
+        document.getElementById("export-job-btn").style.display = currentStatus === "approved" ? "" : "none";
+      }
+      async function generateContent(mode, params) {
+        if (!selectedRaceId) { status(mainStatus, "Select a race first.", "err"); return; }
+        status(mainStatus, `Generating ${mode}...`);
+        try {
+          const data = await api(`/races/${selectedRaceId}/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, params }) });
+          renderGeneratedContent(data);
+          status(mainStatus, "Generated content.", "ok");
+        } catch (err) { status(mainStatus, err.message, "err"); }
+      }
+      async function loadJobs() {
+        try {
+          const data = await api("/jobs");
+          jobsBody.innerHTML = (data.jobs || []).length ? data.jobs.map((j) => `<tr>
+            <td>${esc(j.event_name || "-")}</td><td>${esc(j.content_mode)}</td><td>${esc(j.headline || "-")}</td><td>${badge(j.status)}</td>
+            <td>${esc(fmtDate(j.created_at))}</td><td><button data-view-job="${esc(j.id)}" type="button">View</button> ${j.status === "approved" ? `<button data-export-job="${esc(j.id)}" type="button">Export</button>` : ""}</td>
+          </tr>`).join("") : '<tr><td colspan="6" class="empty">No jobs yet.</td></tr>';
+        } catch (err) {
+          jobsBody.innerHTML = `<tr><td colspan="6" class="empty">${esc(err.message)}</td></tr>`;
+        }
+      }
+      async function loadAll() {
+        status(mainStatus, "Loading...");
+        try {
+          const [races, athletes] = await Promise.all([api("/races"), api("/athletes")]);
+          renderRaces(races.races || []);
+          renderAthletes(athletes.athletes || []);
+          renderModeCards();
+          await loadJobs();
+          status(mainStatus, "Loaded", "ok");
+        } catch (err) { status(mainStatus, err.message, "err"); }
+      }
+      async function uploadRace() {
+        const file = document.getElementById("csv-input").files[0];
+        if (!file) { status(uploadStatus, "Choose a CSV file.", "err"); return; }
+        const params = new URLSearchParams({
+          eventName: document.getElementById("event-name").value.trim(),
+          eventDate: document.getElementById("event-date").value,
+          division: document.getElementById("division").value,
+          sex: document.getElementById("sex").value,
+          season: document.getElementById("season").value,
+        });
+        status(uploadStatus, "Uploading...");
+        try {
+          const data = await api(`/races/upload?${params}`, { method: "POST", headers: { "content-type": "text/csv" }, body: await file.text() });
+          status(uploadStatus, `Uploaded ${data.race?.athleteCount || 0} athletes with ${(data.warnings || []).length} warning(s).`, "ok");
+          await loadAll();
+        } catch (err) { status(uploadStatus, err.message, "err"); }
+      }
+      async function addAthlete() {
+        status(athleteStatus, "Saving...");
+        try {
+          await api("/athletes", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              fullName: document.getElementById("athlete-name").value,
+              instagramHandle: document.getElementById("athlete-handle").value,
+              instagramFollowerCount: document.getElementById("athlete-followers").value,
+              sex: document.getElementById("athlete-sex").value,
+              division: document.getElementById("athlete-division").value,
+            }),
+          });
+          status(athleteStatus, "Athlete added.", "ok");
+          await loadAll();
+        } catch (err) { status(athleteStatus, err.message, "err"); }
+      }
+      document.getElementById("load-btn").addEventListener("click", loadAll);
+      document.getElementById("upload-btn").addEventListener("click", uploadRace);
+      document.getElementById("add-athlete-btn").addEventListener("click", addAthlete);
+      racesBody.addEventListener("click", async (event) => {
+        const selectId = event.target?.dataset?.select;
+        if (selectId) {
+          selectedRaceId = selectId;
+          selectedRaceEl.textContent = `Selected race: ${event.target.dataset.name || selectId}`;
+          return;
+        }
+        const id = event.target?.dataset?.auto;
+        if (!id) return;
+        status(mainStatus, "Running Auto-Pick...");
+        try {
+          const data = await api(`/races/${id}/auto-pick`, { method: "POST" });
+          renderInsights(data.insights || []);
+          status(mainStatus, `Auto-Pick returned ${(data.insights || []).length} insight(s).`, "ok");
+        } catch (err) { status(mainStatus, err.message, "err"); }
+      });
+      athletesBody.addEventListener("click", async (event) => {
+        const id = event.target?.dataset?.delete;
+        if (!id) return;
+        try {
+          await api(`/athletes/${id}`, { method: "DELETE" });
+          await loadAll();
+        } catch (err) { status(athleteStatus, err.message, "err"); }
+      });
+      modeGrid.addEventListener("click", (event) => {
+        const mode = event.target?.dataset?.generate;
+        if (!mode) return;
+        const card = event.target.closest("[data-mode-card]");
+        const params = {};
+        card.querySelectorAll("[data-param]").forEach((input) => { params[input.dataset.param] = input.value; });
+        generateContent(mode, params);
+      });
+      document.getElementById("prev-slide-btn").addEventListener("click", () => {
+        currentSlideIndex = Math.max(0, currentSlideIndex - 1);
+        renderSlide();
+      });
+      document.getElementById("next-slide-btn").addEventListener("click", () => {
+        currentSlideIndex = Math.min(currentSlides.length - 1, currentSlideIndex + 1);
+        renderSlide();
+      });
+      async function patchJob(action) {
+        if (!currentJobId) return;
+        try {
+          const data = await api(`/jobs/${currentJobId}/${action}`, { method: "PATCH" });
+          currentStatus = data.status;
+          renderJobStatus();
+          await loadJobs();
+        } catch (err) { status(mainStatus, err.message, "err"); }
+      }
+      document.getElementById("submit-job-btn").addEventListener("click", () => patchJob("submit"));
+      document.getElementById("approve-job-btn").addEventListener("click", () => patchJob("approve"));
+      document.getElementById("reject-job-btn").addEventListener("click", () => patchJob("reject"));
+      async function exportJob(jobId = currentJobId) {
+        if (!jobId) return;
+        try {
+          const data = await api(`/jobs/${jobId}/export`);
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `forma-content-${jobId.slice(0, 8)}.json`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          currentStatus = "exported";
+          renderJobStatus();
+          await loadJobs();
+        } catch (err) { status(mainStatus, err.message, "err"); }
+      }
+      document.getElementById("export-job-btn").addEventListener("click", () => exportJob());
+      jobsBody.addEventListener("click", async (event) => {
+        const viewId = event.target?.dataset?.viewJob;
+        const exportId = event.target?.dataset?.exportJob;
+        if (exportId) { await exportJob(exportId); return; }
+        if (!viewId) return;
+        try {
+          const data = await api(`/jobs/${viewId}`);
+          const generated = data.job.generated_content_json || {};
+          renderGeneratedContent({ jobId: data.job.id, status: data.job.status, ...generated });
+        } catch (err) { status(mainStatus, err.message, "err"); }
+      });
+      hashtagList.addEventListener("click", (event) => {
+        if (!event.target?.dataset?.removeTag) return;
+        event.target.closest(".chip")?.remove();
+      });
+      renderModeCards();
+      renderJobStatus();
+      if (saved) loadAll();
+    </script>
+  </body>
+</html>

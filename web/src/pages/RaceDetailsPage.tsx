@@ -31,6 +31,9 @@ export function RaceDetailsPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
 
+  const [calculatorMode, setCalculatorMode] = useState<"target" | "analyse">(
+    (draft?.calculatorMode as "target" | "analyse" | undefined) ?? "target",
+  );
   const [name, setName] = useState(normalizeName(draft?.athlete?.name ?? null) ?? "");
   const [gender, setGender] = useState<"male" | "female">(draft?.athlete?.gender ?? "male");
   const [ageGroup, setAgeGroup] = useState(
@@ -55,11 +58,19 @@ export function RaceDetailsPage() {
 
   const parsedFinishTime = parseTimeToSeconds(finishTime);
   const parsedTargetFinishTime = parseTimeToSeconds(targetFinishTime);
+  const targetTimeRequired = calculatorMode === "target";
   const isTargetFasterThanFinish = parsedFinishTime !== null && parsedTargetFinishTime !== null && parsedTargetFinishTime < parsedFinishTime;
-  const isFormValid = Boolean(ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && isTargetFasterThanFinish);
+  const isFormValid =
+    calculatorMode === "analyse"
+      ? Boolean(ageGroup && parsedFinishTime !== null)
+      : Boolean(ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && isTargetFasterThanFinish);
   const targetFinishTimeWarning =
     targetFinishTime && parsedFinishTime !== null && parsedTargetFinishTime !== null && !isTargetFasterThanFinish
-      ? "Target time should be faster than your current finish time."
+      ? targetTimeRequired
+        ? "Target time should be faster than your current finish time."
+        : "Goal time should be faster than your finish time."
+      : targetFinishTime && !targetTimeRequired && parsedTargetFinishTime === null
+        ? "Enter a valid goal time or leave it blank."
       : undefined;
   const importedSummary = [name, division ? formatDivisionLabel(division) : "", finishTime].filter(Boolean).join(" · ");
 
@@ -79,11 +90,13 @@ export function RaceDetailsPage() {
       errs.finishTime = "Enter finish time, e.g. 1:25:17 or 85:17";
     }
 
-    const parsedTarget = parseTimeToSeconds(targetFinishTime);
-    if (!targetFinishTime || parsedTarget === null) {
-      errs.targetFinishTime = "Enter target finish time, e.g. 55:00 or 1:05:00";
-    } else if (parsedFinish !== null && parsedTarget >= parsedFinish) {
-      errs.targetFinishTime = "Target time should be faster than your current finish time.";
+    if (targetTimeRequired) {
+      const parsedTarget = parseTimeToSeconds(targetFinishTime);
+      if (!targetFinishTime || parsedTarget === null) {
+        errs.targetFinishTime = "Enter target finish time, e.g. 55:00 or 1:05:00";
+      } else if (parsedFinish !== null && parsedTarget >= parsedFinish) {
+        errs.targetFinishTime = "Target time should be faster than your current finish time.";
+      }
     }
 
     setErrors(errs);
@@ -150,8 +163,10 @@ export function RaceDetailsPage() {
     if (!validate()) return;
 
     const finishSeconds = parseTimeToSeconds(finishTime) ?? 0;
-    const targetFinishTimeSeconds = parseTimeToSeconds(targetFinishTime) ?? 0;
+    const parsedTarget = parseTimeToSeconds(targetFinishTime);
+    const targetFinishTimeSeconds = parsedTarget !== null && parsedTarget < finishSeconds ? parsedTarget : undefined;
     const updated: Partial<HyroxCalculatorDraft> = {
+      calculatorMode,
       athlete: {
         name: normalizeName(name) ?? undefined,
         gender,
@@ -316,6 +331,19 @@ export function RaceDetailsPage() {
 
               <div className={styles.fieldGroup}>
                 <div className={styles.groupTitle}>Race setup</div>
+                <SegmentedControl
+                  label="What do you want to know?"
+                  options={[
+                    { value: "target", label: "Hit a target time" },
+                    { value: "analyse", label: "Analyse my race" },
+                  ]}
+                  value={calculatorMode}
+                  onChange={(v) => {
+                    const mode = v as "target" | "analyse";
+                    setCalculatorMode(mode);
+                    saveDraft({ calculatorMode: mode });
+                  }}
+                />
                 <div className={styles.row2}>
                   <SegmentedControl
                     label="Gender"
@@ -375,10 +403,10 @@ export function RaceDetailsPage() {
                     error={errors.finishTime}
                   />
                   <TimeInput
-                    label="Target finish time"
-                    required
+                    label={targetTimeRequired ? "Target finish time" : "Goal time (optional)"}
+                    required={targetTimeRequired}
                     placeholder="55:00"
-                    hint="Used to calculate the time gaps needed to reach your goal."
+                    hint={targetTimeRequired ? "Used to calculate the time gaps needed to reach your goal." : "Optional reference point for your analysis."}
                     value={targetFinishTime}
                     onChange={(e) => setTargetFinishTime(e.target.value)}
 	                    error={errors.targetFinishTime || targetFinishTimeWarning}

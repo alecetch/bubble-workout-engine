@@ -18,6 +18,7 @@ export interface HyroxRaceReplaySplit {
 }
 
 export interface HyroxCalculatorDraft {
+  calculatorMode?: "target" | "analyse";
   athlete: {
     name?: string;
     email?: string;
@@ -47,6 +48,7 @@ export interface HyroxCalculatorDraft {
 }
 
 export interface HyroxAnalysisRequest {
+  calculatorMode?: "target" | "analyse";
   athlete: {
     name?: string;
     email: string;
@@ -93,6 +95,17 @@ export interface BrowserSummary {
     newProjectedTimeFormatted?: string;
   };
   dataQualityNote?: string;
+  calculatorMode?: "target" | "analyse";
+  athleteArchetype?: {
+    key: string;
+    label: string;
+    confidence?: string | null;
+  } | null;
+  workRunBalance?: {
+    runSharePct?: number | null;
+    workSharePct?: number | null;
+    profileType?: string | null;
+  } | null;
 }
 
 export interface HyroxAnalysisResponse {
@@ -103,6 +116,7 @@ export interface HyroxAnalysisResponse {
   browserSummary: BrowserSummary;
   carouselDataAvailable: boolean;
   analysisVersion: string;
+  calculatorMode?: "target" | "analyse";
 }
 
 export interface SegmentDefinition {
@@ -111,4 +125,93 @@ export interface SegmentDefinition {
   label: string;
   type: "run" | "station";
   distance: string;
+}
+
+// HYROX Predictor
+
+export type HyroxDivision = "open" | "pro" | "doubles" | "relay";
+export type HyroxSex = "male" | "female";
+export type HyroxAgeGroup =
+  | "18-24" | "25-29" | "30-34" | "35-39" | "40-44"
+  | "45-49" | "50-54" | "55-59" | "60-64" | "65-69" | "prefer-not-to-say";
+
+export interface HyroxPredictorDraft {
+  athlete: {
+    name?: string;
+    email?: string;
+    sex: HyroxSex;
+    ageGroup?: HyroxAgeGroup;
+    division: HyroxDivision;
+  };
+  benchmarks: {
+    run5kSeconds?: number;
+    run10kSeconds?: number;
+    backSquat3RM?: number;
+    deadlift3RM?: number;
+    rowErg2kSeconds?: number;
+    skiErg1kSeconds?: number;
+    wallBallRepsIn2Min?: number;
+    farmerCarryTimeSeconds?: number;
+    sledPushNote?: string;
+    previousHyroxSeconds?: number;
+  };
+  context: {
+    trainingFrequency?: "2-3" | "4-5" | "6+";
+    primaryBackground?: "endurance" | "strength" | "crossfit" | "general";
+    weeklyRunningKm?: "<15" | "15-30" | "30-45" | "45+";
+  };
+  race: {
+    raceDate?: string;
+    targetFinishTimeSeconds?: number;
+  };
+  marketingConsent: boolean;
+}
+
+export interface HyroxPredictionRequest {
+  athlete: {
+    name?: string;
+    email: string;
+    sex: HyroxSex;
+    ageGroup?: HyroxAgeGroup;
+    division: HyroxDivision;
+  };
+  benchmarks: HyroxPredictorDraft["benchmarks"];
+  context: HyroxPredictorDraft["context"];
+  race: HyroxPredictorDraft["race"];
+  marketingConsent: boolean;
+  website?: string;
+}
+
+export interface PredictedSegment {
+  segmentKey: string;
+  label: string;
+  type: "run" | "station";
+  predictedSeconds: number;
+  predictedFormatted: string;
+  limiterScore: number;
+  opportunityGainSeconds?: number;
+}
+
+export interface HyroxPredictionResponse {
+  predictionId: string;
+  predictedFinishSeconds: number;
+  predictedFinishFormatted: string;
+  rangeLowSeconds: number;
+  rangeLowFormatted: string;
+  rangeHighSeconds: number;
+  rangeHighFormatted: string;
+  confidenceScore: number;
+  confidenceLabel: "low" | "moderate" | "good" | "high";
+  predictionMode: "minimum" | "better" | "best";
+  segments: PredictedSegment[];
+  topLimiters: PredictedSegment[];
+  topOpportunities: PredictedSegment[];
+  targetComparison?: {
+    targetSeconds: number;
+    targetFormatted: string;
+    gapSeconds: number;
+    gapFormatted: string;
+  };
+  keyAssumptions: string[];
+  predictionVersion: string;
 }

@@ -40,3 +40,11 @@
 .green {
   color: var(--accent-green);
 }
+
+.amber {
+  color: var(--accent-amber);
+}
+
+.blue {
+  color: var(--accent-blue);
+}
