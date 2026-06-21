@@ -87,16 +87,47 @@
 
       <section class="section">
         <h2>Race Events</h2>
-        <div class="form-grid">
-          <div class="control wide"><label for="csv-input">CSV file</label><input id="csv-input" type="file" accept=".csv,text/csv" /></div>
-          <div class="control wide"><label for="event-name">Event name</label><input id="event-name" type="text" placeholder="HYROX London" /></div>
-          <div class="control"><label for="event-date">Date</label><input id="event-date" type="date" /></div>
-          <div class="control"><label for="season">Season</label><input id="season" type="number" min="2000" max="2100" placeholder="2026" /></div>
-          <div class="control"><label for="division">Division</label><select id="division"><option value="open">Open</option><option value="pro">Pro</option><option value="doubles">Doubles</option></select></div>
-          <div class="control"><label for="sex">Sex</label><select id="sex"><option value="male">Male</option><option value="female">Female</option></select></div>
-          <button id="upload-btn" type="button">Upload CSV</button>
-        </div>
-        <div id="upload-status" class="status"></div>
+
+        <!-- Scrape from HYROX Results -->
+        <details open style="max-width:none;margin-bottom:14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px">
+          <summary style="font-weight:600;cursor:pointer;font-size:14px">⚡ Scrape from HYROX Results</summary>
+          <div style="margin-top:10px">
+            <div class="form-grid">
+              <div class="control wide">
+                <label for="scrape-race">Race</label>
+                <select id="scrape-race">
+                  <option value="">— select a race —</option>
+                </select>
+              </div>
+              <div class="control wide">
+                <label for="scrape-division">Division</label>
+                <select id="scrape-division" disabled>
+                  <option value="">— select race first —</option>
+                </select>
+              </div>
+              <button id="fetch-divisions-btn" type="button" disabled>Load Divisions</button>
+              <button id="scrape-btn" type="button" disabled>Scrape Top 50</button>
+            </div>
+            <div id="scrape-status" class="status"></div>
+          </div>
+        </details>
+
+        <!-- Manual CSV upload -->
+        <details style="max-width:none;margin-bottom:14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px">
+          <summary style="font-weight:600;cursor:pointer;font-size:14px">📄 Manual CSV Upload</summary>
+          <div style="margin-top:10px">
+            <div class="form-grid">
+              <div class="control wide"><label for="csv-input">CSV file</label><input id="csv-input" type="file" accept=".csv,text/csv" /></div>
+              <div class="control wide"><label for="event-name">Event name</label><input id="event-name" type="text" placeholder="HYROX London" /></div>
+              <div class="control"><label for="event-date">Date</label><input id="event-date" type="date" /></div>
+              <div class="control"><label for="season">Season</label><input id="season" type="number" min="2000" max="2100" placeholder="2026" /></div>
+              <div class="control"><label for="division">Division</label><select id="division"><option value="open">Open</option><option value="pro">Pro</option><option value="doubles">Doubles</option></select></div>
+              <div class="control"><label for="sex">Sex</label><select id="sex"><option value="male">Male</option><option value="female">Female</option></select></div>
+              <button id="upload-btn" type="button">Upload CSV</button>
+            </div>
+            <div id="upload-status" class="status"></div>
+          </div>
+        </details>
         <div class="table-wrap" style="margin-top:10px">
           <table>
             <thead><tr><th>Event Name</th><th>Division</th><th>Sex</th><th>Date</th><th>Athletes</th><th>Status</th><th>Actions</th></tr></thead>
@@ -484,9 +515,90 @@
         if (!event.target?.dataset?.removeTag) return;
         event.target.closest(".chip")?.remove();
       });
+      // ── Scrape from HYROX Results ──────────────────────────────────────────
+      const scrapeRaceEl = document.getElementById("scrape-race");
+      const scrapeDivisionEl = document.getElementById("scrape-division");
+      const fetchDivisionsBtn = document.getElementById("fetch-divisions-btn");
+      const scrapeBtn = document.getElementById("scrape-btn");
+      const scrapeStatusEl = document.getElementById("scrape-status");
+
+      async function loadHyroxEvents() {
+        try {
+          const data = await api("/hyrox-events");
+          scrapeRaceEl.innerHTML = '<option value="">— select a race —</option>';
+          (data.events || []).forEach((e) => {
+            const opt = document.createElement("option");
+            opt.value = e.resultsPageKey;
+            opt.textContent = `${e.eventName} (${e.season ? "S" + e.season : ""})`;
+            scrapeRaceEl.appendChild(opt);
+          });
+        } catch (err) {
+          status(scrapeStatusEl, `Could not load races: ${err.message}`, "err");
+        }
+      }
+
+      scrapeRaceEl.addEventListener("change", () => {
+        scrapeDivisionEl.innerHTML = '<option value="">— click Load Divisions —</option>';
+        scrapeDivisionEl.disabled = true;
+        scrapeBtn.disabled = true;
+        fetchDivisionsBtn.disabled = !scrapeRaceEl.value;
+      });
+
+      fetchDivisionsBtn.addEventListener("click", async () => {
+        const key = scrapeRaceEl.value;
+        if (!key) return;
+        status(scrapeStatusEl, "Fetching divisions from results.hyrox.com…");
+        fetchDivisionsBtn.disabled = true;
+        try {
+          const data = await api(`/hyrox-events/${encodeURIComponent(key)}/divisions`);
+          const divisions = data.divisions || [];
+          if (!divisions.length) { status(scrapeStatusEl, "No divisions found — the race may not have results yet.", "err"); return; }
+          scrapeDivisionEl.innerHTML = '<option value="">— pick a division —</option>';
+          divisions.forEach((d) => {
+            const opt = document.createElement("option");
+            opt.value = d;
+            opt.textContent = d;
+            scrapeDivisionEl.appendChild(opt);
+          });
+          scrapeDivisionEl.disabled = false;
+          status(scrapeStatusEl, `Found ${divisions.length} division(s). Pick one and click Scrape Top 50.`, "ok");
+        } catch (err) {
+          status(scrapeStatusEl, err.message, "err");
+        } finally {
+          fetchDivisionsBtn.disabled = false;
+        }
+      });
+
+      scrapeDivisionEl.addEventListener("change", () => {
+        scrapeBtn.disabled = !scrapeDivisionEl.value;
+      });
+
+      scrapeBtn.addEventListener("click", async () => {
+        const key = scrapeRaceEl.value;
+        const division = scrapeDivisionEl.value;
+        if (!key || !division) return;
+        status(scrapeStatusEl, `Scraping "${division}" from ${key}… (may take 20–40 s)`);
+        scrapeBtn.disabled = true;
+        try {
+          const data = await api(`/hyrox-events/${encodeURIComponent(key)}/scrape`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ division }),
+          });
+          status(scrapeStatusEl, `Done — ${data.athleteCount} athletes scraped (${data.division} / ${data.sex}). Race "${data.eventName}" added.`, "ok");
+          selectedRaceId = data.raceEventId;
+          selectedRaceEl.textContent = `Selected race: ${data.eventName} — ${data.division}`;
+          await loadAll();
+        } catch (err) {
+          status(scrapeStatusEl, err.message, "err");
+        } finally {
+          scrapeBtn.disabled = false;
+        }
+      });
+
       renderModeCards();
       renderJobStatus();
-      if (saved) loadAll();
+      if (saved) { loadAll(); loadHyroxEvents(); } else { loadHyroxEvents(); }
     </script>
   </body>
 </html>
