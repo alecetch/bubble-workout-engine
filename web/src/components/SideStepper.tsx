@@ -9,12 +9,13 @@ const STEPS = [
 
 interface SideStepperProps {
   current: number;
+  steps?: Array<{ label: string }>;
 }
 
-export function SideStepper({ current }: SideStepperProps) {
+export function SideStepper({ current, steps = STEPS }: SideStepperProps) {
   return (
     <div className={styles.stepper}>
-      {STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const num = i + 1;
         const isDone = num < current;
         const isActive = num === current;
@@ -32,7 +33,7 @@ export function SideStepper({ current }: SideStepperProps) {
               <div className={styles.circle}>{isDone ? "✓" : String(num)}</div>
               <span className={styles.label}>{step.label}</span>
             </div>
-            {i < STEPS.length - 1 && <div className={styles.connector} />}
+            {i < steps.length - 1 && <div className={styles.connector} />}
           </div>
         );
       })}

@@ -1,5 +1,6 @@
-import type { HyroxAnalysisRequest, HyroxAnalysisResponse } from "../types";
+import type { HyroxAnalysisRequest, HyroxAnalysisResponse, HyroxPredictionRequest, HyroxPredictionResponse } from "../types";
 import type { HyroxParseResult } from "./hyroxResultsParser";
+import { loadDraft } from "./storage";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -30,6 +31,39 @@ export async function submitHyroxAnalysis(
   payload: HyroxAnalysisRequest,
 ): Promise<HyroxAnalysisResponse> {
   const url = `${BASE_URL}/api/hyrox/analyse`;
+  const calculatorMode = payload.calculatorMode ?? loadDraft()?.calculatorMode ?? "target";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, calculatorMode }),
+  });
+
+  if (res.status === 400) {
+    const body = await res.json();
+    throw new ValidationError(body.errors ?? []);
+  }
+  if (res.status === 429) {
+    const body = await res.json();
+    throw new RateLimitError(body.message ?? "Too many requests.");
+  }
+  if (!res.ok) {
+    let message = "Something went wrong. Please try again.";
+    try {
+      const body = await res.json();
+      message = body.message ?? message;
+    } catch {
+      // ignore
+    }
+    throw new ServerError(message);
+  }
+
+  return res.json() as Promise<HyroxAnalysisResponse>;
+}
+
+export async function submitHyroxPrediction(
+  payload: HyroxPredictionRequest,
+): Promise<HyroxPredictionResponse> {
+  const url = `${BASE_URL}/api/hyrox/predict`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -55,7 +89,7 @@ export async function submitHyroxAnalysis(
     throw new ServerError(message);
   }
 
-  return res.json() as Promise<HyroxAnalysisResponse>;
+  return res.json() as Promise<HyroxPredictionResponse>;
 }
 
 export async function fetchHyroxResultsImport(
