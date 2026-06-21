@@ -136,6 +136,77 @@ describe("parseHyroxResults", () => {
     ]);
   });
 
+  test("uses Race Replay Diff column when pasted rows include time of day and elapsed time", () => {
+    const replayText = [
+      FULL_PAGE_TEXT,
+      "Rox In\t08:55:15\t00:05:09\t05:09",
+      "1000m SkiErg In\t08:55:21\t00:05:14\t00:05",
+      "1000m SkiErg Out\t08:59:31\t00:09:25\t04:11",
+      "Rox Out\t09:00:03\t00:09:56\t00:31",
+      "Rox In\t09:05:00\t00:14:53\t04:57",
+      "50m Sled Push In\t09:05:03\t00:14:56\t00:03",
+      "50m Sled Push Out\t09:08:22\t00:18:16\t03:20",
+      "Rox Out\t09:08:46\t00:18:40\t00:24",
+    ].join("\n");
+
+    const result = parseHyroxResults(replayText);
+
+    expect(result.raceReplay).toEqual([
+      { station: "ski_erg", entrySeconds: 5, exitSeconds: 31 },
+      { station: "sled_push", entrySeconds: 3, exitSeconds: 24 },
+    ]);
+  });
+
+  test("uses final time cell for multi-line Race Replay paste rows", () => {
+    const replayText = [
+      FULL_PAGE_TEXT,
+      "1000m SkiErg In",
+      "08:55:21",
+      "00:05:14",
+      "00:05",
+      "Rox Out",
+      "09:00:03",
+      "00:09:56",
+      "00:31",
+      "50m Sled Push In",
+      "09:05:03",
+      "00:14:56",
+      "00:03",
+      "Rox Out",
+      "09:08:46",
+      "00:18:40",
+      "00:24",
+    ].join("\n");
+
+    const result = parseHyroxResults(replayText);
+
+    expect(result.raceReplay).toEqual([
+      { station: "ski_erg", entrySeconds: 5, exitSeconds: 31 },
+      { station: "sled_push", entrySeconds: 3, exitSeconds: 24 },
+    ]);
+  });
+
+  test("preserves repeated Rox Out diff values and excludes incomplete Wall Balls replay row", () => {
+    const replayText = [
+      FULL_PAGE_TEXT,
+      "50m Sled Push In\t09:05:03\t00:14:56\t00:03",
+      "Rox Out\t09:08:46\t00:18:40\t00:24",
+      "50m Sled Pull In\t09:13:56\t00:23:49\t00:11",
+      "Rox Out\t09:18:03\t00:27:56\t00:24",
+      "80m Burpee Broad Jump In\t09:23:17\t00:33:10\t00:13",
+      "Rox Out\t09:27:43\t00:37:36\t00:06",
+      "Wall Balls In\t10:04:11\t01:14:04\t04:38",
+    ].join("\n");
+
+    const result = parseHyroxResults(replayText);
+
+    expect(result.raceReplay).toEqual([
+      { station: "sled_push", entrySeconds: 3, exitSeconds: 24 },
+      { station: "sled_pull", entrySeconds: 11, exitSeconds: 24 },
+      { station: "burpee_broad_jump", entrySeconds: 13, exitSeconds: 6 },
+    ]);
+  });
+
   test("maps divisions and warnings", () => {
     const pro = parseHyroxResults(`Division\tPRO\n${SPLITS_ONLY}`);
     expect(pro.division).toBe("pro");

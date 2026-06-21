@@ -1,70 +1,73 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shell } from "../components/Shell";
-import { FormPanel } from "../components/FormPanel";
 import { ContextQuestionCard } from "../components/ContextQuestionCard";
+import { FormPanel } from "../components/FormPanel";
 import { OptionCardGroup } from "../components/OptionCardGroup";
-import { TimeInput } from "../components/TimeInput";
-import { PrivacyNotice } from "../components/PrivacyNotice";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
+import { Shell } from "../components/Shell";
 import { SideStepper } from "../components/SideStepper";
-import { loadDraft, saveDraft } from "../utils/storage";
-import { parseTimeToSeconds, formatSeconds } from "../utils/time";
 import { trackEvent } from "../utils/api";
+import { loadDraft, saveDraft } from "../utils/storage";
+import { formatSeconds } from "../utils/time";
 import styles from "./AthleteContextPage.module.css";
+
+function formatDivisionLabel(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatSignedTime(seconds: number): string {
+  if (seconds === 0) return "0:00";
+  return `${seconds > 0 ? "+" : "-"}${formatSeconds(Math.abs(seconds))}`;
+}
 
 export function AthleteContextPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
   const ctx = draft?.athleteContext ?? {};
 
-  const [trainingAge, setTrainingAge] = useState(ctx.trainingAge ?? "");
-  const [primaryBackground, setPrimaryBackground] = useState(
-    ctx.primaryBackground ?? "",
-  );
-  const [weeklyRunningVolume, setWeeklyRunningVolume] = useState(
-    ctx.weeklyRunningVolume ?? "",
-  );
-  const [weeklyStrengthSessions, setWeeklyStrengthSessions] = useState(
-    ctx.weeklyStrengthSessions ?? "",
-  );
-  const [targetTime, setTargetTime] = useState(
-    ctx.targetFinishTimeSeconds
-      ? formatSeconds(ctx.targetFinishTimeSeconds, "HH:MM:SS")
-      : "",
-  );
-  const [additionalContext, setAdditionalContext] = useState(
-    ctx.additionalContext ?? "",
-  );
+  const [trainingFrequency, setTrainingFrequency] = useState(ctx.weeklyStrengthSessions ?? ctx.trainingAge ?? "");
+  const [primaryBackground, setPrimaryBackground] = useState(ctx.primaryBackground ?? "");
+  const [weeklyRunningVolume, setWeeklyRunningVolume] = useState(ctx.weeklyRunningVolume ?? "");
+  const [additionalContext, setAdditionalContext] = useState(ctx.additionalContext ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [hasAttemptedContinue, setHasAttemptedContinue] = useState(false);
+
+  const splitCount = (draft?.splits ?? []).filter((split) => split.timeSeconds > 0).length;
+  const splitTotal = (draft?.splits ?? []).reduce((sum, split) => sum + (split.timeSeconds ?? 0), 0);
+  const officialRoxzone = draft?.roxzoneTimeSeconds ?? (
+    draft?.race?.finishTimeSeconds && splitTotal > 0
+      ? draft.race.finishTimeSeconds - splitTotal
+      : null
+  );
+  const replayRows = (draft?.raceReplay ?? []).filter((row) => row.entrySeconds !== null && row.exitSeconds !== null);
+  const replayRoxzone = replayRows.reduce((sum, row) => sum + (row.entrySeconds ?? 0) + (row.exitSeconds ?? 0), 0);
+  const roxzoneVariance = officialRoxzone != null && replayRows.length > 0 ? officialRoxzone - replayRoxzone : null;
+  const requiredSectionsComplete = [
+    trainingFrequency,
+    weeklyRunningVolume,
+    primaryBackground,
+  ].filter(Boolean).length;
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
-    if (!trainingAge) errs.trainingAge = "Please select an option.";
+    if (!trainingFrequency) errs.trainingFrequency = "Please select an option.";
+    if (!weeklyRunningVolume) errs.weeklyRunningVolume = "Please select an option.";
     if (!primaryBackground) errs.primaryBackground = "Please select an option.";
-    if (!weeklyRunningVolume)
-      errs.weeklyRunningVolume = "Please select an option.";
-    if (!weeklyStrengthSessions)
-      errs.weeklyStrengthSessions = "Please select an option.";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
   function handleNext() {
+    setHasAttemptedContinue(true);
     if (!validate()) return;
-
-    const targetSeconds = targetTime
-      ? (parseTimeToSeconds(targetTime) ?? undefined)
-      : undefined;
 
     saveDraft({
       athleteContext: {
-        trainingAge,
         primaryBackground,
         weeklyRunningVolume,
-        weeklyStrengthSessions,
-        targetFinishTimeSeconds: targetSeconds,
+        weeklyStrengthSessions: trainingFrequency,
+        targetFinishTimeSeconds: ctx.targetFinishTimeSeconds,
         additionalContext: additionalContext.trim() || undefined,
       },
     });
@@ -78,148 +81,153 @@ export function AthleteContextPage() {
         <SideStepper current={3} />
 
         <div className={styles.intro}>
-          <h2 className={styles.introHeadline}>Almost there.</h2>
-          <p className={styles.introCopy}>
-            A few more details to personalise your analysis. This helps us
-            provide more accurate benchmarks, identify your likely limiters, and
-            give you training recommendations that fit your background.
-          </p>
+          <div>
+            <h1 className={styles.introHeadline}>Add training context</h1>
+            <p className={styles.introCopy}>
+              This makes the report more useful. Your splits show what happened; context helps explain why.
+            </p>
+          </div>
+          <div className={styles.chipRow}>
+            <span className={[styles.statusChip, styles.stepChip].join(" ")}>STEP 3 OF 4</span>
+            <span className={[styles.statusChip, styles.goodChip].join(" ")}>Takes 60 seconds</span>
+            <span className={[styles.statusChip, styles.neutralChip].join(" ")}>Optional notes</span>
+          </div>
         </div>
 
-        <FormPanel>
-          <div className={styles.grid}>
-            <ContextQuestionCard
-              question="How long have you been training seriously for HYROX or similar events?"
-              required
-            >
-              <OptionCardGroup
-                label=""
-                options={[
-                  { value: "lt_1_year", label: "< 1 year" },
-                  { value: "1_3_years", label: "1–3 years" },
-                  { value: "3_5_years", label: "3–5 years" },
-                  { value: "5_plus_years", label: "5+ years" },
-                ]}
-                value={trainingAge}
-                onChange={setTrainingAge}
-              />
-              {errors.trainingAge && (
-                <p style={{ color: "var(--accent-red)", fontSize: 12, marginTop: 8 }}>
-                  {errors.trainingAge}
-                </p>
-              )}
-            </ContextQuestionCard>
+        <div className={styles.layout}>
+          <FormPanel className={styles.contextPanel}>
+            <div className={styles.grid}>
+              <ContextQuestionCard number={1} question="How often do you currently train?" required>
+                <OptionCardGroup
+                  label=""
+                  options={[
+                    { value: "2_3_days_week", label: "2-3 days/week", sublabel: "maintenance" },
+                    { value: "4_5_days_week", label: "4-5 days/week", sublabel: "consistent" },
+                    { value: "6_plus_days_week", label: "6+ days/week", sublabel: "high volume" },
+                  ]}
+                  value={trainingFrequency}
+                  onChange={(value) => {
+                    setTrainingFrequency(value);
+                    setErrors((prev) => ({ ...prev, trainingFrequency: "" }));
+                  }}
+                />
+                {hasAttemptedContinue && errors.trainingFrequency && <p className={styles.errorText}>{errors.trainingFrequency}</p>}
+              </ContextQuestionCard>
 
-            <ContextQuestionCard
-              question="What is your main athletic background?"
-              required
-            >
-              <OptionCardGroup
-                label=""
-                options={[
-                  { value: "running", label: "Running" },
-                  { value: "crossfit", label: "CrossFit" },
-                  { value: "strength_sports", label: "Strength sports" },
-                  { value: "team_sports", label: "Team sports" },
-                  { value: "other", label: "Other" },
-                ]}
-                value={primaryBackground}
-                onChange={setPrimaryBackground}
-              />
-              {errors.primaryBackground && (
-                <p style={{ color: "var(--accent-red)", fontSize: 12, marginTop: 8 }}>
-                  {errors.primaryBackground}
-                </p>
-              )}
-            </ContextQuestionCard>
+              <ContextQuestionCard number={2} question="What is your current running volume?" required>
+                <OptionCardGroup
+                  label=""
+                  options={[
+                    { value: "under_15_km", label: "Under 15 km", sublabel: "low" },
+                    { value: "15_30_km", label: "15-30 km", sublabel: "moderate" },
+                    { value: "30_45_km", label: "30-45 km", sublabel: "strong" },
+                    { value: "45_plus_km", label: "45+ km", sublabel: "high" },
+                  ]}
+                  value={weeklyRunningVolume}
+                  onChange={(value) => {
+                    setWeeklyRunningVolume(value);
+                    setErrors((prev) => ({ ...prev, weeklyRunningVolume: "" }));
+                  }}
+                />
+                {hasAttemptedContinue && errors.weeklyRunningVolume && <p className={styles.errorText}>{errors.weeklyRunningVolume}</p>}
+              </ContextQuestionCard>
 
-            <ContextQuestionCard
-              question="On average, how many kilometres do you run per week?"
-              required
-            >
-              <OptionCardGroup
-                label=""
-                options={[
-                  { value: "0_10_km", label: "0–10 km" },
-                  { value: "11_20_km", label: "11–20 km" },
-                  { value: "21_40_km", label: "21–40 km" },
-                  { value: "41_60_km", label: "41–60 km" },
-                  { value: "60_plus_km", label: "60+ km" },
-                ]}
-                value={weeklyRunningVolume}
-                onChange={setWeeklyRunningVolume}
-              />
-              {errors.weeklyRunningVolume && (
-                <p style={{ color: "var(--accent-red)", fontSize: 12, marginTop: 8 }}>
-                  {errors.weeklyRunningVolume}
-                </p>
-              )}
-            </ContextQuestionCard>
+              <ContextQuestionCard number={3} question="What best describes your strength background?" required>
+                <OptionCardGroup
+                  label=""
+                  options={[
+                    { value: "new_to_strength", label: "New to strength", sublabel: "needs base" },
+                    { value: "general_gym", label: "General gym", sublabel: "solid" },
+                    { value: "crossfit_hybrid", label: "CrossFit / hybrid", sublabel: "specific" },
+                    { value: "strength_sport", label: "Strength sport", sublabel: "power bias" },
+                  ]}
+                  value={primaryBackground}
+                  onChange={(value) => {
+                    setPrimaryBackground(value);
+                    setErrors((prev) => ({ ...prev, primaryBackground: "" }));
+                  }}
+                />
+                {hasAttemptedContinue && errors.primaryBackground && <p className={styles.errorText}>{errors.primaryBackground}</p>}
+              </ContextQuestionCard>
 
-            <ContextQuestionCard
-              question="On average, how many strength training sessions do you do per week?"
-              required
-            >
-              <OptionCardGroup
-                label=""
-                options={[
-                  { value: "0_1", label: "0–1" },
-                  { value: "2_3", label: "2–3" },
-                  { value: "4_5", label: "4–5" },
-                  { value: "6_plus", label: "6+" },
-                ]}
-                value={weeklyStrengthSessions}
-                onChange={setWeeklyStrengthSessions}
-              />
-              {errors.weeklyStrengthSessions && (
-                <p style={{ color: "var(--accent-red)", fontSize: 12, marginTop: 8 }}>
-                  {errors.weeklyStrengthSessions}
-                </p>
-              )}
-            </ContextQuestionCard>
-
-            <div className={styles.fullWidth}>
-              <TimeInput
-                label="Target Finish Time (optional)"
-                placeholder="e.g. 1:15:00"
-                hint="What is your target for your next HYROX?"
-                value={targetTime}
-                onChange={(e) => setTargetTime(e.target.value)}
-              />
+              <ContextQuestionCard number={4} question="Anything we should account for?">
+                <textarea
+                  className={styles.textarea}
+                  placeholder="Injuries, penalties, recent illness, compromised stations, equipment limitations, or anything unusual about race day."
+                  maxLength={500}
+                  value={additionalContext}
+                  onChange={(e) => setAdditionalContext(e.target.value)}
+                />
+                <div className={styles.charCount}>Optional &middot; {additionalContext.length}/500</div>
+              </ContextQuestionCard>
             </div>
 
-            <div className={styles.fullWidth}>
-              <div className={styles.timeLabel}>
-                Anything else we should know? (optional)
+            <div className={styles.actions}>
+              <div className={requiredSectionsComplete >= 3 ? styles.actionStatusGood : styles.actionStatusWarn}>
+                {requiredSectionsComplete}/3 required sections complete
               </div>
-              <textarea
-                className={styles.textarea}
-                placeholder="e.g. Recent shoulder irritation, training after injury, first HYROX..."
-                maxLength={500}
-                value={additionalContext}
-                onChange={(e) => setAdditionalContext(e.target.value)}
-              />
-              <div className={styles.charCount}>
-                {additionalContext.length}/500
-              </div>
+              <SecondaryButton
+                type="button"
+                className={styles.compactButton}
+                onClick={() => void navigate("/hyrox-calculator/splits")}
+              >
+                Back
+              </SecondaryButton>
+              <PrimaryButton type="button" className={styles.compactButton} onClick={handleNext}>
+                Review My Inputs
+              </PrimaryButton>
             </div>
-          </div>
+          </FormPanel>
 
-          <PrivacyNotice />
-
-          <div className={styles.actions}>
-            <SecondaryButton
-              type="button"
-              onClick={() => void navigate("/hyrox-calculator/splits")}
-            >
-              ← Back
-            </SecondaryButton>
-            <PrimaryButton type="button" onClick={handleNext}>
-              Get My Analysis →
-            </PrimaryButton>
+          <div className={styles.sideCol}>
+            <FormPanel className={styles.whyPanel}>
+              <div className={styles.sideKicker}>WHY THIS MATTERS</div>
+              <h2 className={styles.sideTitle}>Context changes the advice</h2>
+              <p className={styles.sideCopy}>
+                Two athletes can have the same split loss for different reasons. This step helps Forma tell the difference.
+              </p>
+              <div className={styles.reasonRows}>
+                <ReasonRow title="Running volume" copy="Separates under-trained run fitness from race-day pacing." />
+                <ReasonRow title="Strength background" copy="Explains whether station gaps are skill, strength or fatigue." />
+                <ReasonRow title="Training frequency" copy="Keeps recommendations realistic for your week." />
+                <ReasonRow title="Notes" copy="Catches injuries, penalties and race-specific context." />
+              </div>
+            </FormPanel>
+            <FormPanel className={styles.dataPanel}>
+              <div className={styles.sideKicker}>DATA ALREADY CAPTURED</div>
+              <DataRow label="Race" value={draft?.race?.division ? `HYROX ${formatDivisionLabel(draft.race.division)}` : "HYROX"} />
+              <DataRow label="Finish" value={draft?.race?.finishTimeSeconds ? formatSeconds(draft.race.finishTimeSeconds) : "-"} />
+              <DataRow label="Target" value={ctx.targetFinishTimeSeconds ? formatSeconds(ctx.targetFinishTimeSeconds) : "-"} />
+              <DataRow label="Splits" value={`${splitCount}/16 complete`} />
+              <DataRow label="RoxZone" value={roxzoneVariance != null ? `${formatSignedTime(roxzoneVariance)} variance` : "-"} />
+            </FormPanel>
           </div>
-        </FormPanel>
+        </div>
+
+        <div className={styles.stickyCta}>
+          <PrimaryButton type="button" fullWidth onClick={handleNext}>
+            Review My Inputs
+          </PrimaryButton>
+        </div>
       </div>
     </Shell>
+  );
+}
+
+function ReasonRow({ title, copy }: { title: string; copy: string }) {
+  return (
+    <div className={styles.reasonRow}>
+      <div className={styles.reasonTitle}>{title}</div>
+      <div className={styles.reasonCopy}>{copy}</div>
+    </div>
+  );
+}
+
+function DataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.dataRow}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }

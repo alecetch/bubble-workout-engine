@@ -61,9 +61,26 @@ test("aggregate ranks extracted", () => {
 
 test("race replay parsed", () => {
   const result = parseHyroxResultsHtml(html());
-  assert.equal(result.raceReplay.length, 8);
+  assert.equal(result.raceReplay.length, 7);
   assert.deepEqual(result.raceReplay[0], { station: "ski_erg", entrySeconds: 8, exitSeconds: 29 });
-  assert.deepEqual(result.raceReplay[7], { station: "wall_balls", entrySeconds: 12, exitSeconds: null });
+  assert.equal(result.raceReplay.some((row) => row.station === "wall_balls"), false);
+});
+
+test("race replay html rows use the final time cell as the diff column", () => {
+  const multiColumnReplay = `
+    <div id="detail-box-splits">
+      <table>
+        <tr><th class="desc">1000m SkiErg In</th><td>08:55:21</td><td>00:05:14</td><td class="diff right last">00:00:05</td></tr>
+        <tr><th class="desc">Rox Out</th><td>09:00:03</td><td>00:09:56</td><td class="diff right last">00:00:31</td></tr>
+        <tr><th class="desc">50m Sled Push In</th><td>09:05:03</td><td>00:14:56</td><td class="diff right last">00:00:03</td></tr>
+        <tr><th class="desc">Rox Out</th><td>09:08:46</td><td>00:18:40</td><td class="diff right last">00:00:24</td></tr>
+      </table>
+    </div>`;
+  const result = parseHyroxResultsHtml(html({ replay: false }).replace("</body>", `${multiColumnReplay}</body>`));
+  assert.deepEqual(result.raceReplay.slice(0, 2), [
+    { station: "ski_erg", entrySeconds: 5, exitSeconds: 31 },
+    { station: "sled_push", entrySeconds: 3, exitSeconds: 24 },
+  ]);
 });
 
 test("race replay parsed from loose text labels", () => {
@@ -78,6 +95,56 @@ test("race replay parsed from loose text labels", () => {
   assert.deepEqual(result.raceReplay.slice(0, 2), [
     { station: "ski_erg", entrySeconds: 8, exitSeconds: 29 },
     { station: "sled_push", entrySeconds: 4, exitSeconds: 36 },
+  ]);
+});
+
+test("loose race replay text uses the final time value as the diff column", () => {
+  const looseReplay = `
+    <div>
+      <p>Ski-Erg In 08:55:21 00:05:14 00:05</p>
+      <p>Rox Out 09:00:03 00:09:56 00:31</p>
+      <p>Sled Push In 09:05:03 00:14:56 00:03</p>
+      <p>Rox Out 09:08:46 00:18:40 00:24</p>
+    </div>`;
+  const result = parseHyroxResultsHtml(html({ replay: false }).replace("</body>", `${looseReplay}</body>`));
+  assert.deepEqual(result.raceReplay.slice(0, 2), [
+    { station: "ski_erg", entrySeconds: 5, exitSeconds: 31 },
+    { station: "sled_push", entrySeconds: 3, exitSeconds: 24 },
+  ]);
+});
+
+test("loose race replay cell text uses the last consecutive time cell", () => {
+  const looseReplay = `
+    <div>
+      <span>Ski-Erg In</span><span>08:55:21</span><span>00:05:14</span><span>00:05</span>
+      <span>Rox Out</span><span>09:00:03</span><span>00:09:56</span><span>00:31</span>
+      <span>Sled Push In</span><span>09:05:03</span><span>00:14:56</span><span>00:03</span>
+      <span>Rox Out</span><span>09:08:46</span><span>00:18:40</span><span>00:24</span>
+    </div>`;
+  const result = parseHyroxResultsHtml(html({ replay: false }).replace("</body>", `${looseReplay}</body>`));
+  assert.deepEqual(result.raceReplay.slice(0, 2), [
+    { station: "ski_erg", entrySeconds: 5, exitSeconds: 31 },
+    { station: "sled_push", entrySeconds: 3, exitSeconds: 24 },
+  ]);
+});
+
+test("repeated Rox Out diff values are preserved in sequence", () => {
+  const duplicateRoxOutReplay = `
+    <div id="detail-box-splits">
+      <table>
+        <tr><th class="desc">50m Sled Push In</th><td>09:05:03</td><td>00:14:56</td><td>00:03</td></tr>
+        <tr><th class="desc">Rox Out</th><td>09:08:46</td><td>00:18:40</td><td>00:24</td></tr>
+        <tr><th class="desc">50m Sled Pull In</th><td>09:13:56</td><td>00:23:49</td><td>00:11</td></tr>
+        <tr><th class="desc">Rox Out</th><td>09:18:03</td><td>00:27:56</td><td>00:24</td></tr>
+        <tr><th class="desc">80m Burpee Broad Jump In</th><td>09:23:17</td><td>00:33:10</td><td>00:13</td></tr>
+        <tr><th class="desc">Rox Out</th><td>09:27:43</td><td>00:37:36</td><td>00:06</td></tr>
+      </table>
+    </div>`;
+  const result = parseHyroxResultsHtml(html({ replay: false }).replace("</body>", `${duplicateRoxOutReplay}</body>`));
+  assert.deepEqual(result.raceReplay.slice(0, 3), [
+    { station: "sled_push", entrySeconds: 3, exitSeconds: 24 },
+    { station: "sled_pull", entrySeconds: 11, exitSeconds: 24 },
+    { station: "burpee_broad_jump", entrySeconds: 13, exitSeconds: 6 },
   ]);
 });
 

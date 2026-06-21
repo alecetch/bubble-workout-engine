@@ -60,13 +60,25 @@ export async function submitHyroxAnalysis(
 
 export async function fetchHyroxResultsImport(
   url: string,
-): Promise<{ success: boolean; reason?: string; parsed?: HyroxParseResult }> {
+): Promise<{
+  success: boolean;
+  reason?: string;
+  parsed?: HyroxParseResult;
+  eventDate?: string;
+  eventName?: string;
+}> {
   const res = await fetch(`${BASE_URL}/api/hyrox/import-url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
-  return res.json() as Promise<{ success: boolean; reason?: string; parsed?: HyroxParseResult }>;
+  return res.json() as Promise<{
+    success: boolean;
+    reason?: string;
+    parsed?: HyroxParseResult;
+    eventDate?: string;
+    eventName?: string;
+  }>;
 }
 
 export function trackEvent(name: string, props?: Record<string, unknown>): void {

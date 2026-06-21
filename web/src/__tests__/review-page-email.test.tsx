@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ReviewPage } from "../pages/ReviewPage";
 import { clearDraft, saveDraft } from "../utils/storage";
@@ -45,14 +45,24 @@ function seedDraft() {
       ageOnRaceDay: 35,
     },
     race: {
+      raceName: "HYROX Manchester",
       division: "open",
       finishTimeSeconds: 5400,
     },
-    splits: [
-      { index: 1, segmentKey: "run_1", label: "Run 1", type: "run", timeSeconds: 300 },
-    ],
+    splits: Array.from({ length: 16 }, (_, index) => ({
+      index: index + 1,
+      segmentKey: `segment_${index + 1}`,
+      label: `Segment ${index + 1}`,
+      type: index % 2 === 0 ? "run" as const : "station" as const,
+      timeSeconds: 300,
+    })),
+    roxzoneTimeSeconds: 600,
     athleteContext: {
+      targetFinishTimeSeconds: 3300,
       trainingAge: "one_to_three_years",
+      weeklyStrengthSessions: "4_5_days_week",
+      weeklyRunningVolume: "30_45_km",
+      primaryBackground: "crossfit_hybrid",
     },
     marketingConsent: false,
   });
@@ -76,14 +86,24 @@ describe("ReviewPage email collection", () => {
   test("Email field renders on ReviewPage", () => {
     renderPage();
     expect(screen.getByTestId("email-input")).toBeInTheDocument();
+    expect(screen.getByText(/Review and receive your analysis/i)).toBeInTheDocument();
+    expect(screen.getByText(/ANALYSIS SUMMARY/i)).toBeInTheDocument();
+    expect(screen.getByText(/WHERE SHOULD WE SEND IT/i)).toBeInTheDocument();
+    expect(screen.getByText(/REPORT WILL INCLUDE/i)).toBeInTheDocument();
+    expect(screen.getByText(/WHAT HAPPENS NEXT/i)).toBeInTheDocument();
+    expect(screen.getByText(/QUALITY CHECKS/i)).toBeInTheDocument();
+    expect(screen.getByText(/All core data complete/i)).toBeInTheDocument();
+    expect(screen.getByText(/Target finish time/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/55:00/i).length).toBeGreaterThan(0);
   });
 
   test("Submit blocked when email is empty", async () => {
     renderPage();
     await act(async () => {
-      fireEvent.click(screen.getByText("Send My Performance Report"));
+      fireEvent.click(screen.getAllByText("Generate My Report")[0]);
     });
     expect(screen.getByTestId("email-error")).toBeInTheDocument();
+    expect(screen.getByTestId("email-error")).toHaveTextContent(/Enter an email address to generate your report/i);
     expect(submitHyroxAnalysis).not.toHaveBeenCalled();
   });
 
@@ -91,9 +111,10 @@ describe("ReviewPage email collection", () => {
     renderPage();
     fireEvent.change(screen.getByTestId("email-input"), { target: { value: "notanemail" } });
     await act(async () => {
-      fireEvent.click(screen.getByText("Send My Performance Report"));
+      fireEvent.click(screen.getAllByText("Generate My Report")[0]);
     });
     expect(screen.getByTestId("email-error")).toBeInTheDocument();
+    expect(screen.getByTestId("email-error")).toHaveTextContent(/Enter a valid email address/i);
     expect(submitHyroxAnalysis).not.toHaveBeenCalled();
   });
 
@@ -103,10 +124,46 @@ describe("ReviewPage email collection", () => {
     fireEvent.change(screen.getByTestId("email-input"), { target: { value: "test@example.com" } });
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Send My Performance Report"));
+      fireEvent.click(screen.getAllByText("Generate My Report")[0]);
     });
 
     expect(submitHyroxAnalysis).toHaveBeenCalled();
     expect(vi.mocked(submitHyroxAnalysis).mock.calls[0][0].athlete.email).toBe("test@example.com");
+    expect(vi.mocked(submitHyroxAnalysis).mock.calls[0][0].athleteContext?.targetFinishTimeSeconds).toBe(3300);
+  });
+
+  test("Submit button shows loading copy while report is generating", async () => {
+    let resolveSubmit: (value: HyroxAnalysisResponse) => void = () => undefined;
+    vi.mocked(submitHyroxAnalysis).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveSubmit = resolve;
+      }),
+    );
+    renderPage();
+    fireEvent.change(screen.getByTestId("email-input"), { target: { value: "test@example.com" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByText("Generate My Report")[0]);
+    });
+
+    expect(screen.getAllByText(/Generating your report/i).length).toBeGreaterThan(0);
+
+    await act(async () => {
+      resolveSubmit(mockResponse);
+    });
+  });
+
+  test("Submit failure shows clear retry message", async () => {
+    vi.mocked(submitHyroxAnalysis).mockRejectedValue(new Error("network"));
+    renderPage();
+    fireEvent.change(screen.getByTestId("email-input"), { target: { value: "test@example.com" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByText("Generate My Report")[0]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/We couldn't generate your report just now\. Please try again/i)).toBeInTheDocument();
+    });
   });
 });

@@ -4,13 +4,36 @@ function segment(analysisJson, key) {
   return analysisJson.segments?.find((row) => row.segmentKey === key) ?? null;
 }
 
+function hasReplayRoxzoneDetail(analysisJson) {
+  const rox = analysisJson.roxzoneAnalysis ?? {};
+  return Boolean(
+    rox.entryExitAvailable ||
+    rox.roxzoneNarrative?.available ||
+    Number(rox.roxzoneNarrative?.measurableStationCount) > 0 ||
+    Number(rox.measurableStationCount) > 0,
+  );
+}
+
+function hasCompleteCoreSplits(analysisJson) {
+  const segments = Array.isArray(analysisJson.segments) ? analysisJson.segments : [];
+  const runCount = new Set(segments.filter((row) => row.type === "run").map((row) => row.segmentKey)).size;
+  const stationCount = new Set(segments.filter((row) => row.type === "station").map((row) => row.segmentKey)).size;
+  return runCount >= 8 && stationCount >= 8;
+}
+
 export function buildBrowserSummary(analysisJson = {}, insights = [], athleteContext = {}) {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
   const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
   const total = segment(analysisJson, "total_time");
   const noteParts = [];
-  if (analysisJson.roxzoneAnalysis?.mode === "inferred_total") noteParts.push("Roxzone time is estimated from unallocated race time.");
-  if (analysisJson.dataQuality?.warnings?.includes("partial_split_data") || Number(analysisJson.dataQuality?.inputCompleteness) < 1) noteParts.push("Some split data is missing, so the summary is limited.");
+  const replayRoxzoneAvailable = hasReplayRoxzoneDetail(analysisJson);
+  const coreSplitsComplete = hasCompleteCoreSplits(analysisJson);
+  if (analysisJson.roxzoneAnalysis?.mode === "inferred_total" && !replayRoxzoneAvailable) {
+    noteParts.push("RoxZone total is estimated from unallocated race time.");
+  }
+  if (!coreSplitsComplete && (analysisJson.dataQuality?.warnings?.includes("partial_split_data") || Number(analysisJson.dataQuality?.inputCompleteness) < 1)) {
+    noteParts.push("Some run or station split data is missing, so the summary is limited.");
+  }
 
   return {
     heroInsight: {

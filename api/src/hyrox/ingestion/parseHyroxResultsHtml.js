@@ -75,6 +75,19 @@ function parseHms(value) {
   return null;
 }
 
+function timeMatches(value) {
+  return [...String(value ?? "").matchAll(/\b\d{1,2}:[0-5]\d(?::[0-5]\d)?\b/g)]
+    .map((match) => ({ index: match.index ?? -1, value: match[0] }))
+    .filter((match) => match.index >= 0);
+}
+
+function onlyTimeValue(value) {
+  const line = String(value ?? "").trim();
+  const matches = timeMatches(line);
+  if (matches.length !== 1) return null;
+  return line.replace(matches[0].value, "").trim() ? null : parseHms(matches[0].value);
+}
+
 function parsePenaltyText(raw) {
   if (!raw || /^[-–—\s]*$/.test(raw)) return null;
   const secondsMatch = raw.match(/\((\d+)\s*s\)/i);
@@ -132,34 +145,47 @@ function extractReplayRowsFromText(html) {
   const rows = [];
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const sameLineTime = parseHms(line);
+    const matches = timeMatches(line);
+    const sameLineTime = matches.length > 0 ? parseHms(matches[matches.length - 1].value) : null;
     if (sameLineTime !== null && /(?:\brox\s+(?:in|out)\b|\b(?:in|out)\b)/i.test(line)) {
-      rows.push({ label: normaliseReplayLabel(line.replace(/\b\d{1,2}:[0-5]\d(?::[0-5]\d)?\b.*$/, "")), timeSeconds: sameLineTime });
+      rows.push({ label: normaliseReplayLabel(line.slice(0, matches[0].index)), timeSeconds: sameLineTime });
       continue;
     }
 
-    const next = lines[i + 1] ?? "";
-    const nextTime = parseHms(next);
-    if (nextTime !== null && /(?:\brox\s+(?:in|out)\b|\b(?:in|out)\b)/i.test(line)) {
-      rows.push({ label: normaliseReplayLabel(line), timeSeconds: nextTime });
-      i += 1;
+    if (/(?:\brox\s+(?:in|out)\b|\b(?:in|out)\b)/i.test(line)) {
+      const followingTimes = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const time = onlyTimeValue(lines[j]);
+        if (time === null) break;
+        followingTimes.push(time);
+        j += 1;
+      }
+      if (followingTimes.length > 0) {
+        rows.push({ label: normaliseReplayLabel(line), timeSeconds: followingTimes[followingTimes.length - 1] });
+        i = j - 1;
+      }
     }
   }
   return rows;
 }
 
 function extractReplayRows(html) {
-  const htmlRows = [...String(html ?? "").matchAll(/<tr[^>]*>\s*<th[^>]*class=["'][^"']*desc[^"']*["'][^>]*>([\s\S]*?)<\/th>\s*<td[^>]*class=["'][^"']*diff[^"']*["'][^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi)]
-    .map((match) => ({ label: stripTags(match[1]), timeSeconds: parseHms(stripTags(match[2])) }))
-    .filter((row) => row.label);
-  const rows = [...htmlRows, ...extractReplayRowsFromText(html)];
-  const seen = new Set();
-  return rows.filter((row) => {
-    const key = `${normaliseReplayLabel(row.label)}:${row.timeSeconds ?? ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const htmlRows = [...String(html ?? "").matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map((match) => {
+      const rowHtml = match[1];
+      const label = stripTags(rowHtml.match(/<th[^>]*class=["'][^"']*desc[^"']*["'][^>]*>([\s\S]*?)<\/th>/i)?.[1] ?? "");
+      const cellTimes = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
+        .map((cell) => parseHms(stripTags(cell[1])))
+        .filter((time) => time !== null);
+      return { label, timeSeconds: cellTimes[cellTimes.length - 1] ?? null };
+    })
+    .filter((row) =>
+      row.label
+      && row.timeSeconds !== null
+      && /(?:\brox\s+(?:in|out)\b|\b(?:in|out)\b)/i.test(row.label)
+    );
+  return htmlRows.length > 0 ? htmlRows : extractReplayRowsFromText(html);
 }
 
 function parseRaceReplay(html) {
@@ -177,7 +203,7 @@ function parseRaceReplay(html) {
       entrySeconds: entryIndex >= 0 ? rows[entryIndex].timeSeconds : null,
       exitSeconds: exitIndex >= 0 ? rows[exitIndex].timeSeconds : null,
     };
-  }).filter((row) => row.entrySeconds !== null || row.exitSeconds !== null);
+  }).filter((row) => row.entrySeconds !== null && row.exitSeconds !== null);
 }
 
 export function parseHyroxResultsHtml(html) {

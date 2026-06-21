@@ -225,11 +225,13 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
           }
           if (targetTimeString) {
             const gain = formatGain(analysisJson.timePotential?.goalBasedGainSeconds ?? analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds);
-            return `${base}. To finish in your target time of ${targetTimeString} you need to find ${gain} across your stations and penalties.`;
+            return `${base}. Against ${targetTimeString} finishers, your ${limiterLabel} was approximately ${gain} slower.`;
           }
           return `${base}, estimated gap of ${formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds)}.`;
         })(),
-        contributors: isRun ? [] : stationContributors,
+        contributors: isRun ? [] : stationContributors.filter(
+          (contributor) => contributor.label !== (limiter.label ?? label(limiter.segmentKey)),
+        ),
         runGapNote: !isRun && runGapSummary
           ? `Your running also contributed an estimated ${formatGain(runGapSummary.gainSeconds)} to the gap - see pacing below.`
           : null,

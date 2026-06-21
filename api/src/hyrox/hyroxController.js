@@ -52,6 +52,7 @@ function contextForPipeline(body = {}) {
     ...performanceContext,
     displayName: body.athlete?.name ?? athleteContext.displayName,
     email: body.athlete?.email,
+    sex: body.athlete?.sex ?? null,
     targetFinishTimeSeconds: intOrNull(athleteContext.targetFinishTimeSeconds),
     targetTimeSeconds: intOrNull(athleteContext.targetFinishTimeSeconds),
     nextRaceDate: athleteContext.nextRaceDate,

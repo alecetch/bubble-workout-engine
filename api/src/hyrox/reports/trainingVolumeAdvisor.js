@@ -45,7 +45,7 @@ const RUNNING_BACKGROUND_COPY = Object.freeze({
 });
 
 const STRENGTH_BACKGROUND_COPY = Object.freeze({
-  running: "As a runner, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
+  running: "For athletes with a stronger running base, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
   crossfit: "CrossFit movement patterns transfer well to HYROX stations, but sessions that focus on HYROX-specific pacing and loading rather than generic WODs will sharpen station performance more efficiently.",
   strength_sports: "As an athlete from a strength sports background, it is common to default to more lifting than a hybrid event requires. The key question is whether your additional sessions are improving HYROX-specific output or adding fatigue that limits your running.",
 });
