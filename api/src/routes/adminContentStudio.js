@@ -366,8 +366,9 @@ adminContentStudioRouter.get("/content-studio/hyrox-events", async (_req, res) =
 
 adminContentStudioRouter.get("/content-studio/hyrox-events/:resultsPageKey/divisions", async (req, res) => {
   const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
+  const season = req.query.season ? Number(req.query.season) : null;
   try {
-    const divisions = await fetchDivisions(resultsPageKey);
+    const divisions = await fetchDivisions(resultsPageKey, season);
     return res.json({ ok: true, divisions });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
@@ -377,10 +378,11 @@ adminContentStudioRouter.get("/content-studio/hyrox-events/:resultsPageKey/divis
 adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scrape", express.json(), async (req, res) => {
   const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
   const division = String(req.body?.division ?? "").trim();
+  const season = req.body?.season ? Number(req.body.season) : null;
   if (!division) return res.status(400).json({ ok: false, error: "division is required" });
 
   try {
-    const rows = await scrapeLeaderboard(resultsPageKey, division, 50);
+    const rows = await scrapeLeaderboard(resultsPageKey, division, 50, season);
     if (!rows.length) return res.status(422).json({ ok: false, error: "Scrape returned no rows" });
 
     const divisionType = rows[0].division;
