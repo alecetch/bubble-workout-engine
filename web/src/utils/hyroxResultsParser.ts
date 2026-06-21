@@ -96,6 +96,18 @@ function findTimeIndex(line: string): number {
   return line.search(/\b\d{1,2}:[0-5]\d\b/);
 }
 
+function timeMatches(line: string): Array<{ index: number; value: string }> {
+  return [...line.matchAll(/\b\d{1,2}:[0-5]\d(?::[0-5]\d)?\b/g)]
+    .map((match) => ({ index: match.index ?? -1, value: match[0] }))
+    .filter((match) => match.index >= 0);
+}
+
+function onlyTimeValue(line: string): string | null {
+  const matches = timeMatches(line.trim());
+  if (matches.length !== 1) return null;
+  return line.replace(matches[0].value, "").trim() ? null : matches[0].value;
+}
+
 function cleanLabel(value: string): string {
   return value
     .replace(/\([^)]*\)/g, "")           // strip "(1,000 m)", "(100 reps)", "(300s)" etc.
@@ -176,10 +188,10 @@ function normaliseReplayLabel(value: string): string {
 function parseRaceReplay(lines: string[]): HyroxParseResult["raceReplay"] {
   const replayRows = lines
     .map((line) => {
-      const timeIdx = findTimeIndex(line);
-      if (timeIdx < 0) return null;
-      const label = normaliseReplayLabel(line.slice(0, timeIdx));
-      const timeSeconds = parseHms(line.slice(timeIdx));
+      const matches = timeMatches(line);
+      if (matches.length === 0) return null;
+      const label = normaliseReplayLabel(line.slice(0, matches[0].index));
+      const timeSeconds = parseHms(matches[matches.length - 1].value);
       return label && timeSeconds !== null ? { label, timeSeconds } : null;
     })
     .filter((row): row is { label: string; timeSeconds: number } => Boolean(row));
@@ -200,10 +212,10 @@ function parseRaceReplay(lines: string[]): HyroxParseResult["raceReplay"] {
       entrySeconds: entryIndex >= 0 ? replayRows[entryIndex].timeSeconds : null,
       exitSeconds: roxOutIndex >= 0 ? replayRows[roxOutIndex].timeSeconds : null,
     };
-  }).filter((row) => row.entrySeconds !== null || row.exitSeconds !== null);
+  }).filter((row) => row.entrySeconds !== null && row.exitSeconds !== null);
 }
 
-function pairLabelWithTime(lines: string[]): string[] {
+export function pairLabelWithTime(lines: string[]): string[] {
   const out: string[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -224,11 +236,37 @@ function pairLabelWithTime(lines: string[]): string[] {
   return out;
 }
 
+function pairLabelWithReplayDiffTime(lines: string[]): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (findTimeIndex(line) < 0 && i + 1 < lines.length) {
+      const followingTimes: string[] = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const time = onlyTimeValue(lines[j]);
+        if (!time) break;
+        followingTimes.push(time);
+        j += 1;
+      }
+      if (followingTimes.length > 0) {
+        out.push(line + "\t" + followingTimes[followingTimes.length - 1]);
+        i = j;
+        continue;
+      }
+    }
+    out.push(line);
+    i++;
+  }
+  return out;
+}
+
 export function parseHyroxResults(rawText: string): HyroxParseResult {
   try {
     const result = emptyResult();
     const rawLines = String(rawText ?? "").replace(/\r/g, "").split("\n").map((line) => line.trim()).filter(Boolean);
-    const lines = pairLabelWithTime(rawLines);
+    const lines = pairLabelWithReplayDiffTime(rawLines);
     const splitsByKey = new Map<string, HyroxImportSplit>();
 
     for (const line of lines) {

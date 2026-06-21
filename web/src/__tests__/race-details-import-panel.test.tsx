@@ -30,7 +30,13 @@ describe("RaceDetailsPage inline import panel", () => {
     renderPage();
     expect(screen.getByTestId("inline-import-panel")).toBeInTheDocument();
     expect(screen.getByTestId("inline-url-input")).toBeInTheDocument();
-    expect(screen.getByText(/preferred: paste your results\.hyrox\.com result link/i)).toBeInTheDocument();
+    expect(screen.getByText(/FREE HYROX ANALYSIS/i)).toBeInTheDocument();
+    expect(screen.getByText(/Paste your HYROX result URL or enter your race manually/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/HYROX result URL/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Next: Check Splits/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/No account needed\. Email capture happens at review/i)).toBeInTheDocument();
+    expect(screen.getByText(/WHAT YOU'LL GET/i)).toBeInTheDocument();
+    expect(screen.getByText(/A race report that tells you what to train next/i)).toBeInTheDocument();
   });
 
   test("Or enter manually separator is visible before import", () => {
@@ -41,7 +47,7 @@ describe("RaceDetailsPage inline import panel", () => {
   test("Successful paste import pre-fills fields and hides separator", async () => {
     renderPage();
 
-    fireEvent.click(screen.getByText("Paste"));
+    fireEvent.click(screen.getByText("Manual"));
     fireEvent.change(screen.getByTestId("paste-area"), { target: { value: FULL_PAGE_TEXT } });
     await act(async () => {
       fireEvent.click(screen.getByTestId("parse-btn"));
@@ -51,10 +57,11 @@ describe("RaceDetailsPage inline import panel", () => {
     });
 
     expect(screen.getByTestId("import-success-badge")).toBeInTheDocument();
+    expect(screen.getByText(/Result imported/i)).toBeInTheDocument();
     expect(screen.queryByTestId("manual-entry-separator")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/athlete name/i)).toHaveValue("Gaston Vanadia");
-    expect(screen.getByLabelText(/age range/i)).toHaveValue("45-49");
-    expect(screen.getByLabelText(/finish time/i)).toHaveValue("1:35:38");
+    expect(screen.getByLabelText(/age group/i)).toHaveValue("45-49");
+    expect(screen.getByLabelText(/^finish time/i)).toHaveValue("1:35:38");
     expect(loadDraft()?.athlete?.name).toBe("Gaston Vanadia");
     expect(loadDraft()?.athlete?.ageGroup).toBe("45-49");
     expect(loadDraft()?.splits?.length).toBeGreaterThan(0);
@@ -79,15 +86,9 @@ describe("RaceDetailsPage inline import panel", () => {
     expect(normalizeAgeGroup("F35")).toBe("35-39");
   });
 
-  test("Known HYROX event selection pre-fills race name and date", () => {
+  test("HYROX event dropdown is not shown on Screen 1", () => {
     renderPage();
-
-    fireEvent.change(screen.getByLabelText(/hyrox event/i), {
-      target: { value: "HYROX Birmingham" },
-    });
-
-    expect(screen.getByLabelText(/race name/i)).toHaveValue("HYROX Birmingham");
-    expect(screen.getByLabelText(/race date/i)).toHaveValue("2026-10-27");
+    expect(screen.queryByLabelText(/hyrox event/i)).not.toBeInTheDocument();
   });
 
   test("Typed known race name pre-fills race date on blur", () => {
@@ -97,7 +98,6 @@ describe("RaceDetailsPage inline import panel", () => {
     fireEvent.change(raceName, { target: { value: "Birmingham" } });
     fireEvent.blur(raceName);
 
-    expect(screen.getByLabelText(/hyrox event/i)).toHaveValue("HYROX Birmingham");
     expect(screen.getByLabelText(/race date/i)).toHaveValue("2026-10-27");
   });
 
@@ -148,5 +148,38 @@ describe("RaceDetailsPage inline import panel", () => {
 
     expect(screen.getByLabelText(/race name/i)).toHaveValue("HYROX Birmingham");
     expect(screen.getByLabelText(/race date/i)).toHaveValue("2026-10-27");
+  });
+
+  test("Successful URL import applies server event date over static fallback", async () => {
+    vi.mocked(fetchHyroxResultsImport).mockResolvedValue({
+      success: true,
+      eventDate: "2025-12-04",
+      eventName: "HYROX London Excel",
+      parsed: {
+        success: true,
+        confidence: "high",
+        athleteName: "test, athlete",
+        athleteAge: null,
+        ageGroup: "35-39",
+        raceName: "HYROX Birmingham",
+        division: "open",
+        finishTimeSeconds: 4800,
+        roxzoneSeconds: 240,
+        penalties: [],
+        raceReplay: [],
+        warnings: [],
+        splits: [],
+      },
+    });
+    renderPage();
+    fireEvent.change(screen.getByTestId("inline-url-input"), {
+      target: { value: "https://results.hyrox.com/season-8/?event_main_group=2025+London+Excel" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("inline-url-fetch"));
+    });
+
+    expect(screen.getByLabelText(/race date/i)).toHaveValue("2025-12-04");
   });
 });

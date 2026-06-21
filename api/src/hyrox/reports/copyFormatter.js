@@ -1,7 +1,7 @@
 import { formatSecondsToTime } from "../ingestion/timeParser.js";
 
 const FORBIDDEN_REPLACEMENTS = Object.freeze([
-  [/\bweakness\b/gi, "limiter"],
+  [/\bweakness\b/g, "limiter"],
   [/\bfailure\b/gi, "setback"],
   [/\bguaranteed\b/gi, "estimated"],
   [/\bbad performance\b/gi, "challenging result"],
@@ -49,6 +49,13 @@ export function formatPercentile(p) {
   const n = Number(p);
   if (!Number.isFinite(n)) return null;
   if (n >= 50) return `Top ${Math.max(1, Math.round(100 - n))}%`;
+  const rounded = Math.round(n);
+  return `${rounded}${ordinalSuffix(rounded)} percentile`;
+}
+
+export function formatPercentileRank(p) {
+  const n = Number(p);
+  if (!Number.isFinite(n)) return null;
   const rounded = Math.round(n);
   return `${rounded}${ordinalSuffix(rounded)} percentile`;
 }

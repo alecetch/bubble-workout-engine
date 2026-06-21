@@ -1,6 +1,7 @@
 import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
 import { formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label } from "./copyFormatter.js";
+import { resolveHeroImage } from "./heroImageResolver.js";
 
 const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type !== "roxzone");
 const FEATURES = Object.freeze(["Biggest Limiter", "Time Potential", "Strongest Station", "Percentile Ranking", "Race Efficiency Score"]);
@@ -52,17 +53,50 @@ function rankLanguage(analysisJson, athleteContext) {
   return { percentile: formatPercentile(percentile) ?? "BENCHMARKED RESULT", worldRank: "" };
 }
 
+function athleteRankLine(rank, athleteContext) {
+  const name = athleteName(athleteContext);
+  if (!rank?.percentile || rank.percentile === "BENCHMARKED RESULT") return rank?.percentile ?? "BENCHMARKED RESULT";
+  if (rank.percentile === "TOP RANK WORLDWIDE") return `${name} has a top rank worldwide`;
+  return `${name} is in the ${rank.percentile}`;
+}
+
+function hasGoalGroup(analysisJson) {
+  return Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup);
+}
+
+function targetSeconds(row, goalAvailable) {
+  if (Number.isFinite(row?.exactTargetSeconds)) return row.exactTargetSeconds;
+  if (goalAvailable && Number.isFinite(row?.goalBenchmarkSeconds)) return row.goalBenchmarkSeconds;
+  return Number.isFinite(row?.benchmarkMedianSeconds) ? row.benchmarkMedianSeconds : null;
+}
+
+function targetGapSeconds(row, goalAvailable) {
+  if (Number.isFinite(row?.timeGapToExactTargetSeconds)) return row.timeGapToExactTargetSeconds;
+  if (goalAvailable && Number.isFinite(row?.goalBenchmarkSeconds) && Number.isFinite(row?.userSeconds)) {
+    return row.userSeconds - row.goalBenchmarkSeconds;
+  }
+  return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
+}
+
+function comparisonLabel(analysisJson) {
+  if ((analysisJson.segments ?? []).some((row) => Number.isFinite(row?.exactTargetSeconds))) return "TARGET";
+  return hasGoalGroup(analysisJson) ? "TARGET BENCHMARK" : "MEDIAN";
+}
+
 function flowRows(analysisJson) {
+  const goalAvailable = hasGoalGroup(analysisJson);
   return RACE_SEGMENTS.map((mapRow) => {
     const row = segment(analysisJson, mapRow.segmentKey);
-    const deltaSeconds = Number(row?.timeGapToMedianSeconds ?? 0);
+    const deltaSeconds = targetGapSeconds(row, goalAvailable);
+    const roundedDelta = Number.isFinite(deltaSeconds) ? Math.round(deltaSeconds) : 0;
     return {
       name: upper(mapRow.displayName),
       time: formatTime(row?.userSeconds) ?? "-",
-      benchmark_time: formatTime(row?.benchmarkMedianSeconds) ?? null,
-      delta: formatTimeDiff(-deltaSeconds) ?? "0",
-      delta_seconds: Math.round(deltaSeconds),
-      tone: deltaSeconds < 0 ? "positive" : deltaSeconds > 0 ? "negative" : "neutral",
+      benchmark_time: formatTime(targetSeconds(row, goalAvailable)) ?? null,
+      target_time: formatTime(targetSeconds(row, goalAvailable)) ?? null,
+      delta: formatTimeDiff(roundedDelta) ?? "0",
+      delta_seconds: roundedDelta,
+      tone: roundedDelta < 0 ? "positive" : roundedDelta > 0 ? "negative" : "neutral",
     };
   });
 }
@@ -72,8 +106,8 @@ function callouts(rows) {
   const gain = [...withDeltas].sort((a, b) => a.delta_seconds - b.delta_seconds)[0];
   const loss = [...withDeltas].sort((a, b) => b.delta_seconds - a.delta_seconds)[0];
   return {
-    biggest_gain: { station: gain?.name ?? "N/A", delta: gain ? formatTimeDiff(Math.abs(gain.delta_seconds)) : "0" },
-    biggest_loss: { station: loss?.name ?? "N/A", delta: loss ? formatTimeDiff(-Math.abs(loss.delta_seconds)) : "0" },
+    biggest_gain: { station: gain?.name ?? "N/A", delta: gain ? formatTimeDiff(gain.delta_seconds) : "0" },
+    biggest_loss: { station: loss?.name ?? "N/A", delta: loss ? formatTimeDiff(loss.delta_seconds) : "0" },
   };
 }
 
@@ -86,13 +120,22 @@ function wordsForSeconds(seconds) {
   return `${remainder} seconds.`;
 }
 
+function opportunityGap(row, analysisJson) {
+  const gap = targetGapSeconds(row, hasGoalGroup(analysisJson));
+  return Number.isFinite(gap) ? gap : Number(row?.timeGapSeconds ?? 0);
+}
+
 export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athleteContext = {}) {
-  const limiter = opportunityStation(analysisJson);
+  const limiter = [...stationSegments(analysisJson)]
+    .filter((row) => opportunityGap(row, analysisJson) > 0)
+    .sort((a, b) => (opportunityGap(b, analysisJson) - opportunityGap(a, analysisJson)) || (a.percentile - b.percentile))[0]
+    ?? opportunityStation(analysisJson);
   const strength = bestStation(analysisJson);
   const gain = analysisJson.timePotential?.headlineGainSeconds ?? analysisJson.headline?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? limiter?.timeGapToMedianSeconds ?? 0;
   const rank = rankLanguage(analysisJson, athleteContext);
   const rows = flowRows(analysisJson);
   const rowCallouts = callouts(rows);
+  const basis = comparisonLabel(analysisJson);
 
   return {
     template_id: "A",
@@ -107,8 +150,8 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         slide_id: "A1_ATHLETE_HOOK",
         report_type: "HYROX PERFORMANCE ANALYSIS",
         athlete_name: athleteName(athleteContext),
-        athlete_image: athleteContext.athleteImage ?? "",
-        percentile: rank.percentile,
+        athlete_image: athleteContext.athleteImage || resolveHeroImage(analysisJson, athleteContext),
+        percentile: athleteRankLine(rank, athleteContext),
         limiter_word: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "OPPORTUNITY"),
         headline_suffix: gain >= 60 ? "COST TIME" : "SETS THE STORY",
         hero_number: formatGain(gain) ?? "0:00",
@@ -121,6 +164,8 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
       {
         slide_id: "A2_POSITION_FLOW",
         title: "WHERE TIME WAS GAINED AND LOST",
+        comparison_basis: basis,
+        legend_text: `BLUE = FASTER THAN ${basis}    RED = SLOWER THAN ${basis}`,
         ...rowCallouts,
         stations: rows,
       },
