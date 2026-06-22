@@ -108,18 +108,27 @@ function bestKeyBy(keys, valueFn, compareFn) {
 }
 
 export async function analyseRaceEvent(rows, division = "open", sex = "male", db) {
-  const athletes = [...rows]
-    .sort((a, b) => a.rank - b.rank)
+  const sortedRows = [...rows].sort((a, b) => (a.finishTimeSeconds ?? Infinity) - (b.finishTimeSeconds ?? Infinity));
+  const athletes = sortedRows
     .map((row) => {
       const splitValues = Object.values(row.splits).filter((value) => value != null);
       const mean = splitValues.length ? splitValues.reduce((sum, value) => sum + value, 0) / splitValues.length : null;
       const stddev = mean ? Math.sqrt(splitValues.reduce((sum, value) => sum + (value - mean) ** 2, 0) / splitValues.length) : null;
       const runTotalSeconds = sumPresent(row.splits, RUN_KEYS);
       const stationTotalSeconds = sumPresent(row.splits, STATION_KEYS);
+      const roxzoneInTotal = sumPresent(row.roxzoneSplits ?? {}, STATION_KEYS.map((key) => `${key}_rox_in`));
+      const roxzoneOutTotal = sumPresent(row.roxzoneSplits ?? {}, STATION_KEYS.map((key) => `${key}_rox_out`));
+      const roxzoneTotalFromSplits = roxzoneInTotal != null && roxzoneOutTotal != null
+        ? roxzoneInTotal + roxzoneOutTotal
+        : (row.roxzoneSeconds ?? null);
       return {
         ...row,
         runTotalSeconds,
         stationTotalSeconds,
+        roxzoneInTotal,
+        roxzoneOutTotal,
+        roxzoneTotalFromSplits,
+        roxzoneSplits: row.roxzoneSplits ?? {},
         runShare: row.finishTimeSeconds && runTotalSeconds != null ? runTotalSeconds / row.finishTimeSeconds : null,
         stationShare: row.finishTimeSeconds && stationTotalSeconds != null ? stationTotalSeconds / row.finishTimeSeconds : null,
         splitVariance: mean ? stddev / mean : null,
@@ -129,11 +138,23 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
 
   assignDenseRanks(athletes, (athlete) => athlete.runTotalSeconds, "runRank");
   assignDenseRanks(athletes, (athlete) => athlete.stationTotalSeconds, "stationRank");
+  assignDenseRanks(athletes, (athlete) => athlete.roxzoneTotalFromSplits, "roxzoneRank");
   for (const key of SPLIT_KEYS) assignSegmentRanks(athletes, key);
 
   const segments = {};
   for (const key of METRIC_KEYS) {
     segments[key] = segmentStats(athletes.map((athlete) => metricValue(athlete, key)));
+  }
+  segments.roxzone_total = segmentStats(athletes.map((athlete) => athlete.roxzoneTotalFromSplits).filter((value) => value != null));
+  for (const stationKey of STATION_KEYS) {
+    const stationRoxTotals = athletes
+      .map((athlete) => {
+        const inVal = athlete.roxzoneSplits[`${stationKey}_rox_in`];
+        const outVal = athlete.roxzoneSplits[`${stationKey}_rox_out`];
+        return inVal != null && outVal != null ? inVal + outVal : null;
+      })
+      .filter((value) => value != null);
+    segments[`${stationKey}_rox_total`] = segmentStats(stationRoxTotals);
   }
 
   const rankCorrelations = {};
@@ -153,6 +174,13 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
     .sort((a, b) => a.value - b.value);
   const sledPairs = sledRanked.map(({ athlete }, index) => ({ segmentRank: index + 1, finishRank: athlete.rank }));
   rankCorrelations.combined_sled = spearmanCorrelation(sledPairs.map((p) => p.segmentRank), sledPairs.map((p) => p.finishRank));
+  const roxzonePairs = athletes
+    .filter((athlete) => Number.isFinite(athlete.roxzoneRank) && Number.isFinite(athlete.rank))
+    .map((athlete) => ({ roxzoneRank: athlete.roxzoneRank, finishRank: athlete.rank }));
+  rankCorrelations.roxzone_total = spearmanCorrelation(
+    roxzonePairs.map((pair) => pair.roxzoneRank),
+    roxzonePairs.map((pair) => pair.finishRank),
+  );
 
   const historicalBenchmarks = await loadHistoricalBenchmarks(division, sex, db);
   for (const athlete of athletes) {
@@ -165,6 +193,9 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
 
   const fullSplitCount = athletes.filter((athlete) => SPLIT_KEYS.every((key) => athlete.splits[key] != null)).length;
   const run1Count = athletes.filter((athlete) => athlete.splits.run_1 != null).length;
+  const roxzoneSplitCount = athletes.filter((athlete) =>
+    STATION_KEYS.some((key) => athlete.roxzoneSplits?.[`${key}_rox_in`] != null)
+  ).length;
 
   return {
     athletes,
@@ -177,6 +208,7 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
       fieldSize: rows.length,
       hasRunSplits: rows.length > 0 && run1Count / rows.length >= 0.8,
       hasFullSplits: rows.length > 0 && fullSplitCount / rows.length >= 0.8,
+      hasRoxzoneSplits: rows.length > 0 && roxzoneSplitCount / rows.length >= 0.8,
     },
     historicalBenchmarks,
     division,

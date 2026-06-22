@@ -89,7 +89,7 @@ test("content studio generate, approval, and export workflow", async (t) => {
       headers: { "content-type": "text/csv" },
       body: csvBody(),
     });
-    assert.equal(upload.response.status, 200);
+    assert.equal(upload.response.status, 200, JSON.stringify(upload.body));
     raceEventId = upload.body.raceEventId;
 
     const generated = await request(app, `/api/admin/content-studio/races/${raceEventId}/generate`, {

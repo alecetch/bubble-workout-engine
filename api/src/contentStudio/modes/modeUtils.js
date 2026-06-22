@@ -18,8 +18,13 @@ export function resolveHandle(name, athleteRegistry = []) {
 }
 
 export function archetypeLabel(athlete, n) {
-  if (athlete.runRank <= 3 && athlete.stationRank > n * 0.5) return "Running dominant";
-  if (athlete.stationRank <= 3 && athlete.runRank > n * 0.5) return "Station dominant";
+  if (athlete.runRank == null || athlete.stationRank == null || n < 2) return "Balanced hybrid";
+  // Use fractional position (0 = top, 1 = bottom); positive diff means better at stations
+  const runFrac = athlete.runRank / n;
+  const statFrac = athlete.stationRank / n;
+  const diff = runFrac - statFrac;
+  if (diff < -0.2) return "Running dominant";
+  if (diff > 0.2) return "Station dominant";
   return "Balanced hybrid";
 }
 
