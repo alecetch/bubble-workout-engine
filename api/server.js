@@ -783,6 +783,9 @@ app.post("/api/physique/check-in", ...entitledUserAuth, uploadSingle, handleChec
 app.post("/api/physique/check-ins/:id/analyse", ...entitledUserAuth, handleTriggerAnalysis);
 app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
 app.use("/api", physiquePhotoRouter);
+// Serve the React web app before marketing pages so /hyrox-calculator and / hit the SPA first.
+app.use(express.static(join(__dirname, "public/web")));
+
 // referralLandingRouter must come before any app.use("/api", ...userAuth, ...) mount —
 // those mounts run userAuth on ALL /api/* paths that reach them, which would block the
 // public GET /api/referral/preview/:code endpoint with a 401 before it can be handled.
@@ -861,9 +864,7 @@ app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates
 app.use(generateProgramV2Router);
 
-// Serve the React frontend and handle client-side routing.
-// Must come after all API routes so /api/* etc. are matched first.
-app.use(express.static(join(__dirname, "public/web")));
+// Catch-all for React Router client-side routes not matched by any API or marketing route.
 app.get(/.*/, (_req, res) => {
   res.sendFile(join(__dirname, "public/web/index.html"));
 });
