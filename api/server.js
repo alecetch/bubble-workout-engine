@@ -861,6 +861,13 @@ app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates
 app.use(generateProgramV2Router);
 
+// Serve the React frontend and handle client-side routing.
+// Must come after all API routes so /api/* etc. are matched first.
+app.use(express.static(join(__dirname, "public/web")));
+app.get(/.*/, (_req, res) => {
+  res.sendFile(join(__dirname, "public/web/index.html"));
+});
+
 // Sentry error handler — must come BEFORE the generic error handler and AFTER all routes.
 Sentry.setupExpressErrorHandler(app);
 
