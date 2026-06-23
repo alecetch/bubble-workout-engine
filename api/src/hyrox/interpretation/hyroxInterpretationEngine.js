@@ -304,11 +304,19 @@ function muscleGroupConfidence(analysisJson = {}) {
   return "low";
 }
 
-export function buildSectionOrder(primaryThesis) {
+export function buildSectionOrder(primaryThesis, analysisJson = {}) {
   if (primaryThesis?.category === "penalty") return [...PENALTY_SECTION_ORDER];
-  if (primaryThesis?.category === "running") return [...RUNNING_SECTION_ORDER];
-  if (primaryThesis?.category === "roxzone") return [...ROXZONE_SECTION_ORDER];
-  return [...DEFAULT_SECTION_ORDER];
+  let order;
+  if (primaryThesis?.category === "running") order = [...RUNNING_SECTION_ORDER];
+  else if (primaryThesis?.category === "roxzone") order = [...ROXZONE_SECTION_ORDER];
+  else order = [...DEFAULT_SECTION_ORDER];
+
+  const hasPenalty = totalPenaltySeconds(analysisJson) > 0;
+  if (hasPenalty && !order.includes("penalty_callout")) {
+    const snapIdx = order.indexOf("race_snapshot");
+    order.splice(snapIdx >= 0 ? snapIdx + 1 : 2, 0, "penalty_callout");
+  }
+  return order;
 }
 
 export function buildHeroCopy(primaryThesis, analysisJson = {}) {
@@ -417,7 +425,7 @@ export function buildInterpretation(analysisJson = {}, athleteContext = {}) {
     secondaryTheses,
     protectedStrengths: protectedStrengths(analysisJson),
     suppressedSignals: buildSuppressedSignals(primaryCategory, secondaryTheses, analysisJson),
-    sectionOrder: buildSectionOrder(primaryThesis),
+    sectionOrder: buildSectionOrder(primaryThesis, analysisJson),
     heroCopy: buildHeroCopy(primaryThesis, analysisJson),
     summaryBullets: buildSummaryBullets(primaryThesis, secondaryTheses, analysisJson),
     penaltyInterpretation,

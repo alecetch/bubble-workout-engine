@@ -59,7 +59,7 @@ export function normaliseSubmission(input = {}) {
           runKey: String(penalty?.runKey ?? penalty?.segmentKey ?? penalty?.station ?? "").trim(),
           penaltySeconds: finiteOrNull(penalty?.penaltySeconds),
         }))
-        .filter((penalty) => penalty.runKey && RUN_KEYS.includes(penalty.runKey) && penalty.penaltySeconds !== null)
+        .filter((penalty) => penalty.runKey && (RUN_KEYS.includes(penalty.runKey) || STATION_KEYS.includes(penalty.runKey)) && penalty.penaltySeconds !== null)
     : [];
   const splitMap = new Map(suppliedSplits.map((split) => [split.segmentKey, split]));
   const penaltyAdjustedSplitMap = new Map(splitMap);

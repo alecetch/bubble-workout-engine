@@ -120,19 +120,21 @@ function penaltyNote(analysisJson) {
 function penaltyCalloutSection(analysisJson = {}, interpretation = null) {
   const penalties = analysisJson.penalties ?? [];
   const total = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
-  if (total < 60) return null;
+  if (total <= 0) return null;
   const adjustedTime = interpretation?.penaltyInterpretation?.adjustedFinishTime;
   const content = [
     `${formatGain(total)} in penalties recorded.${adjustedTime ? ` Your adjusted race time was ${adjustedTime}.` : ""}`,
   ];
-  const affectedRuns = penalties
+  const affectedSegments = penalties
     .map((penalty) => {
-      const runNum = String(penalty.runKey ?? penalty.station ?? penalty.segmentKey ?? "").match(/\d+/)?.[0];
-      return runNum ? `Run ${runNum}` : null;
+      const key = String(penalty.runKey ?? penalty.station ?? penalty.segmentKey ?? "");
+      const runNum = key.match(/^run_(\d+)$/)?.[1];
+      if (runNum) return `Run ${runNum}`;
+      return label(key) || null;
     })
     .filter(Boolean);
-  if (affectedRuns.length > 0) {
-    content.push(`The penalty appeared in ${affectedRuns.join(", ")}.`);
+  if (affectedSegments.length > 0) {
+    content.push(`The penalty was recorded at ${affectedSegments.join(", ")}.`);
   }
   content.push("Before chasing fitness gains, reclaim this time through cleaner station execution.");
   return section("penalty_callout", "Penalty Analysis", content);
