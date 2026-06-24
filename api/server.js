@@ -50,6 +50,7 @@ import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { adminHyroxRouter } from "./src/routes/adminHyrox.js";
+import { adminContentStudioRouter } from "./src/routes/adminContentStudio.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
@@ -72,8 +73,10 @@ import { pool } from "./src/db.js";
 import { loadBenchmarkData } from "./src/hyrox/engine/benchmarkService.js";
 import { hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission } from "./src/hyrox/hyroxValidator.js";
 import * as hyroxController from "./src/hyrox/hyroxController.js";
+import { predict } from "./src/hyrox/hyroxPredictController.js";
 import { makeImportUrlHandler } from "./src/hyrox/hyroxImportController.js";
 import { hyroxCarouselHandler } from "./src/hyrox/hyroxCarouselController.js";
+import { sharePackHandlers } from "./src/hyrox/hyroxSharePackController.js";
 import { runningIpRateLimiter, validateRunningSubmission } from "./src/hyrox/running/runningValidator.js";
 import * as runningController from "./src/hyrox/running/runningController.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
@@ -317,6 +320,7 @@ app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdm
 app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(res, "seed-history.html"));
 app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
 app.get("/admin/hyrox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox.html"));
+app.get("/admin/content-studio", adminCspMiddleware, (_req, res) => sendAdminPage(res, "content-studio.html"));
 app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
 // /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
 app.get("/admin/users", (req, res, next) => {
@@ -769,6 +773,7 @@ app.use("/api/auth", authRouter);
 // internal-token–guarded admin routers.
 app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
+app.use("/api/admin", ...adminOnly, adminContentStudioRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 
 // RevenueCat webhook uses a shared secret header, not user JWT auth.
@@ -787,10 +792,15 @@ app.use(websiteEnhancementsRouter);
 app.use(contentHubRouter);
 app.use(affiliateProgramRouter);
 app.post("/api/hyrox/analyse", hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission, hyroxController.analyse);
+app.post("/api/hyrox/predict", predict);
 app.post("/api/hyrox/import-url", hyroxIpRateLimiter, makeImportUrlHandler(pool));
 app.get("/api/hyrox/health", hyroxController.health);
 app.get("/hyrox/carousel/:submissionId", hyroxCarouselHandler);
 app.get("/api/hyrox/carousel/:submissionId", hyroxCarouselHandler);
+app.post("/api/hyrox/share-pack/:submissionId", sharePackHandlers.generatePack);
+app.post("/api/hyrox/share-pack/:submissionId/email", sharePackHandlers.sendPackEmail);
+app.get("/api/hyrox/share-pack/:submissionId/qr", sharePackHandlers.getQrCode);
+app.get("/hyrox/share/:shareToken", sharePackHandlers.mobileLandingPage);
 app.post("/api/running/analyse", runningIpRateLimiter, validateRunningSubmission, runningController.analyse);
 app.get("/api/running/health", runningController.health);
 app.use("/api", ...userAuth, physiqueReadRouter);
@@ -845,6 +855,7 @@ app.use("/admin", ...adminOnly, adminProgressionSandboxRouter);
 app.use("/admin", ...adminOnly, adminUsersRouter);
 app.use("/admin", ...adminOnly, adminSeedHistoryRouter);
 app.use("/admin", ...adminOnly, adminHyroxRouter);
+app.use("/admin", ...adminOnly, adminContentStudioRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates

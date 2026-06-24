@@ -50,6 +50,7 @@ function contextForPipeline(body = {}) {
   return {
     ...athleteContext,
     ...performanceContext,
+    calculatorMode: body.calculatorMode ?? "target",
     displayName: body.athlete?.name ?? athleteContext.displayName,
     email: body.athlete?.email,
     sex: body.athlete?.sex ?? null,
@@ -95,6 +96,7 @@ export function submissionInput(body = {}) {
     splits: body.splits ?? [],
     penalties: body.penalties ?? [],
     raceReplay: body.raceReplay ?? [],
+    calculatorMode: body.calculatorMode ?? "target",
     athleteContext,
     roxzoneMode: body.roxzoneMode,
   };
@@ -221,7 +223,14 @@ export async function analyse(req, res) {
 
     const insights = unsupportedDivision ? [] : generateInsights(analysisJson, input.athleteContext);
     const emailReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "email_report" });
-    const webReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "web_report" });
+    const webReport = assembleReport({
+      raceResult: input.race,
+      analysisJson,
+      insights,
+      athleteContext: input.athleteContext,
+      outputType: "web_report",
+      calculatorMode: body.calculatorMode ?? "target",
+    });
     const carouselA = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "carousel_a" });
     const carouselB = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "carousel_b" });
 
@@ -239,6 +248,7 @@ export async function analyse(req, res) {
       analysisScope: analysisJson.analysisScope,
       reportSentTo: submission.email,
       browserSummary: webReport.browserSummary,
+      calculatorMode: body.calculatorMode ?? "target",
       muscleGroupProfile: analysisJson.muscleGroupProfile,
       carouselDataAvailable: Boolean(carouselA.carousel || carouselA.slides),
       analysisVersion: analysisJson.analysisVersion,
