@@ -19,10 +19,11 @@ export async function screenshotSlides(carouselHtml) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1080, height: 7000 });
-    // Use domcontentloaded — the carousel page is self-contained with no external resources
-    await page.setContent(carouselHtml, { waitUntil: "domcontentloaded", timeout: 30000 });
-    // Allow inline scripts to finish rendering before screenshotting
-    await page.evaluate(() => new Promise((resolve) => window.requestAnimationFrame(resolve)));
+    // load fires after inline scripts execute; safe for self-contained pages
+    await page.setContent(carouselHtml, { waitUntil: "load", timeout: 30000 });
+    // Small buffer so layout is computed before screenshotting; rAF is unreliable
+    // in headless Chrome with --disable-gpu so use setTimeout instead
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 200)));
 
     const buffers = [];
     for (const slideId of SLIDE_IDS) {
