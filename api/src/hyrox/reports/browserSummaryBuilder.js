@@ -21,7 +21,7 @@ function hasCompleteCoreSplits(analysisJson) {
   return runCount >= 8 && stationCount >= 8;
 }
 
-export function buildBrowserSummary(analysisJson = {}, insights = [], athleteContext = {}) {
+export function buildBrowserSummary(analysisJson = {}, insights = [], athleteContext = {}, calculatorMode = "target") {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
   const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
   const total = segment(analysisJson, "total_time");
@@ -51,5 +51,24 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
     },
     sentMessage: athleteContext.email ? `Your full report has been sent to ${athleteContext.email}` : null,
     dataQualityNote: noteParts.length ? noteParts.join(" ") : null,
+    calculatorMode,
+    athleteArchetype: analysisJson.athleteArchetype
+      ? {
+          key: analysisJson.athleteArchetype.key,
+          label: analysisJson.athleteArchetype.label,
+          confidence: analysisJson.athleteArchetype.confidence ?? null,
+        }
+      : null,
+    workRunBalance: analysisJson.workRunBalance
+      ? {
+          runSharePct: analysisJson.workRunBalance.runShare != null
+            ? Math.round(analysisJson.workRunBalance.runShare * 100)
+            : null,
+          workSharePct: analysisJson.workRunBalance.workShare != null
+            ? Math.round(analysisJson.workRunBalance.workShare * 100)
+            : null,
+          profileType: analysisJson.workRunBalance.profileType ?? null,
+        }
+      : null,
   };
 }

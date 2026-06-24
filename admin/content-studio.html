@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Content Studio</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --success: #198754;
+        --danger: #dc3545;
+        --warning: #b45309;
+        --purple: #7c3aed;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Segoe UI, Arial, sans-serif; color: var(--text); background: var(--bg); }
+      .topbar {
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+        padding: 10px 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .topbar h1 { margin: 0; font-size: 17px; flex: none; }
+      .topbar a { font-size: 12px; color: var(--primary); text-decoration: none; white-space: nowrap; }
+      .topbar a:hover { text-decoration: underline; }
+      .topbar .sep { color: var(--border); }
+      .controls { display: flex; gap: 8px; align-items: center; flex: 1; flex-wrap: wrap; }
+      .controls input {
+        padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+        font: inherit; min-width: 220px;
+      }
+      button {
+        font: inherit; border: 1px solid var(--border); background: #fff;
+        border-radius: 6px; padding: 6px 12px; cursor: pointer; white-space: nowrap;
+      }
+      button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+      button.success { background: var(--success); border-color: var(--success); color: #fff; }
+      button.danger { border-color: #f0b7bf; color: #b42318; }
+      button.danger-fill { background: var(--danger); border-color: var(--danger); color: #fff; }
+      button.purple { background: var(--purple); border-color: var(--purple); color: #fff; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status { font-size: 13px; color: var(--muted); }
+      .status.ok { color: var(--success); }
+      .status.err { color: var(--danger); }
+
+      /* Tabs */
+      .tabs-bar {
+        display: flex; gap: 0; border-bottom: 2px solid var(--border);
+        background: var(--panel); padding: 0 18px;
+      }
+      .tab-btn {
+        border: none; background: none; border-radius: 0; border-bottom: 2px solid transparent;
+        margin-bottom: -2px; padding: 10px 16px; font-weight: 600; color: var(--muted);
+        cursor: pointer; font-size: 14px;
+      }
+      .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
+
+      .main { padding: 16px 18px; }
+
+      /* Cards and sections */
+      .card {
+        background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+        margin-bottom: 14px;
+      }
+      .card-header {
+        padding: 12px 14px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      }
+      .card-header h3 { margin: 0; font-size: 14px; }
+      .card-body { padding: 14px; }
+      .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+      .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+      .form-row { margin-bottom: 10px; }
+      label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+      input[type="text"], input[type="number"], input[type="date"], select, textarea {
+        width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+        font: inherit; background: #fff;
+      }
+      textarea { resize: vertical; font-family: Consolas, monospace; font-size: 12px; min-height: 120px; }
+      .btn-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+
+      /* Tables */
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid #ebeff5; padding: 7px 10px; text-align: left; font-size: 13px; vertical-align: middle; }
+      th { background: #f9fbfd; font-weight: 600; white-space: nowrap; }
+      tr:last-child td { border-bottom: none; }
+      tr.selected-row td { background: #edf4ff; }
+
+      /* Badges */
+      .badge {
+        display: inline-block; border-radius: 4px; padding: 2px 7px;
+        font-size: 11px; font-weight: 600; white-space: nowrap;
+      }
+      .badge-draft     { background: #f1f5f9; color: #64748b; }
+      .badge-pending   { background: #fef3c7; color: #92400e; }
+      .badge-approved  { background: #d1fae5; color: #065f46; }
+      .badge-exported  { background: #ede9fe; color: #5b21b6; }
+      .badge-analysed  { background: #dbeafe; color: #1e40af; }
+
+      /* Detail panel */
+      .detail-panel {
+        background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
+        padding: 14px; margin-top: 12px;
+      }
+      .detail-panel h4 { margin: 0 0 10px 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+      .insight-item { padding: 8px 0; border-bottom: 1px solid #ebeff5; }
+      .insight-item:last-child { border-bottom: none; }
+      .insight-score { font-size: 12px; color: var(--muted); }
+      .slides-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 10px; }
+      .slide-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px; }
+      .slide-type { font-size: 10px; color: var(--muted); text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
+      pre.caption { background: #f1f5f9; border-radius: 6px; padding: 10px; font-size: 12px; white-space: pre-wrap; margin: 0; }
+      .empty { color: var(--muted); padding: 20px 0; text-align: center; font-size: 13px; }
+      .mono { font-family: Consolas, monospace; font-size: 11px; color: var(--muted); }
+
+      .mode-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 8px; margin: 10px 0;
+      }
+      .mode-card {
+        border: 2px solid var(--border); border-radius: 8px; padding: 10px;
+        cursor: pointer; background: #fff; text-align: center; font-size: 13px;
+        transition: border-color 0.15s;
+      }
+      .mode-card:hover { border-color: var(--primary); }
+      .mode-card.selected { border-color: var(--primary); background: #edf4ff; color: var(--primary); font-weight: 600; }
+      .mode-icon { font-size: 22px; margin-bottom: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <h1>🎨 Content Studio</h1>
+      <span class="sep">|</span>
+      <a href="/admin/hyrox">Submissions</a>
+      <a href="/admin-ui">Config Admin</a>
+      <a href="/hyrox-calculator" target="_blank">Calculator ↗</a>
+      <a href="/hyrox-predictor" target="_blank">Predictor ↗</a>
+      <span class="sep">|</span>
+      <div class="controls">
+        <input id="token-input" type="password" placeholder="x-internal-token" />
+        <span id="status" class="status"></span>
+      </div>
+    </div>
+
+    <div class="tabs-bar">
+      <button class="tab-btn active" data-tab="races">Race Events</button>
+      <button class="tab-btn" data-tab="athletes">Athletes</button>
+      <button class="tab-btn" data-tab="jobs">Content Jobs</button>
+    </div>
+
+    <!-- RACES TAB -->
+    <div id="tab-races" class="tab-panel active">
+      <div class="main">
+        <!-- Upload -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Upload Race Results (CSV)</h3>
+            <button id="load-races-btn">Refresh List</button>
+          </div>
+          <div class="card-body">
+            <div class="form-grid three">
+              <div>
+                <label>Event Name *</label>
+                <input id="upload-event-name" type="text" placeholder="e.g. HYROX London 2025" />
+              </div>
+              <div>
+                <label>Event Date</label>
+                <input id="upload-event-date" type="date" />
+              </div>
+              <div>
+                <label>Season</label>
+                <input id="upload-season" type="number" placeholder="e.g. 9" min="1" max="20" />
+              </div>
+              <div>
+                <label>Division</label>
+                <select id="upload-division">
+                  <option value="open">Open</option>
+                  <option value="pro">Pro</option>
+                  <option value="doubles_men">Doubles Men</option>
+                  <option value="doubles_women">Doubles Women</option>
+                  <option value="doubles_mixed">Doubles Mixed</option>
+                </select>
+              </div>
+              <div>
+                <label>Sex</label>
+                <select id="upload-sex">
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>CSV Data (paste top-50 results)</label>
+              <textarea id="upload-csv" placeholder="Paste CSV content here..."></textarea>
+            </div>
+            <div class="btn-row">
+              <button id="upload-btn" class="primary">Upload & Analyse</button>
+              <span id="upload-status" class="status"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Race list -->
+        <div class="card">
+          <div class="card-header"><h3>Race Events</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Event</th><th>Date</th><th>Season</th><th>Division</th><th>Sex</th><th>Athletes</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="races-tbody">
+                <tr><td colspan="8" class="empty">Load token and click Refresh List.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Race detail / generate panel -->
+        <div id="race-detail" style="display:none">
+          <div class="card">
+            <div class="card-header">
+              <h3 id="race-detail-title">Race</h3>
+              <button id="run-autopick-btn" class="primary">⚡ Auto-Pick</button>
+            </div>
+            <div class="card-body">
+              <div id="autopick-results"></div>
+
+              <h4 style="margin:16px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">Generate Content</h4>
+              <div class="mode-grid" id="mode-grid">
+                <div class="mode-card" data-mode="athlete_spotlight"><div class="mode-icon">⭐</div>Athlete Spotlight</div>
+                <div class="mode-card" data-mode="head_to_head"><div class="mode-icon">⚔️</div>Head-to-Head</div>
+                <div class="mode-card" data-mode="podium_breakdown"><div class="mode-icon">🏆</div>Podium Breakdown</div>
+                <div class="mode-card" data-mode="race_breakdown"><div class="mode-icon">📊</div>Race Breakdown</div>
+                <div class="mode-card" data-mode="myth_buster"><div class="mode-icon">💡</div>Myth Buster</div>
+                <div class="mode-card" data-mode="what_we_learn"><div class="mode-icon">🎓</div>What We Learn</div>
+              </div>
+
+              <!-- Athlete Spotlight params -->
+              <div id="params-athlete_spotlight" class="generate-params" style="display:none">
+                <div class="form-row">
+                  <label>Athlete Name (optional — leave blank to auto-select top performer)</label>
+                  <input type="text" id="param-athlete-name" placeholder="e.g. Jane Smith" />
+                </div>
+              </div>
+              <!-- Head to Head params -->
+              <div id="params-head_to_head" class="generate-params" style="display:none">
+                <div class="form-grid">
+                  <div>
+                    <label>Athlete A Name</label>
+                    <input type="text" id="param-athlete-a" placeholder="First athlete" />
+                  </div>
+                  <div>
+                    <label>Athlete B Name</label>
+                    <input type="text" id="param-athlete-b" placeholder="Second athlete" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="btn-row" id="generate-btn-row" style="display:none">
+                <button id="generate-btn" class="success">Generate Content</button>
+                <span id="generate-status" class="status"></span>
+              </div>
+
+              <div id="generate-results"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ATHLETES TAB -->
+    <div id="tab-athletes" class="tab-panel">
+      <div class="main">
+        <div class="card">
+          <div class="card-header">
+            <h3>Add Athlete</h3>
+            <button id="load-athletes-btn">Refresh List</button>
+          </div>
+          <div class="card-body">
+            <div class="form-grid three">
+              <div>
+                <label>Full Name *</label>
+                <input id="ath-name" type="text" placeholder="e.g. Jane Smith" />
+              </div>
+              <div>
+                <label>Instagram Handle</label>
+                <input id="ath-handle" type="text" placeholder="@janesmith" />
+              </div>
+              <div>
+                <label>Follower Count</label>
+                <input id="ath-followers" type="number" placeholder="e.g. 15000" min="0" />
+              </div>
+              <div>
+                <label>Sex</label>
+                <select id="ath-sex">
+                  <option value="">—</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+              <div>
+                <label>Division</label>
+                <select id="ath-division">
+                  <option value="">—</option>
+                  <option value="open">Open</option>
+                  <option value="pro">Pro</option>
+                </select>
+              </div>
+              <div>
+                <label>Notes</label>
+                <input id="ath-notes" type="text" placeholder="Optional notes" />
+              </div>
+            </div>
+            <div class="btn-row">
+              <button id="add-athlete-btn" class="primary">Add Athlete</button>
+              <span id="athlete-add-status" class="status"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3>Athlete Registry</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Name</th><th>Handle</th><th>Followers</th><th>Sex</th><th>Division</th><th>Notes</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="athletes-tbody">
+                <tr><td colspan="7" class="empty">Click Refresh List.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JOBS TAB -->
+    <div id="tab-jobs" class="tab-panel">
+      <div class="main">
+        <div class="card">
+          <div class="card-header">
+            <h3>Content Jobs</h3>
+            <button id="load-jobs-btn">Refresh List</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Event</th><th>Mode</th><th>Headline</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="jobs-tbody">
+                <tr><td colspan="6" class="empty">Click Refresh List.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="job-detail" style="display:none">
+          <div class="card">
+            <div class="card-header">
+              <h3 id="job-detail-title">Job Detail</h3>
+              <div class="btn-row" style="margin:0">
+                <button id="job-submit-btn">Submit for Review</button>
+                <button id="job-approve-btn" class="success">Approve</button>
+                <button id="job-reject-btn" class="danger">Reject</button>
+                <button id="job-export-btn" class="purple">Export JSON ↓</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="job-content-preview"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_internal_api_token";
+      const tokenInput = document.getElementById("token-input");
+      const statusEl = document.getElementById("status");
+
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) tokenInput.value = saved;
+      tokenInput.addEventListener("change", () => sessionStorage.setItem(STORAGE_KEY, tokenInput.value.trim()));
+
+      function getToken() { return tokenInput.value.trim(); }
+
+      function setStatus(msg, kind = "") {
+        statusEl.textContent = msg;
+        statusEl.className = `status ${kind}`;
+      }
+
+      function esc(v) {
+        return String(v ?? "")
+          .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return "—";
+        return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      }
+
+      function fmtDateTime(iso) {
+        if (!iso) return "—";
+        return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      }
+
+      function badgeHtml(status) {
+        const map = { draft: "badge-draft", pending_review: "badge-pending", approved: "badge-approved", exported: "badge-exported", analysed: "badge-analysed" };
+        return `<span class="badge ${map[status] ?? "badge-draft"}">${esc(status ?? "—")}</span>`;
+      }
+
+      async function apiFetch(path, init = {}) {
+        const token = getToken();
+        if (!token) throw new Error("Paste x-internal-token first.");
+        const headers = { "Content-Type": "application/json", "x-internal-token": token, ...(init.headers || {}) };
+        const res = await fetch(path, { ...init, headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+      // ── Tab switching ─────────────────────────────────────────────────────────
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+          document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+          btn.classList.add("active");
+          document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+        });
+      });
+
+      // ══════════════════════════════════════════════════════════════════════════
+      // RACES TAB
+      // ══════════════════════════════════════════════════════════════════════════
+      let selectedRaceId = null;
+      let selectedMode = null;
+
+      async function loadRaces() {
+        try {
+          setStatus("Loading races…");
+          const data = await apiFetch("/admin/content-studio/races");
+          renderRaces(data.races || []);
+          setStatus(`${(data.races || []).length} races`, "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      }
+
+      function renderRaces(races) {
+        const tbody = document.getElementById("races-tbody");
+        if (!races.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="empty">No race events yet. Upload one above.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = races.map((r) => `
+          <tr data-race-id="${esc(r.id)}">
+            <td><strong>${esc(r.eventName)}</strong></td>
+            <td>${esc(fmtDate(r.eventDate))}</td>
+            <td>${esc(r.season ?? "—")}</td>
+            <td>${esc(r.division)}</td>
+            <td>${esc(r.sex)}</td>
+            <td>${esc(r.athleteCount ?? "—")}</td>
+            <td>${badgeHtml(r.status)}</td>
+            <td><button class="select-race-btn" data-race-id="${esc(r.id)}" data-race-name="${esc(r.eventName)}">Select</button></td>
+          </tr>
+        `).join("");
+
+        tbody.querySelectorAll(".select-race-btn").forEach((btn) => {
+          btn.addEventListener("click", () => openRaceDetail(btn.dataset.raceId, btn.dataset.raceName));
+        });
+      }
+
+      function openRaceDetail(raceId, raceName) {
+        selectedRaceId = raceId;
+        selectedMode = null;
+        document.getElementById("race-detail-title").textContent = `Generate for: ${raceName}`;
+        document.getElementById("autopick-results").innerHTML = "";
+        document.getElementById("generate-results").innerHTML = "";
+        document.getElementById("generate-btn-row").style.display = "none";
+        document.querySelectorAll(".mode-card").forEach((c) => c.classList.remove("selected"));
+        document.querySelectorAll(".generate-params").forEach((p) => { p.style.display = "none"; });
+        document.getElementById("race-detail").style.display = "block";
+        document.getElementById("race-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+
+        // highlight selected row
+        document.querySelectorAll("#races-tbody tr").forEach((tr) => tr.classList.remove("selected-row"));
+        const row = document.querySelector(`#races-tbody tr[data-race-id="${raceId}"]`);
+        if (row) row.classList.add("selected-row");
+      }
+
+      document.getElementById("load-races-btn").addEventListener("click", loadRaces);
+
+      // Upload
+      document.getElementById("upload-btn").addEventListener("click", async () => {
+        const statusEl2 = document.getElementById("upload-status");
+        const eventName = document.getElementById("upload-event-name").value.trim();
+        const csv = document.getElementById("upload-csv").value.trim();
+        if (!eventName) { statusEl2.textContent = "Event name is required."; statusEl2.className = "status err"; return; }
+        if (!csv) { statusEl2.textContent = "Paste CSV data first."; statusEl2.className = "status err"; return; }
+
+        const params = new URLSearchParams({
+          eventName,
+          division: document.getElementById("upload-division").value,
+          sex: document.getElementById("upload-sex").value,
+        });
+        const eventDate = document.getElementById("upload-event-date").value;
+        const season = document.getElementById("upload-season").value;
+        if (eventDate) params.set("eventDate", eventDate);
+        if (season) params.set("season", season);
+
+        const token = getToken();
+        if (!token) { statusEl2.textContent = "Paste token first."; statusEl2.className = "status err"; return; }
+
+        statusEl2.textContent = "Uploading…"; statusEl2.className = "status";
+        try {
+          const res = await fetch(`/admin/content-studio/races/upload?${params}`, {
+            method: "POST",
+            headers: { "Content-Type": "text/csv", "x-internal-token": token },
+            body: csv,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          const warns = (data.warnings || []).length ? ` (${data.warnings.length} warnings)` : "";
+          statusEl2.textContent = `Uploaded: race event #${data.raceEventId}${warns}`;
+          statusEl2.className = "status ok";
+          document.getElementById("upload-csv").value = "";
+          await loadRaces();
+        } catch (err) {
+          statusEl2.textContent = err.message;
+          statusEl2.className = "status err";
+        }
+      });
+
+      // Auto-pick
+      document.getElementById("run-autopick-btn").addEventListener("click", async () => {
+        if (!selectedRaceId) return;
+        const el = document.getElementById("autopick-results");
+        el.innerHTML = '<p class="status">Running auto-pick…</p>';
+        try {
+          const data = await apiFetch(`/admin/content-studio/races/${selectedRaceId}/auto-pick`, { method: "POST" });
+          const insights = data.insights || [];
+          if (!insights.length) { el.innerHTML = '<p class="status">No insights generated.</p>'; return; }
+          el.innerHTML = `
+            <div class="detail-panel">
+              <h4>Auto-Pick Insights (${insights.length}) — Job #${esc(data.jobId?.slice(0,8))}…</h4>
+              ${insights.slice(0, 10).map((ins) => `
+                <div class="insight-item">
+                  <strong>${esc(ins.title ?? ins.insightType ?? ins.type ?? "Insight")}</strong>
+                  <span class="insight-score">— score ${typeof ins.totalScore === "number" ? ins.totalScore.toFixed(1) : "?"}</span>
+                  <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(ins.headline ?? ins.hook ?? "")}</div>
+                </div>
+              `).join("")}
+            </div>`;
+        } catch (err) {
+          el.innerHTML = `<p class="status err">${esc(err.message)}</p>`;
+        }
+      });
+
+      // Mode selection
+      document.querySelectorAll(".mode-card").forEach((card) => {
+        card.addEventListener("click", () => {
+          document.querySelectorAll(".mode-card").forEach((c) => c.classList.remove("selected"));
+          document.querySelectorAll(".generate-params").forEach((p) => { p.style.display = "none"; });
+          card.classList.add("selected");
+          selectedMode = card.dataset.mode;
+          const params = document.getElementById(`params-${selectedMode}`);
+          if (params) params.style.display = "block";
+          document.getElementById("generate-btn-row").style.display = "flex";
+        });
+      });
+
+      // Generate
+      document.getElementById("generate-btn").addEventListener("click", async () => {
+        if (!selectedRaceId || !selectedMode) return;
+        const statusEl3 = document.getElementById("generate-status");
+        const el = document.getElementById("generate-results");
+        statusEl3.textContent = "Generating…"; statusEl3.className = "status";
+        el.innerHTML = "";
+
+        const modeParams = {};
+        if (selectedMode === "athlete_spotlight") {
+          const name = document.getElementById("param-athlete-name")?.value.trim();
+          if (name) modeParams.athleteName = name;
+        }
+        if (selectedMode === "head_to_head") {
+          const a = document.getElementById("param-athlete-a")?.value.trim();
+          const b = document.getElementById("param-athlete-b")?.value.trim();
+          if (a) modeParams.athleteA = a;
+          if (b) modeParams.athleteB = b;
+        }
+
+        try {
+          const data = await apiFetch(`/admin/content-studio/races/${selectedRaceId}/generate`, {
+            method: "POST",
+            body: JSON.stringify({ mode: selectedMode, params: modeParams }),
+          });
+          statusEl3.textContent = `Job #${data.jobId?.slice(0,8)}… created`;
+          statusEl3.className = "status ok";
+          renderGeneratedContent(data);
+        } catch (err) {
+          statusEl3.textContent = err.message;
+          statusEl3.className = "status err";
+        }
+      });
+
+      function renderGeneratedContent(data) {
+        const el = document.getElementById("generate-results");
+        const slides = data.carouselSlides ?? [];
+        const slidesHtml = slides.length
+          ? `<div class="slides-grid">${slides.map((s) => `
+              <div class="slide-card">
+                <div class="slide-type">${esc(s.slideType ?? s.type ?? "slide")}</div>
+                <div style="font-weight:600;margin-bottom:4px">${esc(s.headline ?? s.title ?? "")}</div>
+                <div style="color:var(--muted)">${esc(s.bodyText ?? s.body ?? "")}</div>
+              </div>`).join("")}</div>`
+          : '<p class="status">No slides generated.</p>';
+
+        el.innerHTML = `
+          <div class="detail-panel" style="margin-top:12px">
+            <h4>${esc(data.headline ?? "Generated Content")}</h4>
+            ${data.hook ? `<p style="font-size:13px;margin:0 0 8px">${esc(data.hook)}</p>` : ""}
+            ${slidesHtml}
+            ${data.captionDraft ? `
+              <h4 style="margin-top:14px">Draft Caption</h4>
+              <pre class="caption">${esc(data.captionDraft)}</pre>
+              ${data.suggestedHandles?.length ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 0">Handles: ${esc(data.suggestedHandles.join(", "))}</p>` : ""}
+              ${data.suggestedHashtags?.length ? `<p style="font-size:12px;color:var(--muted);margin:4px 0 0">Tags: ${esc(data.suggestedHashtags.join(" "))}</p>` : ""}
+            ` : ""}
+          </div>`;
+      }
+
+      // ══════════════════════════════════════════════════════════════════════════
+      // ATHLETES TAB
+      // ══════════════════════════════════════════════════════════════════════════
+      async function loadAthletes() {
+        try {
+          setStatus("Loading athletes…");
+          const data = await apiFetch("/admin/content-studio/athletes");
+          renderAthletes(data.athletes || []);
+          setStatus(`${(data.athletes || []).length} athletes`, "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      }
+
+      function renderAthletes(athletes) {
+        const tbody = document.getElementById("athletes-tbody");
+        if (!athletes.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty">No athletes in registry yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = athletes.map((a) => `
+          <tr data-athlete-id="${esc(a.id)}">
+            <td>${esc(a.full_name)}</td>
+            <td>${esc(a.instagram_handle ?? "—")}</td>
+            <td>${esc(a.instagram_follower_count != null ? Number(a.instagram_follower_count).toLocaleString() : "—")}</td>
+            <td>${esc(a.sex ?? "—")}</td>
+            <td>${esc(a.division ?? "—")}</td>
+            <td>${esc(a.notes ?? "—")}</td>
+            <td>
+              <button class="delete-athlete-btn danger" data-id="${esc(a.id)}" data-name="${esc(a.full_name)}">Delete</button>
+            </td>
+          </tr>
+        `).join("");
+        tbody.querySelectorAll(".delete-athlete-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm(`Delete athlete "${btn.dataset.name}"?`)) return;
+            try {
+              await apiFetch(`/admin/content-studio/athletes/${btn.dataset.id}`, { method: "DELETE" });
+              await loadAthletes();
+            } catch (err) {
+              setStatus(err.message, "err");
+            }
+          });
+        });
+      }
+
+      document.getElementById("load-athletes-btn").addEventListener("click", loadAthletes);
+
+      document.getElementById("add-athlete-btn").addEventListener("click", async () => {
+        const statusEl4 = document.getElementById("athlete-add-status");
+        const fullName = document.getElementById("ath-name").value.trim();
+        if (!fullName) { statusEl4.textContent = "Full name is required."; statusEl4.className = "status err"; return; }
+        try {
+          await apiFetch("/admin/content-studio/athletes", {
+            method: "POST",
+            body: JSON.stringify({
+              fullName,
+              instagramHandle: document.getElementById("ath-handle").value.trim() || undefined,
+              instagramFollowerCount: document.getElementById("ath-followers").value || undefined,
+              sex: document.getElementById("ath-sex").value || undefined,
+              division: document.getElementById("ath-division").value || undefined,
+              notes: document.getElementById("ath-notes").value.trim() || undefined,
+            }),
+          });
+          statusEl4.textContent = "Added!"; statusEl4.className = "status ok";
+          document.getElementById("ath-name").value = "";
+          document.getElementById("ath-handle").value = "";
+          document.getElementById("ath-followers").value = "";
+          document.getElementById("ath-notes").value = "";
+          await loadAthletes();
+        } catch (err) {
+          statusEl4.textContent = err.message; statusEl4.className = "status err";
+        }
+      });
+
+      // ══════════════════════════════════════════════════════════════════════════
+      // JOBS TAB
+      // ══════════════════════════════════════════════════════════════════════════
+      let selectedJobId = null;
+      let selectedJobStatus = null;
+
+      async function loadJobs() {
+        try {
+          setStatus("Loading jobs…");
+          const data = await apiFetch("/admin/content-studio/jobs");
+          renderJobs(data.jobs || []);
+          setStatus(`${(data.jobs || []).length} jobs`, "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      }
+
+      function renderJobs(jobs) {
+        const tbody = document.getElementById("jobs-tbody");
+        if (!jobs.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty">No content jobs yet. Generate content from the Race Events tab.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = jobs.map((j) => `
+          <tr data-job-id="${esc(j.id)}" data-job-status="${esc(j.status)}">
+            <td>${esc(j.event_name ?? "—")}<span class="mono" style="margin-left:6px">${esc(j.division ?? "")} ${esc(j.sex ?? "")}</span></td>
+            <td>${esc(j.content_mode?.replace(/_/g, " ") ?? "—")}</td>
+            <td>${esc(j.headline ?? "—")}</td>
+            <td>${badgeHtml(j.status)}</td>
+            <td class="mono">${esc(fmtDateTime(j.created_at))}</td>
+            <td><button class="view-job-btn" data-id="${esc(j.id)}" data-status="${esc(j.status)}" data-mode="${esc(j.content_mode ?? "")}">View</button></td>
+          </tr>
+        `).join("");
+        tbody.querySelectorAll(".view-job-btn").forEach((btn) => {
+          btn.addEventListener("click", () => openJobDetail(btn.dataset.id, btn.dataset.status, btn.dataset.mode));
+        });
+      }
+
+      async function openJobDetail(jobId, status, mode) {
+        selectedJobId = jobId;
+        selectedJobStatus = status;
+        document.getElementById("job-detail-title").textContent = `Job ${jobId.slice(0,8)}… — ${mode.replace(/_/g, " ")}`;
+        updateJobActions(status);
+        document.getElementById("job-content-preview").innerHTML = '<p class="status">Loading…</p>';
+        document.getElementById("job-detail").style.display = "block";
+        document.getElementById("job-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+
+        try {
+          const data = await apiFetch(`/admin/content-studio/jobs/${jobId}`);
+          renderJobDetail(data.job, data.items || []);
+        } catch (err) {
+          document.getElementById("job-content-preview").innerHTML = `<p class="status err">${esc(err.message)}</p>`;
+        }
+      }
+
+      function updateJobActions(status) {
+        document.getElementById("job-submit-btn").style.display = status === "draft" ? "" : "none";
+        document.getElementById("job-approve-btn").style.display = status === "pending_review" ? "" : "none";
+        document.getElementById("job-reject-btn").style.display = status === "pending_review" ? "" : "none";
+        document.getElementById("job-export-btn").style.display = status === "approved" ? "" : "none";
+      }
+
+      function renderJobDetail(job, items) {
+        const el = document.getElementById("job-content-preview");
+        const content = job.generated_content_json ?? {};
+        const carouselItem = items.find((i) => i.item_type === "carousel");
+        const slides = content.carouselSlides ?? carouselItem?.carousel_json?.slides ?? [];
+
+        const slidesHtml = slides.length
+          ? `<div class="slides-grid">${slides.map((s) => `
+              <div class="slide-card">
+                <div class="slide-type">${esc(s.slideType ?? s.type ?? "slide")}</div>
+                <div style="font-weight:600;margin-bottom:4px">${esc(s.headline ?? s.title ?? "")}</div>
+                <div style="color:var(--muted)">${esc(s.bodyText ?? s.body ?? "")}</div>
+              </div>`).join("")}</div>`
+          : "";
+
+        el.innerHTML = `
+          <div style="margin-bottom:10px">
+            <strong>${esc(content.headline ?? "")}</strong>
+            ${content.hook ? `<p style="color:var(--muted);font-size:13px;margin:4px 0 0">${esc(content.hook)}</p>` : ""}
+          </div>
+          ${slidesHtml}
+          ${carouselItem?.caption_text ? `
+            <h4 style="margin:14px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Caption</h4>
+            <pre class="caption">${esc(carouselItem.caption_text)}</pre>
+          ` : ""}`;
+      }
+
+      document.getElementById("load-jobs-btn").addEventListener("click", loadJobs);
+
+      document.getElementById("job-submit-btn").addEventListener("click", async () => {
+        if (!selectedJobId) return;
+        try {
+          await apiFetch(`/admin/content-studio/jobs/${selectedJobId}/submit`, { method: "PATCH" });
+          selectedJobStatus = "pending_review";
+          updateJobActions("pending_review");
+          setStatus("Submitted for review", "ok");
+          await loadJobs();
+        } catch (err) { setStatus(err.message, "err"); }
+      });
+
+      document.getElementById("job-approve-btn").addEventListener("click", async () => {
+        if (!selectedJobId) return;
+        try {
+          await apiFetch(`/admin/content-studio/jobs/${selectedJobId}/approve`, { method: "PATCH" });
+          selectedJobStatus = "approved";
+          updateJobActions("approved");
+          setStatus("Approved", "ok");
+          await loadJobs();
+        } catch (err) { setStatus(err.message, "err"); }
+      });
+
+      document.getElementById("job-reject-btn").addEventListener("click", async () => {
+        if (!selectedJobId) return;
+        try {
+          await apiFetch(`/admin/content-studio/jobs/${selectedJobId}/reject`, { method: "PATCH" });
+          selectedJobStatus = "draft";
+          updateJobActions("draft");
+          setStatus("Rejected → back to draft", "ok");
+          await loadJobs();
+        } catch (err) { setStatus(err.message, "err"); }
+      });
+
+      document.getElementById("job-export-btn").addEventListener("click", async () => {
+        if (!selectedJobId) return;
+        const token = getToken();
+        const url = `/admin/content-studio/jobs/${selectedJobId}/export`;
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `forma-content-${selectedJobId.slice(0,8)}.json`);
+        // Add token via fetch + blob since we need auth header
+        try {
+          const res = await fetch(url, { headers: { "x-internal-token": token } });
+          if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || `HTTP ${res.status}`); }
+          const blob = await res.blob();
+          link.href = URL.createObjectURL(blob);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setStatus("Exported", "ok");
+          selectedJobStatus = "exported";
+          updateJobActions("exported");
+          await loadJobs();
+        } catch (err) { setStatus(err.message, "err"); }
+      });
+    </script>
+  </body>
+</html>

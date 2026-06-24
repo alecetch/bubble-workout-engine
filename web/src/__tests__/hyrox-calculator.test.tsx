@@ -209,6 +209,7 @@ describe("SplitEntryPage", () => {
     expect(screen.getByTestId("race-replay-summary-card")).toHaveTextContent(/N\/A/i);
     expect(screen.getByTestId("race-replay-summary-card")).not.toHaveTextContent(/4:38/i);
   });
+
 });
 
 // ─── Race details page validation ─────────────────────────────────────────────

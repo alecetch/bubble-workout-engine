@@ -68,6 +68,7 @@ export function assembleReport(request = {}) {
     athleteContext: rawAthleteContext = {},
     outputType = "web_report",
     target = null,
+    calculatorMode = "target",
   } = request;
   const athleteContext = rawAthleteContext ?? {};
 
@@ -77,7 +78,7 @@ export function assembleReport(request = {}) {
 
   if (analysisJson.analysisScope === "no_benchmark_data") {
     report.templateId = outputType === "email_report" ? "PERSONAL_REPORT" : "BROWSER_SUMMARY";
-    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext);
+    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext, calculatorMode);
     return deepEnforceTone(report);
   }
 
@@ -108,7 +109,7 @@ export function assembleReport(request = {}) {
     report.emailText = email.textBody;
   } else if (outputType === "web_report") {
     report.templateId = "BROWSER_SUMMARY";
-    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext);
+    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext, calculatorMode);
   } else if (/^[C-H]$/.test(outputType)) {
     report.templateId = `${outputType}_STUB`;
     report.carousel = buildTemplateStub(outputType);

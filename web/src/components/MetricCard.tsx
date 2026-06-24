@@ -5,7 +5,7 @@ interface MetricCardProps {
   title: string;
   value: ReactNode;
   sub?: string;
-  accent?: "default" | "red" | "green" | "cyan";
+  accent?: "default" | "red" | "green" | "cyan" | "amber" | "blue";
 }
 
 export function MetricCard({
@@ -19,6 +19,8 @@ export function MetricCard({
     accent === "cyan" ? styles.accent : "",
     accent === "red" ? styles.red : "",
     accent === "green" ? styles.green : "",
+    accent === "amber" ? styles.amber : "",
+    accent === "blue" ? styles.blue : "",
   ]
     .filter(Boolean)
     .join(" ");
