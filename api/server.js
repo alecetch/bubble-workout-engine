@@ -40,6 +40,7 @@ import { adminSyncRouter } from "./src/routes/adminSync.js";
 import { adminCoverageRouter } from "./src/routes/adminCoverage.js";
 import { adminHealthRouter } from "./src/routes/adminHealth.js";
 import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
+import { createAdminHyroxObservabilityRouter } from "./src/routes/adminHyroxObservability.js";
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
@@ -775,6 +776,7 @@ app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin", ...adminOnly, adminContentStudioRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
+app.use("/api/admin/observability/hyrox", ...adminOnly, createAdminHyroxObservabilityRouter(pool));
 
 // RevenueCat webhook uses a shared secret header, not user JWT auth.
 app.use("/api", webhookRevenuecatRouter);
@@ -784,7 +786,15 @@ app.post("/api/physique/check-ins/:id/analyse", ...entitledUserAuth, handleTrigg
 app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
 app.use("/api", physiquePhotoRouter);
 // Serve the React web app before marketing pages so /hyrox-calculator and / hit the SPA first.
-app.use(express.static(join(__dirname, "public/web")));
+// index.html must not be cached — it references content-hashed bundle filenames that change on deploy.
+// Hashed assets (*.js, *.css) can be cached indefinitely since their content never changes.
+app.use(express.static(join(__dirname, "public/web"), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith("index.html")) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  },
+}));
 
 // referralLandingRouter must come before any app.use("/api", ...userAuth, ...) mount —
 // those mounts run userAuth on ALL /api/* paths that reach them, which would block the
@@ -866,6 +876,7 @@ app.use(generateProgramV2Router);
 
 // Catch-all for React Router client-side routes not matched by any API or marketing route.
 app.get(/.*/, (_req, res) => {
+  res.setHeader("Cache-Control", "no-cache");
   res.sendFile(join(__dirname, "public/web/index.html"));
 });
 
