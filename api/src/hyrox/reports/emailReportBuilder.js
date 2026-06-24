@@ -670,7 +670,15 @@ function renderSplitTable(section, analysisJson) {
     }
 
     let mainLimiter;
-    if (workGap > runGap + 60) {
+    if (totalGapSeconds <= 0) {
+      if (workGap > runGap + 60) {
+        mainLimiter = "You matched or beat your benchmark group overall. Station performance is the main area for further improvement.";
+      } else if (runGap > workGap + 60) {
+        mainLimiter = "You matched or beat your benchmark group overall. Running pace is the main area for further improvement.";
+      } else {
+        mainLimiter = "You matched or beat your benchmark group overall.";
+      }
+    } else if (workGap > runGap + 60) {
       mainLimiter = "The main limiter is station performance.";
     } else if (runGap > workGap + 60) {
       mainLimiter = "The main limiter is running pace.";
@@ -692,7 +700,7 @@ function renderSplitTable(section, analysisJson) {
     const biggestNote = lossNames ? ` Biggest opportunities: ${lossNames}.` : "";
 
     const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
-    const gapSentence = Number.isFinite(totalGapSeconds) && Number.isFinite(stationGap)
+    const gapSentence = Number.isFinite(totalGapSeconds) && totalGapSeconds > 0 && Number.isFinite(stationGap)
       ? ` Stations account for <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(stationGap))}</strong> of your total <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(totalGapSeconds))}</strong> gap.`
       : "";
     const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
@@ -715,6 +723,7 @@ function renderSplitTable(section, analysisJson) {
   }
 
   function renderGapBreakdown() {
+    if (totalGapSeconds <= 0) return "";
     const stationGap = Math.max(0, splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0);
     const penaltyForBar = penaltiesAreMaterial ? totalPenaltySeconds : 0;
     const runningForBar = penaltiesAreMaterial ? runGapNetOfPenalties : Math.max(0, runGapRaw);
