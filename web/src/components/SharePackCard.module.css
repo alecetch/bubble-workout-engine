@@ -41,7 +41,33 @@
 .status {
   color: var(--text-muted);
   font-size: 14px;
-  padding: 14px 0;
+  padding: 14px 0 0;
+}
+
+.progressBar {
+  height: 3px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  margin: 12px 0 8px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent-cyan);
+  border-radius: 2px;
+  animation: packProgress 35s ease-out forwards;
+}
+
+@keyframes packProgress {
+  from { width: 0%; }
+  to { width: 90%; }
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding-bottom: 14px;
 }
 
 .actions {
