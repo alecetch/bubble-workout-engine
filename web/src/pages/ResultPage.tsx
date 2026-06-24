@@ -2,11 +2,22 @@ import { useLocation, Link } from "react-router-dom";
 import { Shell } from "../components/Shell";
 import { MetricCard } from "../components/MetricCard";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { SharePackCard } from "../components/SharePackCard";
 import type { HyroxAnalysisResponse } from "../types";
 import styles from "./ResultPage.module.css";
 
 interface LocationState {
   response?: HyroxAnalysisResponse;
+}
+
+function profileTypeLabel(profileType: string | null | undefined): string {
+  const map: Record<string, string> = {
+    runner_dominant: "Runner dominant",
+    strength_dominant: "Station dominant",
+    balanced_hybrid: "Balanced hybrid",
+    transition_limited: "Transition limited",
+  };
+  return profileType && map[profileType] ? map[profileType] : "Mixed profile";
 }
 
 export function ResultPage() {
@@ -31,6 +42,7 @@ export function ResultPage() {
   const heroInsight = summary.heroInsight;
   const timePotential = summary.timePotential;
   const biggestStrength = summary.biggestStrength;
+  const calculatorMode = response.calculatorMode ?? summary.calculatorMode ?? "target";
 
   return (
     <Shell>
@@ -38,15 +50,23 @@ export function ResultPage() {
         <div className={styles.badge}>✓ Analysis Complete</div>
 
         <h1 className={styles.headline} data-testid="result-headline">
-          {heroInsight?.label
-            ? `Your biggest limiter: ${heroInsight.label}`
-            : "Your Analysis Is Ready"}
+          {calculatorMode === "analyse"
+            ? summary.athleteArchetype?.label
+              ? `Your race profile: ${summary.athleteArchetype.label}`
+              : "Your Analysis Is Ready"
+            : heroInsight?.label
+              ? `Your biggest limiter: ${heroInsight.label}`
+              : "Your Analysis Is Ready"}
         </h1>
 
         <p className={styles.subline}>
-          {heroInsight?.timeGapFormatted
-            ? `We identified ${heroInsight.timeGapFormatted} of potential time gain from your top opportunity.`
-            : "Your personalised performance report has been generated."}
+          {calculatorMode === "analyse"
+            ? summary.overallPercentile != null
+              ? `You finished in the top ${100 - summary.overallPercentile}% of ${summary.benchmarkGroupLabel ?? "your benchmark group"}.`
+              : "Your personalised performance report has been generated."
+            : heroInsight?.timeGapFormatted
+              ? `We identified ${heroInsight.timeGapFormatted} of potential time gain from your top opportunity.`
+              : "Your personalised performance report has been generated."}
         </p>
 
         <div className={styles.emailNote} data-testid="email-confirmation">
@@ -59,6 +79,56 @@ export function ResultPage() {
         </div>
 
         <div className={styles.metricsGrid}>
+          {calculatorMode === "analyse" && (
+            <>
+              {(summary.overallPercentile != null || summary.benchmarkGroupLabel) && (
+                <MetricCard
+                  title="Benchmark Position"
+                  value={
+                    summary.overallPercentile != null
+                      ? `Top ${100 - summary.overallPercentile}%`
+                      : (summary.benchmarkGroupLabel ?? "-")
+                  }
+                  sub={summary.benchmarkGroupLabel ?? "in your benchmark group"}
+                  accent="cyan"
+                />
+              )}
+              {summary.athleteArchetype?.label && (
+                <MetricCard
+                  title="Athlete Archetype"
+                  value={summary.athleteArchetype.label}
+                  sub="based on your split profile"
+                  accent="amber"
+                />
+              )}
+              {summary.workRunBalance?.profileType && (
+                <MetricCard
+                  title="Run vs Station"
+                  value={profileTypeLabel(summary.workRunBalance.profileType)}
+                  sub={
+                    summary.workRunBalance.runSharePct != null && summary.workRunBalance.workSharePct != null
+                      ? `${summary.workRunBalance.runSharePct}% running - ${summary.workRunBalance.workSharePct}% stations`
+                      : "run / station split"
+                  }
+                  accent="blue"
+                />
+              )}
+              {biggestStrength?.label && (
+                <MetricCard
+                  title="Biggest Strength"
+                  value={biggestStrength.label}
+                  sub={
+                    biggestStrength.percentile != null
+                      ? `Top ${100 - biggestStrength.percentile}%`
+                      : undefined
+                  }
+                  accent="green"
+                />
+              )}
+            </>
+          )}
+          {calculatorMode !== "analyse" && (
+            <>
           {heroInsight?.label && (
             <MetricCard
               title="Biggest Limiter"
@@ -108,10 +178,16 @@ export function ResultPage() {
               accent="cyan"
             />
           )}
+            </>
+          )}
         </div>
 
         {summary.dataQualityNote && (
           <div className={styles.dataNote}>ℹ {summary.dataQualityNote}</div>
+        )}
+
+        {response.submissionId && (
+          <SharePackCard submissionId={response.submissionId} prefillEmail={response.reportSentTo} />
         )}
 
         <div className={styles.actions}>

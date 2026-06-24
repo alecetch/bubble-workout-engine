@@ -1,0 +1,143 @@
+.card {
+  margin-top: 24px;
+  background: var(--panel-900);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  color: var(--accent-cyan);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.title {
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.copy {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.status {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 14px 0;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.button,
+.download {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-950);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.download {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  color: #07101e;
+}
+
+.button:hover,
+.download:hover {
+  transform: translateY(-1px);
+}
+
+.panel {
+  margin-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 18px;
+}
+
+.emailRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.input {
+  background: var(--bg-950);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.message {
+  color: var(--accent-cyan);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.error {
+  color: var(--accent-red);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.qrBox {
+  margin-top: 14px;
+  background: #ffffff;
+  border-radius: 8px;
+  display: inline-block;
+  padding: 12px;
+}
+
+.qrBox svg {
+  display: block;
+  width: 160px;
+  height: 160px;
+}
+
+@media (max-width: 720px) {
+  .card {
+    padding: 18px;
+  }
+
+  .header {
+    display: block;
+  }
+
+  .actions,
+  .emailRow {
+    grid-template-columns: 1fr;
+  }
+}
