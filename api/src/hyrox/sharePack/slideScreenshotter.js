@@ -19,8 +19,12 @@ export async function screenshotSlides(carouselHtml) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1080, height: 7000 });
-    // load fires after inline scripts execute; safe for self-contained pages
-    await page.setContent(carouselHtml, { waitUntil: "load", timeout: 30000 });
+    // Inject base URL so /assets/... paths resolve against the local Express server
+    const port = process.env.PORT ?? 3000;
+    const baseTag = `<base href="http://localhost:${port}">`;
+    const htmlWithBase = carouselHtml.replace("<head>", `<head>${baseTag}`);
+    // waitUntil: "load" fires after images load — critical for the athlete hero image
+    await page.setContent(htmlWithBase, { waitUntil: "load", timeout: 30000 });
     // Small buffer so layout is computed before screenshotting; rAF is unreliable
     // in headless Chrome with --disable-gpu so use setTimeout instead
     await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 200)));

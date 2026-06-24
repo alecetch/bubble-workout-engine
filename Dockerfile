@@ -27,6 +27,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 COPY api/package*.json ./
 RUN npm ci --omit=dev
 COPY api/ .
+COPY assets/ ./assets/
 COPY migrations/ ./migrations/
 COPY --from=web-build /web/dist ./public/web
 ENV NODE_ENV=production
