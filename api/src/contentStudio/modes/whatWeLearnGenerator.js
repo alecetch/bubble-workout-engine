@@ -1,5 +1,5 @@
 import { formatSeconds, interpolatePercentile } from "../utils.js";
-import { ALL_SEGMENTS, BRAND, mean, stationMetricLabel, updateSlideTotals } from "./modeUtils.js";
+import { ALL_SEGMENTS, BRAND, flipName, mean, stationMetricLabel, updateSlideTotals } from "./modeUtils.js";
 
 export function whatWeLearnGenerator(raceAnalysis) {
   const podium = raceAnalysis.athletes.slice(0, 3);
@@ -26,7 +26,7 @@ export function whatWeLearnGenerator(raceAnalysis) {
       dataFields: {
         headline,
         subline: finishPct != null ? `Podium average: historical top ${finishPct}%` : `${raceAnalysis.division} ${raceAnalysis.sex}`,
-        athleteNames: podium.map((athlete) => athlete.name),
+        athleteNames: podium.map((athlete) => flipName(athlete.name)),
       },
     },
     {

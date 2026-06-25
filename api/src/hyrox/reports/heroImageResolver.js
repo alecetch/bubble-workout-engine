@@ -40,10 +40,20 @@ export function resolveHeroImage(analysisJson = {}, athleteContext = {}) {
   const gender = normaliseGender(athleteContext.sex);
   const category = selectPrimaryCategory(analysisJson);
 
-  if (category === "station_capacity") {
-    const key = limiterKey(analysisJson);
-    const slug = STATION_SLUG[key];
+  // Penalty and roxzone have dedicated hero images that are more contextually
+  // relevant than any specific station, so resolve those first.
+  if (category === "penalty" || category === "roxzone") {
+    const slug = CATEGORY_SLUG[category];
     if (slug) return `${BASE}/hyrox-${slug}-${gender}.png`;
+  }
+
+  // For all other categories, a specific station image is more informative than
+  // the generic running/pacing/data_quality image. selectPrimaryCategory can
+  // misidentify the category (e.g. returns "running") when stationBreakdown is
+  // absent from the analysis JSON, so we check the station limiter directly.
+  const key = limiterKey(analysisJson);
+  if (key && STATION_SLUG[key]) {
+    return `${BASE}/hyrox-${STATION_SLUG[key]}-${gender}.png`;
   }
 
   const slug = CATEGORY_SLUG[category];

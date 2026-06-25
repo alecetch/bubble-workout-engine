@@ -60,7 +60,7 @@ describe("RaceDetailsPage calculator mode selector", () => {
     expect(loadDraft()?.calculatorMode).toBe("analyse");
   });
 
-  test("analyse mode with slower optional goal shows warning but keeps Next enabled", () => {
+  test("analyse mode with slower optional goal shows warning and disables Next", () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /analyse my race/i }));
@@ -69,8 +69,8 @@ describe("RaceDetailsPage calculator mode selector", () => {
       target: { value: "1:40:00" },
     });
 
-    expect(screen.getByText(/goal time should be faster/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/next: check splits/i)[0]).not.toBeDisabled();
+    expect(screen.getByText(/goal time must be faster/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/next: check splits/i)[0]).toBeDisabled();
   });
 });
 

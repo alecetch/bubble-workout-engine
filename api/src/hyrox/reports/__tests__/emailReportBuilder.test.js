@@ -412,6 +412,47 @@ describe("buildEmailReport visual redesign", () => {
 
 });
 
+describe("analyse mode email", () => {
+  it("subject does not say bottleneck in analyse mode", () => {
+    const personal = mockReport();
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:open:male:35_39", label: "Open Men 35-39" },
+        goalBenchmarkGroup: null,
+      },
+      segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 10, userSeconds: 3548 }],
+    });
+    const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
+    assert.doesNotMatch(email.subject, /bottleneck/i);
+  });
+
+  it("subject says bottleneck in target mode with a limiter", () => {
+    const personal = mockReport();
+    const email = buildEmailReport(personal, mockAnalysis(), mockContext(), null, "target");
+    assert.match(email.subject, /bottleneck/i);
+  });
+
+  it("analyse mode HTML does not contain the target benchmark time in BENCHMARK cell", () => {
+    const personal = mockReport();
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:open:male:35_39", label: "Open Men 35-39" },
+        goalBenchmarkGroup: { key: "sub_60_open_male", targetFinishSeconds: 3600 },
+      },
+    });
+    const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
+    assert.doesNotMatch(email.htmlBody, /BENCHMARK<\/span>\s*<span[^>]*>1:00:00/);
+    assert.match(email.htmlBody, /Open Men 35-39/);
+  });
+
+  it("analyse mode CTA references marginal gains not bottleneck", () => {
+    const personal = mockReport();
+    const email = buildEmailReport(personal, mockAnalysis(), mockContext(), { primaryThesis: { category: "high_performer" } }, "analyse");
+    assert.doesNotMatch(email.htmlBody, /targeting your bottleneck/i);
+    assert.match(email.htmlBody, /marginal gains|preserv/i);
+  });
+});
+
 describe("renderSplitTable", () => {
   const splitSection = { sectionKey: "race_split_breakdown", title: "Race Split Breakdown", tableData: {} };
   const analysisWithFullSplits = {

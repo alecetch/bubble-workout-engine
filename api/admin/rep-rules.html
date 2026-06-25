@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rep Rules — Admin</title>
+  <title>Rep Rules - Admin</title>
   <style>
     :root {
       --bg: #f4f6f8; --panel: #fff; --border: #d8dee6;
@@ -29,10 +29,6 @@
     .header { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
     .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
     .header-title { display: flex; align-items: center; gap: 12px; }
-    .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-    .nav a { color: #1d4ed8; text-decoration: none; font-size: 12px; }
-    .nav a:hover { text-decoration: underline; }
-    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
     .ctrl { display: grid; gap: 3px; }
     .ctrl label { font-size: 11px; color: var(--muted); }
@@ -98,6 +94,7 @@
   </style>
 </head>
 <body>
+    <div id="nav-placeholder"></div>
 <div class="page">
 
   <!-- Header -->
@@ -107,25 +104,7 @@
         <h1>Rep Rules</h1>
         <button id="new-rule-btn" disabled>+ New Simulation Rule</button>
       </div>
-      <nav class="nav">
-        <a href="/admin-ui/index.html">Config Editor</a>
-        <a href="/admin/coverage">Coverage</a>
-        <a href="/admin/health">Health</a>
-        <a href="/admin/exercises">Exercises</a>
-        <a href="/admin/narration">Narration</a>
-        <a href="/admin/rep-rules" class="active">Rep Rules</a>
-        <a href="/admin/observability">Observability</a>
-        <a href="/admin/preview">Preview</a>
-        <a href="/admin/program-quality">Program Quality</a>
-        <a href="/admin/progression-sandbox">Progression Sandbox</a>
-        <a href="/admin/users">Users</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-      </nav>
-      <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">⬇ Sync All to Flyway</button>
+      <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">Sync Sync All to Flyway</button>
     </div>
     <div class="controls">
       <div class="ctrl">
@@ -198,16 +177,16 @@
 
 </div>
 
-<!-- Overlay + Drawer (creation form — wired in R4) -->
+<!-- Overlay + Drawer (creation form - wired in R4) -->
 <div class="overlay" id="drawer-overlay"></div>
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
   <div class="drawer-header">
     <h2 class="drawer-title" id="drawer-title">New Simulation Rule</h2>
-    <button class="ghost" id="drawer-close" aria-label="Close">✕</button>
+    <button class="ghost" id="drawer-close" aria-label="Close">x</button>
   </div>
   <div class="drawer-body" id="drawer-body">
     <p class="warn-note">
-      ⚠ New rules require a <strong>day_type</strong>. Base rules (day_type = any)
+      Warning New rules require a <strong>day_type</strong>. Base rules (day_type = any)
       must be added via the seed migration.
     </p>
 
@@ -231,7 +210,7 @@
         <div class="f">
           <label for="d-day-type">Day type <span style="color:var(--danger)">*</span></label>
           <input id="d-day-type" type="text" value="simulation" readonly style="background:#f9fafb;color:var(--muted);" />
-          <span class="hint">Locked — new rules require a day type.</span>
+          <span class="hint">Locked - new rules require a day type.</span>
         </div>
       </div>
     </fieldset>
@@ -339,7 +318,7 @@
 </div>
 
 <script>
-  // ── State ─────────────────────────────────────────────────────────────────
+  // State
   let _allRules = [];
   let _dimensions = { movement_pattern: [], swap_group_id_1: [], swap_group_id_2: [] };
   let _token = localStorage.getItem("admin_token") || "";
@@ -363,7 +342,7 @@
     localStorage.setItem("admin_token", t);
   }
 
-  // ── API helpers ───────────────────────────────────────────────────────────
+  // API helpers
   async function apiFetch(path, init = {}) {
     const token = getToken();
     const res = await fetch(path, {
@@ -379,11 +358,11 @@
     return data;
   }
 
-  // ── Load & filter ─────────────────────────────────────────────────────────
+  // Load & filter
   async function loadRules() {
     const token = ($("token-input").value || "").trim();
     if (token) saveToken(token);
-    setStatus("Loading…");
+    setStatus("Loading...");
     try {
       const [rulesData, dimensionsData] = await Promise.all([
         apiFetch("/admin/rep-rules/rules"),
@@ -448,7 +427,7 @@
   }
 
   function fmt(v) {
-    return (v === null || v === undefined || v === "") ? "—" : String(v);
+    return (v === null || v === undefined || v === "") ? "-" : String(v);
   }
 
   function validateDimensionInput(label, value, validValues) {
@@ -478,10 +457,10 @@
 
       const dayBadge = isScoped
         ? `<span class="badge sim">${escHtml(r.day_type)}</span>`
-        : `<span class="badge base">—</span>`;
+        : `<span class="badge base">-</span>`;
 
       const activeBadge = r.is_active
-        ? `<span class="badge" style="background:#d1fae5;color:#065f46">✓</span>`
+        ? `<span class="badge" style="background:#d1fae5;color:#065f46">OK</span>`
         : `<span class="badge inactive">off</span>`;
 
       const repLow  = editableCell(r, "rep_low",  fmt(r.rep_low));
@@ -522,20 +501,20 @@
 
   function updateSummary(total, scoped) {
     $("summary-bar").textContent = total
-      ? `${total} rule${total !== 1 ? "s" : ""} shown — ${scoped} day-type-scoped (blue), ${total - scoped} base`
+      ? `${total} rule${total !== 1 ? "s" : ""} shown - ${scoped} day-type-scoped (blue), ${total - scoped} base`
       : "";
   }
 
-  // ── Escaping ──────────────────────────────────────────────────────────────
+  // Escaping
   function escHtml(v) {
     return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  // ── Inline editing ────────────────────────────────────────────────────────
+  // Inline editing
   const UNIT_OPTIONS = ["reps", "m", "cal", "seconds"];
 
   $("rules-tbody").addEventListener("click", e => {
-    // Edit button → open drawer
+    // Edit button -> open drawer
     if (e.target.classList.contains("edit-btn")) {
       const ruleId = e.target.dataset.ruleId;
       const rule = _allRules.find(r => r.rule_id === ruleId);
@@ -552,7 +531,7 @@
     const rule = _allRules.find(r => r.rule_id === ruleId);
     if (!rule) return;
 
-    // is_active — confirm dialog, immediate PATCH
+    // is_active - confirm dialog, immediate PATCH
     if (field === "is_active") {
       const nextVal = !rule.is_active;
       const verb = nextVal ? "Activate" : "Deactivate";
@@ -561,7 +540,7 @@
       return;
     }
 
-    // Other prescription fields — replace cell content with input/select
+    // Other prescription fields - replace cell content with input/select
     const originalHTML = cell.innerHTML;
     const currentVal = rule[field] ?? "";
     cell.classList.add("editing");
@@ -642,7 +621,7 @@
     }
   }
 
-  // ── Drawer ────────────────────────────────────────────────────────────────
+  // Drawer
   function openDrawer() {
     $("drawer-overlay").classList.add("open");
     $("drawer").classList.add("open");
@@ -707,7 +686,7 @@
     openDrawer();
   }
 
-  // ── Drawer save ───────────────────────────────────────────────────────────
+  // Drawer save
   async function saveDrawer() {
     $("drawer-err").textContent = "";
     const btn = $("drawer-save-btn");
@@ -745,7 +724,7 @@
     if (dimensionErr) { $("drawer-err").textContent = dimensionErr; return; }
 
     btn.disabled = true;
-    btn.textContent = "Saving…";
+    btn.textContent = "Saving...";
 
     try {
       if (_drawerMode === "new") {
@@ -777,7 +756,7 @@
         if (row) { row.classList.add("flash-ok"); row.addEventListener("animationend", () => row.classList.remove("flash-ok"), { once: true }); }
         setStatus(`Created rule: ${data.rule.rule_id}`, "ok");
       } else {
-        // Edit mode — PATCH prescription fields only
+        // Edit mode - PATCH prescription fields only
         const body = {
           segment_type: ($("d-segment-type").value || "").trim() || null,
           purpose: ($("d-purpose").value || "").trim() || null,
@@ -807,7 +786,7 @@
       }
     } catch (err) {
       $("drawer-err").textContent = err.status === 409
-        ? "Rule ID already exists — choose a different ID."
+        ? "Rule ID already exists - choose a different ID."
         : `Error: ${err.message}`;
     } finally {
       btn.disabled = false;
@@ -815,7 +794,7 @@
     }
   }
 
-  // ── Event wiring ──────────────────────────────────────────────────────────
+  // Event wiring
   $("load-btn").addEventListener("click", loadRules);
   $("token-input").addEventListener("keydown", e => { if (e.key === "Enter") loadRules(); });
 
@@ -829,7 +808,7 @@
   $("drawer-overlay").addEventListener("click", closeDrawer);
   $("drawer-save-btn").addEventListener("click", saveDrawer);
 
-  // ── Init: restore token if stored ─────────────────────────────────────────
+  // Init: restore token if stored
   if (_token) {
     $("token-input").value = _token;
   }
@@ -837,20 +816,21 @@
   $("sync-all-btn").addEventListener("click", async () => {
     const btn = $("sync-all-btn");
     btn.disabled = true;
-    btn.textContent = "Syncing…";
+    btn.textContent = "Syncing...";
     try {
       const data = await apiFetch("/admin/sync-all-to-flyway", { method: "POST" });
       const lines = data.files.map(f =>
-        `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
+        `${f.ok ? "OK" : "X"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
       ).join("\n");
-      window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
+      window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
     } catch (err) {
       window.alert("Sync failed: " + (err.message || String(err)));
     } finally {
       btn.disabled = false;
-      btn.textContent = "⬇ Sync All to Flyway";
+      btn.textContent = "Sync Sync All to Flyway";
     }
   });
 </script>
-</body>
+    <script src="/admin-ui/nav.js"></script>
+  </body>
 </html>

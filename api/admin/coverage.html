@@ -42,19 +42,6 @@
         margin: 0;
         font-size: 22px;
       }
-      .nav {
-        display: flex;
-        gap: 10px;
-      }
-      .nav a {
-        color: #1d4ed8;
-        text-decoration: none;
-        font-size: 13px;
-      }
-      .nav a:hover {
-        text-decoration: underline;
-      }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls {
         display: grid;
         grid-template-columns: 280px 200px 200px 160px auto;
@@ -165,7 +152,7 @@
       .focus-empty {
         color: var(--muted);
       }
-      /* ── Score panel ─────────────────────────────────────────────────── */
+      /* Score panel */
       .score-panel {
         background: var(--panel);
         border: 1px solid var(--border);
@@ -290,29 +277,12 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <section class="header">
         <div class="top-row">
           <h1 class="title">Coverage Report</h1>
-          <div class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage" class="active">Coverage</a>
-            <a href="/admin/health">Health</a>
-            <a href="/admin/exercises">Exercises</a>
-            <a href="/admin/narration">Narration</a>
-            <a href="/admin/rep-rules">Rep Rules</a>
-            <a href="/admin/observability">Observability</a>
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/progression-sandbox">Progression Sandbox</a>
-            <a href="/admin/users">Users</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-          </div>
-          <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">⬇ Sync All to Flyway</button>
+          <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">Sync Sync All to Flyway</button>
         </div>
         <div class="controls">
           <div class="control">
@@ -345,14 +315,14 @@
         <div class="score-top">
           <div class="score-headline">
             <span class="score-label">Coverage score</span>
-            <span id="score-value" class="score-value">—</span>
+            <span id="score-value" class="score-value">-</span>
           </div>
           <div class="score-badges">
-            <span id="badge-zero"   class="badge badge-red">— zero gaps</span>
-            <span id="badge-thin"   class="badge badge-amber">— thin (1 option)</span>
-            <span id="badge-two"    class="badge badge-amber">— ok (2 options)</span>
-            <span id="badge-three"  class="badge badge-blue">— good (3 options)</span>
-            <span id="badge-four"   class="badge badge-green">— strong (4+)</span>
+            <span id="badge-zero"   class="badge badge-red">- zero gaps</span>
+            <span id="badge-thin"   class="badge badge-amber">- thin (1 option)</span>
+            <span id="badge-two"    class="badge badge-amber">- ok (2 options)</span>
+            <span id="badge-three"  class="badge badge-blue">- good (3 options)</span>
+            <span id="badge-four"   class="badge badge-green">- strong (4+)</span>
           </div>
         </div>
         <div class="score-breakdowns">
@@ -381,7 +351,7 @@
       <div class="modal-panel">
         <div class="modal-header">
           <h3 id="modal-title"></h3>
-          <button class="modal-close" id="modal-close">✕</button>
+          <button class="modal-close" id="modal-close">x</button>
         </div>
         <div class="modal-body" id="modal-body"></div>
       </div>
@@ -411,7 +381,7 @@
         visiblePresets: new Set(),
       };
 
-      // ── Exercise cache & matching ─────────────────────────────────────────
+      // Exercise cache & matching
       const EXCLUDED_MC = new Set(["cardio", "conditioning", "locomotion"]);
       let _exerciseCache = null;
 
@@ -463,7 +433,7 @@
               score += bonus;
               reasons.push(`pref+${bonus}`);
             } else {
-              reasons.push(`pref✓`); // strict gate passed — no score bonus
+              reasons.push(`prefOK`); // strict gate passed - no score bonus
             }
           }
         }
@@ -476,7 +446,7 @@
         return { score, reasons };
       }
 
-      // ── Modal ─────────────────────────────────────────────────────────────
+      // Modal
       const modalEl    = document.getElementById("match-modal");
       const modalTitle = document.getElementById("modal-title");
       const modalBody  = document.getElementById("modal-body");
@@ -486,8 +456,8 @@
       async function showMatchModal(row, presetCode, rank) {
         const preset = state.presets.find(p => p.code === presetCode);
         const rankLabel = { 0: "Beginner", 1: "Intermediate", 2: "Advanced", 3: "Elite" }[rank] ?? `Rank ${rank}`;
-        modalTitle.textContent = `${row.slot} · ${preset?.label ?? presetCode} · ${rankLabel}`;
-        modalBody.innerHTML = `<div class="modal-loading">Loading exercises…</div>`;
+        modalTitle.textContent = `${row.slot}  -  ${preset?.label ?? presetCode}  -  ${rankLabel}`;
+        modalBody.innerHTML = `<div class="modal-loading">Loading exercises...</div>`;
         modalEl.hidden = false;
 
         let exercises;
@@ -510,7 +480,7 @@
           `<li class="match-item">
             <span class="match-score">${score}</span>
             <span class="match-name">${escapeHtml(ex.name)}</span>
-            <span class="match-reasons">${escapeHtml(reasons.join(" · "))}</span>
+            <span class="match-reasons">${escapeHtml(reasons.join("  -  "))}</span>
           </li>`
         ).join("")}</ul>`;
       }
@@ -613,7 +583,7 @@
           parts.push("prefMode:soft");
         }
         if (resolved.strength_equivalent_bonus) parts.push("strengthEq:+3");
-        return parts.length ? parts.join(" · ") : "";
+        return parts.length ? parts.join("  -  ") : "";
       }
 
       function getConstraintText(row, visiblePresets) {
@@ -632,8 +602,8 @@
         return fallback ? escapeHtml(fallback) : "";
       }
 
-      // ── Coverage score ────────────────────────────────────────────────
-      // Each (slot × preset × rank) cell scores: 0=0, 1=0.5, 2+=1.0
+      // Coverage score
+      // Each (slot x preset x rank) cell scores: 0=0, 1=0.5, 2+=1.0
       // Overall score = sum / total * 100
 
       function cellScore(count) {
@@ -838,8 +808,8 @@
             return `
               <tr>
                 <td>${escapeHtml(row.config_key)}</td>
-                <td>${row.day_index} · ${escapeHtml(row.day_key)}</td>
-                <td class="${row.day_focus ? "" : "focus-empty"}">${row.day_focus ? escapeHtml(row.day_focus) : "—"}</td>
+                <td>${row.day_index}  -  ${escapeHtml(row.day_key)}</td>
+                <td class="${row.day_focus ? "" : "focus-empty"}">${row.day_focus ? escapeHtml(row.day_focus) : "-"}</td>
                 <td>${escapeHtml(row.slot)}</td>
                 <td class="constraints-cell ${constraintText ? "" : "constraints-empty"}">${constraintText || "(unconstrained)"}</td>
                 ${countCells}
@@ -897,7 +867,7 @@
         document.getElementById("sync-all-btn").addEventListener("click", async () => {
           const btn = document.getElementById("sync-all-btn");
           btn.disabled = true;
-          btn.textContent = "Syncing…";
+          btn.textContent = "Syncing...";
           try {
             const token = saveToken(getToken());
             if (!token) throw new Error("Missing token. Fill Internal API Token first.");
@@ -908,14 +878,14 @@
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
             const lines = data.files.map(f =>
-              `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
+              `${f.ok ? "OK" : "X"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
             ).join("\n");
-            window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
+            window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
           } catch (err) {
             window.alert("Sync failed: " + (err.message || String(err)));
           } finally {
             btn.disabled = false;
-            btn.textContent = "⬇ Sync All to Flyway";
+            btn.textContent = "Sync Sync All to Flyway";
           }
         });
 
@@ -930,5 +900,6 @@
 
       init();
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

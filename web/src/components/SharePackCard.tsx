@@ -96,7 +96,15 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
         </div>
       </div>
 
-      {loading && <div className={styles.status}>Preparing your Instagram pack...</div>}
+      {loading && (
+        <div>
+          <div className={styles.status}>Preparing your Instagram pack...</div>
+          <div className={styles.progressBar}>
+            <div className={styles.progressFill} />
+          </div>
+          <div className={styles.hint}>This usually takes around 30 seconds on first load.</div>
+        </div>
+      )}
 
       {error && !loading && (
         <div>

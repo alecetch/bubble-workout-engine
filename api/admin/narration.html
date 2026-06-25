@@ -72,14 +72,6 @@
       margin-bottom: 8px;
     }
     h1 { margin: 0; font-size: 20px; }
-    .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-    .nav a {
-      color: #1d4ed8;
-      text-decoration: none;
-      font-size: 12px;
-    }
-    .nav a:hover { text-decoration: underline; }
-    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
     .controls, .filter-grid {
       display: flex;
       flex-wrap: wrap;
@@ -347,31 +339,14 @@
   </style>
 </head>
 <body>
+    <div id="nav-placeholder"></div>
   <div class="page">
     <div class="header">
       <div class="header-top">
         <div>
           <h1>Narration Templates</h1>
         </div>
-        <nav class="nav">
-          <a href="/admin-ui/index.html">Config Editor</a>
-          <a href="/admin/coverage">Coverage</a>
-          <a href="/admin/health">Health</a>
-          <a href="/admin/exercises">Exercises</a>
-          <a href="/admin/narration" class="active">Narration</a>
-          <a href="/admin/rep-rules">Rep Rules</a>
-          <a href="/admin/observability">Observability</a>
-          <a href="/admin/preview">Preview</a>
-          <a href="/admin/program-quality">Program Quality</a>
-          <a href="/admin/progression-sandbox">Progression Sandbox</a>
-          <a href="/admin/users">Users</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-        </nav>
-        <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">⬇ Sync All to Flyway</button>
+        <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">Sync Sync All to Flyway</button>
       </div>
       <div class="controls">
         <div class="ctrl">
@@ -1371,7 +1346,7 @@
 
       const apiToken = token();
       if (!apiToken) {
-        setCoverageStatus('<span class="err">Internal API token is required — enter token and click Load first.</span>', false, false);
+        setCoverageStatus('<span class="err">Internal API token is required - enter token and click Load first.</span>', false, false);
         return;
       }
 
@@ -1544,19 +1519,19 @@
       document.getElementById("sync-all-btn").addEventListener("click", async () => {
         const btn = document.getElementById("sync-all-btn");
         btn.disabled = true;
-        btn.textContent = "Syncing…";
+        btn.textContent = "Syncing...";
         try {
           const data = await apiFetchJson("/admin/sync-all-to-flyway", { method: "POST" });
           const lines = data.files.map(f =>
-            `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
+            `${f.ok ? "OK" : "X"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
           ).join("\n");
-          window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
+          window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
           await checkSyncStatus();
         } catch (err) {
           window.alert("Sync failed: " + (err.message || String(err)));
         } finally {
           btn.disabled = false;
-          btn.textContent = "⬇ Sync All to Flyway";
+          btn.textContent = "Sync Sync All to Flyway";
         }
       });
       document.getElementById("sync-now-btn").addEventListener("click", async () => {
@@ -1566,5 +1541,6 @@
 
     init();
   </script>
-</body>
+    <script src="/admin-ui/nav.js"></script>
+  </body>
 </html>

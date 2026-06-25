@@ -21,10 +21,6 @@
       .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
       .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
       .title { margin: 0; font-size: 22px; }
-      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
-      .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
       .control { display: grid; gap: 4px; min-width: 280px; }
       .control label { font-size: 12px; color: var(--muted); }
@@ -60,28 +56,11 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <section class="header">
         <div class="top-row">
           <h1 class="title">User Accounts</h1>
-          <div class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin-ui/coverage.html">Coverage</a>
-            <a href="/admin-ui/health.html">Health</a>
-            <a href="/admin-ui/exercises.html">Exercises</a>
-            <a href="/admin-ui/narration.html">Narration</a>
-            <a href="/admin-ui/rep-rules.html">Rep Rules</a>
-            <a href="/admin-ui/observability.html">Observability</a>
-            <a href="/admin-ui/preview.html">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/users" class="active">Users</a>
-            <a href="/admin/seed-history">Seed History</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-          </div>
         </div>
         <div class="controls">
           <div class="control">
@@ -96,7 +75,7 @@
       <section class="section">
         <h2 style="margin: 0 0 10px; font-size: 16px;">
           Registered Accounts
-          <span id="user-count" class="count-badge muted" style="margin-left: 6px;">—</span>
+          <span id="user-count" class="count-badge muted" style="margin-left: 6px;">-</span>
         </h2>
         <div id="table-wrap" class="table-wrap">
           <div class="empty">Enter your token and click Load Accounts.</div>
@@ -145,7 +124,7 @@
       }
 
       function fmtDate(iso) {
-        if (!iso) return '<span class="muted">—</span>';
+        if (!iso) return '<span class="muted">-</span>';
         const d = new Date(iso);
         return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
       }
@@ -165,12 +144,12 @@
           expired: ["chip-expired", "Expired"],
           cancelled: ["chip-cancelled", "Cancelled"],
         };
-        const [cls, label] = map[status] ?? ["chip-muted", status ?? "—"];
+        const [cls, label] = map[status] ?? ["chip-muted", status ?? "-"];
         return `<span class="chip ${cls}">${label}</span>`;
       }
 
       function trialDaysCell(u) {
-        if (u.subscription_status !== "trialing") return '<span class="muted">—</span>';
+        if (u.subscription_status !== "trialing") return '<span class="muted">-</span>';
         const days = Number(u.trial_days_remaining ?? 0);
         if (days <= 0) return '<span style="color:var(--danger)">Expired</span>';
         return `<strong>${days}</strong> day${days === 1 ? "" : "s"}`;
@@ -203,7 +182,7 @@
               ${users.map((u) => `
                 <tr data-id="${esc(u.id)}">
                   <td>${esc(u.email)}</td>
-                  <td>${u.display_name ? esc(u.display_name) : '<span class="muted">—</span>'}</td>
+                  <td>${u.display_name ? esc(u.display_name) : '<span class="muted">-</span>'}</td>
                   <td>${subscriptionChip(u.subscription_status)}</td>
                   <td>${trialDaysCell(u)}</td>
                   <td>${onboardingChip(u)}</td>
@@ -233,7 +212,7 @@
 
       async function handleDelete(id, email) {
         if (!confirm(`Permanently delete account for:\n\n${email}\n\nThis removes all their programs, profile and session data. Cannot be undone.`)) return;
-        setStatus("Deleting…", "");
+        setStatus("Deleting...", "");
         try {
           await apiFetch(`/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
           users = users.filter((u) => u.id !== id);
@@ -245,7 +224,7 @@
       }
 
       async function handleSetSubscription(id, status) {
-        setStatus(`Setting subscription to "${status}"…`, "");
+        setStatus(`Setting subscription to "${status}"...`, "");
         try {
           await apiFetch(`/admin/users/${encodeURIComponent(id)}/subscription`, {
             method: "PATCH",
@@ -270,7 +249,7 @@
       async function loadUsers() {
         if (!token()) { setStatus("Enter your internal API token first.", "err"); return; }
         loadBtn.disabled = true;
-        setStatus("Loading…", "");
+        setStatus("Loading...", "");
         try {
           const data = await apiFetch("/admin/users");
           users = data.users;
@@ -286,5 +265,6 @@
 
       loadBtn.addEventListener("click", loadUsers);
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

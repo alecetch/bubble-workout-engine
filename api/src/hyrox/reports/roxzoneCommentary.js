@@ -157,7 +157,9 @@ export function buildRoxzoneSection(analysisJson = {}) {
   }
 
   if (rox.mode === "inferred_total") {
-    return buildInferredSection(rox, roxSegment);
+    const content = buildInferredSection(rox, roxSegment);
+    const inferredNote = "RoxZone time shown is estimated from unallocated race time and should be treated as directional.";
+    return Array.isArray(content) ? [inferredNote, ...content] : [inferredNote, content].filter(Boolean);
   }
 
   return buildExplicitSection(rox, roxSegment);

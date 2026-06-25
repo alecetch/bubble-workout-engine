@@ -4,6 +4,10 @@ export function parseTimeToSeconds(
 ): number | null {
   if (!value || typeof value !== "string") return null;
   const trimmed = value.trim();
+  if (/^\d{3,6}$/.test(trimmed)) {
+    const normalized = normalizeTimeInputValue(trimmed);
+    if (normalized !== trimmed) return parseTimeToSeconds(normalized);
+  }
   const parts = trimmed.split(":").map((p) => p.trim());
 
   if (parts.length === 2) {
@@ -28,6 +32,29 @@ export function parseTimeToSeconds(
   }
 
   return null;
+}
+
+export function normalizeTimeInputValue(value: string): string {
+  if (!value || typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes(":")) return trimmed;
+
+  const digits = trimmed.replace(/\s+/g, "");
+  if (!/^\d{3,6}$/.test(digits)) return trimmed;
+
+  if (digits.length <= 4) {
+    const minutes = digits.slice(0, -2);
+    const seconds = digits.slice(-2);
+    const formatted = `${Number(minutes)}:${seconds.padStart(2, "0")}`;
+    return parseTimeToSeconds(formatted) === null ? trimmed : formatted;
+  }
+
+  const hours = digits.slice(0, -4);
+  const minutes = digits.slice(-4, -2);
+  const seconds = digits.slice(-2);
+  const formatted = `${Number(hours)}:${minutes.padStart(2, "0")}:${seconds.padStart(2, "0")}`;
+  return parseTimeToSeconds(formatted) === null ? trimmed : formatted;
 }
 
 export function formatSeconds(

@@ -192,7 +192,7 @@ function penaltyRecommendation(analysisJson = {}, timeHorizon) {
   };
 }
 
-export function buildRecommendations(analysisJson = {}, insights = [], athleteContext = {}) {
+export function buildRecommendations(analysisJson = {}, insights = [], athleteContext = {}, calculatorMode = "target") {
   const days = daysToRace(athleteContext);
   const timeHorizon = horizon(days);
   const executionOnly = Number.isFinite(days) && days > 0 && days < 14;
@@ -204,9 +204,10 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
   const targetTimeString = Number.isFinite(Number(targetSeconds)) && Number(targetSeconds) > 0
     ? formatTime(Number(targetSeconds))
     : null;
+  const effectiveTargetTimeString = calculatorMode === "analyse" ? null : targetTimeString;
   const useGoalGap = !!(goalGroupKey && targetTimeString);
-  const stationContributors = buildStationContributors(analysisJson, targetTimeString, useGoalGap);
-  const runGapSummary = buildRunGapSummary(analysisJson, targetTimeString, useGoalGap);
+  const stationContributors = buildStationContributors(analysisJson, effectiveTargetTimeString, useGoalGap);
+  const runGapSummary = buildRunGapSummary(analysisJson, effectiveTargetTimeString, useGoalGap);
 
   if (!executionOnly && limiter) {
     const isRun = limiter.segmentKey?.startsWith("run") || limiter.segmentKey === "run_time";
@@ -218,14 +219,14 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
           const limiterLabel = isRun ? "Running" : limiter.label ?? label(limiter.segmentKey);
           const base = `${limiterLabel}: ${formatPercentile(limiter.percentile) ?? "below benchmark"}`;
           if (isRun) {
-            if (targetTimeString && runGapSummary) {
-              return `${base}. To finish in ${targetTimeString} your average run pace needs to improve by ${runGapSummary.copy}.`;
+            if (effectiveTargetTimeString && runGapSummary) {
+              return `${base}. To finish in ${effectiveTargetTimeString} your average run pace needs to improve by ${runGapSummary.copy}.`;
             }
             return `${base}, estimated gap of ${formatGain(limiter.timeGapSeconds)}.`;
           }
-          if (targetTimeString) {
+          if (effectiveTargetTimeString) {
             const gain = formatGain(analysisJson.timePotential?.goalBasedGainSeconds ?? analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds);
-            return `${base}. Against ${targetTimeString} finishers, your ${limiterLabel} was approximately ${gain} slower.`;
+            return `${base}. Against ${effectiveTargetTimeString} finishers, your ${limiterLabel} was approximately ${gain} slower.`;
           }
           return `${base}, estimated gap of ${formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds)}.`;
         })(),
@@ -235,7 +236,7 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
         runGapNote: !isRun && runGapSummary
           ? `Your running also contributed an estimated ${formatGain(runGapSummary.gainSeconds)} to the gap - see pacing below.`
           : null,
-        targetTimeCopy: targetTimeString,
+        targetTimeCopy: effectiveTargetTimeString,
         timeHorizon,
         safetyNote: shoulderConstraint(athleteContext) && /wall/i.test(limiter.label ?? "") ? "Because you noted a shoulder constraint, overhead station work should be progressed carefully rather than simply adding high-volume loading." : null,
       });
@@ -290,9 +291,9 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
         const goalFadeStats = goalGroupKey ? getBenchmarkStats(goalGroupKey, "run_fade_pct") : null;
         const goalFadeMedian = goalFadeStats?.medianSeconds ?? null;
         const goalFadeP25 = goalFadeStats?.p25Seconds ?? null;
-        const fadeRange = goalFadeMedian && goalFadeP25 && targetTimeString
+        const fadeRange = goalFadeMedian && goalFadeP25 && effectiveTargetTimeString
           ? `${Math.round(goalFadeP25)}-${Math.round(goalFadeMedian)}%`
-          : goalFadeMedian && targetTimeString
+          : goalFadeMedian && effectiveTargetTimeString
             ? `around ${Math.round(goalFadeMedian)}%`
             : null;
 
@@ -301,13 +302,13 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
           const parts = [
             `Run fade was ${fade}%, and your Run 1 was ${pctStr} faster than your average across the race - a classic opening too-fast pattern.`,
           ];
-          if (fadeRange) parts.push(`Athletes finishing around ${targetTimeString} typically open within 3-5% of their race average and fade ${fadeRange}.`);
+          if (fadeRange) parts.push(`Athletes finishing around ${effectiveTargetTimeString} typically open within 3-5% of their race average and fade ${fadeRange}.`);
           parts.push("In training, practise starting conservatively and building through the middle runs (negative splits).");
           return parts.join(" ");
         }
 
         const parts = [`Run fade was ${fade}%.`];
-        if (fadeRange) parts.push(`Athletes finishing around ${targetTimeString} typically fade ${fadeRange}.`);
+        if (fadeRange) parts.push(`Athletes finishing around ${effectiveTargetTimeString} typically fade ${fadeRange}.`);
         parts.push("Pace held through the mid-race runs but dropped in the later legs, pointing to accumulated station fatigue.");
         parts.push("Station endurance work and tempo running under fatigue will help close this gap.");
         return parts.join(" ");
@@ -343,7 +344,10 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
   }
 
   if (items.length === 0) {
-    safePush(items, { title: "Maintain strengths", actionId: "maintain_taper", rationale: "No single high-confidence limiter dominates this result.", timeHorizon, safetyNote: null });
+    const rationale = calculatorMode === "analyse"
+      ? "Your strongest segments define your race profile. Focus on preserving these under heavier training loads and race fatigue, and rehearse transitions and pacing to protect the result."
+      : "No single high-confidence limiter dominates this result.";
+    safePush(items, { title: "Maintain strengths", actionId: "maintain_taper", rationale, timeHorizon, safetyNote: null });
   }
 
   return items.slice(0, 3).map((item, index) => ({ ...item, priority: index + 1 }));
