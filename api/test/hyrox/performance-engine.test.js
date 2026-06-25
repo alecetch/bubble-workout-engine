@@ -20,6 +20,7 @@ const FIXTURE_DIR = path.resolve(__dirname, "../fixtures/hyrox");
 const GROUP_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:30-34";
 const FALLBACK_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:all";
 const GOAL_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_70:open:male";
+const SUB_60_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_60:open:male";
 
 const BASE_MEDIANS = Object.freeze({
   total_time: 4440,
@@ -83,15 +84,18 @@ function seedBenchmarks() {
     metrics.push(metric(GROUP_KEY, metricKey, median));
     metrics.push(metric(FALLBACK_KEY, metricKey, median));
     metrics.push(metric(GOAL_BAND_KEY, metricKey, median));
+    metrics.push(metric(SUB_60_BAND_KEY, metricKey, metricKey === "total_time" ? 3420 : median - 30));
   }
   metrics.push(metric(GROUP_KEY, "run_fade_pct", 5));
   metrics.push(metric(FALLBACK_KEY, "run_fade_pct", 5));
   metrics.push(metric(GOAL_BAND_KEY, "run_fade_pct", 5));
+  metrics.push(metric(SUB_60_BAND_KEY, "run_fade_pct", 5));
   setBenchmarkData({
     groups: [
       { groupKey: GROUP_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", ageGroup: "30-34", sampleSize: 500 },
       { groupKey: FALLBACK_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", ageGroup: null, fallbackLevel: 1, sampleSize: 600 },
       { groupKey: GOAL_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_70", sampleSize: 500 },
+      { groupKey: SUB_60_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_60", sampleSize: 500 },
     ],
     metrics,
   });
@@ -228,6 +232,26 @@ test("target time attaches exact segment targets and uses exact limiter gap", ()
     analysis.timePotential.goalBasedGainSeconds,
     Math.max(0, limiter.timeGapToExactTargetSeconds),
   );
+});
+
+test("analyse mode uses achieved band cohort for top-level and segment gaps", () => {
+  const analysis = analyseSubmission({
+    ...readFixture("elite_small_gaps.json"),
+    calculatorMode: "analyse",
+  });
+  const total = analysis.segments.find((segment) => segment.segmentKey === "total_time");
+  const run1 = analysis.segments.find((segment) => segment.segmentKey === "run_1");
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_60");
+  assert.equal(analysis.benchmarkContext.primaryBenchmarkGroup.key, SUB_60_BAND_KEY);
+  assert.equal(analysis.benchmarkContext.demographicBenchmarkGroup.key, GROUP_KEY);
+  assert.equal(analysis.benchmarkContext.nextBand, null);
+  assert.equal(analysis.benchmarkContext.goalBenchmarkGroup, null);
+  assert.equal(total.benchmarkGroupUsed, SUB_60_BAND_KEY);
+  assert.equal(total.benchmarkMedianSeconds, 3420);
+  assert.equal(total.timeGapToMedianSeconds, 80);
+  assert.equal(run1.benchmarkGroupUsed, SUB_60_BAND_KEY);
+  assert.equal(run1.benchmarkMedianSeconds, 270);
 });
 
 test("missing age group uses fallback benchmark", () => {

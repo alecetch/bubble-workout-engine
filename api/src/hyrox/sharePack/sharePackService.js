@@ -26,6 +26,7 @@ function athleteContext(row = {}, storedCarousel = null) {
   return {
     ...objectOrNull(row.athlete_context_json),
     ...objectOrNull(row.performance_context_json),
+    calculatorMode: row.calculator_mode ?? objectOrNull(row.athlete_context_json)?.calculatorMode,
     displayName: row.display_name ?? storedAthlete?.displayName ?? slideAthlete?.athlete_name,
     division: row.division ?? storedAthlete?.division,
   };
@@ -57,6 +58,7 @@ export async function getOrCreateSharePack(submissionId, db = pool) {
             s.display_name,
             s.race_name,
             s.division,
+            s.calculator_mode,
             s.athlete_context_json,
             s.performance_context_json
      FROM hyrox_analyses a

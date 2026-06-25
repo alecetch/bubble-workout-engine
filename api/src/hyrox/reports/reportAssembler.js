@@ -84,7 +84,7 @@ export function assembleReport(request = {}) {
 
   if (outputType === "carousel_a") {
     report.templateId = "A_ATHLETE_ANALYSIS";
-    report.carousel = buildTemplateA(analysisJson, resolved, athleteContext);
+    report.carousel = buildTemplateA(analysisJson, resolved, { ...athleteContext, calculatorMode });
     report.slides = report.carousel.slides;
   } else if (outputType === "carousel_b") {
     report.templateId = "B_POPULATION_RESEARCH";

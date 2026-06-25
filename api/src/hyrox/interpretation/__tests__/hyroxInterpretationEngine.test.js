@@ -148,6 +148,15 @@ test("high-performer hero copy does not say OPPORTUNITY", () => {
   assert.match(result.heroCopy.headline, /STRONG|DROVE IT|PERCENTILE/i);
 });
 
+test("high-performer hero copy references achieved band when available", () => {
+  const result = buildInterpretation(makeAnalysis({
+    ...highPerformerAnalysis(),
+    benchmarkContext: { achievedBand: "sub_60" },
+  }), {}, "analyse");
+  assert.match(result.heroCopy.headline, /SUB-60 GROUP/i);
+  assert.match(result.heroCopy.subline, /sub-60 group/i);
+});
+
 test("high-performer summary bullets do not contain strength endurance priority action", () => {
   const result = buildInterpretation(highPerformerAnalysis(), {}, "analyse");
   const text = result.summaryBullets.join(" ");

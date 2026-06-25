@@ -173,6 +173,17 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
   </tr>`;
 }
 
+function analyseBenchmarkCellLabel(analysisJson) {
+  const achievedBand = analysisJson?.benchmarkContext?.achievedBand;
+  const bandLabel = achievedBand?.replace("sub_", "sub-") ?? null;
+  const groupLabel = analysisJson?.benchmarkContext?.primaryBenchmarkGroup?.label ?? "Your division";
+  const confidence = analysisJson?.benchmarkContext?.confidenceLabel;
+  const confidenceSuffix = ["directional", "low-confidence"].includes(confidence)
+    ? ` (${confidence})`
+    : "";
+  return bandLabel ? `${bandLabel} - ${groupLabel}${confidenceSuffix}` : `${groupLabel}${confidenceSuffix}`;
+}
+
 function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "target") {
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
   const { totalPenaltySeconds, penaltiesAreMaterial, adjustedRaceTimeSeconds } = penaltyContext(analysisJson);
@@ -218,7 +229,7 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     : calculatorMode === "analyse"
       ? metricCell(
           "BENCHMARK GROUP",
-          esc(analysisJson.benchmarkContext?.primaryBenchmarkGroup?.label ?? "Your division"),
+          esc(analyseBenchmarkCellLabel(analysisJson)),
           "#0f172a",
           true,
           "Arial,Helvetica,sans-serif",
@@ -795,8 +806,9 @@ function renderSplitTable(section, analysisJson) {
 
   function renderSummaryCards() {
     const roxGapForCard = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
+    const totalGapNote = hasGoalGroup ? "vs target" : "vs group median";
     const cards = [
-      { key: "total_time", label: "Race time", note: "Total gap" },
+      { key: "total_time", label: "Race time", note: totalGapNote },
       { key: "work_time", label: "Stations", note: "Main limiter" },
       { key: "run_time", label: "Running", note: "Secondary limiter" },
       { key: "roxzone_time", label: "RoxZone", note: roxGapForCard < -30 ? "Strength to protect" : "On benchmark" },
@@ -845,7 +857,7 @@ function renderSplitTable(section, analysisJson) {
         <td style="background-color:#ffffff;padding:0 24px 18px;">
           <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
             <tr>
-              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Race time", timeFor(totalSeg), totalGapSeconds, "Total gap")}</td>
+              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Race time", timeFor(totalSeg), totalGapSeconds, totalGapNote)}</td>
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Adjusted", adjustedTime, adjustedGapSeconds, "Without penalties", penaltyPill(adjustedGapSeconds))}</td>
             </tr>
             <tr>
@@ -1348,6 +1360,16 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
   const subject = (() => {
     if (usePenaltyHero) return `Your HYROX fastest win is ${formatGain(emailPenaltySeconds)} of penalties`;
     if (calculatorMode === "analyse") {
+      const achievedBand = analysisJson.benchmarkContext?.achievedBand;
+      const nextBand = analysisJson.benchmarkContext?.nextBand;
+      const bandLabel = achievedBand?.replace("sub_", "sub-") ?? null;
+      const nextBandLabel = nextBand?.replace("sub_", "sub-") ?? null;
+      if (bandLabel && !nextBandLabel) {
+        return "You're sub-60. Here's what separates you from the top of the group.";
+      }
+      if (bandLabel && nextBandLabel) {
+        return `You're in the ${bandLabel} band. Here's the route to ${nextBandLabel}.`;
+      }
       const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
       const pct = formatPercentileRank(totalSeg?.percentile);
       return pct ? `Your HYROX analysis - you finished in the ${pct}` : "Your HYROX race analysis is ready";

@@ -445,6 +445,48 @@ describe("analyse mode email", () => {
     assert.match(email.htmlBody, /Open Men 35-39/);
   });
 
+  it("analyse mode subject uses top-band copy for sub-60 athletes", () => {
+    const personal = mockReport();
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:band:sub_60:open:male", label: "Open Male" },
+        achievedBand: "sub_60",
+        nextBand: null,
+        confidenceLabel: "strong",
+      },
+    });
+    const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
+    assert.equal(email.subject, "You're sub-60. Here's what separates you from the top of the group.");
+  });
+
+  it("analyse mode subject points to the next faster band when one exists", () => {
+    const personal = mockReport();
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:band:sub_75:open:male", label: "Open Male" },
+        achievedBand: "sub_75",
+        nextBand: "sub_70",
+        confidenceLabel: "strong",
+      },
+    });
+    const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
+    assert.equal(email.subject, "You're in the sub-75 band. Here's the route to sub-70.");
+  });
+
+  it("analyse mode metric strip includes band and directional confidence", () => {
+    const personal = mockReport();
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:band:sub_65:open:female", label: "Open Female" },
+        achievedBand: "sub_65",
+        nextBand: "sub_60",
+        confidenceLabel: "directional",
+      },
+    });
+    const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
+    assert.match(email.htmlBody, /sub-65 - Open Female \(directional\)/);
+  });
+
   it("analyse mode CTA references marginal gains not bottleneck", () => {
     const personal = mockReport();
     const email = buildEmailReport(personal, mockAnalysis(), mockContext(), { primaryThesis: { category: "high_performer" } }, "analyse");
@@ -1009,11 +1051,11 @@ describe("renderSplitTable", () => {
     }
   });
 
-  it("race time summary card note reads Total gap", () => {
+  it("race time summary card note reads vs group median when no goal group", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithFullSplits, {}, null,
     );
-    assert.ok(htmlBody.includes("Total gap"));
+    assert.ok(htmlBody.includes("vs group median"), "should show median label when no goal group");
     assert.ok(!htmlBody.includes("Overall improvement required"));
   });
 
@@ -1112,11 +1154,11 @@ describe("renderSplitTable", () => {
     );
   });
 
-  it('race time summary card note reads "Total gap"', () => {
+  it('race time summary card note reads "vs group median" when no goal group', () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithFullSplits, {}, null,
     );
-    assert.ok(htmlBody.includes("Total gap"), 'race time card should show "Total gap" as note');
+    assert.ok(htmlBody.includes("vs group median"), 'race time card should show "vs group median" when no goal group');
     assert.ok(!htmlBody.includes("Overall improvement required"), "old verbose note should not appear");
   });
 

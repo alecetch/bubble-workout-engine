@@ -76,4 +76,28 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[1].biggest_gain.delta, "-0:15");
     assert.equal(carousel.slides[1].biggest_loss.delta, "+1:00");
   });
+
+  it("keeps a slide 1 hero image for analyse-mode high performers", () => {
+    const highPerformer = analysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:35-39", label: "Open Male 35-39" },
+        goalBenchmarkGroup: null,
+      },
+      stationBreakdown: [
+        { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: -120, percentile: 92, confidence: "high" },
+        { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", timeGapSeconds: -90, percentile: 88, confidence: "high" },
+      ],
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 90, userSeconds: 3600 }),
+        segment("run_1", { type: "run", timeGapToMedianSeconds: -60, percentile: 85 }),
+        segment("run_2", { type: "run", timeGapToMedianSeconds: -50, percentile: 82 }),
+        segment("wall_balls", { timeGapToMedianSeconds: -120, percentile: 92 }),
+        segment("sandbag_lunges", { timeGapToMedianSeconds: -90, percentile: 88 }),
+      ],
+      headline: { biggestLimiter: null, biggestStrength: { segmentKey: "wall_balls", label: "Wall Balls", percentile: 92 } },
+    });
+    const carousel = buildTemplateA(highPerformer, [], { displayName: "Marcus Fernandes", sex: "male", calculatorMode: "analyse" });
+
+    assert.match(carousel.slides[0].athlete_image, /hyrox-wall-balls-male\.png$/);
+  });
 });

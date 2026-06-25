@@ -20,6 +20,7 @@ const CATEGORY_SLUG = {
   pacing: "pacing",
   penalty: "penalty",
   data_quality: "data-quality",
+  high_performer: "running",
 };
 
 function normaliseGender(sex) {
@@ -36,9 +37,19 @@ function limiterKey(analysisJson) {
     ?? null;
 }
 
+function strengthKey(analysisJson) {
+  return [...(analysisJson.segments ?? [])]
+    .filter((s) => STATION_KEYS.includes(s.segmentKey) && Number.isFinite(Number(s.percentile)))
+    .sort((a, b) => Number(b.percentile) - Number(a.percentile))[0]
+    ?.segmentKey
+    ?? analysisJson.strengths?.[0]?.segmentKey
+    ?? analysisJson.headline?.biggestStrength?.segmentKey
+    ?? null;
+}
+
 export function resolveHeroImage(analysisJson = {}, athleteContext = {}) {
   const gender = normaliseGender(athleteContext.sex);
-  const category = selectPrimaryCategory(analysisJson);
+  const category = selectPrimaryCategory(analysisJson, athleteContext.calculatorMode ?? "target");
 
   // Penalty and roxzone have dedicated hero images that are more contextually
   // relevant than any specific station, so resolve those first.
@@ -54,6 +65,13 @@ export function resolveHeroImage(analysisJson = {}, athleteContext = {}) {
   const key = limiterKey(analysisJson);
   if (key && STATION_SLUG[key]) {
     return `${BASE}/hyrox-${STATION_SLUG[key]}-${gender}.png`;
+  }
+
+  if (category === "high_performer") {
+    const strength = strengthKey(analysisJson);
+    if (strength && STATION_SLUG[strength]) {
+      return `${BASE}/hyrox-${STATION_SLUG[strength]}-${gender}.png`;
+    }
   }
 
   const slug = CATEGORY_SLUG[category];

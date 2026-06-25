@@ -260,9 +260,16 @@ export function selectPrimaryCategory(analysisJson = {}, calculatorMode = "targe
   if (roxPct != null && roxPct < 35 && roxGap > 90) return "roxzone";
   if (runFade >= 10 && weakCount < 2) return "pacing";
   if (confidence === "low" || segmentCount < 4) return "data_quality";
-  if (calculatorMode === "analyse" && stationGap === 0 && runGap === 0) {
+  if (calculatorMode === "analyse") {
+    const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+    const totalGap = finiteNumber(totalSeg?.timeGapToMedianSeconds);
     const hasStationData = (analysisJson.stationBreakdown ?? []).some((s) => s.confidence !== "low");
-    if (hasStationData) return "high_performer";
+    // "high_performer" fires when the athlete beats the benchmark overall (total gap ≤ −30s)
+    // or, when no total gap is available, when every individual station and run gap is also zero.
+    if (hasStationData && (
+      (totalGap != null && totalGap <= -30) ||
+      (totalGap == null && stationGap === 0 && runGap === 0)
+    )) return "high_performer";
   }
   return stationGap >= runGap ? "station_capacity" : "running";
 }
@@ -386,13 +393,17 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     return { headline: "YOUR ANALYSIS IS READY - HERE IS WHAT WE CAN SAY CONFIDENTLY", subline: null, gainDisplay: null };
   }
   if (category === "high_performer") {
+    const band = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-") || null;
     const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
     const pct = formatPercentileRank(totalSeg?.percentile);
+    const groupRef = band ? `the ${band} group` : "your benchmark group";
     return {
       headline: pct
-        ? `YOU ARE AT THE ${String(pct).toUpperCase()} - HERE IS WHAT DROVE IT`
-        : "YOUR RESULT IS ALREADY STRONG - HERE IS WHAT DROVE IT",
-      subline: "This is a marginal-gains profile, not a bottleneck result.",
+        ? `YOU ARE IN THE ${String(pct).toUpperCase()} OF ${groupRef.toUpperCase()} - HERE IS WHAT DROVE IT`
+        : `YOUR RESULT IS ALREADY STRONG IN ${groupRef.toUpperCase()} - HERE IS WHAT DROVE IT`,
+      subline: band
+        ? `This is the sharpest end of the ${band} group. Marginal gains apply here.`
+        : "This is a marginal-gains profile, not a bottleneck result.",
       gainDisplay: null,
     };
   }
