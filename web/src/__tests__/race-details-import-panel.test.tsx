@@ -37,6 +37,9 @@ describe("RaceDetailsPage inline import panel", () => {
     expect(screen.getByText(/No account needed\. Email capture happens at review/i)).toBeInTheDocument();
     expect(screen.getByText(/WHAT YOU'LL GET/i)).toBeInTheDocument();
     expect(screen.getByText(/A race report that tells you what to train next/i)).toBeInTheDocument();
+    expect(screen.getByText(/Benchmark comparison/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Projected insight/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Wall Balls cost you the most time/i)).not.toBeInTheDocument();
   });
 
   test("Or enter manually separator is visible before import", () => {
@@ -65,6 +68,8 @@ describe("RaceDetailsPage inline import panel", () => {
     expect(loadDraft()?.athlete?.name).toBe("Gaston Vanadia");
     expect(loadDraft()?.athlete?.ageGroup).toBe("45-49");
     expect(loadDraft()?.splits?.length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Projected insight/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Wall Balls cost you the most time/i)).not.toBeInTheDocument();
   });
 
   test("Existing draft athlete name renders in title case", () => {
