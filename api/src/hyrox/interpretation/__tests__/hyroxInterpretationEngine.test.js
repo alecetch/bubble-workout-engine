@@ -118,3 +118,57 @@ test("balanced athlete defaults to station capacity when station gap is higher",
   assert.ok(result.heroCopy.gainDisplay === null || result.heroCopy.gainDisplay !== "0:00");
   assertShared(result);
 });
+
+function highPerformerAnalysis() {
+  return makeAnalysis({
+    stationBreakdown: [
+      { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: -120, percentile: 8, confidence: "high" },
+      { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", timeGapSeconds: -90, percentile: 12, confidence: "high" },
+      { segmentKey: "sled_push", label: "Sled Push", timeGapSeconds: -60, percentile: 15, confidence: "high" },
+    ],
+    segments: [
+      { segmentKey: "total_time", type: "aggregate", percentile: 10, userSeconds: 3548 },
+      { segmentKey: "run_1", type: "run", timeGapToMedianSeconds: -30, percentile: 15 },
+      { segmentKey: "run_2", type: "run", timeGapToMedianSeconds: -25, percentile: 18 },
+      { segmentKey: "run_3", type: "run", timeGapToMedianSeconds: -20, percentile: 20 },
+      { segmentKey: "run_4", type: "run", timeGapToMedianSeconds: -15, percentile: 22 },
+    ],
+    headline: { biggestLimiter: null },
+  });
+}
+
+test("high-performer in analyse mode selects high_performer category", () => {
+  const result = buildInterpretation(highPerformerAnalysis(), {}, "analyse");
+  assert.equal(result.primaryThesis.category, "high_performer");
+});
+
+test("high-performer hero copy does not say OPPORTUNITY", () => {
+  const result = buildInterpretation(highPerformerAnalysis(), {}, "analyse");
+  assert.doesNotMatch(result.heroCopy.headline, /OPPORTUNITY/i);
+  assert.match(result.heroCopy.headline, /STRONG|DROVE IT|PERCENTILE/i);
+});
+
+test("high-performer summary bullets do not contain strength endurance priority action", () => {
+  const result = buildInterpretation(highPerformerAnalysis(), {}, "analyse");
+  const text = result.summaryBullets.join(" ");
+  assert.doesNotMatch(text, /station.specific strength endurance/i);
+});
+
+test("high-performer in target mode does not select high_performer", () => {
+  const result = buildInterpretation(highPerformerAnalysis(), {}, "target");
+  assert.notEqual(result.primaryThesis.category, "high_performer");
+});
+
+test("analyse mode station_capacity hero says LEAST ALIGNED not OPPORTUNITY", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [
+      station("sandbag_lunges", 60, 38),
+      station("wall_balls", 40, 42),
+    ],
+    segments: [run("run_1", 20), run("run_2", 15), run("run_3", 10), run("run_4", 5)],
+    headline: { biggestLimiter: { label: "Sandbag Lunges", segmentKey: "sandbag_lunges", timeGapSeconds: 60 } },
+  }), {}, "analyse");
+  assert.equal(result.primaryThesis.category, "station_capacity");
+  assert.doesNotMatch(result.heroCopy.headline, /BIGGEST OPPORTUNITY/i);
+  assert.match(result.heroCopy.headline, /LEAST ALIGNED/i);
+});

@@ -31,10 +31,6 @@
     /* Header */
     .header { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
     .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-    .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-    .nav a { color: #1d4ed8; text-decoration: none; font-size: 12px; }
-    .nav a:hover { text-decoration: underline; }
-    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
     .ctrl { display: grid; gap: 3px; }
     .ctrl label { font-size: 11px; color: var(--muted); }
@@ -185,31 +181,14 @@
   </style>
 </head>
 <body>
+    <div id="nav-placeholder"></div>
 <div class="page">
 
   <!-- Header -->
   <div class="header">
     <div class="header-top">
       <h1>Exercise Catalogue</h1>
-      <nav class="nav">
-        <a href="/admin-ui/index.html">Config Editor</a>
-        <a href="/admin/coverage">Coverage</a>
-        <a href="/admin/health">Health</a>
-        <a href="/admin/exercises" class="active">Exercises</a>
-        <a href="/admin/narration">Narration</a>
-        <a href="/admin/rep-rules">Rep Rules</a>
-        <a href="/admin/observability">Observability</a>
-        <a href="/admin/preview">Preview</a>
-        <a href="/admin/program-quality">Program Quality</a>
-        <a href="/admin/progression-sandbox">Progression Sandbox</a>
-        <a href="/admin/users">Users</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-      </nav>
-      <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">⬇ Sync All to Flyway</button>
+      <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">Sync Sync All to Flyway</button>
     </div>
     <div class="controls">
       <div class="ctrl">
@@ -218,7 +197,7 @@
       </div>
       <div class="ctrl">
         <label for="search-input">Search</label>
-        <input id="search-input" type="search" style="width:180px" placeholder="Name or ID…" />
+        <input id="search-input" type="search" style="width:180px" placeholder="Name or ID..." />
       </div>
       <div class="ctrl">
         <label for="class-filter">Class</label>
@@ -239,7 +218,7 @@
       </div>
       <button id="load-btn" type="button">Load</button>
       <button id="new-btn" type="button" class="secondary">+ New</button>
-      <button id="csv-btn" type="button" class="secondary">CSV ▾</button>
+      <button id="csv-btn" type="button" class="secondary">CSV v</button>
     </div>
     <div class="controls-row2">
       <div class="ctrl">
@@ -266,7 +245,7 @@
         <select id="sw2-filter" style="width:180px"><option value="">All SW2</option></select>
       </div>
       <div class="ctrl">
-        <label for="rank-filter">Min Rank ≤</label>
+        <label for="rank-filter">Min Rank <=</label>
         <select id="rank-filter" style="width:90px">
           <option value="">Any</option>
           <option value="0">0</option>
@@ -327,20 +306,20 @@
       <table>
         <thead>
           <tr>
-            <th data-sort="exercise_id">ID<span class="sort-icon">↕</span></th>
-            <th data-sort="name">Name<span class="sort-icon">↕</span></th>
-            <th data-sort="movement_class">Class<span class="sort-icon">↕</span></th>
-            <th data-sort="movement_pattern_primary">Pattern<span class="sort-icon">↕</span></th>
-            <th data-sort="min_fitness_rank" style="text-align:center">Rank<span class="sort-icon">↕</span></th>
-            <th data-sort="is_loadable" style="text-align:center">Loadable<span class="sort-icon">↕</span></th>
-            <th data-sort="equipment_items_slugs">Equipment<span class="sort-icon">↕</span></th>
-            <th data-sort="strength_primary_region">Region<span class="sort-icon">↕</span></th>
-            <th data-sort="swap_group_id_1" title="swap_group_id_1 — used for swAny matching">sw<span class="sort-icon">↕</span></th>
-            <th data-sort="swap_group_id_2" title="swap_group_id_2 — used for sw2Any matching">sw2<span class="sort-icon">↕</span></th>
-            <th title="preferred_in_json tags — used for requirePref gate">Pref tags</th>
-            <th data-sort="strength_equivalent" style="text-align:center" title="strength_equivalent — opt-in +3 bonus">SE<span class="sort-icon">↕</span></th>
-            <th data-sort="_gap_count">Coverage<span class="sort-icon">↕</span></th>
-            <th data-sort="is_archived">Status<span class="sort-icon">↕</span></th>
+            <th data-sort="exercise_id">ID<span class="sort-icon"><-></span></th>
+            <th data-sort="name">Name<span class="sort-icon"><-></span></th>
+            <th data-sort="movement_class">Class<span class="sort-icon"><-></span></th>
+            <th data-sort="movement_pattern_primary">Pattern<span class="sort-icon"><-></span></th>
+            <th data-sort="min_fitness_rank" style="text-align:center">Rank<span class="sort-icon"><-></span></th>
+            <th data-sort="is_loadable" style="text-align:center">Loadable<span class="sort-icon"><-></span></th>
+            <th data-sort="equipment_items_slugs">Equipment<span class="sort-icon"><-></span></th>
+            <th data-sort="strength_primary_region">Region<span class="sort-icon"><-></span></th>
+            <th data-sort="swap_group_id_1" title="swap_group_id_1 - used for swAny matching">sw<span class="sort-icon"><-></span></th>
+            <th data-sort="swap_group_id_2" title="swap_group_id_2 - used for sw2Any matching">sw2<span class="sort-icon"><-></span></th>
+            <th title="preferred_in_json tags - used for requirePref gate">Pref tags</th>
+            <th data-sort="strength_equivalent" style="text-align:center" title="strength_equivalent - opt-in +3 bonus">SE<span class="sort-icon"><-></span></th>
+            <th data-sort="_gap_count">Coverage<span class="sort-icon"><-></span></th>
+            <th data-sort="is_archived">Status<span class="sort-icon"><-></span></th>
             <th></th>
           </tr>
         </thead>
@@ -385,7 +364,7 @@
   <!-- Equipment Items tab -->
   <div id="tab-equipment" class="tab-panel">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <input id="eq-search" type="search" placeholder="Search name, slug or category…" style="width:260px" />
+      <input id="eq-search" type="search" placeholder="Search name, slug or category..." style="width:260px" />
       <button id="eq-new-btn">Add New</button>
       <span id="eq-status" style="font-size:12px;color:var(--muted);margin-left:4px"></span>
     </div>
@@ -437,7 +416,7 @@
 
 <!-- Session bar -->
 <div id="session-bar" class="hidden">
-  <span><span id="session-count">0</span> change(s) queued — keep editing or apply when ready</span>
+  <span><span id="session-count">0</span> change(s) queued - keep editing or apply when ready</span>
   <span id="session-bar-spacer" class="bar-spacer"></span>
   <button id="session-apply-btn" class="sm">Apply to Database</button>
   <button id="session-view-btn" class="secondary sm">View SQL</button>
@@ -452,7 +431,7 @@
     <h2 id="drawer-title" class="drawer-title">Exercise</h2>
     <div style="display:flex;gap:6px">
       <button class="ghost sm" id="clone-btn" style="display:none">Clone</button>
-      <button class="ghost" id="drawer-close">✕</button>
+      <button class="ghost" id="drawer-close">x</button>
     </div>
   </div>
   <div class="drawer-body">
@@ -485,7 +464,7 @@
         <div class="f">
           <label for="f-movement_class">Movement Class *</label>
           <select id="f-movement_class">
-            <option value="">— select —</option>
+            <option value="">- select -</option>
             <option>compound</option><option>isolation</option><option>engine</option>
             <option>core</option><option>carry</option><option>cardio</option>
             <option>conditioning</option><option>locomotion</option>
@@ -494,10 +473,10 @@
         <div class="f">
           <label for="f-movement_pattern_primary">Movement Pattern *</label>
           <div class="mp-wrapper">
-            <input id="f-movement_pattern_primary" type="text" placeholder="Search existing patterns…" autocomplete="off" />
+            <input id="f-movement_pattern_primary" type="text" placeholder="Search existing patterns..." autocomplete="off" />
             <ul class="mp-dropdown" id="mp-dropdown" hidden></ul>
           </div>
-          <span class="mp-new-warning" id="mp-new-warning" hidden>New pattern — not in existing catalogue. Make sure this is intentional.</span>
+          <span class="mp-new-warning" id="mp-new-warning" hidden>New pattern - not in existing catalogue. Make sure this is intentional.</span>
         </div>
       </div>
       <div class="row2">
@@ -508,27 +487,27 @@
         <div class="f">
           <label for="f-strength_primary_region">Strength Region</label>
           <select id="f-strength_primary_region">
-            <option value="">—</option>
+            <option value="">-</option>
             <option>upper</option><option>lower</option>
           </select>
         </div>
         <div class="f">
           <label for="f-swap_group_id_1">Swap Group 1 (sw)</label>
           <div class="sw-wrapper">
-            <input id="f-swap_group_id_1" type="text" placeholder="Search existing values…" autocomplete="off" />
+            <input id="f-swap_group_id_1" type="text" placeholder="Search existing values..." autocomplete="off" />
             <ul class="sw-dropdown" id="sw1-dropdown" hidden></ul>
           </div>
-          <span class="sw-new-warning" id="sw1-new-warning" hidden>New swap group — not in existing catalogue. Make sure this is intentional.</span>
+          <span class="sw-new-warning" id="sw1-new-warning" hidden>New swap group - not in existing catalogue. Make sure this is intentional.</span>
         </div>
       </div>
       <div class="row2">
         <div class="f">
           <label for="f-swap_group_id_2">Swap Group 2 (sw2)</label>
           <div class="sw-wrapper">
-            <input id="f-swap_group_id_2" type="text" placeholder="Search existing values…" autocomplete="off" />
+            <input id="f-swap_group_id_2" type="text" placeholder="Search existing values..." autocomplete="off" />
             <ul class="sw-dropdown" id="sw2-dropdown" hidden></ul>
           </div>
-          <span class="sw-new-warning" id="sw2-new-warning" hidden>New swap group — not in existing catalogue. Make sure this is intentional.</span>
+          <span class="sw-new-warning" id="sw2-new-warning" hidden>New swap group - not in existing catalogue. Make sure this is intentional.</span>
         </div>
         <div class="f"><label for="f-min_fitness_rank">Min Fitness Rank</label><input id="f-min_fitness_rank" type="number" min="0" max="3" step="1" /></div>
       </div>
@@ -555,7 +534,7 @@
         <div class="eq-slug-wrapper">
           <div class="chip-input" id="eq-chip-container">
             <div class="chip-list" id="eq-chip-list"></div>
-            <input id="eq-slug-input" type="text" placeholder="Search equipment…" autocomplete="off" />
+            <input id="eq-slug-input" type="text" placeholder="Search equipment..." autocomplete="off" />
           </div>
           <ul class="eq-dropdown" id="eq-dropdown" hidden></ul>
         </div>
@@ -573,7 +552,7 @@
         <label>Preferred In (pref tags)</label>
         <div class="chip-input" id="pref-chip-container">
           <div class="chip-list" id="pref-chip-list"></div>
-          <input id="pref-tag-input" type="text" list="pref-tag-options" placeholder="Add tag…" autocomplete="off" />
+          <input id="pref-tag-input" type="text" list="pref-tag-options" placeholder="Add tag..." autocomplete="off" />
         </div>
         <input type="hidden" id="f-preferred_in_json" />
       </div>
@@ -601,7 +580,7 @@
     <!-- Impact preview -->
     <div id="impact-panel" style="display:none">
       <h4>Coverage Impact Preview</h4>
-      <div id="impact-body">Loading…</div>
+      <div id="impact-body">Loading...</div>
     </div>
 
     <div id="drawer-err" class="err-msg"></div>
@@ -664,7 +643,7 @@ const LAST_ACTIVE_KEY = `${STORAGE_KEY}:last_active`;
 const ACTIVITY_EVENTS = ["pointerdown", "keydown", "mousedown", "touchstart", "scroll"];
 const BASE = "/admin/exercise-catalogue";
 
-// ── State ──────────────────────────────────────────────────────────────────
+// State
 let exercises = [];   // from full-state
 let gaps = [];        // coverage gaps from full-state
 let equipmentSlugs = [];
@@ -676,7 +655,7 @@ let csvDryRunRows = [];
 let sortCol = "name";
 let sortDir = "asc";
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// Helpers
 function esc(v) {
   return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 }
@@ -786,7 +765,7 @@ async function apiFetch(path, opts = {}) {
   return data;
 }
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
+// Tabs
 document.querySelectorAll(".tab").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
@@ -796,7 +775,7 @@ document.querySelectorAll(".tab").forEach(btn => {
   });
 });
 
-// ── Load ───────────────────────────────────────────────────────────────────
+// Load
 async function handleLoadClick(event) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
@@ -859,7 +838,7 @@ document.querySelectorAll("th[data-sort]").forEach(th => {
 });
 
 async function loadState() {
-  setStatus("Loading…");
+  setStatus("Loading...");
   try {
     const data = await apiFetch(`${BASE}/full-state`);
     exercises = data.exercises ?? [];
@@ -875,7 +854,7 @@ async function loadState() {
   }
 }
 
-// ── Pref-tag chip selector ─────────────────────────────────────────────────
+// Pref-tag chip selector
 let _prefTags = [];
 
 function setPrefTags(tags) {
@@ -887,7 +866,7 @@ function _syncPrefChips() {
   const list = document.getElementById("pref-chip-list");
   if (!list) return;
   list.innerHTML = _prefTags.map(t =>
-    `<span class="chip">${esc(t)}<button type="button" class="chip-remove" data-tag="${esc(t)}" title="Remove">✕</button></span>`
+    `<span class="chip">${esc(t)}<button type="button" class="chip-remove" data-tag="${esc(t)}" title="Remove">x</button></span>`
   ).join("");
   list.querySelectorAll(".chip-remove").forEach(btn =>
     btn.addEventListener("click", e => { e.stopPropagation(); _removePrefTag(btn.dataset.tag); })
@@ -930,7 +909,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("pref-chip-container")?.addEventListener("click", () => inp.focus());
 });
 
-// ── Equipment-slug chip selector ───────────────────────────────────────────
+// Equipment-slug chip selector
 let _eqSlugs = [];
 
 function setEqSlugs(slugs) {
@@ -942,7 +921,7 @@ function _syncEqChips() {
   const list = document.getElementById("eq-chip-list");
   if (!list) return;
   list.innerHTML = _eqSlugs.map(s =>
-    `<span class="chip">${esc(s)}<button type="button" class="chip-remove" data-slug="${esc(s)}" title="Remove">✕</button></span>`
+    `<span class="chip">${esc(s)}<button type="button" class="chip-remove" data-slug="${esc(s)}" title="Remove">x</button></span>`
   ).join("");
   list.querySelectorAll(".chip-remove").forEach(btn =>
     btn.addEventListener("click", e => { e.stopPropagation(); _removeEqSlug(btn.dataset.slug); })
@@ -1037,7 +1016,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("eq-chip-container")?.addEventListener("click", () => inp.focus());
 });
 
-// ── Movement pattern combobox ─────────────────────────────────────────────
+// Movement pattern combobox
 document.addEventListener("DOMContentLoaded", () => {
   const inp = document.getElementById("f-movement_pattern_primary");
   const ddEl = document.getElementById("mp-dropdown");
@@ -1099,7 +1078,7 @@ document.addEventListener("DOMContentLoaded", () => {
   inp.addEventListener("blur", () => { setTimeout(_closeDd, 150); _updateWarning(); });
 });
 
-// ── Swap group comboboxes (sw1 / sw2) ─────────────────────────────────────
+// Swap group comboboxes (sw1 / sw2)
 (function initSwComboboxes() {
   const configs = [
     { inputId: "f-swap_group_id_1", ddId: "sw1-dropdown", warnId: "sw1-new-warning", field: "swap_group_id_1" },
@@ -1170,16 +1149,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 })();
 
-// ── Selector helpers ───────────────────────────────────────────────────────
+// Selector helpers
 function prefTagsHtml(json) {
   const tags = Array.isArray(json) ? json.map(t => typeof t === "string" ? t : t?.tag).filter(Boolean)
     : (json && typeof json === "object" && !Array.isArray(json)) ? Object.keys(json)
     : [];
-  if (!tags.length) return '<span class="gap-dash">—</span>';
+  if (!tags.length) return '<span class="gap-dash">-</span>';
   return tags.map(t => `<span class="pref-tag">${esc(t)}</span>`).join(" ");
 }
 
-// ── Table ──────────────────────────────────────────────────────────────────
+// Table
 function renderTable() {
   const q       = document.getElementById("search-input").value.toLowerCase();
   const cls     = document.getElementById("class-filter").value;
@@ -1266,32 +1245,32 @@ function renderTable() {
     const icon = th.querySelector(".sort-icon");
     if (th.dataset.sort === sortCol) {
       th.classList.add(sortDir === "asc" ? "sort-asc" : "sort-desc");
-      if (icon) icon.textContent = sortDir === "asc" ? "↑" : "↓";
+      if (icon) icon.textContent = sortDir === "asc" ? "up" : "down";
     } else {
-      if (icon) icon.textContent = "↕";
+      if (icon) icon.textContent = "<->";
     }
   });
 
   document.getElementById("browse-summary").textContent = `${rows.length} of ${exercises.length} exercises`;
 
   document.getElementById("table-body").innerHTML = rows.map(ex => {
-    const eq = (ex.equipment_items_slugs ?? []).join(", ") || "—";
+    const eq = (ex.equipment_items_slugs ?? []).join(", ") || "-";
     const gapCount = gapCounts.get(ex.exercise_id) ?? 0;
     const covClass = gapCount === 0 ? "ok" : gapCount <= 2 ? "low" : "zero";
-    const covBar = `<div class="cov-bar"><div class="cov-seg ${covClass}" title="${gapCount} gap slots covered"></div><span class="cov-count">${gapCount > 0 ? '+'+gapCount : '—'}</span></div>`;
+    const covBar = `<div class="cov-bar"><div class="cov-seg ${covClass}" title="${gapCount} gap slots covered"></div><span class="cov-count">${gapCount > 0 ? '+'+gapCount : '-'}</span></div>`;
     return `<tr class="${ex.is_archived ? "archived" : ""}" data-id="${esc(ex.exercise_id)}">
       <td><code style="font-size:10px">${esc(ex.exercise_id)}</code></td>
       <td class="wide">${esc(ex.name)}</td>
       <td><span class="badge">${esc(ex.movement_class)}</span></td>
       <td>${esc(ex.movement_pattern_primary)}</td>
       <td style="text-align:center">${ex.min_fitness_rank ?? 0}</td>
-      <td style="text-align:center">${ex.is_loadable ? '<span class="badge yes">✓</span>' : "—"}</td>
+      <td style="text-align:center">${ex.is_loadable ? '<span class="badge yes">OK</span>' : "-"}</td>
       <td class="eq">${esc(eq)}</td>
-      <td>${esc(ex.strength_primary_region ?? "—")}</td>
-      <td class="${ex.swap_group_id_1 ? '' : 'gap-cell'}">${ex.swap_group_id_1 ? `<code style="font-size:10px">${esc(ex.swap_group_id_1)}</code>` : '<span class="gap-dash">—</span>'}</td>
-      <td class="${ex.swap_group_id_2 ? '' : 'gap-cell'}">${ex.swap_group_id_2 ? `<code style="font-size:10px">${esc(ex.swap_group_id_2)}</code>` : '<span class="gap-dash">—</span>'}</td>
+      <td>${esc(ex.strength_primary_region ?? "-")}</td>
+      <td class="${ex.swap_group_id_1 ? '' : 'gap-cell'}">${ex.swap_group_id_1 ? `<code style="font-size:10px">${esc(ex.swap_group_id_1)}</code>` : '<span class="gap-dash">-</span>'}</td>
+      <td class="${ex.swap_group_id_2 ? '' : 'gap-cell'}">${ex.swap_group_id_2 ? `<code style="font-size:10px">${esc(ex.swap_group_id_2)}</code>` : '<span class="gap-dash">-</span>'}</td>
       <td>${prefTagsHtml(ex.preferred_in_json)}</td>
-      <td style="text-align:center">${ex.strength_equivalent ? '<span class="badge yes" title="strength_equivalent = true">SE</span>' : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="text-align:center">${ex.strength_equivalent ? '<span class="badge yes" title="strength_equivalent = true">SE</span>' : '<span style="color:var(--muted)">-</span>'}</td>
       <td>${covBar}</td>
       <td>${ex.is_archived ? '<span class="badge archived">Archived</span>' : '<span class="badge yes">Active</span>'}</td>
       <td><button class="ghost edit-btn" data-id="${esc(ex.exercise_id)}">Edit</button></td>
@@ -1306,7 +1285,7 @@ function renderTable() {
   });
 }
 
-// ── Drawer ─────────────────────────────────────────────────────────────────
+// Drawer
 const overlay = document.getElementById("overlay");
 const drawer = document.getElementById("drawer");
 
@@ -1476,7 +1455,7 @@ async function fetchImpactPreview() {
   const payload = collectPayload();
   const panel = document.getElementById("impact-panel");
   panel.style.display = "block";
-  document.getElementById("impact-body").textContent = "Computing…";
+  document.getElementById("impact-body").textContent = "Computing...";
   try {
     const d = await apiFetch(`${BASE}/preview-change`, { method: "POST", body: JSON.stringify({ action: "edit", exercise_id: editingId, changes: payload }) });
     renderImpact(d);
@@ -1583,7 +1562,7 @@ async function queueChange() {
   }
 }
 
-// ── Session bar ────────────────────────────────────────────────────────────
+// Session bar
 async function refreshSessionBar() {
   try {
     const d = await apiFetch(`${BASE}/session/pending`);
@@ -1596,7 +1575,7 @@ async function refreshSessionBar() {
 
 document.getElementById("session-apply-btn").addEventListener("click", async () => {
   const el = document.getElementById("session-apply-status");
-  el.textContent = "Applying…"; el.style.color = "#fff";
+  el.textContent = "Applying..."; el.style.color = "#fff";
   try {
     const d = await apiFetch(`${BASE}/session/apply-to-db`, { method: "POST" });
     el.textContent = d.message ?? "Done"; el.style.color = "#6ee7b7";
@@ -1630,7 +1609,7 @@ document.getElementById("session-clear-btn").addEventListener("click", async () 
   } catch (e) { setStatus(e.message, "err"); }
 });
 
-// ── Migration tab ──────────────────────────────────────────────────────────
+// Migration tab
 async function refreshMigrationTab() {
   try {
     const d = await apiFetch(`${BASE}/session/pending`);
@@ -1645,7 +1624,7 @@ async function refreshMigrationTab() {
 
 document.getElementById("mig-apply-btn").addEventListener("click", async () => {
   const el = document.getElementById("mig-status");
-  el.textContent = "Applying…"; el.style.color = "var(--muted)";
+  el.textContent = "Applying..."; el.style.color = "var(--muted)";
   try {
     const d = await apiFetch(`${BASE}/session/apply-to-db`, { method: "POST" });
     el.textContent = d.message ?? "Done"; el.style.color = "var(--success)";
@@ -1663,7 +1642,7 @@ document.getElementById("mig-apply-btn").addEventListener("click", async () => {
 
 document.getElementById("mig-generate-btn").addEventListener("click", async () => {
   const el = document.getElementById("mig-status");
-  el.textContent = "Applying…";
+  el.textContent = "Applying...";
   try {
     const d = await apiFetch(`${BASE}/session/generate-migration`, { method: "POST" });
     el.textContent = d.message ?? "Done";
@@ -1704,7 +1683,7 @@ document.getElementById("mig-download-btn").addEventListener("click", () => {
 document.getElementById("mig-snapshot-btn").addEventListener("click", async () => {
   if (!confirm("This will overwrite R__exercise_catalogue_edits.sql with a full snapshot of all current exercises.\n\nContinue?")) return;
   const el = document.getElementById("snapshot-status");
-  el.textContent = "Exporting…";
+  el.textContent = "Exporting...";
   el.style.color = "var(--muted)";
   try {
     const d = await apiFetch(`${BASE}/session/export-snapshot`, { method: "POST" });
@@ -1716,7 +1695,7 @@ document.getElementById("mig-snapshot-btn").addEventListener("click", async () =
   }
 });
 
-// ── Clone modal ────────────────────────────────────────────────────────────
+// Clone modal
 const cloneModal = document.getElementById("clone-modal");
 document.getElementById("clone-cancel-btn").addEventListener("click", () => cloneModal.classList.remove("open"));
 
@@ -1769,7 +1748,7 @@ document.getElementById("clone-queue-btn").addEventListener("click", async () =>
   } catch (e) { document.getElementById("clone-err").textContent = e.message; }
 });
 
-// ── CSV modal ──────────────────────────────────────────────────────────────
+// CSV modal
 const csvModal = document.getElementById("csv-modal");
 document.getElementById("csv-btn").addEventListener("click", () => csvModal.classList.add("open"));
 document.getElementById("csv-close-btn").addEventListener("click", () => csvModal.classList.remove("open"));
@@ -1799,7 +1778,7 @@ document.getElementById("csv-dry-run-btn").addEventListener("click", async () =>
   if (!file) { alert("Select a CSV file first."); return; }
   const text = await file.text();
   const resultEl = document.getElementById("csv-result");
-  resultEl.textContent = "Running dry-run…";
+  resultEl.textContent = "Running dry-run...";
   document.getElementById("csv-apply-btn").style.display = "none";
   csvDryRunRows = [];
   try {
@@ -1841,9 +1820,9 @@ document.getElementById("csv-apply-btn").addEventListener("click", async () => {
   await refreshMigrationTab();
 });
 
-// ── Health tab ─────────────────────────────────────────────────────────────
+// Health tab
 document.getElementById("health-load-btn").addEventListener("click", async () => {
-  document.getElementById("health-content").innerHTML = "<div style='color:var(--muted)'>Loading…</div>";
+  document.getElementById("health-content").innerHTML = "<div style='color:var(--muted)'>Loading...</div>";
   try {
     const d = await apiFetch(`${BASE}/catalogue-health`);
     renderHealth(d);
@@ -1878,7 +1857,7 @@ function renderHealth(d) {
         </div>
       </div>
       <div class="card">
-        <h4>Low Utility — ≤4 slots (${lowUtility.length})</h4>
+        <h4>Low Utility - <=4 slots (${lowUtility.length})</h4>
         <p>Exercises eligible in very few slots; consider broadening or archiving.</p>
         <div style="margin-top:8px;max-height:200px;overflow-y:auto">
           ${table(lowUtility, ["ID","Name","Slots"], r => `<tr>
@@ -1889,7 +1868,7 @@ function renderHealth(d) {
         </div>
       </div>
       <div class="card">
-        <h4>Oversupplied Clusters — ≥5 exercises (${oversupplied.length})</h4>
+        <h4>Oversupplied Clusters - >=5 exercises (${oversupplied.length})</h4>
         <p>Slot clusters with many eligible exercises; no action needed but flagged for awareness.</p>
         <div style="margin-top:8px;max-height:200px;overflow-y:auto">
           ${table(oversupplied, ["Slot","Config","Count"], r => `<tr>
@@ -1902,9 +1881,9 @@ function renderHealth(d) {
     </div>`;
 }
 
-// ── Recommendations tab ────────────────────────────────────────────────────
+// Recommendations tab
 document.getElementById("recos-load-btn").addEventListener("click", async () => {
-  document.getElementById("recos-content").innerHTML = "<div style='color:var(--muted)'>Computing…</div>";
+  document.getElementById("recos-content").innerHTML = "<div style='color:var(--muted)'>Computing...</div>";
   try {
     const d = await apiFetch(`${BASE}/recommendations`);
     renderRecos(d.recommendations ?? []);
@@ -1915,7 +1894,7 @@ document.getElementById("recos-load-btn").addEventListener("click", async () => 
 
 function renderRecos(recos) {
   if (!recos.length) {
-    document.getElementById("recos-content").innerHTML = "<div style='color:var(--success)'>No coverage gaps detected — catalogue looks healthy.</div>";
+    document.getElementById("recos-content").innerHTML = "<div style='color:var(--success)'>No coverage gaps detected - catalogue looks healthy.</div>";
     return;
   }
 
@@ -1923,7 +1902,7 @@ function renderRecos(recos) {
     if (!changes || !Object.keys(changes).length) return "";
     return Object.entries(changes).map(([field, val]) => {
       const display = Array.isArray(val) ? JSON.stringify(val) : String(val);
-      return `<span class="reco-change-pill"><span class="pill-field">${esc(field)}</span><span class="pill-arrow">→</span>${esc(display)}</span>`;
+      return `<span class="reco-change-pill"><span class="pill-field">${esc(field)}</span><span class="pill-arrow">-></span>${esc(display)}</span>`;
     }).join("");
   }
 
@@ -1932,7 +1911,7 @@ function renderRecos(recos) {
     const lowFixed  = r.impact?.net_low_gaps_improved ?? r.low_gaps_improved ?? 0;
     return `
     <div class="reco-card" id="reco-${i}">
-      <h4>#${r.rank ?? i + 1} &nbsp;${esc(r.exercise_name ?? r.exercise_id)} <span style="font-weight:400;color:var(--muted)">— ${esc(r.action)}</span></h4>
+      <h4>#${r.rank ?? i + 1} &nbsp;${esc(r.exercise_name ?? r.exercise_id)} <span style="font-weight:400;color:var(--muted)">- ${esc(r.action)}</span></h4>
       <div class="reco-meta">
         Score: <strong>${r.score ?? "?"}</strong> &nbsp;|&nbsp; Gaps fixed: <strong>${zeroFixed}</strong> zero, <strong>${lowFixed}</strong> low &nbsp;|&nbsp; Fields changed: <strong>${r.fields_changed ?? 0}</strong>
       </div>
@@ -1954,7 +1933,7 @@ window.applyReco = function(i) {
   const r = window._recos?.[i];
   if (!r) return;
   const ex = exercises.find(e => e.exercise_id === r.exercise_id);
-  if (!ex) { alert("Exercise not loaded — reload browse tab first."); return; }
+  if (!ex) { alert("Exercise not loaded - reload browse tab first."); return; }
   openEditDrawer(r.exercise_id);
   // Apply recommended patches
   if (r.changes) {
@@ -1972,14 +1951,14 @@ window.toggleRecoSql = function(i) {
   el.style.display = el.style.display === "none" || !el.style.display ? "block" : "none";
 };
 
-// ── Equipment Items tab ────────────────────────────────────────────────────
+// Equipment Items tab
 const EQ_BASE = "/admin/equipment-items";
 let eqItems = [];
 let eqEditingId = null;
 let eqLoaded = false;
 
 async function loadEquipmentItems() {
-  document.getElementById("eq-status").textContent = "Loading…";
+  document.getElementById("eq-status").textContent = "Loading...";
   try {
     const d = await apiFetch(EQ_BASE);
     eqItems = d.items ?? [];
@@ -1999,7 +1978,7 @@ function renderEquipmentTable() {
     (it.exercise_slug ?? "").toLowerCase().includes(q) ||
     (it.category ?? "").toLowerCase().includes(q)
   );
-  const tick = v => v ? "✓" : "";
+  const tick = v => v ? "OK" : "";
   document.getElementById("eq-table-body").innerHTML = rows.map(it => `
     <tr style="border-bottom:1px solid var(--border)">
       <td style="padding:6px 8px">${esc(it.name)}</td>
@@ -2114,7 +2093,7 @@ document.querySelector('.tab[data-tab="equipment"]').addEventListener("click", (
   if (!eqLoaded) { eqLoaded = true; loadEquipmentItems(); }
 });
 
-// ── Init ───────────────────────────────────────────────────────────────────
+// Init
 if (ensureActiveAdminSession()) {
   const savedToken = sessionStorage.getItem(STORAGE_KEY);
   if (savedToken) {
@@ -2127,18 +2106,18 @@ installAdminIdleTimeout();
 document.getElementById("sync-all-btn").addEventListener("click", async () => {
   const btn = document.getElementById("sync-all-btn");
   btn.disabled = true;
-  btn.textContent = "Syncing…";
+  btn.textContent = "Syncing...";
   try {
     const data = await apiFetch("/admin/sync-all-to-flyway", { method: "POST" });
     const lines = data.files.map(f =>
-      `${f.ok ? "✓" : "✗"} ${f.file} (${f.rows} rows)${f.error ? " — " + f.error : ""}`
+      `${f.ok ? "OK" : "X"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
     ).join("\n");
-    window.alert(`Sync ${data.ok ? "complete" : "partial — some files failed"}:\n\n${lines}`);
+    window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
   } catch (err) {
     window.alert("Sync failed: " + (err.message || String(err)));
   } finally {
     btn.disabled = false;
-    btn.textContent = "⬇ Sync All to Flyway";
+    btn.textContent = "Sync Sync All to Flyway";
   }
 });
 </script>
@@ -2148,5 +2127,6 @@ document.getElementById("sync-all-btn").addEventListener("click", async () => {
   <option value="hypertrophy_secondary"><option value="hypertrophy_accessory"><option value="hyrox_buy_in">
   <option value="hyrox_power"><option value="hyrox_station"><option value="strength_main">
 </datalist>
-</body>
+    <script src="/admin-ui/nav.js"></script>
+  </body>
 </html>

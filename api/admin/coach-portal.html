@@ -23,10 +23,6 @@
       .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
       .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
       .title { margin: 0; font-size: 22px; }
-      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
-      .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
       .control { display: grid; gap: 4px; }
       .control label { font-size: 12px; color: var(--muted); }
@@ -139,30 +135,12 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <!-- Header / Nav -->
       <section class="header">
         <div class="top-row">
           <h1 class="title">Coach Portal</h1>
-          <div class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage</a>
-            <a href="/admin/health">Health</a>
-            <a href="/admin/exercises">Exercises</a>
-            <a href="/admin/narration">Narration</a>
-            <a href="/admin/rep-rules">Rep Rules</a>
-            <a href="/admin/observability">Observability</a>
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/seed-history">Seed History</a>
-            <a href="/admin/progression-sandbox">Progression Sandbox</a>
-            <a href="/admin/users">Users</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal" class="active">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-          </div>
         </div>
 
         <!-- Auth section -->
@@ -198,13 +176,13 @@
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
               <h2 style="margin:0; font-size:15px; font-weight:700;">
                 My Athletes
-                <span id="client-count" class="count-badge" style="margin-left:6px;">—</span>
+                <span id="client-count" class="count-badge" style="margin-left:6px;">-</span>
               </h2>
-              <button id="refresh-clients-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">↻ Refresh</button>
+              <button id="refresh-clients-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">Refresh Refresh</button>
             </div>
             <div id="client-list-loading" class="loading-wrap" style="display:none"><div class="spinner"></div></div>
             <div id="client-list-content">
-              <div class="empty">Connecting…</div>
+              <div class="empty">Connecting...</div>
             </div>
           </div>
 
@@ -218,7 +196,7 @@
             </div>
             <div id="detail-content" style="display:none">
               <div class="detail-header">
-                <h2 class="detail-name" id="d-name">—</h2>
+                <h2 class="detail-name" id="d-name">-</h2>
                 <div class="detail-meta" id="d-meta"></div>
                 <div class="detail-rel" id="d-rel"></div>
               </div>
@@ -236,7 +214,7 @@
                   <div class="metric-grid">
                     <div class="metric-card">
                       <div class="metric-card-title">Active Program</div>
-                      <div id="ov-program-title" class="metric-card-value" style="font-size:15px;">—</div>
+                      <div id="ov-program-title" class="metric-card-value" style="font-size:15px;">-</div>
                       <div id="ov-program-meta" class="metric-card-sub"></div>
                       <div id="ov-progress-wrap" class="progress-bar-wrap" style="display:none">
                         <div id="ov-progress-fill" class="progress-bar-fill" style="width:0%"></div>
@@ -244,7 +222,7 @@
                     </div>
                     <div class="metric-card">
                       <div class="metric-card-title">Training Snapshot</div>
-                      <div id="ov-streak" class="metric-card-value">—</div>
+                      <div id="ov-streak" class="metric-card-value">-</div>
                       <div id="ov-completion" class="metric-card-sub"></div>
                       <div id="ov-last-session" class="metric-card-sub"></div>
                     </div>
@@ -275,7 +253,7 @@
                   </div>
                   <div>
                     <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">Exercise</label>
-                    <input id="dec-exercise-filter" type="text" placeholder="Filter by exercise…" style="width:180px" />
+                    <input id="dec-exercise-filter" type="text" placeholder="Filter by exercise..." style="width:180px" />
                   </div>
                   <div>
                     <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">Limit</label>
@@ -303,7 +281,7 @@
                   <div class="form-row">
                     <label for="ov-exercise-select">Exercise</label>
                     <select id="ov-exercise-select">
-                      <option value="">— select exercise —</option>
+                      <option value="">- select exercise -</option>
                     </select>
                   </div>
                   <div class="form-row">
@@ -346,7 +324,7 @@
                 <div>
                   <div class="sub-title">
                     Override History
-                    <button id="ov-history-refresh" type="button" class="secondary-btn" style="font-size:11px; padding:2px 8px; margin-left:8px;">↻</button>
+                    <button id="ov-history-refresh" type="button" class="secondary-btn" style="font-size:11px; padding:2px 8px; margin-left:8px;">Refresh</button>
                   </div>
                   <div id="overrides-loading" class="loading-wrap" style="display:none"><div class="spinner"></div></div>
                   <div class="table-wrap">
@@ -362,8 +340,7 @@
     </div><!-- /page -->
 
     <script type="module">
-      // ─── Utilities ─────────────────────────────────────────────────────────────
-
+      // Utilities
       function esc(v) {
         return String(v ?? "")
           .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -371,13 +348,13 @@
       }
 
       function fmtDate(iso) {
-        if (!iso) return "—";
+        if (!iso) return "-";
         return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
       }
 
       function trunc(str, n) {
         const s = String(str ?? "");
-        return s.length > n ? s.slice(0, n - 1) + "…" : s;
+        return s.length > n ? s.slice(0, n - 1) + "..." : s;
       }
 
       function autoHide(el, ms = 4000) {
@@ -398,12 +375,12 @@
 
       function outcomeChip(outcome) {
         const map = {
-          increase_load: ["chip-ok", "Load ↑"],
-          increase_reps: ["chip-ok", "Reps ↑"],
-          increase_sets: ["chip-ok", "Sets ↑"],
+          increase_load: ["chip-ok", "Load up"],
+          increase_reps: ["chip-ok", "Reps up"],
+          increase_sets: ["chip-ok", "Sets up"],
           hold: ["chip-muted", "Hold"],
           deload_local: ["chip-warn", "Deload"],
-          reduce_rest: ["chip-blue", "Rest ↓"],
+          reduce_rest: ["chip-blue", "Rest down"],
         };
         const [cls, label] = map[outcome] ?? ["chip-muted", esc(outcome)];
         return `<span class="chip ${cls}">${label}</span>`;
@@ -423,17 +400,16 @@
       function payloadSummary(kind, payload) {
         try {
           const p = typeof payload === "object" ? payload : JSON.parse(payload ?? "{}");
-          if (kind === "next_session_load" && p.recommended_load_kg != null) return `→ ${p.recommended_load_kg} kg`;
-          if (kind === "next_session_reps" && p.target_reps != null) return `→ ${p.target_reps} reps`;
+          if (kind === "next_session_load" && p.recommended_load_kg != null) return `-> ${p.recommended_load_kg} kg`;
+          if (kind === "next_session_reps" && p.target_reps != null) return `-> ${p.target_reps} reps`;
           if (kind === "next_session_hold") return "Hold";
         } catch { /* ignore */ }
-        return "—";
+        return "-";
       }
 
       const STORAGE_KEY = "coach_portal_jwt";
 
-      // ─── Auth state ────────────────────────────────────────────────────────────
-
+      // Auth state
       let _jwt = sessionStorage.getItem(STORAGE_KEY) || "";
       let _connectedEmail = "";
       let _currentClientId = null;
@@ -467,7 +443,7 @@
 
       async function connect() {
         connectBtn.disabled = true;
-        setStatus(authStatus, "Signing in…", "");
+        setStatus(authStatus, "Signing in...", "");
         try {
           const email = emailInput.value.trim();
           const password = passwordInput.value;
@@ -511,7 +487,7 @@
 
       function showPortal() {
         authSection.style.display = "none";
-        connectedLabel.textContent = `${_connectedEmail} · ${_clients.length} athlete${_clients.length !== 1 ? "s" : ""}`;
+        connectedLabel.textContent = `${_connectedEmail}  -  ${_clients.length} athlete${_clients.length !== 1 ? "s" : ""}`;
         connectedHeader.style.display = "block";
         portalEl.style.display = "block";
       }
@@ -542,7 +518,7 @@
           renderClientList();
         }).catch((err) => {
           console.warn("[coach-portal] auto-connect failed, clearing token:", err.message);
-          // Token expired or invalid — show login form
+          // Token expired or invalid - show login form
           sessionStorage.removeItem(STORAGE_KEY);
           _jwt = "";
           authSection.style.display = "block";
@@ -551,8 +527,7 @@
         });
       }
 
-      // ─── Client list ───────────────────────────────────────────────────────────
-
+      // Client list
       function daysSince(iso) {
         if (!iso) return Infinity;
         return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -587,11 +562,11 @@
         content.innerHTML = _clients.map((c) => {
           const lastDays = daysSince(c.last_session_date);
           const badges = [];
-          if (lastDays > 7) badges.push(`<span class="chip chip-warn">⚠ No recent session</span>`);
-          if (c.has_active_override) badges.push(`<span class="chip chip-blue">⏳ Override pending</span>`);
+          if (lastDays > 7) badges.push(`<span class="chip chip-warn">Warning No recent session</span>`);
+          if (c.has_active_override) badges.push(`<span class="chip chip-blue">Pending Override pending</span>`);
 
           const streak = Number(c.current_streak || 0);
-          const streakHtml = streak > 0 ? `<span style="font-size:12px">🔥 ${streak}-day streak</span>` : "";
+          const streakHtml = streak > 0 ? `<span style="font-size:12px"> ${streak}-day streak</span>` : "";
 
           const lastHtml = c.last_session_date
             ? `Last session: ${fmtDate(c.last_session_date)}`
@@ -606,7 +581,7 @@
                  data-id="${esc(c.client_user_id)}">
               <div class="client-card-name">${esc(c.display_name || "Athlete")}</div>
               <div class="client-card-program">${progHtml}</div>
-              <div class="client-card-meta">${lastHtml}${streakHtml ? " · " + streakHtml : ""}</div>
+              <div class="client-card-meta">${lastHtml}${streakHtml ? "  -  " + streakHtml : ""}</div>
               ${badges.length ? `<div class="client-card-badges">${badges.join("")}</div>` : ""}
             </div>`;
         }).join("");
@@ -633,8 +608,7 @@
         }
       });
 
-      // ─── Client selection & detail ─────────────────────────────────────────────
-
+      // Client selection & detail
       async function selectClient(clientId) {
         _currentClientId = clientId;
         renderClientList(); // update selected state
@@ -662,8 +636,7 @@
         loadClientPrograms(clientId);
       }
 
-      // ─── Tabs ──────────────────────────────────────────────────────────────────
-
+      // Tabs
       function activateTab(tabName) {
         document.querySelectorAll(".tab-btn").forEach((btn) => {
           btn.classList.toggle("active", btn.dataset.tab === tabName);
@@ -687,8 +660,7 @@
         });
       });
 
-      // ─── Overview tab ──────────────────────────────────────────────────────────
-
+      // Overview tab
       async function loadOverview(clientId) {
         const loading = document.getElementById("overview-loading");
         const content = document.getElementById("overview-content");
@@ -707,11 +679,11 @@
           // Program card
           const prog = data.active_program;
           if (prog) {
-            document.getElementById("ov-program-title").textContent = prog.program_title || "—";
+            document.getElementById("ov-program-title").textContent = prog.program_title || "-";
             const wk = prog.weeks_count ? `${prog.weeks_count} wks` : "";
-            const dpw = prog.days_per_week ? `${prog.days_per_week}×/wk` : "";
+            const dpw = prog.days_per_week ? `${prog.days_per_week}x/wk` : "";
             document.getElementById("ov-program-meta").innerHTML =
-              `<span class="chip chip-blue" style="margin-right:4px">${esc(prog.program_type || "")}</span>${esc([wk, dpw].filter(Boolean).join(" · "))}`;
+              `<span class="chip chip-blue" style="margin-right:4px">${esc(prog.program_type || "")}</span>${esc([wk, dpw].filter(Boolean).join("  -  "))}`;
             const ratio = data.summary?.completion_ratio;
             if (ratio != null) {
               const wrap = document.getElementById("ov-progress-wrap");
@@ -726,7 +698,7 @@
           // Snapshot card
           const summary = data.summary || {};
           const streak = Number(summary.current_streak || 0);
-          document.getElementById("ov-streak").textContent = streak > 0 ? `🔥 ${streak}-day streak` : "No active streak";
+          document.getElementById("ov-streak").textContent = streak > 0 ? ` ${streak}-day streak` : "No active streak";
           const pct = summary.completion_ratio != null ? `${Math.round(summary.completion_ratio * 100)}% completion` : "";
           document.getElementById("ov-completion").textContent = pct;
           document.getElementById("ov-last-session").textContent = summary.last_session_date
@@ -763,8 +735,7 @@
         }
       }
 
-      // ─── Sessions tab ──────────────────────────────────────────────────────────
-
+      // Sessions tab
       async function loadSessions(clientId) {
         if (_currentClientId !== clientId) return;
         const loading = document.getElementById("sessions-loading");
@@ -781,10 +752,10 @@
               const prCount = s.pr_count ?? s.prs ?? 0;
               return `<tr>
                 <td>${fmtDate(s.scheduled_date || s.date)}</td>
-                <td>${esc(s.day_label || s.day_title || (s.day_number ?? "—"))}</td>
-                <td>${s.exercises_logged ?? s.exercise_count ?? "—"}</td>
-                <td>${s.total_volume_kg ? s.total_volume_kg + " kg" : "—"}</td>
-                <td>${prCount > 0 ? `<span class="chip chip-ok">${prCount} PR${prCount !== 1 ? "s" : ""}</span>` : "—"}</td>
+                <td>${esc(s.day_label || s.day_title || (s.day_number ?? "-"))}</td>
+                <td>${s.exercises_logged ?? s.exercise_count ?? "-"}</td>
+                <td>${s.total_volume_kg ? s.total_volume_kg + " kg" : "-"}</td>
+                <td>${prCount > 0 ? `<span class="chip chip-ok">${prCount} PR${prCount !== 1 ? "s" : ""}</span>` : "-"}</td>
               </tr>`;
             }).join("");
             body.innerHTML = `
@@ -797,15 +768,14 @@
               </table>`;
           }
         } catch (err) {
-          const msg = err.status === 403 ? "Access denied — this athlete may not be linked to your account." : err.message;
+          const msg = err.status === 403 ? "Access denied - this athlete may not be linked to your account." : err.message;
           body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px" onclick="loadSessions('${esc(clientId)}')">Retry</button></div>`;
         } finally {
           loading.style.display = "none";
         }
       }
 
-      // ─── Decisions tab ─────────────────────────────────────────────────────────
-
+      // Decisions tab
       async function loadClientPrograms(clientId) {
         try {
           const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/programs`);
@@ -844,7 +814,7 @@
           if (exerciseFilter) rows = rows.filter((r) => (r.exercise_name || "").toLowerCase().includes(exerciseFilter));
           renderDecisionsTable(rows, body);
         } catch (err) {
-          const msg = err.status === 403 ? "Access denied — this athlete may not be linked to your account." : err.message;
+          const msg = err.status === 403 ? "Access denied - this athlete may not be linked to your account." : err.message;
           body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px" onclick="loadDecisions('${esc(clientId)}')">Retry</button></div>`;
         } finally {
           loading.style.display = "none";
@@ -857,7 +827,7 @@
           return;
         }
         const tableRows = rows.map((r) => {
-          const wd = r.week_number != null ? `W${r.week_number} D${r.day_number ?? "?"}` : "—";
+          const wd = r.week_number != null ? `W${r.week_number} D${r.day_number ?? "?"}` : "-";
           const reason = trunc(r.display_reason || "", 60);
           const progTitle = trunc(r.program_title || "", 24);
           return `<tr>
@@ -865,7 +835,7 @@
             <td title="${esc(r.program_title || "")}" class="muted">${esc(progTitle)}</td>
             <td class="mono" style="font-size:12px">${esc(wd)}</td>
             <td>${outcomeChip(r.outcome)}</td>
-            <td class="muted" style="font-size:12px">${esc(r.confidence || "—")}</td>
+            <td class="muted" style="font-size:12px">${esc(r.confidence || "-")}</td>
             <td title="${esc(r.display_reason || "")}" class="muted" style="font-style:italic">${esc(reason)}</td>
             <td class="muted" style="font-size:12px; white-space:nowrap">${fmtDate(r.decided_at)}</td>
           </tr>`;
@@ -893,12 +863,11 @@
         renderDecisionsTable(filtered, document.getElementById("decisions-table-body"));
       });
 
-      // ─── Overrides tab ─────────────────────────────────────────────────────────
-
+      // Overrides tab
       async function loadExercisesForOverrideForm(clientId) {
         if (_currentClientId !== clientId) return;
         const sel = document.getElementById("ov-exercise-select");
-        sel.innerHTML = '<option value="">— select exercise —</option>';
+        sel.innerHTML = '<option value="">- select exercise -</option>';
         try {
           const data = await coachFetch(`/api/coach/clients/${encodeURIComponent(clientId)}/decisions?limit=100`);
           const rows = data.rows || [];
@@ -915,7 +884,7 @@
         } catch { /* non-fatal */ }
       }
 
-      // Kind radio → show/hide payload fields
+      // Kind radio -> show/hide payload fields
       document.querySelectorAll('input[name="override-kind"]').forEach((radio) => {
         radio.addEventListener("change", () => updateOverrideKindUI());
       });
@@ -959,7 +928,7 @@
           payload = { recommended_load_kg: v };
         } else if (kind === "next_session_reps") {
           const v = parseInt(document.getElementById("ov-reps-input").value, 10);
-          if (isNaN(v) || v < 1 || v > 30) { setFormStatus(formStatus, "Enter valid reps (1–30).", "err"); return; }
+          if (isNaN(v) || v < 1 || v > 30) { setFormStatus(formStatus, "Enter valid reps (1-30).", "err"); return; }
           payload = { target_reps: v };
         }
 
@@ -972,7 +941,7 @@
         if (reason) body.reason_text = reason;
 
         submitBtn.disabled = true;
-        setFormStatus(formStatus, "Creating override…", "");
+        setFormStatus(formStatus, "Creating override...", "");
         try {
           await coachFetch(`/api/coach/clients/${encodeURIComponent(_currentClientId)}/progression-override`, {
             method: "POST",
@@ -1013,7 +982,7 @@
               <td>${esc(o.exercise_name || o.exercise_id)}</td>
               <td>${overrideKindChip(o.override_kind)}</td>
               <td>${esc(payloadSummary(o.override_kind, o.override_payload_json))}</td>
-              <td title="${esc(o.reason_text || "")}" class="muted" style="font-style:italic">${esc(trunc(o.reason_text || "—", 40))}</td>
+              <td title="${esc(o.reason_text || "")}" class="muted" style="font-style:italic">${esc(trunc(o.reason_text || "-", 40))}</td>
               <td>${overrideStatusChip(o.status)}</td>
               <td class="muted" style="font-size:12px; white-space:nowrap">${fmtDate(o.created_at)}</td>
             </tr>`).join("");
@@ -1043,9 +1012,10 @@
           const data = await coachFetch("/api/coach/clients");
           _clients = sortClients(data.clients || []);
           renderClientList();
-          connectedLabel.textContent = `Connected · ${_clients.length} athlete${_clients.length !== 1 ? "s" : ""}`;
+          connectedLabel.textContent = `Connected  -  ${_clients.length} athlete${_clients.length !== 1 ? "s" : ""}`;
         } catch { /* non-fatal */ }
       }
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

@@ -1,86 +1,132 @@
-import { formatSeconds, stationLabel } from "../utils.js";
+import { formatSeconds, humanDuration, stationLabel } from "../utils.js";
 import { BRAND, mean, updateSlideTotals } from "./modeUtils.js";
 
 export function raceBreakdownGenerator(raceAnalysis, params = {}) {
   const decisive = raceAnalysis.narrativeStats.mostDecisiveStation;
-  const variable = raceAnalysis.narrativeStats.mostVariableStation;
-  const leastVariable = raceAnalysis.narrativeStats.leastVariableStation;
+  const fieldSize = raceAnalysis.narrativeStats.fieldSize;
+  const winner = raceAnalysis.athletes[0];
   const top10 = raceAnalysis.athletes.slice(0, 10);
   const bot10 = raceAnalysis.athletes.slice(-10);
-  const top10RunShare = mean(top10.map((athlete) => athlete.runShare));
-  const bot10RunShare = mean(bot10.map((athlete) => athlete.runShare));
-  const top5Cv = mean(raceAnalysis.athletes.slice(0, 5).map((athlete) => athlete.splitVariance));
-  const fieldCvs = raceAnalysis.athletes.map((athlete) => athlete.splitVariance).filter(Number.isFinite).sort((a, b) => a - b);
-  const fieldMedianCv = fieldCvs[Math.floor(fieldCvs.length / 2)] ?? null;
-  const raceName = params.raceName ?? "This race";
-  const headline = `${raceName}: what the data says`;
-  const variableStats = raceAnalysis.raceStats.segments[variable] ?? {};
+
+  // Average run and station times for top vs bottom of field
+  const top10AvgRun     = mean(top10.map((a) => a.runTotalSeconds));
+  const bot10AvgRun     = mean(bot10.map((a) => a.runTotalSeconds));
+  const top10AvgStation = mean(top10.map((a) => a.stationTotalSeconds));
+  const bot10AvgStation = mean(bot10.map((a) => a.stationTotalSeconds));
+  const runGap     = (bot10AvgRun     ?? 0) - (top10AvgRun     ?? 0);
+  const stationGap = (bot10AvgStation ?? 0) - (top10AvgStation ?? 0);
+  const stationsDecided = stationGap > runGap;
+
+  // Decisive station evidence
+  const decisiveStats  = decisive ? (raceAnalysis.raceStats.segments[decisive] ?? {}) : {};
+  const decisiveSpread = decisive && decisiveStats.max != null && decisiveStats.min != null
+    ? decisiveStats.max - decisiveStats.min : null;
+  const decisiveCorr   = decisive
+    ? Math.round((raceAnalysis.raceStats.rankCorrelations?.[decisive] ?? 0) * 100) : null;
+
+  // Field profile
+  const finishStats = raceAnalysis.raceStats.segments.finish_time ?? {};
+
+  const raceName = params.raceName ?? null;
+  const headline = raceName ? `${raceName}: what the data says` : "What the data found";
+
+  const safeRound = (v) => (v != null && Number.isFinite(v) ? Math.round(v) : null);
+
   const slides = updateSlideTotals([
+    // Slide 1 — Hook: scale + promise of insight
     {
       templateKey: "CS_RB_HOOK",
       layoutType: "hook",
       brand: BRAND,
       contentType: "race",
       dataFields: {
-        headline,
+        headline: raceName
+          ? `${fieldSize} athletes ran ${raceName}. Here's what the data found.`
+          : `${fieldSize} athletes. One decisive station. Here's what the data found.`,
         metrics: [
-          { label: "Division", value: `${raceAnalysis.division} ${raceAnalysis.sex}` },
-          { label: "Field size", value: `${raceAnalysis.narrativeStats.fieldSize}` },
-          { label: "Winning time", value: formatSeconds(raceAnalysis.athletes[0]?.finishTimeSeconds) },
+          { label: "Field size", value: `${fieldSize} athletes` },
+          { label: "Winning time", value: formatSeconds(winner?.finishTimeSeconds) },
+          { label: "Median time", value: formatSeconds(finishStats.median) },
         ],
       },
     },
+    // Slide 2 — Decisive station: plain English + spread as evidence
     {
       templateKey: "CS_RB_DECISIVE",
       layoutType: "verdict",
       brand: BRAND,
       contentType: "race",
       dataFields: {
-        headline: decisive ? `${stationLabel(decisive)} was the most decisive station` : "No single station decided this race",
-        metrics: decisive ? [{ label: "Correlation", value: `${((raceAnalysis.raceStats.rankCorrelations[decisive] ?? 0) * 100).toFixed(0)}%`, context: "with finish position" }] : [],
-      },
-    },
-    {
-      templateKey: "CS_RB_SPREAD",
-      layoutType: "data",
-      brand: BRAND,
-      contentType: "race",
-      dataFields: {
-        headline: variable ? `${stationLabel(variable)} split the field` : "The field stayed tight",
-        metrics: variable ? [
-          { label: "Fastest", value: formatSeconds(variableStats.min) },
-          { label: "Slowest", value: formatSeconds(variableStats.max) },
-          { label: "Gap", value: formatSeconds((variableStats.max ?? 0) - (variableStats.min ?? 0)) },
+        headline: decisive
+          ? `Your ${stationLabel(decisive)} rank predicted your finish rank`
+          : "No single station decided this race",
+        subline: decisive && decisiveCorr != null
+          ? `${decisiveCorr}% correlation — stronger than any other station`
+          : null,
+        metrics: decisive && decisiveSpread != null ? [
+          { label: "Fastest in field", value: formatSeconds(decisiveStats.min) },
+          { label: "Slowest in field", value: formatSeconds(decisiveStats.max) },
+          { label: "Total spread", value: humanDuration(decisiveSpread) },
         ] : [],
       },
     },
+    // Slide 3 — Run vs stations: directional finding, two-column layout
     {
       templateKey: "CS_RB_PROFILE",
       layoutType: "comparison",
       brand: BRAND,
       contentType: "race",
       dataFields: {
-        headline: "Run balance separated the field",
-        metrics: [
-          { label: "Top 10 run share", value: `${Math.round((top10RunShare ?? 0) * 100)}%` },
-          { label: "Bottom 10 run share", value: `${Math.round((bot10RunShare ?? 0) * 100)}%` },
-          { label: "Least variable", value: leastVariable ? stationLabel(leastVariable) : "-" },
+        headline: stationsDecided
+          ? "Stations split the field more than running"
+          : "Running speed was the bigger differentiator",
+        subline: stationsDecided
+          ? `Station gap: ${humanDuration(safeRound(stationGap))} · Run gap: ${humanDuration(safeRound(runGap))}`
+          : `Run gap: ${humanDuration(safeRound(runGap))} · Station gap: ${humanDuration(safeRound(stationGap))}`,
+        columns: [
+          {
+            header: "Top 10",
+            stats: [
+              { label: "Avg running",  value: formatSeconds(safeRound(top10AvgRun)) },
+              { label: "Avg stations", value: formatSeconds(safeRound(top10AvgStation)) },
+            ],
+          },
+          {
+            header: "Bottom 10",
+            stats: [
+              { label: "Avg running",  value: formatSeconds(safeRound(bot10AvgRun)) },
+              { label: "Avg stations", value: formatSeconds(safeRound(bot10AvgStation)) },
+            ],
+          },
         ],
       },
     },
+    // Slide 4 — Field profile: where does your time fit?
     {
-      templateKey: "CS_RB_LESSON",
+      templateKey: "CS_RB_SPREAD",
+      layoutType: "data",
+      brand: BRAND,
+      contentType: "race",
+      dataFields: {
+        headline: "Where does your time fit?",
+        metrics: [
+          { label: "Winner",     value: formatSeconds(finishStats.min),    context: "Top of the field" },
+          { label: "Top 10%",   value: formatSeconds(finishStats.p10),    context: `Faster than 90% of finishers` },
+          { label: "Median",    value: formatSeconds(finishStats.median), context: "Middle of the field" },
+          { label: "Bottom 10%", value: formatSeconds(finishStats.p90),   context: `Slower than 90% of finishers` },
+        ],
+      },
+    },
+    // Slide 5 — CTA: personal and connected to slide 4
+    {
+      templateKey: "CS_RB_CTA",
       layoutType: "cta",
       brand: BRAND,
       contentType: "race",
       dataFields: {
-        headline: "What we learned",
-        bullets: [
-          decisive ? `${stationLabel(decisive)} had the strongest relationship to finish position` : "The race rewarded all-round execution",
-          variable ? `${stationLabel(variable)} created the biggest time spread` : "No station created a large split",
-          top5Cv != null && fieldMedianCv != null && top5Cv < fieldMedianCv ? "The front of the race was more consistent than the field" : "Consistency still matters across all 16 splits",
-        ],
-        subline: "Analyse your own HYROX result -> forma.fit",
+        headline: "Where would you have finished?",
+        subline: "Compare your splits against this field at forma.fit",
+        bullets: ["Know your station profile before race day → forma.fit"],
       },
     },
   ]);
@@ -90,7 +136,18 @@ export function raceBreakdownGenerator(raceAnalysis, params = {}) {
     headline,
     selectedInsights: raceAnalysis._insights?.slice(0, 3) ?? [],
     carouselSlides: slides,
-    captionDraft: `${headline}.\n\n${decisive ? `${stationLabel(decisive)} was the most decisive station.` : "No single station decided the race."}\n\nAnalyse your own HYROX result -> forma.fit`,
+    captionDraft: [
+      `${headline}.`,
+      "",
+      decisive
+        ? `${stationLabel(decisive)} predicted finish position more than any other station (${decisiveCorr}% correlation).`
+        : "No single station decided this race.",
+      stationsDecided
+        ? `Stations split the field by ${humanDuration(safeRound(stationGap))} — more than the running gap (${humanDuration(safeRound(runGap))}).`
+        : `Running split the field by ${humanDuration(safeRound(runGap))} — more than the station gap (${humanDuration(safeRound(stationGap))}).`,
+      "",
+      "Where would you have finished? → forma.fit",
+    ].filter(Boolean).join("\n"),
     suggestedHandles: [],
     suggestedHashtags: ["#hyrox", "#forma", "#hyroxdata", "#hyroxperformance"],
   };

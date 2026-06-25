@@ -1,15 +1,30 @@
 import { stationLabel } from "../utils.js";
 
 export const BRAND = { product: "FORMA", site: "forma.fit" };
+
+export function flipName(name) {
+  if (!name || !name.includes(",")) return name;
+  const [last, first] = name.split(",", 2).map((s) => s.trim());
+  return first ? `${first} ${last}` : last;
+}
 export const STATION_KEYS = ["skierg", "sled_push", "sled_pull", "burpee_bj", "row", "farmers_carry", "sandbag_lunge", "wall_balls"];
 export const ALL_SEGMENTS = ["run_1", "skierg", "run_2", "sled_push", "run_3", "sled_pull", "run_4", "burpee_bj", "run_5", "row", "run_6", "farmers_carry", "run_7", "sandbag_lunge", "run_8", "wall_balls"];
 
 export function findAthlete(raceAnalysis, name) {
   const needle = String(name ?? "").trim().toLowerCase();
   if (!needle) return null;
+  // Try comma-flipped variant so "Lee Tynan" matches stored "Tynan, Lee" and vice versa
+  const parts = needle.split(/\s+/);
+  const flipped = needle.includes(",")
+    ? needle.split(",").map((s) => s.trim()).reverse().join(" ")
+    : parts.length >= 2
+      ? `${parts.slice(1).join(" ")}, ${parts[0]}`
+      : null;
   return raceAnalysis.athletes.find((athlete) => {
     const athleteName = athlete.name.toLowerCase();
-    return athleteName.includes(needle) || needle.includes(athleteName);
+    if (athleteName.includes(needle) || needle.includes(athleteName)) return true;
+    if (flipped && (athleteName.includes(flipped) || flipped.includes(athleteName))) return true;
+    return false;
   }) ?? null;
 }
 

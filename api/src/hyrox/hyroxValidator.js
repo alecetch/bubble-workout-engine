@@ -8,6 +8,10 @@ const REQUIRED_COMPLETE_KEYS = Object.freeze([...RUN_KEYS, ...STATION_KEYS]);
 
 const emailHits = new Map();
 
+const EMAIL_ALLOWLIST = new Set(
+  (process.env.HYROX_EMAIL_ALLOWLIST ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+);
+
 function error(field, message) {
   return { field, message };
 }
@@ -42,7 +46,7 @@ export const hyroxIpRateLimiter = rateLimit({
 
 export function hyroxEmailRateLimiter(req, res, next) {
   const email = String(req.body?.athlete?.email ?? "").trim().toLowerCase();
-  if (!email) return next();
+  if (!email || EMAIL_ALLOWLIST.has(email)) return next();
   const now = Date.now();
   cleanEmailMap(now);
   const hits = emailHits.get(email) ?? [];

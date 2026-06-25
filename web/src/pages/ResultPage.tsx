@@ -79,6 +79,14 @@ export function ResultPage() {
         </div>
 
         <div className={styles.metricsGrid}>
+          {summary.athleteArchetype?.label && (
+            <MetricCard
+              title="Athlete Archetype"
+              value={summary.athleteArchetype.label}
+              sub="based on your split profile"
+              accent="amber"
+            />
+          )}
           {calculatorMode === "analyse" && (
             <>
               {(summary.overallPercentile != null || summary.benchmarkGroupLabel) && (
@@ -91,14 +99,6 @@ export function ResultPage() {
                   }
                   sub={summary.benchmarkGroupLabel ?? "in your benchmark group"}
                   accent="cyan"
-                />
-              )}
-              {summary.athleteArchetype?.label && (
-                <MetricCard
-                  title="Athlete Archetype"
-                  value={summary.athleteArchetype.label}
-                  sub="based on your split profile"
-                  accent="amber"
                 />
               )}
               {summary.workRunBalance?.profileType && (

@@ -1,4 +1,4 @@
-﻿
+
 <!doctype html>
 <html lang="en">
   <head>
@@ -74,21 +74,7 @@
         display: grid;
         gap: 6px;
       }
-      .nav-row {
-        margin-top: 10px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .nav-row a {
-        font-size: 13px;
-        color: #1d4ed8;
-        text-decoration: none;
-      }
-      .nav-row a:hover {
-        text-decoration: underline;
-      }
-      .token-row input {
+.token-row input {
         width: 100%;
       }
       .list-wrap {
@@ -368,6 +354,7 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <aside class="sidebar">
         <div class="sidebar-header">
@@ -379,27 +366,6 @@
             <label for="token-input">Internal API Token</label>
             <input id="token-input" type="password" placeholder="Paste x-internal-token" />
             <button id="load-btn">Load Configs</button>
-          </div>
-          <div class="nav-row">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage</a>
-            <a href="/admin/health">Health</a>
-            <a href="/admin/exercises">Exercises</a>
-            <a href="/admin/narration">Narration</a>
-            <a href="/admin/rep-rules">Rep Rules</a>
-            <a href="/admin/observability">Observability</a>
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/progression-sandbox">Progression Sandbox</a>
-            <a href="/admin/users">Users</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://127.0.0.1:3000/" target="_blank">Website Preview ↗</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-            <a href="/admin/content-studio">Content Studio</a>
-            <a href="http://localhost:5173/hyrox-calculator" target="_blank">HYROX Calculator ↗</a>
-            <a href="http://localhost:5173/hyrox-predictor" target="_blank">HYROX Predictor ↗</a>
-            <a href="http://localhost:5173/running-profiler" target="_blank">Running Profiler ↗</a>
           </div>
           <div style="margin-top:8px">
             <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;width:100%">⬇ Sync All to Flyway</button>
@@ -2390,5 +2356,6 @@
 
       init();
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

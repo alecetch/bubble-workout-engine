@@ -22,10 +22,6 @@
       .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
       .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
       .title { margin: 0; font-size: 22px; }
-      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
-      .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
       .control { display: grid; gap: 4px; min-width: 240px; }
       .control label { font-size: 12px; color: var(--muted); }
@@ -74,30 +70,12 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <!-- Header / Nav -->
       <section class="header">
         <div class="top-row">
           <h1 class="title">Coach Management</h1>
-          <div class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage</a>
-            <a href="/admin/health">Health</a>
-            <a href="/admin/exercises">Exercises</a>
-            <a href="/admin/narration">Narration</a>
-            <a href="/admin/rep-rules">Rep Rules</a>
-            <a href="/admin/observability">Observability</a>
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/seed-history">Seed History</a>
-            <a href="/admin/progression-sandbox">Progression Sandbox</a>
-            <a href="/admin/users">Users</a>
-            <a href="/admin/coaches" class="active">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-          </div>
         </div>
         <div class="controls">
           <div class="control">
@@ -114,9 +92,9 @@
         <div class="section-header">
           <h2 class="section-title">
             Coach Accounts
-            <span id="coach-count" class="count-badge muted" style="margin-left:6px">—</span>
+            <span id="coach-count" class="count-badge muted" style="margin-left:6px">-</span>
           </h2>
-          <button id="refresh-coaches-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">↻ Refresh</button>
+          <button id="refresh-coaches-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">Refresh Refresh</button>
         </div>
         <div id="coaches-spinner" class="spinner" style="display:none"></div>
         <div class="table-wrap">
@@ -139,9 +117,9 @@
         <div class="section-header">
           <h2 class="section-title">
             Relationships
-            <span id="rel-count" class="count-badge muted" style="margin-left:6px">—</span>
+            <span id="rel-count" class="count-badge muted" style="margin-left:6px">-</span>
           </h2>
-          <button id="refresh-rels-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">↻ Refresh</button>
+          <button id="refresh-rels-btn" type="button" class="secondary-btn" style="font-size:12px; padding:4px 8px;">Refresh Refresh</button>
         </div>
         <div class="filter-row">
           <div>
@@ -191,7 +169,7 @@
           <div>
             <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:3px;">View activity for coach</label>
             <select id="activity-coach-select" style="min-width:220px">
-              <option value="">— select coach —</option>
+              <option value="">- select coach -</option>
             </select>
           </div>
           <button id="load-activity-btn" type="button" class="secondary-btn" style="font-size:12px; padding:6px 10px;">Load Activity</button>
@@ -205,8 +183,7 @@
     </div><!-- /page -->
 
     <script type="module">
-      // ─── Utilities ─────────────────────────────────────────────────────────────
-
+      // Utilities
       function esc(v) {
         return String(v ?? "")
           .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -214,13 +191,13 @@
       }
 
       function fmtDate(iso) {
-        if (!iso) return '<span class="muted">—</span>';
+        if (!iso) return '<span class="muted">-</span>';
         return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
       }
 
       function trunc(str, n) {
         const s = String(str ?? "");
-        return s.length > n ? s.slice(0, n - 1) + "…" : s;
+        return s.length > n ? s.slice(0, n - 1) + "..." : s;
       }
 
       function autoHide(el, ms = 4000) {
@@ -254,13 +231,11 @@
         return data;
       }
 
-      // ─── State ─────────────────────────────────────────────────────────────────
-
+      // State
       let coaches = [];
       let allRelationships = [];
 
-      // ─── Section 1: Coach Accounts ─────────────────────────────────────────────
-
+      // Section 1: Coach Accounts
       function renderCoachesTable() {
         const el = document.getElementById("coaches-table");
         document.getElementById("coach-count").textContent = coaches.length;
@@ -314,7 +289,7 @@
         document.getElementById("load-btn").disabled = true;
         document.getElementById("coaches-spinner").style.display = "block";
         document.getElementById("coaches-table").innerHTML = "";
-        setStatus(document.getElementById("main-status"), "Loading…", "");
+        setStatus(document.getElementById("main-status"), "Loading...", "");
         try {
           const data = await apiFetch("/api/admin/coaches");
           coaches = data.coaches || [];
@@ -344,9 +319,9 @@
         btn.disabled = true;
 
         try {
-          // Resolve email → UUID via the users list
+          // Resolve email -> UUID via the users list
           let userId;
-          setStatus(statusEl, "Looking up user…", "");
+          setStatus(statusEl, "Looking up user...", "");
           const usersData = await apiFetch("/admin/users");
           const match = (usersData.users || []).find(
             (u) => (u.email || "").toLowerCase() === raw.toLowerCase()
@@ -370,8 +345,7 @@
         }
       });
 
-      // ─── Section 2: Relationships ──────────────────────────────────────────────
-
+      // Section 2: Relationships
       async function loadAllRelationships() {
         document.getElementById("rels-spinner").style.display = "block";
         document.getElementById("rels-table").innerHTML = "";
@@ -397,7 +371,7 @@
         coachFilter.value = prev;
 
         const prevActivity = activitySel.value;
-        activitySel.innerHTML = '<option value="">— select coach —</option>' +
+        activitySel.innerHTML = '<option value="">- select coach -</option>' +
           coaches.map((c) => `<option value="${esc(c.id)}">${esc(c.email)}</option>`).join("");
         activitySel.value = prevActivity;
       }
@@ -429,7 +403,7 @@
           const isRevoked = r.status === "revoked";
           return `<tr>
             <td class="mono">${esc(r.coach_email)}</td>
-            <td class="mono">${esc(r.client_email || "—")}</td>
+            <td class="mono">${esc(r.client_email || "-")}</td>
             <td>${statusChip(r.status)}</td>
             <td>${fmtDate(r.created_at)}</td>
             <td>${fmtDate(r.accepted_at)}</td>
@@ -478,8 +452,7 @@
       document.getElementById("rel-coach-filter").addEventListener("change", renderRelationshipsTable);
       document.getElementById("rel-status-filter").addEventListener("change", renderRelationshipsTable);
 
-      // ─── Section 3: Link ────────────────────────────────────────────────────────
-
+      // Section 3: Link
       document.getElementById("link-btn").addEventListener("click", async () => {
         const coachEmail = document.getElementById("link-coach-input").value.trim();
         const athleteEmail = document.getElementById("link-athlete-input").value.trim();
@@ -491,7 +464,7 @@
         const btn = document.getElementById("link-btn");
         btn.disabled = true;
         try {
-          setStatus(statusEl, "Looking up users…", "");
+          setStatus(statusEl, "Looking up users...", "");
           const usersData = await apiFetch("/admin/users");
           const users = usersData.users || [];
 
@@ -502,7 +475,7 @@
           if (!athleteUser) { setStatus(statusEl, `No account found for athlete "${athleteEmail}".`, "err"); return; }
 
           await apiFetch(`/api/admin/coaches/${encodeURIComponent(coachUser.id)}/clients/${encodeURIComponent(athleteUser.id)}/link`, { method: "POST" });
-          setStatus(statusEl, `Linked ${coachEmail} → ${athleteEmail}.`, "ok");
+          setStatus(statusEl, `Linked ${coachEmail} -> ${athleteEmail}.`, "ok");
           document.getElementById("link-coach-input").value = "";
           document.getElementById("link-athlete-input").value = "";
           await loadAllRelationships();
@@ -515,8 +488,7 @@
         }
       });
 
-      // ─── Section 4: Activity ────────────────────────────────────────────────────
-
+      // Section 4: Activity
       document.getElementById("load-activity-btn").addEventListener("click", async () => {
         const coachId = document.getElementById("activity-coach-select").value;
         const tableEl = document.getElementById("activity-table");
@@ -539,11 +511,11 @@
               return `<span class="chip ${map[s] ?? "chip-muted"}">${esc(s)}</span>`;
             };
             const rows = overrides.map((o) => `<tr>
-              <td>${esc(o.client_display_name || o.client_email || o.client_user_id || "—")}</td>
-              <td>${esc(o.exercise_name || o.exercise_id || "—")}</td>
+              <td>${esc(o.client_display_name || o.client_email || o.client_user_id || "-")}</td>
+              <td>${esc(o.exercise_name || o.exercise_id || "-")}</td>
               <td>${kindChip(o.override_kind)}</td>
               <td>${statusChipFn(o.status)}</td>
-              <td title="${esc(o.reason_text || "")}" class="muted" style="font-style:italic">${esc(trunc(o.reason_text || "—", 40))}</td>
+              <td title="${esc(o.reason_text || "")}" class="muted" style="font-style:italic">${esc(trunc(o.reason_text || "-", 40))}</td>
               <td class="muted" style="font-size:12px; white-space:nowrap">${fmtDate(o.created_at)}</td>
             </tr>`).join("");
             tableEl.innerHTML = `
@@ -563,5 +535,6 @@
         }
       });
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

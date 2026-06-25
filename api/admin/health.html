@@ -23,10 +23,6 @@
       .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
       .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
       .title { margin: 0; font-size: 22px; }
-      .nav { display: flex; gap: 10px; }
-      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
-      .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
       .control { display: grid; gap: 4px; min-width: 280px; }
       .control label { font-size: 12px; color: var(--muted); }
@@ -61,28 +57,11 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <section class="header">
         <div class="top-row">
           <h1 class="title">Catalogue Rule Health</h1>
-          <div class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage</a>
-            <a href="/admin/health" class="active">Health</a>
-            <a href="/admin/exercises">Exercises</a>
-            <a href="/admin/narration">Narration</a>
-            <a href="/admin/rep-rules">Rep Rules</a>
-            <a href="/admin/observability">Observability</a>
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/progression-sandbox">Progression Sandbox</a>
-            <a href="/admin/users">Users</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-          </div>
         </div>
         <div class="controls">
           <div class="control">
@@ -192,7 +171,7 @@
           el.textContent = "";
           return;
         }
-        el.textContent = `total ${summary.total ?? 0} · critical ${summary.critical ?? 0} · warning ${summary.warning ?? 0} · info ${summary.info ?? 0}`;
+        el.textContent = `total ${summary.total ?? 0}  -  critical ${summary.critical ?? 0}  -  warning ${summary.warning ?? 0}  -  info ${summary.info ?? 0}`;
       }
 
       async function loadReport() {
@@ -235,7 +214,7 @@
               { label: "Pref Tag", render: (row) => `<span class="mono">${esc(row.pref_tag)}</span>` },
               { label: "Strict Refs", render: (row) => esc(row.strict_refs) },
               { label: "Soft Refs", render: (row) => esc(row.soft_refs) },
-              { label: "Referenced By", render: (row) => row.referenced_by.map((ref) => `${esc(ref.config_key)} · ${esc(ref.slot)} · ${esc(ref.source)}`).join("<br>") },
+              { label: "Referenced By", render: (row) => row.referenced_by.map((ref) => `${esc(ref.config_key)}  -  ${esc(ref.slot)}  -  ${esc(ref.source)}`).join("<br>") },
             ],
             report.orphaned_prefs?.rows || [],
             "No orphaned pref tags found.",
@@ -270,7 +249,7 @@
                 if (row.resolved_selector?.sw2) parts.push(`sw2:${row.resolved_selector.sw2}`);
                 if (row.resolved_selector?.mp) parts.push(`mp:${row.resolved_selector.mp}`);
                 if (row.resolved_selector?.requirePref) parts.push(`pref:${row.resolved_selector.requirePref}`);
-                return parts.length ? esc(parts.join(" · ")) : `<span class="muted">unconstrained</span>`;
+                return parts.length ? esc(parts.join("  -  ")) : `<span class="muted">unconstrained</span>`;
               } },
             ],
             (report.slot_coverage?.rows || []).filter((row) => row.severity !== "ok"),
@@ -278,7 +257,7 @@
           );
 
           document.getElementById("rule-coverage-meta").textContent =
-            `total ${report.rule_coverage?.summary?.total ?? 0} · fallback-only ${report.rule_coverage?.summary?.fallback_only ?? 0} · ok ${report.rule_coverage?.summary?.ok ?? 0}`;
+            `total ${report.rule_coverage?.summary?.total ?? 0}  -  fallback-only ${report.rule_coverage?.summary?.fallback_only ?? 0}  -  ok ${report.rule_coverage?.summary?.ok ?? 0}`;
           renderTable(
             "rule-coverage-table",
             [
@@ -302,5 +281,6 @@
 
       loadBtn.addEventListener("click", loadReport);
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

@@ -7,6 +7,15 @@ export function formatSeconds(s) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+export function humanDuration(s) {
+  if (s == null || !Number.isFinite(s)) return "-";
+  const total = Math.round(s);
+  if (total < 60) return `${total} seconds`;
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return sec === 0 ? `${m}m` : `${m}m ${sec}s`;
+}
+
 export function ordinal(n) {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
@@ -38,10 +47,26 @@ export function interpolatePercentile(value, benchmarks) {
     { pct: 50, val: benchmarks.p50_seconds },
     { pct: 75, val: benchmarks.p75_seconds },
     { pct: 90, val: benchmarks.p90_seconds },
-  ].filter((p) => p.val != null).sort((a, b) => a.val - b.val);
+    { pct: 95, val: benchmarks.p95_seconds },
+  ].filter((p) => p.val != null && Number.isFinite(p.val)).sort((a, b) => a.val - b.val);
   if (pts.length < 2) return null;
-  if (value <= pts[0].val) return pts[0].pct;
-  if (value >= pts[pts.length - 1].val) return pts[pts.length - 1].pct;
+
+  if (value < pts[0].val) {
+    const slope = (pts[1].val - pts[0].val) / (pts[1].pct - pts[0].pct);
+    if (slope <= 0) return 1;
+    const extrapolated = pts[0].pct + (value - pts[0].val) / slope;
+    return Math.max(1, Math.round(extrapolated));
+  }
+
+  if (value > pts[pts.length - 1].val) {
+    const last = pts[pts.length - 1];
+    const prev = pts[pts.length - 2];
+    const slope = (last.val - prev.val) / (last.pct - prev.pct);
+    if (slope <= 0) return 99;
+    const extrapolated = last.pct + (value - last.val) / slope;
+    return Math.min(99, Math.round(extrapolated));
+  }
+
   for (let i = 0; i < pts.length - 1; i += 1) {
     if (value >= pts[i].val && value <= pts[i + 1].val) {
       const frac = (value - pts[i].val) / (pts[i + 1].val - pts[i].val);

@@ -24,10 +24,6 @@
       .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
       .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
       .title { margin: 0; font-size: 22px; }
-      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
-      .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
       .control-grid.single { grid-template-columns: 1fr; }
       .control { display: grid; gap: 4px; }
@@ -50,19 +46,11 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <section class="header">
         <div class="top-row">
           <h1 class="title">Seed Test History</h1>
-          <div class="nav">
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/users">Users</a>
-            <a href="/admin/seed-history" class="active">Seed History</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-          </div>
         </div>
         <div class="warning">
           <strong>Development tool.</strong> This generates synthetic historical data for a specific user and
@@ -189,5 +177,6 @@
 
       generateBtn.addEventListener("click", generate);
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

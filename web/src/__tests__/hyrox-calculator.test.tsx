@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { parseTimeToSeconds, formatSeconds } from "../utils/time";
+import { parseTimeToSeconds, formatSeconds, normalizeTimeInputValue } from "../utils/time";
 import { SplitEntryPage } from "../pages/SplitEntryPage";
 import { RaceDetailsPage } from "../pages/RaceDetailsPage";
 import { AthleteContextPage } from "../pages/AthleteContextPage";
@@ -31,6 +31,20 @@ describe("parseTimeToSeconds", () => {
 
   test('parseTimeToSeconds("85:17") returns 5117 (MM:SS over-1-hour)', () => {
     expect(parseTimeToSeconds("85:17")).toBe(5117);
+  });
+
+  test('parseTimeToSeconds("5500") returns 3300 (compact MMSS)', () => {
+    expect(parseTimeToSeconds("5500")).toBe(3300);
+  });
+
+  test('parseTimeToSeconds("12517") returns 5117 (compact HMMSS)', () => {
+    expect(parseTimeToSeconds("12517")).toBe(5117);
+  });
+
+  test("compact time normalisation formats valid digit-only entries", () => {
+    expect(normalizeTimeInputValue("5500")).toBe("55:00");
+    expect(normalizeTimeInputValue("12517")).toBe("1:25:17");
+    expect(normalizeTimeInputValue("5560")).toBe("5560");
   });
 });
 
@@ -245,11 +259,11 @@ describe("RaceDetailsPage validation", () => {
     fireEvent.change(screen.getByLabelText(/target finish time/i), {
       target: { value: "1:00:00" },
     });
-    expect(screen.getByText(/target time should be faster/i)).toBeInTheDocument();
+    expect(screen.getByText(/target time must be faster/i)).toBeInTheDocument();
     expect(nextBtn).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/target finish time/i), {
-      target: { value: "55:00" },
+      target: { value: "5500" },
     });
     expect(nextBtn).not.toBeDisabled();
 
@@ -258,6 +272,60 @@ describe("RaceDetailsPage validation", () => {
     });
 
     expect(loadDraft()?.athleteContext?.targetFinishTimeSeconds).toBe(3300);
+  });
+
+  test("target finish time rejects invalid time format", () => {
+    renderRacePage();
+
+    fireEvent.change(screen.getByLabelText(/age group/i), {
+      target: { value: "35-39" },
+    });
+    fireEvent.change(screen.getByLabelText(/^finish time/i), {
+      target: { value: "1:25:00" },
+    });
+    fireEvent.change(screen.getByLabelText(/target finish time/i), {
+      target: { value: "55:99" },
+    });
+
+    expect(screen.getByText(/enter target finish time as mm:ss or h:mm:ss/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/next: check splits/i)[0]).toBeDisabled();
+  });
+
+  test("clicking Next with a slower target does not save race details", async () => {
+    renderRacePage();
+
+    fireEvent.change(screen.getByLabelText(/age group/i), {
+      target: { value: "35-39" },
+    });
+    fireEvent.change(screen.getByLabelText(/^finish time/i), {
+      target: { value: "59:08" },
+    });
+    fireEvent.change(screen.getByLabelText(/target finish time/i), {
+      target: { value: "1:00:00" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByText(/next: check splits/i)[0]);
+    });
+
+    expect(screen.getByText(/target time must be faster/i)).toBeInTheDocument();
+    expect(loadDraft()?.race?.finishTimeSeconds).toBeUndefined();
+    expect(loadDraft()?.athleteContext?.targetFinishTimeSeconds).toBeUndefined();
+  });
+
+  test("time fields normalise compact values on blur", () => {
+    renderRacePage();
+
+    const finishInput = screen.getByLabelText(/^finish time/i);
+    const targetInput = screen.getByLabelText(/target finish time/i);
+
+    fireEvent.change(finishInput, { target: { value: "12517" } });
+    fireEvent.blur(finishInput);
+    fireEvent.change(targetInput, { target: { value: "5500" } });
+    fireEvent.blur(targetInput);
+
+    expect(finishInput).toHaveValue("1:25:17");
+    expect(targetInput).toHaveValue("55:00");
   });
 });
 

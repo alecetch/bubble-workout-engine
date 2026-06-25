@@ -12,9 +12,6 @@
       .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
       .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
       .title { margin: 0; font-size: 22px; }
-      .nav { display: flex; gap: 10px; flex-wrap: wrap; }
-      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls, .form-grid { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
       .control { display: grid; gap: 4px; min-width: 180px; }
       .control.wide { min-width: 280px; }
@@ -60,20 +57,18 @@
       .chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; background: #f8fafc; font-size: 12px; }
       .selected-race { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
       @media (max-width: 1000px) { .review-grid { grid-template-columns: 1fr; } }
+      .vs-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: start; }
+      .vs-col { display: grid; gap: 8px; }
+      .vs-col-header { font-weight: 700; font-size: 13px; text-align: center; color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,.2); padding-bottom: 6px; margin-bottom: 2px; }
+      .vs-divider { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #64748b; padding: 0 4px; align-self: center; }
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <section class="header">
         <div class="top-row">
           <h1 class="title">Forma Content Studio</h1>
-          <div class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="/admin/content-studio" class="active">Content Studio</a>
-            <a href="http://localhost:5173/hyrox-calculator" target="_blank">Calculator ↗</a>
-            <a href="http://localhost:5173/hyrox-predictor" target="_blank">Predictor ↗</a>
-          </div>
         </div>
         <div class="controls">
           <div class="control wide">
@@ -90,25 +85,25 @@
 
         <!-- Scrape from HYROX Results -->
         <details open style="max-width:none;margin-bottom:14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px">
-          <summary style="font-weight:600;cursor:pointer;font-size:14px">⚡ Scrape from HYROX Results</summary>
+          <summary style="font-weight:600;cursor:pointer;font-size:14px">Scrape from HYROX Results</summary>
           <div style="margin-top:10px">
             <div class="form-grid">
               <div class="control">
                 <label for="scrape-season">Season</label>
                 <select id="scrape-season">
-                  <option value="">— all seasons —</option>
+                  <option value="">-- all seasons --</option>
                 </select>
               </div>
               <div class="control wide">
                 <label for="scrape-race">Race</label>
                 <select id="scrape-race">
-                  <option value="">— select a race —</option>
+                  <option value="">-- select a race --</option>
                 </select>
               </div>
               <div class="control wide">
                 <label for="scrape-division">Division (auto-detected)</label>
                 <select id="scrape-division" disabled>
-                  <option value="">— click Load Divisions —</option>
+                  <option value="">-- click Load Divisions --</option>
                 </select>
               </div>
               <div class="control">
@@ -127,6 +122,7 @@
                 <input id="scrape-contest-id-manual" type="text" placeholder="e.g. HPRO_LR3MS4JI1682" />
               </div>
               <button id="scrape-btn" type="button" disabled>Scrape Top 50</button>
+              <button id="scrape-all-btn" type="button" disabled>Scrape All Standard</button>
             </div>
             <div id="scrape-status" class="status"></div>
           </div>
@@ -134,7 +130,7 @@
 
         <!-- Manual CSV upload -->
         <details style="max-width:none;margin-bottom:14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px">
-          <summary style="font-weight:600;cursor:pointer;font-size:14px">📄 Manual CSV Upload</summary>
+          <summary style="font-weight:600;cursor:pointer;font-size:14px">Manual CSV Upload</summary>
           <div style="margin-top:10px">
             <div class="form-grid">
               <div class="control wide"><label for="csv-input">CSV file</label><input id="csv-input" type="file" accept=".csv,text/csv" /></div>
@@ -155,13 +151,13 @@
           </table>
         </div>
 
-        <!-- Athlete viewer — appears when View Athletes is clicked -->
+        <!-- Athlete viewer - appears when View Athletes is clicked -->
         <div id="athlete-viewer" style="display:none;margin-top:12px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <h3 style="margin:0;font-size:15px" id="athlete-viewer-title">Athletes</h3>
-            <button id="close-athlete-viewer" type="button" style="padding:4px 10px;font-size:12px">✕ Close</button>
+            <button id="close-athlete-viewer" type="button" style="padding:4px 10px;font-size:12px">Close</button>
           </div>
-          <p style="font-size:12px;color:var(--muted);margin:0 0 8px">Click <strong>Quick Add</strong> to pre-fill the Athlete Registry form. Athletes already in the registry are marked ✓.</p>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 8px">Click <strong>Quick Add</strong> to pre-fill the Athlete Registry form. Athletes already in the registry are marked Yes.</p>
           <div class="table-wrap">
             <table>
               <thead><tr><th>#</th><th>Name</th><th>Time</th><th>Registry</th><th></th></tr></thead>
@@ -175,7 +171,7 @@
         <h2>Auto-Pick Results</h2>
         <!-- Smart suggestions populated after auto-pick -->
         <div id="smart-suggestions" style="display:none;margin-bottom:14px">
-          <p style="font-size:12px;color:var(--muted);margin:0 0 8px">Based on race data — click Generate to create content immediately.</p>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 8px">Based on race data - click Generate to create content immediately.</p>
           <div id="suggestions-grid" class="mode-grid"></div>
         </div>
         <div class="table-wrap">
@@ -199,8 +195,8 @@
         <div id="athlete-status" class="status"></div>
         <div class="table-wrap" style="margin-top:10px">
           <table>
-            <thead><tr><th>Name</th><th>Handle</th><th>Followers</th><th>Division</th><th>Last Featured</th><th>Delete</th></tr></thead>
-            <tbody id="athletes-body"><tr><td colspan="6" class="empty">Load athletes.</td></tr></tbody>
+            <thead><tr><th>Name</th><th>Handle</th><th>Followers</th><th>Division</th><th>Notes</th><th>Last Featured</th><th></th></tr></thead>
+            <tbody id="athletes-body"><tr><td colspan="7" class="empty">Load athletes.</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -325,12 +321,13 @@
             <button data-view-athletes="${esc(r.id)}" data-race-name="${esc(r.eventName)}" type="button">View Athletes</button>
             <button data-auto="${esc(r.id)}" data-auto-name="${esc(r.eventName)}" type="button">Auto-Pick</button>
             <button data-select="${esc(r.id)}" data-name="${esc(r.eventName)}" type="button">Generate Content</button>
+            <button class="danger" data-delete-race="${esc(r.id)}" data-delete-race-name="${esc(r.eventName)}" type="button">Delete</button>
           </td>
         </tr>`).join("") : '<tr><td colspan="7" class="empty">No races yet.</td></tr>';
       }
 
       function formatTime(seconds) {
-        if (seconds == null || !Number.isFinite(seconds)) return "—";
+        if (seconds == null || !Number.isFinite(seconds)) return "-";
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
@@ -338,15 +335,41 @@
         return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
       }
 
-      // "Lastname, Firstname" → "Firstname Lastname"
+      // "Lastname, Firstname" to "Firstname Lastname"
       function flipName(name) {
         if (!name || !name.includes(",")) return name;
         const [last, first] = name.split(",", 2).map((s) => s.trim());
         return first ? `${first} ${last}` : last;
       }
 
+      function matchRegistry(displayName) {
+        if (!displayName) return null;
+        const needle = displayName.trim().toLowerCase();
+        return loadedAthletes.find((a) => {
+          const reg = (a.full_name || "").toLowerCase();
+          return reg === needle || reg.includes(needle) || needle.includes(reg);
+        }) ?? null;
+      }
+
+      function fmtFollowers(n) {
+        if (n == null) return null;
+        if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+        if (n >= 1000) return `${Math.round(n / 1000)}K`;
+        return String(n);
+      }
+
+      function registryBadge(name) {
+        const a = matchRegistry(name);
+        if (!a) return "";
+        const handle = a.instagram_handle ? `@${a.instagram_handle}` : "";
+        const followers = fmtFollowers(a.instagram_follower_count);
+        const tier = a.forma_target_recommendation === "Primary target" ? "⭐ " : "";
+        const parts = [handle, followers].filter(Boolean).join(" · ");
+        return `<div style="margin-top:5px;font-size:11px;color:#22c55e;font-weight:600">${tier}${parts}</div>`;
+      }
+
       function renderAthleteViewer(rawRows, raceName) {
-        document.getElementById("athlete-viewer-title").textContent = `Athletes — ${raceName}`;
+        document.getElementById("athlete-viewer-title").textContent = `Athletes - ${raceName}`;
         const registryNames = new Set(loadedAthletes.map((a) => a.full_name.toLowerCase()));
         function inRegistry(name) {
           return registryNames.has(name.toLowerCase()) || registryNames.has(flipName(name).toLowerCase());
@@ -359,7 +382,7 @@
                 <td>${esc(String(a.rank))}</td>
                 <td>${esc(display)}</td>
                 <td>${esc(formatTime(a.finishTimeSeconds))}</td>
-                <td style="text-align:center">${known ? "✓" : ""}</td>
+                <td style="text-align:center">${known ? "Yes" : ""}</td>
                 <td>${known ? "" : `<button data-quick-add="${esc(a.name)}" data-display-name="${esc(display)}" type="button" style="padding:3px 8px;font-size:12px">Quick Add</button>`}</td>
               </tr>`;
             }).join("")
@@ -391,59 +414,61 @@
             desc: winner,
             mode: "athlete_spotlight",
             params: { athleteName: winner },
-            emoji: "🥇",
+            athletes: [winner],
           },
           winner && second && {
             label: "Head-to-Head",
             desc: `${winner} vs ${second}`,
             mode: "head_to_head",
             params: { athleteA: winner, athleteB: second },
-            emoji: "⚔️",
+            athletes: [winner, second],
           },
           second && third && {
-            label: "H2H — 2nd vs 3rd",
+            label: "H2H - 2nd vs 3rd",
             desc: `${second} vs ${third}`,
             mode: "head_to_head",
             params: { athleteA: second, athleteB: third },
-            emoji: "⚔️",
+            athletes: [second, third],
           },
           {
             label: "Podium Breakdown",
             desc: `${winner || "top 3"}${second ? `, ${second}` : ""}${third ? `, ${third}` : ""}`,
             mode: "podium_breakdown",
             params: {},
-            emoji: "🏆",
+            athletes: [winner, second, third].filter(Boolean),
           },
           {
             label: "Race Breakdown",
             desc: "Summarise the race-level data story",
             mode: "race_breakdown",
             params: {},
-            emoji: "📊",
+            athletes: [],
           },
           mythKey && {
             label: "Myth Buster",
             desc: mythInsight.headline,
             mode: "myth_buster",
             params: { myth: mythKey },
-            emoji: "💥",
+            athletes: [],
           },
           winner && {
             label: "What We Can Learn",
             desc: "Extract practical lessons from the podium",
             mode: "what_we_learn",
             params: {},
-            emoji: "💡",
+            athletes: [winner, second, third].filter(Boolean),
           },
         ].filter(Boolean);
 
-        grid.innerHTML = suggestions.map((s) =>
-          `<div class="mode-card">
-            <div class="mode-title">${s.emoji} ${esc(s.label)}</div>
+        grid.innerHTML = suggestions.map((s) => {
+          const badges = (s.athletes || []).map((n) => registryBadge(n)).filter(Boolean).join("");
+          return `<div class="mode-card">
+            <div class="mode-title">📊 ${esc(s.label)}</div>
             <div style="font-size:12px;color:var(--muted)">${esc(s.desc)}</div>
+            ${badges}
             <button data-suggest-mode="${esc(s.mode)}" data-suggest-params="${esc(JSON.stringify(s.params))}" type="button">Generate</button>
-          </div>`
-        ).join("");
+          </div>`;
+        }).join("");
 
         el.style.display = "block";
       }
@@ -455,11 +480,47 @@
           <td><details><summary>Evidence</summary>${(i.evidence || []).map((e) => `<div>${esc(e)}</div>`).join("")}</details></td>
         </tr>`).join("") : '<tr><td colspan="9" class="empty">No insights triggered.</td></tr>';
       }
+      function athleteRowHtml(a) {
+        const data = esc(JSON.stringify(a));
+        return `<tr data-athlete-id="${esc(a.id)}">
+          <td>${esc(a.full_name)}</td>
+          <td>${esc(a.instagram_handle ? "@" + a.instagram_handle : "-")}</td>
+          <td>${esc(a.instagram_follower_count != null ? String(a.instagram_follower_count) : "-")}</td>
+          <td>${esc(a.division || "-")}</td>
+          <td style="max-width:200px;white-space:normal;font-size:11px;color:var(--muted)">${esc(a.notes || "")}</td>
+          <td>${esc(fmtDate(a.last_featured_at))}</td>
+          <td style="white-space:nowrap">
+            <button data-edit-athlete="${data}" type="button" style="margin-right:4px">Edit</button>
+            <button class="danger" data-delete="${esc(a.id)}" type="button">Delete</button>
+          </td>
+        </tr>`;
+      }
+      function athleteEditRowHtml(a) {
+        const handle = a.instagram_handle || "";
+        return `<tr data-athlete-id="${esc(a.id)}" data-editing="1">
+          <td><input data-field="full_name" value="${esc(a.full_name)}" style="width:100%;box-sizing:border-box" /></td>
+          <td><input data-field="instagram_handle" value="${esc(handle)}" placeholder="no @ needed" style="width:100%;box-sizing:border-box" /></td>
+          <td><input data-field="instagram_follower_count" type="number" min="0" value="${esc(a.instagram_follower_count != null ? String(a.instagram_follower_count) : "")}" style="width:80px" /></td>
+          <td>
+            <select data-field="division" style="width:100%">
+              <option value="">-</option>
+              <option value="Pro" ${a.division === "Pro" ? "selected" : ""}>Pro</option>
+              <option value="Open" ${a.division === "Open" ? "selected" : ""}>Open</option>
+              <option value="Doubles" ${a.division === "Doubles" ? "selected" : ""}>Doubles</option>
+            </select>
+          </td>
+          <td><input data-field="notes" value="${esc(a.notes || "")}" style="width:100%;box-sizing:border-box" /></td>
+          <td>${esc(fmtDate(a.last_featured_at))}</td>
+          <td style="white-space:nowrap">
+            <button data-save-athlete="${esc(a.id)}" type="button" style="margin-right:4px">Save</button>
+            <button data-cancel-edit="${esc(a.id)}" type="button">Cancel</button>
+          </td>
+        </tr>`;
+      }
       function renderAthletes(athletes) {
-        athletesBody.innerHTML = athletes.length ? athletes.map((a) => `<tr>
-          <td>${esc(a.full_name)}</td><td>${esc(a.instagram_handle || "-")}</td><td>${esc(a.instagram_follower_count ?? "-")}</td><td>${esc(a.division || "-")}</td>
-          <td>${esc(fmtDate(a.last_featured_at))}</td><td><button class="danger" data-delete="${esc(a.id)}" type="button">Delete</button></td>
-        </tr>`).join("") : '<tr><td colspan="6" class="empty">No athletes yet.</td></tr>';
+        athletesBody.innerHTML = athletes.length
+          ? athletes.map(athleteRowHtml).join("")
+          : '<tr><td colspan="7" class="empty">No athletes yet.</td></tr>';
       }
       function renderModeCards() {
         modeGrid.innerHTML = modes.map(([key, name, desc]) => {
@@ -497,11 +558,20 @@
         const metrics = (f.metrics || []).map((m) => `<div class="metric-box"><span>${esc(m.label)}</span><strong>${esc(m.value)}</strong><span>${esc(m.context || "")}</span></div>`).join("");
         const bullets = (f.bullets || []).map((b) => `<li>${esc(b)}</li>`).join("");
         const deltas = (f.segmentDeltas || []).map((d) => `<div class="metric-box"><span>${esc(d.segment)}</span><strong>${esc(d.deltaSeconds)}s</strong><span>${esc(d.winner)}</span></div>`).join("");
+        const cols = f.columns || [];
+        const columnsHtml = cols.length
+          ? `<div class="vs-grid">${cols.map((col, i) =>
+              (i > 0 ? '<div class="vs-divider">VS</div>' : "") +
+              `<div class="vs-col"><div class="vs-col-header">${esc(col.header)}</div>${
+                (col.stats || []).map((s) => `<div class="metric-box"><span>${esc(s.label)}</span><strong>${esc(s.value)}</strong></div>`).join("")
+              }</div>`
+            ).join("")}</div>`
+          : "";
         slidePreview.innerHTML = `
           ${f.verdict ? `<span class="badge badge-${esc(f.verdict)}">${esc(f.verdict)}</span>` : ""}
           <h2>${esc(f.headline || "")}</h2>
           ${f.subline ? `<p class="subline">${esc(f.subline)}</p>` : ""}
-          ${metrics || deltas ? `<div class="metrics-grid">${metrics}${deltas}</div>` : ""}
+          ${columnsHtml || (metrics || deltas ? `<div class="metrics-grid">${metrics}${deltas}</div>` : "")}
           ${bullets ? `<ul>${bullets}</ul>` : ""}
         `;
         slideCounter.textContent = `Slide ${currentSlideIndex + 1} of ${currentSlides.length}`;
@@ -542,7 +612,12 @@
           const data = await api("/jobs");
           jobsBody.innerHTML = (data.jobs || []).length ? data.jobs.map((j) => `<tr>
             <td>${esc(j.event_name || "-")}</td><td>${esc(j.content_mode)}</td><td>${esc(j.headline || "-")}</td><td>${badge(j.status)}</td>
-            <td>${esc(fmtDate(j.created_at))}</td><td><button data-view-job="${esc(j.id)}" type="button">View</button> ${j.status === "approved" ? `<button data-export-job="${esc(j.id)}" type="button">Export</button>` : ""}</td>
+            <td>${esc(fmtDate(j.created_at))}</td>
+            <td style="white-space:nowrap">
+              <button data-view-job="${esc(j.id)}" type="button">View</button>
+              ${j.status === "approved" ? `<button data-export-job="${esc(j.id)}" type="button" style="margin-left:4px">Export</button>` : ""}
+              <button class="danger" data-delete-job="${esc(j.id)}" type="button" style="margin-left:4px">Delete</button>
+            </td>
           </tr>`).join("") : '<tr><td colspan="6" class="empty">No jobs yet.</td></tr>';
         } catch (err) {
           jobsBody.innerHTML = `<tr><td colspan="6" class="empty">${esc(err.message)}</td></tr>`;
@@ -557,6 +632,7 @@
           renderAthletes(loadedAthletes);
           renderModeCards();
           await loadJobs();
+          await loadHyroxEvents();
           status(mainStatus, "Loaded", "ok");
         } catch (err) { status(mainStatus, err.message, "err"); }
       }
@@ -619,6 +695,18 @@
           return;
         }
 
+        const deleteId = event.target?.dataset?.deleteRace;
+        if (deleteId) {
+          const raceName = event.target.dataset.deleteRaceName || deleteId;
+          if (!confirm(`Delete "${raceName}"? This cannot be undone.`)) return;
+          try {
+            await api(`/races/${deleteId}`, { method: "DELETE" });
+            if (selectedRaceId === deleteId) { selectedRaceId = null; selectedRaceEl.textContent = "Select a race event to generate content."; }
+            await loadAll();
+          } catch (err) { status(mainStatus, err.message, "err"); }
+          return;
+        }
+
         const id = event.target?.dataset?.auto;
         if (!id) return;
         selectedRaceId = id;
@@ -626,10 +714,12 @@
         selectedRaceEl.textContent = `Selected race: ${raceName}`;
         status(mainStatus, "Running Auto-Pick...");
         try {
-          const [autoPickData, raceData] = await Promise.all([
+          const [autoPickData, raceData, athleteData] = await Promise.all([
             api(`/races/${id}/auto-pick`, { method: "POST" }),
             api(`/races/${id}`),
+            api("/athletes"),
           ]);
+          loadedAthletes = athleteData.athletes || loadedAthletes;
           const insights = autoPickData.insights || [];
           const rawRows = raceData.rawRows || [];
           renderSmartSuggestions(rawRows, insights);
@@ -639,12 +729,56 @@
         } catch (err) { status(mainStatus, err.message, "err"); }
       });
       athletesBody.addEventListener("click", async (event) => {
-        const id = event.target?.dataset?.delete;
-        if (!id) return;
-        try {
-          await api(`/athletes/${id}`, { method: "DELETE" });
-          await loadAll();
-        } catch (err) { status(athleteStatus, err.message, "err"); }
+        // Delete
+        const deleteId = event.target?.dataset?.delete;
+        if (deleteId) {
+          try {
+            await api(`/athletes/${deleteId}`, { method: "DELETE" });
+            await loadAll();
+          } catch (err) { status(athleteStatus, err.message, "err"); }
+          return;
+        }
+
+        // Edit — swap row to inline edit form
+        const editData = event.target?.dataset?.editAthlete;
+        if (editData) {
+          const a = JSON.parse(editData);
+          const tr = event.target.closest("tr");
+          if (tr) tr.outerHTML = athleteEditRowHtml(a);
+          return;
+        }
+
+        // Cancel — restore original row from loadedAthletes
+        const cancelId = event.target?.dataset?.cancelEdit;
+        if (cancelId) {
+          const a = loadedAthletes.find((x) => x.id === cancelId);
+          const tr = event.target.closest("tr");
+          if (tr && a) tr.outerHTML = athleteRowHtml(a);
+          return;
+        }
+
+        // Save — collect field values and PATCH
+        const saveId = event.target?.dataset?.saveAthlete;
+        if (saveId) {
+          const tr = event.target.closest("tr");
+          const get = (field) => tr.querySelector(`[data-field="${field}"]`)?.value ?? null;
+          const followersRaw = get("instagram_follower_count");
+          const body = {
+            fullName: get("full_name"),
+            instagramHandle: get("instagram_handle"),
+            instagramFollowerCount: followersRaw !== "" && followersRaw != null ? Number(followersRaw) : null,
+            division: get("division"),
+            notes: get("notes"),
+          };
+          try {
+            await api(`/athletes/${saveId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+            const updated = await api("/athletes");
+            loadedAthletes = updated.athletes || loadedAthletes;
+            renderAthletes(loadedAthletes);
+            status(athleteStatus, "Saved.", "ok");
+          } catch (err) { status(athleteStatus, err.message, "err"); }
+          return;
+        }
       });
 
       document.getElementById("athlete-viewer").addEventListener("click", (event) => {
@@ -662,11 +796,11 @@
         document.getElementById("athlete-viewer").style.display = "none";
       });
 
-      document.getElementById("suggestions-grid").addEventListener("click", (event) => {
+      document.getElementById("suggestions-grid").addEventListener("click", async (event) => {
         const mode = event.target?.dataset?.suggestMode;
         if (!mode) return;
         const params = JSON.parse(event.target.dataset.suggestParams || "{}");
-        generateContent(mode, params);
+        await generateContent(mode, params);
         document.querySelector(".section:has(#slide-preview)").scrollIntoView({ behavior: "smooth", block: "start" });
       });
       modeGrid.addEventListener("click", (event) => {
@@ -714,9 +848,18 @@
       }
       document.getElementById("export-job-btn").addEventListener("click", () => exportJob());
       jobsBody.addEventListener("click", async (event) => {
-        const viewId = event.target?.dataset?.viewJob;
+        const deleteId = event.target?.dataset?.deleteJob;
+        if (deleteId) {
+          if (!confirm("Delete this job and all its content items? This cannot be undone.")) return;
+          try {
+            await api(`/jobs/${deleteId}`, { method: "DELETE" });
+            await loadJobs();
+          } catch (err) { status(mainStatus, err.message, "err"); }
+          return;
+        }
         const exportId = event.target?.dataset?.exportJob;
         if (exportId) { await exportJob(exportId); return; }
+        const viewId = event.target?.dataset?.viewJob;
         if (!viewId) return;
         try {
           const data = await api(`/jobs/${viewId}`);
@@ -728,7 +871,7 @@
         if (!event.target?.dataset?.removeTag) return;
         event.target.closest(".chip")?.remove();
       });
-      // ── Scrape from HYROX Results ──────────────────────────────────────────
+      // Scrape from HYROX Results
       const scrapeSeasonEl = document.getElementById("scrape-season");
       const scrapeRaceEl = document.getElementById("scrape-race");
       const scrapeDivisionEl = document.getElementById("scrape-division");
@@ -738,11 +881,12 @@
       const scrapeManualGroupEl = document.getElementById("scrape-manual-group");
       const fetchDivisionsBtn = document.getElementById("fetch-divisions-btn");
       const scrapeBtn = document.getElementById("scrape-btn");
+      const scrapeAllBtn = document.getElementById("scrape-all-btn");
       const scrapeStatusEl = document.getElementById("scrape-status");
 
       let allHyroxEvents = [];
 
-      // Season 8 = 25/26, Season 7 = 24/25, …, Season 1 = 18/19
+      // Season 8 = 25/26, Season 7 = 24/25, ..., Season 1 = 18/19
       function seasonLabel(n) {
         const y1 = (2017 + n) % 100;
         const y2 = (2018 + n) % 100;
@@ -770,7 +914,7 @@
         const filtered = filterSeason
           ? allHyroxEvents.filter((e) => e.season === filterSeason)
           : allHyroxEvents;
-        scrapeRaceEl.innerHTML = '<option value="">— select a race —</option>';
+        scrapeRaceEl.innerHTML = '<option value="">-- select a race --</option>';
         filtered.forEach((e) => {
           const opt = document.createElement("option");
           opt.value = e.resultsPageKey;
@@ -779,12 +923,13 @@
           scrapeRaceEl.appendChild(opt);
         });
         // Reset downstream controls
-        scrapeDivisionEl.innerHTML = '<option value="">— click Load Divisions —</option>';
+        scrapeDivisionEl.innerHTML = '<option value="">-- click Load Divisions --</option>';
         scrapeDivisionEl.disabled = true;
         scrapeDivisionManualEl.value = "";
         scrapeContestIdManualEl.value = "";
         scrapeManualGroupEl.style.display = "none";
         fetchDivisionsBtn.disabled = true;
+        scrapeAllBtn.disabled = true;
         updateScrapeBtn();
       }
 
@@ -795,7 +940,7 @@
 
           // Build season filter dropdown from distinct seasons in the data
           const seasons = [...new Set(allHyroxEvents.map((e) => e.season).filter(Boolean))].sort((a, b) => b - a);
-          scrapeSeasonEl.innerHTML = '<option value="">— all seasons —</option>';
+          scrapeSeasonEl.innerHTML = '<option value="">-- all seasons --</option>';
           seasons.forEach((n) => {
             const opt = document.createElement("option");
             opt.value = n;
@@ -817,10 +962,11 @@
 
       function updateScrapeBtn() {
         scrapeBtn.disabled = !scrapeRaceEl.value || !activeDivisionLabel() || !activeContestId();
+        scrapeAllBtn.disabled = !scrapeRaceEl.value;
       }
 
       scrapeRaceEl.addEventListener("change", () => {
-        scrapeDivisionEl.innerHTML = '<option value="">— click Load Divisions —</option>';
+        scrapeDivisionEl.innerHTML = '<option value="">-- click Load Divisions --</option>';
         scrapeDivisionEl.disabled = true;
         scrapeDivisionManualEl.value = "";
         scrapeContestIdManualEl.value = "";
@@ -832,7 +978,7 @@
       fetchDivisionsBtn.addEventListener("click", async () => {
         const key = scrapeRaceEl.value;
         if (!key) return;
-        status(scrapeStatusEl, "Fetching divisions from results.hyrox.com… (may take up to 45 s)");
+        status(scrapeStatusEl, "Fetching divisions from results.hyrox.com... (may take up to 45 s)");
         fetchDivisionsBtn.disabled = true;
         try {
           const season = selectedSeason();
@@ -841,10 +987,10 @@
           const divisions = data.divisions || [];
           if (!divisions.length) {
             scrapeManualGroupEl.style.display = "block";
-            status(scrapeStatusEl, "Auto-detection found no divisions — enter the division name and contest ID manually below.", "err");
+            status(scrapeStatusEl, "Auto-detection found no divisions - enter the division name and contest ID manually below.", "err");
             return;
           }
-          scrapeDivisionEl.innerHTML = '<option value="">— pick a division —</option>';
+          scrapeDivisionEl.innerHTML = '<option value="">-- pick a division --</option>';
           divisions.forEach((d) => {
             const opt = document.createElement("option");
             opt.value = d.contestId;   // contestId is the option value (e.g. HPRO_LR3MS4JI1682)
@@ -855,7 +1001,7 @@
           scrapeManualGroupEl.style.display = "none";
           status(scrapeStatusEl, `Found ${divisions.length} division(s). Pick one then click Scrape Top 50.`, "ok");
         } catch (err) {
-          status(scrapeStatusEl, `${err.message} — type the division name manually below.`, "err");
+          status(scrapeStatusEl, `${err.message} - type the division name manually below.`, "err");
         } finally {
           fetchDivisionsBtn.disabled = false;
           updateScrapeBtn();
@@ -869,7 +1015,7 @@
       scrapeBtn.addEventListener("click", async () => {
         const key = scrapeRaceEl.value;
         const division = activeDivisionLabel();
-	        const contestId = activeContestId();
+		        const contestId = activeContestId();
 	        if (!key || !division || !contestId) return;
 	        const season = selectedSeason();
 	        const sexValue = scrapeSexEl.value;
@@ -905,7 +1051,7 @@
 	          }
 	          return;
 	        }
-        status(scrapeStatusEl, `Scraping "${division}" from ${key}… (may take 30–60 s)`);
+        status(scrapeStatusEl, `Scraping "${division}" from ${key}... (may take 30-60 s)`);
         scrapeBtn.disabled = true;
         try {
           const data = await api(`/hyrox-events/${encodeURIComponent(key)}/scrape`, {
@@ -913,9 +1059,9 @@
             headers: { "content-type": "application/json" },
 	            body: JSON.stringify({ division, contestId, sex: sexValue, ...(season ? { season: Number(season) } : {}) }),
           });
-          status(scrapeStatusEl, `Done — ${data.athleteCount} athletes, ${Math.round((data.splitCoverage || 0) * data.athleteCount)} with full splits (${Math.round((data.splitCoverage || 0) * 100)}% coverage). Race "${data.eventName}" added.`, "ok");
+          status(scrapeStatusEl, `Done - ${data.athleteCount} athletes, ${Math.round((data.splitCoverage || 0) * data.athleteCount)} with full splits (${Math.round((data.splitCoverage || 0) * 100)}% coverage). Race "${data.eventName}" added.`, "ok");
 	          selectedRaceId = data.raceEventId;
-          selectedRaceEl.textContent = `Selected race: ${data.eventName} — ${data.division}`;
+          selectedRaceEl.textContent = `Selected race: ${data.eventName} - ${data.division}`;
           await loadAll();
         } catch (err) {
           status(scrapeStatusEl, err.message, "err");
@@ -924,9 +1070,43 @@
         }
       });
 
+      scrapeAllBtn.addEventListener("click", async () => {
+        const key = scrapeRaceEl.value;
+        if (!key) return;
+        const season = selectedSeason();
+
+        scrapeStatusEl.className = "status";
+        scrapeStatusEl.textContent = "Scraping all standard divisions (PRO + Open x Men + Women)... this takes 2-4 minutes.";
+        scrapeAllBtn.disabled = true;
+        scrapeBtn.disabled = true;
+
+        try {
+          const data = await api(`/hyrox-events/${encodeURIComponent(key)}/scrape-standard`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...(season ? { season: Number(season) } : {}), enrichSplits: true }),
+          });
+
+          const lines = (data.results || []).map((result) =>
+            result.ok
+              ? `OK ${result.division} (${result.athleteCount} athletes, ${Math.round((result.splitCoverage || 0) * 100)}% splits)`
+              : `FAIL ${result.division}: ${result.error}`
+          );
+          scrapeStatusEl.className = `status ${data.failed === 0 ? "ok" : ""}`;
+          scrapeStatusEl.innerHTML = `${data.scraped} scraped, ${data.failed} failed:<br>${lines.map(esc).join("<br>")}`;
+
+          await loadAll();
+        } catch (err) {
+          status(scrapeStatusEl, `Error: ${err.message}`, "err");
+        } finally {
+          updateScrapeBtn();
+        }
+      });
+
       renderModeCards();
       renderJobStatus();
-      if (saved) { loadAll(); loadHyroxEvents(); } else { loadHyroxEvents(); }
+      if (saved) { loadAll(); }
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

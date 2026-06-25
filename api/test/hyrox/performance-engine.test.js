@@ -188,6 +188,7 @@ test("elite_small_gaps fixture classifies as elite_marginal_gains", () => {
   const analysis = analyseSubmission(readFixture("elite_small_gaps.json"));
   assert.ok(analysis.scores.overallPerformanceScore >= 85);
   assert.equal(analysis.athleteArchetype.key, "elite_marginal_gains");
+  assert.equal(analysis.athleteArchetype.label, "Advanced marginal gains");
 });
 
 test("doubles_result returns analysisScope: limited", () => {

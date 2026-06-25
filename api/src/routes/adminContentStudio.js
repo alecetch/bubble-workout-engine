@@ -5,7 +5,13 @@ import { analyseRaceEvent } from "../contentStudio/raceEventAnalyser.js";
 import { generateContentInsights } from "../contentStudio/contentInsightEngine.js";
 import { generateContentForMode } from "../contentStudio/contentModeDispatcher.js";
 import { generateCaption } from "../contentStudio/captionGenerator.js";
-import { fetchDivisions, scrapeLeaderboard, enrichAthleteSplits } from "../contentStudio/hyroxScraper.js";
+import {
+  fetchDivisions,
+  scrapeLeaderboard,
+  enrichAthleteSplits,
+  normaliseDivisionType,
+  normaliseDivisionSex,
+} from "../contentStudio/hyroxScraper.js";
 
 export const adminContentStudioRouter = express.Router();
 
@@ -105,6 +111,16 @@ adminContentStudioRouter.get("/content-studio/races/:raceEventId", async (req, r
       rawRows: row.raw_data_json,
       analysis: row.analysis_json,
     });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+adminContentStudioRouter.delete("/content-studio/races/:raceEventId", async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM cs_race_events WHERE id = $1 RETURNING id", [req.params.raceEventId]);
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: "Race event not found" });
+    return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
@@ -344,6 +360,16 @@ adminContentStudioRouter.get("/content-studio/jobs/:jobId/export", async (req, r
   }
 });
 
+adminContentStudioRouter.delete("/content-studio/jobs/:jobId", async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM cs_content_jobs WHERE id = $1 RETURNING id", [req.params.jobId]);
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: "Job not found" });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── HYROX results scraping ─────────────────────────────────────────────────────
 
 adminContentStudioRouter.get("/content-studio/hyrox-events", async (_req, res) => {
@@ -428,12 +454,80 @@ adminContentStudioRouter.get("/content-studio/hyrox-events/:resultsPageKey/divis
   const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
   const season = req.query.season ? Number(req.query.season) : null;
   try {
-    const divisions = await fetchDivisions(resultsPageKey, season);
+    const scraper = req.app.locals.contentStudioScraper ?? {};
+    const divisions = await (scraper.fetchDivisions ?? fetchDivisions)(resultsPageKey, season);
     return res.json({ ok: true, divisions });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+async function scrapeSingleDivision(resultsPageKey, divisionLabel, contestId, season, enrichSplits, scraper, dbPool, requestedSex = null) {
+  let rows = await scraper.scrapeLeaderboard(resultsPageKey, divisionLabel, 50, season, contestId, requestedSex);
+  if (enrichSplits && rows.some((athlete) => athlete.athleteId)) {
+    rows = await scraper.enrichAthleteSplits(rows, resultsPageKey, contestId, season);
+  }
+  if (!rows.length) throw new Error("Scrape returned no rows");
+
+  const splitsCount = rows.filter((athlete) => Object.keys(athlete.splits ?? {}).length > 0).length;
+  const splitCoverage = rows.length > 0 ? splitsCount / rows.length : 0;
+  const divisionType = rows[0].division;
+  const sex = requestedSex ?? rows[0].sex;
+
+  const analysis = await analyseRaceEvent(rows, divisionType, sex, dbPool);
+
+  const evRow = await dbPool.query(
+    "SELECT event_name, start_date, season FROM hyrox_events WHERE results_page_key = $1 LIMIT 1",
+    [resultsPageKey],
+  );
+  const eventName = evRow.rows[0]?.event_name ?? resultsPageKey;
+  const eventDate = evRow.rows[0]?.start_date ?? null;
+  const dbSeason = evRow.rows[0]?.season ?? season;
+
+  const result = await dbPool.query(
+    `INSERT INTO cs_race_events (
+      event_name, event_date, season, division, sex,
+      athlete_count, raw_data_json, analysis_json, scrape_meta_json, status
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, 'analysed')
+     RETURNING *`,
+    [
+      `${eventName} - ${divisionLabel}`,
+      eventDate,
+      dbSeason,
+      divisionType,
+      sex,
+      rows.length,
+      JSON.stringify(rows),
+      JSON.stringify(analysis),
+      JSON.stringify({
+        resultsPageKey,
+        contestId,
+        season: dbSeason,
+        scrapedAt: new Date().toISOString(),
+        splitCoverage,
+        source: "mika_timing",
+      }),
+    ],
+  );
+
+  return {
+    raceEventId: result.rows[0].id,
+    athleteCount: rows.length,
+    splitCoverage,
+    division: divisionType,
+    sex,
+    eventName: result.rows[0].event_name,
+  };
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scrape", express.json(), async (req, res) => {
   const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
@@ -448,63 +542,56 @@ adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scra
 
   try {
     const scraper = req.app.locals.contentStudioScraper ?? { scrapeLeaderboard, enrichAthleteSplits };
-    let rows = await scraper.scrapeLeaderboard(resultsPageKey, division, 50, season, contestId, requestedSex);
-    if (enrichSplits && rows.some((athlete) => athlete.athleteId)) {
-      rows = await scraper.enrichAthleteSplits(rows, resultsPageKey, contestId, season);
-    }
-    if (!rows.length) return res.status(422).json({ ok: false, error: "Scrape returned no rows" });
-    const splitsCount = rows.filter((athlete) => Object.keys(athlete.splits ?? {}).length > 0).length;
-    const splitCoverage = rows.length > 0 ? splitsCount / rows.length : 0;
+    const scrapeResult = await scrapeSingleDivision(resultsPageKey, division, contestId, season, enrichSplits, scraper, pool, requestedSex);
+    return res.json({ ok: true, ...scrapeResult });
+  } catch (err) {
+    if (err.message === "Scrape returned no rows") return res.status(422).json({ ok: false, error: err.message });
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
-    const divisionType = rows[0].division;
-    const sex = requestedSex ?? rows[0].sex;
-    const analysis = await analyseRaceEvent(rows, divisionType, sex, pool);
+adminContentStudioRouter.post("/content-studio/hyrox-events/:resultsPageKey/scrape-standard", express.json(), async (req, res) => {
+  const resultsPageKey = decodeURIComponent(req.params.resultsPageKey);
+  const season = req.body?.season ? Number(req.body.season) : null;
+  const enrichSplits = req.body?.enrichSplits !== false;
 
-    // Look up event metadata from hyrox_events table
-    const evRow = await pool.query(
-      "SELECT event_name, start_date, season FROM hyrox_events WHERE results_page_key = $1 LIMIT 1",
-      [resultsPageKey],
-    );
-    const eventName = evRow.rows[0]?.event_name ?? resultsPageKey;
-    const eventDate = evRow.rows[0]?.start_date ?? null;
-    const dbSeason = evRow.rows[0]?.season ?? season; // prefer DB value, fall back to request value
-
-    const result = await pool.query(
-      `INSERT INTO cs_race_events (
-        event_name, event_date, season, division, sex,
-		        athlete_count, raw_data_json, analysis_json, scrape_meta_json, status
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, 'analysed')
-       RETURNING *`,
-      [
-        `${eventName} — ${division}`,
-        eventDate,
-        dbSeason,
-        divisionType,
-        sex,
-        rows.length,
-        JSON.stringify(rows),
-        JSON.stringify(analysis),
-        JSON.stringify({
-          resultsPageKey,
-          contestId,
-          season: dbSeason,
-          scrapedAt: new Date().toISOString(),
-          splitCoverage,
-          source: "mika_timing",
-        }),
-      ],
-    );
-
-    return res.json({
-      ok: true,
-      raceEventId: result.rows[0].id,
-      athleteCount: rows.length,
-      splitCoverage,
-      division: divisionType,
-      sex,
-      eventName: result.rows[0].event_name,
+  try {
+    const scraper = req.app.locals.contentStudioScraper ?? { fetchDivisions, scrapeLeaderboard, enrichAthleteSplits };
+    const allDivisions = await (scraper.fetchDivisions ?? fetchDivisions)(resultsPageKey, season);
+    const standardDivisions = allDivisions.filter((division) => {
+      const type = normaliseDivisionType(division.label);
+      const sex = normaliseDivisionSex(division.label);
+      return (type === "pro" || type === "open") && (sex === "male" || sex === "female");
     });
+
+    const typeOrder = { pro: 0, open: 1 };
+    const sexOrder = { male: 0, female: 1 };
+    standardDivisions.sort((a, b) => {
+      const typeDiff = (typeOrder[normaliseDivisionType(a.label)] ?? 9) - (typeOrder[normaliseDivisionType(b.label)] ?? 9);
+      if (typeDiff !== 0) return typeDiff;
+      return (sexOrder[normaliseDivisionSex(a.label)] ?? 9) - (sexOrder[normaliseDivisionSex(b.label)] ?? 9);
+    });
+
+    const DIVISION_TIMEOUT_MS = 90_000;
+    const results = [];
+    for (const division of standardDivisions) {
+      const type = normaliseDivisionType(division.label);
+      const sex = normaliseDivisionSex(division.label);
+      try {
+        const divResult = await withTimeout(
+          scrapeSingleDivision(resultsPageKey, division.label, division.contestId, season, enrichSplits, scraper, pool, sex),
+          DIVISION_TIMEOUT_MS,
+          "Division scrape timed out after 90s",
+        );
+        results.push({ ok: true, ...divResult, division: division.label, type, sex });
+      } catch (err) {
+        results.push({ division: division.label, type, sex, ok: false, error: err.message });
+      }
+    }
+
+    const scraped = results.filter((result) => result.ok).length;
+    const failed = results.filter((result) => !result.ok).length;
+    return res.json({ ok: true, results, scraped, failed });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
