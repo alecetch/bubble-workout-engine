@@ -92,6 +92,25 @@ describe("ResultPage analyse mode", () => {
     expect(screen.getByText("Time Potential")).toBeInTheDocument();
   });
 
+  test("target mode also renders athlete archetype when available", () => {
+    renderResult({
+      ...baseResponse,
+      calculatorMode: "target",
+      browserSummary: {
+        ...baseResponse.browserSummary,
+        athleteArchetype: {
+          key: "strong_runner_station_limited",
+          label: "Strong runner, station limited",
+        },
+      },
+    });
+
+    expect(screen.getByTestId("result-headline")).toHaveTextContent(/Your biggest limiter: Wall Balls/i);
+    expect(screen.getByText("Athlete Archetype")).toBeInTheDocument();
+    expect(screen.getByText("Strong runner, station limited")).toBeInTheDocument();
+    expect(screen.getByText("Time Potential")).toBeInTheDocument();
+  });
+
   test("missing calculatorMode defaults to target display", () => {
     renderResult(baseResponse);
 

@@ -14,8 +14,7 @@
     body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; font-size: 13px; }
     a { color: #1d4ed8; text-decoration: none; font-size: 12px; }
     a:hover { text-decoration: underline; }
-    .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
-    input, select, button { font: inherit; }
+input, select, button { font: inherit; }
     button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
     button:hover { filter: brightness(.9); }
     button.secondary { background: #fff; color: var(--primary); }
@@ -28,8 +27,7 @@
     /* Header */
     .header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }
     .header h1 { margin: 0; font-size: 16px; }
-    .nav { display: flex; gap: 10px; }
-    .ctrl-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ctrl-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .ctrl-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
     .toggle-row { display: flex; gap: 3px; }
     .sep { width: 1px; height: 20px; background: var(--border); align-self: center; }
@@ -123,26 +121,10 @@
   </style>
 </head>
 <body>
+    <div id="nav-placeholder"></div>
 
 <div class="header">
   <h1>Program Preview</h1>
-  <div class="nav">
-    <a href="/admin-ui/index.html">Config Editor</a>
-    <a href="/admin/coverage">Coverage</a>
-    <a href="/admin/health">Health</a>
-    <a href="/admin/exercises">Exercises</a>
-    <a href="/admin/narration">Narration</a>
-    <a href="/admin/rep-rules">Rep Rules</a>
-    <a href="/admin/observability">Observability</a>
-    <a href="/admin/preview" class="active">Preview</a>
-    <a href="/admin/program-quality">Program Quality</a>
-    <a href="/admin/seed-history">Seed History</a>
-    <a href="/admin/progression-sandbox">Progression Sandbox</a>
-    <a href="/admin/coaches">Coaches</a>
-    <a href="/admin/coach-portal">Coach Portal</a>
-    <a href="/admin/hyrox">HYROX</a>
-    <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-  </div>
   <div class="ctrl-group">
     <span class="ctrl-label">Token</span>
     <input id="token-input" type="password" placeholder="x-internal-token" style="width:170px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
@@ -357,8 +339,7 @@ document.querySelectorAll(".type-tab").forEach(btn => {
   });
 });
 
-// ── HTML helpers ──────────────────────────────────────────────────────────────
-
+// HTML helpers
 function esc(v) {
   return String(v ?? "")
     .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -540,7 +521,7 @@ function renderItem(item, nameMap, ctx) {
     <div class="item">
       <div class="item-main">
         <span class="ex-name">${esc(name)}</span>
-        <span class="ex-meta">${esc(parts.join(" · "))}</span>
+        <span class="ex-meta">${esc(parts.join("  -  "))}</span>
       </div>
       ${showNarrationEnabled() ? `<div class="item-nar">${renderNar(item.narration)}</div>` : ""}
       ${renderSlotDebug(item, ctx?.seg, ctx?.day, slotDebug, ctx?.repRuleMap)}
@@ -552,13 +533,13 @@ function renderSeg(seg, nameMap, ctx) {
   const narSkip = new Set(["title"]);
   const titleText = seg.narration?.title ?? "";
   const durSec = seg.duration_seconds;
-  const durLabel = durSec ? ` · ${Math.round(durSec / 60)}min` : "";
+  const durLabel = durSec ? `  -  ${Math.round(durSec / 60)}min` : "";
   return `
     <div class="seg">
       <div class="seg-hdr">
         <span class="seg-purpose seg-purpose-${esc(purpose)}">${esc(purpose || "segment")}</span>
         <span class="seg-type">${esc(seg.segment_type ?? "")}</span>
-        ${(seg.rounds ?? 0) > 1 ? `<span class="seg-rounds">${seg.rounds}×</span>` : ""}
+        ${(seg.rounds ?? 0) > 1 ? `<span class="seg-rounds">${seg.rounds}x</span>` : ""}
         ${titleText ? `<span class="seg-title">${esc(titleText)}</span>` : ""}
         <span class="seg-type" style="margin-left:auto">${esc(durLabel)}</span>
       </div>
@@ -579,7 +560,7 @@ function renderDay(day, nameMap, ctx) {
     <details class="day" open>
       <summary>
         <span class="day-label">${esc(label)}</span>
-        ${metaParts.length ? `<span class="day-meta">${esc(metaParts.join(" · "))}</span>` : ""}
+        ${metaParts.length ? `<span class="day-meta">${esc(metaParts.join("  -  "))}</span>` : ""}
       </summary>
       <div class="day-body">
         ${showNarrationEnabled() && day.narration?.day_goal ? `<div class="day-goal">${esc(day.narration.day_goal)}</div>` : ""}
@@ -596,7 +577,7 @@ function renderWeek(wk, programNarration, nameMap, ctx) {
   const phaseLabel = wkNar.phase_label || wkNar.label || "";
   const focus = wkNar.focus || "";
   const notes = wkNar.notes || "";
-  const summary = [focus, notes].filter(Boolean).join(" — ");
+  const summary = [focus, notes].filter(Boolean).join(" - ");
   return `
     <details class="week" open>
       <summary>
@@ -646,16 +627,15 @@ function renderProgram(type, preview, meta) {
       ${!weeks.length ? `<div class="panel-empty">No weeks in program output</div>` : ""}
     </div>
     <details class="dbg">
-      <summary>Debug (step1–step6)</summary>
+      <summary>Debug (step1-step6)</summary>
       <pre class="dbg-json">${esc(JSON.stringify(debug, null, 2))}</pre>
     </details>`;
 }
 
-// ── Generate ──────────────────────────────────────────────────────────────────
-
+// Generate
 function renderStartingLoadsTab(decisions) {
   if (!decisions || decisions.length === 0) {
-    return `<div class="panel-empty">No starting load estimates — add anchor lifts above and regenerate.</div>`;
+    return `<div class="panel-empty">No starting load estimates - add anchor lifts above and regenerate.</div>`;
   }
   const rows = decisions.map(d => {
     if (d.skipped_reason) {
@@ -672,7 +652,7 @@ function renderStartingLoadsTab(decisions) {
       <td>${esc(String(d.day ?? ""))}</td>
       <td>${esc(d.purpose ?? "")}</td>
       <td>${esc(d.prescribed_reps ?? "")}</td>
-      <td><strong>${esc(String(d.guideline_load_kg ?? "—"))}</strong> ${esc(d.unit ?? "kg")}</td>
+      <td><strong>${esc(String(d.guideline_load_kg ?? "-"))}</strong> ${esc(d.unit ?? "kg")}</td>
       <td class="${d.confidence === "high" ? "ok" : d.confidence === "low" ? "err" : "warn"}">${esc(d.confidence ?? "")}</td>
       <td>${esc(d.source ?? "")}</td>
       <td style="font-size:11px;color:var(--muted)">${(d.reasoning ?? []).map(r => esc(r)).join(" ")}</td>
@@ -756,7 +736,7 @@ async function loadLiveSlotDebug() {
 document.getElementById("generate-btn").addEventListener("click", async () => {
   const statusEl = document.getElementById("gen-status");
   const tabsEl = document.getElementById("type-tabs");
-  statusEl.innerHTML = `<span class="spinner"></span>Generating…`;
+  statusEl.innerHTML = `<span class="spinner"></span>Generating...`;
   if (getToken()) sessionStorage.setItem(STORAGE_KEY, getToken());
   const clientProfileId = clientProfileIdInputEl.value.trim();
   const userId = userIdInputEl.value.trim();
@@ -820,7 +800,7 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
   metaBar.classList.remove("hidden");
   metaBar.innerHTML = [
     ["mode", previewContext.mode ?? "synthetic"],
-    ["profile", previewContext.profile_id ?? (previewContext.requested_user_id ?? "—")],
+    ["profile", previewContext.profile_id ?? (previewContext.requested_user_id ?? "-")],
     ["fitness", `${meta.fitness_level} (rank ${meta.fitness_rank})`],
     ["preset", meta.equipment_preset],
     ["equipment", `${meta.equipment_slugs?.length ?? 0} items`],
@@ -942,6 +922,6 @@ debugToggleEl.addEventListener("change", () => {
   rerenderPreviewPanels();
 });
 </script>
-</body>
+    <script src="/admin-ui/nav.js"></script>
+  </body>
 </html>
-

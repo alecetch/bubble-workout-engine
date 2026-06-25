@@ -15,7 +15,7 @@ import { fetchHyroxResultsImport, trackEvent } from "../utils/api";
 import { ageGroupFromAge, normalizeAgeGroup, normalizeName, saveImportedHyroxResult } from "../utils/hyroxImportDraft";
 import type { HyroxParseResult } from "../utils/hyroxResultsParser";
 import { loadDraft, saveDraft } from "../utils/storage";
-import { formatSeconds, parseTimeToSeconds } from "../utils/time";
+import { formatSeconds, normalizeTimeInputValue, parseTimeToSeconds } from "../utils/time";
 import styles from "./RaceDetailsPage.module.css";
 
 type Division = "open" | "pro" | "doubles" | "relay";
@@ -60,18 +60,25 @@ export function RaceDetailsPage() {
   const parsedTargetFinishTime = parseTimeToSeconds(targetFinishTime);
   const targetTimeRequired = calculatorMode === "target";
   const isTargetFasterThanFinish = parsedFinishTime !== null && parsedTargetFinishTime !== null && parsedTargetFinishTime < parsedFinishTime;
+  const targetFinishTimeIssue =
+    !targetFinishTime
+      ? targetTimeRequired
+        ? "Enter target finish time, e.g. 55:00 or 1:05:00"
+        : undefined
+      : parsedTargetFinishTime === null
+        ? targetTimeRequired
+          ? "Enter target finish time as MM:SS or H:MM:SS, e.g. 55:00 or 1:05:00."
+          : "Enter goal time as MM:SS or H:MM:SS, e.g. 55:00, or leave it blank."
+        : parsedFinishTime !== null && !isTargetFasterThanFinish
+          ? targetTimeRequired
+            ? "Target time must be faster than your current finish time."
+            : "Goal time must be faster than your finish time."
+          : undefined;
   const isFormValid =
     calculatorMode === "analyse"
-      ? Boolean(ageGroup && parsedFinishTime !== null)
-      : Boolean(ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && isTargetFasterThanFinish);
-  const targetFinishTimeWarning =
-    targetFinishTime && parsedFinishTime !== null && parsedTargetFinishTime !== null && !isTargetFasterThanFinish
-      ? targetTimeRequired
-        ? "Target time should be faster than your current finish time."
-        : "Goal time should be faster than your finish time."
-      : targetFinishTime && !targetTimeRequired && parsedTargetFinishTime === null
-        ? "Enter a valid goal time or leave it blank."
-      : undefined;
+      ? Boolean(ageGroup && parsedFinishTime !== null && !targetFinishTimeIssue)
+      : Boolean(ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && !targetFinishTimeIssue);
+  const targetFinishTimeInlineIssue = targetFinishTime ? targetFinishTimeIssue : undefined;
   const importedSummary = [name, division ? formatDivisionLabel(division) : "", finishTime].filter(Boolean).join(" · ");
 
   useEffect(() => {
@@ -93,9 +100,16 @@ export function RaceDetailsPage() {
     if (targetTimeRequired) {
       const parsedTarget = parseTimeToSeconds(targetFinishTime);
       if (!targetFinishTime || parsedTarget === null) {
-        errs.targetFinishTime = "Enter target finish time, e.g. 55:00 or 1:05:00";
+        errs.targetFinishTime = "Enter target finish time as MM:SS or H:MM:SS, e.g. 55:00 or 1:05:00.";
       } else if (parsedFinish !== null && parsedTarget >= parsedFinish) {
-        errs.targetFinishTime = "Target time should be faster than your current finish time.";
+        errs.targetFinishTime = "Target time must be faster than your current finish time.";
+      }
+    } else if (targetFinishTime) {
+      const parsedTarget = parseTimeToSeconds(targetFinishTime);
+      if (parsedTarget === null) {
+        errs.targetFinishTime = "Enter goal time as MM:SS or H:MM:SS, e.g. 55:00, or leave it blank.";
+      } else if (parsedFinish !== null && parsedTarget >= parsedFinish) {
+        errs.targetFinishTime = "Goal time must be faster than your finish time.";
       }
     }
 
@@ -161,6 +175,7 @@ export function RaceDetailsPage() {
 
   function handleNext() {
     if (!validate()) return;
+    if (!isFormValid) return;
 
     const finishSeconds = parseTimeToSeconds(finishTime) ?? 0;
     const parsedTarget = parseTimeToSeconds(targetFinishTime);
@@ -400,16 +415,18 @@ export function RaceDetailsPage() {
                     hint="Your official race finish time."
                     value={finishTime}
                     onChange={(e) => setFinishTime(e.target.value)}
+                    onBlur={(e) => setFinishTime(normalizeTimeInputValue(e.target.value))}
                     error={errors.finishTime}
                   />
                   <TimeInput
                     label={targetTimeRequired ? "Target finish time" : "Goal time (optional)"}
                     required={targetTimeRequired}
-                    placeholder="55:00"
-                    hint={targetTimeRequired ? "Used to calculate the time gaps needed to reach your goal." : "Optional reference point for your analysis."}
+                    placeholder="55:00 or 5500"
+                    hint={targetTimeRequired ? "Type 5500 for 55:00. This must be faster than your finish time." : "Optional. Type 5500 for 55:00; leave blank if you do not have a goal."}
                     value={targetFinishTime}
                     onChange={(e) => setTargetFinishTime(e.target.value)}
-	                    error={errors.targetFinishTime || targetFinishTimeWarning}
+                    onBlur={(e) => setTargetFinishTime(normalizeTimeInputValue(e.target.value))}
+                    error={errors.targetFinishTime || targetFinishTimeInlineIssue}
                   />
                 </div>
                 <TextInput
@@ -451,15 +468,10 @@ export function RaceDetailsPage() {
           <FormPanel className={styles.previewPanel}>
             <div className={styles.previewEyebrow}>WHAT YOU&apos;LL GET</div>
             <h2 className={styles.previewTitle}>A race report that tells you what to train next.</h2>
-            <div className={styles.mockInsight}>
-              <div className={styles.mockLabel}>Projected insight</div>
-              <div className={styles.mockTitle}>Wall Balls cost you the most time</div>
-              <div className={styles.mockMeta}>Stations +11:39 · Running +4:27 · RoxZone −0:04</div>
-            </div>
             <div className={styles.previewRows}>
-              <PreviewRow label="Biggest gap" value="Wall Balls" />
-              <PreviewRow label="Best segment" value="Run 6" />
-              <PreviewRow label="Training focus" value="Station durability" />
+              <PreviewRow label="Benchmark comparison" value="Calculated after submit" />
+              <PreviewRow label="Time gaps" value="Based on your splits" />
+              <PreviewRow label="Training focus" value="Matched to the final report" />
             </div>
           </FormPanel>
         </div>

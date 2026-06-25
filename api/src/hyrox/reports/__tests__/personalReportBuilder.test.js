@@ -121,4 +121,20 @@ describe("buildPersonalReport - race_split_breakdown section", () => {
     assert.ok(recIdx < limiterIdx, "recommendations should come before suppressed station breakdown");
     assert.ok(tableIdx < potentialIdx, "table should come before time_potential");
   });
+
+  it("adds data confidence section near the top for partial data", () => {
+    const analysis = minimalAnalysis({
+      analysisScope: "partial",
+      dataQuality: {
+        inputCompleteness: 0.67,
+        warnings: ["partial_split_data", "roxzone_inferred_from_unallocated_time"],
+      },
+      segments: makeSegments(16),
+    });
+    const { sections } = buildPersonalReport(analysis, [], {});
+    const confidenceIdx = sections.findIndex((section) => section.sectionKey === "data_confidence");
+    assert.ok(confidenceIdx > -1, "data_confidence section expected");
+    assert.ok(confidenceIdx <= 1, "data_confidence should appear near the top");
+    assert.match(sections[confidenceIdx].content.join(" "), /partial split data|RoxZone/i);
+  });
 });

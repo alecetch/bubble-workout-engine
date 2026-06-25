@@ -359,3 +359,50 @@ describe("buildRecommendations - roxzone enrichment", () => {
     assert.ok(roxRec, "Roxzone recommendation expected");
   });
 });
+
+test("analyse mode with no positive gap uses preserve-strengths rationale", () => {
+  const result = buildRecommendations(
+    {
+      penalties: [],
+      stationBreakdown: [],
+      segments: [],
+      scores: { engineScore: 70, strengthScore: 68 },
+      timePotential: { headlineGainSeconds: 0 },
+      runningAnalysis: { available: false },
+      roxzoneAnalysis: { available: false },
+      headline: { biggestLimiter: null },
+      benchmarkContext: { goalBenchmarkGroup: null },
+    },
+    [],
+    {},
+    "analyse",
+  );
+  assert.ok(result.length > 0);
+  assert.doesNotMatch(result.map((r) => r.rationale).join(" "), /Against.*finishers/i);
+  assert.ok(result.some((r) => /maintain|strengths|preserv/i.test(r.title + r.rationale)));
+});
+
+test("target mode with target time includes target time in rationale", () => {
+  const result = buildRecommendations(
+    {
+      penalties: [],
+      stationBreakdown: [
+        { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: 164, percentile: 34, confidence: "high", timeGapToExactTargetSeconds: 120 },
+      ],
+      segments: [
+        { segmentKey: "wall_balls", type: "station", timeGapToExactTargetSeconds: 120, timeGapToMedianSeconds: 164, timeGapToGoalSeconds: null },
+      ],
+      scores: { engineScore: 55, strengthScore: 55 },
+      timePotential: { headlineGainSeconds: 164 },
+      runningAnalysis: { available: false },
+      roxzoneAnalysis: { available: false },
+      headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 164 } },
+      benchmarkContext: { goalBenchmarkGroup: null },
+    },
+    [],
+    { targetFinishTimeSeconds: 3300 },
+    "target",
+  );
+  const allText = result.map((r) => r.rationale).join(" ");
+  assert.match(allText, /55:00/);
+});

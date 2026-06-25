@@ -12,10 +12,6 @@
       .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
       .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
       .title { margin: 0; font-size: 22px; }
-      .nav { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-      .nav a { color: #1d4ed8; text-decoration: none; font-size: 13px; }
-      .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
       .controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
       .control { display: grid; gap: 4px; min-width: 280px; }
       .control label { font-size: 12px; color: var(--muted); }
@@ -50,24 +46,15 @@
       .muted { color: var(--muted); }
       .empty { color: var(--muted); font-style: italic; padding: 12px 0; }
       .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-      @media (max-width: 720px) { .top-row { display: block; } .nav { justify-content: flex-start; margin-top: 8px; } .control { min-width: 100%; } }
+      @media (max-width: 720px) { .top-row { display: block; } .control { min-width: 100%; } }
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <section class="header">
         <div class="top-row">
           <h1 class="title">Program Quality</h1>
-          <nav class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage</a>
-            <a href="/admin/health">Health</a>
-            <a href="/admin/narration">Narration</a>
-            <a href="/admin/rep-rules">Rep Rules</a>
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality" class="active">Program Quality</a>
-            <a href="/admin/hyrox">HYROX</a>
-          </nav>
         </div>
         <div class="controls">
           <div class="control">
@@ -321,5 +308,6 @@
       runBtn.addEventListener("click", () => runReview());
       setStatus("Ready. Paste your internal API token, then run review.");
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>
