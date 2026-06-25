@@ -208,6 +208,7 @@ function limitedAnalysis(body, normalised, reason) {
 }
 
 export async function analyse(req, res) {
+  const startMs = Date.now();
   try {
     const body = req.body ?? {};
     const input = submissionInput(body);
@@ -220,6 +221,23 @@ export async function analyse(req, res) {
     analysisJson.athlete = { ...(analysisJson.athlete ?? {}), ...input.athlete };
     const submission = await persistSubmission(body, normalised);
     analysisJson.submissionId = submission.id;
+    const analysisDurationMs = Date.now() - startMs;
+    const requestId = req.headers["x-request-id"] ?? null;
+    pool.query(
+      `
+      UPDATE hyrox_submissions
+      SET calculator_mode = $1,
+          analysis_duration_ms = $2,
+          request_id = $3
+      WHERE id = $4
+      `,
+      [body.calculatorMode ?? null, analysisDurationMs, requestId, submission.id],
+    ).catch((err) => {
+      (req.log ?? console).error?.(
+        { event: "hyrox.observability_update_failed", err: err?.message },
+        "HYROX observability update failed",
+      );
+    });
 
     const insights = unsupportedDivision ? [] : generateInsights(analysisJson, input.athleteContext);
     const emailReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "email_report" });

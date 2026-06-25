@@ -33,7 +33,7 @@ export function classifyArchetype(scores, normalisedSubmission, runFadeAnalysis,
     return result("first_timer_execution_leak", "First-timer execution leak", "medium", [`Roxzone percentile ${roxzoneAnalysis?.percentile}`, "No previous HYROX races"]);
   }
   if ((scores.overallPerformanceScore ?? 0) > 85 && stationGaps.every((row) => row.timeGapToMedianSeconds < 30)) {
-    return result("elite_marginal_gains", "Elite marginal gains", "medium", [`Overall score ${scores.overallPerformanceScore}`, "All station gaps under 30s"]);
+    return result("elite_marginal_gains", "Advanced marginal gains", "medium", [`Overall score ${scores.overallPerformanceScore}`, "All station gaps under 30s"]);
   }
   if (Number.isFinite(engine) && Number.isFinite(strength) && Math.abs(engine - strength) < 15 && (execution ?? 100) >= 45) {
     return result("balanced_hybrid", "Balanced hybrid", "medium", [`Engine score ${engine}`, `Strength score ${strength}`]);
