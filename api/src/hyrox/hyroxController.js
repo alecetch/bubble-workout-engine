@@ -249,7 +249,7 @@ export async function analyse(req, res) {
       outputType: "web_report",
       calculatorMode: body.calculatorMode ?? "target",
     });
-    const carouselA = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "carousel_a" });
+    const carouselA = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "carousel_a", calculatorMode: body.calculatorMode ?? "target" });
     const carouselB = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "carousel_b" });
 
     await persistAnalysis({ submissionId: submission.id, analysisJson, insights, emailReport, carouselA, carouselB });

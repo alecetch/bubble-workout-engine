@@ -75,12 +75,16 @@ function outputTypeForMetric(metricKey, type) {
 
 function requestFromSubmission(normalisedSubmission, benchmarkContext) {
   const group = benchmarkContext?.primaryBenchmarkGroup ?? {};
-  return {
+  const request = {
     datasetVersion: group.datasetVersion,
     division: normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division,
     gender: normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender,
     ageGroup: normalisedSubmission.athlete?.ageGroup ?? null,
   };
+  if (group.performanceBand) {
+    request.performanceBand = group.performanceBand;
+  }
+  return request;
 }
 
 export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
@@ -93,7 +97,13 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
     if (!Number.isFinite(userSeconds)) continue;
 
     const metricType = SEGMENT_TYPE_BY_KEY.get(metricKey) ?? "aggregate";
-    const selection = selectBenchmark(requestFromSubmission(normalisedSubmission, benchmarkContext), metricKey, outputTypeForMetric(metricKey, metricType));
+    const isBandMode = Boolean(benchmarkContext?.primaryBenchmarkGroup?.performanceBand);
+    const selection = selectBenchmark(
+      requestFromSubmission(normalisedSubmission, benchmarkContext),
+      metricKey,
+      outputTypeForMetric(metricKey, metricType),
+      isBandMode ? { performanceTarget: true } : {},
+    );
     const benchmarkGroupKey = selection.suppressed ? primaryGroupKey : selection.benchmarkUsed;
     const stats = getBenchmarkStats(benchmarkGroupKey, metricKey);
     const goalStats = goalGroupKey ? getBenchmarkStats(goalGroupKey, metricKey) : null;

@@ -58,8 +58,13 @@ function workRunBalance(normalised) {
 }
 
 function dataQuality(normalised, benchmarkContext) {
-  const expected = normalised.completeness.totalExpectedSplits;
-  const supplied = normalised.completeness.runSplits + normalised.completeness.stationSplits + normalised.completeness.roxzoneSplits;
+  // Inferred-total RoxZone is not missing data — only count the 16 race splits as required.
+  const isExplicitRoxzone = normalised.roxzoneMode === "explicit_splits";
+  const raceSplitsSupplied = normalised.completeness.runSplits + normalised.completeness.stationSplits;
+  const expected = isExplicitRoxzone ? normalised.completeness.totalExpectedSplits : 16;
+  const supplied = isExplicitRoxzone
+    ? raceSplitsSupplied + normalised.completeness.roxzoneSplits
+    : raceSplitsSupplied;
   const issues = [];
   const warnings = [];
   if (!benchmarkContext.available) issues.push("no_benchmark_data");
@@ -81,13 +86,15 @@ function analysisScope(input, normalised, benchmarkContext) {
   if (!benchmarkContext.available) return "no_benchmark_data";
   const supplied = normalised.completeness.runSplits + normalised.completeness.stationSplits;
   if (supplied < 8) return "limited";
-  if (supplied < 16 || normalised.roxzoneMode !== "explicit_splits") return "partial";
+  if (supplied < 16) return "partial";
   return "full";
 }
 
 export function analyseSubmission(input = {}) {
   const normalised = normaliseSubmission(input);
-  const benchmarkContext = selectBenchmarkGroups(normalised);
+  const benchmarkContext = selectBenchmarkGroups(normalised, {
+    calculatorMode: input.calculatorMode ?? "target",
+  });
   const scope = analysisScope(input, normalised, benchmarkContext);
 
   const rawSegments = benchmarkContext.available ? calculateSegmentStats(normalised, benchmarkContext) : [];
@@ -134,6 +141,11 @@ export function analyseSubmission(input = {}) {
       primaryBenchmarkGroup: benchmarkContext.primaryBenchmarkGroup,
       fallbacksUsed: benchmarkContext.fallbacksUsed,
       goalBenchmarkGroup: benchmarkContext.goalBenchmarkGroup,
+      achievedBand: benchmarkContext.achievedBand ?? null,
+      nextBand: benchmarkContext.nextBand ?? null,
+      nextBandGroup: benchmarkContext.nextBandGroup ?? null,
+      confidenceLabel: benchmarkContext.confidenceLabel ?? null,
+      demographicBenchmarkGroup: benchmarkContext.demographicBenchmarkGroup ?? null,
     },
     headline: {
       biggestLimiter: limiter ? {
