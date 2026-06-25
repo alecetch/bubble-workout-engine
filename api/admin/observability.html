@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -35,7 +35,7 @@
         padding: 14px;
         margin-bottom: 12px;
       }
-      .top-row, .page-header, .controls, .page-actions, .nav, .tab-bar {
+      .top-row, .page-header, .controls, .page-actions,  .tab-bar {
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
@@ -53,14 +53,7 @@
         color: var(--muted);
         font-size: 13px;
       }
-      .nav a {
-        color: #1d4ed8;
-        text-decoration: none;
-        font-size: 13px;
-      }
-      .nav a:hover { text-decoration: underline; }
-      .nav a.active { font-weight: 700; color: var(--text); pointer-events: none; }
-      .controls, .page-actions { align-items: end; }
+.controls, .page-actions { align-items: end; }
       .control { display: grid; gap: 4px; }
       .control label {
         font-size: 12px;
@@ -97,7 +90,9 @@
         border-radius: 8px;
         padding: 16px;
         color: #fff;
+        border: 1px solid transparent;
       }
+      .kpi-card.alert { border-color: #ef4444; box-shadow: inset 0 0 0 1px #ef4444; }
       .kpi-label {
         font-size: 11px;
         color: #a8b0c3;
@@ -249,7 +244,7 @@
         overflow-y: auto;
         position: relative;
       }
-      #modal-close {
+      #modal-close, #hx-modal-close {
         position: absolute;
         top: 12px;
         right: 12px;
@@ -268,9 +263,62 @@
         position: relative;
         min-height: 180px;
       }
+      .hx-chart-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .hx-mix-grid, .hx-stat-grid, .hx-pager {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .hx-mix-grid > div, .hx-stat-block {
+        flex: 1 1 260px;
+      }
+      .hx-stat-block {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        background: #f9fbfd;
+      }
+      .hx-stat-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid #ecf0f4;
+        padding: 7px 0;
+        font-size: 13px;
+      }
+      .hx-stat-line:first-of-type { border-top: 0; }
+      .hx-pager {
+        align-items: center;
+        justify-content: flex-end;
+        margin-top: 10px;
+      }
+      .hx-pager button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .modal-box dl {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 8px 14px;
+        margin: 0;
+      }
+      .modal-box dt {
+        color: #a8b0c3;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .modal-box dd {
+        margin: 0;
+        word-break: break-word;
+      }
       @media (max-width: 1100px) {
         .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-        .grid-2, .split-panels, .meta-grid, .kv-grid { grid-template-columns: 1fr; }
+        .grid-2, .split-panels, .meta-grid, .kv-grid, .hx-chart-grid { grid-template-columns: 1fr; }
       }
       @media (max-width: 640px) {
         .kpi-grid { grid-template-columns: 1fr; }
@@ -278,28 +326,11 @@
     </style>
   </head>
   <body>
+    <div id="nav-placeholder"></div>
     <div class="page">
       <section class="header">
         <div class="top-row">
           <h1 class="title">Observability Dashboard</h1>
-          <div class="nav">
-            <a href="/admin-ui/index.html">Config Editor</a>
-            <a href="/admin/coverage">Coverage</a>
-            <a href="/admin/health">Health</a>
-            <a href="/admin/exercises">Exercises</a>
-            <a href="/admin/narration">Narration</a>
-            <a href="/admin/rep-rules">Rep Rules</a>
-            <a href="/admin/observability" class="active">Observability</a>
-            <a href="/admin/preview">Preview</a>
-            <a href="/admin/program-quality">Program Quality</a>
-            <a href="/admin/progression-sandbox">Progression Sandbox</a>
-            <a href="/admin/users">Users</a>
-            <a href="/admin/coaches">Coaches</a>
-            <a href="/admin/coach-portal">Coach Portal</a>
-            <a href="/admin/hyrox">HYROX</a>
-            <a href="http://localhost:8025" target="_blank">Mailpit ↗</a>
-            <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-          </div>
         </div>
         <div class="controls">
           <div class="control">
@@ -337,6 +368,7 @@
           <button class="tab-btn" data-tab="config">Config / Rules</button>
           <button class="tab-btn" data-tab="exercises">Exercises</button>
           <button class="tab-btn" data-tab="coverage">Test Coverage</button>
+          <button class="tab-btn" data-tab="hyrox">HYROX Calculator</button>
         </div>
 
         <div id="tab-overview" class="tab-panel">
@@ -495,6 +527,128 @@
           </section>
         </div>
 
+        <div id="tab-hyrox" class="tab-panel hidden">
+          <div class="kpi-grid">
+            <div class="kpi-card" id="card-hx-submissions">
+              <div class="kpi-label">Submissions</div>
+              <div class="kpi-value" id="kpi-hx-submissions">-</div>
+              <div class="kpi-note">Submitted analyses</div>
+            </div>
+            <div class="kpi-card" id="card-hx-analysis-pct">
+              <div class="kpi-label">Analysis OK</div>
+              <div class="kpi-value" id="kpi-hx-analysis-pct">-</div>
+              <div class="kpi-note">Analyses / submissions</div>
+            </div>
+            <div class="kpi-card" id="card-hx-email-pct">
+              <div class="kpi-label">Email Sent</div>
+              <div class="kpi-value" id="kpi-hx-email-pct">-</div>
+              <div class="kpi-note">Sent / terminal email rows</div>
+            </div>
+            <div class="kpi-card" id="card-hx-email-failed">
+              <div class="kpi-label">Email Failed</div>
+              <div class="kpi-value" id="kpi-hx-email-failed">-</div>
+              <div class="kpi-note">Failed email rows</div>
+            </div>
+            <div class="kpi-card" id="card-hx-share-packs">
+              <div class="kpi-label">Share Packs</div>
+              <div class="kpi-value" id="kpi-hx-share-packs">-</div>
+              <div class="kpi-note">Generated packs</div>
+            </div>
+            <div class="kpi-card" id="card-hx-share-pct">
+              <div class="kpi-label">Share Action</div>
+              <div class="kpi-value" id="kpi-hx-share-pct">-</div>
+              <div class="kpi-note">Packs / analyses</div>
+            </div>
+            <div class="kpi-card" id="card-hx-p95">
+              <div class="kpi-label">p95 Duration</div>
+              <div class="kpi-value" id="kpi-hx-p95">-</div>
+              <div class="kpi-note">Analysis duration</div>
+            </div>
+            <div class="kpi-card" id="card-hx-stale">
+              <div class="kpi-label">Stale Queued</div>
+              <div class="kpi-value" id="kpi-hx-stale">-</div>
+              <div class="kpi-note">Queued more than 10m</div>
+            </div>
+          </div>
+
+          <section class="panel">
+            <h2>Analysis Health</h2>
+            <div class="hx-chart-grid">
+              <div class="chart-wrap"><canvas id="chart-hx-scope" height="220"></canvas></div>
+              <div class="chart-wrap"><canvas id="chart-hx-confidence" height="220"></canvas></div>
+              <div class="chart-wrap"><canvas id="chart-hx-division" height="220"></canvas></div>
+            </div>
+            <div class="hx-mix-grid">
+              <div class="table-wrap">
+                <h3>Mode Mix</h3>
+                <table>
+                  <thead><tr><th>Mode</th><th>Count</th><th>%</th></tr></thead>
+                  <tbody id="hx-mode-mix-body"></tbody>
+                </table>
+              </div>
+              <div class="table-wrap">
+                <h3>Source Mix</h3>
+                <table>
+                  <thead><tr><th>Source</th><th>Count</th><th>%</th></tr></thead>
+                  <tbody id="hx-source-mix-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Daily Trend</h2>
+            <div class="chart-wrap">
+              <canvas id="chart-hx-daily" height="220"></canvas>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Email and Share Pack</h2>
+            <div class="hx-stat-grid">
+              <div class="hx-stat-block">
+                <h3>Email</h3>
+                <div id="hx-email-stats"></div>
+              </div>
+              <div class="hx-stat-block">
+                <h3>Share Pack</h3>
+                <div id="hx-share-stats"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Recent Submissions</h2>
+            <div class="table-wrap">
+              <table id="hx-submissions-table">
+                <thead>
+                  <tr>
+                    <th>Created</th>
+                    <th>Submission ID</th>
+                    <th>Mode</th>
+                    <th>Division</th>
+                    <th>Sex</th>
+                    <th>Age Group</th>
+                    <th>Source</th>
+                    <th>Splits</th>
+                    <th>RoxZone</th>
+                    <th>Scope</th>
+                    <th>Confidence</th>
+                    <th>Email</th>
+                    <th>Share Pack</th>
+                  </tr>
+                </thead>
+                <tbody id="hx-submissions-body"></tbody>
+              </table>
+            </div>
+            <div class="hx-pager">
+              <button id="hx-prev-btn" type="button">Prev</button>
+              <span id="hx-page-status" class="muted">-</span>
+              <button id="hx-next-btn" type="button">Next</button>
+            </div>
+          </section>
+        </div>
+
         <div id="tab-coverage" class="tab-panel hidden">
           <div id="coverage-unavailable" class="panel hidden" style="border-left:4px solid #f59e0b">
             <strong>Coverage manifest not available.</strong>
@@ -546,6 +700,13 @@
       <div class="modal-box">
         <button id="modal-close" type="button">x</button>
         <div id="modal-content"></div>
+      </div>
+    </div>
+
+    <div id="hx-modal" class="modal hidden">
+      <div class="modal-box">
+        <button id="hx-modal-close" type="button">x</button>
+        <div id="hx-modal-content"></div>
       </div>
     </div>
 
@@ -697,10 +858,17 @@
       let chartFill = null;
       let chartExercise = null;
       let chartCoverage = null;
-      let anomalies = { fill: 0, config: 0, exercises: 0, overview: 0, coverage: 0 };
+      let chartHxScope = null;
+      let chartHxConfidence = null;
+      let chartHxDivision = null;
+      let chartHxDaily = null;
+      let hxOffset = 0;
+      let hxModalRequestId = 0;
+      const HX_PAGE_SIZE = 50;
+      let anomalies = { fill: 0, config: 0, exercises: 0, overview: 0, coverage: 0, hyrox: 0 };
 
       function renderAnomalyBadges() {
-        const map = { overview: "overview", fill: "fill", config: "config", exercises: "exercises", coverage: "coverage" };
+        const map = { overview: "overview", fill: "fill", config: "config", exercises: "exercises", coverage: "coverage", hyrox: "hyrox" };
         for (const [tab, key] of Object.entries(map)) {
           const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
           if (!btn) continue;
@@ -722,6 +890,9 @@
         document.querySelectorAll(".tab-panel").forEach((panel) => {
           panel.classList.toggle("hidden", panel.id !== `tab-${tabName}`);
         });
+        if (tabName === "hyrox") {
+          loadHyroxTab().catch((err) => setStatus(err.message || "Failed to load HYROX data", "err"));
+        }
       }
 
       function getSelectedDays() {
@@ -731,7 +902,7 @@
 
       async function loadAll() {
         const days = getSelectedDays();
-        anomalies = { fill: 0, config: 0, exercises: 0, overview: 0, coverage: 0 };
+        anomalies = { fill: 0, config: 0, exercises: 0, overview: 0, coverage: 0, hyrox: anomalies.hyrox || 0 };
         renderAnomalyBadges();
         setStatus("Loading observability data...", "");
         await Promise.all([loadOverview(days), loadFillQuality(days), loadConfigHits(days), loadExercises(days), loadTestCoverage()]);
@@ -839,6 +1010,229 @@
 
         anomalies.coverage = s.gap;
         renderAnomalyBadges();
+      }
+
+      async function loadHyroxTab() {
+        const days = getSelectedDays();
+        setStatus("Loading HYROX calculator observability...", "");
+        const [summary, health, email, sharePack, trend, submissions] = await Promise.all([
+          apiFetch(`/api/admin/observability/hyrox/summary?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/hyrox/analysis-health?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/hyrox/email?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/hyrox/share-pack?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/hyrox/daily-trend?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/hyrox/submissions?days=${encodeURIComponent(days)}&limit=${HX_PAGE_SIZE}&offset=${hxOffset}`),
+        ]);
+
+        renderHyroxKpis(summary, email);
+        renderHyroxHealth(health);
+        renderHyroxDaily(Array.isArray(trend.daily) ? trend.daily : []);
+        renderHyroxEmailStats(email);
+        renderHyroxShareStats(sharePack);
+        renderHyroxSubmissions(Array.isArray(submissions.rows) ? submissions.rows : [], Number(submissions.total || 0));
+
+        anomalies.hyrox = 0;
+        if (Number(summary.analysisSuccessPct || 0) < 95 && Number(summary.submissions || 0) > 0) anomalies.hyrox += 1;
+        if (Number(summary.emailSentPct || 0) < 95 && (Number(summary.emailSent || 0) + Number(summary.emailFailed || 0)) > 0) anomalies.hyrox += 1;
+        if (Number(summary.p95AnalysisDurationMs || 0) > 15000) anomalies.hyrox += 1;
+        if (Number(email.staleQueued || 0) > 0) anomalies.hyrox += 1;
+        renderAnomalyBadges();
+        setStatus(`Loaded HYROX calculator data for the last ${days} days.`, "ok");
+      }
+
+      function setCardAlert(cardId, enabled) {
+        const card = document.getElementById(cardId);
+        if (card) card.classList.toggle("alert", Boolean(enabled));
+      }
+
+      function formatDurationMs(value) {
+        if (value == null || value === "") return "-";
+        const n = Number(value);
+        if (!Number.isFinite(n)) return "-";
+        if (n >= 1000) return `${(n / 1000).toFixed(1)}s`;
+        return `${Math.round(n)}ms`;
+      }
+
+      function renderHyroxKpis(summary, email) {
+        const analysisPct = Number(summary.analysisSuccessPct || 0);
+        const emailPct = Number(summary.emailSentPct || 0);
+        const p95 = Number(summary.p95AnalysisDurationMs || 0);
+        const staleQueued = Number(email.staleQueued || 0);
+        const terminalEmail = Number(summary.emailSent || 0) + Number(summary.emailFailed || 0);
+
+        document.getElementById("kpi-hx-submissions").textContent = formatNumber(summary.submissions);
+        document.getElementById("kpi-hx-analysis-pct").innerHTML = `<span class="${successBandClass(analysisPct)}">${analysisPct.toFixed(1)}%</span>`;
+        document.getElementById("kpi-hx-email-pct").innerHTML = `<span class="${successBandClass(emailPct)}">${emailPct.toFixed(1)}%</span>`;
+        document.getElementById("kpi-hx-email-failed").innerHTML = `<span class="${Number(summary.emailFailed || 0) > 0 ? "badge-red" : "badge-green"}">${formatNumber(summary.emailFailed)}</span>`;
+        document.getElementById("kpi-hx-share-packs").textContent = formatNumber(summary.sharePacksGenerated);
+        document.getElementById("kpi-hx-share-pct").textContent = `${Number(summary.shareActionPct || 0).toFixed(1)}%`;
+        document.getElementById("kpi-hx-p95").innerHTML = `<span class="${p95 > 15000 ? "badge-red" : "badge-green"}">${escapeHtml(formatDurationMs(summary.p95AnalysisDurationMs))}</span>`;
+        document.getElementById("kpi-hx-stale").innerHTML = `<span class="${staleQueued > 0 ? "badge-red" : "badge-green"}">${formatNumber(staleQueued)}</span>`;
+
+        setCardAlert("card-hx-analysis-pct", Number(summary.submissions || 0) > 0 && analysisPct < 95);
+        setCardAlert("card-hx-email-pct", terminalEmail > 0 && emailPct < 95);
+        setCardAlert("card-hx-email-failed", Number(summary.emailFailed || 0) > 0);
+        setCardAlert("card-hx-p95", p95 > 15000);
+        setCardAlert("card-hx-stale", staleQueued > 0);
+      }
+
+      function renderHyroxHealth(health) {
+        renderHxMixChart("chart-hx-scope", "Scope", health.scopeMix || [], "scope", "chartHxScope");
+        renderHxMixChart("chart-hx-confidence", "Confidence", health.confidenceMix || [], "confidence", "chartHxConfidence");
+        renderHxMixChart("chart-hx-division", "Division", health.divisionMix || [], "division", "chartHxDivision");
+        renderHxMixTable("hx-mode-mix-body", health.modeMix || [], "mode");
+        renderHxMixTable("hx-source-mix-body", health.sourceMix || [], "source");
+      }
+
+      function renderHxMixChart(canvasId, label, rows, key, chartName) {
+        const ctx = document.getElementById(canvasId);
+        if (window[chartName]) window[chartName].destroy();
+        const chart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: rows.map((row) => row[key] || "-"),
+            datasets: [{ label, data: rows.map((row) => Number(row.count || 0)), backgroundColor: "#3b82f6" }],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true }, y: { ticks: { autoSkip: false } } },
+          },
+        });
+        window[chartName] = chart;
+        if (chartName === "chartHxScope") chartHxScope = chart;
+        if (chartName === "chartHxConfidence") chartHxConfidence = chart;
+        if (chartName === "chartHxDivision") chartHxDivision = chart;
+      }
+
+      function renderHxMixTable(tbodyId, rows, key) {
+        const tbody = document.getElementById(tbodyId);
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="3" class="empty-state">No rows in this period.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows.map((row) => `<tr>
+          <td>${escapeHtml(row[key] || "-")}</td>
+          <td>${formatNumber(row.count)}</td>
+          <td>${formatNumber(row.pct, "%")}</td>
+        </tr>`).join("");
+      }
+
+      function renderHyroxDaily(daily) {
+        const ctx = document.getElementById("chart-hx-daily");
+        if (chartHxDaily) chartHxDaily.destroy();
+        chartHxDaily = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: daily.map((row) => row.date),
+            datasets: [
+              { label: "Successful Analyses", data: daily.map((row) => Number(row.successfulAnalyses || 0)), backgroundColor: "#22c55e" },
+              { label: "Failed Analyses", data: daily.map((row) => Number(row.failedAnalyses || 0)), backgroundColor: "#ef4444" },
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: "top" } },
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+          },
+        });
+      }
+
+      function renderHyroxEmailStats(email) {
+        document.getElementById("hx-email-stats").innerHTML = [
+          hxStatLine("Queued", email.queued),
+          hxStatLine("Sent", email.sent),
+          hxStatLine("Failed", email.failed),
+          hxStatLine("Stale", email.staleQueued),
+          hxStatLine("Sent Rate", `${Number(email.sentPct || 0).toFixed(1)}%`),
+        ].join("");
+      }
+
+      function renderHyroxShareStats(sharePack) {
+        document.getElementById("hx-share-stats").innerHTML = [
+          hxStatLine("Generated", sharePack.generated),
+          hxStatLine("With ZIP", sharePack.withZip),
+          hxStatLine("Without ZIP", sharePack.withoutZip),
+        ].join("");
+      }
+
+      function hxStatLine(label, value) {
+        return `<div class="hx-stat-line"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value == null ? "-" : value)}</strong></div>`;
+      }
+
+      function renderHyroxSubmissions(rows, total) {
+        const tbody = document.getElementById("hx-submissions-body");
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="13" class="empty-state">No HYROX submissions found for this period.</td></tr>`;
+        } else {
+          tbody.innerHTML = rows.map((row) => `<tr class="clickable" data-hx-submission-id="${escapeHtml(row.submissionId)}">
+            <td>${escapeHtml(formatDateTime(row.createdAt))}</td>
+            <td>${escapeHtml(row.submissionId || "-")}</td>
+            <td>${escapeHtml(row.calculatorMode || "-")}</td>
+            <td>${escapeHtml(row.division || "-")}</td>
+            <td>${escapeHtml(row.sex || "-")}</td>
+            <td>${escapeHtml(row.ageGroup || "-")}</td>
+            <td>${escapeHtml(row.source || "-")}</td>
+            <td>${formatNumber(row.splitsCount)}</td>
+            <td>${escapeHtml(row.roxzoneMode || "-")}</td>
+            <td>${escapeHtml(row.analysisScope || "-")}</td>
+            <td>${escapeHtml(row.confidence || "-")}</td>
+            <td>${escapeHtml(row.emailStatus || "-")}</td>
+            <td>${row.hasSharePack ? "Yes" : "No"}</td>
+          </tr>`).join("");
+        }
+        const start = total === 0 ? 0 : hxOffset + 1;
+        const end = Math.min(hxOffset + HX_PAGE_SIZE, total);
+        document.getElementById("hx-page-status").textContent = `${start}-${end} of ${total}`;
+        document.getElementById("hx-prev-btn").disabled = hxOffset <= 0;
+        document.getElementById("hx-next-btn").disabled = hxOffset + HX_PAGE_SIZE >= total;
+      }
+
+      async function openHyroxSubmissionModal(id) {
+        const requestId = ++hxModalRequestId;
+        const modal = document.getElementById("hx-modal");
+        const content = document.getElementById("hx-modal-content");
+        modal.classList.remove("hidden");
+        content.innerHTML = `<div class="muted">Loading HYROX submission detail...</div>`;
+        try {
+          const row = await apiFetch(`/api/admin/observability/hyrox/submission/${encodeURIComponent(id)}`);
+          if (requestId !== hxModalRequestId) return;
+          const fields = [
+            ["Submission ID", row.submissionId],
+            ["Created", formatDateTime(row.createdAt)],
+            ["Mode", row.calculatorMode],
+            ["Division", row.division],
+            ["Sex", row.sex],
+            ["Age Group", row.ageGroup],
+            ["Age On Race Day", row.ageOnRaceDay],
+            ["Finish Time Seconds", row.finishTimeSeconds],
+            ["Race Name", row.raceName],
+            ["Race Date", row.raceDate],
+            ["Source", row.source],
+            ["RoxZone Mode", row.roxzoneMode],
+            ["Splits Count", row.splitsCount],
+            ["Marketing Consent", row.marketingConsent ? "Yes" : "No"],
+            ["Analysis Duration", formatDurationMs(row.analysisDurationMs)],
+            ["Request ID", row.requestId],
+            ["Analysis Scope", row.analysisScope],
+            ["Analysis Version", row.analysisVersion],
+            ["Benchmark Group", row.benchmarkGroupKey],
+            ["Confidence", row.confidence],
+            ["Email Status", row.emailStatus],
+            ["Share Pack", row.hasSharePack ? "Yes" : "No"],
+          ];
+          content.innerHTML = `<h2>HYROX Submission</h2><dl>${fields.map(([label, value]) => `
+            <dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value == null || value === "" ? "-" : value)}</dd>
+          `).join("")}</dl>`;
+        } catch (err) {
+          if (requestId !== hxModalRequestId) return;
+          content.innerHTML = `<div class="metric-bad">${escapeHtml(err.message || "Failed to load submission detail.")}</div>`;
+        }
+      }
+
+      function closeHyroxModal() {
+        document.getElementById("hx-modal").classList.add("hidden");
       }
 
       function renderDailyChart(dailyCounts) {
@@ -1154,21 +1548,43 @@
           btn.addEventListener("click", () => activateTab(btn.dataset.tab));
         });
         document.getElementById("period-select").addEventListener("change", () => {
-          loadAll().catch((err) => setStatus(err.message || "Failed to load data", "err"));
+          hxOffset = 0;
+          const active = document.querySelector(".tab-btn.active")?.dataset.tab;
+          const loader = active === "hyrox" ? loadHyroxTab() : loadAll();
+          loader.catch((err) => setStatus(err.message || "Failed to load data", "err"));
         });
         document.getElementById("refresh-btn").addEventListener("click", () => {
-          loadAll().catch((err) => setStatus(err.message || "Failed to load data", "err"));
+          const active = document.querySelector(".tab-btn.active")?.dataset.tab;
+          const loader = active === "hyrox" ? loadHyroxTab() : loadAll();
+          loader.catch((err) => setStatus(err.message || "Failed to load data", "err"));
         });
         document.getElementById("recent-runs-body").addEventListener("click", (event) => {
           const row = event.target.closest("tr[data-run-id]");
           if (row) openRunModal(row.dataset.runId);
         });
+        document.getElementById("hx-submissions-body").addEventListener("click", (event) => {
+          const row = event.target.closest("tr[data-hx-submission-id]");
+          if (row) openHyroxSubmissionModal(row.dataset.hxSubmissionId);
+        });
+        document.getElementById("hx-prev-btn").addEventListener("click", () => {
+          hxOffset = Math.max(0, hxOffset - HX_PAGE_SIZE);
+          loadHyroxTab().catch((err) => setStatus(err.message || "Failed to load HYROX data", "err"));
+        });
+        document.getElementById("hx-next-btn").addEventListener("click", () => {
+          hxOffset += HX_PAGE_SIZE;
+          loadHyroxTab().catch((err) => setStatus(err.message || "Failed to load HYROX data", "err"));
+        });
         document.getElementById("modal-close").addEventListener("click", closeModal);
+        document.getElementById("hx-modal-close").addEventListener("click", closeHyroxModal);
         document.getElementById("run-modal").addEventListener("click", (event) => {
           if (event.target.id === "run-modal") closeModal();
+        });
+        document.getElementById("hx-modal").addEventListener("click", (event) => {
+          if (event.target.id === "hx-modal") closeHyroxModal();
         });
         loadAll().catch((err) => setStatus(err.message || "Failed to load data", "err"));
       });
     </script>
+    <script src="/admin-ui/nav.js"></script>
   </body>
 </html>

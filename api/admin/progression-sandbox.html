@@ -22,10 +22,7 @@
     body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
     .header { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 16px; background: rgba(246,248,251,0.96); border-bottom: 1px solid var(--border); backdrop-filter: blur(8px); }
     .header h1 { margin: 0 10px 0 0; font-size: 18px; }
-    .nav { display: flex; gap: 8px; flex-wrap: wrap; }
-    .nav a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 6px 8px; border-radius: 8px; }
-    .nav a.active, .nav a:hover { background: #e8f1f8; color: var(--primary-2); }
-    .ctrl-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ctrl-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .ctrl-label { font-size: 12px; color: var(--muted); }
     .page { padding: 16px; display: grid; grid-template-columns: minmax(360px, 520px) minmax(380px, 1fr); gap: 16px; align-items: start; }
     .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; }
@@ -71,22 +68,9 @@
   </style>
 </head>
 <body>
+    <div id="nav-placeholder"></div>
   <div class="header">
     <h1>Progression Sandbox</h1>
-    <div class="nav">
-      <a href="/admin-ui/index.html">Config Editor</a>
-      <a href="/admin/coverage">Coverage</a>
-      <a href="/admin/health">Health</a>
-      <a href="/admin/exercises">Exercises</a>
-      <a href="/admin/narration">Narration</a>
-      <a href="/admin/rep-rules">Rep Rules</a>
-      <a href="/admin/observability">Observability</a>
-      <a href="/admin/preview">Preview</a>
-      <a href="/admin/program-quality">Program Quality</a>
-      <a href="/admin/progression-sandbox" class="active">Progression Sandbox</a>
-      <a href="/admin/hyrox">HYROX</a>
-      <a href="http://localhost:3001" target="_blank">Doc Board ↗</a>
-    </div>
     <div class="ctrl-group">
       <span class="ctrl-label">Token</span>
       <input id="token-input" type="password" placeholder="x-internal-token" style="width:180px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px" />
@@ -206,7 +190,7 @@
           <label>rir_actual</label>
           <input type="number" step="0.5" data-field="rir_actual" placeholder="2" value="${esc(entry.rir_actual ?? "")}" />
         </div>
-        <button class="secondary" type="button" data-action="remove-row">×</button>
+        <button class="secondary" type="button" data-action="remove-row">x</button>
       `;
       row.querySelector('[data-action="remove-row"]').addEventListener("click", () => {
         const list = document.getElementById("history-list");
@@ -268,7 +252,7 @@
         ${recommendationLines.join("") || `<div class="result-line">No concrete recommendation fields were returned.</div>`}
         <div class="result-block">
           <h3>Confidence</h3>
-          <div class="result-line">${esc(data.confidence ?? "—")} ${data.confidence_score != null ? `(${esc(String(data.confidence_score))})` : ""}</div>
+          <div class="result-line">${esc(data.confidence ?? "-")} ${data.confidence_score != null ? `(${esc(String(data.confidence_score))})` : ""}</div>
         </div>
         <div class="result-block">
           <h3>Reasons</h3>
@@ -278,15 +262,15 @@
           <summary>Evidence</summary>
           <table>
             <tbody>
-              <tr><th>Exposures considered</th><td>${esc(String(evidence.exposures_considered ?? "—"))}</td></tr>
-              <tr><th>Successful exposures</th><td>${esc(String(evidence.successful_exposures ?? "—"))}</td></tr>
-              <tr><th>Underperformance exposures</th><td>${esc(String(evidence.underperformance_exposures ?? "—"))}</td></tr>
-              <tr><th>Latest weight</th><td>${evidence.latest_weight_kg != null ? `${esc(String(evidence.latest_weight_kg))} kg` : "—"}</td></tr>
-              <tr><th>Latest reps</th><td>${esc(String(evidence.latest_reps ?? "—"))}</td></tr>
-              <tr><th>Latest RIR</th><td>${esc(String(evidence.latest_rir ?? "—"))}</td></tr>
-              <tr><th>Target rep range</th><td>${evidence.target_low != null || evidence.target_high != null ? `${esc(String(evidence.target_low ?? "—"))} – ${esc(String(evidence.target_high ?? "—"))}` : "—"}</td></tr>
-              <tr><th>Target RIR</th><td>${esc(String(evidence.target_rir ?? "—"))}</td></tr>
-              <tr><th>Required RIR (with rank offset)</th><td>${esc(String(evidence.required_rir ?? "—"))}</td></tr>
+              <tr><th>Exposures considered</th><td>${esc(String(evidence.exposures_considered ?? "-"))}</td></tr>
+              <tr><th>Successful exposures</th><td>${esc(String(evidence.successful_exposures ?? "-"))}</td></tr>
+              <tr><th>Underperformance exposures</th><td>${esc(String(evidence.underperformance_exposures ?? "-"))}</td></tr>
+              <tr><th>Latest weight</th><td>${evidence.latest_weight_kg != null ? `${esc(String(evidence.latest_weight_kg))} kg` : "-"}</td></tr>
+              <tr><th>Latest reps</th><td>${esc(String(evidence.latest_reps ?? "-"))}</td></tr>
+              <tr><th>Latest RIR</th><td>${esc(String(evidence.latest_rir ?? "-"))}</td></tr>
+              <tr><th>Target rep range</th><td>${evidence.target_low != null || evidence.target_high != null ? `${esc(String(evidence.target_low ?? "-"))} - ${esc(String(evidence.target_high ?? "-"))}` : "-"}</td></tr>
+              <tr><th>Target RIR</th><td>${esc(String(evidence.target_rir ?? "-"))}</td></tr>
+              <tr><th>Required RIR (with rank offset)</th><td>${esc(String(evidence.required_rir ?? "-"))}</td></tr>
             </tbody>
           </table>
         </details>
@@ -294,8 +278,8 @@
           <summary>Config Used</summary>
           <table>
             <tbody>
-              <tr><th>Profile name</th><td>${esc(data.config_used?.profile_name ?? "—")}</td></tr>
-              <tr><th>Rank key</th><td>${esc(data.config_used?.rank_key ?? "—")}</td></tr>
+              <tr><th>Profile name</th><td>${esc(data.config_used?.profile_name ?? "-")}</td></tr>
+              <tr><th>Rank key</th><td>${esc(data.config_used?.rank_key ?? "-")}</td></tr>
             </tbody>
           </table>
         </details>
@@ -315,8 +299,8 @@
     async function evaluate() {
       const resultsPanel = document.getElementById("results-panel");
       const formStatus = document.getElementById("form-status");
-      formStatus.textContent = "Evaluating…";
-      resultsPanel.innerHTML = `<div class="muted-box">Running progression decision…</div>`;
+      formStatus.textContent = "Evaluating...";
+      resultsPanel.innerHTML = `<div class="muted-box">Running progression decision...</div>`;
 
       const body = {
         program_type: selectedValue("program-type"),
@@ -406,5 +390,6 @@
       { weight_kg: 100, reps_completed: 6, rir_actual: 2.5 },
     ]);
   </script>
-</body>
+    <script src="/admin-ui/nav.js"></script>
+  </body>
 </html>
