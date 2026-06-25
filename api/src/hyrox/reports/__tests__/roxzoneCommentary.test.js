@@ -110,7 +110,7 @@ describe("buildRoxzoneSection", () => {
     assert.match(lines, /Sandbag Lunges/);
     assert.match(lines, /2:19/);
     assert.match(lines, /got slower later/i);
-    assert.doesNotMatch(lines, /estimated from unallocated/i);
+    assert.match(lines, /estimated from unallocated/i);
   });
 
   it("uses roxzone narrative copy and rounded checkpoint caveat when available", () => {

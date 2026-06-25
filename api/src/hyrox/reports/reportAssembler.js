@@ -99,9 +99,9 @@ export function assembleReport(request = {}) {
     ];
   } else if (outputType === "email_report") {
     report.templateId = "PERSONAL_REPORT";
-    const interpretation = buildInterpretation(analysisJson, athleteContext);
-    const personal = buildPersonalReport(analysisJson, resolved, athleteContext, interpretation);
-    const email = buildEmailReport(personal, analysisJson, athleteContext, interpretation);
+    const interpretation = buildInterpretation(analysisJson, athleteContext, calculatorMode);
+    const personal = buildPersonalReport(analysisJson, resolved, athleteContext, interpretation, calculatorMode);
+    const email = buildEmailReport(personal, analysisJson, athleteContext, interpretation, calculatorMode);
     report.sections = personal.sections;
     report.recommendations = personal.recommendations;
     report.emailSubject = email.subject;

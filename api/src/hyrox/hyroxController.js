@@ -240,7 +240,7 @@ export async function analyse(req, res) {
     });
 
     const insights = unsupportedDivision ? [] : generateInsights(analysisJson, input.athleteContext);
-    const emailReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "email_report" });
+    const emailReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "email_report", calculatorMode: body.calculatorMode ?? "target" });
     const webReport = assembleReport({
       raceResult: input.race,
       analysisJson,

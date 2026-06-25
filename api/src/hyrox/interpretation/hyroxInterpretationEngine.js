@@ -1,8 +1,9 @@
 import { MUSCLE_GROUP_MAP } from "../config/muscleGroupMap.js";
-import { formatGain, formatPercent, formatPercentile, formatTime, label } from "../reports/copyFormatter.js";
+import { formatGain, formatPercent, formatPercentile, formatPercentileRank, formatTime, label } from "../reports/copyFormatter.js";
 
 const DEFAULT_SECTION_ORDER = Object.freeze([
   "executive_summary",
+  "data_confidence",
   "race_snapshot",
   "biggest_strength",
   "station_breakdown",
@@ -18,6 +19,7 @@ const DEFAULT_SECTION_ORDER = Object.freeze([
 
 const PENALTY_SECTION_ORDER = Object.freeze([
   "executive_summary",
+  "data_confidence",
   "race_snapshot",
   "penalty_callout",
   "station_breakdown",
@@ -33,6 +35,7 @@ const PENALTY_SECTION_ORDER = Object.freeze([
 
 const RUNNING_SECTION_ORDER = Object.freeze([
   "executive_summary",
+  "data_confidence",
   "race_snapshot",
   "running_fatigue",
   "station_breakdown",
@@ -47,6 +50,7 @@ const RUNNING_SECTION_ORDER = Object.freeze([
 
 const ROXZONE_SECTION_ORDER = Object.freeze([
   "executive_summary",
+  "data_confidence",
   "race_snapshot",
   "roxzone_execution",
   "station_breakdown",
@@ -54,6 +58,22 @@ const ROXZONE_SECTION_ORDER = Object.freeze([
   "split_table",
   "time_potential",
   "muscle_group",
+  "training_volume",
+  "background_context",
+  "recommendations",
+]);
+
+const HIGH_PERFORMER_SECTION_ORDER = Object.freeze([
+  "executive_summary",
+  "data_confidence",
+  "race_snapshot",
+  "biggest_strength",
+  "station_breakdown",
+  "running_fatigue",
+  "roxzone_execution",
+  "split_table",
+  "muscle_group",
+  "time_potential",
   "training_volume",
   "background_context",
   "recommendations",
@@ -99,6 +119,15 @@ function benchmarkConfidence(analysisJson = {}) {
     ?? analysisJson.benchmarkContext?.confidence
     ?? analysisJson.dataQuality?.confidence
     ?? (analysisJson.analysisScope === "no_benchmark_data" ? "low" : null);
+}
+
+function isPartialAnalysis(analysisJson = {}) {
+  return analysisJson.analysisScope === "partial"
+    || (analysisJson.dataQuality?.inputCompleteness ?? 1) < 0.85;
+}
+
+function applyDataConfidenceOrder(order, analysisJson = {}) {
+  return isPartialAnalysis(analysisJson) ? order : order.filter((key) => key !== "data_confidence");
 }
 
 function roxzoneGap(analysisJson = {}) {
@@ -212,7 +241,7 @@ function thesis(category, analysisJson = {}, overrides = {}) {
   return { ...base, ...overrides };
 }
 
-export function selectPrimaryCategory(analysisJson = {}) {
+export function selectPrimaryCategory(analysisJson = {}, calculatorMode = "target") {
   const penalty = totalPenaltySeconds(analysisJson);
   const stationGap = totalStationGapSeconds(analysisJson);
   const runGap = totalRunGapSeconds(analysisJson);
@@ -231,6 +260,10 @@ export function selectPrimaryCategory(analysisJson = {}) {
   if (roxPct != null && roxPct < 35 && roxGap > 90) return "roxzone";
   if (runFade >= 10 && weakCount < 2) return "pacing";
   if (confidence === "low" || segmentCount < 4) return "data_quality";
+  if (calculatorMode === "analyse" && stationGap === 0 && runGap === 0) {
+    const hasStationData = (analysisJson.stationBreakdown ?? []).some((s) => s.confidence !== "low");
+    if (hasStationData) return "high_performer";
+  }
   return stationGap >= runGap ? "station_capacity" : "running";
 }
 
@@ -305,7 +338,16 @@ function muscleGroupConfidence(analysisJson = {}) {
 }
 
 export function buildSectionOrder(primaryThesis, analysisJson = {}) {
-  if (primaryThesis?.category === "penalty") return [...PENALTY_SECTION_ORDER];
+  if (primaryThesis?.category === "high_performer") {
+    const order = [...HIGH_PERFORMER_SECTION_ORDER];
+    const hasPenalty = totalPenaltySeconds(analysisJson) > 0;
+    if (hasPenalty && !order.includes("penalty_callout")) {
+      const snapIdx = order.indexOf("race_snapshot");
+      order.splice(snapIdx >= 0 ? snapIdx + 1 : 2, 0, "penalty_callout");
+    }
+    return applyDataConfidenceOrder(order, analysisJson);
+  }
+  if (primaryThesis?.category === "penalty") return applyDataConfidenceOrder([...PENALTY_SECTION_ORDER], analysisJson);
   let order;
   if (primaryThesis?.category === "running") order = [...RUNNING_SECTION_ORDER];
   else if (primaryThesis?.category === "roxzone") order = [...ROXZONE_SECTION_ORDER];
@@ -316,10 +358,10 @@ export function buildSectionOrder(primaryThesis, analysisJson = {}) {
     const snapIdx = order.indexOf("race_snapshot");
     order.splice(snapIdx >= 0 ? snapIdx + 1 : 2, 0, "penalty_callout");
   }
-  return order;
+  return applyDataConfidenceOrder(order, analysisJson);
 }
 
-export function buildHeroCopy(primaryThesis, analysisJson = {}) {
+export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode = "target") {
   const category = primaryThesis?.category ?? "station_capacity";
   const gain = headlineGainSeconds(analysisJson);
   const gainDisplay = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : null;
@@ -343,6 +385,24 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}) {
   if (category === "data_quality") {
     return { headline: "YOUR ANALYSIS IS READY - HERE IS WHAT WE CAN SAY CONFIDENTLY", subline: null, gainDisplay: null };
   }
+  if (category === "high_performer") {
+    const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+    const pct = formatPercentileRank(totalSeg?.percentile);
+    return {
+      headline: pct
+        ? `YOU ARE AT THE ${String(pct).toUpperCase()} - HERE IS WHAT DROVE IT`
+        : "YOUR RESULT IS ALREADY STRONG - HERE IS WHAT DROVE IT",
+      subline: "This is a marginal-gains profile, not a bottleneck result.",
+      gainDisplay: null,
+    };
+  }
+  if (category === "station_capacity" && calculatorMode === "analyse") {
+    return {
+      headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
+      subline: "Not a weakness versus the field - the smallest relative advantage in your overall race profile.",
+      gainDisplay: null,
+    };
+  }
   return {
     headline: `${String(lLabel).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`,
     subline: gainDisplay ? "estimated opportunity against your target benchmark group." : null,
@@ -355,7 +415,8 @@ function secondaryEvidence(secondaryTheses = []) {
   return first?.evidenceSummary ?? null;
 }
 
-export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysisJson = {}) {
+export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysisJson = {}, calculatorMode = "target") {
+  void calculatorMode;
   const category = primaryThesis?.category;
   const penalty = buildPenaltyInterpretation(analysisJson);
   const stationGap = totalStationGapSeconds(analysisJson);
@@ -363,6 +424,20 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
   const runFade = finiteNumber(analysisJson.runningAnalysis?.runFadePct);
   const roxPct = finiteNumber(analysisJson.roxzoneAnalysis?.percentile);
   const bullets = [];
+
+  if (category === "high_performer") {
+    const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+    const pct = formatPercentile(totalSeg?.percentile);
+    const topStrengths = (analysisJson.stationBreakdown ?? [])
+      .filter((s) => s.confidence !== "low" && Number.isFinite(s.percentile))
+      .sort((a, b) => a.percentile - b.percentile)
+      .slice(0, 2)
+      .map((s) => s.label);
+    if (pct) bullets.push(`You placed in the ${pct} overall against your benchmark group.`);
+    if (topStrengths.length > 0) bullets.push(`Strongest stations: ${topStrengths.join(" and ")}.`);
+    bullets.push("The next question is where marginal gains are most available within an already-strong result.");
+    return bullets.filter(Boolean).slice(0, 3);
+  }
 
   if (category === "penalty") {
     const adjusted = penalty?.adjustedFinishTime ? ` Your adjusted time was ${penalty.adjustedFinishTime}.` : "";
@@ -414,9 +489,9 @@ function buildSuppressedSignals(primary, secondaryTheses, analysisJson = {}) {
   return suppressed;
 }
 
-export function buildInterpretation(analysisJson = {}, athleteContext = {}) {
+export function buildInterpretation(analysisJson = {}, athleteContext = {}, calculatorMode = "target") {
   void athleteContext;
-  const primaryCategory = selectPrimaryCategory(analysisJson);
+  const primaryCategory = selectPrimaryCategory(analysisJson, calculatorMode);
   const primaryThesis = thesis(primaryCategory, analysisJson);
   const secondaryTheses = buildSecondaryTheses(primaryCategory, analysisJson);
   const penaltyInterpretation = buildPenaltyInterpretation(analysisJson);
@@ -426,8 +501,8 @@ export function buildInterpretation(analysisJson = {}, athleteContext = {}) {
     protectedStrengths: protectedStrengths(analysisJson),
     suppressedSignals: buildSuppressedSignals(primaryCategory, secondaryTheses, analysisJson),
     sectionOrder: buildSectionOrder(primaryThesis, analysisJson),
-    heroCopy: buildHeroCopy(primaryThesis, analysisJson),
-    summaryBullets: buildSummaryBullets(primaryThesis, secondaryTheses, analysisJson),
+    heroCopy: buildHeroCopy(primaryThesis, analysisJson, calculatorMode),
+    summaryBullets: buildSummaryBullets(primaryThesis, secondaryTheses, analysisJson, calculatorMode),
     penaltyInterpretation,
     runPattern: analysisJson.runningAnalysis?.runPattern ?? null,
     muscleGroupConfidence: muscleGroupConfidence(analysisJson),

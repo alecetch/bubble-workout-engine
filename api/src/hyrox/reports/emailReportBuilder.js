@@ -173,7 +173,7 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
   </tr>`;
 }
 
-function renderMetricStrip(analysisJson, athleteContext) {
+function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "target") {
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
   const { totalPenaltySeconds, penaltiesAreMaterial, adjustedRaceTimeSeconds } = penaltyContext(analysisJson);
   const finishTime = formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "-";
@@ -215,7 +215,15 @@ function renderMetricStrip(analysisJson, athleteContext) {
     : "";
   const secondCell = showAdjusted
     ? metricCell("ADJUSTED", esc(adjustedTime), "#0f172a", true)
-    : metricCell("BENCHMARK", esc(benchmarkTime), "#0f172a", true);
+    : calculatorMode === "analyse"
+      ? metricCell(
+          "BENCHMARK GROUP",
+          esc(analysisJson.benchmarkContext?.primaryBenchmarkGroup?.label ?? "Your division"),
+          "#0f172a",
+          true,
+          "Arial,Helvetica,sans-serif",
+        )
+      : metricCell("BENCHMARK", esc(benchmarkTime), "#0f172a", true);
 
   return `<tr>
     <td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;padding:0;">
@@ -455,15 +463,26 @@ function renderRecommendations(section, analysisJson = {}) {
   </tr>`;
 }
 
-function renderCta(section, analysisJson = {}) {
+function buildCtaCopy(calculatorMode, primaryCategory) {
+  if (primaryCategory === "high_performer") {
+    return "Use Forma to build a training plan that preserves your strengths and finds marginal gains.";
+  }
+  if (calculatorMode === "analyse" && primaryCategory === "data_quality") {
+    return "Use Forma to build a plan once your full split data is available.";
+  }
+  if (calculatorMode === "analyse") {
+    return "Use Forma to build a plan targeting your race-profile opportunities.";
+  }
+  return "Use Forma to build a training plan targeting your bottleneck.";
+}
+
+function renderCta(section, analysisJson = {}, ctaCopy = null) {
   const ctaUrl = process.env.FORMA_CTA_URL ?? "https://forma.fit";
   const baseUrl = (process.env.BASE_URL ?? "https://getformai.com").replace(/\/$/, "");
   const submissionId = analysisJson.submissionId ?? null;
   const carouselUrl = analysisJson.carouselUrl ?? (submissionId ? `${baseUrl}/api/hyrox/carousel/${submissionId}` : null);
-  const bodyText = esc(enforceTone((Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")).replace(
-    "Use Forma to build a training plan targeting your bottleneck.",
-    "Use Forma to build a plan targeting your biggest opportunities.",
-  )));
+  const rawContent = ctaCopy ?? (Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? ""));
+  const bodyText = esc(enforceTone(rawContent));
   const carouselLink = carouselUrl
     ? `<a href="${esc(carouselUrl)}" target="_blank" style="display:inline-block;margin-top:14px;color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">View your shareable carousel &#8594;</a>`
     : "";
@@ -1279,7 +1298,7 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
   </tr>`;
 }
 
-function renderSection(section, analysisJson, interpretation = null) {
+function renderSection(section, analysisJson, interpretation = null, calculatorMode = "target") {
   const SUPPRESSED_IN_EMAIL = new Set([
     "executive_summary",
     "race_snapshot",
@@ -1307,7 +1326,7 @@ function renderSection(section, analysisJson, interpretation = null) {
     case "recommended_focus_areas":
       return renderRecommendations(section, analysisJson);
     case "cta":
-      return renderCta(section, analysisJson);
+      return renderCta(section, analysisJson, buildCtaCopy(calculatorMode, interpretation?.primaryThesis?.category));
     case "race_snapshot":
       return "";
     case "penalty_callout":
@@ -1323,12 +1342,18 @@ function renderSection(section, analysisJson, interpretation = null) {
   }
 }
 
-export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null) {
+export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target") {
   const { totalPenaltySeconds: emailPenaltySeconds, penaltiesAreMaterial: emailPenaltiesMaterial, usePenaltyHero } = penaltyContext(analysisJson);
   const limiter = limiterName(analysisJson);
-  const subject = usePenaltyHero
-    ? `Your HYROX fastest win is ${formatGain(emailPenaltySeconds)} of penalties`
-    : (limiter ? `Your HYROX bottleneck is ${limiter}` : "Your HYROX analysis is ready");
+  const subject = (() => {
+    if (usePenaltyHero) return `Your HYROX fastest win is ${formatGain(emailPenaltySeconds)} of penalties`;
+    if (calculatorMode === "analyse") {
+      const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+      const pct = formatPercentileRank(totalSeg?.percentile);
+      return pct ? `Your HYROX analysis - you finished in the ${pct}` : "Your HYROX race analysis is ready";
+    }
+    return limiter ? `Your HYROX bottleneck is ${limiter}` : "Your HYROX analysis is ready";
+  })();
   const rawName = athleteContext.firstName ?? athleteContext.displayName ?? null;
   const firstName = rawName ? rawName.split(/[\s,]+/)[0] : "there";
   const greetingName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
@@ -1338,7 +1363,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     .map((section) => `${section.title}\n${contentText(section.content)}`)
     .join("\n\n");
   const textBody = enforceTone(`${greeting}\n\n${textSections}`);
-  const sectionRows = sections.map((section) => renderSection(section, analysisJson, interpretation)).join("");
+  const sectionRows = sections.map((section) => renderSection(section, analysisJson, interpretation, calculatorMode)).join("");
   const outerTableStyle = inlineStyle({
     width: "100%",
     "border-collapse": "collapse",
@@ -1366,7 +1391,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
         <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="${innerTableStyle}">
           ${renderHeader()}
           ${renderHero(analysisJson, greetingName, interpretation)}
-          ${renderMetricStrip(analysisJson, athleteContext)}
+          ${renderMetricStrip(analysisJson, athleteContext, calculatorMode)}
           ${sectionRows}
           ${renderMethodNote(emailPenaltiesMaterial)}
           ${renderFooter()}

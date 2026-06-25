@@ -13,6 +13,11 @@ function section(sectionKey, title, content) {
   return { sectionKey, title, content };
 }
 
+const WARNING_LABELS = Object.freeze({
+  roxzone_inferred_from_unallocated_time: "Transition (RoxZone) time was estimated from unallocated race time, not recorded directly.",
+  partial_split_data: "Some station splits are missing and were excluded from the analysis.",
+});
+
 const SECTION_KEY_MAP = Object.freeze({
   station_breakdown: "biggest_limiter",
   split_table: "race_split_breakdown",
@@ -273,14 +278,51 @@ function shouldIncludeRunFadeInSummary(analysisJson, interpretation) {
   return categories.has("running") || categories.has("pacing");
 }
 
-export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null) {
+function stationBreakdownTitle(calculatorMode = "target", primaryCategory = null) {
+  if (primaryCategory === "high_performer") return "Relative Profile Observations";
+  if (calculatorMode === "analyse") return "Race Profile Gaps";
+  return "Station Breakdown";
+}
+
+function isPartialAnalysis(analysisJson = {}) {
+  return analysisJson.analysisScope === "partial"
+    || (analysisJson.dataQuality?.inputCompleteness ?? 1) < 0.85;
+}
+
+function dataConfidenceSection(analysisJson = {}) {
+  const warnings = (analysisJson.dataQuality?.warnings ?? [])
+    .map((code) => WARNING_LABELS[code])
+    .filter(Boolean);
+  return section("data_confidence", "What We Can and Cannot Infer", [
+    "This analysis is based on partial split data. Conclusions about individual stations are directional.",
+    ...warnings,
+    "Overall performance percentile and running pattern are available. Specific muscle-group conclusions are limited.",
+  ]);
+}
+
+function ctaCopy(calculatorMode = "target", primaryCategory = null) {
+  if (primaryCategory === "high_performer") {
+    return "Use Forma to build a training plan that preserves your strengths and finds marginal gains.";
+  }
+  if (calculatorMode === "analyse" && primaryCategory === "data_quality") {
+    return "Use Forma to build a plan once your full split data is available.";
+  }
+  if (calculatorMode === "analyse") {
+    return "Use Forma to build a plan targeting your race-profile opportunities.";
+  }
+  return "Use Forma to build a training plan targeting your bottleneck.";
+}
+
+export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null, calculatorMode = "target") {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
   const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
   const total = segment(analysisJson, "total_time");
-  const recommendations = buildRecommendations(analysisJson, insights, athleteContext);
+  const recommendations = buildRecommendations(analysisJson, insights, athleteContext, calculatorMode);
   const gainSeconds = analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? 0;
   const ctxCopy = hasContext(athleteContext) ? contextCopy(analysisJson, athleteContext) : null;
   const muscleGroupProfile = analysisJson.muscleGroupProfile ?? null;
+  const primaryCategory = interpretation?.primaryThesis?.category ?? null;
+  const isPartial = isPartialAnalysis(analysisJson);
   const sections = [];
   const summary = [];
 
@@ -292,6 +334,9 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     if (ctxCopy) summary.push(ctxCopy);
   }
   sections.push(section("executive_summary", "Executive Summary", summary.slice(0, 3)));
+  if (isPartial) {
+    sections.push(dataConfidenceSection(analysisJson));
+  }
 
   const snapshot = [
     `Finish time: ${formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "not supplied"}.`,
@@ -340,13 +385,13 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
       sections.push(section("training_volume", "Training Volume Assessment", content));
     }
   }
-  if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound) {
+  if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound && !(isPartial && interpretation?.muscleGroupConfidence === "low")) {
     const sex = analysisJson.athlete?.sex ?? "male";
     sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
   }
   sections.push(section("running_fatigue", "Running and Fatigue Profile", runningFatigueContent(analysisJson)));
   sections.push(section("biggest_strength", "Biggest Strength", strength ? `${strength.label} is the strongest benchmarked area at ${formatPercentile(strength.percentile) ?? "a strong percentile"}.` : "No single high-confidence strength dominated this result."));
-  sections.push(section("biggest_limiter", "Station Breakdown", stationBreakdownSection(analysisJson)));
+  sections.push(section("biggest_limiter", stationBreakdownTitle(calculatorMode, primaryCategory), stationBreakdownSection(analysisJson)));
   const headlineGain = analysisJson.timePotential?.headlineGainSeconds ?? 0;
   const limiterGap = limiter?.timeGapSeconds ?? 0;
   const clarification = Math.abs(headlineGain - limiterGap) > 30
@@ -363,7 +408,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     sections.push(section("training_context", "Training Context Interpretation", ctxCopy));
   }
 
-  sections.push(section("cta", "Next Step", "Use Forma to build a plan targeting your biggest opportunities."));
+  sections.push(section("cta", "Next Step", ctaCopy(calculatorMode, primaryCategory)));
 
   return { sections: orderSections(sections, interpretation), recommendations };
 }
