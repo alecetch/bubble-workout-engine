@@ -141,13 +141,13 @@ function parseTime(str) {
   return null;
 }
 
-function normaliseDivisionSex(label) {
+export function normaliseDivisionSex(label) {
   const lower = label.toLowerCase();
   if (lower.includes("women") || lower.includes("female") || lower.includes("woman")) return "female";
   return "male";
 }
 
-function normaliseDivisionType(label) {
+export function normaliseDivisionType(label) {
   const lower = label.toLowerCase();
   if (lower.includes("pro") && lower.includes("double")) return "doubles_pro";
   if (lower.includes("pro")) return "pro";
@@ -280,8 +280,6 @@ const RACE_REPLAY_MAP = {
   "f-time_101": "farmers_carry_rox_out",
   "f-time_103": "sandbag_lunge_rox_in",
   "f-time_104": "sandbag_lunge_rox_out",
-  "f-time_106": "wall_balls_rox_in",
-  "f-time_107": "wall_balls_rox_out",
 };
 
 export function parseRaceReplay(html) {
@@ -304,6 +302,18 @@ export function parseRaceReplay(html) {
   return roxzoneSplits;
 }
 
+export function parseInstagramHandle(html) {
+  const m = html.match(
+    /href=["']https?:\/\/(?:www\.)?instagram\.com\/([A-Za-z0-9_.]{1,30})\/?["']/i,
+  );
+  if (!m) return null;
+  const handle = m[1].trim();
+  if (!handle || handle === "p" || handle === "reel" || handle === "explore" || handle === "accounts") {
+    return null;
+  }
+  return `@${handle}`;
+}
+
 const ENRICH_BATCH_SIZE = 5;
 const ENRICH_BATCH_DELAY_MS = 300;
 
@@ -318,6 +328,7 @@ export async function enrichAthleteSplits(athletes, _resultsPageKey, contestId, 
         const html = await fetchHtml(buildDetailUrl(athlete.athleteId, contestId, season));
         const summary = parseWorkoutSummary(html);
         const roxzoneSplits = parseRaceReplay(html);
+        const instagramHandle = parseInstagramHandle(html);
         const idx = enriched.findIndex((candidate) => candidate.athleteId === athlete.athleteId);
         if (idx !== -1) {
           enriched[idx] = {
@@ -328,6 +339,7 @@ export async function enrichAthleteSplits(athletes, _resultsPageKey, contestId, 
             runTotalSeconds: summary.runTotalSeconds ?? null,
             bestRunLapSeconds: summary.bestRunLapSeconds ?? null,
             ...(summary.roxzoneSeconds != null ? { roxzoneSeconds: summary.roxzoneSeconds } : {}),
+            ...(instagramHandle ? { instagramHandle } : {}),
           };
         }
       } catch {

@@ -3,7 +3,17 @@ import { SPLIT_KEYS } from "./csvParser.js";
 
 export const RUN_KEYS = ["run_1", "run_2", "run_3", "run_4", "run_5", "run_6", "run_7", "run_8"];
 export const STATION_KEYS = ["skierg", "sled_push", "sled_pull", "burpee_bj", "row", "farmers_carry", "sandbag_lunge", "wall_balls"];
+export const ROXZONE_STATION_KEYS = STATION_KEYS.filter((key) => key !== "wall_balls");
 export const METRIC_KEYS = ["run_total", "station_total", "finish_time", ...SPLIT_KEYS];
+
+const BENCHMARK_KEY_MAP = {
+  finish_time: "total_time",
+  run_total: "run_time",
+  station_total: "work_time",
+  skierg: "ski_erg",
+  burpee_bj: "burpee_broad_jump",
+  sandbag_lunge: "sandbag_lunges",
+};
 
 function finiteValues(values) {
   return values.filter((value) => Number.isFinite(value));
@@ -73,21 +83,28 @@ async function loadHistoricalBenchmarks(division, sex, db) {
   if (!db?.query) return {};
   try {
     const result = await db.query(
-      `SELECT metric_key, p10_seconds, p25_seconds, p50_seconds, p75_seconds, p90_seconds
+      `SELECT metric_key, p10_seconds, p25_seconds, p50_seconds, p75_seconds, p90_seconds, p95_seconds
        FROM hyrox_benchmark_metrics bm
        JOIN hyrox_benchmark_groups bg ON bg.group_key = bm.group_key
-       WHERE bg.division = $1 AND bg.gender = $2
-         AND bg.fallback_level = 0
-       ORDER BY bg.sample_size DESC`,
+       WHERE bg.division = $1 AND bg.gender = $2 AND bg.fallback_level = 1`,
       [division, sex],
     );
-    return Object.fromEntries((result.rows ?? []).map((row) => [row.metric_key, {
-      p10_seconds: Number(row.p10_seconds),
-      p25_seconds: Number(row.p25_seconds),
-      p50_seconds: Number(row.p50_seconds),
-      p75_seconds: Number(row.p75_seconds),
-      p90_seconds: Number(row.p90_seconds),
-    }]));
+    const reverseMap = Object.fromEntries(
+      Object.entries(BENCHMARK_KEY_MAP).map(([analyserKey, dbKey]) => [dbKey, analyserKey]),
+    );
+    const benchmarks = {};
+    for (const row of result.rows ?? []) {
+      const analyserKey = reverseMap[row.metric_key] ?? row.metric_key;
+      benchmarks[analyserKey] = {
+        p10_seconds: Number(row.p10_seconds),
+        p25_seconds: Number(row.p25_seconds),
+        p50_seconds: Number(row.p50_seconds),
+        p75_seconds: Number(row.p75_seconds),
+        p90_seconds: Number(row.p90_seconds),
+        p95_seconds: Number(row.p95_seconds),
+      };
+    }
+    return benchmarks;
   } catch {
     return {};
   }
@@ -116,8 +133,8 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
       const stddev = mean ? Math.sqrt(splitValues.reduce((sum, value) => sum + (value - mean) ** 2, 0) / splitValues.length) : null;
       const runTotalSeconds = sumPresent(row.splits, RUN_KEYS);
       const stationTotalSeconds = sumPresent(row.splits, STATION_KEYS);
-      const roxzoneInTotal = sumPresent(row.roxzoneSplits ?? {}, STATION_KEYS.map((key) => `${key}_rox_in`));
-      const roxzoneOutTotal = sumPresent(row.roxzoneSplits ?? {}, STATION_KEYS.map((key) => `${key}_rox_out`));
+      const roxzoneInTotal = sumPresent(row.roxzoneSplits ?? {}, ROXZONE_STATION_KEYS.map((key) => `${key}_rox_in`));
+      const roxzoneOutTotal = sumPresent(row.roxzoneSplits ?? {}, ROXZONE_STATION_KEYS.map((key) => `${key}_rox_out`));
       const roxzoneTotalFromSplits = roxzoneInTotal != null && roxzoneOutTotal != null
         ? roxzoneInTotal + roxzoneOutTotal
         : (row.roxzoneSeconds ?? null);
@@ -146,7 +163,7 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
     segments[key] = segmentStats(athletes.map((athlete) => metricValue(athlete, key)));
   }
   segments.roxzone_total = segmentStats(athletes.map((athlete) => athlete.roxzoneTotalFromSplits).filter((value) => value != null));
-  for (const stationKey of STATION_KEYS) {
+  for (const stationKey of ROXZONE_STATION_KEYS) {
     const stationRoxTotals = athletes
       .map((athlete) => {
         const inVal = athlete.roxzoneSplits[`${stationKey}_rox_in`];
@@ -190,11 +207,15 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
       if (pct != null) athlete.historicalPercentiles[key] = pct;
     }
   }
+  const fieldMedianPercentile = interpolatePercentile(
+    segments.finish_time?.median,
+    historicalBenchmarks.finish_time,
+  );
 
   const fullSplitCount = athletes.filter((athlete) => SPLIT_KEYS.every((key) => athlete.splits[key] != null)).length;
   const run1Count = athletes.filter((athlete) => athlete.splits.run_1 != null).length;
   const roxzoneSplitCount = athletes.filter((athlete) =>
-    STATION_KEYS.some((key) => athlete.roxzoneSplits?.[`${key}_rox_in`] != null)
+    ROXZONE_STATION_KEYS.some((key) => athlete.roxzoneSplits?.[`${key}_rox_in`] != null)
   ).length;
 
   return {
@@ -206,6 +227,7 @@ export async function analyseRaceEvent(rows, division = "open", sex = "male", db
       mostVariableStation: bestKeyBy(SPLIT_KEYS, (key) => segments[key]?.cv, (a, b) => b - a),
       leastVariableStation: bestKeyBy(SPLIT_KEYS, (key) => segments[key]?.cv, (a, b) => a - b),
       fieldSize: rows.length,
+      fieldMedianPercentile,
       hasRunSplits: rows.length > 0 && run1Count / rows.length >= 0.8,
       hasFullSplits: rows.length > 0 && fullSplitCount / rows.length >= 0.8,
       hasRoxzoneSplits: rows.length > 0 && roxzoneSplitCount / rows.length >= 0.8,
