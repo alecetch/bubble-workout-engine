@@ -54,13 +54,20 @@ else
   DB_PASSWORD="${PGPASSWORD}"
 fi
 
-docker run --rm \
-  --network host \
-  -v "$(pwd)/migrations:/flyway/sql:ro" \
-  flyway/flyway:12 \
-  -url="${JDBC_URL}" \
-  -user="${DB_USER}" \
-  -password="${DB_PASSWORD}" \
-  -schemas=public \
-  -ignoreMigrationPatterns="*:missing" \
-  migrate
+FLYWAY_COMMON_ARGS=(
+  --rm
+  --network host
+  -v "$(pwd)/migrations:/flyway/sql:ro"
+  flyway/flyway:12
+  -url="${JDBC_URL}"
+  -user="${DB_USER}"
+  -password="${DB_PASSWORD}"
+  -schemas=public
+  -ignoreMigrationPatterns="*:missing"
+)
+
+# Repair first: updates checksums in schema history for any migrations whose files
+# changed after being applied (e.g. placeholder rows with checksum 0).
+docker run "${FLYWAY_COMMON_ARGS[@]}" repair
+
+docker run "${FLYWAY_COMMON_ARGS[@]}" migrate
