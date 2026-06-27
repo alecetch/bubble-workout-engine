@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildEmailReport } from "../emailReportBuilder.js";
+import { bandScoreLabel, buildEmailReport } from "../emailReportBuilder.js";
 
 function mockReport(extraSections = []) {
   return {
@@ -412,7 +412,111 @@ describe("buildEmailReport visual redesign", () => {
 
 });
 
+describe("bandScoreLabel", () => {
+  it("returns Strength at 80 and above", () => {
+    assert.equal(bandScoreLabel(80), "Strength");
+    assert.equal(bandScoreLabel(100), "Strength");
+  });
+
+  it("returns Good at 60-79", () => {
+    assert.equal(bandScoreLabel(79), "Good");
+    assert.equal(bandScoreLabel(60), "Good");
+  });
+
+  it("returns On benchmark at 40-59", () => {
+    assert.equal(bandScoreLabel(59), "On benchmark");
+    assert.equal(bandScoreLabel(40), "On benchmark");
+  });
+
+  it("returns Opportunity at 20-39", () => {
+    assert.equal(bandScoreLabel(39), "Opportunity");
+    assert.equal(bandScoreLabel(20), "Opportunity");
+  });
+
+  it("returns Priority below 20", () => {
+    assert.equal(bandScoreLabel(19), "Priority");
+    assert.equal(bandScoreLabel(0), "Priority");
+  });
+});
+
 describe("analyse mode email", () => {
+  it("does not use 'subgroup' in athlete-facing email copy", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_75",
+        primaryBenchmarkGroup: { label: "Open Men" },
+      },
+    }), mockContext(), null, "analyse");
+    assert.doesNotMatch(htmlBody.toLowerCase(), /subgroup/);
+  });
+
+  it("shows OVERALL STANDING not OVERALL RANK in metric strip", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
+    assert.match(htmlBody, /OVERALL STANDING/);
+    assert.doesNotMatch(htmlBody, /OVERALL RANK/);
+  });
+
+  it("renders benchmark explanation in analyse mode", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis({
+      athlete: { division: "Open", gender: "Men" },
+      benchmarkContext: {
+        achievedBand: "sub_75",
+        primaryBenchmarkGroup: { label: "Open Men" },
+      },
+    }), mockContext(), null, "analyse");
+    assert.match(htmlBody, /benchmark band/i);
+  });
+
+  it("does not say 'account for' when station gap is greater than total gap", () => {
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: {},
+    };
+    const { htmlBody } = buildEmailReport(
+      { sections: [splitSection] },
+      mockAnalysis({
+        segments: [
+          { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, benchmarkMedianSeconds: 2080, timeGapToMedianSeconds: 120, confidence: "high" },
+          { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 2500, benchmarkMedianSeconds: 2590, timeGapToMedianSeconds: -90, confidence: "high" },
+          { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 400, benchmarkMedianSeconds: 400, timeGapToMedianSeconds: 0, confidence: "high" },
+          { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 5100, benchmarkMedianSeconds: 5070, timeGapToMedianSeconds: 30, percentile: 45, confidence: "high" },
+        ],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    assert.doesNotMatch(htmlBody, /account for.*of your total/i);
+  });
+
+  it("includes small-sample note when confidenceLabel is directional", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_75",
+        confidenceLabel: "directional",
+        primaryBenchmarkGroup: { label: "Open Men" },
+      },
+    }), mockContext(), null, "analyse");
+    assert.match(htmlBody, /smaller sample size|directional/i);
+  });
+
+  it("shows EXECUTION chip for penalty recommendation", () => {
+    const report = {
+      sections: [{
+        sectionKey: "recommended_focus_areas",
+        title: "Recommended Focus Areas",
+        content: ["1. Penalty avoidance: Clean execution."],
+        richRecommendations: [{ title: "Penalty avoidance", category: "Execution", rationale: "Clean execution.", actionId: "penalty_avoidance" }],
+      }],
+    };
+    const { htmlBody } = buildEmailReport(report, mockAnalysis({
+      penalties: [{ station: "wall_balls", penaltySeconds: 300 }],
+      segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 34, userSeconds: 5612, timeGapToMedianSeconds: 600 }],
+    }), mockContext(), null, "analyse");
+    assert.match(htmlBody, /EXECUTION/);
+  });
+
   it("subject does not say bottleneck in analyse mode", () => {
     const personal = mockReport();
     const analysis = mockAnalysis({
@@ -704,7 +808,7 @@ describe("renderSplitTable", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("#7c3aed"), "purple penalty colour should appear");
     assert.ok(htmlBody.includes("Running is shown net of penalties"), "segment profile should explain net running");
-    assert.ok(htmlBody.includes("do not sum to your overall race gap"), "segment profile should carry the independence note");
+    assert.ok(htmlBody.includes("may not sum exactly to the total race gap"), "segment profile should carry the independence note");
   });
 
   it("material penalties: penalty row appears before segment rows in reduced split table", () => {
@@ -809,7 +913,7 @@ describe("renderSplitTable", () => {
     const stripStart = htmlBody.indexOf("YOUR RACE");
     const stripHtml = htmlBody.slice(stripStart, stripStart + 1800);
     assert.ok(stripHtml.includes("ADJUSTED"));
-    assert.ok(stripHtml.includes("RANK"));
+    assert.ok(stripHtml.includes("STANDING"));
     assert.ok(!stripHtml.includes("BENCHMARK"));
   });
 
@@ -965,7 +1069,7 @@ describe("renderSplitTable", () => {
     assert.equal(htmlBody.includes("<link"), false);
   });
 
-  it("split table includes Overall rank and Subgroup column headers", () => {
+  it("split table includes Overall standing and Band score column headers", () => {
     const splitSection = {
       sectionKey: "race_split_breakdown",
       title: "Race Split Breakdown",
@@ -983,11 +1087,11 @@ describe("renderSplitTable", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithSplits, {}, null,
     );
-    assert.ok(htmlBody.includes("Overall rank"), `expected "Overall rank" header, not found in HTML`);
-    assert.ok(htmlBody.includes("Subgroup"), `expected "Subgroup" header, not found in HTML`);
+    assert.ok(htmlBody.includes("Overall standing"), `expected "Overall standing" header, not found in HTML`);
+    assert.ok(htmlBody.includes("Band score"), `expected "Band score" header, not found in HTML`);
   });
 
-  it("split table renders percentile value for a station with known percentile", () => {
+  it("split table renders band score value for a station with known percentile", () => {
     const splitSection = {
       sectionKey: "race_split_breakdown",
       title: "Race Split Breakdown",
@@ -1005,10 +1109,10 @@ describe("renderSplitTable", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithSplits, {}, null,
     );
-    assert.ok(htmlBody.includes("8th"), "expected 8th percentile text in split table HTML");
+    assert.ok(htmlBody.includes("Priority"), "expected Priority band score text in split table HTML");
   });
 
-  it("split table renders high percentile as percentile rank, not top-percent shorthand", () => {
+  it("split table renders high percentile as Strength band score, not top-percent shorthand", () => {
     const splitSection = {
       sectionKey: "race_split_breakdown",
       title: "Race Split Breakdown",
@@ -1026,7 +1130,7 @@ describe("renderSplitTable", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithSplits, {}, null,
     );
-    assert.ok(htmlBody.includes("80th percentile"), "expected high rank to render as percentile text");
+    assert.ok(htmlBody.includes("Strength"), "expected high percentile to render as Strength band score");
     assert.ok(!htmlBody.includes("Top 20%"), "split table should not mix in top-percent shorthand");
   });
 
@@ -1158,8 +1262,8 @@ describe("renderSplitTable", () => {
 
   it("snapshot strip final column has no right border when no penalties present", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis({ penalties: [] }), {}, null);
-    assert.ok(!htmlBody.match(/OVERALL RANK[\s\S]{0,200}border-right:1px solid/),
-      "OVERALL RANK cell should not have right border when no penalties");
+    assert.ok(!htmlBody.match(/OVERALL STANDING[\s\S]{0,200}border-right:1px solid/),
+      "OVERALL STANDING cell should not have right border when no penalties");
   });
 
   it("gap column has at least 12px right padding", () => {

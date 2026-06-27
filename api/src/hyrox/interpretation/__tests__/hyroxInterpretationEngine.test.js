@@ -209,9 +209,9 @@ test("next_band frame summary bullets mention athlete is ahead of current band",
   assert.match(text, /ahead|sub-70|next step/i);
 });
 
-test("competitive frame hero copy says LEAST ALIGNED not KEY TO REACHING", () => {
+test("competitive frame hero copy references current and next band", () => {
   const result = buildInterpretation(analysisWithFrame("competitive", "sub_70"), {}, "analyse");
-  assert.match(result.heroCopy.headline, /LEAST ALIGNED/i);
+  assert.match(result.heroCopy.headline, /sub-70|sub-65|competitive/i);
   assert.doesNotMatch(result.heroCopy.headline, /KEY TO REACHING/i);
 });
 
@@ -225,4 +225,41 @@ test("totalRunGapSeconds uses positive frameGapSeconds from run segments", () =>
     headline: { biggestLimiter: null },
   });
   assert.equal(totalRunGapSeconds(analysis), 45);
+});
+
+test("does not use 'weakness' or 'main limiter' for sub-60 athletes", () => {
+  const result = buildInterpretation(makeAnalysis({
+    benchmarkContext: { achievedBand: "sub_60" },
+    stationBreakdown: [
+      station("wall_balls", 100, 32),
+      station("sandbag_lunges", 80, 23),
+    ],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 100 } },
+  }), {}, "analyse");
+  const allCopy = JSON.stringify(result);
+  assert.doesNotMatch(allCopy, /\bweakness\b/i);
+  assert.doesNotMatch(allCopy, /\bmain limiter\b/i);
+});
+
+test("headline includes 'fastest win' or 'penalties' for penalty-heavy athlete", () => {
+  const result = buildInterpretation(makeAnalysis({
+    penalties: [{ penaltySeconds: 300 }],
+    race: { finishTimeSeconds: 5738 },
+  }));
+  const headline = result.primaryThesis?.headline ?? result.heroCopy?.headline ?? "";
+  assert.match(String(headline), /fastest win|penalt/i);
+});
+
+test("headline references current and next band for competitive athlete", () => {
+  const result = buildInterpretation(makeAnalysis({
+    benchmarkContext: { achievedBand: "sub_70", nextBand: "sub_65" },
+    stationBreakdown: [
+      station("wall_balls", 90, 38),
+      station("sandbag_lunges", 70, 42),
+    ],
+    segments: [run("run_1", 20), run("run_2", 15)],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 90 } },
+  }), {}, "analyse");
+  const headline = JSON.stringify(result);
+  assert.match(headline, /sub-70|sub-65/i);
 });

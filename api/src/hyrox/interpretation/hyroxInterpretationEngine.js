@@ -107,6 +107,33 @@ export function totalPenaltySeconds(analysisJson = {}) {
     .reduce((sum, p) => sum + (Number(p.penaltySeconds) || 0), 0);
 }
 
+function athleteLevel(analysisJson = {}) {
+  const penaltySeconds = totalPenaltySeconds(analysisJson);
+  const achievedBand = analysisJson.benchmarkContext?.achievedBand;
+  if (penaltySeconds >= 300) return "penalty_heavy";
+  if (achievedBand === "sub_60") return "elite";
+  if (achievedBand === "sub_65" || achievedBand === "sub_70") return "competitive";
+  if (achievedBand === "sub_75" || achievedBand === "sub_80") return "mid_pack";
+  return "developing";
+}
+
+function guardEliteLanguage(text, level) {
+  if (level !== "elite") return text;
+  return String(text)
+    .replace(/\bweakness\b/gi, "least aligned split")
+    .replace(/\bmain limiter\b/gi, "next marginal gain")
+    .replace(/\bbiggest limiter\b/gi, "next refinement area");
+}
+
+function guardCopyValue(value, level) {
+  if (typeof value === "string") return guardEliteLanguage(value, level);
+  if (Array.isArray(value)) return value.map((item) => guardCopyValue(item, level));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, guardCopyValue(item, level)]));
+  }
+  return value;
+}
+
 export function totalStationGapSeconds(analysisJson = {}) {
   return (analysisJson.stationBreakdown ?? [])
     .filter((s) => s.confidence !== "low" && s.timeGapSeconds > 0)
@@ -192,9 +219,10 @@ function thesis(category, analysisJson = {}, overrides = {}) {
   };
 
   if (category === "penalty") {
+    const penStr = formatGain(penalty);
     return {
       ...base,
-      headline: "Penalty time is the fastest win",
+      headline: `${penStr} of penalties is your fastest win`,
       evidenceSummary: `${formatGain(penalty)} in penalties were recorded.`,
       estimatedImpactSeconds: penalty,
       copyAngle: "urgent_fix",
@@ -203,9 +231,17 @@ function thesis(category, analysisJson = {}, overrides = {}) {
     };
   }
   if (category === "station_capacity") {
+    const level = athleteLevel(analysisJson);
+    const stationHeadlines = {
+      elite: `${limiterLabel(analysisJson)} is the least aligned split - this is where the next marginal gain sits`,
+      competitive: `${limiterLabel(analysisJson)} is what moves you toward the next band`,
+      mid_pack: `${limiterLabel(analysisJson)} is your biggest opportunity`,
+      penalty_heavy: `${limiterLabel(analysisJson)} is the main fitness limiter - but penalties are faster to fix`,
+      developing: `${limiterLabel(analysisJson)} is your biggest opportunity`,
+    };
     return {
       ...base,
-      headline: "Station capacity is the biggest limiter",
+      headline: stationHeadlines[level] ?? "Station capacity is the biggest limiter",
       evidenceSummary: stationThesisEvidence(analysisJson),
       estimatedImpactSeconds: stationGap || headlineGainSeconds(analysisJson),
       copyAngle: "next_block",
@@ -413,6 +449,22 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       gainDisplay: null,
     };
   }
+  if (calculatorMode === "analyse" && athleteLevel(analysisJson) === "competitive") {
+    const achievedBand = analysisJson.benchmarkContext?.achievedBand;
+    const nextBandLabel = analysisJson.benchmarkContext?.nextBand?.replace("sub_", "sub-");
+    const achievedLabel = achievedBand?.replace("sub_", "sub-");
+    if (achievedLabel) {
+      return {
+        headline: nextBandLabel
+          ? `You are competitive in ${achievedLabel} - here is what moves you toward ${nextBandLabel}`
+          : `You are competitive in ${achievedLabel}`,
+        subline: category === "station_capacity"
+          ? `${lLabel} is the split to sharpen next.`
+          : "The next gains are specific, not generic.",
+        gainDisplay: null,
+      };
+    }
+  }
   if (calculatorMode === "analyse" && (frame === "next_band" || frame === "next_band_stretch")) {
     const bandTarget = compBandLabel ?? "the next band";
     if (category === "station_capacity") {
@@ -583,11 +635,12 @@ function buildSuppressedSignals(primary, secondaryTheses, analysisJson = {}) {
 
 export function buildInterpretation(analysisJson = {}, athleteContext = {}, calculatorMode = "target") {
   void athleteContext;
+  const level = athleteLevel(analysisJson);
   const primaryCategory = selectPrimaryCategory(analysisJson, calculatorMode);
   const primaryThesis = thesis(primaryCategory, analysisJson);
   const secondaryTheses = buildSecondaryTheses(primaryCategory, analysisJson);
   const penaltyInterpretation = buildPenaltyInterpretation(analysisJson);
-  return {
+  const result = {
     primaryThesis,
     secondaryTheses,
     protectedStrengths: protectedStrengths(analysisJson),
@@ -599,4 +652,5 @@ export function buildInterpretation(analysisJson = {}, athleteContext = {}, calc
     runPattern: analysisJson.runningAnalysis?.runPattern ?? null,
     muscleGroupConfidence: muscleGroupConfidence(analysisJson),
   };
+  return guardCopyValue(result, level);
 }
