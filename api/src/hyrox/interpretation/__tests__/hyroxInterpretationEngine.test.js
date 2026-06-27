@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInterpretation } from "../hyroxInterpretationEngine.js";
+import { buildInterpretation, totalRunGapSeconds } from "../hyroxInterpretationEngine.js";
 
 function station(segmentKey, timeGapSeconds, percentile = 40, confidence = "high") {
   return { segmentKey, label: segmentKey.replace(/_/g, " "), timeGapSeconds, percentile, confidence };
@@ -180,4 +180,49 @@ test("analyse mode station_capacity hero says LEAST ALIGNED not OPPORTUNITY", ()
   assert.equal(result.primaryThesis.category, "station_capacity");
   assert.doesNotMatch(result.heroCopy.headline, /BIGGEST OPPORTUNITY/i);
   assert.match(result.heroCopy.headline, /LEAST ALIGNED/i);
+});
+
+function analysisWithFrame(frame, comparisonBand, achievedBand = "sub_70") {
+  return makeAnalysis({
+    stationBreakdown: [
+      { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: 90, percentile: 38, confidence: "high" },
+      { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", timeGapSeconds: 70, percentile: 42, confidence: "high" },
+    ],
+    segments: [run("run_1", 20), run("run_2", 15)],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 90 } },
+    benchmarkContext: {
+      achievedBand,
+      nextBand: "sub_65",
+      analysisFrame: { frame, comparisonBand, stretchBand: frame === "competitive" ? "sub_65" : null, gapToBandMedianSeconds: -80 },
+    },
+  });
+}
+
+test("next_band frame hero copy references comparisonBand in headline", () => {
+  const result = buildInterpretation(analysisWithFrame("next_band", "sub_65"), {}, "analyse");
+  assert.match(result.heroCopy.headline, /SUB-65|NEXT BAND/i);
+});
+
+test("next_band frame summary bullets mention athlete is ahead of current band", () => {
+  const result = buildInterpretation(analysisWithFrame("next_band", "sub_65"), {}, "analyse");
+  const text = result.summaryBullets.join(" ");
+  assert.match(text, /ahead|sub-70|next step/i);
+});
+
+test("competitive frame hero copy says LEAST ALIGNED not KEY TO REACHING", () => {
+  const result = buildInterpretation(analysisWithFrame("competitive", "sub_70"), {}, "analyse");
+  assert.match(result.heroCopy.headline, /LEAST ALIGNED/i);
+  assert.doesNotMatch(result.heroCopy.headline, /KEY TO REACHING/i);
+});
+
+test("totalRunGapSeconds uses positive frameGapSeconds from run segments", () => {
+  const analysis = makeAnalysis({
+    segments: [
+      { segmentKey: "run_1", type: "run", frameGapSeconds: 45, timeGapToMedianSeconds: -30, percentile: 55 },
+      { segmentKey: "run_2", type: "run", frameGapSeconds: -10, timeGapToMedianSeconds: -10, percentile: 45 },
+    ],
+    stationBreakdown: [],
+    headline: { biggestLimiter: null },
+  });
+  assert.equal(totalRunGapSeconds(analysis), 45);
 });

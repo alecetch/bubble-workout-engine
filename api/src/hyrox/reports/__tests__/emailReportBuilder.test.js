@@ -487,6 +487,21 @@ describe("analyse mode email", () => {
     assert.match(email.htmlBody, /sub-65 - Open Female \(directional\)/);
   });
 
+  it("next_band frame subject references ahead of group and target band", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_70",
+        nextBand: "sub_65",
+        analysisFrame: { frame: "next_band", comparisonBand: "sub_65", stretchBand: null, gapToBandMedianSeconds: -63 },
+        primaryBenchmarkGroup: { label: "sub-70 Open Male" },
+      },
+      segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 35, userSeconds: 4047 }],
+    });
+    const email = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+    assert.match(email.subject, /ahead/i);
+    assert.match(email.subject, /sub-65/i);
+  });
+
   it("analyse mode CTA references marginal gains not bottleneck", () => {
     const personal = mockReport();
     const email = buildEmailReport(personal, mockAnalysis(), mockContext(), { primaryThesis: { category: "high_performer" } }, "analyse");
