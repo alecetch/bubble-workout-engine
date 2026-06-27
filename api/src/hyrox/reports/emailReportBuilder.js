@@ -1,5 +1,21 @@
 import { enforceTone, formatGain, formatPercentileRank, formatTime } from "./copyFormatter.js";
 
+export function bandScoreLabel(percentile) {
+  if (!Number.isFinite(percentile)) return null;
+  if (percentile >= 80) return "Strength";
+  if (percentile >= 60) return "Good";
+  if (percentile >= 40) return "On benchmark";
+  if (percentile >= 20) return "Opportunity";
+  return "Priority";
+}
+
+function bandScoreColor(label) {
+  if (label === "Priority") return "#e53e3e";
+  if (label === "Strength") return "#16a34a";
+  if (label === "Good") return "#22c55e";
+  return "#64748b";
+}
+
 function esc(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -184,6 +200,48 @@ function analyseBenchmarkCellLabel(analysisJson) {
   return bandLabel ? `${bandLabel} - ${groupLabel}${confidenceSuffix}` : `${groupLabel}${confidenceSuffix}`;
 }
 
+const BAND_RANGES = {
+  sub_60: "under 60:00",
+  sub_65: "between 60:00 and 64:59",
+  sub_70: "between 65:00 and 69:59",
+  sub_75: "between 70:00 and 74:59",
+  sub_80: "between 75:00 and 79:59",
+  sub_90: "between 80:00 and 89:59",
+  sub_105: null,
+};
+
+function renderBenchmarkExplanation(analysisJson = {}, calculatorMode = "target") {
+  if (calculatorMode !== "analyse") return "";
+  const achievedBand = analysisJson.benchmarkContext?.achievedBand;
+  if (!achievedBand) return "";
+
+  const division = analysisJson.athlete?.division ?? "Open";
+  const gender = analysisJson.athlete?.gender ?? "";
+  const divLabel = [division, gender].filter(Boolean).join(" ");
+  const confidenceLabel = analysisJson.benchmarkContext?.confidenceLabel;
+  const isLowSample = ["low-confidence", "directional"].includes(confidenceLabel);
+
+  let explanation;
+  if (achievedBand === "sub_105") {
+    explanation = `Your benchmark band: ${divLabel} athletes finishing in the 90:00+ performance range. This is a wider comparison band because the field spreads out more at this end of the results.`;
+  } else {
+    const range = BAND_RANGES[achievedBand];
+    explanation = range
+      ? `Your benchmark band: ${divLabel} athletes finishing ${range}. This compares you with athletes at a similar race level, so the analysis reflects realistic opportunities for improvement.`
+      : `Your benchmark band is the ${achievedBand.replace("sub_", "sub-")} group.`;
+  }
+
+  const lowSampleNote = isLowSample
+    ? " This benchmark band has a smaller sample size, so treat band scores as directional. The priority areas are still useful."
+    : "";
+
+  return `<tr>
+    <td style="background-color:#ffffff;padding:8px 24px 14px;border-bottom:1px solid #e2e8f0;">
+      <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;font-style:italic;">${esc(explanation + lowSampleNote)}</p>
+    </td>
+  </tr>`;
+}
+
 function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "target") {
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
   const { totalPenaltySeconds, penaltiesAreMaterial, adjustedRaceTimeSeconds } = penaltyContext(analysisJson);
@@ -242,7 +300,7 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
         <tr>
           ${metricCell("YOUR RACE", esc(finishTime), "#0f172a", true)}
           ${secondCell}
-	          ${metricCell(showAdjusted ? "RANK" : "OVERALL RANK", rank, "#0f172a", hasPenalties, "Arial,Helvetica,sans-serif")}
+	          ${metricCell(showAdjusted ? "STANDING" : "OVERALL STANDING", rank, "#0f172a", hasPenalties, "Arial,Helvetica,sans-serif")}
           ${penaltyCell}
         </tr>
       </table>
@@ -461,13 +519,23 @@ function renderRecommendations(section, analysisJson = {}) {
     : (richRecs?.[0]?.title
         ? `${enforceTone(richRecs[0].title).replace(/\s+focus$/i, "")} under fatigue`
         : "Build station-specific strength endurance under fatigue");
+  const primaryCategory = hasMaterialPenalties ? "Execution" : (richRecs?.[0]?.category ?? "Fitness");
+  const categoryChip = (category) => {
+    const styles = {
+      Fitness: { bg: "#e0f2fe", color: "#0369a1" },
+      Execution: { bg: "#ede9fe", color: "#7c3aed" },
+      "Race management": { bg: "#fef3c7", color: "#d97706" },
+    };
+    const style = styles[category] ?? styles.Fitness;
+    return `<span style="display:inline-block;background-color:${style.bg};color:${style.color};font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;padding:1px 5px;border-radius:3px;margin-left:6px;">${esc(String(category).toUpperCase())}</span>`;
+  };
 
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
       <div style="background-color:#0c1830;color:#cbd5e1;border-radius:8px;padding:18px;">
         <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">NEXT TRAINING FOCUS</span>
-        <h3 style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:1.3;margin:0 0 12px;">${esc(primaryTitle)}</h3>
+        <h3 style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:1.3;margin:0 0 12px;">${esc(primaryTitle)}${categoryChip(primaryCategory)}</h3>
         <ol style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;margin:0;padding-left:20px;">${listRows}</ol>
       </div>
     </td>
@@ -675,6 +743,23 @@ function renderSplitTable(section, analysisJson) {
     return "";
   }
 
+  function buildGapRelationSentence(stationGap, runGapRawValue, totalGapSecondsValue) {
+    if (!Number.isFinite(totalGapSecondsValue) || totalGapSecondsValue <= 0) return "";
+    if (!Number.isFinite(stationGap)) return "";
+
+    const stationStr = splitGapDisplay(stationGap);
+    const runStr = splitGapDisplay(runGapRawValue);
+    const totalStr = splitGapDisplay(totalGapSecondsValue);
+
+    if (Number.isFinite(runGapRawValue) && runGapRawValue < 0) {
+      return ` Your largest positive gap is stations: <strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>. Running is ahead of benchmark by <strong style="color:#22c55e;">${splitSafe(runStr)}</strong>, which is why the total race gap is only <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong>.`;
+    }
+    if (Number.isFinite(runGapRawValue) && runGapRawValue >= 60) {
+      return ` Both stations (<strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>) and running (<strong style="color:#0f172a;">${splitSafe(runStr)}</strong>) are contributing to the total race gap of <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong>.`;
+    }
+    return ` Stations are the largest contributor at <strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>, with a total race gap of <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong>.`;
+  }
+
   function renderRaceStorySummary() {
     const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
     if (penaltiesAreMaterial) {
@@ -693,11 +778,12 @@ function renderSplitTable(section, analysisJson) {
         : roxGap < 30
           ? "Transitions are not a meaningful drag on your result."
           : `Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above benchmark).`;
+      const gapSentence = buildGapRelationSentence(stationGap, runGapRaw, totalGapSeconds);
       return `<tr>
         <td style="background-color:#ffffff;padding:18px 24px;">
           <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
             <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-            <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">Stations remain the largest fitness limiter, but penalties are your fastest controllable win. Stations account for <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(stationGap))}</strong> of your total <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(totalGapSeconds))}</strong> gap${splitSafe(bandBenchmarkRef)}.<br><br>Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
+            <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">Stations remain the largest fitness limiter, but penalties are your fastest controllable win.${gapSentence}${splitSafe(bandBenchmarkRef)}<br><br>Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
           </div>
         </td>
       </tr>`;
@@ -734,9 +820,7 @@ function renderSplitTable(section, analysisJson) {
     const biggestNote = lossNames ? ` Biggest opportunities: ${lossNames}.` : "";
 
     const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
-    const gapSentence = Number.isFinite(totalGapSeconds) && totalGapSeconds > 0 && Number.isFinite(stationGap)
-      ? ` Stations account for <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(stationGap))}</strong> of your total <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(totalGapSeconds))}</strong> gap${splitSafe(bandBenchmarkRef)}.`
-      : "";
+    const gapSentence = `${buildGapRelationSentence(stationGap, runGapRaw, totalGapSeconds)}${splitSafe(bandBenchmarkRef)}`;
     const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
     let penaltySentence = "";
     if (penaltiesAreMaterial) {
@@ -776,8 +860,8 @@ function renderSplitTable(section, analysisJson) {
       ? `Running ${splitSafe(splitGapDisplay(runGapNetOfPenalties))} net of penalties`
       : `Running ${splitSafe(splitGapDisplay(runGapRaw))}`;
     const footerNote = penaltiesAreMaterial
-      ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">Running is shown net of penalties so fitness and execution are not conflated. Each figure is vs. its own segment benchmark — they do not sum to your overall race gap.</p>`
-      : `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">Each figure is vs. the band median for that segment — they do not sum to your overall race gap.</p>`;
+      ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap.</p>`
+      : `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap.</p>`;
 
     return `<tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
@@ -1031,10 +1115,11 @@ function renderSplitTable(section, analysisJson) {
     const overallCell = Number.isFinite(segment.fieldPercentile)
       ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(segment.fieldPercentile))}</td>`
       : dash;
-    const subgroupCell = Number.isFinite(segment.percentile)
-      ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(segment.percentile))}</td>`
+    const bsLabel = bandScoreLabel(segment.percentile);
+    const bandScoreCell = bsLabel
+      ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${bandScoreColor(bsLabel)};">${splitSafe(bsLabel)}</td>`
       : dash;
-    return `${overallCell}${subgroupCell}`;
+    return `${overallCell}${bandScoreCell}`;
   }
 
   function dataRow(segment) {
@@ -1151,7 +1236,7 @@ function renderSplitTable(section, analysisJson) {
     return `<tr>
 	      <td style="background-color:#f8fafc;padding:12px 24px 16px;border-top:1px solid #e2e8f0;">
 	        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">HOW TO READ THIS</span>
-        <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Rank shows your percentile against the benchmark group. Band summarises whether each segment needs attention or is a strength to protect.</p>
+        <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Band score shows whether each segment is a Strength, Good, On benchmark, Opportunity, or Priority versus athletes who finished in the same time band.</p>
       </td>
     </tr>`;
   }
@@ -1172,8 +1257,8 @@ function renderSplitTable(section, analysisJson) {
 	        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-collapse:collapse;width:100%;">
           <tr style="background-color:#f1f5f9;border-bottom:2px solid #e2e8f0;">
             <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:32%;">Segment</th>
-            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">Overall rank</th>
-            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Subgroup</th>
+            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">Overall standing</th>
+            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Band score</th>
             <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your split</th>
             <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">Gap vs median</th>
           </tr>
@@ -1205,7 +1290,7 @@ function renderMethodNote(hasMaterialPenalties = false) {
     <td style="background-color:#ffffff;padding:0 24px 18px;">
       <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin:0 0;">
         <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">METHOD NOTE</span>
-        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">Target times are based on your selected benchmark group.${penaltyNote} Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.</p>
+        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">Target times are based on your selected benchmark group.${penaltyNote} Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.</p>
       </div>
     </td>
   </tr>`;
@@ -1439,6 +1524,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
           ${renderHeader()}
           ${renderHero(analysisJson, greetingName, interpretation)}
           ${renderMetricStrip(analysisJson, athleteContext, calculatorMode)}
+          ${renderBenchmarkExplanation(analysisJson, calculatorMode)}
           ${sectionRows}
           ${renderMethodNote(emailPenaltiesMaterial)}
           ${renderFooter()}
