@@ -30,6 +30,7 @@ function stationBreakdown(segments) {
       segmentKey: segment.segmentKey,
       label: segment.label,
       percentile: segment.percentile,
+      fieldPercentile: segment.fieldPercentile ?? null,
       timeGapSeconds: Math.round(segment.frameGapSeconds ?? 0),
       confidence: segment.confidence,
       nextBandMedianSeconds: segment.nextBandMedianSeconds ?? null,

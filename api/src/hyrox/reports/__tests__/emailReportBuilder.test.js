@@ -700,11 +700,11 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes("Net of penalties"), "Running card note should say Net of penalties");
   });
 
-  it("material penalties: gap breakdown includes purple penalty attribution", () => {
+  it("material penalties: segment profile includes purple penalty attribution", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("#7c3aed"), "purple penalty colour should appear");
-    assert.ok(htmlBody.includes("including penalties"), 'total gap label should say "including penalties"');
-    assert.ok(htmlBody.includes("Running is shown net of penalties"), "gap breakdown should explain net running");
+    assert.ok(htmlBody.includes("Running is shown net of penalties"), "segment profile should explain net running");
+    assert.ok(htmlBody.includes("do not sum to your overall race gap"), "segment profile should carry the independence note");
   });
 
   it("material penalties: penalty row appears before segment rows in reduced split table", () => {
@@ -765,8 +765,8 @@ describe("renderSplitTable", () => {
       },
     });
     const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
-    const farmersSnippet = detailHtml.slice(detailHtml.indexOf("Farmers Carry") - 220, detailHtml.indexOf("Farmers Carry") + 500);
-    const sledSnippet = detailHtml.slice(detailHtml.indexOf("Sled Push") - 220, detailHtml.indexOf("Sled Push") + 500);
+    const farmersSnippet = detailHtml.slice(detailHtml.indexOf("Farmers Carry") - 220, detailHtml.indexOf("Farmers Carry") + 700);
+    const sledSnippet = detailHtml.slice(detailHtml.indexOf("Sled Push") - 220, detailHtml.indexOf("Sled Push") + 700);
     assert.ok(farmersSnippet.includes("background-color:#fffdf7"), "Farmers Carry +1:07 should use amber background");
     assert.ok(farmersSnippet.includes("color:#d97706"), "Farmers Carry +1:07 should use amber text");
     assert.ok(!farmersSnippet.includes("background-color:#fff4f4"), "Farmers Carry +1:07 should not use red background");
@@ -957,15 +957,15 @@ describe("renderSplitTable", () => {
     assert.equal(htmlBody.includes("<link"), false);
   });
 
-  it("renders gap breakdown and remains email-safe", () => {
+  it("renders segment profile and remains email-safe", () => {
     const htmlBody = renderSplit();
-    assert.match(htmlBody, /GAP BREAKDOWN/);
+    assert.match(htmlBody, /SEGMENT PROFILE/);
     assert.equal(htmlBody.includes('class="'), false);
     assert.equal(/<style/i.test(htmlBody), false);
     assert.equal(htmlBody.includes("<link"), false);
   });
 
-  it("split table includes Rank column header", () => {
+  it("split table includes Overall rank and Subgroup column headers", () => {
     const splitSection = {
       sectionKey: "race_split_breakdown",
       title: "Race Split Breakdown",
@@ -983,7 +983,8 @@ describe("renderSplitTable", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithSplits, {}, null,
     );
-    assert.ok(htmlBody.includes(">Rank<"), `expected "Rank" header, not found in HTML`);
+    assert.ok(htmlBody.includes("Overall rank"), `expected "Overall rank" header, not found in HTML`);
+    assert.ok(htmlBody.includes("Subgroup"), `expected "Subgroup" header, not found in HTML`);
   });
 
   it("split table renders percentile value for a station with known percentile", () => {
@@ -1039,9 +1040,9 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes(">STN<"), "split table should not contain STN pill");
   });
 
-  it('split table uses "Gap" column header instead of "+/-"', () => {
+  it('split table uses "Gap vs median" column header instead of "+/-"', () => {
     const htmlBody = renderSplit();
-    assert.ok(htmlBody.includes(">Gap<"), 'expected "Gap" column header');
+    assert.ok(htmlBody.includes("Gap vs median"), 'expected "Gap vs median" column header');
     assert.ok(!htmlBody.includes("+/−"), 'should not contain old "+/−" header');
   });
 
