@@ -266,7 +266,7 @@ export function buildTemplateB(benchmarkGroupKey, targetBand = "sub-75") {
       label: "Average time lost",
       heroNumber: formatGain(top.gapSeconds),
       subLabel: `Versus ${targetBand} athletes`,
-      caption: "The single largest time gap in this benchmark group.",
+      caption: "The single largest time gap in this benchmark band.",
     },
     opportunity: {
       eyebrow: "Biggest opportunity",

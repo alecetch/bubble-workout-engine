@@ -75,9 +75,13 @@ const ROXZONE_TRAINING_CUES =
 const PENALTY_TRAINING_CUES =
   "Review judge standards before race day. Practise controlled reps at target depth and height. Use a pre-race standards checklist and communicate with judges at unfamiliar stations.";
 
+const RUNNING_TRAINING_CUES =
+  "Focus on pacing discipline (negative splits), late-race pace retention under station fatigue, and compromised running practice after heavy station work. If running is already a strength, do not over-prioritise it at the expense of station capacity.";
+
 function stationCueFor(actionId) {
   if (actionId === "penalty_avoidance") return PENALTY_TRAINING_CUES;
   if (actionId === "roxzone_rehearsal") return ROXZONE_TRAINING_CUES;
+  if (actionId === "run_volume_base" || actionId === "compromised_running") return RUNNING_TRAINING_CUES;
   return STATION_TRAINING_CUES[actionId] ?? null;
 }
 
@@ -270,9 +274,9 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
   const compBandLabel = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
   const benchmarkPrefix = (() => {
     if (isNextBandFrame && compBandLabel) return `Against ${compBandLabel} finishers`;
-    if (calculatorMode === "analyse") return "Compared with your benchmark group";
+    if (calculatorMode === "analyse") return "Compared with your benchmark band";
     if (effectiveTargetTimeString) return `Against ${effectiveTargetTimeString} finishers`;
-    return "In your benchmark group";
+    return "In your benchmark band";
   })();
   const comparisonTargetString = isNextBandFrame && compBandLabel ? compBandLabel : effectiveTargetTimeString;
   const stationContributors = buildStationContributors(analysisJson, comparisonTargetString, useGoalGap, benchmarkPrefix);

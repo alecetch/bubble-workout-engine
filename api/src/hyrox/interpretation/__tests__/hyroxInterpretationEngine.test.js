@@ -63,9 +63,9 @@ test("strong runner with weak stations selects station capacity thesis", () => {
   assert.doesNotMatch(result.heroCopy.headline, /ANALYSIS IS READY/);
   assert.equal(result.heroCopy.gainDisplay, "4:10");
   assert.ok(!result.heroCopy.subline.includes("4:10"), "hero subline should not repeat the hero metric");
-  assert.match(result.heroCopy.subline, /target benchmark group/);
+  assert.match(result.heroCopy.subline, /benchmark band/);
   assert.match(result.summaryBullets[0], /4:10/);
-  assert.match(result.summaryBullets[0], /target benchmark group/);
+  assert.match(result.summaryBullets[0], /benchmark band/);
   assert.doesNotMatch(result.summaryBullets[0], /4:10.*4:10/);
   assert.equal(result.summaryBullets.some((bullet) => /Running contributed/i.test(bullet)), false);
   assertShared(result);
@@ -148,13 +148,15 @@ test("high-performer hero copy does not say OPPORTUNITY", () => {
   assert.match(result.heroCopy.headline, /STRONG|DROVE IT|PERCENTILE/i);
 });
 
-test("high-performer hero copy references achieved band when available", () => {
+test("sub-60 high-performer hero copy uses marginal-gain framing", () => {
   const result = buildInterpretation(makeAnalysis({
     ...highPerformerAnalysis(),
     benchmarkContext: { achievedBand: "sub_60" },
   }), {}, "analyse");
-  assert.match(result.heroCopy.headline, /SUB-60 GROUP/i);
-  assert.match(result.heroCopy.subline, /sub-60 group/i);
+  assert.match(result.heroCopy.headline, /SUB-60/i);
+  assert.match(result.heroCopy.headline, /MARGINAL/i);
+  assert.doesNotMatch(result.heroCopy.headline, /BENCHMARK BAND/i);
+  assert.match(result.heroCopy.subline, /least dominant|smallest relative advantage/i);
 });
 
 test("high-performer summary bullets do not contain strength endurance priority action", () => {
@@ -262,4 +264,42 @@ test("headline references current and next band for competitive athlete", () => 
   }), {}, "analyse");
   const headline = JSON.stringify(result);
   assert.match(headline, /sub-70|sub-65/i);
+});
+
+test("competitive athlete hero headline uses em dash not plain hyphen", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [
+      station("wall_balls", 120, 25),
+      station("sandbag_lunges", 90, 30),
+    ],
+    segments: [run("run_1", -60), run("run_2", -60)],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 120 } },
+    timePotential: { headlineGainSeconds: 210 },
+    benchmarkContext: {
+      achievedBand: "sub_65",
+      nextBand: "sub_60",
+    },
+  }), {}, "analyse");
+
+  assert.ok(!result.heroCopy.headline.includes(" - "), `headline should not contain plain hyphen separator, got: ${result.heroCopy.headline}`);
+  assert.ok(result.heroCopy.headline.includes(" — "), `headline should contain em dash, got: ${result.heroCopy.headline}`);
+});
+
+test("sub-60 athlete with Sandbag Lunges limiter uses plural verb", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [
+      { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", timeGapSeconds: 55, percentile: 18, confidence: "high" },
+      { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: 30, percentile: 45, confidence: "high" },
+    ],
+    headline: { biggestLimiter: { label: "Sandbag Lunges", segmentKey: "sandbag_lunges", timeGapSeconds: 55 } },
+    timePotential: { headlineGainSeconds: 55 },
+    benchmarkContext: {
+      achievedBand: "sub_60",
+      nextBand: null,
+    },
+  }), {}, "analyse");
+
+  const allCopy = [result.heroCopy.headline, result.heroCopy.subline, ...result.summaryBullets].join(" ");
+  assert.ok(!allCopy.includes("Sandbag Lunges is"), `should not contain "Sandbag Lunges is", got: ${allCopy}`);
+  assert.ok(allCopy.includes("Sandbag Lunges are"), `should contain "Sandbag Lunges are", got: ${allCopy}`);
 });
