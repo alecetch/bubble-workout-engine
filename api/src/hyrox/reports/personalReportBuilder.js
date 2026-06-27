@@ -190,12 +190,14 @@ function buildSplitTableText(analysisJson, athleteContext = {}) {
   const goalGroup = analysisJson.benchmarkContext?.goalBenchmarkGroup ?? null;
 
   function targetSecondsFor(seg) {
+    if (Number.isFinite(seg?.nextBandMedianSeconds)) return seg.nextBandMedianSeconds;
     if (Number.isFinite(seg?.exactTargetSeconds)) return seg.exactTargetSeconds;
     if (goalGroup && Number.isFinite(seg?.goalBenchmarkSeconds)) return seg.goalBenchmarkSeconds;
     return seg?.benchmarkMedianSeconds ?? null;
   }
 
   function gapSecs(seg) {
+    if (Number.isFinite(seg?.frameGapSeconds)) return seg.frameGapSeconds;
     if (Number.isFinite(seg?.timeGapToExactTargetSeconds)) return seg.timeGapToExactTargetSeconds;
     return Number.isFinite(seg?.timeGapToMedianSeconds) ? seg.timeGapToMedianSeconds : null;
   }
@@ -278,8 +280,13 @@ function shouldIncludeRunFadeInSummary(analysisJson, interpretation) {
   return categories.has("running") || categories.has("pacing");
 }
 
-function stationBreakdownTitle(calculatorMode = "target", primaryCategory = null) {
+function stationBreakdownTitle(calculatorMode = "target", primaryCategory = null, analysisFrame = null) {
   if (primaryCategory === "high_performer") return "Relative Profile Observations";
+  const frame = analysisFrame?.frame;
+  const compBand = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
+  if (frame === "next_band" || frame === "next_band_stretch") {
+    return compBand ? `Top Opportunities to Reach ${compBand}` : "Next Band Opportunities";
+  }
   if (calculatorMode === "analyse") return "Race Profile Gaps";
   return "Station Breakdown";
 }
@@ -317,7 +324,13 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
   const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
   const total = segment(analysisJson, "total_time");
-  const recommendations = buildRecommendations(analysisJson, insights, athleteContext, calculatorMode);
+  const recommendations = buildRecommendations(
+    analysisJson,
+    insights,
+    athleteContext,
+    calculatorMode,
+    analysisJson.benchmarkContext?.analysisFrame,
+  );
   const gainSeconds = analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? 0;
   const ctxCopy = hasContext(athleteContext) ? contextCopy(analysisJson, athleteContext) : null;
   const muscleGroupProfile = analysisJson.muscleGroupProfile ?? null;
@@ -391,7 +404,11 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   }
   sections.push(section("running_fatigue", "Running and Fatigue Profile", runningFatigueContent(analysisJson)));
   sections.push(section("biggest_strength", "Biggest Strength", strength ? `${strength.label} is the strongest benchmarked area at ${formatPercentile(strength.percentile) ?? "a strong percentile"}.` : "No single high-confidence strength dominated this result."));
-  sections.push(section("biggest_limiter", stationBreakdownTitle(calculatorMode, primaryCategory), stationBreakdownSection(analysisJson)));
+  sections.push(section(
+    "biggest_limiter",
+    stationBreakdownTitle(calculatorMode, primaryCategory, analysisJson.benchmarkContext?.analysisFrame),
+    stationBreakdownSection(analysisJson),
+  ));
   const headlineGain = analysisJson.timePotential?.headlineGainSeconds ?? 0;
   const limiterGap = limiter?.timeGapSeconds ?? 0;
   const clarification = Math.abs(headlineGain - limiterGap) > 30

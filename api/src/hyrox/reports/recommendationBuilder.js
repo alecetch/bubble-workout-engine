@@ -52,9 +52,12 @@ export function buildGapBreakdown(analysisJson = {}) {
   stationItems.forEach((station) => contributors.push({ label: station.label, gainSeconds: station.timeGapSeconds }));
 
   const runSegments = (analysisJson.segments ?? []).filter(
-    (segment) => segment.type === "run" && Number.isFinite(segment.timeGapToMedianSeconds) && segment.timeGapToMedianSeconds > 0,
+    (segment) => {
+      const gap = segment.frameGapSeconds ?? segment.timeGapToMedianSeconds;
+      return segment.type === "run" && Number.isFinite(gap) && gap > 0;
+    },
   );
-  const totalRunGap = runSegments.reduce((sum, segment) => sum + segment.timeGapToMedianSeconds, 0);
+  const totalRunGap = runSegments.reduce((sum, segment) => sum + (segment.frameGapSeconds ?? segment.timeGapToMedianSeconds), 0);
   if (totalRunGap >= GAP_THRESHOLD) {
     const perKmSeconds = Math.round(totalRunGap / 8);
     const pace = formatPacePerKm(perKmSeconds);
@@ -90,7 +93,7 @@ export function formatGapBreakdown(items) {
   return `Likely contributors: ${parts.join(" ")}`;
 }
 
-function buildStationContributors(analysisJson, targetTimeString, useGoalGap) {
+function buildStationContributors(analysisJson, targetTimeString, useGoalGap, benchmarkPrefix) {
   const contributors = [];
   const GAP_THRESHOLD = 30;
 
@@ -124,7 +127,7 @@ function buildStationContributors(analysisJson, targetTimeString, useGoalGap) {
       label: station.label,
       gainSeconds,
       copy: targetTimeString
-        ? `athletes finishing in ${targetTimeString} complete these ~${time} faster`
+        ? `${benchmarkPrefix}, athletes complete these ~${time} faster`
         : `~${time} above the median`,
     });
   }
@@ -132,7 +135,7 @@ function buildStationContributors(analysisJson, targetTimeString, useGoalGap) {
   return contributors.sort((a, b) => b.gainSeconds - a.gainSeconds).slice(0, 3);
 }
 
-function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap) {
+function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap, benchmarkPrefix) {
   const runSegments = (analysisJson.segments ?? []).filter((segment) => segment.type === "run");
   let totalGap = 0;
 
@@ -142,8 +145,10 @@ function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap) {
         ? segment.timeGapToExactTargetSeconds
         : useGoalGap && Number.isFinite(segment.timeGapToGoalSeconds) && segment.timeGapToGoalSeconds > 0
           ? segment.timeGapToGoalSeconds
-          : Number.isFinite(segment.timeGapToMedianSeconds) && segment.timeGapToMedianSeconds > 0
-            ? segment.timeGapToMedianSeconds
+          : Number.isFinite(segment.frameGapSeconds) && segment.frameGapSeconds > 0
+            ? segment.frameGapSeconds
+            : Number.isFinite(segment.timeGapToMedianSeconds) && segment.timeGapToMedianSeconds > 0
+              ? segment.timeGapToMedianSeconds
             : 0;
     totalGap += gap;
   }
@@ -159,7 +164,7 @@ function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap) {
   return {
     gainSeconds: totalGap,
     copy: targetTimeString
-      ? `athletes finishing in ${targetTimeString} typically run${paceClause}, saving ~${gainTime} across the race`
+      ? `${benchmarkPrefix} typically run${paceClause}, saving ~${gainTime} across the race`
       : `estimated ~${gainTime} above the median across all runs`,
   };
 }
@@ -192,7 +197,7 @@ function penaltyRecommendation(analysisJson = {}, timeHorizon) {
   };
 }
 
-export function buildRecommendations(analysisJson = {}, insights = [], athleteContext = {}, calculatorMode = "target") {
+export function buildRecommendations(analysisJson = {}, insights = [], athleteContext = {}, calculatorMode = "target", analysisFrame = null) {
   const days = daysToRace(athleteContext);
   const timeHorizon = horizon(days);
   const executionOnly = Number.isFinite(days) && days > 0 && days < 14;
@@ -206,8 +211,18 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
     : null;
   const effectiveTargetTimeString = calculatorMode === "analyse" ? null : targetTimeString;
   const useGoalGap = !!(goalGroupKey && targetTimeString);
-  const stationContributors = buildStationContributors(analysisJson, effectiveTargetTimeString, useGoalGap);
-  const runGapSummary = buildRunGapSummary(analysisJson, effectiveTargetTimeString, useGoalGap);
+  const frame = analysisFrame?.frame;
+  const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
+  const compBandLabel = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
+  const benchmarkPrefix = (() => {
+    if (isNextBandFrame && compBandLabel) return `Against ${compBandLabel} finishers`;
+    if (calculatorMode === "analyse") return "Compared with your benchmark group";
+    if (effectiveTargetTimeString) return `Against ${effectiveTargetTimeString} finishers`;
+    return "In your benchmark group";
+  })();
+  const comparisonTargetString = isNextBandFrame && compBandLabel ? compBandLabel : effectiveTargetTimeString;
+  const stationContributors = buildStationContributors(analysisJson, comparisonTargetString, useGoalGap, benchmarkPrefix);
+  const runGapSummary = buildRunGapSummary(analysisJson, comparisonTargetString, useGoalGap, benchmarkPrefix);
 
   if (!executionOnly && limiter) {
     const isRun = limiter.segmentKey?.startsWith("run") || limiter.segmentKey === "run_time";
@@ -222,11 +237,18 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
             if (effectiveTargetTimeString && runGapSummary) {
               return `${base}. To finish in ${effectiveTargetTimeString} your average run pace needs to improve by ${runGapSummary.copy}.`;
             }
+            if (isNextBandFrame && compBandLabel && runGapSummary) {
+              return `${base}. ${runGapSummary.copy}.`;
+            }
             return `${base}, estimated gap of ${formatGain(limiter.timeGapSeconds)}.`;
           }
           if (effectiveTargetTimeString) {
             const gain = formatGain(analysisJson.timePotential?.goalBasedGainSeconds ?? analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds);
             return `${base}. Against ${effectiveTargetTimeString} finishers, your ${limiterLabel} was approximately ${gain} slower.`;
+          }
+          if (isNextBandFrame && compBandLabel) {
+            const gain = formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds);
+            return `${base}. ${benchmarkPrefix}, your ${limiterLabel} was approximately ${gain} slower.`;
           }
           return `${base}, estimated gap of ${formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds)}.`;
         })(),

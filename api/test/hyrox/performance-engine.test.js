@@ -20,6 +20,7 @@ const FIXTURE_DIR = path.resolve(__dirname, "../fixtures/hyrox");
 const GROUP_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:30-34";
 const FALLBACK_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:all";
 const GOAL_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_70:open:male";
+const SUB_65_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_65:open:male";
 const SUB_60_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_60:open:male";
 
 const BASE_MEDIANS = Object.freeze({
@@ -83,18 +84,21 @@ function seedBenchmarks() {
   for (const [metricKey, median] of Object.entries(BASE_MEDIANS)) {
     metrics.push(metric(GROUP_KEY, metricKey, median));
     metrics.push(metric(FALLBACK_KEY, metricKey, median));
-    metrics.push(metric(GOAL_BAND_KEY, metricKey, median));
+    metrics.push(metric(GOAL_BAND_KEY, metricKey, metricKey === "total_time" ? 4140 : median));
+    metrics.push(metric(SUB_65_BAND_KEY, metricKey, metricKey === "total_time" ? 3900 : median - 60));
     metrics.push(metric(SUB_60_BAND_KEY, metricKey, metricKey === "total_time" ? 3420 : median - 30));
   }
   metrics.push(metric(GROUP_KEY, "run_fade_pct", 5));
   metrics.push(metric(FALLBACK_KEY, "run_fade_pct", 5));
   metrics.push(metric(GOAL_BAND_KEY, "run_fade_pct", 5));
+  metrics.push(metric(SUB_65_BAND_KEY, "run_fade_pct", 5));
   metrics.push(metric(SUB_60_BAND_KEY, "run_fade_pct", 5));
   setBenchmarkData({
     groups: [
       { groupKey: GROUP_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", ageGroup: "30-34", sampleSize: 500 },
       { groupKey: FALLBACK_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", ageGroup: null, fallbackLevel: 1, sampleSize: 600 },
       { groupKey: GOAL_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_70", sampleSize: 500 },
+      { groupKey: SUB_65_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_65", sampleSize: 500 },
       { groupKey: SUB_60_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_60", sampleSize: 500 },
     ],
     metrics,
@@ -252,6 +256,27 @@ test("analyse mode uses achieved band cohort for top-level and segment gaps", ()
   assert.equal(total.timeGapToMedianSeconds, 80);
   assert.equal(run1.benchmarkGroupUsed, SUB_60_BAND_KEY);
   assert.equal(run1.benchmarkMedianSeconds, 270);
+});
+
+test("analyse mode switches frame gaps to next band when athlete beats achieved band median", () => {
+  const fixture = readFixture("elite_small_gaps.json");
+  const analysis = analyseSubmission({
+    ...fixture,
+    race: { ...fixture.race, finishTimeSeconds: 4047 },
+    calculatorMode: "analyse",
+  });
+  const total = analysis.segments.find((segment) => segment.segmentKey === "total_time");
+  const wallBalls = analysis.segments.find((segment) => segment.segmentKey === "wall_balls");
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_70");
+  assert.equal(analysis.benchmarkContext.analysisFrame.frame, "next_band");
+  assert.equal(analysis.benchmarkContext.analysisFrame.comparisonBand, "sub_65");
+  assert.equal(total.benchmarkGroupUsed, GOAL_BAND_KEY);
+  assert.equal(total.timeGapToMedianSeconds, -93);
+  assert.equal(total.nextBandMedianSeconds, 3900);
+  assert.equal(total.frameGapSeconds, 147);
+  assert.equal(wallBalls.nextBandMedianSeconds, 240);
+  assert.equal(wallBalls.frameGapSeconds, 10);
 });
 
 test("missing age group uses fallback benchmark", () => {
