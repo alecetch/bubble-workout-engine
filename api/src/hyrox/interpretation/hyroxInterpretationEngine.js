@@ -1,6 +1,10 @@
 import { MUSCLE_GROUP_MAP } from "../config/muscleGroupMap.js";
 import { formatGain, formatPercent, formatPercentile, formatPercentileRank, formatTime, label } from "../reports/copyFormatter.js";
 
+function pluralStation(label) {
+  return /lunges|balls|jumps$/i.test(String(label ?? ""));
+}
+
 const DEFAULT_SECTION_ORDER = Object.freeze([
   "executive_summary",
   "data_confidence",
@@ -456,10 +460,10 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     if (achievedLabel) {
       return {
         headline: nextBandLabel
-          ? `You are competitive in ${achievedLabel} - here is what moves you toward ${nextBandLabel}`
+          ? `YOU ARE COMPETITIVE IN ${achievedLabel.toUpperCase()} — HERE IS WHAT MOVES YOU TOWARD ${nextBandLabel.toUpperCase()}`
           : `You are competitive in ${achievedLabel}`,
-        subline: category === "station_capacity"
-          ? `${lLabel} is the split to sharpen next.`
+        subline: nextBandLabel && category === "station_capacity"
+          ? `The gap to ${nextBandLabel} is within reach. Station efficiency is the lever.`
           : "The next gains are specific, not generic.",
         gainDisplay: null,
       };
@@ -503,36 +507,67 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     return { headline: "TRANSITION LEAKAGE IS COSTING YOU FREE TIME", subline: "Roxzone efficiency is your lowest-effort gain.", gainDisplay: null };
   }
   if (category === "pacing") {
-    return { headline: "YOU HAVE THE ENGINE - THE CEILING IS EXECUTION", subline: "Pacing discipline is the next unlock.", gainDisplay: null };
+    return { headline: "YOU HAVE THE ENGINE — THE CEILING IS EXECUTION", subline: "Pacing discipline is the next unlock.", gainDisplay: null };
   }
   if (category === "data_quality") {
-    return { headline: "YOUR ANALYSIS IS READY - HERE IS WHAT WE CAN SAY CONFIDENTLY", subline: null, gainDisplay: null };
+    return { headline: "YOUR ANALYSIS IS READY — HERE IS WHAT WE CAN SAY CONFIDENTLY", subline: null, gainDisplay: null };
   }
   if (category === "high_performer") {
     const band = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-") || null;
+    const isEliteBand = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+    const limiter = analysisJson.headline?.biggestLimiter?.label ?? null;
+    if (isEliteBand) {
+      return {
+        headline: "YOU ARE SUB-60 — THE NEXT GAIN IS MARGINAL",
+        subline: limiter
+          ? `At this level, we are not looking for weaknesses. ${limiter} ${pluralStation(limiter) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark.`
+          : "The next gain is not basic fitness — it is the smallest relative advantage in your race profile.",
+        gainDisplay: null,
+      };
+    }
     const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
     const pct = formatPercentileRank(totalSeg?.percentile);
-    const groupRef = band ? `the ${band} group` : "your benchmark group";
+    const groupRef = band ? `the ${band} benchmark band` : "your benchmark band";
     return {
       headline: pct
-        ? `YOU ARE IN THE ${String(pct).toUpperCase()} OF ${groupRef.toUpperCase()} - HERE IS WHAT DROVE IT`
-        : `YOUR RESULT IS ALREADY STRONG IN ${groupRef.toUpperCase()} - HERE IS WHAT DROVE IT`,
+        ? `YOU ARE IN THE ${String(pct).toUpperCase()} OF ${groupRef.toUpperCase()} — HERE IS WHAT DROVE IT`
+        : `YOUR RESULT IS ALREADY STRONG IN ${groupRef.toUpperCase()} — HERE IS WHAT DROVE IT`,
       subline: band
-        ? `This is the sharpest end of the ${band} group. Marginal gains apply here.`
+        ? `This is the sharpest end of the ${band} benchmark band. Marginal gains apply here.`
         : "This is a marginal-gains profile, not a bottleneck result.",
       gainDisplay: null,
     };
   }
   if (category === "station_capacity" && calculatorMode === "analyse") {
+    const achievedBandStr = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-");
+    const nextBandStr = (analysisJson.benchmarkContext?.nextBand ?? "").replace("sub_", "sub-");
+    const isEliteBand = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+    const isCompetitive = ["sub_65", "sub_70"].includes(analysisJson.benchmarkContext?.achievedBand ?? "");
+
+    if (isEliteBand) {
+      return {
+        headline: "YOU ARE SUB-60 — THE NEXT GAIN IS MARGINAL",
+        subline: `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark. At this level, this is a refinement, not a remediation.`,
+        gainDisplay: null,
+      };
+    }
+
+    if (isCompetitive && nextBandStr) {
+      return {
+        headline: `YOU ARE COMPETITIVE IN ${achievedBandStr.toUpperCase()} — HERE IS WHAT MOVES YOU TOWARD ${nextBandStr.toUpperCase()}`,
+        subline: `The gap to ${nextBandStr} is within reach. Station efficiency is the lever.`,
+        gainDisplay: null,
+      };
+    }
     return {
       headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
-      subline: "Not a weakness versus the field - the smallest relative advantage in your overall race profile.",
+      subline: "Not a weakness versus the field — the smallest relative advantage in your overall race profile.",
       gainDisplay: null,
     };
   }
   return {
     headline: `${String(lLabel).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`,
-    subline: gainDisplay ? "estimated opportunity against your target benchmark group." : null,
+    subline: gainDisplay ? "estimated opportunity against your benchmark band." : null,
     gainDisplay,
   };
 }
@@ -559,7 +594,7 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
       .sort((a, b) => a.percentile - b.percentile)
       .slice(0, 2)
       .map((s) => s.label);
-    if (pct) bullets.push(`You placed in the ${pct} overall against your benchmark group.`);
+    if (pct) bullets.push(`You placed in the ${pct} overall against your benchmark band.`);
     if (topStrengths.length > 0) bullets.push(`Strongest stations: ${topStrengths.join(" and ")}.`);
     bullets.push("The next question is where marginal gains are most available within an already-strong result.");
     return bullets.filter(Boolean).slice(0, 3);
@@ -589,7 +624,19 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
   } else if (category === "station_capacity") {
     const gain = headlineGainSeconds(analysisJson);
     const gainCopy = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : formatGain(stationGap);
-    bullets.push(`${limiterLabel(analysisJson)} is your biggest opportunity - ${gainCopy} against your target benchmark group.`);
+    const achievedBandLabel = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-");
+    const nextBandLabel = (analysisJson.benchmarkContext?.nextBand ?? "").replace("sub_", "sub-");
+    const isCompetitive = ["sub_65", "sub_70"].includes(analysisJson.benchmarkContext?.achievedBand ?? "");
+    const isElite = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+
+    if (isElite) {
+      const _ll = limiterLabel(analysisJson);
+      bullets.push(`At this level, we are not looking for limiters. We are looking for the smallest advantage. ${_ll} ${pluralStation(_ll) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark.`);
+    } else if (isCompetitive && nextBandLabel && calculatorMode === "analyse") {
+      bullets.push(`You are already competitive in ${achievedBandLabel}. ${limiterLabel(analysisJson)} shows the biggest gap versus ${nextBandLabel} athletes - closing this is the route to the next band.`);
+    } else {
+      bullets.push(`${limiterLabel(analysisJson)} is your biggest opportunity - ${gainCopy} against your benchmark band.`);
+    }
   } else if (category === "running") {
     bullets.push(`Your cumulative run gap (${formatGain(runGap)}) exceeds your station gap (${formatGain(stationGap)}).`);
   } else if (category === "roxzone") {
