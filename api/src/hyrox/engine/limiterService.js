@@ -9,7 +9,7 @@ function confidenceAtLeastLow(segment) {
 // When a goal benchmark is available, prefer the gap to the athlete's target over the gap to the
 // age-group median. This keeps the headline limiter consistent with what the split table shows.
 function effectiveGapSeconds(segment) {
-  return segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
+  return segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
 }
 
 function preferLimiter(a, b) {
@@ -85,7 +85,13 @@ export function calculateTimePotential(segmentStats, normalisedSubmission, bench
     };
   }
 
-  const conservativeGainSeconds = Math.max(0, selectedLimiter.userSeconds - (selectedLimiter.benchmarkMedianSeconds ?? selectedLimiter.userSeconds));
+  const effectiveGap = effectiveGapSeconds(selectedLimiter);
+  const conservativeGainSeconds = Math.max(
+    0,
+    Number.isFinite(effectiveGap)
+      ? effectiveGap
+      : selectedLimiter.userSeconds - (selectedLimiter.benchmarkMedianSeconds ?? selectedLimiter.userSeconds),
+  );
   const competitiveGainSeconds = Math.max(0, selectedLimiter.userSeconds - (selectedLimiter.benchmarkTopQuartileSeconds ?? selectedLimiter.userSeconds));
   const goalBasedGainSeconds = Number.isFinite(selectedLimiter.timeGapToExactTargetSeconds)
     ? Math.max(0, selectedLimiter.timeGapToExactTargetSeconds)

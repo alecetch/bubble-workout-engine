@@ -433,7 +433,7 @@ function renderRecommendations(section, analysisJson = {}) {
     .filter((segment) => segment.type === "station")
     .map((segment) => ({
       label: segment.label,
-      gap: segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds,
+      gap: segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds,
     }))
     .filter((row) => Number.isFinite(row.gap) && row.gap > 30)
     .sort((a, b) => b.gap - a.gap);
@@ -537,12 +537,14 @@ function splitSafe(value) {
 }
 
 function splitTargetSeconds(segment, hasGoalGroup) {
+  if (Number.isFinite(segment?.nextBandMedianSeconds)) return segment.nextBandMedianSeconds;
   if (Number.isFinite(segment?.exactTargetSeconds)) return segment.exactTargetSeconds;
   if (hasGoalGroup && Number.isFinite(segment?.goalBenchmarkSeconds)) return segment.goalBenchmarkSeconds;
   return Number.isFinite(segment?.benchmarkMedianSeconds) ? segment.benchmarkMedianSeconds : null;
 }
 
 function splitGapSeconds(segment, hasGoalGroup) {
+  if (Number.isFinite(segment?.frameGapSeconds)) return segment.frameGapSeconds;
   if (Number.isFinite(segment?.timeGapToExactTargetSeconds)) return segment.timeGapToExactTargetSeconds;
   if (hasGoalGroup && Number.isFinite(segment?.goalBenchmarkSeconds) && Number.isFinite(segment?.userSeconds)) {
     return segment.userSeconds - segment.goalBenchmarkSeconds;
@@ -1360,15 +1362,31 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
   const subject = (() => {
     if (usePenaltyHero) return `Your HYROX fastest win is ${formatGain(emailPenaltySeconds)} of penalties`;
     if (calculatorMode === "analyse") {
+      const analysisFrame = analysisJson.benchmarkContext?.analysisFrame;
+      const frame = analysisFrame?.frame;
       const achievedBand = analysisJson.benchmarkContext?.achievedBand;
-      const nextBand = analysisJson.benchmarkContext?.nextBand;
       const bandLabel = achievedBand?.replace("sub_", "sub-") ?? null;
-      const nextBandLabel = nextBand?.replace("sub_", "sub-") ?? null;
-      if (bandLabel && !nextBandLabel) {
+      const compBandLabel = (analysisFrame?.comparisonBand ?? analysisJson.benchmarkContext?.nextBand)?.replace("sub_", "sub-") ?? null;
+      const stretchBandLabel = analysisFrame?.stretchBand?.replace("sub_", "sub-") ?? null;
+
+      if (frame === "next_band" || frame === "next_band_stretch") {
+        if (bandLabel && compBandLabel) {
+          return `You're ahead of your ${bandLabel} group. ${compBandLabel} is the next test.`;
+        }
+        if (compBandLabel) {
+          return `You have the engine. ${compBandLabel} is the next test.`;
+        }
+      }
+
+      if (frame === "competitive" && bandLabel && stretchBandLabel) {
+        return `You're competitive in ${bandLabel}. Here's what moves you to ${stretchBandLabel}.`;
+      }
+
+      if (achievedBand === "sub_60") {
         return "You're sub-60. Here's what separates you from the top of the group.";
       }
-      if (bandLabel && nextBandLabel) {
-        return `You're in the ${bandLabel} band. Here's the route to ${nextBandLabel}.`;
+      if (bandLabel && compBandLabel) {
+        return `You're in the ${bandLabel} band. Here's the route to ${compBandLabel}.`;
       }
       const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
       const pct = formatPercentileRank(totalSeg?.percentile);

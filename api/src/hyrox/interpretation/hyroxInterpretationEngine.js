@@ -79,6 +79,22 @@ const HIGH_PERFORMER_SECTION_ORDER = Object.freeze([
   "recommendations",
 ]);
 
+const NEXT_BAND_SECTION_ORDER = Object.freeze([
+  "executive_summary",
+  "data_confidence",
+  "race_snapshot",
+  "station_breakdown",
+  "running_fatigue",
+  "roxzone_execution",
+  "split_table",
+  "biggest_strength",
+  "muscle_group",
+  "time_potential",
+  "training_volume",
+  "background_context",
+  "recommendations",
+]);
+
 const MUSCLE_BY_SEGMENT = new Map(MUSCLE_GROUP_MAP.map((row) => [row.segmentKey, row]));
 
 function finiteNumber(value) {
@@ -99,8 +115,11 @@ export function totalStationGapSeconds(analysisJson = {}) {
 
 export function totalRunGapSeconds(analysisJson = {}) {
   return (analysisJson.segments ?? [])
-    .filter((s) => s.type === "run" && Number.isFinite(s.timeGapToMedianSeconds) && s.timeGapToMedianSeconds > 0)
-    .reduce((sum, s) => sum + s.timeGapToMedianSeconds, 0);
+    .filter((s) => {
+      const gap = s.frameGapSeconds ?? s.timeGapToMedianSeconds;
+      return s.type === "run" && Number.isFinite(gap) && gap > 0;
+    })
+    .reduce((sum, s) => sum + (s.frameGapSeconds ?? s.timeGapToMedianSeconds), 0);
 }
 
 export function weakStationCount(analysisJson = {}) {
@@ -344,7 +363,17 @@ function muscleGroupConfidence(analysisJson = {}) {
   return "low";
 }
 
-export function buildSectionOrder(primaryThesis, analysisJson = {}) {
+export function buildSectionOrder(primaryThesis, analysisJson = {}, calculatorMode = "target") {
+  const frame = analysisJson.benchmarkContext?.analysisFrame?.frame;
+  if (calculatorMode === "analyse" && (frame === "next_band" || frame === "next_band_stretch")) {
+    const order = [...NEXT_BAND_SECTION_ORDER];
+    const hasPenalty = totalPenaltySeconds(analysisJson) > 0;
+    if (hasPenalty && !order.includes("penalty_callout")) {
+      const snapIdx = order.indexOf("race_snapshot");
+      order.splice(snapIdx >= 0 ? snapIdx + 1 : 2, 0, "penalty_callout");
+    }
+    return applyDataConfidenceOrder(order, analysisJson);
+  }
   if (primaryThesis?.category === "high_performer") {
     const order = [...HIGH_PERFORMER_SECTION_ORDER];
     const hasPenalty = totalPenaltySeconds(analysisJson) > 0;
@@ -373,12 +402,47 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
   const gain = headlineGainSeconds(analysisJson);
   const gainDisplay = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : null;
   const lLabel = limiterLabel(analysisJson);
+  const analysisFrame = analysisJson?.benchmarkContext?.analysisFrame;
+  const frame = analysisFrame?.frame;
+  const compBandLabel = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
+  const stretchBandLabel = analysisFrame?.stretchBand?.replace("sub_", "sub-") ?? null;
   if (category === "penalty") {
     return {
       headline: `${formatGain(totalPenaltySeconds(analysisJson))} OF PENALTIES IS YOUR FASTEST WIN`,
       subline: "Cleaner execution reclaims that time without a training block.",
       gainDisplay: null,
     };
+  }
+  if (calculatorMode === "analyse" && (frame === "next_band" || frame === "next_band_stretch")) {
+    const bandTarget = compBandLabel ?? "the next band";
+    if (category === "station_capacity") {
+      return {
+        headline: `${String(lLabel).toUpperCase()} IS THE KEY TO REACHING ${String(bandTarget).toUpperCase()}`,
+        subline: stretchBandLabel
+          ? `Fix this and ${stretchBandLabel} comes into view.`
+          : `This is where the time is hiding in the jump to ${bandTarget}.`,
+        gainDisplay: null,
+      };
+    }
+    if (category === "running") {
+      return {
+        headline: `YOUR RUNNING IS THE ROUTE TO ${String(bandTarget).toUpperCase()}`,
+        subline: stretchBandLabel
+          ? `Sort the running and ${stretchBandLabel} comes into view.`
+          : `Running is where ${bandTarget} athletes have an edge.`,
+        gainDisplay: null,
+      };
+    }
+  }
+  if (calculatorMode === "analyse" && frame === "competitive") {
+    const nextBandLabel = stretchBandLabel;
+    if (category === "station_capacity" && nextBandLabel) {
+      return {
+        headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
+        subline: `You are competitive in your group. This is the gap that limits ${nextBandLabel}.`,
+        gainDisplay: null,
+      };
+    }
   }
   if (category === "running") {
     return { headline: "YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP", subline: "Closing that gap unlocks your finish time.", gainDisplay: null };
@@ -427,7 +491,6 @@ function secondaryEvidence(secondaryTheses = []) {
 }
 
 export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysisJson = {}, calculatorMode = "target") {
-  void calculatorMode;
   const category = primaryThesis?.category;
   const penalty = buildPenaltyInterpretation(analysisJson);
   const stationGap = totalStationGapSeconds(analysisJson);
@@ -448,6 +511,24 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
     if (topStrengths.length > 0) bullets.push(`Strongest stations: ${topStrengths.join(" and ")}.`);
     bullets.push("The next question is where marginal gains are most available within an already-strong result.");
     return bullets.filter(Boolean).slice(0, 3);
+  }
+
+  const frame2 = analysisJson?.benchmarkContext?.analysisFrame?.frame;
+  const compBand2 = analysisJson?.benchmarkContext?.analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
+  const achievedBandLabel2 = (analysisJson?.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-") || null;
+
+  if (calculatorMode === "analyse" && (frame2 === "next_band" || frame2 === "next_band_stretch")) {
+    const bandTarget2 = compBand2 ?? "the next band";
+    const frameBullets = [];
+    if (achievedBandLabel2) {
+      frameBullets.push(`You are ahead of the median ${achievedBandLabel2} finisher. The next step is ${bandTarget2}.`);
+    }
+    const lLabel = limiterLabel(analysisJson);
+    if (lLabel) {
+      frameBullets.push(`${lLabel} shows the biggest gap versus ${bandTarget2} athletes.`);
+    }
+    frameBullets.push(`Closing this gap is the main route to ${bandTarget2}.`);
+    return frameBullets.filter(Boolean).slice(0, 3);
   }
 
   if (category === "penalty") {
@@ -511,7 +592,7 @@ export function buildInterpretation(analysisJson = {}, athleteContext = {}, calc
     secondaryTheses,
     protectedStrengths: protectedStrengths(analysisJson),
     suppressedSignals: buildSuppressedSignals(primaryCategory, secondaryTheses, analysisJson),
-    sectionOrder: buildSectionOrder(primaryThesis, analysisJson),
+    sectionOrder: buildSectionOrder(primaryThesis, analysisJson, calculatorMode),
     heroCopy: buildHeroCopy(primaryThesis, analysisJson, calculatorMode),
     summaryBullets: buildSummaryBullets(primaryThesis, secondaryTheses, analysisJson, calculatorMode),
     penaltyInterpretation,
