@@ -220,7 +220,7 @@ export function RaceDetailsPage() {
             <br />
             Insight out.
             <br />
-            Performance up.
+            Per<span style={{ WebkitTextFillColor: "var(--accent-cyan)" }}>forma</span>nce up.
           </h1>
           <p className={styles.subline}>
             Paste your HYROX result and Forma turns your race into a clear

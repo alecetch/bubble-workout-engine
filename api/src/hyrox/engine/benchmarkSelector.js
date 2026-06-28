@@ -95,7 +95,9 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const calculatorMode = options.calculatorMode ?? "target";
   const isAnalyseMode = calculatorMode === "analyse";
 
-  const division = normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division ?? "open";
+  const rawDivision = normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division ?? "open";
+  const doublesBenchmarkedAsSingles = rawDivision === "doubles";
+  const division = doublesBenchmarkedAsSingles ? "open" : rawDivision;
   const gender = normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender ?? "unknown";
   const ageGroup = normalisedSubmission.athlete?.ageGroup ?? null;
   const request = { datasetVersion, division, gender, ageGroup };
@@ -149,6 +151,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
           confidenceLabel: confidenceLabelFromSampleSize(bandSelection.sampleSize),
           fallbacksUsed,
           goalBenchmarkGroup: null,
+          doublesBenchmarkedAsSingles,
         };
       }
 
@@ -172,5 +175,6 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
     confidenceLabel: isAnalyseMode ? confidenceLabel : null,
     fallbacksUsed,
     goalBenchmarkGroup: isAnalyseMode ? null : groupFromSelection(goalSelection),
+    doublesBenchmarkedAsSingles,
   };
 }

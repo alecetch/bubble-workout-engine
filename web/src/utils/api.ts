@@ -101,18 +101,30 @@ export async function fetchHyroxResultsImport(
   eventDate?: string;
   eventName?: string;
 }> {
-  const res = await fetch(`${BASE_URL}/api/hyrox/import-url`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
-  });
-  return res.json() as Promise<{
-    success: boolean;
-    reason?: string;
-    parsed?: HyroxParseResult;
-    eventDate?: string;
-    eventName?: string;
-  }>;
+  try {
+    const res = await fetch(`${BASE_URL}/api/hyrox/import-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return { success: false, reason: res.ok ? "invalid_response" : "fetch_failed" };
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      return { success: false, reason: body.error ?? "fetch_failed" };
+    }
+    return res.json() as Promise<{
+      success: boolean;
+      reason?: string;
+      parsed?: HyroxParseResult;
+      eventDate?: string;
+      eventName?: string;
+    }>;
+  } catch {
+    return { success: false, reason: "fetch_failed" };
+  }
 }
 
 export function trackEvent(name: string, props?: Record<string, unknown>): void {

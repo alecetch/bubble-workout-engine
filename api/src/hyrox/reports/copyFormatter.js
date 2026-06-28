@@ -61,14 +61,11 @@ export function formatPercentileRank(p) {
 }
 
 export function formatOverallStanding(p) {
+  if (p == null) return null;
   const n = Number(p);
   if (!Number.isFinite(n)) return null;
-  if (n >= 99) return "Top 1% overall";
-  if (n >= 95) return "Top 5% overall";
-  if (n >= 90) return "Top 10% overall";
-  if (n >= 75) return "Top 25% overall";
-  const rounded = Math.round(n);
-  return `${rounded}${ordinalSuffix(rounded)} percentile overall`;
+  const topPct = Math.max(1, Math.round(100 - n));
+  return `Top ${topPct}% overall`;
 }
 
 export function bandScoreLabel(percentile) {

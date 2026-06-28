@@ -12,6 +12,10 @@ function bandDisplayLabel(band) {
   return band.replace("sub_", "sub-");
 }
 
+function pluralStation(label) {
+  return /lunges|balls|jumps$/i.test(String(label ?? ""));
+}
+
 function esc(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -207,33 +211,50 @@ const BAND_RANGES = {
 };
 
 function renderBenchmarkExplanation(analysisJson = {}, calculatorMode = "target") {
-  if (calculatorMode !== "analyse") return "";
-  const achievedBand = analysisJson.benchmarkContext?.achievedBand;
-  if (!achievedBand) return "";
+  if (calculatorMode === "analyse") {
+    const achievedBand = analysisJson.benchmarkContext?.achievedBand;
+    if (!achievedBand) return "";
 
-  const division = analysisJson.athlete?.division ?? "Open";
-  const gender = analysisJson.athlete?.gender ?? "";
-  const divLabel = [division, gender].filter(Boolean).join(" ");
-  const confidenceLabel = analysisJson.benchmarkContext?.confidenceLabel;
-  const isLowSample = ["low-confidence", "directional"].includes(confidenceLabel);
+    const division = analysisJson.athlete?.division ?? "Open";
+    const gender = analysisJson.athlete?.gender ?? "";
+    const divLabel = [division, gender].filter(Boolean).join(" ");
+    const confidenceLabel = analysisJson.benchmarkContext?.confidenceLabel;
+    const isLowSample = ["low-confidence", "directional"].includes(confidenceLabel);
 
-  let explanation;
-  if (achievedBand === "sub_105") {
-    explanation = `Your benchmark band: ${divLabel} athletes finishing in the 90:00+ performance range. This is a wider comparison band because the field spreads out more at this end of the results.`;
-  } else {
-    const range = BAND_RANGES[achievedBand];
-    explanation = range
-      ? `Your benchmark band: ${divLabel} athletes finishing ${range}. This compares you with athletes at a similar race level, so the analysis reflects realistic opportunities for improvement.`
-      : `Your benchmark band is the ${achievedBand.replace("sub_", "sub-")} group.`;
+    let explanation;
+    if (achievedBand === "sub_105") {
+      explanation = `Your benchmark band: ${divLabel} athletes finishing in the 90:00+ performance range. This is a wider comparison band because the field spreads out more at this end of the results.`;
+    } else {
+      const range = BAND_RANGES[achievedBand];
+      explanation = range
+        ? `Your benchmark band: ${divLabel} athletes finishing ${range}. This compares you with athletes at a similar race level, so the analysis reflects realistic opportunities for improvement.`
+        : `Your benchmark band is the ${achievedBand.replace("sub_", "sub-")} group.`;
+    }
+
+    const lowSampleNote = isLowSample
+      ? " This benchmark band has a smaller sample size, so treat band scores as directional. The priority areas are still useful."
+      : "";
+
+    return `<tr>
+      <td style="background-color:#ffffff;padding:8px 24px 14px;border-bottom:1px solid #e2e8f0;">
+        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;font-style:italic;">${esc(explanation + lowSampleNote)}</p>
+      </td>
+    </tr>`;
   }
 
-  const lowSampleNote = isLowSample
-    ? " This benchmark band has a smaller sample size, so treat band scores as directional. The priority areas are still useful."
-    : "";
+  const goalGroup2 = analysisJson?.benchmarkContext?.goalBenchmarkGroup;
+  const targetTimeFmt = goalGroup2?.targetFinishSeconds
+    ? formatTime(goalGroup2.targetFinishSeconds)
+    : null;
+  if (!targetTimeFmt) return "";
+
+  const explanation = `Your target analysis compares your current race with a realistic split profile for ${targetTimeFmt}. The gaps below show where you need to find time to make the target achievable.`;
 
   return `<tr>
-    <td style="background-color:#ffffff;padding:8px 24px 14px;border-bottom:1px solid #e2e8f0;">
-      <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;font-style:italic;">${esc(explanation + lowSampleNote)}</p>
+    <td style="background-color:#f0f9ff;border-top:1px solid #bae6fd;border-bottom:1px solid #bae6fd;padding:10px 24px;">
+      <p style="color:#0369a1;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.55;margin:0;">
+        ${esc(explanation)}
+      </p>
     </td>
   </tr>`;
 }
@@ -242,13 +263,25 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
   const { totalPenaltySeconds, penaltiesAreMaterial, adjustedRaceTimeSeconds } = penaltyContext(analysisJson);
   const finishTime = formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "-";
+  const selectedTargetSeconds = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+    ?? totalSeg?.exactTargetSeconds
+    ?? null;
   const benchmarkTime = formatTime(
-    totalSeg?.exactTargetSeconds
-    ?? totalSeg?.goalBenchmarkSeconds
-    ?? analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds,
+    calculatorMode === "analyse"
+      ? totalSeg?.exactTargetSeconds
+        ?? totalSeg?.goalBenchmarkSeconds
+        ?? analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+      : selectedTargetSeconds,
   ) ?? "-";
   const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "-";
   const rank = esc(formatOverallStanding(totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
+  const finishSeconds = analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds;
+  const targetGapSeconds = Number.isFinite(finishSeconds) && Number.isFinite(selectedTargetSeconds)
+    ? finishSeconds - selectedTargetSeconds
+    : null;
+  const targetGap = Number.isFinite(targetGapSeconds)
+    ? targetGapSeconds <= 0 ? "On target" : formatGain(targetGapSeconds)
+    : "-";
   const penalties = analysisJson.penalties ?? [];
   const hasPenalties = penalties.length > 0;
   const showAdjusted = hasPenalties && penaltiesAreMaterial;
@@ -288,7 +321,16 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
           true,
           "Arial,Helvetica,sans-serif",
         )
-      : metricCell("BENCHMARK", esc(benchmarkTime), "#0f172a", true);
+		      : metricCell("TARGET TIME", esc(benchmarkTime), "#0f172a", true);
+  const thirdCell = calculatorMode === "analyse"
+    ? metricCell("OVERALL STANDING", rank, "#0f172a", hasPenalties, "Arial,Helvetica,sans-serif")
+    : metricCell(
+        "TARGET GAP",
+        esc(targetGap),
+        Number.isFinite(targetGapSeconds) && targetGapSeconds <= 0 ? "#22c55e" : "#d97706",
+        hasPenalties,
+        "Arial,Helvetica,sans-serif",
+      );
 
   return `<tr>
     <td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;padding:0;">
@@ -296,7 +338,7 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
         <tr>
           ${metricCell("YOUR RACE", esc(finishTime), "#0f172a", true)}
           ${secondCell}
-	          ${metricCell("OVERALL STANDING", rank, "#0f172a", hasPenalties, "Arial,Helvetica,sans-serif")}
+	          ${thirdCell}
           ${penaltyCell}
         </tr>
       </table>
@@ -583,6 +625,22 @@ function renderCta(section, analysisJson = {}, ctaCopy = null) {
   </tr>`;
 }
 
+function renderTargetModeNudge(athleteContext = {}, calculatorMode = "target") {
+  if (calculatorMode !== "analyse") return "";
+  const targetSecs = athleteContext.targetFinishTimeSeconds ?? athleteContext.race?.targetTimeSeconds ?? null;
+  if (!Number.isFinite(targetSecs) || targetSecs <= 0) return "";
+  const targetFmt = formatTime(targetSecs);
+  if (!targetFmt) return "";
+  return `<tr>
+    <td style="background-color:#ffffff;padding:0 24px 18px;">
+      <div style="background-color:#f0f9ff;border:1px solid #bae6fd;border-left:3px solid #08a7f5;border-radius:8px;padding:14px 18px;">
+        <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">WANT TO HIT ${esc(targetFmt)}?</span>
+        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0;">Run the calculator in <strong style="color:#0f172a;">Hit a Target Time</strong> mode to see a split-by-split breakdown of exactly where you need to find time to make <strong style="color:#0f172a;">${esc(targetFmt)}</strong> achievable.</p>
+      </div>
+    </td>
+  </tr>`;
+}
+
 const SPLIT_TABLE_RACE_ORDER = Object.freeze([
   "run_1", "ski_erg", "run_2", "sled_push", "run_3", "sled_pull",
   "run_4", "burpee_broad_jump", "run_5", "row", "run_6", "farmers_carry",
@@ -651,6 +709,8 @@ function renderSplitTable(section, analysisJson) {
   const baseUrl = (process.env.BASE_URL ?? "https://getformai.com").replace(/\/$/, "");
   const splitReportUrl = analysisJson.submissionId ? `${baseUrl}/api/hyrox/carousel/${analysisJson.submissionId}` : null;
   const segMap = new Map(segments.map((segment) => [segment.segmentKey, segment]));
+  const finishSeconds = analysisJson.race?.finishTimeSeconds ?? segMap.get("total_time")?.userSeconds ?? null;
+  const isSub60Finish = Number.isFinite(finishSeconds) && finishSeconds <= 3600;
   const totalPenaltySeconds = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
   const hasPenalties = totalPenaltySeconds > 0;
   const totalGapSeconds = Math.max(0, splitGapSeconds(segMap.get("total_time"), hasGoalGroup) ?? 0);
@@ -738,11 +798,11 @@ function renderSplitTable(section, analysisJson) {
     return "";
   }
 
-  function buildGapRelationSentence(stationGap, runGapRawValue, totalGapSecondsValue, bandLabel = null) {
+  function buildGapRelationSentence(stationGap, runGapRawValue, totalGapSecondsValue, bandLabel = null, prefixOverride = null) {
     if (!Number.isFinite(totalGapSecondsValue) || totalGapSecondsValue <= 0) return "";
     if (!Number.isFinite(stationGap)) return "";
 
-    const prefix = bandLabel ? `Against the ${bandLabel} benchmark median, ` : "";
+    const prefix = prefixOverride ?? (bandLabel ? `Against the ${bandLabel} benchmark median, ` : "");
     const your = prefix ? "your" : "Your";
     const both = prefix ? "both" : "Both";
     const stations = prefix ? "stations" : "Stations";
@@ -772,31 +832,45 @@ function renderSplitTable(section, analysisJson) {
       const fitnessSentence = fitnessNames.length
         ? ` Biggest fitness opportunities: ${fitnessNames.join(", ").replace(/, ([^,]*)$/, " and $1")}. Fastest controllable win: penalties.`
         : " Fastest controllable win: penalties.";
+      const roxRef = hasGoalGroup ? "target profile" : "benchmark";
       const roxNote = roxGap < -30
-        ? `Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs benchmark).`
+        ? `Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs ${roxRef}).`
         : roxGap < 30
           ? "Transitions are not a meaningful drag on your result."
-          : `Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above benchmark).`;
-      const gapSentence = buildGapRelationSentence(stationGap, runGapRaw, totalGapSeconds, bandDisplayLabel(achievedBand));
+          : `Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
+      const gapSentence = buildGapRelationSentence(
+        stationGap,
+        runGapRaw,
+        totalGapSeconds,
+        hasGoalGroup ? null : bandDisplayLabel(achievedBand),
+        hasGoalGroup ? "Against the target profile, " : null,
+      );
       return `<tr>
         <td style="background-color:#ffffff;padding:18px 24px;">
           <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
             <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-            <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">Stations remain the largest fitness limiter, but penalties are your fastest controllable win.${gapSentence}<br><br>Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
+            <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${hasGoalGroup ? "Stations remain the largest target gap" : "Stations remain the largest fitness limiter"}, but penalties are your fastest controllable win.${gapSentence}<br><br>Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
           </div>
         </td>
       </tr>`;
     }
 
-    const isElite = achievedBand === "sub_60";
+    const isElite = achievedBand === "sub_60" || isSub60Finish;
     const isCompetitive = ["sub_65", "sub_70"].includes(achievedBand ?? "");
     const nextBandStr = analysisJson.benchmarkContext?.nextBand?.replace("sub_", "sub-") ?? null;
     const achievedStr = achievedBand?.replace("sub_", "sub-") ?? null;
     const limiterStr = analysisJson.headline?.biggestLimiter?.label ?? null;
     const runIsStrength = runGapRaw < -30;
+    const targetTimeFmt2 = hasGoalGroup
+      ? formatTime(goalGroup?.targetFinishSeconds ?? segMap.get("total_time")?.goalBenchmarkSeconds)
+      : null;
     let mainLimiter;
     if (totalGapSeconds <= 0) {
-      if (isElite) {
+      if (hasGoalGroup) {
+        mainLimiter = `You are at or ahead of the ${targetTimeFmt2 ?? "target"} profile. ${
+          limiterStr ? `${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the tightest remaining gap versus the target.` : ""
+        }`.trim();
+      } else if (isElite) {
         mainLimiter = workGap > runGap + 60
           ? "You matched or beat your benchmark band overall. Your next refinement is station execution."
           : runGap > workGap + 60
@@ -818,7 +892,11 @@ function renderSplitTable(section, analysisJson) {
             : "You matched or beat your benchmark band overall.";
       }
     } else if (workGap > runGap + 60) {
-      if (isElite) {
+      if (hasGoalGroup) {
+        mainLimiter = targetTimeFmt2
+          ? `To hit ${targetTimeFmt2}, the gap is led by station performance.${limiterStr ? ` ${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}`
+          : `The main target gap is station performance.${limiterStr ? ` ${limiterStr} leads.` : ""}`;
+      } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in station performance.";
       } else if (isCompetitive && achievedStr && nextBandStr) {
         mainLimiter = `You are competitive in the ${achievedStr} benchmark band. ${
@@ -830,7 +908,11 @@ function renderSplitTable(section, analysisJson) {
         mainLimiter = "The main limiter is station performance.";
       }
     } else if (runGap > workGap + 60) {
-      if (isElite) {
+      if (hasGoalGroup) {
+        mainLimiter = targetTimeFmt2
+          ? `To hit ${targetTimeFmt2}, the gap is led by running pace.${runIsStrength ? " Running is strong against your current benchmark, but still needs time against the target profile." : ""}`
+          : "The main target gap is running pace.";
+      } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in running pace.";
       } else if (isCompetitive && achievedStr && nextBandStr) {
         mainLimiter = `You are competitive in the ${achievedStr} benchmark band. Running pace shows the clearest gap versus ${nextBandStr} athletes.`;
@@ -838,14 +920,41 @@ function renderSplitTable(section, analysisJson) {
         mainLimiter = "The main limiter is running pace.";
       }
     } else {
-      mainLimiter = "Both running and station performance are contributing to the gap.";
+      if (hasGoalGroup) {
+        mainLimiter = targetTimeFmt2
+          ? `To hit ${targetTimeFmt2}, both stations and running are contributing to the gap.${penaltiesAreMaterial ? " The first controllable win is penalty removal." : ""}`
+          : "Both stations and running are contributing to the target gap.";
+      } else {
+        mainLimiter = "Both running and station performance are contributing to the gap.";
+      }
     }
 
+    if (hasGoalGroup && totalGapSeconds > 0) {
+      let feasibility;
+      const isEliteTarget = isElite
+        && Number.isFinite(goalGroup?.targetFinishSeconds)
+        && goalGroup.targetFinishSeconds <= 3300;
+      if (isEliteTarget) {
+        feasibility = "Target assessment: elite stretch.";
+      } else
+      if (totalGapSeconds <= 60) feasibility = "Target assessment: very close — within reach with focused execution.";
+      else if (totalGapSeconds <= 180) feasibility = "Target assessment: realistic with focused execution.";
+      else if (totalGapSeconds <= 360) feasibility = "Target assessment: ambitious but plausible.";
+      else if (totalGapSeconds <= 600) feasibility = "Target assessment: aggressive stretch.";
+      else feasibility = "Target assessment: very aggressive target.";
+
+      if (penaltiesDominate) {
+        feasibility = "Target assessment: aggressive stretch. The first win is execution — removing penalties changes the size of the problem immediately.";
+      }
+      mainLimiter = `${feasibility} ${mainLimiter}`;
+    }
+
+    const roxRef = hasGoalGroup ? "target profile" : "benchmark";
     const roxNote = roxGap < -30
-      ? ` Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs benchmark).`
+      ? ` Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs ${roxRef}).`
       : roxGap < 30
         ? " Transitions are not a meaningful drag on your result."
-        : ` Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above benchmark).`;
+        : ` Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
     const topLosses = SPLIT_TABLE_RACE_ORDER
       .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
       .filter((row) => Number.isFinite(row.gap) && row.gap >= 60)
@@ -855,7 +964,13 @@ function renderSplitTable(section, analysisJson) {
     const biggestNote = lossNames ? ` Biggest opportunities: ${lossNames}.` : "";
 
     const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
-    const gapSentence = buildGapRelationSentence(stationGap, runGapRaw, totalGapSeconds, bandDisplayLabel(achievedBand));
+    const gapSentence = buildGapRelationSentence(
+      stationGap,
+      runGapRaw,
+      totalGapSeconds,
+      hasGoalGroup ? null : bandDisplayLabel(achievedBand),
+      hasGoalGroup ? "Against the target profile, " : null,
+    );
     const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
     let penaltySentence = "";
     if (penaltiesAreMaterial) {
@@ -895,14 +1010,14 @@ function renderSplitTable(section, analysisJson) {
       ? `Running ${splitSafe(splitGapDisplay(runGapNetOfPenalties))} net of penalties`
       : `Running ${splitSafe(splitGapDisplay(runGapRaw))}`;
     const footerNote = penaltiesAreMaterial
-      ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap.</p>`
-      : `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap.</p>`;
+      ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Running is shown net of penalties. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : "Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap."}</p>`
+      : `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : "Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap."}</p>`;
 
     return `<tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
         <div style="border:1px solid #e2e8f0;border-radius:8px;background-color:#ffffff;padding:16px;">
           <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:4px;">SEGMENT PROFILE</span>
-          <span style="display:block;color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;margin-bottom:10px;">vs. band median per segment</span>
+	          <span style="display:block;color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;margin-bottom:10px;">${hasGoalGroup ? "vs. target profile per segment" : "vs. band median per segment"}</span>
           <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="height:14px;background-color:#f1f5f9;overflow:hidden;margin:0 0 12px;">
             <tr>
               <td width="${stationPct}%" style="background-color:#e53e3e;font-size:1px;line-height:14px;">&nbsp;</td>
@@ -922,14 +1037,20 @@ function renderSplitTable(section, analysisJson) {
     </tr>`;
   }
 
-  function renderSummaryCards() {
+	  function renderSummaryCards() {
     const roxGapForCard = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
     const stationGapForCard = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
     const runGapForCard = splitGapSeconds(segMap.get("run_time"), hasGoalGroup) ?? 0;
     const totalGapNote = hasGoalGroup ? "vs target" : "vs benchmark median";
 
     function segmentCardNote(gap) {
-      if (!Number.isFinite(gap)) return "vs benchmark";
+      if (!Number.isFinite(gap)) return hasGoalGroup ? "vs target" : "vs benchmark";
+      if (hasGoalGroup) {
+        if (gap <= -10) return "Ahead of target";
+        if (gap <= 20) return "On target";
+        if (gap < 60) return "Close to target";
+        return "Opportunity";
+      }
       if (gap <= -10) return "Strength";
       if (gap <= 10) return "On benchmark";
       return "Opportunity";
@@ -1037,6 +1158,119 @@ function renderSplitTable(section, analysisJson) {
           </tr>
         </table>
       </td>
+	    </tr>`;
+	  }
+
+  function renderTargetRoadmap() {
+    if (!hasGoalGroup || totalGapSeconds <= 0) return "";
+    const targetTimeFmt = formatTime(goalGroup?.targetFinishSeconds ?? segMap.get("total_time")?.goalBenchmarkSeconds);
+    if (!targetTimeFmt) return "";
+
+    const totalGapStr = formatGain(totalGapSeconds);
+    const stationGap2 = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
+    const roxGap2 = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
+    const runGapForRoute = penaltiesAreMaterial ? runGapNetOfPenalties : runGapRaw;
+    const stationRanked = rankedGaps.filter((r) => segMap.get(r.key)?.type === "station");
+    const runRanked = rankedGaps.filter((r) => segMap.get(r.key)?.type === "run");
+    const topStationLabel = stationRanked[0] ? (segMap.get(stationRanked[0].key)?.label ?? stationRanked[0].key) : null;
+    const top2StationLabel = stationRanked[1] ? (segMap.get(stationRanked[1].key)?.label ?? stationRanked[1].key) : null;
+    const topRunLabel = runRanked[0] ? (segMap.get(runRanked[0].key)?.label ?? runRanked[0].key) : null;
+
+    const routeItems = [];
+
+    if (penaltiesAreMaterial && totalPenaltySeconds > 0) {
+      routeItems.push(`${splitSafe(formatGain(totalPenaltySeconds))} from eliminating penalties`);
+    }
+
+    if (stationGap2 > 30) {
+      const stationBullet = topStationLabel
+        ? `${splitSafe(formatGain(Math.round(stationGap2 * 0.6)))}–${splitSafe(formatGain(Math.round(stationGap2 * 0.85)))} from station efficiency, led by ${splitSafe(topStationLabel)}${top2StationLabel ? ` and ${splitSafe(top2StationLabel)}` : ""}`
+        : `${splitSafe(formatGain(Math.round(stationGap2 * 0.6)))}–${splitSafe(formatGain(Math.round(stationGap2 * 0.85)))} from station efficiency`;
+      routeItems.push(stationBullet);
+    }
+
+    if (runGapForRoute > 30) {
+      const runBullet = topRunLabel
+        ? `around ${splitSafe(formatGain(runGapForRoute))} from running pace, especially ${splitSafe(topRunLabel)}`
+        : `around ${splitSafe(formatGain(runGapForRoute))} from running pace against the target profile`;
+      routeItems.push(runBullet);
+    } else if (runGapRaw < -30) {
+      routeItems.push("protect running – already ahead of the target profile");
+    }
+
+    if (roxGap2 > 20) {
+      routeItems.push(`around ${splitSafe(formatGain(roxGap2))} from cleaner RoxZone transitions`);
+    } else if (roxGap2 < -20) {
+      routeItems.push("protect RoxZone - already ahead of target");
+    }
+
+    if (routeItems.length === 0) return "";
+
+    const listItems = routeItems.map((item) =>
+      `<li style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#475569;line-height:1.6;margin-bottom:4px;">${item}</li>`
+    ).join("");
+
+    const headingText = `YOUR ROUTE TO ${splitSafe(targetTimeFmt)}`;
+
+    return `<tr>
+      <td style="background-color:#ffffff;padding:0 24px 18px;">
+        <div style="background-color:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:18px 24px;">
+          <span style="display:block;color:#0369a1;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">${headingText}</span>
+          <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0 0 10px;">You need to find <strong>${splitSafe(totalGapStr)}</strong> overall. The most realistic route is:</p>
+          <ul style="margin:0;padding-left:20px;">
+            ${listItems}
+          </ul>
+        </div>
+      </td>
+    </tr>`;
+  }
+
+  function renderTargetPriorities() {
+    if (!hasGoalGroup) return "";
+
+    const stationGap2 = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
+    const roxGap2 = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
+    const top1Label = top1 ? (segMap.get(top1)?.label ?? null) : null;
+
+    const protectItems = [];
+    if (runGapRaw < -30) protectItems.push("running pace - already ahead of the target profile");
+    if (roxGap2 < -20) protectItems.push("RoxZone execution - already ahead of the target profile");
+
+    const changeItems = [];
+    if (penaltiesAreMaterial) changeItems.push(`penalties - ${splitSafe(formatGain(totalPenaltySeconds))} of execution leakage`);
+    if (top1Label && stationGap2 > 30) changeItems.push(`${splitSafe(top1Label)} and station efficiency`);
+    const top2Label = top2 ? (segMap.get(top2)?.label ?? null) : null;
+    if (top2Label && !changeItems.some((c) => c.includes(top2Label))) changeItems.push(splitSafe(top2Label));
+
+    const skipItems = [];
+    if (runGapRaw < -30) skipItems.push("general running volume - it is already a relative strength");
+    if (roxGap2 < -20) skipItems.push("RoxZone rebuilding - it needs polish, not a rebuild");
+    if (penaltiesAreMaterial) skipItems.push("Run 5 as pure running fitness - it is penalty-inflated");
+
+    if (protectItems.length === 0 && changeItems.length === 0) return "";
+
+    function listBlock(heading, items, color) {
+      if (items.length === 0) return "";
+      const itemsHtml = items.map((i) =>
+        `<li style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.6;">${i}</li>`
+      ).join("");
+      return `<p style="margin:8px 0 2px;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${color};">${heading}</p>
+        <ul style="margin:0 0 6px;padding-left:16px;">${itemsHtml}</ul>`;
+    }
+
+    const body = [
+      listBlock("Protect", protectItems, "#16a34a"),
+      listBlock("Change", changeItems, "#d97706"),
+      listBlock("Do not over-focus", skipItems, "#94a3b8"),
+    ].filter(Boolean).join("");
+
+    return `<tr>
+      <td style="background-color:#ffffff;padding:0 24px 18px;">
+        <div style="background-color:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px 20px;">
+          <span style="display:block;color:#92400e;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">TARGET PRIORITIES</span>
+          ${body}
+        </div>
+      </td>
     </tr>`;
   }
 
@@ -1097,6 +1331,20 @@ function renderSplitTable(section, analysisJson) {
       const rank = isPenalty
         ? `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#7c3aed;">execution</span>`
         : (() => {
+          if (hasGoalGroup) {
+            const gapAbs = item.gap ?? 0;
+            let targetLabel;
+            if (isEliteAthlete) {
+              targetLabel = "Elite target refinement";
+            } else if (gapAbs >= 120) {
+              targetLabel = idx === 0 ? "Main target opportunity" : "Target opportunity";
+            } else if (gapAbs >= 30) {
+              targetLabel = "Target opportunity";
+            } else {
+              targetLabel = "On target";
+            }
+            return `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#d97706;">${splitSafe(targetLabel)}</span>`;
+          }
           const rawLabel = bandScoreLabel(item.seg?.percentile);
           if (!rawLabel) return "";
           const displayLabel = isEliteAthlete ? eliteBandLabel(rawLabel) : rawLabel;
@@ -1122,6 +1370,10 @@ function renderSplitTable(section, analysisJson) {
 
     function strengthRow(item) {
       const rank = (() => {
+        if (hasGoalGroup) {
+          const targetLabel = item.gap < -10 ? "Ahead of target" : "On target";
+          return `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#16a34a;">${splitSafe(targetLabel)}</span>`;
+        }
         const rawLabel = bandScoreLabel(item.seg?.percentile);
         if (!rawLabel) return "";
         const displayLabel = isEliteAthlete ? eliteBandLabel(rawLabel) : rawLabel;
@@ -1155,11 +1407,11 @@ function renderSplitTable(section, analysisJson) {
     }
 
     const lossTable = `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background-color:#ffffff;">
-      ${panelHeader("Biggest opportunities", penaltiesAreMaterial ? "Penalty separated from split performance" : "Where the next time comes from")}
+      ${panelHeader("Biggest opportunities", penaltiesAreMaterial ? "Penalty separated from split performance" : hasGoalGroup ? "Where your target time comes from" : "Where the next time comes from")}
       ${lossRows}
     </table>`;
     const strengthTable = `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background-color:#ffffff;">
-      ${panelHeader("Strengths to protect", "Good areas to preserve")}
+      ${panelHeader("Strengths to protect", hasGoalGroup ? "Areas already ahead of target profile" : "Good areas to preserve")}
       ${strengthRows}
     </table>`;
 
@@ -1192,13 +1444,42 @@ function renderSplitTable(section, analysisJson) {
       return `${dash}${dash}`;
     }
     const color = rankColor(gap, segment.fieldPercentile ?? segment.percentile);
-    const overallCell = Number.isFinite(segment.fieldPercentile)
-      ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(segment.fieldPercentile))}</td>`
-      : dash;
-    const bsLabel = bandScoreLabel(segment.percentile);
-    const bandScoreCell = bsLabel
-      ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${bandScoreColor(bsLabel)};">${splitSafe(bsLabel)}</td>`
-      : dash;
+    const overallCell = hasGoalGroup
+      ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#64748b;">Target profile</td>`
+      : Number.isFinite(segment.fieldPercentile)
+        ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(segment.fieldPercentile))}</td>`
+        : dash;
+    let bandScoreCell;
+    if (hasGoalGroup) {
+      const isEliteBand = achievedBand === "sub_60";
+      let targetLabel = null;
+      if (Number.isFinite(gap)) {
+        if (gap < -10) {
+          targetLabel = "Ahead of target";
+        } else if (gap <= 30) {
+          targetLabel = "On target";
+        } else if (isEliteBand) {
+          targetLabel = "Elite target refinement";
+        } else if (segment.segmentKey === top1) {
+          targetLabel = "Main target opportunity";
+        } else {
+          targetLabel = "Target opportunity";
+        }
+      }
+      const tColor = !targetLabel ? "#94a3b8"
+        : targetLabel === "Ahead of target" ? "#22c55e"
+        : targetLabel === "On target" ? "#475569"
+        : targetLabel === "Elite target refinement" ? "#6366f1"
+        : "#d97706";
+      bandScoreCell = targetLabel
+        ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${tColor};">${splitSafe(targetLabel)}</td>`
+        : dash;
+    } else {
+      const bsLabel = bandScoreLabel(segment.percentile);
+      bandScoreCell = bsLabel
+        ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${bandScoreColor(bsLabel)};">${splitSafe(bsLabel)}</td>`
+        : dash;
+    }
     return `${overallCell}${bandScoreCell}`;
   }
 
@@ -1316,7 +1597,7 @@ function renderSplitTable(section, analysisJson) {
     return `<tr>
 	      <td style="background-color:#f8fafc;padding:12px 24px 16px;border-top:1px solid #e2e8f0;">
 	        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">HOW TO READ THIS</span>
-        <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Band score shows whether each segment is a Strength, Good, On benchmark, Opportunity, or Priority versus athletes who finished in the same time band.</p>
+        <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">${hasGoalGroup ? "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Target status shows whether each segment is ahead of target, on target, or an opportunity against the selected target profile." : "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Band score shows whether each segment is a Strength, Good, On benchmark, Opportunity, or Priority versus athletes who finished in the same time band."}</p>
       </td>
     </tr>`;
   }
@@ -1325,20 +1606,22 @@ function renderSplitTable(section, analysisJson) {
     ? `<a href="${esc(splitReportUrl)}" target="_blank" style="display:block;background-color:#e8f7fd;border:1px solid #bdeafb;border-radius:8px;padding:14px 16px;margin-top:12px;color:#08a7f5;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;text-decoration:none;">View the full split report &#8594;</a>`
     : "";
 
-  return `
-    ${renderSplitHeader()}
-    ${renderRaceStorySummary()}
-    ${renderGapBreakdown()}
-    ${renderSummaryCards()}
-    ${renderSegmentHighlights()}
+	  return `
+	    ${renderSplitHeader()}
+	    ${renderRaceStorySummary()}
+	    ${renderTargetRoadmap()}
+	    ${renderGapBreakdown()}
+	    ${renderSummaryCards()}
+	    ${renderTargetPriorities()}
+	    ${renderSegmentHighlights()}
     <tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
         <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">REDUCED SPLIT DETAIL</span>
 	        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-collapse:collapse;width:100%;">
           <tr style="background-color:#f1f5f9;border-bottom:2px solid #e2e8f0;">
             <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:32%;">Segment</th>
-            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">Overall standing</th>
-            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Band score</th>
+	            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">${hasGoalGroup ? "Target basis" : "Overall standing"}</th>
+            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">${hasGoalGroup ? "Target status" : "Band score"}</th>
             <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your split</th>
             <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">Gap vs median</th>
           </tr>
@@ -1361,16 +1644,31 @@ function renderFooter() {
   </tr>`;
 }
 
-function renderMethodNote(hasMaterialPenalties = false) {
+function renderDoublesCaveat(analysisJson = {}) {
+  if (!analysisJson.benchmarkContext?.doublesBenchmarkedAsSingles) return "";
+  return `<tr>
+    <td style="background-color:#ffffff;padding:0 24px 18px;">
+      <div style="background-color:#fffbeb;border:1px solid #fde68a;border-left:3px solid #f59e0b;border-radius:8px;padding:14px 18px;">
+        <span style="display:block;color:#92400e;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">DOUBLES RESULT</span>
+        <p style="color:#78350f;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">This is a HYROX Doubles result. We don&#39;t yet have a dedicated doubles benchmark dataset, so all percentiles and comparisons in this report are measured against the singles open-division population. Use these benchmarks as a directional guide rather than a precise competitive ranking.</p>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderMethodNote(hasMaterialPenalties = false, calculatorMode = "target") {
   const penaltyNote = hasMaterialPenalties
     ? " Penalties are separated from running in the gap breakdown to avoid confusing execution leakage with run fitness."
     : "";
+  const methodCopy = calculatorMode === "analyse"
+    ? `Target times are based on your selected benchmark band.${penaltyNote} Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.`
+    : `Target times are based on your selected target profile.${penaltyNote} Segment gaps are measured against that target profile, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.`;
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;">
       <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin:0 0;">
         <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">METHOD NOTE</span>
-        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">Target times are based on your selected benchmark band.${penaltyNote} Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.</p>
+        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">${esc(methodCopy)}</p>
       </div>
     </td>
   </tr>`;
@@ -1561,11 +1859,16 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
         return `You're in the ${bandLabel} band. Here's the route to ${compBandLabel}.`;
       }
       const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
-      const pct = formatPercentileRank(totalSeg?.percentile);
-      return pct ? `Your HYROX analysis - you finished in the ${pct}` : "Your HYROX race analysis is ready";
-    }
-    return limiter ? `Your HYROX bottleneck is ${limiter}` : "Your HYROX analysis is ready";
-  })();
+	      const pct = formatPercentileRank(totalSeg?.percentile);
+	      return pct ? `Your HYROX analysis - you finished in the ${pct}` : "Your HYROX race analysis is ready";
+	    }
+	    const goalTargetSecs = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds;
+	    const goalTargetFmt = goalTargetSecs ? formatTime(goalTargetSecs) : null;
+	    if (goalTargetFmt) {
+	      return `Your route to ${goalTargetFmt}: ${limiter ? `start with ${limiter}` : "the target roadmap"}`;
+	    }
+	    return "Your HYROX target time analysis";
+	  })();
   const rawName = athleteContext.firstName ?? athleteContext.displayName ?? null;
   const firstName = rawName ? rawName.split(/[\s,]+/)[0] : "there";
   const greetingName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
@@ -1605,8 +1908,10 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
           ${renderHero(analysisJson, greetingName, interpretation)}
           ${renderMetricStrip(analysisJson, athleteContext, calculatorMode)}
           ${renderBenchmarkExplanation(analysisJson, calculatorMode)}
+          ${renderDoublesCaveat(analysisJson)}
           ${sectionRows}
-          ${renderMethodNote(emailPenaltiesMaterial)}
+          ${renderTargetModeNudge(athleteContext, calculatorMode)}
+          ${renderMethodNote(emailPenaltiesMaterial, calculatorMode)}
           ${renderFooter()}
         </table>
       </td>

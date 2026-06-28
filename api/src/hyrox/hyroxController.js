@@ -213,7 +213,7 @@ export async function analyse(req, res) {
     const body = req.body ?? {};
     const input = submissionInput(body);
     const normalised = normaliseSubmission(input);
-    const unsupportedDivision = ["doubles", "mixed_doubles", "relay"].includes(String(input.race.division).toLowerCase());
+    const unsupportedDivision = ["mixed_doubles", "relay"].includes(String(input.race.division).toLowerCase());
     const analysisJson = unsupportedDivision
       ? limitedAnalysis(body, normalised, "doubles_relay_not_supported_v1")
       : analyseSubmission(input);

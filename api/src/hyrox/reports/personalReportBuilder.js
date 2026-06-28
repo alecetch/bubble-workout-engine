@@ -84,12 +84,24 @@ function stationBreakdownSection(analysisJson) {
   const candidates = highConfidence.length > 0 ? highConfidence : breakdown;
   const weak = candidates.filter((station) => station.timeGapSeconds > 0).slice(0, 3);
   const strong = [...candidates].reverse().find((station) => station.timeGapSeconds < 0);
+  const isTargetMode = Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup);
 
   if (weak.length === 0) {
     const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
     return limiter
       ? `${limiter.label} is the main limiter, with an estimated gain of ${formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds)}.`
       : "No single station limiter dominated this result.";
+  }
+
+  if (isTargetMode) {
+    const lines = ["Your biggest station gaps against your target profile:"];
+    weak.forEach((station, index) => {
+      lines.push(`${index + 1}. ${station.label} - Target opportunity (+${formatGain(station.timeGapSeconds)} vs target profile)`);
+    });
+    if (strong) {
+      lines.push(`Protect this strength: ${strong.label} — ahead of target profile.`);
+    }
+    return lines;
   }
 
   const lines = ["Your weakest stations against your benchmark band:"];

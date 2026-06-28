@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInterpretation, totalRunGapSeconds } from "../hyroxInterpretationEngine.js";
+import { buildHeroCopy, buildInterpretation, totalRunGapSeconds } from "../hyroxInterpretationEngine.js";
 
 function station(segmentKey, timeGapSeconds, percentile = 40, confidence = "high") {
   return { segmentKey, label: segmentKey.replace(/_/g, " "), timeGapSeconds, percentile, confidence };
@@ -40,7 +40,7 @@ test("penalty-heavy athlete selects penalty thesis", () => {
 
   assert.equal(result.primaryThesis.category, "penalty");
   assert.equal(result.sectionOrder[2], "penalty_callout");
-  assert.match(result.heroCopy.headline, /FASTEST WIN/);
+  assert.match(result.heroCopy.headline, /FIRST TARGET WIN/);
   assert.equal(result.heroCopy.gainDisplay, null);
   assert.match(result.summaryBullets[0], /penalt/i);
   assertShared(result);
@@ -61,12 +61,11 @@ test("strong runner with weak stations selects station capacity thesis", () => {
   assert.equal(result.primaryThesis.category, "station_capacity");
   assert.ok(result.sectionOrder[2] === "station_breakdown" || result.sectionOrder[2] === "biggest_strength");
   assert.doesNotMatch(result.heroCopy.headline, /ANALYSIS IS READY/);
-  assert.equal(result.heroCopy.gainDisplay, "4:10");
-  assert.ok(!result.heroCopy.subline.includes("4:10"), "hero subline should not repeat the hero metric");
-  assert.match(result.heroCopy.subline, /benchmark band/);
-  assert.match(result.summaryBullets[0], /4:10/);
-  assert.match(result.summaryBullets[0], /benchmark band/);
-  assert.doesNotMatch(result.summaryBullets[0], /4:10.*4:10/);
+  assert.equal(result.heroCopy.gainDisplay, null);
+  assert.match(result.heroCopy.headline, /STATION|ROUTE|WALL BALLS/i);
+  assert.match(result.heroCopy.subline, /target/i);
+  assert.match(result.summaryBullets[0], /target/i);
+  assert.match(result.summaryBullets[0], /Wall Balls/i);
   assert.equal(result.summaryBullets.some((bullet) => /Running contributed/i.test(bullet)), false);
   assertShared(result);
 });
@@ -302,4 +301,87 @@ test("sub-60 athlete with Sandbag Lunges limiter uses plural verb", () => {
   const allCopy = [result.heroCopy.headline, result.heroCopy.subline, ...result.summaryBullets].join(" ");
   assert.ok(!allCopy.includes("Sandbag Lunges is"), `should not contain "Sandbag Lunges is", got: ${allCopy}`);
   assert.ok(allCopy.includes("Sandbag Lunges are"), `should contain "Sandbag Lunges are", got: ${allCopy}`);
+});
+
+test("target mode penalty hero says FIRST TARGET WIN not FASTEST WIN", () => {
+  const result = buildInterpretation(makeAnalysis({
+    penalties: [{ penaltySeconds: 300, runKey: "run_5" }],
+    stationBreakdown: [station("wall_balls", 120, 35)],
+    race: { finishTimeSeconds: 5738 },
+  }), {}, "target");
+  assert.match(result.heroCopy.headline, /FIRST TARGET WIN/);
+  assert.ok(!result.heroCopy.headline.includes("FASTEST WIN"));
+});
+
+test("target mode station_capacity hero references target when available", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [
+      station("wall_balls", 120, 30),
+      station("sandbag_lunges", 80, 28),
+    ],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 120 } },
+    timePotential: { headlineGainSeconds: 200 },
+    benchmarkContext: {
+      achievedBand: "sub_70",
+      goalBenchmarkGroup: { targetFinishSeconds: 3600 },
+    },
+  }), {}, "target");
+  assert.ok(!result.heroCopy.headline.includes("HERE IS WHAT MOVES YOU TOWARD"), `got: ${result.heroCopy.headline}`);
+  assert.ok(
+    result.heroCopy.headline.includes("WALL BALLS") || result.heroCopy.headline.includes("ROUTE") || result.heroCopy.headline.includes("STATION"),
+    `expected target-mode headline, got: ${result.heroCopy.headline}`,
+  );
+});
+
+test("target mode uses selected finish target instead of benchmark median", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [
+      station("wall_balls", 120, 30),
+      station("sled_push", 60, 42),
+    ],
+    segments: [
+      {
+        segmentKey: "total_time",
+        type: "aggregate",
+        userSeconds: 3900,
+        exactTargetSeconds: 3300,
+        goalBenchmarkSeconds: 3543,
+        timeGapToExactTargetSeconds: 600,
+      },
+    ],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 120 } },
+    timePotential: { headlineGainSeconds: 200 },
+    benchmarkContext: {
+      achievedBand: "sub_70",
+      goalBenchmarkGroup: { targetFinishSeconds: 3300 },
+    },
+  }), {}, "target");
+
+  const copy = [result.heroCopy.headline, result.heroCopy.subline, ...result.summaryBullets].join(" ");
+  assert.match(copy, /55:00|Wall Balls/i);
+  assert.ok(!copy.includes("59:03"), `should not expose benchmark median target, got: ${copy}`);
+});
+
+test("target mode: pacing category returns target-specific headline", () => {
+  const result = buildHeroCopy(
+    { category: "pacing" },
+    {
+      segments: [{ segmentKey: "total_time", type: "aggregate", exactTargetSeconds: 3600 }],
+      benchmarkContext: { achievedBand: "sub_70", goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60", key: "k" } },
+    },
+    "target",
+  );
+  assert.ok(
+    !result.headline.includes("YOU HAVE THE ENGINE"),
+    `target mode pacing should not say "YOU HAVE THE ENGINE", got: ${result.headline}`,
+  );
+  assert.ok(
+    result.headline.includes("STATIONS") || result.headline.includes("TARGET") || result.headline.includes("RUNNING"),
+    `target mode pacing headline should be target-specific, got: ${result.headline}`,
+  );
+});
+
+test("analyse mode: pacing category returns original headline", () => {
+  const result = buildHeroCopy({ category: "pacing" }, {}, "analyse");
+  assert.equal(result.headline, "YOU HAVE THE ENGINE — THE CEILING IS EXECUTION");
 });

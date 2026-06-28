@@ -107,6 +107,18 @@ test("returns fetch_failed on network error", async () => {
   assert.deepEqual(body, { success: false, reason: "fetch_failed" });
 });
 
+test("returns timeout when upstream HYROX fetch is aborted", async () => {
+  globalThis.fetch = async (url, options) => {
+    if (String(url).startsWith("http://127.0.0.1")) return nativeFetch(url, options);
+    const err = new Error("aborted");
+    err.name = "AbortError";
+    throw err;
+  };
+  const { response, body } = await request("/api/hyrox/import-url", { url: "https://results.hyrox.com/season-8/?x=1" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(body, { success: false, reason: "timeout" });
+});
+
 test("GET /api/hyrox/health unaffected", async () => {
   const { response, body } = await request("/api/hyrox/health", null, "GET");
   assert.equal(response.status, 200);

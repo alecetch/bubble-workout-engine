@@ -163,3 +163,60 @@ test("missing penalty row returns empty penalties", () => {
   const result = parseHyroxResultsHtml(html({ penalty: false }));
   assert.deepEqual(result.penalties, []);
 });
+
+test("doubles: two unique names joined with &", () => {
+  const doublesHtml = `<html><body>
+    <td class="f-__fullname">Alice Smith</td>
+    <td class="f-__fullname">Bob Jones</td>
+    <table>${splitRows}</table>
+  </body></html>`;
+  const result = parseHyroxResultsHtml(doublesHtml);
+  assert.equal(result.athleteName, "Alice Smith & Bob Jones");
+  assert.equal(result.division, "open");
+  assert.ok(!result.warnings.includes("division_doubles_not_supported"));
+});
+
+test("doubles: four entries with only two unique names deduplicated", () => {
+  const doublesHtml = `<html><body>
+    <td class="f-__fullname">Alice Smith</td>
+    <td class="f-__fullname">Bob Jones</td>
+    <td class="f-__fullname">ALICE SMITH</td>
+    <td class="f-__fullname">bob jones</td>
+    <table>${splitRows}</table>
+  </body></html>`;
+  const result = parseHyroxResultsHtml(doublesHtml);
+  assert.equal(result.athleteName, "Alice Smith & Bob Jones");
+});
+
+test("singles: one name returned as-is", () => {
+  const singlesHtml = `<html><body>
+    <td class="f-__fullname">Jane Doe</td>
+    <table>${splitRows}</table>
+  </body></html>`;
+  const result = parseHyroxResultsHtml(singlesHtml);
+  assert.equal(result.athleteName, "Jane Doe");
+});
+
+test("doubles: Member 1 / Member 2 row pattern extracts both names", () => {
+  const memberHtml = `<html><body>
+    <table>
+      <tr><th>Member 1</th><td>Dos Santos, Henry (AUS)</td></tr>
+      <tr><th>Member 2</th><td>Cockerill, Stephen (AUS)</td></tr>
+    </table>
+    <table>${splitRows}</table>
+  </body></html>`;
+  const result = parseHyroxResultsHtml(memberHtml);
+  assert.equal(result.athleteName, "Dos Santos, Henry & Cockerill, Stephen");
+});
+
+test("doubles: Member rows with country code stripped", () => {
+  const memberHtml = `<html><body>
+    <table>
+      <tr><th>Member 1</th><td>Smith, Alice (GBR)</td></tr>
+      <tr><th>Member 2</th><td>Jones, Bob (USA)</td></tr>
+    </table>
+    <table>${splitRows}</table>
+  </body></html>`;
+  const result = parseHyroxResultsHtml(memberHtml);
+  assert.equal(result.athleteName, "Smith, Alice & Jones, Bob");
+});

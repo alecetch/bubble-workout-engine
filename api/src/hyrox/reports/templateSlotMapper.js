@@ -41,7 +41,12 @@ function athleteName(athleteContext = {}) {
 }
 
 function firstName(athleteContext = {}) {
-  return String(athleteName(athleteContext)).split(/\s+/)[0] || "This athlete";
+  const name = String(athleteName(athleteContext));
+  if (name.includes(",")) {
+    const given = name.split(",")[1]?.trim().split(/\s+/)[0];
+    if (given) return given;
+  }
+  return name.split(/\s+/)[0] || "This athlete";
 }
 
 function rankLanguage(analysisJson, athleteContext) {
