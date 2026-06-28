@@ -231,14 +231,14 @@ test("allowPartial:true with missing stations returns partial and analysis omits
   }
 });
 
-test("division:doubles returns limited response", async (t) => {
+test("division:doubles returns complete analysis benchmarked as open", async (t) => {
   if (!await dbReady(t)) return;
   const body = validBody({ race: { division: "doubles", finishTimeSeconds: 4800, source: "manual" } });
   const { response, body: json } = await request(buildApp(), "/api/hyrox/analyse", { method: "POST", body: JSON.stringify(body) });
   try {
     assert.equal(response.status, 200);
-    assert.equal(json.status, "limited");
-    assert.equal(json.reason, "doubles_relay_not_supported_v1");
+    assert.equal(json.status, "complete");
+    assert.equal(json.benchmarkContext?.doublesBenchmarkedAsSingles, true);
   } finally {
     await cleanupEmail(body.athlete.email);
   }
