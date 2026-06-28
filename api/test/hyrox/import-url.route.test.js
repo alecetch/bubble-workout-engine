@@ -207,6 +207,54 @@ test("uses parsed race name when URL has no event_main_group", async () => {
   assert.equal(body.eventName, "HYROX BUENOS AIRES");
 });
 
+test("divisionDetection singles men returned for H_ event with sex=M", async () => {
+  stubSuccessfulHyroxFetch();
+  const { body } = await request(
+    "/api/hyrox/import-url",
+    { url: "https://results.hyrox.com/season-8/?event=H_ABC123&search[sex]=M" },
+    "POST",
+    eventPool(new Map()),
+  );
+  assert.equal(body.success, true);
+  assert.deepEqual(body.divisionDetection, {
+    raceFormat: "singles",
+    divisionSex: "male",
+    divisionLabel: "Singles Men",
+    eventCode: "H_ABC123",
+    eventPrefix: "H",
+    sexParam: "M",
+    source: "url_event_param",
+  });
+});
+
+test("divisionDetection doubles returned for HD_ event without sex param", async () => {
+  stubSuccessfulHyroxFetch();
+  const { body } = await request(
+    "/api/hyrox/import-url",
+    { url: "https://results.hyrox.com/season-8/?event=HD_LR3MS4JI1682" },
+    "POST",
+    eventPool(new Map()),
+  );
+  assert.equal(body.success, true);
+  assert.equal(body.divisionDetection.raceFormat, "doubles");
+  assert.equal(body.divisionDetection.divisionSex, "unknown");
+  assert.equal(body.divisionDetection.divisionLabel, "Doubles");
+  assert.equal(body.divisionDetection.sexParam, null);
+});
+
+test("divisionDetection unknown returned when URL has no event param", async () => {
+  stubSuccessfulHyroxFetch();
+  const { body } = await request(
+    "/api/hyrox/import-url",
+    { url: "https://results.hyrox.com/season-8/?x=1" },
+    "POST",
+    eventPool(new Map()),
+  );
+  assert.equal(body.success, true);
+  assert.equal(body.divisionDetection.raceFormat, "unknown");
+  assert.equal(body.divisionDetection.source, "no_event_param");
+});
+
 test("DB lookup failure does not block successful import", async () => {
   stubSuccessfulHyroxFetch();
   const pool = {

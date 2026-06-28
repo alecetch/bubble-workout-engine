@@ -1,4 +1,25 @@
 import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatTime } from "./copyFormatter.js";
+import { readFileSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname_email = dirname(fileURLToPath(import.meta.url));
+
+let FORMA_LOGO_B64 = "";
+const FORMA_LOGO_PATHS = [
+  "./assets/forma-logo.png",
+  "../../../../web/src/assets/forma-logo.png",
+  "../../../../docs/planning/login_page_logos/Forma logo.png",
+];
+for (const relativeLogoPath of FORMA_LOGO_PATHS) {
+  try {
+    const logoPath = resolve(__dirname_email, relativeLogoPath);
+    FORMA_LOGO_B64 = `data:image/png;base64,${readFileSync(logoPath).toString("base64")}`;
+    break;
+  } catch {
+    // Try the next bundled logo path; header and footer fall back to text mark if none load.
+  }
+}
 
 function eliteBandLabel(bsLabel) {
   if (bsLabel === "Priority") return "Next refinement";
@@ -26,6 +47,82 @@ function esc(value) {
 
 function inlineStyle(props) {
   return Object.entries(props).map(([key, value]) => `${key}:${value}`).join(";");
+}
+
+const emailTheme = {
+  bg: "#07111f",
+  panel: "#0e1f34",
+  panelElevated: "#12263d",
+  card: "#0b1628",
+  border: "rgba(148,163,184,0.18)",
+  borderSoft: "rgba(148,163,184,0.12)",
+  borderStrong: "rgba(34,211,238,0.32)",
+  text: "#f8fafc",
+  textBody: "#cbd5e1",
+  textMuted: "#94a3b8",
+  cyan: "#22d3ee",
+  blue: "#0f6fff",
+  green: "#22c55e",
+  amber: "#f59e0b",
+  red: "#ef4444",
+  purple: "#8b5cf6",
+};
+
+const darkSemanticColors = [
+  ["background-color:#f0f4f8", `background-color:${emailTheme.bg}`],
+  ["background-color:#ffffff", `background-color:${emailTheme.panel}`],
+  ["background-color:#f8fafc", `background-color:${emailTheme.panelElevated}`],
+  ["background-color:#f1f5f9", `background-color:${emailTheme.card}`],
+  ["background-color:#e2e8f0", `background-color:${emailTheme.panelElevated}`],
+  ["background-color:#e8f7fd", `background-color:#0a2030`],
+  ["background-color:#f0f9ff", `background-color:#0a2030`],
+  ["background-color:#fffbeb", `background-color:#2a1f0b`],
+  ["background-color:#fef3c7", `background-color:#2a1f0b`],
+  ["background-color:#fffdf7", `background-color:#241b0a`],
+  ["background-color:#fee2e2", `background-color:#2a1114`],
+  ["background-color:#fff4f4", `background-color:#2a1114`],
+  ["background-color:#dcfce7", `background-color:#0f2a1c`],
+  ["background-color:#f0fdf4", `background-color:#0f2a1c`],
+  ["background-color:#f5f3ff", `background-color:#1f1735`],
+  ["background-color:#ede9fe", `background-color:#1f1735`],
+];
+
+const darkSemanticBorders = [
+  ["border:1px solid #e2e8f0", `border:1px solid ${emailTheme.border}`],
+  ["border-top:1px solid #e2e8f0", `border-top:1px solid ${emailTheme.border}`],
+  ["border-bottom:1px solid #e2e8f0", `border-bottom:1px solid ${emailTheme.border}`],
+  ["border-left:3px solid #e2e8f0", `border-left:3px solid ${emailTheme.border}`],
+  ["border-bottom:1px solid #f1f5f9", `border-bottom:1px solid ${emailTheme.borderSoft}`],
+  ["border-top:2px solid #e2e8f0", `border-top:2px solid ${emailTheme.border}`],
+  ["border-bottom:2px solid #e2e8f0", `border-bottom:2px solid ${emailTheme.border}`],
+  ["border:1px solid #bae6fd", `border:1px solid ${emailTheme.borderStrong}`],
+  ["border-top:1px solid #bae6fd", `border-top:1px solid ${emailTheme.borderStrong}`],
+  ["border-bottom:1px solid #bae6fd", `border-bottom:1px solid ${emailTheme.borderStrong}`],
+  ["border:1px solid #bdeafb", `border:1px solid ${emailTheme.borderStrong}`],
+  ["border:1px solid #fde68a", `border:1px solid rgba(245,158,11,0.36)`],
+  ["border:1px solid #ddd6fe", `border:1px solid rgba(139,92,246,0.36)`],
+];
+
+const darkSemanticText = [
+  ["color:#0f172a", `color:${emailTheme.text}`],
+  ["color:#475569", `color:${emailTheme.textBody}`],
+  ["color:#64748b", `color:${emailTheme.textMuted}`],
+  ["color:#4a5568", `color:${emailTheme.textMuted}`],
+  ["color:#0369a1", `color:${emailTheme.cyan}`],
+  ["color:#92400e", `color:${emailTheme.amber}`],
+  ["color:#78350f", "color:#fcd9a0"],
+  ["color:#d97706", `color:${emailTheme.amber}`],
+  ["color:#16a34a", `color:${emailTheme.green}`],
+  ["color:#dc2626", "color:#fca5a5"],
+  ["color:#e53e3e", `color:${emailTheme.red}`],
+  ["color:#7c3aed", `color:${emailTheme.purple}`],
+  ["color:#6366f1", `color:${emailTheme.purple}`],
+  ["color:#6699ff", `color:${emailTheme.blue}`],
+];
+
+function applyUnifiedDarkTheme(html) {
+  return [...darkSemanticColors, ...darkSemanticBorders, ...darkSemanticText]
+    .reduce((current, [from, to]) => current.replaceAll(from, to), String(html));
 }
 
 function limiterName(analysisJson = {}) {
@@ -74,46 +171,48 @@ function sectionAccentColor(sectionKey, interpretation) {
   if (!interpretation) return "#e2e8f0";
   const primaryKey = thesisSectionKey(interpretation.primaryThesis?.category);
   const secondaryKeys = (interpretation.secondaryTheses ?? []).map((thesis) => thesisSectionKey(thesis.category));
-  if (sectionKey === primaryKey) return "#08a7f5";
+  if (sectionKey === primaryKey) return "#22d3ee";
   if (secondaryKeys.includes(sectionKey)) return "#f59e0b";
   return "#e2e8f0";
 }
 
 function headingDot(accentColor) {
-  if (accentColor !== "#08a7f5" && accentColor !== "#f59e0b") return "";
+  if (accentColor !== "#22d3ee" && accentColor !== "#f59e0b") return "";
   return `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${accentColor};margin-right:6px;vertical-align:middle;"></span>`;
+}
+
+function logoMark(size = 28) {
+  if (FORMA_LOGO_B64) {
+    return `<img src="${FORMA_LOGO_B64}" alt="Forma" width="${size}" height="${size}"
+      style="width:${size}px;height:${size}px;border-radius:6px;display:block;" />`;
+  }
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;
+    width:${size}px;height:${size}px;background-color:#0f6fff;border-radius:6px;
+    color:#ffffff;font-family:'Inter Tight',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;
+    font-weight:800;line-height:1;">F</span>`;
 }
 
 function renderHeader() {
   return `<tr>
-    <td style="${inlineStyle({
-      "background-color": "#080e1a",
-      padding: "22px 32px",
-      "border-radius": "8px 8px 0 0",
-    })}">
+    <td style="background-color:#07111f;padding:20px 32px;border-radius:8px 8px 0 0;">
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         <tr>
           <td style="vertical-align:middle;">
-            <span style="${inlineStyle({
-              color: "#08a7f5",
-              "font-family": "'Arial Narrow','Helvetica Neue',Arial,sans-serif",
-              "font-size": "20px",
-              "font-weight": "700",
-              "letter-spacing": "0.06em",
-              "text-transform": "uppercase",
-            })}">FORMA</span>
-            <span style="${inlineStyle({
-              display: "block",
-              color: "#8fa0ba",
-              "font-family": "Arial,Helvetica,sans-serif",
-              "font-size": "10px",
-              "letter-spacing": "0.08em",
-              "text-transform": "uppercase",
-              "margin-top": "4px",
-            })}">HYROX PERFORMANCE ANALYSIS</span>
+            <table cellpadding="0" cellspacing="0" border="0" role="presentation">
+              <tr>
+                <td style="vertical-align:middle;padding-right:10px;">${logoMark(28)}</td>
+                <td style="vertical-align:middle;">
+                  <span style="display:block;font-family:'Inter Tight','Arial Narrow',Arial,sans-serif;
+                    font-size:18px;font-weight:700;color:#f8fafc;letter-spacing:-0.3px;line-height:1;">Forma</span>
+                  <span style="display:block;font-family:Inter,Arial,sans-serif;font-size:10px;
+                    font-weight:500;color:#64748b;letter-spacing:0.08em;text-transform:uppercase;
+                    margin-top:3px;">PERFORMANCE ENGINEER</span>
+                </td>
+              </tr>
+            </table>
           </td>
           <td style="text-align:right;vertical-align:middle;">
-            <span style="color:#8fa0ba;font-family:Arial,Helvetica,sans-serif;font-size:11px;">forma.fit</span>
+            <span style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:11px;">www.getforma.fit</span>
           </td>
         </tr>
       </table>
@@ -157,28 +256,28 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
         "font-family": "'Courier New',Courier,monospace",
         "font-size": "56px",
         "font-weight": "700",
-        color: "#08a7f5",
+        color: "#22d3ee",
         "line-height": "1",
         margin: "8px 0 12px",
       })}">${esc(heroCopy.gainDisplay)}</div>`
     : "";
   const subline = heroCopy.subline
-    ? `<div style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;margin-bottom:0;">${esc(heroCopy.subline)}</div>`
+    ? `<div style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:13px;margin-bottom:0;">${esc(heroCopy.subline)}</div>`
     : "";
 
   return `<tr>
     <td style="${inlineStyle({
-      "background-color": "#ffffff",
+      "background-color": "#07111f",
       padding: "28px 32px 24px 29px",
-      "border-left": "3px solid #08a7f5",
-      "border-bottom": "1px solid #e2e8f0",
+      "border-left": "3px solid #22d3ee",
+      "border-bottom": "1px solid rgba(148,163,184,0.12)",
     })}">
-      <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;margin:0 0 18px;">Hi ${esc(greetingName)},</p>
+      <p style="color:#94a3b8;font-family:Inter,Arial,sans-serif;font-size:14px;margin:0 0 18px;">Hi ${esc(greetingName)},</p>
       <div style="${inlineStyle({
-        "font-family": "'Arial Narrow','Helvetica Neue',Arial,sans-serif",
+        "font-family": "'Inter Tight','Arial Narrow',Arial,sans-serif",
         "font-size": "30px",
         "font-weight": "700",
-        color: "#0f172a",
+        color: "#f8fafc",
         "line-height": "1.1",
         "text-transform": "uppercase",
         "margin-bottom": "4px",
@@ -237,7 +336,7 @@ function renderBenchmarkExplanation(analysisJson = {}, calculatorMode = "target"
 
     return `<tr>
       <td style="background-color:#ffffff;padding:8px 24px 14px;border-bottom:1px solid #e2e8f0;">
-        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;font-style:italic;">${esc(explanation + lowSampleNote)}</p>
+        <p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;font-style:italic;">${esc(explanation + lowSampleNote)}</p>
       </td>
     </tr>`;
   }
@@ -252,7 +351,7 @@ function renderBenchmarkExplanation(analysisJson = {}, calculatorMode = "target"
 
   return `<tr>
     <td style="background-color:#f0f9ff;border-top:1px solid #bae6fd;border-bottom:1px solid #bae6fd;padding:10px 24px;">
-      <p style="color:#0369a1;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.55;margin:0;">
+      <p style="color:#0369a1;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.55;margin:0;">
         ${esc(explanation)}
       </p>
     </td>
@@ -291,18 +390,18 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     padding: "14px 14px",
     "text-align": "center",
     "vertical-align": "middle",
-    ...(borderRight ? { "border-right": "1px solid #e2e8f0" } : {}),
+    ...(borderRight ? { "border-right": "1px solid rgba(148,163,184,0.12)" } : {}),
   });
   const labelStyle = inlineStyle({
     display: "block",
-    color: "#94a3b8",
-    "font-family": "Arial,Helvetica,sans-serif",
+    color: "#64748b",
+    "font-family": "Inter,Arial,sans-serif",
     "font-size": "10px",
     "text-transform": "uppercase",
     "letter-spacing": "0.06em",
     "margin-bottom": "6px",
   });
-  function metricCell(label, value, valueColor = "#0f172a", borderRight = true, valueFont = "'Courier New',Courier,monospace") {
+  function metricCell(label, value, valueColor = "#f8fafc", borderRight = true, valueFont = "'Courier New',Courier,monospace") {
     return `<td width="${colWidth}" style="${cellStyle(borderRight)}">
       <span style="${labelStyle}">${esc(label)}</span>
       <span style="display:block;font-family:${valueFont};font-size:15px;font-weight:700;color:${valueColor};">${value}</span>
@@ -312,31 +411,31 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     ? metricCell("PENALTIES", totalPenaltySeconds > 0 ? esc(formatGain(totalPenaltySeconds) ?? "-") : "None", totalPenaltySeconds > 0 ? "#7c3aed" : "#22c55e", false)
     : "";
   const secondCell = showAdjusted
-    ? metricCell("ADJUSTED", esc(adjustedTime), "#0f172a", true)
+    ? metricCell("ADJUSTED", esc(adjustedTime), "#f8fafc", true)
     : calculatorMode === "analyse"
       ? metricCell(
           "BENCHMARK BAND",
           esc(analyseBenchmarkCellLabel(analysisJson)),
-          "#0f172a",
+          "#f8fafc",
           true,
-          "Arial,Helvetica,sans-serif",
+          "Inter,Arial,Helvetica,sans-serif",
         )
-		      : metricCell("TARGET TIME", esc(benchmarkTime), "#0f172a", true);
+		      : metricCell("TARGET TIME", esc(benchmarkTime), "#f8fafc", true);
   const thirdCell = calculatorMode === "analyse"
-    ? metricCell("OVERALL STANDING", rank, "#0f172a", hasPenalties, "Arial,Helvetica,sans-serif")
+    ? metricCell("OVERALL STANDING", rank, "#f8fafc", hasPenalties, "Inter,Arial,Helvetica,sans-serif")
     : metricCell(
         "TARGET GAP",
         esc(targetGap),
         Number.isFinite(targetGapSeconds) && targetGapSeconds <= 0 ? "#22c55e" : "#d97706",
         hasPenalties,
-        "Arial,Helvetica,sans-serif",
+        "Inter,Arial,Helvetica,sans-serif",
       );
 
   return `<tr>
-    <td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;padding:0;">
+    <td style="background-color:#07111f;border-top:1px solid rgba(148,163,184,0.12);border-bottom:1px solid rgba(148,163,184,0.12);padding:0;">
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         <tr>
-          ${metricCell("YOUR RACE", esc(finishTime), "#0f172a", true)}
+          ${metricCell("YOUR RACE", esc(finishTime), "#f8fafc", true)}
           ${secondCell}
 	          ${thirdCell}
           ${penaltyCell}
@@ -350,7 +449,7 @@ function renderExecutiveSummary(section) {
   const items = Array.isArray(section.content) ? section.content : [section.content];
   const paragraphs = items
     .filter(Boolean)
-    .map((item) => `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
+    .map((item) => `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
     .join("");
   return `<tr>
 	    <td style="background-color:#ffffff;padding:18px 24px;border-bottom:1px solid #e2e8f0;">
@@ -363,13 +462,13 @@ function renderStrengthCard(section) {
   const text = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
   return `
   <tr>
-	    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;border-left:3px solid #08a7f5;">
-      <span style="color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">BIGGEST STRENGTH</span>
+	    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;border-left:3px solid #22d3ee;">
+      <span style="color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">BIGGEST STRENGTH</span>
     </td>
   </tr>
   <tr>
 	    <td style="background-color:#ffffff;padding:16px 24px;border-bottom:1px solid #e2e8f0;">
-      <p style="color:#0f172a;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0;">${text}</p>
+      <p style="color:#0f172a;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0;">${text}</p>
     </td>
   </tr>`;
 }
@@ -388,14 +487,14 @@ function renderStationBreakdown(section) {
     const raw = String(item);
     const gapMatch = raw.match(/\(([+-]?\d+:\d+)/);
     const isLimiter = gapMatch && !gapMatch[1].startsWith("-");
-    const gapColor = isLimiter ? "#e53e3e" : "#08a7f5";
+    const gapColor = isLimiter ? "#e53e3e" : "#22d3ee";
     const borderBottom = isLast ? "" : "border-bottom:1px solid #f1f5f9;";
     const safe = esc(enforceTone(raw)).replace(
       /(\(([+-]?\d+:\d+[^)]*)\))/,
       `<span style="font-family:'Courier New',Courier,monospace;font-weight:700;color:${gapColor};">$1</span>`,
     );
     return `<tr>
-	      <td style="padding:10px 24px;${borderBottom}font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;line-height:1.4;">
+	      <td style="padding:10px 24px;${borderBottom}font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;line-height:1.4;">
         ${safe}
       </td>
     </tr>`;
@@ -403,7 +502,7 @@ function renderStationBreakdown(section) {
   const stationRows = weakItems.map((item, index) => stationRow(item, index === weakItems.length - 1 && !strengthItem)).join("");
   const strengthRow = strengthItem
     ? `<tr>
-	        <td style="padding:10px 24px;border-top:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#08a7f5;line-height:1.4;">
+	        <td style="padding:10px 24px;border-top:1px solid #e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#22d3ee;line-height:1.4;">
           ${esc(enforceTone(strengthItem))}
         </td>
       </tr>`
@@ -412,12 +511,12 @@ function renderStationBreakdown(section) {
   return `
   <tr>
 	    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;">
-      <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">STATION BREAKDOWN</span>
+      <span style="color:#475569;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">STATION BREAKDOWN</span>
     </td>
   </tr>
   <tr>
     <td style="background-color:#ffffff;padding:4px 0 0;border-bottom:1px solid #e2e8f0;">
-	      <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 24px 4px;">${esc(preamble)}</p>
+	      <p style="color:#94a3b8;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 24px 4px;">${esc(preamble)}</p>
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         ${stationRows}
         ${strengthRow}
@@ -430,9 +529,9 @@ function renderTimePotential(section) {
   const text = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
   return `
   <tr>
-	    <td style="background-color:#e8f7fd;padding:18px 24px;border-left:3px solid #08a7f5;border-right:3px solid #08a7f5;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
-      <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">TIME POTENTIAL</span>
-      <p style="color:#0f172a;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${text}</p>
+	    <td style="background-color:#e8f7fd;padding:18px 24px;border-left:3px solid #22d3ee;border-right:3px solid #22d3ee;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+      <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">TIME POTENTIAL</span>
+      <p style="color:#0f172a;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${text}</p>
     </td>
   </tr>`;
 }
@@ -453,21 +552,21 @@ function renderTextCard(section, interpretation = null, analysisJson = {}) {
         ? `${rawText} Because the Run 5 loss is penalty-inflated, do not treat the full raw running gap as a running-volume problem.`
         : rawText;
       return `<div style="${marginTop}">
-        <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#475569;display:block;margin-bottom:4px;">${esc(labels[index] ?? `Point ${index + 1}`)}</span>
-        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${esc(enforceTone(text))}</p>
+        <span style="font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#475569;display:block;margin-bottom:4px;">${esc(labels[index] ?? `Point ${index + 1}`)}</span>
+        <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${esc(enforceTone(text))}</p>
       </div>`;
     }).join("")
     : filteredItems
       .map((item, index) => {
         const border = index > 0 ? "border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;" : "";
-        return `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0;${border}">${esc(enforceTone(String(item)))}</p>`;
+        return `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0;${border}">${esc(enforceTone(String(item)))}</p>`;
       })
       .join("");
   const titleText = esc(String(section.title ?? "").toUpperCase());
   return `
   <tr>
     <td style="background-color:#ffffff;padding:18px 24px;border-bottom:1px solid #e2e8f0;">
-      <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">${titleText}</span>
+      <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">${titleText}</span>
       ${paragraphs}
     </td>
   </tr>`;
@@ -487,19 +586,19 @@ function renderPenaltyCallout(section, interpretation = null, analysisJson = {})
   const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
   const paragraphs = items
     .filter(Boolean)
-    .map((item) => `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
+    .map((item) => `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
     .join("");
   const materialParagraphs = penaltiesAreMaterial
-    ? `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(formatGain(totalPenaltySeconds))} of penalties were recorded. Treat this separately from running: it is execution leakage, not aerobic capacity.</p>`
+    ? `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(formatGain(totalPenaltySeconds))} of penalties were recorded. Treat this separately from running: it is execution leakage, not aerobic capacity.</p>`
     : paragraphs;
   const adjustedLine = adjustedRaceTimeSeconds != null
-    ? `<p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:10px 0 0;">Adjusted race time without penalties: <strong>${esc(formatTime(adjustedRaceTimeSeconds))}</strong>.</p>`
+    ? `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:10px 0 0;">Adjusted race time without penalties: <strong>${esc(formatTime(adjustedRaceTimeSeconds))}</strong>.</p>`
     : "";
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
       <div style="background-color:#f5f3ff;border:1px solid #ddd6fe;border-left:3px solid #7c3aed;border-radius:8px;padding:16px 18px;">
-        <span style="display:block;color:#7c3aed;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">PENALTY ANALYSIS</span>
+        <span style="display:block;color:#7c3aed;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">PENALTY ANALYSIS</span>
         ${materialParagraphs}
         ${adjustedLine}
       </div>
@@ -511,13 +610,13 @@ function renderAthleteBackground(section) {
   const text = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
   return `
   <tr>
-    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;border-left:3px solid #08a7f5;">
-      <span style="color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">YOUR BACKGROUND IN CONTEXT</span>
+    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;border-left:3px solid #22d3ee;">
+      <span style="color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">YOUR BACKGROUND IN CONTEXT</span>
     </td>
   </tr>
   <tr>
     <td style="background-color:#ffffff;padding:16px 24px;border-bottom:1px solid #e2e8f0;">
-      <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${text}</p>
+      <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${text}</p>
     </td>
   </tr>`;
 }
@@ -560,21 +659,21 @@ function renderRecommendations(section, analysisJson = {}) {
   const primaryCategory = hasMaterialPenalties ? "Execution" : (richRecs?.[0]?.category ?? "Fitness");
   const categoryChip = (category) => {
     const styles = {
-      Fitness: { bg: "#e0f2fe", color: "#0369a1" },
-      Execution: { bg: "#ede9fe", color: "#7c3aed" },
-      "Race management": { bg: "#fef3c7", color: "#d97706" },
+      Fitness: { bg: "#0a2030", color: "#22d3ee", border: "rgba(34,211,238,0.32)" },
+      Execution: { bg: "#1f1735", color: "#8b5cf6", border: "rgba(139,92,246,0.36)" },
+      "Race management": { bg: "#2a1f0b", color: "#f59e0b", border: "rgba(245,158,11,0.36)" },
     };
     const style = styles[category] ?? styles.Fitness;
-    return `<span style="display:inline-block;background-color:${style.bg};color:${style.color};font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;padding:1px 5px;border-radius:3px;margin-left:6px;">${esc(String(category).toUpperCase())}</span>`;
+    return `<span style="display:inline-block;background-color:${style.bg};color:${style.color};border:1px solid ${style.border};font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;padding:1px 5px;border-radius:3px;margin-left:6px;">${esc(String(category).toUpperCase())}</span>`;
   };
 
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
       <div style="background-color:#0c1830;color:#cbd5e1;border-radius:8px;padding:18px;">
-        <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">NEXT TRAINING FOCUS</span>
-        <h3 style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:1.3;margin:0 0 12px;">${esc(primaryTitle)}${categoryChip(primaryCategory)}</h3>
-        <ol style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;margin:0;padding-left:20px;">${listRows}</ol>
+        <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">NEXT TRAINING FOCUS</span>
+        <h3 style="color:#ffffff;font-family:Inter,Arial,Helvetica,sans-serif;font-size:18px;line-height:1.3;margin:0 0 12px;">${esc(primaryTitle)}${categoryChip(primaryCategory)}</h3>
+        <ol style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;margin:0;padding-left:20px;">${listRows}</ol>
       </div>
     </td>
   </tr>`;
@@ -594,30 +693,30 @@ function buildCtaCopy(calculatorMode, primaryCategory) {
 }
 
 function renderCta(section, analysisJson = {}, ctaCopy = null) {
-  const ctaUrl = process.env.FORMA_CTA_URL ?? "https://forma.fit";
-  const baseUrl = (process.env.BASE_URL ?? "https://getformai.com").replace(/\/$/, "");
+  const ctaUrl = process.env.FORMA_CTA_URL ?? "https://www.getforma.fit";
+  const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const submissionId = analysisJson.submissionId ?? null;
   const carouselUrl = analysisJson.carouselUrl ?? (submissionId ? `${baseUrl}/api/hyrox/carousel/${submissionId}` : null);
   const rawContent = ctaCopy ?? (Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? ""));
   const bodyText = esc(enforceTone(rawContent));
   const carouselLink = carouselUrl
-    ? `<a href="${esc(carouselUrl)}" target="_blank" style="display:inline-block;margin-top:14px;color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">View your shareable carousel &#8594;</a>`
+    ? `<a href="${esc(carouselUrl)}" target="_blank" style="display:inline-block;margin-top:14px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">View your shareable carousel &#8594;</a>`
     : "";
   return `
   <tr>
     <td style="background-color:#ffffff;padding:24px;text-align:center;border-bottom:1px solid #e2e8f0;">
-      <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 20px;">${bodyText}</p>
+      <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 20px;">${bodyText}</p>
       <a href="${esc(ctaUrl)}" target="_blank" style="${inlineStyle({
         display: "inline-block",
-        "background-color": "#08a7f5",
-        color: "#07101e",
-        "font-family": "'Courier New',Courier,monospace",
+        "background-color": "#0f6fff",
+        color: "#ffffff",
+        "font-family": "'Inter Tight','Arial Narrow',Arial,sans-serif",
         "font-size": "13px",
         "font-weight": "700",
         "text-transform": "uppercase",
         "letter-spacing": "0.06em",
         padding: "14px 36px",
-        "border-radius": "4px",
+        "border-radius": "8px",
         "text-decoration": "none",
       })}">BUILD MY HYROX TRAINING PLAN &#8594;</a>
       ${carouselLink}
@@ -633,9 +732,9 @@ function renderTargetModeNudge(athleteContext = {}, calculatorMode = "target") {
   if (!targetFmt) return "";
   return `<tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;">
-      <div style="background-color:#f0f9ff;border:1px solid #bae6fd;border-left:3px solid #08a7f5;border-radius:8px;padding:14px 18px;">
-        <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">WANT TO HIT ${esc(targetFmt)}?</span>
-        <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0;">Run the calculator in <strong style="color:#0f172a;">Hit a Target Time</strong> mode to see a split-by-split breakdown of exactly where you need to find time to make <strong style="color:#0f172a;">${esc(targetFmt)}</strong> achievable.</p>
+      <div style="background-color:#f0f9ff;border:1px solid #bae6fd;border-left:3px solid #22d3ee;border-radius:8px;padding:14px 18px;">
+        <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">WANT TO HIT ${esc(targetFmt)}?</span>
+        <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0;">Run the calculator in <strong style="color:#0f172a;">Hit a Target Time</strong> mode to see a split-by-split breakdown of exactly where you need to find time to make <strong style="color:#0f172a;">${esc(targetFmt)}</strong> achievable.</p>
       </div>
     </td>
   </tr>`;
@@ -706,7 +805,8 @@ function renderSplitTable(section, analysisJson) {
   const hasGoalGroup = Boolean(goalGroup);
   const benchmarkLabel = goalGroup?.label ?? primaryGroup?.label ?? "your benchmark band";
   const achievedBand = benchmarkContext.achievedBand ?? null;
-  const baseUrl = (process.env.BASE_URL ?? "https://getformai.com").replace(/\/$/, "");
+  const isEliteBenchmark = achievedBand === "sub_60";
+  const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const splitReportUrl = analysisJson.submissionId ? `${baseUrl}/api/hyrox/carousel/${analysisJson.submissionId}` : null;
   const segMap = new Map(segments.map((segment) => [segment.segmentKey, segment]));
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? segMap.get("total_time")?.userSeconds ?? null;
@@ -777,6 +877,7 @@ function renderSplitTable(section, analysisJson) {
   function splitRowBgNew(gap) {
     if (!Number.isFinite(gap)) return "#ffffff";
     if (gap < 0) return "#f0fdf4";
+    if (isEliteBenchmark && !hasGoalGroup && gap < 90) return "#fffdf7";
     if (gap >= 90) return "#fff4f4";
     if (gap >= 20) return "#fffdf7";
     return "#ffffff";
@@ -848,8 +949,8 @@ function renderSplitTable(section, analysisJson) {
       return `<tr>
         <td style="background-color:#ffffff;padding:18px 24px;">
           <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
-            <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-            <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${hasGoalGroup ? "Stations remain the largest target gap" : "Stations remain the largest fitness limiter"}, but penalties are your fastest controllable win.${gapSentence}<br><br>Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
+            <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
+            <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${hasGoalGroup ? "Stations remain the largest target gap" : "Stations remain the largest fitness limiter"}, but penalties are your fastest controllable win.${gapSentence}<br><br>Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
           </div>
         </td>
       </tr>`;
@@ -983,54 +1084,74 @@ function renderSplitTable(section, analysisJson) {
     return `<tr>
       <td style="background-color:#ffffff;padding:18px 24px;">
         <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
-          <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-          <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(enforceTone(mainLimiter))}${gapSentence}${penaltySentence}<br><br>${secondParagraph}</p>
+          <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
+          <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(enforceTone(mainLimiter))}${gapSentence}${penaltySentence}<br><br>${secondParagraph}</p>
         </div>
       </td>
     </tr>`;
   }
 
-  function renderGapBreakdown() {
-    if (totalGapSeconds <= 0) return "";
-    const stationGap = Math.max(0, splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0);
-    const penaltyForBar = penaltiesAreMaterial ? totalPenaltySeconds : 0;
-    const runningForBar = penaltiesAreMaterial ? runGapNetOfPenalties : Math.max(0, runGapRaw);
-    const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
-    const positiveTotal = stationGap + penaltyForBar + runningForBar;
-    const stationPct = positiveTotal > 0 ? Math.round((stationGap / positiveTotal) * 100) : 0;
-    const penaltyPct = positiveTotal > 0 ? Math.round((penaltyForBar / positiveTotal) * 100) : 0;
-    const runningPct = Math.max(0, Math.min(100 - stationPct - penaltyPct, positiveTotal > 0 ? Math.round((runningForBar / positiveTotal) * 100) : 0));
-    const penaltyBarCell = penaltiesAreMaterial && penaltyPct > 0
-      ? `<td width="${penaltyPct}%" style="background-color:#7c3aed;font-size:1px;line-height:14px;">&nbsp;</td>`
-      : "";
-    const penaltyLegendItem = penaltiesAreMaterial
-      ? `<span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#7c3aed;margin-right:5px;"></span>Penalties ${splitSafe(splitGapDisplay(totalPenaltySeconds))}</span>`
-      : "";
-    const runningLabel = penaltiesAreMaterial
-      ? `Running ${splitSafe(splitGapDisplay(runGapNetOfPenalties))} net of penalties`
+	  function renderGapBreakdown() {
+	    if (totalGapSeconds <= 0) return "";
+	    const stationGap = Math.max(0, splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0);
+	    const penaltyForBar = penaltiesAreMaterial ? totalPenaltySeconds : 0;
+	    const runningGap = penaltiesAreMaterial ? runGapNetOfPenalties : runGapRaw;
+	    const runningForBar = Math.max(0, runningGap);
+	    const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
+	    const roxForBar = Math.max(0, roxGap);
+	    const positiveTotal = stationGap + penaltyForBar + runningForBar + roxForBar;
+	    const stationPct = positiveTotal > 0 ? Math.round((stationGap / positiveTotal) * 100) : 0;
+	    const penaltyPct = positiveTotal > 0 ? Math.round((penaltyForBar / positiveTotal) * 100) : 0;
+	    const runningPct = Math.max(0, Math.min(100 - stationPct - penaltyPct, positiveTotal > 0 ? Math.round((runningForBar / positiveTotal) * 100) : 0));
+	    const roxPct = Math.max(0, Math.min(100 - stationPct - penaltyPct - runningPct, positiveTotal > 0 ? Math.round((roxForBar / positiveTotal) * 100) : 0));
+	    function profileGapColor(gap) {
+	      if (!Number.isFinite(gap) || Math.abs(gap) <= 5) return "#94a3b8";
+	      if (gap < 0) return "#22c55e";
+	      if (isEliteBenchmark && !hasGoalGroup && gap < 180) return "#d97706";
+	      if (gap > 60) return "#e53e3e";
+	      return "#d97706";
+	    }
+	    const stationSeverityColor = profileGapColor(stationGap);
+	    const runningSeverityColor = profileGapColor(runningGap);
+	    const roxSeverityColor = profileGapColor(roxGap);
+	    const penaltyBarCell = penaltiesAreMaterial && penaltyPct > 0
+	      ? `<td width="${penaltyPct}%" style="background-color:#7c3aed;font-size:1px;line-height:14px;">&nbsp;</td>`
+	      : "";
+	    const runningBarCell = runningForBar > 0 && runningPct > 0
+	      ? `<td width="${runningPct}%" style="background-color:${runningSeverityColor};font-size:1px;line-height:14px;">&nbsp;</td>`
+	      : "";
+	    const roxBarCell = roxForBar > 0 && roxPct > 0
+	      ? `<td width="${roxPct}%" style="background-color:${roxSeverityColor};font-size:1px;line-height:14px;">&nbsp;</td>`
+	      : "";
+	    const penaltyLegendItem = penaltiesAreMaterial
+	      ? `<span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#7c3aed;margin-right:5px;"></span>Penalties ${splitSafe(splitGapDisplay(totalPenaltySeconds))}</span>`
+	      : "";
+	    const runningLabel = penaltiesAreMaterial
+	      ? `Running ${splitSafe(splitGapDisplay(runGapNetOfPenalties))} net of penalties`
       : `Running ${splitSafe(splitGapDisplay(runGapRaw))}`;
     const footerNote = penaltiesAreMaterial
-      ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Running is shown net of penalties. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : "Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap."}</p>`
-      : `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : "Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap."}</p>`;
+      ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Running is shown net of penalties. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : "Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap."}</p>`
+      : `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : "Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap."}</p>`;
 
     return `<tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
         <div style="border:1px solid #e2e8f0;border-radius:8px;background-color:#ffffff;padding:16px;">
-          <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:4px;">SEGMENT PROFILE</span>
-	          <span style="display:block;color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;margin-bottom:10px;">${hasGoalGroup ? "vs. target profile per segment" : "vs. band median per segment"}</span>
-          <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="height:14px;background-color:#f1f5f9;overflow:hidden;margin:0 0 12px;">
-            <tr>
-              <td width="${stationPct}%" style="background-color:#e53e3e;font-size:1px;line-height:14px;">&nbsp;</td>
-              ${penaltyBarCell}
-              <td width="${runningPct}%" style="background-color:#d97706;font-size:1px;line-height:14px;">&nbsp;</td>
-            </tr>
-          </table>
-          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.7;margin:0;">
-            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#e53e3e;margin-right:5px;"></span>Stations ${splitSafe(splitGapDisplay(stationGap))}</span>
-            ${penaltyLegendItem}
-            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#d97706;margin-right:5px;"></span>${runningLabel}</span>
-            <span style="white-space:nowrap;"><span style="display:inline-block;width:9px;height:9px;background-color:#22c55e;margin-right:5px;"></span>RoxZone ${splitSafe(splitGapDisplay(roxGap))}</span>
-          </p>
+          <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:4px;">SEGMENT PROFILE</span>
+	          <span style="display:block;color:#94a3b8;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;margin-bottom:10px;">${hasGoalGroup ? "vs. target profile per segment" : "vs. band median per segment"}</span>
+	          <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="height:14px;background-color:#f1f5f9;overflow:hidden;margin:0 0 12px;">
+	            <tr>
+	              <td width="${stationPct}%" style="background-color:${stationSeverityColor};font-size:1px;line-height:14px;">&nbsp;</td>
+	              ${penaltyBarCell}
+	              ${runningBarCell}
+	              ${roxBarCell}
+	            </tr>
+	          </table>
+	          <p style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.7;margin:0;">
+	            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:${stationSeverityColor};margin-right:5px;"></span>Stations ${splitSafe(splitGapDisplay(stationGap))}</span>
+	            ${penaltyLegendItem}
+	            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:${runningSeverityColor};margin-right:5px;"></span>${runningLabel}</span>
+	            <span style="white-space:nowrap;"><span style="display:inline-block;width:9px;height:9px;background-color:${roxSeverityColor};margin-right:5px;"></span>RoxZone ${splitSafe(splitGapDisplay(roxGap))}</span>
+	          </p>
           ${footerNote}
         </div>
       </td>
@@ -1091,10 +1212,10 @@ function renderSplitTable(section, analysisJson) {
       const timeStr = seg && Number.isFinite(seg.userSeconds) ? splitSafe(formatTime(seg.userSeconds)) : "&ndash;";
       const pill = Number.isFinite(gap) ? gapPill(gap) : "";
       return `<div style="background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
-        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${splitSafe(cfg.label)}</span>
+        <span style="display:block;color:#94a3b8;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${splitSafe(cfg.label)}</span>
         <span style="display:block;font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:700;color:#0f172a;margin-bottom:6px;">${timeStr}</span>
         ${pill}
-        <span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;margin-top:6px;">${splitSafe(cfg.note)}</span>
+        <span style="display:block;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;margin-top:6px;">${splitSafe(cfg.note)}</span>
       </div>`;
     }
 
@@ -1107,10 +1228,10 @@ function renderSplitTable(section, analysisJson) {
       function explicitCard(label, timeStr, gap, note, pillOverride = null) {
         const pill = pillOverride ?? (Number.isFinite(gap) ? gapPill(gap) : "");
         return `<div style="background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
-          <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${splitSafe(label)}</span>
+          <span style="display:block;color:#94a3b8;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${splitSafe(label)}</span>
           <span style="display:block;font-family:'Courier New',Courier,monospace;font-size:15px;font-weight:700;color:#0f172a;margin-bottom:6px;">${splitSafe(timeStr)}</span>
           ${pill}
-          <span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;margin-top:6px;">${splitSafe(note)}</span>
+          <span style="display:block;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;margin-top:6px;">${splitSafe(note)}</span>
         </div>`;
       }
 
@@ -1207,7 +1328,7 @@ function renderSplitTable(section, analysisJson) {
     if (routeItems.length === 0) return "";
 
     const listItems = routeItems.map((item) =>
-      `<li style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#475569;line-height:1.6;margin-bottom:4px;">${item}</li>`
+      `<li style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#475569;line-height:1.6;margin-bottom:4px;">${item}</li>`
     ).join("");
 
     const headingText = `YOUR ROUTE TO ${splitSafe(targetTimeFmt)}`;
@@ -1215,8 +1336,8 @@ function renderSplitTable(section, analysisJson) {
     return `<tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
         <div style="background-color:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:18px 24px;">
-          <span style="display:block;color:#0369a1;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">${headingText}</span>
-          <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0 0 10px;">You need to find <strong>${splitSafe(totalGapStr)}</strong> overall. The most realistic route is:</p>
+          <span style="display:block;color:#0369a1;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">${headingText}</span>
+          <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0 0 10px;">You need to find <strong>${splitSafe(totalGapStr)}</strong> overall. The most realistic route is:</p>
           <ul style="margin:0;padding-left:20px;">
             ${listItems}
           </ul>
@@ -1252,9 +1373,9 @@ function renderSplitTable(section, analysisJson) {
     function listBlock(heading, items, color) {
       if (items.length === 0) return "";
       const itemsHtml = items.map((i) =>
-        `<li style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.6;">${i}</li>`
+        `<li style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.6;">${i}</li>`
       ).join("");
-      return `<p style="margin:8px 0 2px;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${color};">${heading}</p>
+      return `<p style="margin:8px 0 2px;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${color};">${heading}</p>
         <ul style="margin:0 0 6px;padding-left:16px;">${itemsHtml}</ul>`;
     }
 
@@ -1267,7 +1388,7 @@ function renderSplitTable(section, analysisJson) {
     return `<tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
         <div style="background-color:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px 20px;">
-          <span style="display:block;color:#92400e;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">TARGET PRIORITIES</span>
+          <span style="display:block;color:#92400e;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">TARGET PRIORITIES</span>
           ${body}
         </div>
       </td>
@@ -1320,8 +1441,8 @@ function renderSplitTable(section, analysisJson) {
     const topStrengths = strengths.slice(0, 3);
     const isEliteAthlete = achievedBand === "sub_60";
 
-    const badge = (num) => `<span style="display:inline-block;min-width:20px;text-align:center;background-color:#08a7f5;color:#07101e;font-family:'Courier New',Courier,monospace;font-size:11px;font-weight:700;padding:1px 4px;border-radius:3px;">${num}</span>`;
-    const strongPill = `<span style="display:inline-block;background-color:#dcfce7;color:#16a34a;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;padding:3px 6px;border-radius:4px;">STRONG</span>`;
+    const badge = (num) => `<span style="display:inline-block;min-width:20px;text-align:center;background-color:#22d3ee;color:#07101e;font-family:'Courier New',Courier,monospace;font-size:11px;font-weight:700;padding:1px 4px;border-radius:3px;">${num}</span>`;
+    const strongPill = `<span style="display:inline-block;background-color:#dcfce7;color:#16a34a;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;padding:3px 6px;border-radius:4px;">STRONG</span>`;
 
     function lossRow(item, idx) {
       const isPenalty = item.key === "__penalty__";
@@ -1329,7 +1450,7 @@ function renderSplitTable(section, analysisJson) {
         ? `<span style="display:inline-block;min-width:20px;text-align:center;background-color:#7c3aed;color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:11px;font-weight:700;padding:1px 4px;border-radius:3px;">${idx + 1}</span>`
         : badge(idx + 1);
       const rank = isPenalty
-        ? `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#7c3aed;">execution</span>`
+        ? `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#7c3aed;">execution</span>`
         : (() => {
           if (hasGoalGroup) {
             const gapAbs = item.gap ?? 0;
@@ -1343,16 +1464,16 @@ function renderSplitTable(section, analysisJson) {
             } else {
               targetLabel = "On target";
             }
-            return `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#d97706;">${splitSafe(targetLabel)}</span>`;
+            return `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#d97706;">${splitSafe(targetLabel)}</span>`;
           }
-          const rawLabel = bandScoreLabel(item.seg?.percentile);
-          if (!rawLabel) return "";
-          const displayLabel = isEliteAthlete ? eliteBandLabel(rawLabel) : rawLabel;
-          const bsColor = bandScoreColor(rawLabel);
-          return `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${bsColor};">${splitSafe(displayLabel)} vs your benchmark band</span>`;
+	          const rawLabel = bandScoreLabel(item.seg?.percentile);
+	          if (!rawLabel) return "";
+	          const displayLabel = isEliteAthlete ? eliteBandLabel(rawLabel) : rawLabel;
+	          const bsColor = isEliteAthlete && ["Priority", "Opportunity"].includes(rawLabel) ? "#d97706" : bandScoreColor(rawLabel);
+	          return `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:${bsColor};">${splitSafe(displayLabel)} vs your benchmark band</span>`;
         })();
       const adjustedNote = item.adjusted
-        ? `<span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#7c3aed;">penalty-adjusted</span>`
+        ? `<span style="display:block;font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;color:#7c3aed;">penalty-adjusted</span>`
         : "";
       const pillHtml = isPenalty
         ? `<span style="display:inline-block;background-color:#ede9fe;color:#7c3aed;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:3px;">${splitSafe(splitGapDisplay(item.gap))}</span>`
@@ -1360,7 +1481,7 @@ function renderSplitTable(section, analysisJson) {
       return `<tr>
         <td style="padding:8px 0 8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle;width:28px;">${rowBadge}</td>
         <td style="padding:8px 8px 8px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle;">
-          <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(item.seg.label)}</span>
+          <span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(item.seg.label)}</span>
           ${rank ? `<span style="display:block;">${rank}</span>` : ""}
           ${adjustedNote}
         </td>
@@ -1372,18 +1493,21 @@ function renderSplitTable(section, analysisJson) {
       const rank = (() => {
         if (hasGoalGroup) {
           const targetLabel = item.gap < -10 ? "Ahead of target" : "On target";
-          return `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#16a34a;">${splitSafe(targetLabel)}</span>`;
+          return `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#16a34a;">${splitSafe(targetLabel)}</span>`;
+        }
+        if (Number.isFinite(item.gap) && item.gap < 0) {
+          return `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#16a34a;">Strength vs your benchmark band</span>`;
         }
         const rawLabel = bandScoreLabel(item.seg?.percentile);
         if (!rawLabel) return "";
         const displayLabel = isEliteAthlete ? eliteBandLabel(rawLabel) : rawLabel;
         const bsColor = bandScoreColor(rawLabel);
-        return `<span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${bsColor};">${splitSafe(displayLabel)} vs your benchmark band</span>`;
+        return `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:${bsColor};">${splitSafe(displayLabel)} vs your benchmark band</span>`;
       })();
       return `<tr>
         <td style="padding:8px 0 8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle;width:58px;">${strongPill}</td>
         <td style="padding:8px 8px 8px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle;">
-          <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(item.seg.label)}</span>
+          <span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(item.seg.label)}</span>
           ${rank ? `<span style="display:block;">${rank}</span>` : ""}
         </td>
         <td style="padding:8px 10px 8px 4px;text-align:right;vertical-align:middle;white-space:nowrap;">${gapPill(item.gap)}</td>
@@ -1392,16 +1516,16 @@ function renderSplitTable(section, analysisJson) {
 
     const lossRows = topLosses.length >= 1
       ? topLosses.map((item, idx) => lossRow(item, idx)).join("")
-      : `<tr><td colspan="3" style="padding:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No significant time losses detected.</td></tr>`;
+      : `<tr><td colspan="3" style="padding:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No significant time losses detected.</td></tr>`;
     const strengthRows = topStrengths.length > 0
       ? topStrengths.map((item) => strengthRow(item)).join("")
-      : `<tr><td colspan="3" style="padding:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No segments clearly ahead of benchmark.</td></tr>`;
+      : `<tr><td colspan="3" style="padding:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No segments clearly ahead of benchmark.</td></tr>`;
 
     function panelHeader(title, subtitle) {
       return `<tr style="background-color:#f8fafc;">
         <td colspan="3" style="padding:8px 12px 4px;border-bottom:1px solid #e2e8f0;">
-          <span style="font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">${splitSafe(title)}</span>
-          <span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#94a3b8;margin-top:1px;">${splitSafe(subtitle)}</span>
+          <span style="font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">${splitSafe(title)}</span>
+          <span style="display:block;font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#94a3b8;margin-top:1px;">${splitSafe(subtitle)}</span>
         </td>
       </tr>`;
     }
@@ -1431,6 +1555,7 @@ function renderSplitTable(section, analysisJson) {
   function rankColor(gap, pct) {
     if (Number.isFinite(gap)) {
       if (gap < 0) return "#22c55e";
+      if (isEliteBenchmark && !hasGoalGroup && gap < 90) return "#d97706";
       if (gap >= 90) return "#e53e3e";
       if (gap >= 60) return "#d97706";
       return "#94a3b8";
@@ -1439,15 +1564,15 @@ function renderSplitTable(section, analysisJson) {
   }
 
   function pctCells(segment, isAggregate, gap = null) {
-    const dash = `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">&ndash;</td>`;
+    const dash = `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">&ndash;</td>`;
     if (isAggregate || segment.confidence === "low" || !Number.isFinite(segment.percentile)) {
       return `${dash}${dash}`;
     }
     const color = rankColor(gap, segment.fieldPercentile ?? segment.percentile);
     const overallCell = hasGoalGroup
-      ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#64748b;">Target profile</td>`
+      ? `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#64748b;">Target profile</td>`
       : Number.isFinite(segment.fieldPercentile)
-        ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(segment.fieldPercentile))}</td>`
+        ? `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(segment.fieldPercentile))}</td>`
         : dash;
     let bandScoreCell;
     if (hasGoalGroup) {
@@ -1472,12 +1597,18 @@ function renderSplitTable(section, analysisJson) {
         : targetLabel === "Elite target refinement" ? "#6366f1"
         : "#d97706";
       bandScoreCell = targetLabel
-        ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${tColor};">${splitSafe(targetLabel)}</td>`
+        ? `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${tColor};">${splitSafe(targetLabel)}</td>`
         : dash;
     } else {
-      const bsLabel = bandScoreLabel(segment.percentile);
+      const rawBsLabel = Number.isFinite(gap) && gap < 0 ? "Strength" : bandScoreLabel(segment.percentile);
+      const bsLabel = isEliteBenchmark && Number.isFinite(gap) && gap > 0 && gap < 90 && rawBsLabel === "Priority"
+        ? "Next refinement"
+        : isEliteBenchmark && Number.isFinite(gap) && gap > 0 && gap < 90 && rawBsLabel === "Opportunity"
+          ? "Refinement"
+          : rawBsLabel;
+      const bsColor = ["Next refinement", "Refinement"].includes(bsLabel) ? "#d97706" : bandScoreColor(rawBsLabel);
       bandScoreCell = bsLabel
-        ? `<td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${bandScoreColor(bsLabel)};">${splitSafe(bsLabel)}</td>`
+        ? `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${bsColor};">${splitSafe(bsLabel)}</td>`
         : dash;
     }
     return `${overallCell}${bandScoreCell}`;
@@ -1499,9 +1630,12 @@ function renderSplitTable(section, analysisJson) {
     const adjustedUserT = penaltyAdjusted && Number.isFinite(adjustedUserSeconds(segment))
       ? `${prefix}${formatTime(adjustedUserSeconds(segment))}`
       : userT;
+    const typeTag = segment.segmentKey?.startsWith("run_")
+      ? `<span style="display:inline-block;background-color:#0a2030;color:#22d3ee;font-family:'Inter Tight',Arial,sans-serif;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:0.05em;margin-right:6px;vertical-align:middle;">RUN</span>`
+      : `<span style="display:inline-block;background-color:#0a1530;color:#6699ff;font-family:'Inter Tight',Arial,sans-serif;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:0.05em;margin-right:6px;vertical-align:middle;">STN</span>`;
 
     return `<tr style="${bg}">
-      <td style="padding:7px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${splitSafe(segment.label)}${penaltyAdjusted ? `<span style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#7c3aed;">penalty-adjusted from ${splitSafe(splitGapDisplay(rawGap))}</span>` : ""}</td>
+      <td style="padding:7px 8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">${typeTag}${splitSafe(segment.label)}${penaltyAdjusted ? `<span style="display:block;font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;color:#7c3aed;">penalty-adjusted from ${splitSafe(splitGapDisplay(rawGap))}</span>` : ""}</td>
       ${pctCells(segment, false, gap)}
       <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:${userColor};">${splitSafe(adjustedUserT)}</td>
       <td style="padding:7px 12px 7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;${gapBold}color:${gapColor};">${splitSafe(gapStr)}</td>
@@ -1510,9 +1644,9 @@ function renderSplitTable(section, analysisJson) {
 
   const penaltyRowHtml = totalPenaltySeconds > 0
     ? `<tr style="background-color:#f5f3ff;">
-        <td style="padding:7px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">Penalties</td>
-        <td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#7c3aed;">execution</td>
-        <td style="padding:7px 6px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">&ndash;</td>
+        <td style="padding:7px 8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;">Penalties</td>
+        <td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#7c3aed;">execution</td>
+        <td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">&ndash;</td>
         <td style="padding:7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;color:#7c3aed;">${splitSafe(formatTime(totalPenaltySeconds))}</td>
         <td style="padding:7px 12px 7px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;color:#7c3aed;">${splitSafe(splitGapDisplay(totalPenaltySeconds))}</td>
       </tr>`
@@ -1538,7 +1672,7 @@ function renderSplitTable(section, analysisJson) {
 	    .join("");
 
   const reducedTableNote = penaltiesAreMaterial
-    ? `<p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;line-height:1.45;margin:8px 0 0;">Penalty time is shown separately above, so the split table focuses on performance gaps rather than execution penalties.</p>`
+    ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;line-height:1.45;margin:8px 0 0;">Penalty time is shown separately above, so the split table focuses on performance gaps rather than execution penalties.</p>`
     : "";
 
   function renderTotals() {
@@ -1554,7 +1688,7 @@ function renderSplitTable(section, analysisJson) {
       const bg = key === "total_time" ? "background-color:#e2e8f0;" : "background-color:#ffffff;";
       const weight = bold ? "font-weight:700;" : "";
       return `<tr style="${bg}">
-        <td style="padding:8px 8px 8px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;${weight}color:#0f172a;">${splitSafe(labelOverride ?? seg.label)}</td>
+        <td style="padding:8px 8px 8px 16px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;${weight}color:#0f172a;">${splitSafe(labelOverride ?? seg.label)}</td>
         <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;${weight}color:#0f172a;">${splitSafe(userT)}</td>
         <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;${weight}color:#475569;">${splitSafe(targetT)}</td>
         <td style="padding:8px 16px 8px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;font-weight:700;color:${gapColor};">${splitSafe(gapStr)}</td>
@@ -1562,7 +1696,7 @@ function renderSplitTable(section, analysisJson) {
     }
 
     const totalsPenaltyRow = totalPenaltySeconds > 0 ? `<tr style="background-color:#fff4f4;">
-      <td style="padding:8px 8px 8px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;">Penalties</td>
+      <td style="padding:8px 8px 8px 16px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;">Penalties</td>
       <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;color:#e53e3e;">${splitSafe(formatTime(totalPenaltySeconds))}</td>
       <td style="padding:8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;color:#475569;">0:00</td>
       <td style="padding:8px 16px 8px 8px;text-align:right;font-family:'Courier New',Courier,monospace;font-size:13px;font-weight:700;color:#e53e3e;">+${splitSafe(formatGain(totalPenaltySeconds))}</td>
@@ -1571,17 +1705,17 @@ function renderSplitTable(section, analysisJson) {
     return `
     <tr>
 	      <td style="background-color:#f1f5f9;padding:8px 24px;border-top:2px solid #e2e8f0;">
-        <span style="color:#475569;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">TOTALS</span>
+        <span style="color:#475569;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">TOTALS</span>
       </td>
     </tr>
     <tr>
       <td style="background-color:#ffffff;padding:0;border-bottom:1px solid #e2e8f0;">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
           <tr style="background-color:#f8fafc;">
-            <th style="padding:6px 8px 6px 16px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Category</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Your Time</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#08a7f5;">Target *</th>
-            <th style="padding:6px 16px 6px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Gap</th>
+            <th style="padding:6px 8px 6px 16px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Category</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Your Time</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#22d3ee;">Target *</th>
+            <th style="padding:6px 16px 6px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Gap</th>
           </tr>
           ${totalsRow("run_time", "Total Running", true)}
           ${totalsRow("work_time", "Total Stations", true)}
@@ -1596,14 +1730,14 @@ function renderSplitTable(section, analysisJson) {
   function renderHowToRead() {
     return `<tr>
 	      <td style="background-color:#f8fafc;padding:12px 24px 16px;border-top:1px solid #e2e8f0;">
-	        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">HOW TO READ THIS</span>
-        <p style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">${hasGoalGroup ? "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Target status shows whether each segment is ahead of target, on target, or an opportunity against the selected target profile." : "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Band score shows whether each segment is a Strength, Good, On benchmark, Opportunity, or Priority versus athletes who finished in the same time band."}</p>
+	        <span style="display:block;color:#94a3b8;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">HOW TO READ THIS</span>
+        <p style="color:#94a3b8;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">${hasGoalGroup ? "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Target status shows whether each segment is ahead of target, on target, or an opportunity against the selected target profile." : "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Band score shows whether each segment is a Strength, Good, On benchmark, Opportunity, or Priority versus athletes who finished in the same time band."}</p>
       </td>
     </tr>`;
   }
 
   const splitReportLink = splitReportUrl
-    ? `<a href="${esc(splitReportUrl)}" target="_blank" style="display:block;background-color:#e8f7fd;border:1px solid #bdeafb;border-radius:8px;padding:14px 16px;margin-top:12px;color:#08a7f5;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;text-decoration:none;">View the full split report &#8594;</a>`
+    ? `<a href="${esc(splitReportUrl)}" target="_blank" style="display:block;background-color:#e8f7fd;border:1px solid #bdeafb;border-radius:8px;padding:14px 16px;margin-top:12px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;text-decoration:none;">View the full split report &#8594;</a>`
     : "";
 
 	  return `
@@ -1616,14 +1750,14 @@ function renderSplitTable(section, analysisJson) {
 	    ${renderSegmentHighlights()}
     <tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
-        <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">REDUCED SPLIT DETAIL</span>
+        <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">REDUCED SPLIT DETAIL</span>
 	        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-collapse:collapse;width:100%;">
           <tr style="background-color:#f1f5f9;border-bottom:2px solid #e2e8f0;">
-            <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:32%;">Segment</th>
-	            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">${hasGoalGroup ? "Target basis" : "Overall standing"}</th>
-            <th style="padding:7px 6px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">${hasGoalGroup ? "Target status" : "Band score"}</th>
-            <th style="padding:7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your split</th>
-            <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">Gap vs median</th>
+            <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:32%;">Segment</th>
+	            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">${hasGoalGroup ? "Target basis" : "Overall standing"}</th>
+            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">${hasGoalGroup ? "Target status" : "Band score"}</th>
+            <th style="padding:7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your split</th>
+            <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">Gap vs median</th>
           </tr>
           ${penaltyRowHtml}
           ${reducedRows}
@@ -1637,9 +1771,24 @@ function renderSplitTable(section, analysisJson) {
 function renderFooter() {
   return `
   <tr>
-    <td style="background-color:#0d1422;padding:22px 32px;border-radius:0 0 8px 8px;text-align:center;">
-      <p style="color:#8fa0ba;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.04em;margin:0 0 8px;">FORMA &nbsp;&#183;&nbsp; forma.fit &nbsp;&#183;&nbsp; Performance Analytics for Hybrid Athletes</p>
-      <p style="color:#4a5568;font-family:Arial,Helvetica,sans-serif;font-size:10px;margin:0;">This analysis is for guidance only. Individual results vary.</p>
+    <td style="background-color:#07111f;padding:22px 32px;border-radius:0 0 8px 8px;
+      border-top:1px solid rgba(148,163,184,0.12);">
+      <table cellpadding="0" cellspacing="0" border="0" role="presentation">
+        <tr>
+          <td style="vertical-align:middle;padding-right:8px;">${logoMark(20)}</td>
+          <td style="vertical-align:middle;">
+            <p style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:11px;
+              letter-spacing:0.04em;margin:0 0 3px;">
+              <span style="color:#f8fafc;font-family:'Inter Tight',Arial,sans-serif;
+                font-size:13px;font-weight:700;">Forma</span>
+              &nbsp;&#183;&nbsp; www.getforma.fit &nbsp;&#183;&nbsp; Performance Analytics for Hybrid Athletes
+            </p>
+            <p style="color:#4a5568;font-family:Inter,Arial,sans-serif;font-size:10px;margin:0;">
+              This analysis is for guidance only. Individual results vary.
+            </p>
+          </td>
+        </tr>
+      </table>
     </td>
   </tr>`;
 }
@@ -1649,8 +1798,8 @@ function renderDoublesCaveat(analysisJson = {}) {
   return `<tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;">
       <div style="background-color:#fffbeb;border:1px solid #fde68a;border-left:3px solid #f59e0b;border-radius:8px;padding:14px 18px;">
-        <span style="display:block;color:#92400e;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">DOUBLES RESULT</span>
-        <p style="color:#78350f;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">This is a HYROX Doubles result. We don&#39;t yet have a dedicated doubles benchmark dataset, so all percentiles and comparisons in this report are measured against the singles open-division population. Use these benchmarks as a directional guide rather than a precise competitive ranking.</p>
+        <span style="display:block;color:#92400e;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">DOUBLES RESULT</span>
+        <p style="color:#78350f;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">This is a HYROX Doubles result. We don&#39;t yet have a dedicated doubles benchmark dataset, so all percentiles and comparisons in this report are measured against the singles open-division population. Use these benchmarks as a directional guide rather than a precise competitive ranking.</p>
       </div>
     </td>
   </tr>`;
@@ -1661,14 +1810,14 @@ function renderMethodNote(hasMaterialPenalties = false, calculatorMode = "target
     ? " Penalties are separated from running in the gap breakdown to avoid confusing execution leakage with run fitness."
     : "";
   const methodCopy = calculatorMode === "analyse"
-    ? `Target times are based on your selected benchmark band.${penaltyNote} Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.`
-    : `Target times are based on your selected target profile.${penaltyNote} Segment gaps are measured against that target profile, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.`;
+    ? `Benchmarks are based on your selected benchmark band.${penaltyNote} Segment gaps are each measured against the benchmark median for that segment, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than the benchmark median; a negative gap means faster.`
+    : `Target times are based on your selected target profile.${penaltyNote} Segment gaps are measured against the target profile for that segment, so they may not sum exactly to the total race gap. Gaps are estimates, not guarantees. A positive gap means slower than target; a negative gap means faster.`;
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;">
       <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin:0 0;">
-        <span style="display:block;color:#94a3b8;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">METHOD NOTE</span>
-        <p style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">${esc(methodCopy)}</p>
+        <span style="display:block;color:#94a3b8;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">METHOD NOTE</span>
+        <p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">${esc(methodCopy)}</p>
       </div>
     </td>
   </tr>`;
@@ -1695,19 +1844,58 @@ function parseStationSignals(items) {
   return rows;
 }
 
+function isEliteOrSub60Context(analysisJson = {}) {
+  const achievedBand = analysisJson.benchmarkContext?.achievedBand ?? analysisJson.achievedBand ?? null;
+  if (achievedBand === "sub_60") return true;
+  const finishTimeSeconds = analysisJson.race?.finishTimeSeconds ?? analysisJson.finishTimeSeconds ?? null;
+  if (Number.isFinite(finishTimeSeconds) && finishTimeSeconds <= 3600) return true;
+  const benchmarkLabel = analysisJson.benchmarkContext?.primaryBenchmarkGroup?.label ?? "";
+  return /\bsub[-_\s]?60\b/i.test(String(benchmarkLabel));
+}
+
+function getMuscleSignalLabel(rawSignal, isElite, weakCount) {
+  if (rawSignal !== "Weakness") {
+    return { label: "Strength", severity: "strength", color: "#4ade80", bg: "#052e16", border: "1px solid #166534" };
+  }
+  if (isElite) {
+    return { label: "Refinement Area", severity: "refinement", color: "#22d3ee", bg: "#0c4a6e", border: "1px solid #0e7490" };
+  }
+  const count = typeof weakCount === "number" ? weakCount : 0;
+  if (count >= 3) {
+    return { label: "Weakness", severity: "weakness", color: "#f87171", bg: "#450a0a", border: "1px solid #7f1d1d" };
+  }
+  return { label: "Training Opportunity", severity: "opportunity", color: "#f59e0b", bg: "#78350f", border: "1px solid #92400e" };
+}
+
+function muscleSignalWeakCountByLabel(analysisJson = {}) {
+  const muscleGroupSignalsList = analysisJson.muscleGroupProfile?.muscleGroupSignals ?? [];
+  return new Map(
+    muscleGroupSignalsList
+      .filter((signal) => signal && signal.label)
+      .map((signal) => [String(signal.label).toLowerCase(), signal.weakCount ?? 0]),
+  );
+}
+
+function mapMuscleSignal(row, isElite, weakCountByLabel) {
+  const weakCount = weakCountByLabel.get(String(row.area ?? "").toLowerCase()) ?? null;
+  const { label, color, bg, border } = getMuscleSignalLabel(row.signal, isElite, weakCount);
+  return { ...row, signal: label, color, bg, border };
+}
+
 function parseMuscleAreaSignals(items) {
   const text = items.join("\n");
   const rows = [];
   const summary = items.find((item) => /common thread across your weakest stations/i.test(item)) ?? "";
+  const strengthSummary = items.find((item) => /clear strength/i.test(item)) ?? summary;
   const weakAreasMatch = summary.match(/^(.+?)\s+are the common thread across your weakest stations/i);
-  const strongAreaMatch = summary.match(/weakest stations;\s*your\s+(.+?)\s+is a clear strength/i)
-    ?? summary.match(/^your\s+(.+?)\s+is a clear strength/i);
+  const strongAreaMatch = strengthSummary.match(/weakest stations;\s*your\s+(.+?)\s+is a clear strength/i)
+    ?? strengthSummary.match(/^your\s+(.+?)\s+is a clear strength/i);
   const weakStations = (text.match(/Weakest stations:\s*(.+)/i)?.[1] ?? "")
     .split(/,\s*/)
     .map((entry) => entry.replace(/\s*\([^)]*\)/, "").trim())
     .filter(Boolean)
     .slice(0, 3);
-  const strongStations = (text.match(/Strongest stations:\s*(.+)/i)?.[1] ?? "")
+  const strongStations = (text.match(/Strongest stations?:\s*(.+)/i)?.[1] ?? "")
     .split(/,\s*/)
     .map((entry) => entry.replace(/\s*\([^)]*\)/, "").trim())
     .filter(Boolean)
@@ -1720,8 +1908,6 @@ function parseMuscleAreaSignals(items) {
         rows.push({
           area: name,
           signal: "Weakness",
-          color: "#e53e3e",
-          bg: "#fff4f4",
           meaning: weakStations.length ? `${weakStations.join(", ")} are low-ranked` : "Low-ranked stations share this demand",
         });
       }
@@ -1733,8 +1919,6 @@ function parseMuscleAreaSignals(items) {
       rows.push({
         area,
         signal: "Strength",
-        color: "#16a34a",
-        bg: "#f0fdf4",
         meaning: strongStations.length ? `${strongStations.join(", ")} are stronger` : "Higher-ranked stations share this demand",
       });
     }
@@ -1746,25 +1930,25 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
   const { penaltiesAreMaterial } = penaltyContext(analysisJson);
   const content = Array.isArray(section.content) ? section.content : [section.content];
   const textItems = content.filter((item) => typeof item === "string");
+  const isElite = isEliteOrSub60Context(analysisJson);
+  const weakCountByLabel = muscleSignalWeakCountByLabel(analysisJson);
   const areaRows = parseMuscleAreaSignals(textItems);
   const signalRows = parseStationSignals(textItems);
   const stationFallbackRows = signalRows.map((row) => ({
     area: row.name,
     signal: row.signal,
-    color: row.color,
-    bg: row.bg,
     meaning: row.signal === "Weakness" ? "Station-specific limiter" : "Station to protect",
   }));
-  const rows = areaRows.length > 0 ? areaRows : stationFallbackRows;
+  const rows = (areaRows.length > 0 ? areaRows : stationFallbackRows).map((row) => mapMuscleSignal(row, isElite, weakCountByLabel));
   const signalTableHtml = rows.length > 0
     ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin-top:12px;border:1px solid #e2e8f0;">
       <tr style="background-color:#f8fafc;">
-	        <th width="50%" style="padding:8px;text-align:left;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Area</th>
-	        <th width="50%" style="padding:8px;text-align:center;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Signal</th>
+	        <th width="50%" style="padding:8px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Area</th>
+	        <th width="50%" style="padding:8px;text-align:center;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Signal</th>
       </tr>
       ${rows.map((row) => `<tr>
-        <td style="padding:10px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;border-top:1px solid #e2e8f0;"><strong>${esc(row.area)}</strong></td>
-	        <td style="padding:10px 8px;border-top:1px solid #e2e8f0;text-align:center;"><span style="display:inline-block;background-color:${row.bg};color:${row.color};font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;padding:3px 6px;border-radius:4px;">${esc(row.signal)}</span></td>
+        <td style="padding:10px 8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;border-top:1px solid #e2e8f0;"><strong>${esc(row.area)}</strong></td>
+	        <td style="padding:10px 8px;border-top:1px solid #e2e8f0;text-align:center;"><span style="display:inline-block;background-color:${row.bg};color:${row.color};border:${row.border};font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;padding:3px 6px;border-radius:4px;">${esc(row.signal)}</span></td>
       </tr>`).join("")}
     </table>`
     : "";
@@ -1775,9 +1959,9 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
-      <span style="display:block;color:#08a7f5;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">MUSCLE GROUP SIGNAL</span>
+      <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">MUSCLE GROUP SIGNAL</span>
       ${signalTableHtml}
-      <p style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:12px 0 0;">${esc(enforceTone(implication))}</p>
+      <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:12px 0 0;">${esc(enforceTone(implication))}</p>
     </td>
   </tr>`;
 }
@@ -1870,8 +2054,14 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
 	    return "Your HYROX target time analysis";
 	  })();
   const rawName = athleteContext.firstName ?? athleteContext.displayName ?? null;
-  const firstName = rawName ? rawName.split(/[\s,]+/)[0] : "there";
-  const greetingName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+  let greetingName;
+  if (rawName && rawName.includes(" & ")) {
+    const firstNames = rawName.split(" & ").map((part) => part.trim().split(/[\s,]+/)[0]).filter(Boolean);
+    greetingName = firstNames.length > 0 ? firstNames.join(" & ") : "there";
+  } else {
+    const singleFirst = rawName ? rawName.split(/[\s,]+/)[0] : "there";
+    greetingName = singleFirst.charAt(0).toUpperCase() + singleFirst.slice(1);
+  }
   const greeting = `Hi ${greetingName},`;
   const sections = Array.isArray(personalReport.sections) ? personalReport.sections : [];
   const textSections = sections
@@ -1897,9 +2087,12 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <style type="text/css">
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Inter+Tight:wght@700;800&display=swap');
+  </style>
   <title>${esc(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:Inter,Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
   <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="${outerTableStyle}">
     <tr>
       <td align="center" style="padding:24px 12px;">
@@ -1922,7 +2115,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
 
   return {
     subject: enforceTone(subject),
-    htmlBody: enforceTone(rawHtml),
+    htmlBody: enforceTone(applyUnifiedDarkTheme(rawHtml)),
     textBody,
   };
 }

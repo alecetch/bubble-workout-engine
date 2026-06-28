@@ -8,6 +8,7 @@ import { normaliseSubmission } from "../hyrox/engine/segmentNormaliser.js";
 import { generateInsights } from "../hyrox/insights/insightEngine.js";
 import { assembleReport } from "../hyrox/reports/reportAssembler.js";
 import { lookupHyroxEventByKey } from "../hyrox/services/hyroxEventsService.js";
+import { detectHyroxDivisionFromUrl } from "../hyrox/ingestion/detectHyroxDivision.js";
 
 const RESULTS_URL_PREFIX = "https://results.hyrox.com/";
 const FETCH_TIMEOUT_MS = 12_000;
@@ -317,6 +318,7 @@ async function fetchAndParseHyroxUrl(url, pool) {
     event,
     eventLookupKey,
     sourceUrl: url,
+    divisionDetection: detectHyroxDivisionFromUrl(url),
   };
 }
 
@@ -583,7 +585,7 @@ function qaFlagsMarkdown(modeEntries) {
   return rows.join("\n");
 }
 
-function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishTimeSeconds, modeEntries }) {
+function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishTimeSeconds, modeEntries, divisionDetection }) {
   const metadata = [
     "# HYROX QA Test Harness",
     "",
@@ -596,6 +598,9 @@ function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishT
     `- Event date: ${markdownValue(isoDate(event?.startDate) ?? isoDate(parsed.eventDate))}`,
     `- Athlete: ${markdownValue(parsed.athleteName ?? parsed.name ?? "HYROX athlete")}`,
     `- Division: ${markdownValue(parsed.division)}`,
+    `- Detected race format: ${markdownValue(divisionDetection?.raceFormat)}`,
+    `- Detected division label: ${markdownValue(divisionDetection?.divisionLabel)}`,
+    `- Division detection source: ${markdownValue(divisionDetection?.source)}`,
     `- Finish time: ${formatSeconds(parsed.finishTimeSeconds)}`,
     `- Target time: ${targetFinishTimeSeconds ? formatSeconds(targetFinishTimeSeconds) : "none"}`,
     `- Split count: ${Array.isArray(parsed.splits) ? parsed.splits.length : 0}`,
@@ -785,6 +790,7 @@ async function runHarnessCase({ url, pool, targetFinishTimeSeconds, sharedContex
       event: importResult.event,
       targetFinishTimeSeconds,
       modeEntries,
+      divisionDetection: importResult.divisionDetection,
     }),
   };
 }
@@ -806,6 +812,7 @@ function metadataFromImportResult(importResult) {
     penaltyCount: Array.isArray(parsed.penalties) ? parsed.penalties.length : 0,
     confidence: parsedConfidence(parsed) ?? null,
     warnings: parsed.warnings ?? [],
+    divisionDetection: importResult.divisionDetection ?? null,
   };
 }
 

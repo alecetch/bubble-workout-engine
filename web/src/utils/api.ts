@@ -92,12 +92,23 @@ export async function submitHyroxPrediction(
   return res.json() as Promise<HyroxPredictionResponse>;
 }
 
+export interface HyroxDivisionDetection {
+  raceFormat: "singles" | "doubles" | "unknown";
+  divisionSex: "male" | "female" | "mixed" | "unknown";
+  divisionLabel: string;
+  eventCode: string | null;
+  eventPrefix: string | null;
+  sexParam: string | null;
+  source: "url_event_param" | "no_event_param" | "invalid_url";
+}
+
 export async function fetchHyroxResultsImport(
   url: string,
 ): Promise<{
   success: boolean;
   reason?: string;
   parsed?: HyroxParseResult;
+  divisionDetection?: HyroxDivisionDetection;
   eventDate?: string;
   eventName?: string;
 }> {
@@ -119,6 +130,7 @@ export async function fetchHyroxResultsImport(
       success: boolean;
       reason?: string;
       parsed?: HyroxParseResult;
+      divisionDetection?: HyroxDivisionDetection;
       eventDate?: string;
       eventName?: string;
     }>;

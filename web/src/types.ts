@@ -22,7 +22,7 @@ export interface HyroxCalculatorDraft {
   athlete: {
     name?: string;
     email?: string;
-    gender: "male" | "female";
+    gender: "male" | "female" | "mixed";
     ageOnRaceDay?: number;
     ageGroup?: string;
   };
@@ -52,7 +52,7 @@ export interface HyroxAnalysisRequest {
   athlete: {
     name?: string;
     email: string;
-    sex: "male" | "female";
+    sex: "male" | "female" | "mixed";
     ageOnRaceDay?: number;
     ageGroup?: string;
   };

@@ -32,10 +32,10 @@ export function RaceDetailsPage() {
   const draft = loadDraft();
 
   const [calculatorMode, setCalculatorMode] = useState<"target" | "analyse">(
-    (draft?.calculatorMode as "target" | "analyse" | undefined) ?? "target",
+    (draft?.calculatorMode as "target" | "analyse" | undefined) ?? "analyse",
   );
   const [name, setName] = useState(normalizeName(draft?.athlete?.name ?? null) ?? "");
-  const [gender, setGender] = useState<"male" | "female">(draft?.athlete?.gender ?? "male");
+  const [gender, setGender] = useState<"male" | "female" | "mixed">(draft?.athlete?.gender ?? "male");
   const [ageGroup, setAgeGroup] = useState(
     normalizeAgeGroup(draft?.athlete?.ageGroup) ?? ageGroupFromAge(draft?.athlete?.ageOnRaceDay) ?? "",
   );
@@ -164,6 +164,15 @@ export function RaceDetailsPage() {
       if (response.eventDate) {
         setRaceDate(response.eventDate);
       }
+      const det = response.divisionDetection;
+      if (det?.divisionSex === "mixed") {
+        setGender("mixed");
+        setDivision("doubles");
+      } else if (det?.divisionSex === "female") {
+        setGender("female");
+      } else if (det?.divisionSex === "male") {
+        setGender("male");
+      }
       return;
     }
 
@@ -223,18 +232,17 @@ export function RaceDetailsPage() {
             Per<span style={{ WebkitTextFillColor: "var(--accent-cyan)" }}>forma</span>nce up.
           </h1>
           <p className={styles.subline}>
-            Paste your HYROX result and Forma turns your race into a clear
-            benchmarked analysis: where you lost time, what you did well, and
-            what to train next.
+            Paste your HYROX result and Forma turns it into a clear benchmarked report:
+            where you lost time, what held up, and what to train next.
           </p>
           <ul className={styles.benefits}>
             {[
-              ["Benchmark", "Compare your race with a relevant target group."],
-              ["Bottleneck", "Find the stations, runs or transitions costing the most."],
-              ["Training direction", "Get a practical focus before your next block."],
+              ["Benchmark", "See how your race compares with athletes at your level."],
+              ["Bottleneck", "Find the runs, stations or transitions costing you time."],
+              ["Training focus", "Know what to prioritise before your next block."],
             ].map(([title, body]) => (
               <li key={title} className={styles.benefit}>
-                <span className={styles.benefitIcon}>✓</span>
+                <span className={styles.benefitIcon}>&#10003;</span>
                 <span>
                   <strong>{title}</strong>
                   {body}
@@ -349,8 +357,8 @@ export function RaceDetailsPage() {
                 <SegmentedControl
                   label="What do you want to know?"
                   options={[
-                    { value: "target", label: "Hit a target time" },
                     { value: "analyse", label: "Analyse my race" },
+                    { value: "target", label: "Hit a target time" },
                   ]}
                   value={calculatorMode}
                   onChange={(v) => {
@@ -366,9 +374,14 @@ export function RaceDetailsPage() {
                     options={[
                       { value: "male", label: "Male" },
                       { value: "female", label: "Female" },
+                      { value: "mixed", label: "Mixed" },
                     ]}
                     value={gender}
-                    onChange={(v) => setGender(v as "male" | "female")}
+                    onChange={(v) => {
+                      const g = v as "male" | "female" | "mixed";
+                      setGender(g);
+                      if (g === "mixed") setDivision("doubles");
+                    }}
                   />
                   <div className={styles.selectField}>
                     <label htmlFor="age-group" className={styles.selectLabel}>
