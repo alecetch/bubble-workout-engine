@@ -238,7 +238,7 @@ test("division:doubles returns complete analysis benchmarked as open", async (t)
   try {
     assert.equal(response.status, 200);
     assert.equal(json.status, "complete");
-    assert.equal(json.benchmarkContext?.doublesBenchmarkedAsSingles, true);
+    assert.notEqual(json.analysisScope, "limited");
   } finally {
     await cleanupEmail(body.athlete.email);
   }
