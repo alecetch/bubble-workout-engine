@@ -447,9 +447,12 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
   const compBandLabel = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
   const stretchBandLabel = analysisFrame?.stretchBand?.replace("sub_", "sub-") ?? null;
   if (category === "penalty") {
+    const winLabel = calculatorMode !== "analyse" ? "FIRST TARGET WIN" : "FASTEST WIN";
     return {
-      headline: `${formatGain(totalPenaltySeconds(analysisJson))} OF PENALTIES IS YOUR FASTEST WIN`,
-      subline: "Cleaner execution reclaims that time without a training block.",
+      headline: `${formatGain(totalPenaltySeconds(analysisJson))} OF PENALTIES IS YOUR ${winLabel}`,
+      subline: calculatorMode !== "analyse"
+        ? "Removing penalties reduces the target gap before any fitness change."
+        : "Cleaner execution reclaims that time without a training block.",
       gainDisplay: null,
     };
   }
@@ -500,17 +503,93 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       };
     }
   }
-  if (category === "running") {
+  if (calculatorMode === "analyse" && category === "running") {
     return { headline: "YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP", subline: "Closing that gap unlocks your finish time.", gainDisplay: null };
   }
-  if (category === "roxzone") {
+  if (calculatorMode === "analyse" && category === "roxzone") {
     return { headline: "TRANSITION LEAKAGE IS COSTING YOU FREE TIME", subline: "Roxzone efficiency is your lowest-effort gain.", gainDisplay: null };
   }
-  if (category === "pacing") {
+  if (calculatorMode === "analyse" && category === "pacing") {
     return { headline: "YOU HAVE THE ENGINE — THE CEILING IS EXECUTION", subline: "Pacing discipline is the next unlock.", gainDisplay: null };
   }
   if (category === "data_quality") {
     return { headline: "YOUR ANALYSIS IS READY — HERE IS WHAT WE CAN SAY CONFIDENTLY", subline: null, gainDisplay: null };
+  }
+  if (calculatorMode !== "analyse") {
+    const totalSegment = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+    const targetSecs = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+      ?? totalSegment?.exactTargetSeconds
+      ?? null;
+    const targetStr = targetSecs ? formatTime(targetSecs) : null;
+    const isEliteBand = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+
+    if (category === "high_performer") {
+      if (isEliteBand && targetStr) {
+        return {
+          headline: `THE SUB-60 TARGET GAP STARTS WITH ${lLabel ? String(lLabel).toUpperCase() : "STATION REFINEMENT"}`,
+          subline: lLabel
+            ? `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} the first target refinement at this level.`
+            : "Protect what works. Find the smallest combination of gains.",
+          gainDisplay: null,
+        };
+      }
+      return {
+        headline: targetStr
+          ? `YOUR ENGINE IS CLOSE — THE ROUTE TO ${targetStr} IS STATION EFFICIENCY`
+          : "YOUR ENGINE IS CLOSE — STATION EFFICIENCY CLOSES THE GAP",
+        subline: "You are already competitive. The target requires precision, not a rebuild.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "station_capacity") {
+      if (isEliteBand && targetStr) {
+        return {
+          headline: lLabel
+            ? `THE SUB-60 TARGET GAP STARTS WITH ${String(lLabel).toUpperCase()}`
+            : "THE TARGET IS AN ELITE STRETCH",
+          subline: lLabel
+            ? `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} the biggest target gap. At this level, this is refinement, not remediation.`
+            : "Every second is marginal territory.",
+          gainDisplay: null,
+        };
+      }
+      return {
+        headline: targetStr && lLabel
+          ? `THE ROUTE TO ${targetStr} STARTS WITH ${String(lLabel).toUpperCase()}`
+          : "YOUR ENGINE IS CLOSE — STATION EFFICIENCY CLOSES THE GAP",
+        subline: "Station efficiency is the main lever between now and your target.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "pacing") {
+      return {
+        headline: "THE TARGET IS NOT JUST FASTER RUNNING — STATIONS CLOSE THE GAP",
+        subline: targetStr
+          ? `The route to ${targetStr} runs through station efficiency, not aerobic output.`
+          : "Engine is there. The target gap is in execution.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "running") {
+      return {
+        headline: targetStr
+          ? `THE ROUTE TO ${targetStr} RUNS THROUGH YOUR RUNNING GAP`
+          : "YOUR RUNNING GAP IS THE BIGGEST TARGET LEVER",
+        subline: "Running pace is the main target opportunity.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "roxzone") {
+      return {
+        headline: "TRANSITION LEAKAGE IS COSTING YOU TARGET TIME",
+        subline: "Tighter RoxZone execution is a low-effort gain toward the target.",
+        gainDisplay: null,
+      };
+    }
   }
   if (category === "high_performer") {
     const band = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-") || null;
@@ -634,11 +713,28 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
       bullets.push(`At this level, we are not looking for limiters. We are looking for the smallest advantage. ${_ll} ${pluralStation(_ll) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark.`);
     } else if (isCompetitive && nextBandLabel && calculatorMode === "analyse") {
       bullets.push(`You are already competitive in ${achievedBandLabel}. ${limiterLabel(analysisJson)} shows the biggest gap versus ${nextBandLabel} athletes - closing this is the route to the next band.`);
+    } else if (calculatorMode !== "analyse") {
+      const totalSegment = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+      const targetSecs2 = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+        ?? totalSegment?.exactTargetSeconds
+        ?? null;
+      const tStr = targetSecs2 ? formatTime(targetSecs2) : "your target";
+      const _ll = limiterLabel(analysisJson);
+      bullets.push(`To reach ${tStr}, the biggest station gap is ${_ll}. Closing this is the main target lever.`);
     } else {
       bullets.push(`${limiterLabel(analysisJson)} is your biggest opportunity - ${gainCopy} against your benchmark band.`);
     }
   } else if (category === "running") {
-    bullets.push(`Your cumulative run gap (${formatGain(runGap)}) exceeds your station gap (${formatGain(stationGap)}).`);
+    if (calculatorMode !== "analyse") {
+      const totalSegment = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+      const targetSecs2 = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+        ?? totalSegment?.exactTargetSeconds
+        ?? null;
+      const tStr = targetSecs2 ? formatTime(targetSecs2) : "your target";
+      bullets.push(`To reach ${tStr}, running pace needs ${formatGain(runGap)} improvement.`);
+    } else {
+      bullets.push(`Your cumulative run gap (${formatGain(runGap)}) exceeds your station gap (${formatGain(stationGap)}).`);
+    }
   } else if (category === "roxzone") {
     bullets.push(`Transition time put you in the ${formatPercentile(roxPct) ?? "lower range"} of your division.`);
   } else if (category === "pacing") {

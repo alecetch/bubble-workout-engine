@@ -29,7 +29,7 @@ test("email report uses penalty interpretation hero and callout", () => {
     insights: [],
   });
 
-  assert.match(report.emailHtml, /FASTEST WIN/);
+  assert.match(report.emailHtml, /FIRST TARGET WIN/);
   assert.doesNotMatch(report.emailHtml, />0:00</);
   assert.doesNotMatch(report.emailHtml, /YOUR HYROX ANALYSIS IS READY/);
   assert.match(report.emailHtml, /PENALTY ANALYSIS/);

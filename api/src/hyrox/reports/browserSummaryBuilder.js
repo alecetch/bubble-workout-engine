@@ -68,6 +68,12 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
             ? Math.round(analysisJson.workRunBalance.workShare * 100)
             : null,
           profileType: analysisJson.workRunBalance.profileType ?? null,
+          profileTypeLabel: {
+            transition_limited: "Transition limited",
+            runner_dominant: "Runner dominant",
+            strength_dominant: "Strength dominant",
+            balanced_hybrid: "Balanced hybrid",
+          }[analysisJson.workRunBalance.profileType] ?? null,
         }
       : null,
   };

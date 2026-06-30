@@ -32,9 +32,9 @@ function formatSignedSeconds(seconds: number): string {
   return `${sign}${formatSeconds(Math.abs(seconds))}`;
 }
 
-function formatDivision(division: string, gender?: "male" | "female"): string {
+function formatDivision(division: string, gender?: "male" | "female" | "mixed"): string {
   const divisionLabel = division === "pro" ? "Pro" : division === "doubles" ? "Doubles" : division === "relay" ? "Relay" : "Open";
-  const genderLabel = gender === "female" ? "Women" : "Men";
+  const genderLabel = gender === "female" ? "Women" : gender === "mixed" ? "Mixed" : "Men";
   return `HYROX ${genderLabel}${divisionLabel === "Open" ? "" : ` ${divisionLabel}`}`;
 }
 
@@ -258,7 +258,7 @@ export function ReviewPage() {
               <EditRow
                 title="Race details"
                 value={`${raceLabel} · Finish ${formatSeconds(race.finishTimeSeconds)} · Target ${targetFinishTimeLabel}`}
-                onEdit={() => void navigate("/hyrox-calculator")}
+                onEdit={() => void navigate("/hyrox-calculator/race-details")}
               />
               <EditRow
                 title="Splits"

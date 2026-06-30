@@ -1,4 +1,4 @@
-import type { HyroxAnalysisRequest, HyroxAnalysisResponse, HyroxPredictionRequest, HyroxPredictionResponse } from "../types";
+import type { HyroxAnalysisRequest, HyroxAnalysisResponse, HyroxPredictionRequest, HyroxPredictionResponse, HyroxSubmissionDraftResponse } from "../types";
 import type { HyroxParseResult } from "./hyroxResultsParser";
 import { loadDraft } from "./storage";
 
@@ -92,27 +92,59 @@ export async function submitHyroxPrediction(
   return res.json() as Promise<HyroxPredictionResponse>;
 }
 
+export interface HyroxDivisionDetection {
+  raceFormat: "singles" | "doubles" | "unknown";
+  divisionSex: "male" | "female" | "mixed" | "unknown";
+  divisionLabel: string;
+  eventCode: string | null;
+  eventPrefix: string | null;
+  sexParam: string | null;
+  source: "url_event_param" | "no_event_param" | "invalid_url";
+}
+
 export async function fetchHyroxResultsImport(
   url: string,
 ): Promise<{
   success: boolean;
   reason?: string;
   parsed?: HyroxParseResult;
+  divisionDetection?: HyroxDivisionDetection;
   eventDate?: string;
   eventName?: string;
 }> {
-  const res = await fetch(`${BASE_URL}/api/hyrox/import-url`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
-  });
-  return res.json() as Promise<{
-    success: boolean;
-    reason?: string;
-    parsed?: HyroxParseResult;
-    eventDate?: string;
-    eventName?: string;
-  }>;
+  try {
+    const res = await fetch(`${BASE_URL}/api/hyrox/import-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return { success: false, reason: res.ok ? "invalid_response" : "fetch_failed" };
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      return { success: false, reason: body.error ?? "fetch_failed" };
+    }
+    return res.json() as Promise<{
+      success: boolean;
+      reason?: string;
+      parsed?: HyroxParseResult;
+      divisionDetection?: HyroxDivisionDetection;
+      eventDate?: string;
+      eventName?: string;
+    }>;
+  } catch {
+    return { success: false, reason: "fetch_failed" };
+  }
+}
+
+export async function fetchHyroxSubmissionDraft(submissionId: string): Promise<HyroxSubmissionDraftResponse> {
+  const res = await fetch(`${BASE_URL}/api/hyrox/submission-draft/${encodeURIComponent(submissionId)}`);
+  if (!res.ok) {
+    throw new ServerError("Unable to restore this HYROX result.");
+  }
+  return res.json() as Promise<HyroxSubmissionDraftResponse>;
 }
 
 export function trackEvent(name: string, props?: Record<string, unknown>): void {

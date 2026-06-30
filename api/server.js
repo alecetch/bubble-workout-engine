@@ -51,6 +51,7 @@ import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { adminHyroxRouter } from "./src/routes/adminHyrox.js";
+import { adminHyroxTestHarnessRouter } from "./src/routes/adminHyroxTestHarness.js";
 import { adminContentStudioRouter } from "./src/routes/adminContentStudio.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
@@ -72,12 +73,13 @@ import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { loadBenchmarkData } from "./src/hyrox/engine/benchmarkService.js";
-import { hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission } from "./src/hyrox/hyroxValidator.js";
+import { hyroxImportRateLimiter, hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission } from "./src/hyrox/hyroxValidator.js";
 import * as hyroxController from "./src/hyrox/hyroxController.js";
 import { predict } from "./src/hyrox/hyroxPredictController.js";
 import { makeImportUrlHandler } from "./src/hyrox/hyroxImportController.js";
 import { hyroxCarouselHandler } from "./src/hyrox/hyroxCarouselController.js";
 import { sharePackHandlers } from "./src/hyrox/hyroxSharePackController.js";
+import { createHyroxSubmissionDraftHandler } from "./src/hyrox/hyroxSubmissionDraftController.js";
 import { runningIpRateLimiter, validateRunningSubmission } from "./src/hyrox/running/runningValidator.js";
 import * as runningController from "./src/hyrox/running/runningController.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
@@ -180,6 +182,7 @@ const adminCspMiddleware = helmet.contentSecurityPolicy({
     imgSrc: ["'self'", "data:", "http:", "https:"],
     connectSrc: ["'self'"],
     fontSrc: ["'self'", "data:"],
+    frameSrc: ["'self'", "blob:"],
     objectSrc: ["'none'"],
     baseUri: ["'self'"],
     frameAncestors: ["'none'"],
@@ -321,6 +324,7 @@ app.get("/admin/progression-sandbox", adminCspMiddleware, (_req, res) => sendAdm
 app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(res, "seed-history.html"));
 app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
 app.get("/admin/hyrox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox.html"));
+app.get("/admin/hyrox-test-harness", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox-test-harness.html"));
 app.get("/admin/content-studio", adminCspMiddleware, (_req, res) => sendAdminPage(res, "content-studio.html"));
 app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
 // /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
@@ -773,6 +777,7 @@ app.use("/api/auth", authRouter);
 // requireAuth globally and would intercept /api/admin/* calls before they reach the
 // internal-token–guarded admin routers.
 app.use("/api/admin", adminCoachesRouter);
+app.use("/api/admin", requireInternalToken, adminHyroxTestHarnessRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin", ...adminOnly, adminContentStudioRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
@@ -806,7 +811,8 @@ app.use(contentHubRouter);
 app.use(affiliateProgramRouter);
 app.post("/api/hyrox/analyse", hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission, hyroxController.analyse);
 app.post("/api/hyrox/predict", predict);
-app.post("/api/hyrox/import-url", hyroxIpRateLimiter, makeImportUrlHandler(pool));
+app.post("/api/hyrox/import-url", hyroxImportRateLimiter, makeImportUrlHandler(pool));
+app.get("/api/hyrox/submission-draft/:submissionId", createHyroxSubmissionDraftHandler(pool));
 app.get("/api/hyrox/health", hyroxController.health);
 app.get("/hyrox/carousel/:submissionId", hyroxCarouselHandler);
 app.get("/api/hyrox/carousel/:submissionId", hyroxCarouselHandler);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FormPanel } from "../components/FormPanel";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
@@ -11,7 +11,7 @@ import { TextInput } from "../components/TextInput";
 import { TimeInput } from "../components/TimeInput";
 import { findHyroxEventByName } from "../data/hyroxEvents";
 import type { HyroxCalculatorDraft } from "../types";
-import { fetchHyroxResultsImport, trackEvent } from "../utils/api";
+import { fetchHyroxResultsImport, fetchHyroxSubmissionDraft, trackEvent } from "../utils/api";
 import { ageGroupFromAge, normalizeAgeGroup, normalizeName, saveImportedHyroxResult } from "../utils/hyroxImportDraft";
 import type { HyroxParseResult } from "../utils/hyroxResultsParser";
 import { loadDraft, saveDraft } from "../utils/storage";
@@ -29,13 +29,16 @@ function formatDivisionLabel(value: Division): string {
 
 export function RaceDetailsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryMode = searchParams.get("mode") as "target" | "analyse" | null;
+  const restoreSubmissionId = searchParams.get("submissionId") ?? searchParams.get("submission");
   const draft = loadDraft();
 
   const [calculatorMode, setCalculatorMode] = useState<"target" | "analyse">(
-    (draft?.calculatorMode as "target" | "analyse" | undefined) ?? "target",
+    queryMode ?? (draft?.calculatorMode as "target" | "analyse" | undefined) ?? "analyse",
   );
   const [name, setName] = useState(normalizeName(draft?.athlete?.name ?? null) ?? "");
-  const [gender, setGender] = useState<"male" | "female">(draft?.athlete?.gender ?? "male");
+  const [gender, setGender] = useState<"male" | "female" | "mixed">(draft?.athlete?.gender ?? "male");
   const [ageGroup, setAgeGroup] = useState(
     normalizeAgeGroup(draft?.athlete?.ageGroup) ?? ageGroupFromAge(draft?.athlete?.ageOnRaceDay) ?? "",
   );
@@ -55,6 +58,7 @@ export function RaceDetailsPage() {
   const [importUrlError, setImportUrlError] = useState<string | null>(null);
   const [importUrlLoading, setImportUrlLoading] = useState(false);
   const [importOpenedUrl, setImportOpenedUrl] = useState<string | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
 
   const parsedFinishTime = parseTimeToSeconds(finishTime);
   const parsedTargetFinishTime = parseTimeToSeconds(targetFinishTime);
@@ -84,6 +88,41 @@ export function RaceDetailsPage() {
   useEffect(() => {
     trackEvent("hyrox_calculator_started");
   }, []);
+
+  useEffect(() => {
+    if (!restoreSubmissionId) return;
+    let cancelled = false;
+    setRestoreMessage("Restoring your HYROX result...");
+    fetchHyroxSubmissionDraft(restoreSubmissionId)
+      .then(({ draft: restored }) => {
+        if (cancelled) return;
+        const restoredMode = queryMode ?? restored.calculatorMode ?? "target";
+        saveDraft({ ...restored, calculatorMode: restoredMode });
+        setCalculatorMode(restoredMode);
+        setName(normalizeName(restored.athlete?.name ?? null) ?? "");
+        setGender(restored.athlete?.gender ?? "male");
+        setAgeGroup(
+          normalizeAgeGroup(restored.athlete?.ageGroup) ?? ageGroupFromAge(restored.athlete?.ageOnRaceDay) ?? "",
+        );
+        setRaceName(restored.race?.raceName ?? "");
+        setRaceDate(restored.race?.raceDate ?? "");
+        setDivision(restored.race?.division ?? "open");
+        setFinishTime(restored.race?.finishTimeSeconds ? formatSeconds(restored.race.finishTimeSeconds) : "");
+        setTargetFinishTime(
+          restored.athleteContext?.targetFinishTimeSeconds
+            ? formatSeconds(restored.athleteContext.targetFinishTimeSeconds)
+            : "",
+        );
+        setImportSucceeded(true);
+        setRestoreMessage("Your previous HYROX result has been restored.");
+      })
+      .catch(() => {
+        if (!cancelled) setRestoreMessage("We couldn't restore your previous result. You can still paste your HYROX URL or enter it manually.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [queryMode, restoreSubmissionId]);
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
@@ -164,6 +203,15 @@ export function RaceDetailsPage() {
       if (response.eventDate) {
         setRaceDate(response.eventDate);
       }
+      const det = response.divisionDetection;
+      if (det?.divisionSex === "mixed") {
+        setGender("mixed");
+        setDivision("doubles");
+      } else if (det?.divisionSex === "female") {
+        setGender("female");
+      } else if (det?.divisionSex === "male") {
+        setGender("male");
+      }
       return;
     }
 
@@ -220,21 +268,20 @@ export function RaceDetailsPage() {
             <br />
             Insight out.
             <br />
-            Performance up.
+            Per<span style={{ WebkitTextFillColor: "var(--accent-cyan)" }}>forma</span>nce up.
           </h1>
           <p className={styles.subline}>
-            Paste your HYROX result and Forma turns your race into a clear
-            benchmarked analysis: where you lost time, what you did well, and
-            what to train next.
+            Paste your HYROX result and Forma turns it into a clear benchmarked report:
+            where you lost time, what held up, and what to train next.
           </p>
           <ul className={styles.benefits}>
             {[
-              ["Benchmark", "Compare your race with a relevant target group."],
-              ["Bottleneck", "Find the stations, runs or transitions costing the most."],
-              ["Training direction", "Get a practical focus before your next block."],
+              ["Benchmark", "See how your race compares with athletes at your level."],
+              ["Bottleneck", "Find the runs, stations or transitions costing you time."],
+              ["Training focus", "Know what to prioritise before your next block."],
             ].map(([title, body]) => (
               <li key={title} className={styles.benefit}>
-                <span className={styles.benefitIcon}>✓</span>
+                <span className={styles.benefitIcon}>&#10003;</span>
                 <span>
                   <strong>{title}</strong>
                   {body}
@@ -263,6 +310,11 @@ export function RaceDetailsPage() {
               <h2 className={styles.formTitle}>Race details</h2>
               <p className={styles.formIntro}>Paste your HYROX result URL or enter your race manually.</p>
             </div>
+            {restoreMessage && (
+              <div data-testid="submission-restore-message" className={restoreMessage.startsWith("We couldn't") ? styles.importWarning : styles.importSuccess}>
+                <div className={styles.successTitle}>{restoreMessage}</div>
+              </div>
+            )}
 
             <div className={styles.fields}>
               <div data-testid="inline-import-panel">
@@ -349,8 +401,8 @@ export function RaceDetailsPage() {
                 <SegmentedControl
                   label="What do you want to know?"
                   options={[
-                    { value: "target", label: "Hit a target time" },
                     { value: "analyse", label: "Analyse my race" },
+                    { value: "target", label: "Hit a target time" },
                   ]}
                   value={calculatorMode}
                   onChange={(v) => {
@@ -366,9 +418,14 @@ export function RaceDetailsPage() {
                     options={[
                       { value: "male", label: "Male" },
                       { value: "female", label: "Female" },
+                      { value: "mixed", label: "Mixed" },
                     ]}
                     value={gender}
-                    onChange={(v) => setGender(v as "male" | "female")}
+                    onChange={(v) => {
+                      const g = v as "male" | "female" | "mixed";
+                      setGender(g);
+                      if (g === "mixed") setDivision("doubles");
+                    }}
                   />
                   <div className={styles.selectField}>
                     <label htmlFor="age-group" className={styles.selectLabel}>

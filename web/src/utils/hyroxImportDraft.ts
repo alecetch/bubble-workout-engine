@@ -11,13 +11,23 @@ export function normalizeName(raw: string | null): string | null {
       .toLowerCase()
       .replace(/\S+/g, (word) => word.replace(/(^|[-'])(\w)/g, (_, prefix: string, char: string) => `${prefix}${char.toUpperCase()}`));
   }
-  // HYROX exports names as "Last, First" — convert to "First Last"
-  if (raw.includes(",")) {
-    const [last, first] = raw.split(",").map((s) => s.trim());
-    if (first && last) return titleCase(`${first} ${last}`);
-    return first || last ? titleCase(first || last) : null;
+  function normalizeOneName(name: string): string {
+    const trimmed = name.trim();
+    if (trimmed.includes(",")) {
+      const commaIdx = trimmed.indexOf(",");
+      const last = trimmed.slice(0, commaIdx).trim();
+      const first = trimmed.slice(commaIdx + 1).trim();
+      if (first && last) return titleCase(`${first} ${last}`);
+      return titleCase(first || last);
+    }
+    return titleCase(trimmed);
   }
-  return titleCase(raw);
+  // Doubles: backend joins two athlete names with " & "
+  if (raw.includes(" & ")) {
+    const parts = raw.split(" & ").map(normalizeOneName).filter(Boolean);
+    return parts.length > 0 ? parts.join(" & ") : null;
+  }
+  return normalizeOneName(raw) || null;
 }
 
 export function ageGroupFromAge(age: number | null | undefined): string | null {
@@ -93,5 +103,5 @@ export function saveImportedHyroxResult(result: HyroxParseResult): HyroxCalculat
 }
 
 export function nextRouteAfterImport(_draft: Partial<HyroxCalculatorDraft>): string {
-  return "/hyrox-calculator";
+  return "/hyrox-calculator/race-details";
 }

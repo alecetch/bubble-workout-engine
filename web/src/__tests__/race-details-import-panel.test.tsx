@@ -9,6 +9,7 @@ import { FULL_PAGE_TEXT } from "./hyrox-results-parser.test";
 
 vi.mock("../utils/api", () => ({
   fetchHyroxResultsImport: vi.fn(),
+  fetchHyroxSubmissionDraft: vi.fn(),
   trackEvent: vi.fn(),
 }));
 
@@ -20,7 +21,7 @@ describe("RaceDetailsPage inline import panel", () => {
 
   function renderPage() {
     return render(
-      <MemoryRouter initialEntries={["/hyrox-calculator"]}>
+      <MemoryRouter initialEntries={["/hyrox-calculator/race-details"]}>
         <RaceDetailsPage />
       </MemoryRouter>,
     );

@@ -137,4 +137,26 @@ describe("buildPersonalReport - race_split_breakdown section", () => {
     assert.ok(confidenceIdx <= 1, "data_confidence should appear near the top");
     assert.match(sections[confidenceIdx].content.join(" "), /partial split data|RoxZone/i);
   });
+
+  it("uses target-profile language for target-mode station breakdown", () => {
+    const analysis = minimalAnalysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:open:male:all", label: "Open Male" },
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "60:00 target" },
+      },
+      headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 120 }, biggestStrength: null },
+      stationBreakdown: [
+        { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: 120, percentile: 30, confidence: "high" },
+        { segmentKey: "sled_push", label: "Sled Push", timeGapSeconds: 80, percentile: 42, confidence: "high" },
+        { segmentKey: "ski_erg", label: "SkiErg", timeGapSeconds: -35, percentile: 80, confidence: "high" },
+      ],
+    });
+    const { sections } = buildPersonalReport(analysis, [], {});
+    const limiterSection = sections.find((section) => section.sectionKey === "biggest_limiter");
+
+    assert.ok(limiterSection.content.includes("Your biggest station gaps against your target profile:"));
+    assert.ok(limiterSection.content.some((line) => line.includes("Target opportunity") && line.includes("vs target profile")));
+    assert.ok(limiterSection.content.includes("Protect this strength: SkiErg — ahead of target profile."));
+    assert.ok(!limiterSection.content.join(" ").includes("vs your benchmark band"));
+  });
 });

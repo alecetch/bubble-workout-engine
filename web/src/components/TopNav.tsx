@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import formaLogoUrl from "../assets/forma-logo.png";
 import styles from "./TopNav.module.css";
 
 export function TopNav() {
@@ -6,7 +7,7 @@ export function TopNav() {
     <nav className={styles.nav}>
       <div className={styles.inner}>
         <Link to="/hyrox-calculator" className={styles.logo}>
-          <div className={styles.logoMark}>F</div>
+          <img className={styles.logoMark} src={formaLogoUrl} alt="Forma" />
           <div>
             <div className={styles.logoText}>Forma</div>
             <div className={styles.logoSub}>Performance Engineer</div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FormPanel } from "../../components/FormPanel";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { SegmentedControl } from "../../components/SegmentedControl";
@@ -10,6 +10,7 @@ import { TextInput } from "../../components/TextInput";
 import { TimeInput } from "../../components/TimeInput";
 import { PREDICTOR_STEPS } from "../../data/predictorSteps";
 import type { HyroxAgeGroup, HyroxDivision, HyroxSex } from "../../types";
+import { trackEvent } from "../../utils/api";
 import { loadPredictorDraft, savePredictorDraft } from "../../utils/predictorStorage";
 import { formatSeconds, parseTimeToSeconds } from "../../utils/time";
 import styles from "./PredictorPages.module.css";
@@ -102,6 +103,15 @@ export function PredictorStep1Page() {
               <h1>Your benchmarks</h1>
               <p>Add the minimum data needed to estimate a HYROX finish time.</p>
             </div>
+            <p className={styles.crossLink}>
+              Already completed a HYROX?{" "}
+              <Link
+                to="/hyrox-calculator"
+                onClick={() => trackEvent("predictor_crosslink_clicked", { source: "predictor_step1" })}
+              >
+                Analyse your race instead -&gt;
+              </Link>
+            </p>
             <div className={styles.fields}>
               <div className={styles.row2}>
                 <SegmentedControl
