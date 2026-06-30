@@ -119,6 +119,11 @@ export interface HyroxAnalysisResponse {
   calculatorMode?: "target" | "analyse";
 }
 
+export interface HyroxSubmissionDraftResponse {
+  submissionId: string;
+  draft: HyroxCalculatorDraft;
+}
+
 export interface SegmentDefinition {
   index: number;
   segmentKey: string;

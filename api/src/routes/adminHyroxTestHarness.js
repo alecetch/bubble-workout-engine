@@ -1,4 +1,5 @@
 import express from "express";
+import archiver from "archiver";
 import { pool as defaultPool } from "../db.js";
 import { submissionInput } from "../hyrox/hyroxController.js";
 import { parseHyroxResultsHtml } from "../hyrox/ingestion/parseHyroxResultsHtml.js";
@@ -103,6 +104,14 @@ function markdownValue(value) {
   if (value === undefined || value === null || value === "") return "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function firstDefined(...values) {
@@ -737,10 +746,12 @@ function packResponseFilename(count) {
 }
 
 function artifactResponseFilename(artifact, parsed) {
+  if (artifact === "email_html") return `hyrox-email-html-${nameSlug(parsed.athleteName ?? parsed.name)}-${localTimestampSlug()}.zip`;
   return `hyrox-${artifact}-${nameSlug(parsed.athleteName ?? parsed.name)}-${localTimestampSlug()}.md`;
 }
 
 function artifactPackResponseFilename(artifact, count) {
+  if (artifact === "email_html") return `hyrox-email-html-pack-${count}-${localTimestampSlug()}.zip`;
   return `hyrox-${artifact}-pack-${count}-${localTimestampSlug()}.md`;
 }
 
@@ -907,6 +918,55 @@ function buildArtifactPackMarkdown({ artifact, entries }) {
   return rows.join("\n");
 }
 
+function emailHtmlEntriesFromHarnessEntries(entries = []) {
+  const files = [];
+  for (const [caseIndex, entry] of entries.entries()) {
+    if (!entry.result) continue;
+    const athlete = entry.result.parsed?.athleteName ?? entry.result.parsed?.name ?? `case-${caseIndex + 1}`;
+    for (const [modeIndex, modeEntry] of entry.result.modeEntries.entries()) {
+      if (modeEntry.error) continue;
+      const subject = modeEntry.result?.emailReport?.emailSubject ?? "";
+      const html = modeEntry.result?.emailReport?.emailHtml || `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>${escapeHtml(subject || "No email HTML generated")}</title></head>
+<body>
+  <h1>No email HTML generated</h1>
+  <p>Mode: ${escapeHtml(modeEntry.mode?.modeName ?? `Mode ${modeIndex + 1}`)}</p>
+  <p>Subject: ${escapeHtml(subject)}</p>
+  <p>This harness mode completed, but the email renderer did not return HTML.</p>
+</body>
+</html>`;
+      const modeSlug = modeEntry.mode?.calculatorMode ?? `mode-${modeIndex + 1}`;
+      files.push({
+        name: `${String(caseIndex + 1).padStart(2, "0")}-${nameSlug(athlete)}-${modeSlug}.html`,
+        html,
+      });
+    }
+  }
+  return files;
+}
+
+async function sendEmailHtmlZip(res, { filename, entries }) {
+  const files = emailHtmlEntriesFromHarnessEntries(entries);
+  if (!files.length) {
+    return res.status(422).json({ error: "no_email_html" });
+  }
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  archive.pipe(res);
+  for (const file of files) {
+    archive.append(file.html, { name: file.name });
+  }
+  await new Promise((resolve, reject) => {
+    archive.on("error", reject);
+    res.on("close", resolve);
+    archive.finalize().catch(reject);
+  });
+}
+
 function previewMode(entry) {
   if (entry.error) {
     return {
@@ -995,7 +1055,7 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
       const cases = parseRequestedCases(req.body);
       const urls = cases.map((entry) => entry.url);
       const isPack = cases.length > 1;
-      const artifact = ["email", "instagram"].includes(req.body?.artifact) ? req.body.artifact : "qa";
+	      const artifact = ["email", "instagram", "email_html"].includes(req.body?.artifact) ? req.body.artifact : "qa";
 
       const validation = validateUrlList(urls);
       if (!validation.ok) return res.status(validation.status).json(validation.body);
@@ -1023,12 +1083,18 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
             targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds,
             sharedContext,
           });
-          if (req.body?.preview === true) {
-            return res.status(200).json(previewPayload({
-              entries: [{ url: cases[0].url, targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds, result }],
-            }));
-          }
-          res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+	          if (req.body?.preview === true) {
+	            return res.status(200).json(previewPayload({
+	              entries: [{ url: cases[0].url, targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds, result }],
+	            }));
+	          }
+	          if (artifact === "email_html") {
+	            return sendEmailHtmlZip(res, {
+	              filename: artifactResponseFilename(artifact, result.parsed),
+	              entries: [{ url: cases[0].url, targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds, result }],
+	            });
+	          }
+	          res.setHeader("Content-Type", "text/markdown; charset=utf-8");
           res.setHeader("Content-Disposition", `attachment; filename="${artifact === "qa" ? responseFilename(result.parsed) : artifactResponseFilename(artifact, result.parsed)}"`);
           return res.status(200).send(artifactMarkdown(artifact, result));
         } catch (error) {
@@ -1054,11 +1120,17 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
         }
       }
 
-      if (req.body?.preview === true) {
-        return res.status(200).json(previewPayload({ entries }));
-      }
+	      if (req.body?.preview === true) {
+	        return res.status(200).json(previewPayload({ entries }));
+	      }
+	      if (artifact === "email_html") {
+	        return sendEmailHtmlZip(res, {
+	          filename: artifactPackResponseFilename(artifact, cases.length),
+	          entries,
+	        });
+	      }
 
-      const markdown = artifact === "qa" ? buildPackMarkdown({ entries }) : buildArtifactPackMarkdown({ artifact, entries });
+	      const markdown = artifact === "qa" ? buildPackMarkdown({ entries }) : buildArtifactPackMarkdown({ artifact, entries });
       res.setHeader("Content-Type", "text/markdown; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${artifact === "qa" ? packResponseFilename(cases.length) : artifactPackResponseFilename(artifact, cases.length)}"`);
       return res.status(200).send(markdown);

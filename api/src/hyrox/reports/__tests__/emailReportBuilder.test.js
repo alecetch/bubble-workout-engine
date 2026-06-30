@@ -1331,6 +1331,47 @@ describe("analyse mode email", () => {
     assert.doesNotMatch(email.htmlBody, /targeting your bottleneck/i);
     assert.match(email.htmlBody, /marginal gains|preserv/i);
   });
+
+  it("analyse mode includes the secondary target-time CTA", () => {
+    const email = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse");
+
+    assert.match(email.htmlBody, /Want to work towards a target time\?/);
+    assert.match(email.htmlBody, /mode=target/);
+  });
+
+  it("secondary target-time CTA uses FORMA_APP_BASE_URL when configured", () => {
+    const previous = process.env.FORMA_APP_BASE_URL;
+    process.env.FORMA_APP_BASE_URL = "http://localhost:5173";
+    try {
+      const email = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse");
+
+      assert.match(email.htmlBody, /http:\/\/localhost:5173\/hyrox-calculator\/race-details\?mode=target&amp;source=email/);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.FORMA_APP_BASE_URL;
+      } else {
+        process.env.FORMA_APP_BASE_URL = previous;
+      }
+    }
+  });
+
+  it("secondary target-time CTA carries submissionId when available", () => {
+    const email = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ submissionId: "11111111-1111-4111-8111-111111111111" }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    assert.match(email.htmlBody, /submissionId=11111111-1111-4111-8111-111111111111/);
+  });
+
+  it("target mode excludes the secondary target-time CTA", () => {
+    const email = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "target");
+
+    assert.doesNotMatch(email.htmlBody, /Want to work towards a target time\?/);
+  });
 });
 
 describe("renderSplitTable", () => {

@@ -692,8 +692,9 @@ function buildCtaCopy(calculatorMode, primaryCategory) {
   return "Use Forma to build a training plan targeting your bottleneck.";
 }
 
-function renderCta(section, analysisJson = {}, ctaCopy = null) {
+function renderCta(section, analysisJson = {}, ctaCopy = null, calculatorMode = "target") {
   const ctaUrl = process.env.FORMA_CTA_URL ?? "https://www.getforma.fit";
+  const appBaseUrl = (process.env.FORMA_APP_BASE_URL ?? process.env.FORMA_CTA_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const submissionId = analysisJson.submissionId ?? null;
   const carouselUrl = analysisJson.carouselUrl ?? (submissionId ? `${baseUrl}/api/hyrox/carousel/${submissionId}` : null);
@@ -701,6 +702,11 @@ function renderCta(section, analysisJson = {}, ctaCopy = null) {
   const bodyText = esc(enforceTone(rawContent));
   const carouselLink = carouselUrl
     ? `<a href="${esc(carouselUrl)}" target="_blank" style="display:inline-block;margin-top:14px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">View your shareable carousel &#8594;</a>`
+    : "";
+  const targetParams = new URLSearchParams({ mode: "target", source: "email" });
+  if (submissionId) targetParams.set("submissionId", submissionId);
+  const secondaryCta = calculatorMode !== "target"
+    ? `<a href="${esc(`${appBaseUrl}/hyrox-calculator/race-details?${targetParams.toString()}`)}" target="_blank" style="display:inline-block;margin-top:10px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">Want to work towards a target time? &#8594;</a>`
     : "";
   return `
   <tr>
@@ -720,6 +726,7 @@ function renderCta(section, analysisJson = {}, ctaCopy = null) {
         "text-decoration": "none",
       })}">BUILD MY HYROX TRAINING PLAN &#8594;</a>
       ${carouselLink}
+      ${secondaryCta}
     </td>
   </tr>`;
 }
@@ -1994,7 +2001,7 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
     case "recommended_focus_areas":
       return renderRecommendations(section, analysisJson);
     case "cta":
-      return renderCta(section, analysisJson, buildCtaCopy(calculatorMode, interpretation?.primaryThesis?.category));
+      return renderCta(section, analysisJson, buildCtaCopy(calculatorMode, interpretation?.primaryThesis?.category), calculatorMode);
     case "race_snapshot":
       return "";
     case "penalty_callout":

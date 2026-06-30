@@ -122,8 +122,10 @@ async function persistSubmission(body, normalised) {
       performance_context_json, marketing_consent, allow_partial, height_cm, weight_kg,
       five_km_pb_seconds, ten_km_pb_seconds, half_marathon_pb_seconds, back_squat_kg,
       deadlift_kg, front_squat_kg, max_unbroken_wall_balls, injury_constraints, equipment_access
+      , penalties_json, race_replay_json
     ) VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26::jsonb,$27::jsonb
+      ,$28::jsonb,$29::jsonb
     ) RETURNING *`,
     [
       athlete.email,
@@ -153,6 +155,8 @@ async function persistSubmission(body, normalised) {
       performance.maxUnbrokenWallBalls ?? null,
       JSON.stringify(performance.injuryConstraints ?? []),
       JSON.stringify(performance.equipmentAccess ?? []),
+      JSON.stringify(body.penalties ?? []),
+      JSON.stringify(body.raceReplay ?? []),
     ],
   );
   return result.rows[0];

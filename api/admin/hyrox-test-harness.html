@@ -124,6 +124,7 @@
             <button id="generate-pack-btn" type="submit">Generate Test Pack</button>
             <button id="generate-first-btn" class="secondary" type="button">Generate First Row</button>
             <button id="generate-emails-btn" class="secondary" type="button">Generate All Emails</button>
+            <button id="download-email-html-btn" class="secondary" type="button">Download All Email HTML</button>
             <button id="generate-instagram-btn" class="secondary" type="button">Generate All Instagram Packs</button>
             <button id="preview-emails-btn" class="secondary" type="button">Preview All Emails</button>
             <button id="preview-instagram-btn" class="secondary" type="button">Preview All Instagram</button>
@@ -140,7 +141,7 @@
 
       <section class="section">
         <div class="download-panel">
-          <button id="download-btn" class="secondary" type="button" hidden>Download QA Markdown</button>
+          <button id="download-btn" class="secondary" type="button" hidden>Download Generated File</button>
           <span id="filename" class="filename"></span>
         </div>
       </section>
@@ -170,6 +171,7 @@
       const generatePackBtn = document.getElementById("generate-pack-btn");
       const generateFirstBtn = document.getElementById("generate-first-btn");
       const generateEmailsBtn = document.getElementById("generate-emails-btn");
+      const downloadEmailHtmlBtn = document.getElementById("download-email-html-btn");
       const generateInstagramBtn = document.getElementById("generate-instagram-btn");
       const previewEmailsBtn = document.getElementById("preview-emails-btn");
       const previewInstagramBtn = document.getElementById("preview-instagram-btn");
@@ -184,6 +186,7 @@
 
       let currentDownloadUrl = "";
       let currentFilename = "";
+      let previewFrameUrls = [];
       let metadataCache = loadJson(METADATA_STORAGE_KEY, {});
       let cases = loadJson(CASES_STORAGE_KEY, []);
 
@@ -214,6 +217,18 @@
         currentFilename = "";
         downloadBtn.hidden = true;
         filenameEl.textContent = "";
+      }
+
+      function clearPreviewFrameUrls() {
+        for (const url of previewFrameUrls) URL.revokeObjectURL(url);
+        previewFrameUrls = [];
+      }
+
+      function emailPreviewUrl(html) {
+        const blob = new Blob([String(html ?? "")], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        previewFrameUrls.push(url);
+        return url;
       }
 
       function escapeHtml(value) {
@@ -372,6 +387,7 @@
         generatePackBtn.disabled = busy;
         generateFirstBtn.disabled = busy;
         generateEmailsBtn.disabled = busy;
+        downloadEmailHtmlBtn.disabled = busy;
         generateInstagramBtn.disabled = busy;
         previewEmailsBtn.disabled = busy;
         previewInstagramBtn.disabled = busy;
@@ -394,8 +410,19 @@
 
       function artifactLabel(artifact) {
         if (artifact === "email") return "email artifact";
+        if (artifact === "email_html") return "email HTML ZIP";
         if (artifact === "instagram") return "Instagram pack";
         return "QA markdown";
+      }
+
+      function downloadCurrentArtifact() {
+        if (!currentDownloadUrl) return;
+        const link = document.createElement("a");
+        link.href = currentDownloadUrl;
+        link.download = currentFilename || "hyrox-harness.md";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       }
 
       async function generateMarkdown(selectedCases, artifact = "qa") {
@@ -427,7 +454,15 @@
           currentDownloadUrl = URL.createObjectURL(blob);
           currentFilename = filenameFromDisposition(response.headers.get("Content-Disposition"));
           downloadBtn.hidden = false;
+          downloadBtn.textContent = artifact === "email_html"
+            ? "Download Email HTML ZIP"
+            : artifact === "email"
+              ? "Download Email Markdown"
+              : artifact === "instagram"
+                ? "Download Instagram Markdown"
+                : "Download QA Markdown";
           filenameEl.textContent = currentFilename;
+          if (artifact === "email_html") downloadCurrentArtifact();
           setStatus(selected.length > 1 ? `${label} generated for all cases.` : `${label} generated.`, "ok");
         } catch (error) {
           setStatus(error.message || "Generation failed", "err");
@@ -499,6 +534,7 @@
       }
 
       function renderEmailPreview(data) {
+        clearPreviewFrameUrls();
         previewTitle.textContent = "Email Preview";
         previewContent.innerHTML = (data.cases || []).map((testCase) => {
           if (!testCase.ok) {
@@ -519,7 +555,7 @@
                   <h3>${escapeHtml(mode.modeName)}</h3>
                   <div class="email-subject">${escapeHtml(mode.emailSubject || "(no subject)")}</div>
                   ${mode.emailHtml
-                    ? `<iframe class="email-frame" sandbox srcdoc="${escapeHtml(mode.emailHtml)}"></iframe>`
+                    ? `<iframe class="email-frame" sandbox src="${emailPreviewUrl(mode.emailHtml)}"></iframe>`
                     : '<div class="empty-preview">No email HTML generated for this mode.</div>'}
                 </section>
               ` : `
@@ -656,13 +692,7 @@
       }
 
       downloadBtn.addEventListener("click", () => {
-        if (!currentDownloadUrl) return;
-        const link = document.createElement("a");
-        link.href = currentDownloadUrl;
-        link.download = currentFilename || "hyrox-harness.md";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        downloadCurrentArtifact();
       });
 
       addPastedBtn.addEventListener("click", addPastedUrls);
@@ -673,12 +703,14 @@
       });
       importMetadataBtn.addEventListener("click", importMetadata);
       generateEmailsBtn.addEventListener("click", () => generateMarkdown(cases, "email"));
+      downloadEmailHtmlBtn.addEventListener("click", () => generateMarkdown(cases, "email_html"));
       generateInstagramBtn.addEventListener("click", () => generateMarkdown(cases, "instagram"));
       previewEmailsBtn.addEventListener("click", () => previewOutput(cases, "email"));
       previewInstagramBtn.addEventListener("click", () => previewOutput(cases, "instagram"));
       clearPreviewBtn.addEventListener("click", () => {
         previewSection.hidden = true;
         previewContent.innerHTML = "";
+        clearPreviewFrameUrls();
       });
 
       form.addEventListener("submit", (event) => {

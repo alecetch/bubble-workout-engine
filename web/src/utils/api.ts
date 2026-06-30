@@ -1,4 +1,4 @@
-import type { HyroxAnalysisRequest, HyroxAnalysisResponse, HyroxPredictionRequest, HyroxPredictionResponse } from "../types";
+import type { HyroxAnalysisRequest, HyroxAnalysisResponse, HyroxPredictionRequest, HyroxPredictionResponse, HyroxSubmissionDraftResponse } from "../types";
 import type { HyroxParseResult } from "./hyroxResultsParser";
 import { loadDraft } from "./storage";
 
@@ -137,6 +137,14 @@ export async function fetchHyroxResultsImport(
   } catch {
     return { success: false, reason: "fetch_failed" };
   }
+}
+
+export async function fetchHyroxSubmissionDraft(submissionId: string): Promise<HyroxSubmissionDraftResponse> {
+  const res = await fetch(`${BASE_URL}/api/hyrox/submission-draft/${encodeURIComponent(submissionId)}`);
+  if (!res.ok) {
+    throw new ServerError("Unable to restore this HYROX result.");
+  }
+  return res.json() as Promise<HyroxSubmissionDraftResponse>;
 }
 
 export function trackEvent(name: string, props?: Record<string, unknown>): void {

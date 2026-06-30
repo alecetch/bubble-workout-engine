@@ -35,6 +35,24 @@ async function request(body, { token = "test-harness-token", pool = null, path =
   }
 }
 
+async function requestBinary(body, { token = "test-harness-token", pool = null, path = "/api/admin/hyrox/test-harness" } = {}) {
+  const server = app(pool).listen(0);
+  const { port } = server.address();
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["x-internal-token"] = token;
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return { response, body: buffer };
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 function mockHyroxHtml() {
   function splitRow(cls, time, rank) {
     return `<tr class="${cls}"><td class="${cls}">${time}</td><td>${rank}</td></tr>`;
@@ -176,6 +194,23 @@ test("generates a single-case email artifact", async () => {
   assert.match(body, /## Mode 2: Analyse Without Target Time/);
   assert.match(body, /### HTML/);
   assert.match(body, /```html/);
+});
+
+test("generates downloadable email HTML zip artifact", async () => {
+  stubSuccessfulHyroxFetch();
+
+  const { response, body } = await requestBinary({
+    cases: [
+      { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" },
+      { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:20:00" },
+    ],
+    artifact: "email_html",
+  });
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/zip/);
+  assert.match(response.headers.get("content-disposition") ?? "", /hyrox-email-html-pack-2-/);
+  assert.equal(body.subarray(0, 2).toString("utf8"), "PK");
 });
 
 test("generates a multi-case Instagram artifact pack", async () => {

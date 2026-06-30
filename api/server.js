@@ -79,6 +79,7 @@ import { predict } from "./src/hyrox/hyroxPredictController.js";
 import { makeImportUrlHandler } from "./src/hyrox/hyroxImportController.js";
 import { hyroxCarouselHandler } from "./src/hyrox/hyroxCarouselController.js";
 import { sharePackHandlers } from "./src/hyrox/hyroxSharePackController.js";
+import { createHyroxSubmissionDraftHandler } from "./src/hyrox/hyroxSubmissionDraftController.js";
 import { runningIpRateLimiter, validateRunningSubmission } from "./src/hyrox/running/runningValidator.js";
 import * as runningController from "./src/hyrox/running/runningController.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
@@ -181,6 +182,7 @@ const adminCspMiddleware = helmet.contentSecurityPolicy({
     imgSrc: ["'self'", "data:", "http:", "https:"],
     connectSrc: ["'self'"],
     fontSrc: ["'self'", "data:"],
+    frameSrc: ["'self'", "blob:"],
     objectSrc: ["'none'"],
     baseUri: ["'self'"],
     frameAncestors: ["'none'"],
@@ -810,6 +812,7 @@ app.use(affiliateProgramRouter);
 app.post("/api/hyrox/analyse", hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission, hyroxController.analyse);
 app.post("/api/hyrox/predict", predict);
 app.post("/api/hyrox/import-url", hyroxImportRateLimiter, makeImportUrlHandler(pool));
+app.get("/api/hyrox/submission-draft/:submissionId", createHyroxSubmissionDraftHandler(pool));
 app.get("/api/hyrox/health", hyroxController.health);
 app.get("/hyrox/carousel/:submissionId", hyroxCarouselHandler);
 app.get("/api/hyrox/carousel/:submissionId", hyroxCarouselHandler);

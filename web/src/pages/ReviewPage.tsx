@@ -258,7 +258,7 @@ export function ReviewPage() {
               <EditRow
                 title="Race details"
                 value={`${raceLabel} · Finish ${formatSeconds(race.finishTimeSeconds)} · Target ${targetFinishTimeLabel}`}
-                onEdit={() => void navigate("/hyrox-calculator")}
+                onEdit={() => void navigate("/hyrox-calculator/race-details")}
               />
               <EditRow
                 title="Splits"

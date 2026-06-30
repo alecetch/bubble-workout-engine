@@ -103,5 +103,5 @@ export function saveImportedHyroxResult(result: HyroxParseResult): HyroxCalculat
 }
 
 export function nextRouteAfterImport(_draft: Partial<HyroxCalculatorDraft>): string {
-  return "/hyrox-calculator";
+  return "/hyrox-calculator/race-details";
 }

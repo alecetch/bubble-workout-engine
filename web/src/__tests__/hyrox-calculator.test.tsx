@@ -237,7 +237,7 @@ describe("RaceDetailsPage validation", () => {
 
   function renderRacePage() {
     return render(
-      <MemoryRouter initialEntries={["/hyrox-calculator"]}>
+      <MemoryRouter initialEntries={["/hyrox-calculator/race-details?mode=target"]}>
         <RaceDetailsPage />
       </MemoryRouter>,
     );
