@@ -7,11 +7,33 @@ import { Shell } from "../components/Shell";
 import { SideStepper } from "../components/SideStepper";
 import type { HyroxAnalysisRequest, HyroxCalculatorDraft } from "../types";
 import { RateLimitError, submitHyroxAnalysis, trackEvent, ValidationError } from "../utils/api";
+import { getJourneyVariant } from "../utils/journeyUtils";
 import { clearDraft, loadDraft, saveDraft } from "../utils/storage";
 import { formatSeconds } from "../utils/time";
 import styles from "./ReviewPage.module.css";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_BRANCH_STEPS = [
+  { label: "Race Details" },
+  { label: "Splits" },
+  { label: "Fitness" },
+  { label: "Benchmarks" },
+  { label: "Review" },
+];
+const DIRECT_TARGET_STEPS = [
+  { label: "Race Details" },
+  { label: "Splits" },
+  { label: "Context" },
+  { label: "Fitness" },
+  { label: "Benchmarks" },
+  { label: "Review" },
+];
+const ANALYSE_STEPS = [
+  { label: "Race Details" },
+  { label: "Splits" },
+  { label: "Context" },
+  { label: "Review" },
+];
 
 function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -45,6 +67,7 @@ function contextCount(ctx: HyroxCalculatorDraft["athleteContext"]): number {
 export function ReviewPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
+  const variant = getJourneyVariant(draft);
   const honeypotRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -65,6 +88,14 @@ export function ReviewPage() {
   }
 
   const { athlete, race, splits = [], penalties = [], raceReplay = [], athleteContext, marketingConsent = false } = draft;
+  const isTargetBranch = variant === "target-email" || variant === "target-direct";
+  const contextPath = isTargetBranch ? "/hyrox-calculator/target-benchmarks" : "/hyrox-calculator/context";
+  const steps =
+    variant === "target-email"
+      ? EMAIL_BRANCH_STEPS
+      : variant === "target-direct"
+        ? DIRECT_TARGET_STEPS
+        : ANALYSE_STEPS;
   const completedSplits = splits.filter((s) => s.timeSeconds > 0).length;
   const splitTotal = splits.reduce((sum, s) => sum + (s.timeSeconds ?? 0), 0);
   const estimatedRoxzone = race.finishTimeSeconds - splitTotal;
@@ -147,7 +178,7 @@ export function ReviewPage() {
   return (
     <Shell>
       <div className={styles.page}>
-        <SideStepper current={4} />
+        <SideStepper current={steps.length} steps={steps} />
 
         <FormPanel className={styles.introCard}>
           <div className={styles.introCopy}>
@@ -268,7 +299,7 @@ export function ReviewPage() {
               <EditRow
                 title="Context"
                 value={contextSummary || "Context not supplied"}
-                onEdit={() => void navigate("/hyrox-calculator/context")}
+                onEdit={() => void navigate(contextPath)}
               />
             </FormPanel>
           </div>
@@ -288,8 +319,8 @@ export function ReviewPage() {
               <QualityRow label="Email" status={emailIsValid ? "Complete" : "Required"} tone={emailIsValid ? "good" : "warn"} />
             </FormPanel>
 
-            <SecondaryButton type="button" onClick={() => void navigate("/hyrox-calculator/context")} disabled={loading}>
-              Back to Context
+            <SecondaryButton type="button" onClick={() => void navigate(contextPath)} disabled={loading}>
+              {isTargetBranch ? "Back to Benchmarks" : "Back to Context"}
             </SecondaryButton>
           </div>
         </div>

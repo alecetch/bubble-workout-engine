@@ -8,6 +8,8 @@ import { ResultPage } from "./pages/ResultPage";
 import { SampleReportPage } from "./pages/SampleReportPage";
 import { ImportResultsPage } from "./pages/ImportResultsPage";
 import { HyroxLandingPage } from "./pages/HyroxLandingPage";
+import { TargetCalibrationStep1Page } from "./pages/TargetCalibrationStep1Page";
+import { TargetCalibrationStep2Page } from "./pages/TargetCalibrationStep2Page";
 import { PredictorStep1Page } from "./pages/predictor/PredictorStep1Page";
 import { PredictorStep2Page } from "./pages/predictor/PredictorStep2Page";
 import { PredictorReviewPage } from "./pages/predictor/PredictorReviewPage";
@@ -54,6 +56,8 @@ export function App() {
         <Route path="/hyrox-calculator/import" element={<ImportResultsPage />} />
         <Route path="/hyrox-calculator/splits" element={<SplitEntryPage />} />
         <Route path="/hyrox-calculator/context" element={<AthleteContextPage />} />
+        <Route path="/hyrox-calculator/target-calibration" element={<TargetCalibrationStep1Page />} />
+        <Route path="/hyrox-calculator/target-benchmarks" element={<TargetCalibrationStep2Page />} />
         <Route path="/hyrox-calculator/review" element={<ReviewPage />} />
         <Route path="/hyrox-calculator/result" element={<ResultPage />} />
         <Route path="/hyrox-calculator/sample-report" element={<SampleReportPage />} />
