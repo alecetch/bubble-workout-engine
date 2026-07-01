@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { FormPanel } from "../components/FormPanel";
 import { Shell } from "../components/Shell";
 import { trackEvent } from "../utils/api";
+import { clearDraft } from "../utils/storage";
 import styles from "./HyroxLandingPage.module.css";
 
 export function HyroxLandingPage() {
@@ -33,7 +34,10 @@ export function HyroxLandingPage() {
             <Link
               to="/hyrox-calculator/race-details"
               className={styles.button}
-              onClick={() => trackEvent("mode_card_clicked", { selectedMode: "analyse" })}
+              onClick={() => {
+                clearDraft();
+                trackEvent("mode_card_clicked", { selectedMode: "analyse" });
+              }}
             >
               Analyse my race
             </Link>
@@ -64,14 +68,20 @@ export function HyroxLandingPage() {
             <Link
               to="/hyrox-calculator/race-details"
               className={styles.button}
-              onClick={() => trackEvent("analyse_first_clicked", { source: "target_card" })}
+              onClick={() => {
+                clearDraft();
+                trackEvent("analyse_first_clicked", { source: "target_card" });
+              }}
             >
               Analyse my race first
             </Link>
             <Link
               to="/hyrox-calculator/race-details?mode=target"
               className={styles.textLink}
-              onClick={() => trackEvent("target_continue_anyway_clicked", { source: "target_card" })}
+              onClick={() => {
+                clearDraft();
+                trackEvent("target_continue_anyway_clicked", { source: "target_card" });
+              }}
             >
               I already know my target -&gt;
             </Link>

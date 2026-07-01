@@ -94,7 +94,13 @@ function fixture(options = {}) {
       },
     ],
   };
-  return buildEmailReport(personalReport, analysisJson, { displayName: "Alex Smith", finishTimeSeconds: 4520 }, null, "target").htmlBody;
+  return buildEmailReport(
+    personalReport,
+    analysisJson,
+    { displayName: "Alex Smith", finishTimeSeconds: 4520 },
+    null,
+    options.calculatorMode ?? "target",
+  ).htmlBody;
 }
 
 test("email head contains Google Fonts import", () => {
@@ -178,8 +184,11 @@ test("email does not render pale semantic boxes", () => {
   assert.match(html, /background-color:#12263d/);
 });
 
-test("CTA button uses Forma blue", () => {
-  assert.match(fixture(), /background-color:#0f6fff/);
+test("analyse CTA button uses Forma blue", () => {
+  const html = fixture({ calculatorMode: "analyse" });
+  assert.match(html, /Want to work towards a target time\?/);
+  assert.match(html, /background-color:#0f6fff/);
+  assert.doesNotMatch(html, /BUILD MY HYROX TRAINING PLAN/);
 });
 
 test("inline logo keeps email size below clipping risk", () => {

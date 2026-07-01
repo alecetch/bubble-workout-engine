@@ -5,6 +5,9 @@ import { loadDraft, saveDraft } from "./storage";
 
 export function normalizeName(raw: string | null): string | null {
   if (!raw) return null;
+  function looksLikeUppercaseSurname(value: string): boolean {
+    return /[A-Z]/.test(value) && value === value.toUpperCase() && value.length > 1;
+  }
   function titleCase(value: string): string {
     return value
       .trim()
@@ -19,6 +22,10 @@ export function normalizeName(raw: string | null): string | null {
       const first = trimmed.slice(commaIdx + 1).trim();
       if (first && last) return titleCase(`${first} ${last}`);
       return titleCase(first || last);
+    }
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2 && looksLikeUppercaseSurname(parts[0]) && !looksLikeUppercaseSurname(parts[1])) {
+      return titleCase(`${parts.slice(1).join(" ")} ${parts[0]}`);
     }
     return titleCase(trimmed);
   }

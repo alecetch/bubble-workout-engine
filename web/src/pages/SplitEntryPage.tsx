@@ -6,7 +6,7 @@ import { SplitTable } from "../components/SplitTable";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
 import { SideStepper } from "../components/SideStepper";
-import { getJourneyVariant } from "../utils/journeyUtils";
+import { getJourneyVariant, isRestoredTargetBranch } from "../utils/journeyUtils";
 import { loadDraft, saveDraft } from "../utils/storage";
 import { parseTimeToSeconds, formatSeconds } from "../utils/time";
 import { trackEvent } from "../utils/api";
@@ -142,7 +142,7 @@ export function SplitEntryPage() {
     saveDraft({ splits });
     trackEvent("splits_completed");
     const variant = getJourneyVariant(loadDraft());
-    void navigate(variant === "target-email" ? "/hyrox-calculator/target-calibration" : "/hyrox-calculator/context");
+    void navigate(isRestoredTargetBranch(variant) ? "/hyrox-calculator/target-calibration" : "/hyrox-calculator/context");
   }
 
   return (

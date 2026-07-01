@@ -70,10 +70,95 @@
   margin-bottom: 24px;
 }
 
-.actions {
+.nextStepPanel {
+  margin-top: 36px;
+  padding: 22px;
+  background: var(--panel-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.nextStepHeader {
+  margin-bottom: 18px;
+}
+
+.nextStepHeader h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.nextStepHeader p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.nextStepGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.nextStepCard {
+  min-height: 210px;
+  padding: 18px;
+  background: var(--bg-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-top: 40px;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.nextStepPrimary {
+  border-color: rgba(34, 211, 238, 0.42);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.08);
+}
+
+.nextStepCard h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.nextStepCard p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.nextStepCard a {
+  text-decoration: none;
+}
+
+.nextStepCard button {
+  width: 100%;
+}
+
+.tertiaryLink {
+  display: inline-flex;
+  margin-top: 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tertiaryLink:hover {
+  color: var(--accent-cyan);
+}
+
+@media (max-width: 560px) {
+  .nextStepPanel {
+    padding: 18px;
+  }
+
+  .nextStepGrid {
+    grid-template-columns: 1fr;
+  }
 }

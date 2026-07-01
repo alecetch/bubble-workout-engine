@@ -45,6 +45,40 @@ function esc(value) {
     .replace(/"/g, "&quot;");
 }
 
+function isUppercaseNameToken(value) {
+  return /[A-Z]/.test(String(value ?? "")) && String(value ?? "").length > 1 && String(value ?? "") === String(value ?? "").toUpperCase();
+}
+
+function firstGreetingNameFromPart(rawPart) {
+  const trimmed = String(rawPart ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.includes(",")) {
+    const first = trimmed.slice(trimmed.indexOf(",") + 1).trim().split(/\s+/)[0];
+    return first || null;
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2 && isUppercaseNameToken(parts[0]) && !isUppercaseNameToken(parts[1])) {
+    return parts[1];
+  }
+  return parts[0] ?? null;
+}
+
+function titleCaseNameToken(value) {
+  const token = String(value ?? "").trim();
+  if (!token) return "";
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+}
+
+function resolveGreetingName(rawName) {
+  if (!rawName) return "there";
+  const firstNames = String(rawName)
+    .split(" & ")
+    .map(firstGreetingNameFromPart)
+    .filter(Boolean)
+    .map(titleCaseNameToken);
+  return firstNames.length > 0 ? firstNames.join(" & ") : "there";
+}
+
 function inlineStyle(props) {
   return Object.entries(props).map(([key, value]) => `${key}:${value}`).join(";");
 }
@@ -681,52 +715,54 @@ function renderRecommendations(section, analysisJson = {}) {
 
 function buildCtaCopy(calculatorMode, primaryCategory) {
   if (primaryCategory === "high_performer") {
-    return "Use Forma to build a training plan that preserves your strengths and finds marginal gains.";
+    return calculatorMode === "analyse"
+      ? "Use this result as your baseline and see which marginal gains would matter most for your next HYROX target."
+      : "Use Forma to preserve your strengths and find the marginal gains that matter next.";
   }
   if (calculatorMode === "analyse" && primaryCategory === "data_quality") {
-    return "Use Forma to build a plan once your full split data is available.";
+    return "Use this result as your baseline, then add a target time when your full split data is available.";
   }
   if (calculatorMode === "analyse") {
-    return "Use Forma to build a plan targeting your race-profile opportunities.";
+    return "Use this result as your baseline and see what needs to change to hit your next HYROX target.";
   }
-  return "Use Forma to build a training plan targeting your bottleneck.";
+  return "Use Forma to turn this analysis into the next race-profile decision.";
 }
 
 function renderCta(section, analysisJson = {}, ctaCopy = null, calculatorMode = "target") {
-  const ctaUrl = process.env.FORMA_CTA_URL ?? "https://www.getforma.fit";
   const appBaseUrl = (process.env.FORMA_APP_BASE_URL ?? process.env.FORMA_CTA_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const submissionId = analysisJson.submissionId ?? null;
   const carouselUrl = analysisJson.carouselUrl ?? (submissionId ? `${baseUrl}/api/hyrox/carousel/${submissionId}` : null);
   const rawContent = ctaCopy ?? (Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? ""));
   const bodyText = esc(enforceTone(rawContent));
-  const carouselLink = carouselUrl
-    ? `<a href="${esc(carouselUrl)}" target="_blank" style="display:inline-block;margin-top:14px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">View your shareable carousel &#8594;</a>`
-    : "";
   const targetParams = new URLSearchParams({ mode: "target", source: "email" });
   if (submissionId) targetParams.set("submissionId", submissionId);
-  const secondaryCta = calculatorMode !== "target"
-    ? `<a href="${esc(`${appBaseUrl}/hyrox-calculator/race-details?${targetParams.toString()}`)}" target="_blank" style="display:inline-block;margin-top:10px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">Want to work towards a target time? &#8594;</a>`
+  const targetCtaUrl = `${appBaseUrl}/hyrox-calculator/race-details?${targetParams.toString()}`;
+  const primaryCtaLabel = calculatorMode === "target"
+    ? "Want to work towards a different target time?"
+    : "Want to work towards a target time?";
+  const primaryCta = `<a href="${esc(targetCtaUrl)}" target="_blank" style="${inlineStyle({
+    display: "inline-block",
+    "background-color": "#0f6fff",
+    color: "#ffffff",
+    "font-family": "'Inter Tight','Arial Narrow',Arial,sans-serif",
+    "font-size": "13px",
+    "font-weight": "700",
+    "text-transform": "uppercase",
+    "letter-spacing": "0.06em",
+    padding: "14px 36px",
+    "border-radius": "8px",
+    "text-decoration": "none",
+  })}">${esc(primaryCtaLabel)} &#8594;</a>`;
+  const carouselLink = carouselUrl
+    ? `<a href="${esc(carouselUrl)}" target="_blank" style="display:inline-block;margin-top:${primaryCta ? "14px" : "0"};color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;text-decoration:none;">View your shareable carousel &#8594;</a>`
     : "";
   return `
   <tr>
     <td style="background-color:#ffffff;padding:24px;text-align:center;border-bottom:1px solid #e2e8f0;">
       <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0 0 20px;">${bodyText}</p>
-      <a href="${esc(ctaUrl)}" target="_blank" style="${inlineStyle({
-        display: "inline-block",
-        "background-color": "#0f6fff",
-        color: "#ffffff",
-        "font-family": "'Inter Tight','Arial Narrow',Arial,sans-serif",
-        "font-size": "13px",
-        "font-weight": "700",
-        "text-transform": "uppercase",
-        "letter-spacing": "0.06em",
-        padding: "14px 36px",
-        "border-radius": "8px",
-        "text-decoration": "none",
-      })}">BUILD MY HYROX TRAINING PLAN &#8594;</a>
+      ${primaryCta}
       ${carouselLink}
-      ${secondaryCta}
     </td>
   </tr>`;
 }
@@ -1871,7 +1907,7 @@ function getMuscleSignalLabel(rawSignal, isElite, weakCount) {
   if (count >= 3) {
     return { label: "Weakness", severity: "weakness", color: "#f87171", bg: "#450a0a", border: "1px solid #7f1d1d" };
   }
-  return { label: "Training Opportunity", severity: "opportunity", color: "#f59e0b", bg: "#78350f", border: "1px solid #92400e" };
+  return { label: "Opportunity", severity: "opportunity", color: "#fbbf24", bg: "#2a1f0b", border: "1px solid rgba(245,158,11,0.45)" };
 }
 
 function muscleSignalWeakCountByLabel(analysisJson = {}) {
@@ -2060,15 +2096,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
 	    }
 	    return "Your HYROX target time analysis";
 	  })();
-  const rawName = athleteContext.firstName ?? athleteContext.displayName ?? null;
-  let greetingName;
-  if (rawName && rawName.includes(" & ")) {
-    const firstNames = rawName.split(" & ").map((part) => part.trim().split(/[\s,]+/)[0]).filter(Boolean);
-    greetingName = firstNames.length > 0 ? firstNames.join(" & ") : "there";
-  } else {
-    const singleFirst = rawName ? rawName.split(/[\s,]+/)[0] : "there";
-    greetingName = singleFirst.charAt(0).toUpperCase() + singleFirst.slice(1);
-  }
+  const greetingName = resolveGreetingName(athleteContext.firstName ?? athleteContext.displayName ?? null);
   const greeting = `Hi ${greetingName},`;
   const sections = Array.isArray(personalReport.sections) ? personalReport.sections : [];
   const textSections = sections

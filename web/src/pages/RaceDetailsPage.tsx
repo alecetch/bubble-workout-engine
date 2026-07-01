@@ -35,6 +35,7 @@ export function RaceDetailsPage() {
   const sourceParam = searchParams.get("source");
   const submissionIdParam = searchParams.get("submissionId");
   const isEmailTargetBranch = sourceParam === "email" && !!submissionIdParam;
+  const isPostAnalysisBranch = sourceParam === "analysis_complete" && !!submissionIdParam;
   const draft = loadDraft();
 
   const [calculatorMode, setCalculatorMode] = useState<"target" | "analyse">(
@@ -56,6 +57,9 @@ export function RaceDetailsPage() {
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [importSucceeded, setImportSucceeded] = useState(false);
+  const hasDraftData = Boolean(draft?.race?.finishTimeSeconds);
+  const [manualEntrySelected, setManualEntrySelected] = useState(hasDraftData);
+  const showRaceFields = importSucceeded || manualEntrySelected;
   const [importTab, setImportTab] = useState<"paste" | "url">("url");
   const [importUrl, setImportUrl] = useState("");
   const [importUrlError, setImportUrlError] = useState<string | null>(null);
@@ -86,6 +90,18 @@ export function RaceDetailsPage() {
       ? Boolean(ageGroup && parsedFinishTime !== null && !targetFinishTimeIssue)
       : Boolean(ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && !targetFinishTimeIssue);
   const targetFinishTimeInlineIssue = targetFinishTime ? targetFinishTimeIssue : undefined;
+  const isTargetMode = calculatorMode === "target";
+  const benefits: [string, string][] = isTargetMode
+    ? [
+        ["Gap analysis", "Where time is being lost versus your target."],
+        ["Priority stations", "What's blocking you from hitting your goal."],
+        ["Training focus", "Matched to your target time and current splits."],
+      ]
+    : [
+        ["Benchmark", "See how your race compares with athletes at your level."],
+        ["Bottleneck", "Find the runs, stations or transitions costing you time."],
+        ["Training focus", "Know what to prioritise before your next block."],
+      ];
   const importedSummary = [name, division ? formatDivisionLabel(division) : "", finishTime].filter(Boolean).join(" · ");
 
   useEffect(() => {
@@ -93,18 +109,33 @@ export function RaceDetailsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isEmailTargetBranch) return;
-    saveDraft({
-      meta: {
+    if (isEmailTargetBranch) {
+      saveDraft({
+        meta: {
+          source: "analysis_email",
+          sourceSubmissionId: submissionIdParam ?? undefined,
+        },
+      });
+      trackEvent("analysis_email_target_clicked", {
         source: "analysis_email",
-        sourceSubmissionId: submissionIdParam ?? undefined,
-      },
-    });
-    trackEvent("analysis_email_target_clicked", {
-      source: "analysis_email",
-      sourceSubmissionId: submissionIdParam,
-      mode: "target",
-    });
+        sourceSubmissionId: submissionIdParam,
+        mode: "target",
+      });
+    }
+
+    if (isPostAnalysisBranch) {
+      saveDraft({
+        meta: {
+          source: "analysis_complete",
+          sourceSubmissionId: submissionIdParam ?? undefined,
+        },
+      });
+      trackEvent("target_started_from_analysis_complete", {
+        source: "analysis_complete",
+        sourceSubmissionId: submissionIdParam,
+        journeyVariant: "target-post-analysis",
+      });
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -118,11 +149,11 @@ export function RaceDetailsPage() {
         saveDraft({
           ...restored,
           calculatorMode: restoredMode,
-          ...(isEmailTargetBranch
+          ...(isEmailTargetBranch || isPostAnalysisBranch
             ? {
                 meta: {
                   ...(restored.meta ?? {}),
-                  source: "analysis_email",
+                  source: isPostAnalysisBranch ? "analysis_complete" : "analysis_email",
                   sourceSubmissionId: submissionIdParam ?? undefined,
                 },
               }
@@ -144,7 +175,11 @@ export function RaceDetailsPage() {
             : "",
         );
         setImportSucceeded(true);
-        setRestoreMessage("Your previous HYROX result has been restored.");
+        setRestoreMessage(
+          isPostAnalysisBranch
+            ? "Your race data from this analysis has been loaded. Add your target time to continue."
+            : "Your previous HYROX result has been restored.",
+        );
       })
       .catch(() => {
         if (!cancelled) setRestoreMessage("We couldn't restore your previous result. You can still paste your HYROX URL or enter it manually.");
@@ -152,7 +187,7 @@ export function RaceDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isEmailTargetBranch, queryMode, restoreSubmissionId, submissionIdParam]);
+  }, [isEmailTargetBranch, isPostAnalysisBranch, queryMode, restoreSubmissionId, submissionIdParam]);
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
@@ -292,24 +327,19 @@ export function RaceDetailsPage() {
       <SideStepper current={1} />
       <div className={styles.layout}>
         <div className={styles.pitchCol}>
-          <div className={styles.eyebrow}>FREE HYROX ANALYSIS</div>
+          <div className={styles.eyebrow}>
+            {isTargetMode ? "HIT A TARGET TIME" : "ANALYSE MY RACE"}
+          </div>
           <h1 className={styles.headline}>
-            Data in.
-            <br />
-            Insight out.
-            <br />
-            Per<span style={{ WebkitTextFillColor: "var(--accent-cyan)" }}>forma</span>nce up.
+            {isTargetMode ? "Hit a target time" : "Analyse your HYROX result"}
           </h1>
           <p className={styles.subline}>
-            Paste your HYROX result and Forma turns it into a clear benchmarked report:
-            where you lost time, what held up, and what to train next.
+            {isTargetMode
+              ? "Start with your latest HYROX result. Forma will use your splits as the baseline, then show what needs to change to reach your goal."
+              : "Paste your result URL and Forma will benchmark your race, find the biggest time gaps, and show what to train next."}
           </p>
           <ul className={styles.benefits}>
-            {[
-              ["Benchmark", "See how your race compares with athletes at your level."],
-              ["Bottleneck", "Find the runs, stations or transitions costing you time."],
-              ["Training focus", "Know what to prioritise before your next block."],
-            ].map(([title, body]) => (
+            {benefits.map(([title, body]) => (
               <li key={title} className={styles.benefit}>
                 <span className={styles.benefitIcon}>&#10003;</span>
                 <span>
@@ -320,9 +350,11 @@ export function RaceDetailsPage() {
             ))}
           </ul>
           <div className={styles.linkStack}>
-            <Link to="/hyrox-calculator/sample-report" className={styles.externalLink}>
-              View Sample Report -&gt;
-            </Link>
+            {!isTargetMode && (
+              <Link to="/hyrox-calculator/sample-report" className={styles.externalLink}>
+                View Sample Report -&gt;
+              </Link>
+            )}
             <a
               href="https://results.hyrox.com"
               target="_blank"
@@ -337,8 +369,14 @@ export function RaceDetailsPage() {
         <div className={styles.formCol}>
           <FormPanel className={styles.racePanel}>
             <div className={styles.panelHeader}>
-              <h2 className={styles.formTitle}>Race details</h2>
-              <p className={styles.formIntro}>Paste your HYROX result URL or enter your race manually.</p>
+              <h2 className={styles.formTitle}>
+                {calculatorMode === "target" ? "Hit a target time" : "Analyse your race"}
+              </h2>
+              <p className={styles.formIntro}>
+                {calculatorMode === "target"
+                  ? "Paste your HYROX result URL and Forma will use your splits as your baseline."
+                  : "Paste your HYROX result URL and Forma will benchmark your race."}
+              </p>
             </div>
             {restoreMessage && (
               <div data-testid="submission-restore-message" className={restoreMessage.startsWith("We couldn't") ? styles.importWarning : styles.importSuccess}>
@@ -348,25 +386,6 @@ export function RaceDetailsPage() {
 
             <div className={styles.fields}>
               <div data-testid="inline-import-panel">
-                <div className={styles.importTabs}>
-                  <button
-                    type="button"
-                    className={`${styles.importTab} ${importTab === "url" ? styles.importTabActive : ""}`}
-                    onClick={() => setImportTab("url")}
-                    disabled={importUrlLoading}
-                  >
-                    Import URL
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.importTab} ${importTab === "paste" ? styles.importTabActive : ""}`}
-                    onClick={() => setImportTab("paste")}
-                    disabled={importUrlLoading}
-                  >
-                    Manual
-                  </button>
-                </div>
-
                 {importSucceeded && (
                   <div data-testid="import-success-badge" className={styles.importSuccess}>
                     <div className={styles.successTitle}>✓ Result imported</div>
@@ -416,168 +435,168 @@ export function RaceDetailsPage() {
                         {importUrlLoading ? "Importing result..." : "Import result"}
                       </SecondaryButton>
                     </div>
+                    <button
+                      type="button"
+                      className={styles.pasteLink}
+                      onClick={() => setImportTab("paste")}
+                    >
+                      Paste results text instead →
+                    </button>
                   </div>
                 )}
               </div>
 
-              {!importSucceeded && (
-                <div data-testid="manual-entry-separator" className={styles.manualSeparator}>
-                  Or enter manually below
-                </div>
+              {!showRaceFields && (
+                <p className={styles.formReassurance}>
+                  Your report includes benchmark gaps, priority stations and training focus.
+                </p>
               )}
 
-              <div className={styles.fieldGroup}>
-                <div className={styles.groupTitle}>Race setup</div>
-                <SegmentedControl
-                  label="What do you want to know?"
-                  options={[
-                    { value: "analyse", label: "Analyse my race" },
-                    { value: "target", label: "Hit a target time" },
-                  ]}
-                  value={calculatorMode}
-                  onChange={(v) => {
-                    const mode = v as "target" | "analyse";
-                    setCalculatorMode(mode);
-                    saveDraft({ calculatorMode: mode });
+              {!importSucceeded && !manualEntrySelected && (
+                <button
+                  type="button"
+                  data-testid="manual-entry-separator"
+                  className={styles.manualEntryLink}
+                  onClick={() => {
+                    setManualEntrySelected(true);
+                    trackEvent("manual_entry_expanded", { mode: calculatorMode });
                   }}
-                />
-                <div className={styles.row2}>
-                  <SegmentedControl
-                    label="Gender"
-                    required
-                    options={[
-                      { value: "male", label: "Male" },
-                      { value: "female", label: "Female" },
-                      { value: "mixed", label: "Mixed" },
-                    ]}
-                    value={gender}
-                    onChange={(v) => {
-                      const g = v as "male" | "female" | "mixed";
-                      setGender(g);
-                      if (g === "mixed") setDivision("doubles");
-                    }}
-                  />
-                  <div className={styles.selectField}>
-                    <label htmlFor="age-group" className={styles.selectLabel}>
-                      Age Group <span className={styles.required}>*</span>
-                    </label>
-                    <select
-                      id="age-group"
-                      value={ageGroup}
-                      onChange={(event) => setAgeGroup(event.target.value)}
-                      className={`${styles.select} ${errors.ageGroup ? styles.selectError : ""}`}
-                    >
-                      <option value="">Select range</option>
-                      {AGE_GROUP_OPTIONS.map((value) => (
-                        <option key={value} value={value}>{value}</option>
-                      ))}
-                    </select>
-                    {errors.ageGroup && <div className={styles.errorMsg}>{errors.ageGroup}</div>}
+                >
+                  Or enter manually
+                </button>
+              )}
+
+              {showRaceFields && (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <div className={styles.groupTitle}>
+                      {calculatorMode === "target"
+                        ? "Confirm your race details and target"
+                        : "Confirm your race details"}
+                    </div>
+                    <div className={styles.row2}>
+                      <SegmentedControl
+                        label="Gender"
+                        required
+                        options={[
+                          { value: "male", label: "Male" },
+                          { value: "female", label: "Female" },
+                          { value: "mixed", label: "Mixed" },
+                        ]}
+                        value={gender}
+                        onChange={(v) => {
+                          const g = v as "male" | "female" | "mixed";
+                          setGender(g);
+                          if (g === "mixed") setDivision("doubles");
+                        }}
+                      />
+                      <div className={styles.selectField}>
+                        <label htmlFor="age-group" className={styles.selectLabel}>
+                          Age Group <span className={styles.required}>*</span>
+                        </label>
+                        <select
+                          id="age-group"
+                          value={ageGroup}
+                          onChange={(event) => setAgeGroup(event.target.value)}
+                          className={`${styles.select} ${errors.ageGroup ? styles.selectError : ""}`}
+                        >
+                          <option value="">Select range</option>
+                          {AGE_GROUP_OPTIONS.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                        {errors.ageGroup && <div className={styles.errorMsg}>{errors.ageGroup}</div>}
+                      </div>
+                    </div>
+                    <SegmentedControl
+                      label="Division"
+                      required
+                      options={[
+                        { value: "open", label: "Open" },
+                        { value: "pro", label: "Pro" },
+                        { value: "doubles", label: "Doubles" },
+                        { value: "relay", label: "Relay" },
+                      ]}
+                      value={division}
+                      onChange={(v) => setDivision(v as Division)}
+                    />
+                    <div className={styles.benchmarkNote}>
+                      Benchmark: your age group, gender and division set the comparison group.
+                    </div>
                   </div>
-                </div>
-                <SegmentedControl
-                  label="Division"
-                  required
-                  options={[
-                    { value: "open", label: "Open" },
-                    { value: "pro", label: "Pro" },
-                    { value: "doubles", label: "Doubles" },
-                    { value: "relay", label: "Relay" },
-                  ]}
-                  value={division}
-                  onChange={(v) => setDivision(v as Division)}
-                />
-                <div className={styles.benchmarkNote}>
-                  Benchmark: your age group, gender and division set the comparison group.
-                </div>
-              </div>
 
-              <div className={styles.fieldGroup}>
-                <div className={styles.groupTitle}>Result</div>
-                <div className={styles.row2}>
-                  <TimeInput
-                    label="Finish Time"
-                    required
-                    placeholder="1:25:17 or 85:17"
-                    hint="Your official race finish time."
-                    value={finishTime}
-                    onChange={(e) => setFinishTime(e.target.value)}
-                    onBlur={(e) => setFinishTime(normalizeTimeInputValue(e.target.value))}
-                    error={errors.finishTime}
-                  />
-                  <TimeInput
-                    label={targetTimeRequired ? "Target finish time" : "Goal time (optional)"}
-                    required={targetTimeRequired}
-                    placeholder="55:00 or 5500"
-                    hint={targetTimeRequired ? "Type 5500 for 55:00. This must be faster than your finish time." : "Optional. Type 5500 for 55:00; leave blank if you do not have a goal."}
-                    value={targetFinishTime}
-                    onChange={(e) => setTargetFinishTime(e.target.value)}
-                    onBlur={(e) => setTargetFinishTime(normalizeTimeInputValue(e.target.value))}
-                    error={errors.targetFinishTime || targetFinishTimeInlineIssue}
-                  />
-                </div>
-                <TextInput
-                  label="Athlete Name"
-                  placeholder="Optional"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onBlur={(e) => {
-                    const normalized = normalizeName(e.target.value);
-                    if (normalized) setName(normalized);
-                  }}
-                />
-                <div className={styles.row2}>
-                  <TextInput
-                    label="Race Name"
-                    placeholder="e.g. HYROX Manchester"
-                    value={raceName}
-                    onChange={(e) => setRaceName(e.target.value)}
-                    onBlur={(e) => applyKnownEventDateFromName(e.target.value)}
-                  />
-                  <TextInput
-                    label="Race Date"
-                    type="date"
-                    value={raceDate}
-                    onChange={(e) => setRaceDate(e.target.value)}
-                  />
-                </div>
-              </div>
+                  <div className={styles.fieldGroup}>
+                    <div className={styles.groupTitle}>Result</div>
+                    <div className={styles.row2}>
+                      <TimeInput
+                        label="Finish Time"
+                        required
+                        placeholder="1:25:17 or 85:17"
+                        hint="Your official race finish time."
+                        value={finishTime}
+                        onChange={(e) => setFinishTime(e.target.value)}
+                        onBlur={(e) => setFinishTime(normalizeTimeInputValue(e.target.value))}
+                        error={errors.finishTime}
+                      />
+                      <TimeInput
+                        label={targetTimeRequired ? "Target finish time" : "Goal time (optional)"}
+                        required={targetTimeRequired}
+                        placeholder="55:00 or 5500"
+                        hint={targetTimeRequired ? "Type 5500 for 55:00. This must be faster than your finish time." : "Optional. Type 5500 for 55:00; leave blank if you do not have a goal."}
+                        value={targetFinishTime}
+                        onChange={(e) => setTargetFinishTime(e.target.value)}
+                        onBlur={(e) => setTargetFinishTime(normalizeTimeInputValue(e.target.value))}
+                        error={errors.targetFinishTime || targetFinishTimeInlineIssue}
+                      />
+                    </div>
+                    <TextInput
+                      label="Athlete Name"
+                      placeholder="Optional"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      onBlur={(e) => {
+                        const normalized = normalizeName(e.target.value);
+                        if (normalized) setName(normalized);
+                      }}
+                    />
+                    <div className={styles.row2}>
+                      <TextInput
+                        label="Race Name"
+                        placeholder="e.g. HYROX Manchester"
+                        value={raceName}
+                        onChange={(e) => setRaceName(e.target.value)}
+                        onBlur={(e) => applyKnownEventDateFromName(e.target.value)}
+                      />
+                      <TextInput
+                        label="Race Date"
+                        type="date"
+                        value={raceDate}
+                        onChange={(e) => setRaceDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
 
-              <div className={styles.actions}>
-                <PrimaryButton type="button" fullWidth onClick={handleNext} disabled={!isFormValid}>
-                  Next: Check Splits
-                </PrimaryButton>
-                <p className={styles.ctaReassurance}>No account needed. Email capture happens at review.</p>
-              </div>
+                  <div className={styles.actions}>
+                    <PrimaryButton type="button" fullWidth onClick={handleNext} disabled={!isFormValid}>
+                      Next: Check Splits
+                    </PrimaryButton>
+                    <p className={styles.ctaReassurance}>No account needed. Email capture happens at review.</p>
+                  </div>
+                </>
+              )}
             </div>
           </FormPanel>
 
-          <FormPanel className={styles.previewPanel}>
-            <div className={styles.previewEyebrow}>WHAT YOU&apos;LL GET</div>
-            <h2 className={styles.previewTitle}>A race report that tells you what to train next.</h2>
-            <div className={styles.previewRows}>
-              <PreviewRow label="Benchmark comparison" value="Calculated after submit" />
-              <PreviewRow label="Time gaps" value="Based on your splits" />
-              <PreviewRow label="Training focus" value="Matched to the final report" />
-            </div>
-          </FormPanel>
         </div>
       </div>
 
-      <div className={styles.mobileStickyCta}>
-        <PrimaryButton type="button" fullWidth onClick={handleNext} disabled={!isFormValid}>
-          Next: Check Splits
-        </PrimaryButton>
-      </div>
+      {showRaceFields && (
+        <div data-testid="mobile-sticky-cta" className={styles.mobileStickyCta}>
+          <PrimaryButton type="button" fullWidth onClick={handleNext} disabled={!isFormValid}>
+            Next: Check Splits
+          </PrimaryButton>
+        </div>
+      )}
     </Shell>
-  );
-}
-
-function PreviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.previewRow}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }

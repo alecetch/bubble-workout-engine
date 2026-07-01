@@ -31,14 +31,14 @@ describe("RaceDetailsPage inline import panel", () => {
     renderPage();
     expect(screen.getByTestId("inline-import-panel")).toBeInTheDocument();
     expect(screen.getByTestId("inline-url-input")).toBeInTheDocument();
-    expect(screen.getByText(/FREE HYROX ANALYSIS/i)).toBeInTheDocument();
-    expect(screen.getByText(/Paste your HYROX result URL or enter your race manually/i)).toBeInTheDocument();
+    expect(screen.getByText(/ANALYSE MY RACE/i)).toBeInTheDocument();
+    expect(screen.getByText(/Paste your HYROX result URL and Forma will benchmark your race/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/HYROX result URL/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Next: Check Splits/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/No account needed\. Email capture happens at review/i)).toBeInTheDocument();
-    expect(screen.getByText(/WHAT YOU'LL GET/i)).toBeInTheDocument();
-    expect(screen.getByText(/A race report that tells you what to train next/i)).toBeInTheDocument();
-    expect(screen.getByText(/Benchmark comparison/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Next: Check Splits/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No account needed\. Email capture happens at review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/WHAT YOU'LL GET/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/A race report that tells you what to train next/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Benchmark comparison/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Projected insight/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Wall Balls cost you the most time/i)).not.toBeInTheDocument();
   });
@@ -51,7 +51,7 @@ describe("RaceDetailsPage inline import panel", () => {
   test("Successful paste import pre-fills fields and hides separator", async () => {
     renderPage();
 
-    fireEvent.click(screen.getByText("Manual"));
+    fireEvent.click(screen.getByRole("button", { name: /paste results text instead/i }));
     fireEvent.change(screen.getByTestId("paste-area"), { target: { value: FULL_PAGE_TEXT } });
     await act(async () => {
       fireEvent.click(screen.getByTestId("parse-btn"));
@@ -100,6 +100,7 @@ describe("RaceDetailsPage inline import panel", () => {
   test("Typed known race name pre-fills race date on blur", () => {
     renderPage();
 
+    fireEvent.click(screen.getByRole("button", { name: /or enter manually/i }));
     const raceName = screen.getByLabelText(/race name/i);
     fireEvent.change(raceName, { target: { value: "Birmingham" } });
     fireEvent.blur(raceName);
