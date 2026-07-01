@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { RaceDetailsPage } from "../pages/RaceDetailsPage";
 import { clearDraft, loadDraft } from "../utils/storage";
-import { fetchHyroxSubmissionDraft } from "../utils/api";
+import { fetchHyroxSubmissionDraft, trackEvent } from "../utils/api";
 
 vi.mock("../utils/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../utils/api")>();
@@ -114,6 +114,32 @@ describe("RaceDetailsPage calculator mode selector", () => {
     expect(screen.getByLabelText(/target finish time/i)).toHaveValue("1:25:00");
     expect(loadDraft()?.splits?.[0]?.segmentKey).toBe("run_1");
     expect(loadDraft()?.raceReplay?.[0]?.station).toBe("ski_erg");
+    expect(loadDraft()?.meta?.source).toBe("analysis_email");
+    expect(loadDraft()?.meta?.sourceSubmissionId).toBe("11111111-1111-4111-8111-111111111111");
+    expect(trackEvent).toHaveBeenCalledWith("analysis_email_target_clicked", {
+      source: "analysis_email",
+      sourceSubmissionId: "11111111-1111-4111-8111-111111111111",
+      mode: "target",
+    });
+  });
+
+  test("source=email without submissionId does not activate the email target branch", () => {
+    renderPage("/hyrox-calculator/race-details?mode=target&source=email");
+
+    expect(loadDraft()?.meta?.source).toBeUndefined();
+    expect(trackEvent).not.toHaveBeenCalledWith("analysis_email_target_clicked", expect.anything());
+  });
+
+  test("submissionId without source=email does not activate the email target branch", async () => {
+    vi.mocked(fetchHyroxSubmissionDraft).mockRejectedValue(new Error("not found"));
+    renderPage("/hyrox-calculator/race-details?mode=target&submissionId=11111111-1111-4111-8111-111111111111");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("submission-restore-message")).toHaveTextContent(/couldn't restore/i);
+    });
+
+    expect(loadDraft()?.meta?.source).toBeUndefined();
+    expect(trackEvent).not.toHaveBeenCalledWith("analysis_email_target_clicked", expect.anything());
   });
 });
 

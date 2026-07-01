@@ -32,6 +32,9 @@ export function RaceDetailsPage() {
   const [searchParams] = useSearchParams();
   const queryMode = searchParams.get("mode") as "target" | "analyse" | null;
   const restoreSubmissionId = searchParams.get("submissionId") ?? searchParams.get("submission");
+  const sourceParam = searchParams.get("source");
+  const submissionIdParam = searchParams.get("submissionId");
+  const isEmailTargetBranch = sourceParam === "email" && !!submissionIdParam;
   const draft = loadDraft();
 
   const [calculatorMode, setCalculatorMode] = useState<"target" | "analyse">(
@@ -90,6 +93,21 @@ export function RaceDetailsPage() {
   }, []);
 
   useEffect(() => {
+    if (!isEmailTargetBranch) return;
+    saveDraft({
+      meta: {
+        source: "analysis_email",
+        sourceSubmissionId: submissionIdParam ?? undefined,
+      },
+    });
+    trackEvent("analysis_email_target_clicked", {
+      source: "analysis_email",
+      sourceSubmissionId: submissionIdParam,
+      mode: "target",
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (!restoreSubmissionId) return;
     let cancelled = false;
     setRestoreMessage("Restoring your HYROX result...");
@@ -97,7 +115,19 @@ export function RaceDetailsPage() {
       .then(({ draft: restored }) => {
         if (cancelled) return;
         const restoredMode = queryMode ?? restored.calculatorMode ?? "target";
-        saveDraft({ ...restored, calculatorMode: restoredMode });
+        saveDraft({
+          ...restored,
+          calculatorMode: restoredMode,
+          ...(isEmailTargetBranch
+            ? {
+                meta: {
+                  ...(restored.meta ?? {}),
+                  source: "analysis_email",
+                  sourceSubmissionId: submissionIdParam ?? undefined,
+                },
+              }
+            : {}),
+        });
         setCalculatorMode(restoredMode);
         setName(normalizeName(restored.athlete?.name ?? null) ?? "");
         setGender(restored.athlete?.gender ?? "male");
@@ -122,7 +152,7 @@ export function RaceDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [queryMode, restoreSubmissionId]);
+  }, [isEmailTargetBranch, queryMode, restoreSubmissionId, submissionIdParam]);
 
   function validate(): boolean {
     const errs: Record<string, string> = {};

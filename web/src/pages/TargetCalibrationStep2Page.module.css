@@ -1,0 +1,161 @@
+.page {
+  padding-top: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 14px;
+  align-items: start;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.eyebrow,
+.sideKicker {
+  margin-bottom: 8px;
+  color: var(--accent-cyan);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.heading {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.body {
+  max-width: 720px;
+  margin-bottom: 14px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.numberField {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.numberField label,
+.fieldLabel {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.numberField input,
+.dateInput {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-850);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.numberField input:focus,
+.dateInput:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.numberField span,
+.fieldHint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.skipLink,
+.skipLinkTop {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.skipLink {
+  margin-top: 12px;
+}
+
+.skipLink:hover,
+.skipLinkTop:hover {
+  color: var(--text-primary);
+}
+
+.sidePanel {
+  position: sticky;
+  top: 80px;
+  padding: 16px;
+}
+
+.sideTitle {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.sideCopy {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidePanel {
+    position: static;
+    order: -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .row2,
+  .actions {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}
