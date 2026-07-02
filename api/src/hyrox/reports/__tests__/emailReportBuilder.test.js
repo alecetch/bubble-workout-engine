@@ -144,6 +144,27 @@ describe("buildEmailReport visual redesign", () => {
     assert.match(htmlBody, /Hi Alex,/);
   });
 
+  it("uses first name when imported HYROX name is surname-comma-first", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext({ displayName: "Smith, Alice" }));
+    assert.match(htmlBody, /Hi Alice,/);
+    assert.doesNotMatch(htmlBody, /Hi Smith,/);
+  });
+
+  it("uses first name when imported HYROX name is uppercase surname first", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext({ displayName: "SMITH Alice" }));
+    assert.match(htmlBody, /Hi Alice,/);
+    assert.doesNotMatch(htmlBody, /Hi Smith,/);
+  });
+
+  it("uses first names for doubles imported with surname-first names", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis(),
+      mockContext({ displayName: "Smith, Alice & JONES Bob" }),
+    );
+    assert.match(htmlBody, /Hi Alice &amp; Bob,/);
+  });
+
   it("renders finish time in the metric strip", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
     assert.match(htmlBody, /1:33:32/);
@@ -220,9 +241,10 @@ describe("buildEmailReport visual redesign", () => {
     assert.ok(!htmlBody.includes("Likely contributors"));
   });
 
-  it("renders CTA button text", () => {
-    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
-    assert.match(htmlBody, /BUILD MY HYROX TRAINING PLAN/);
+  it("renders target-time CTA as the analyse email primary button", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse");
+    assert.match(htmlBody, /Want to work towards a target time\?/);
+    assert.doesNotMatch(htmlBody, /BUILD MY HYROX TRAINING PLAN/);
   });
 
   it("renders carousel link when submissionId is present", () => {
@@ -433,7 +455,7 @@ describe("buildEmailReport visual redesign", () => {
     assert.ok(htmlBody.includes("MUSCLE GROUP SIGNAL"));
     assert.ok(htmlBody.includes("Area"));
     assert.ok(htmlBody.includes("Wall Balls"));
-    assert.ok(htmlBody.includes("Training Opportunity"));
+    assert.ok(htmlBody.includes("Opportunity"));
     assert.ok(htmlBody.includes("Sled Pull"));
     assert.ok(htmlBody.includes("Strength"));
   });
@@ -524,10 +546,11 @@ describe("muscle group signal labelling", () => {
     assert.match(htmlBody, /Refinement Area/);
   });
 
-  it("non-elite weakCount below 3 shows Training Opportunity", () => {
+  it("non-elite weakCount below 3 shows Opportunity", () => {
     const htmlBody = renderMuscleEmail();
-    assert.match(htmlBody, /Training Opportunity/);
-    assert.match(htmlBody, /#f59e0b/);
+    assert.match(htmlBody, /Opportunity/);
+    assert.match(htmlBody, /#fbbf24/);
+    assert.doesNotMatch(htmlBody, /#fcd9a0/);
     assert.doesNotMatch(htmlBody, /Refinement Area/);
     assert.doesNotMatch(htmlBody, /Weakness/);
   });
@@ -566,13 +589,14 @@ describe("muscle group signal labelling", () => {
       race: { finishTimeSeconds: 5400 },
     }, undefined, "target");
     assert.doesNotMatch(htmlBody, /Refinement Area/);
-    assert.match(htmlBody, /Training Opportunity/);
+    assert.match(htmlBody, /Opportunity/);
   });
 
   it("muscle group signal badges do not use pale legacy backgrounds", () => {
     const htmlBody = renderMuscleEmail();
     assert.doesNotMatch(htmlBody, /#fff4f4/);
     assert.doesNotMatch(htmlBody, /#f0fdf4/);
+    assert.doesNotMatch(htmlBody, /#fcd9a0/);
   });
 });
 
@@ -1332,14 +1356,14 @@ describe("analyse mode email", () => {
     assert.match(email.htmlBody, /marginal gains|preserv/i);
   });
 
-  it("analyse mode includes the secondary target-time CTA", () => {
+  it("analyse mode includes the primary target-time CTA", () => {
     const email = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse");
 
     assert.match(email.htmlBody, /Want to work towards a target time\?/);
     assert.match(email.htmlBody, /mode=target/);
   });
 
-  it("secondary target-time CTA uses FORMA_APP_BASE_URL when configured", () => {
+  it("primary target-time CTA uses FORMA_APP_BASE_URL when configured", () => {
     const previous = process.env.FORMA_APP_BASE_URL;
     process.env.FORMA_APP_BASE_URL = "http://localhost:5173";
     try {
@@ -1355,7 +1379,7 @@ describe("analyse mode email", () => {
     }
   });
 
-  it("secondary target-time CTA carries submissionId when available", () => {
+  it("primary target-time CTA carries submissionId when available", () => {
     const email = buildEmailReport(
       mockReport(),
       mockAnalysis({ submissionId: "11111111-1111-4111-8111-111111111111" }),
@@ -1367,10 +1391,46 @@ describe("analyse mode email", () => {
     assert.match(email.htmlBody, /submissionId=11111111-1111-4111-8111-111111111111/);
   });
 
-  it("target mode excludes the secondary target-time CTA", () => {
-    const email = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "target");
+  it("target mode includes the different-target-time primary CTA", () => {
+    const email = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        submissionId: "11111111-1111-4111-8111-111111111111",
+        carouselUrl: "https://example.com/carousel",
+      }),
+      mockContext(),
+      null,
+      "target",
+    );
 
-    assert.doesNotMatch(email.htmlBody, /Want to work towards a target time\?/);
+    const targetIndex = email.htmlBody.indexOf("Want to work towards a different target time?");
+    const carouselIndex = email.htmlBody.indexOf("View your shareable carousel");
+    assert.ok(targetIndex >= 0, "different-target-time CTA should appear");
+    assert.ok(carouselIndex >= 0, "carousel CTA should appear");
+    assert.ok(targetIndex < carouselIndex, "different-target-time CTA should be primary before carousel CTA");
+    assert.match(email.htmlBody, /mode=target/);
+    assert.match(email.htmlBody, /submissionId=11111111-1111-4111-8111-111111111111/);
+    assert.doesNotMatch(email.htmlBody, /BUILD MY HYROX TRAINING PLAN/);
+  });
+
+  it("analyse email orders target-time CTA before carousel link", () => {
+    const email = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        submissionId: "11111111-1111-4111-8111-111111111111",
+        carouselUrl: "https://example.com/carousel",
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    const targetIndex = email.htmlBody.indexOf("Want to work towards a target time?");
+    const carouselIndex = email.htmlBody.indexOf("View your shareable carousel");
+    assert.ok(targetIndex >= 0, "target-time CTA should appear");
+    assert.ok(carouselIndex >= 0, "carousel CTA should appear");
+    assert.ok(targetIndex < carouselIndex, "target-time CTA should be primary before carousel CTA");
+    assert.doesNotMatch(email.htmlBody, /BUILD MY HYROX TRAINING PLAN/);
   });
 });
 

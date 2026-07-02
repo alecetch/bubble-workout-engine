@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { getJourneyVariant } from "../utils/journeyUtils";
+import { getJourneyVariant, isRestoredTargetBranch } from "../utils/journeyUtils";
 
 describe("getJourneyVariant", () => {
   it("returns target-email when meta.source is analysis_email", () => {
     expect(getJourneyVariant({ meta: { source: "analysis_email" } } as any)).toBe("target-email");
+  });
+
+  it("returns target-post-analysis when meta.source is analysis_complete", () => {
+    expect(getJourneyVariant({ meta: { source: "analysis_complete" } } as any)).toBe("target-post-analysis");
+  });
+
+  it("returns target-post-analysis even when calculatorMode is target", () => {
+    expect(getJourneyVariant({ calculatorMode: "target", meta: { source: "analysis_complete" } } as any)).toBe(
+      "target-post-analysis",
+    );
+  });
+
+  it("still returns target-email for analysis_email source", () => {
+    expect(getJourneyVariant({ calculatorMode: "target", meta: { source: "analysis_email" } } as any)).toBe(
+      "target-email",
+    );
   });
 
   it("returns target-direct when calculatorMode is target and no meta.source", () => {
@@ -24,5 +40,23 @@ describe("getJourneyVariant", () => {
 
   it("returns analyse for undefined draft", () => {
     expect(getJourneyVariant(undefined)).toBe("analyse");
+  });
+});
+
+describe("isRestoredTargetBranch", () => {
+  it("returns true for target-email", () => {
+    expect(isRestoredTargetBranch("target-email")).toBe(true);
+  });
+
+  it("returns true for target-post-analysis", () => {
+    expect(isRestoredTargetBranch("target-post-analysis")).toBe(true);
+  });
+
+  it("returns false for target-direct", () => {
+    expect(isRestoredTargetBranch("target-direct")).toBe(false);
+  });
+
+  it("returns false for analyse", () => {
+    expect(isRestoredTargetBranch("analyse")).toBe(false);
   });
 });

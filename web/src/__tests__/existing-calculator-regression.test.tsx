@@ -47,7 +47,7 @@ describe("existing HYROX calculator regression", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: /Race details/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Analyse your race/i })).toBeInTheDocument();
   });
 
   test("target mode still requires target finish time before Next is enabled", () => {
@@ -57,6 +57,7 @@ describe("existing HYROX calculator regression", () => {
       </MemoryRouter>,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /or enter manually/i }));
     fireEvent.change(screen.getByLabelText(/age group/i), {
       target: { value: "30-34" },
     });

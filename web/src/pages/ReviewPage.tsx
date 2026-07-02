@@ -7,7 +7,7 @@ import { Shell } from "../components/Shell";
 import { SideStepper } from "../components/SideStepper";
 import type { HyroxAnalysisRequest, HyroxCalculatorDraft } from "../types";
 import { RateLimitError, submitHyroxAnalysis, trackEvent, ValidationError } from "../utils/api";
-import { getJourneyVariant } from "../utils/journeyUtils";
+import { getJourneyVariant, isRestoredTargetBranch } from "../utils/journeyUtils";
 import { clearDraft, loadDraft, saveDraft } from "../utils/storage";
 import { formatSeconds } from "../utils/time";
 import styles from "./ReviewPage.module.css";
@@ -88,10 +88,10 @@ export function ReviewPage() {
   }
 
   const { athlete, race, splits = [], penalties = [], raceReplay = [], athleteContext, marketingConsent = false } = draft;
-  const isTargetBranch = variant === "target-email" || variant === "target-direct";
+  const isTargetBranch = isRestoredTargetBranch(variant) || variant === "target-direct";
   const contextPath = isTargetBranch ? "/hyrox-calculator/target-benchmarks" : "/hyrox-calculator/context";
   const steps =
-    variant === "target-email"
+    isRestoredTargetBranch(variant)
       ? EMAIL_BRANCH_STEPS
       : variant === "target-direct"
         ? DIRECT_TARGET_STEPS

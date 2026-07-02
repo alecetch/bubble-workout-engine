@@ -10,15 +10,15 @@ vi.mock("../utils/api", () => ({
   trackEvent: vi.fn(),
 }));
 
-function seedDraft(withEmailMeta = false) {
+function seedDraft(metaSource?: "analysis_email" | "analysis_complete") {
   saveDraft({
     calculatorMode: "target",
     athlete: { gender: "male", ageGroup: "30-34" },
     race: { division: "open", finishTimeSeconds: 5400 },
     splits: SEGMENTS.map((segment) => ({ ...segment, timeSeconds: 300 })),
     marketingConsent: false,
-    ...(withEmailMeta
-      ? { meta: { source: "analysis_email" as const, sourceSubmissionId: "11111111-1111-4111-8111-111111111111" } }
+    ...(metaSource
+      ? { meta: { source: metaSource, sourceSubmissionId: "11111111-1111-4111-8111-111111111111" } }
       : {}),
   });
 }
@@ -71,8 +71,8 @@ describe("SplitEntryPage calibration branch", () => {
     vi.clearAllMocks();
   });
 
-  test("email branch continues to target calibration", () => {
-    seedDraft(true);
+  test("routes to target calibration when meta.source is analysis_complete", () => {
+    seedDraft("analysis_complete");
     renderFlow();
 
     fireEvent.click(screen.getAllByRole("button", { name: /continue: add context/i })[0]);
@@ -80,8 +80,17 @@ describe("SplitEntryPage calibration branch", () => {
     expect(screen.getByText("Calibration route")).toBeInTheDocument();
   });
 
-  test("normal branch continues to context", () => {
-    seedDraft(false);
+  test("still routes to target calibration for analysis_email", () => {
+    seedDraft("analysis_email");
+    renderFlow();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /continue: add context/i })[0]);
+
+    expect(screen.getByText("Calibration route")).toBeInTheDocument();
+  });
+
+  test("routes to context for target-direct", () => {
+    seedDraft();
     renderFlow();
 
     fireEvent.click(screen.getAllByRole("button", { name: /continue: add context/i })[0]);

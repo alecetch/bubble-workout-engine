@@ -55,7 +55,7 @@ export interface HyroxCalculatorDraft {
   };
   marketingConsent: boolean;
   meta?: {
-    source?: "analysis_email";
+    source?: "analysis_email" | "analysis_complete";
     sourceSubmissionId?: string;
     calibrationCompleted?: boolean;
     calibrationSkipped?: boolean;
