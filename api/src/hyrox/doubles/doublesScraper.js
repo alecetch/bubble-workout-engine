@@ -72,6 +72,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isRateLimitError(err) {
+  const message = String(err?.message ?? err ?? "");
+  return err?.status === 403 || err?.statusCode === 403 || /\bHTTP 403\b/i.test(message);
+}
+
 function categoriesFromDivisionLabel(label) {
   const text = String(label ?? "").toUpperCase();
   if (text.includes("MIXED")) return [{ divisionCategory: "doubles_mixed", sexCode: "X" }];
@@ -321,6 +326,7 @@ export async function enrichDoublesRows(rows, contestId, seasonNum, detailFetche
         const html = await detailFetcher(row.source_athlete_id, contestId, seasonNum, { timeoutMs: DETAIL_FETCH_TIMEOUT_MS });
         enriched[index] = enrichResultRowFromDetail(row, html);
       } catch (err) {
+        if (isRateLimitError(err)) throw err;
         const flags = new Set(row.data_quality_flags ?? []);
         flags.add("detail_enrichment_failed");
         enriched[index] = {

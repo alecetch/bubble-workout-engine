@@ -13,9 +13,27 @@ const INTER_PAGE_DELAY_MS = Number(process.env.HYROX_DOUBLES_INTER_PAGE_DELAY_MS
 const RUNNER_INTERVAL_MS = Number(process.env.HYROX_DOUBLES_RUNNER_INTERVAL_MS || 10000);
 const PAGE_SIZE = 50;
 const PAGE_RETRY_BACKOFF_MS = [5000, 15000, 45000];
+const RATE_LIMIT_COOLDOWN_MS = Number(process.env.HYROX_DOUBLES_RATE_LIMIT_COOLDOWN_MS || 60 * 60 * 1000);
+
+class RateLimitCooldownError extends Error {
+  constructor(message, cooldownMs = RATE_LIMIT_COOLDOWN_MS) {
+    super(message);
+    this.name = "RateLimitCooldownError";
+    this.cooldownMs = cooldownMs;
+  }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(err) {
+  const message = String(err?.message ?? err ?? "");
+  return err?.status === 403 || err?.statusCode === 403 || /\bHTTP 403\b/i.test(message);
+}
+
+function isRateLimitCooldownError(err) {
+  return err instanceof RateLimitCooldownError || err?.name === "RateLimitCooldownError";
 }
 
 function validateJobConfig({ selectedEventIds, selectedDivisions }) {
@@ -93,6 +111,19 @@ async function pickNextJob(pool) {
   }
 }
 
+async function releaseExpiredCooldownJobs(pool) {
+  await pool.query(
+    `UPDATE hyrox_doubles_scrape_jobs
+     SET status='retrying',
+         resumed_at=now(),
+         cooldown_until=NULL,
+         updated_at=now()
+     WHERE status='paused'
+       AND cooldown_until IS NOT NULL
+       AND cooldown_until <= now()`,
+  );
+}
+
 async function logScrapeError(pool, { jobId, jobEventId, hyroxEventId, divisionCategory, pageOffset, error, retryNumber = 0, errorType = "network" }) {
   await pool.query(
     `INSERT INTO hyrox_doubles_scrape_errors
@@ -109,6 +140,23 @@ async function scrapePageWithRetry(pool, { jobId, unit, event, contestId, sexCod
       return await scrapeDoublesPage(event.results_page_key, contestId, event.season, pageOffset, sexCode);
     } catch (err) {
       lastError = err;
+      if (isRateLimitError(err)) {
+        const cooldownMinutes = Math.max(1, Math.round(RATE_LIMIT_COOLDOWN_MS / 60000));
+        const cooldownError = new RateLimitCooldownError(
+          `HYROX returned HTTP 403; scraper paused for a ${cooldownMinutes} minute cooldown before retrying.`,
+        );
+        await logScrapeError(pool, {
+          jobId,
+          jobEventId: unit.id,
+          hyroxEventId: unit.hyrox_event_id,
+          divisionCategory: unit.division_category,
+          pageOffset,
+          error: cooldownError,
+          retryNumber: attempt + 1,
+          errorType: "rate_limited",
+        });
+        throw cooldownError;
+      }
       await logScrapeError(pool, {
         jobId,
         jobEventId: unit.id,
@@ -155,6 +203,15 @@ export async function runJob(jobId, pool) {
     `UPDATE hyrox_doubles_scrape_jobs
      SET status='running', started_at=COALESCE(started_at, now()), updated_at=now()
      WHERE id=$1`,
+    [jobId],
+  );
+  await pool.query(
+    `UPDATE hyrox_doubles_scrape_job_events
+     SET status='pending',
+         retry_count=retry_count + 1,
+         last_error=COALESCE(last_error, 'Recovered stale running unit'),
+         last_error_at=COALESCE(last_error_at, now())
+     WHERE job_id=$1 AND status='running'`,
     [jobId],
   );
 
@@ -211,12 +268,14 @@ export async function runJob(jobId, pool) {
     let unitCompleted = false;
     let unitTerminalStatus = "completed";
     let unitTerminalError = null;
+    let activePageOffset = unit.last_page_offset ?? 0;
     try {
-      let pageOffset = unit.last_page_offset ?? 0;
+      let pageOffset = activePageOffset;
       let totalYielded = 0;
       let lastMaxRank = 0;
 
       while (true) {
+        activePageOffset = pageOffset;
         const pageRows = await scrapePageWithRetry(pool, { jobId, unit, event, contestId, sexCode, pageOffset });
         if (!pageRows.length) {
           if (totalYielded === 0) {
@@ -287,6 +346,45 @@ export async function runJob(jobId, pool) {
         );
       }
     } catch (err) {
+      if (isRateLimitCooldownError(err) || isRateLimitError(err)) {
+        const cooldownMinutes = Math.max(1, Math.round(RATE_LIMIT_COOLDOWN_MS / 60000));
+        const cooldownError = isRateLimitCooldownError(err)
+          ? err
+          : new RateLimitCooldownError(`HYROX returned HTTP 403; scraper paused for a ${cooldownMinutes} minute cooldown before retrying.`);
+        if (!isRateLimitCooldownError(err)) {
+          await logScrapeError(pool, {
+            jobId,
+            jobEventId: unit.id,
+            hyroxEventId: unit.hyrox_event_id,
+            divisionCategory: unit.division_category,
+            pageOffset: activePageOffset,
+            error: cooldownError,
+            retryNumber: 1,
+            errorType: "rate_limited",
+          });
+        }
+        await pool.query(
+          `UPDATE hyrox_doubles_scrape_job_events
+           SET status='pending',
+               last_error=$2,
+               last_error_at=now()
+           WHERE id=$1`,
+          [unit.id, cooldownError.message],
+        );
+        await pool.query(
+          `UPDATE hyrox_doubles_scrape_jobs
+           SET status='paused',
+               paused_at=now(),
+               cooldown_until=now() + ($3::int * interval '1 millisecond'),
+               last_error=$2,
+               last_error_at=now(),
+               updated_at=now()
+           WHERE id=$1`,
+          [jobId, cooldownError.message, cooldownError.cooldownMs ?? RATE_LIMIT_COOLDOWN_MS],
+        );
+        await updateJobAggregates(pool, jobId);
+        return;
+      }
       await pool.query(
         `UPDATE hyrox_doubles_scrape_job_events
          SET status='failed', retry_count=retry_count + 1, last_error=$2, last_error_at=now()
@@ -326,9 +424,11 @@ export async function runJob(jobId, pool) {
     `UPDATE hyrox_doubles_scrape_jobs
      SET status=$2,
          completed_at=CASE WHEN $2='completed' THEN now() ELSE completed_at END,
-         failed_at=CASE WHEN $2='failed' THEN now() ELSE failed_at END,
-         last_error=COALESCE($3, last_error),
-         last_error_at=CASE WHEN $3 IS NULL THEN last_error_at ELSE now() END,
+         failed_at=CASE WHEN $2='failed' THEN now() ELSE NULL END,
+         total_errors=CASE WHEN $2='completed' THEN 0 ELSE total_errors END,
+         last_error=CASE WHEN $2='completed' THEN NULL ELSE COALESCE($3, last_error) END,
+         last_error_at=CASE WHEN $2='completed' THEN NULL WHEN $3 IS NULL THEN last_error_at ELSE now() END,
+         cooldown_until=NULL,
          updated_at=now()
      WHERE id=$1 AND status='running'`,
     [jobId, finalStatus, finalError],
@@ -355,6 +455,7 @@ export async function startJobRunnerLoop(pool) {
 
   async function tick() {
     try {
+      await releaseExpiredCooldownJobs(pool);
       const job = await pickNextJob(pool);
       if (job) await runJob(job.id, pool);
     } catch (err) {
