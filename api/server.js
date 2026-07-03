@@ -53,6 +53,7 @@ import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { adminHyroxRouter } from "./src/routes/adminHyrox.js";
 import { adminHyroxTestHarnessRouter } from "./src/routes/adminHyroxTestHarness.js";
 import { adminContentStudioRouter } from "./src/routes/adminContentStudio.js";
+import { adminHyroxDoublesRouter } from "./src/routes/adminHyroxDoubles.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
@@ -73,6 +74,7 @@ import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
 import { loadBenchmarkData } from "./src/hyrox/engine/benchmarkService.js";
+import { startJobRunnerLoop } from "./src/hyrox/doubles/doublesJobRunner.js";
 import { hyroxImportRateLimiter, hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission } from "./src/hyrox/hyroxValidator.js";
 import * as hyroxController from "./src/hyrox/hyroxController.js";
 import { predict } from "./src/hyrox/hyroxPredictController.js";
@@ -325,6 +327,7 @@ app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(
 app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
 app.get("/admin/hyrox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox.html"));
 app.get("/admin/hyrox-test-harness", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox-test-harness.html"));
+app.get("/admin/hyrox-doubles", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox-doubles.html"));
 app.get("/admin/content-studio", adminCspMiddleware, (_req, res) => sendAdminPage(res, "content-studio.html"));
 app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
 // /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
@@ -780,6 +783,7 @@ app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", requireInternalToken, adminHyroxTestHarnessRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin", ...adminOnly, adminContentStudioRouter);
+app.use("/api/admin", ...adminOnly, adminHyroxDoublesRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/api/admin/observability/hyrox", ...adminOnly, createAdminHyroxObservabilityRouter(pool));
 
@@ -875,6 +879,7 @@ app.use("/admin", ...adminOnly, adminUsersRouter);
 app.use("/admin", ...adminOnly, adminSeedHistoryRouter);
 app.use("/admin", ...adminOnly, adminHyroxRouter);
 app.use("/admin", ...adminOnly, adminContentStudioRouter);
+app.use("/admin", ...adminOnly, adminHyroxDoublesRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates
@@ -932,9 +937,38 @@ const server = app.listen(port, "0.0.0.0", () => {
   loadBenchmarkData(pool)
     .then((summary) => logger.info({ event: "hyrox.benchmarks.loaded", ...summary }, "Loaded HYROX benchmark cache"))
     .catch((err) => logger.warn({ event: "hyrox.benchmarks.load_failed", err: err?.message }, "HYROX benchmark cache unavailable"));
+  startJobRunnerLoop(pool)
+    .then(() => logger.info({ event: "hyrox.doubles.runner.started" }, "Started HYROX doubles job runner"))
+    .catch((err) => logger.warn({ event: "hyrox.doubles.runner.start_failed", err: err?.message }, "HYROX doubles job runner unavailable"));
 });
 // Prevent keep-alive race condition with Vite's proxy (and any upstream load balancer).
 // Node.js 18+ defaults to 5 s, which is shorter than Vite's proxy idle window, causing
 // "socket hang up" errors when a connection is reused just as Express closes it.
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 66000;
+
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ event: "server.shutdown.start", signal }, "Shutting down API");
+  try {
+    await pool.query(
+      `UPDATE hyrox_doubles_scrape_jobs
+       SET status='paused', paused_at=now(), updated_at=now()
+       WHERE status='running'`,
+    );
+  } catch (err) {
+    logger.warn({ event: "hyrox.doubles.runner.pause_failed", err: err?.message }, "Could not pause running doubles jobs");
+  }
+  server.close(async () => {
+    try {
+      await pool.end();
+    } finally {
+      process.exit(0);
+    }
+  });
+}
+
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
