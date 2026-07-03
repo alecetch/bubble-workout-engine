@@ -33,6 +33,7 @@
       items: [
         { label: "HYROX",              href: "/admin/hyrox" },
         { label: "HYROX Test Harness", href: "/admin/hyrox-test-harness" },
+        { label: "HYROX Doubles Scraper", href: "/admin/hyrox-doubles" },
         { label: "Content Studio",     href: "/admin/content-studio" },
         { label: "Config Editor",      href: "/admin-ui/index.html" },
       ],

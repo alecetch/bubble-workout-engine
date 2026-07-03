@@ -13,6 +13,9 @@ const DEMOGRAPHIC_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:all";
 const SUB_60_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_60:open:male";
 const SUB_75_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_75:open:male";
 const SUB_70_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_70:open:male";
+const DOUBLES_HISTORICAL_KEY = "hyrox:historical_hyrox_2026_06_v1:doubles:male:all";
+const DOUBLES_MALE_KEY = "hyrox:doubles_v1:doubles_male:all:all";
+const DOUBLES_MIXED_KEY = "hyrox:doubles_v1:doubles_mixed:all:all";
 
 function metric(groupKey, metricKey = "total_time", sampleSize = 500) {
   return {
@@ -52,6 +55,7 @@ function submission(finishTimeSeconds) {
 }
 
 beforeEach(() => {
+  delete process.env.USE_DOUBLES_BENCHMARK_DATASET;
   seedBenchmarks();
 });
 
@@ -108,5 +112,114 @@ describe("selectBenchmarkGroups analyse mode", () => {
     assert.equal(result.primaryBenchmarkGroup.key, SUB_75_KEY);
     assert.equal(result.nextBand, "sub_70");
     assert.equal(result.nextBandGroup.key, SUB_70_KEY);
+  });
+});
+
+describe("selectBenchmarkGroups doubles routing", () => {
+  it("uses singles fallback when doubles feature flag is unset", () => {
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.available, true);
+    assert.equal(result.doublesBenchmarkedAsSingles, true);
+    assert.equal(result.useDoublesBenchmarks, false);
+    assert.equal(result.primaryBenchmarkGroup.key, DEMOGRAPHIC_KEY);
+  });
+
+  it("falls back to singles when flag is set but no doubles groups exist", () => {
+    process.env.USE_DOUBLES_BENCHMARK_DATASET = "true";
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.doublesBenchmarkedAsSingles, true);
+    assert.equal(result.useDoublesBenchmarks, false);
+    assert.equal(result.primaryBenchmarkGroup.key, DEMOGRAPHIC_KEY);
+  });
+
+  it("uses historical doubles group when flag is unset but doubles groups exist", () => {
+    setBenchmarkData({
+      groups: [
+        { groupKey: DEMOGRAPHIC_KEY, datasetVersion: DATASET, division: "open", gender: "male", sampleSize: 500 },
+        { groupKey: DOUBLES_HISTORICAL_KEY, datasetVersion: DATASET, division: "doubles", gender: "male", sampleSize: 500 },
+      ],
+      metrics: [
+        metric(DEMOGRAPHIC_KEY),
+        metric(DOUBLES_HISTORICAL_KEY),
+      ],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.available, true);
+    assert.equal(result.doublesBenchmarkedAsSingles, false);
+    assert.equal(result.useDoublesBenchmarks, false);
+    assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_HISTORICAL_KEY);
+  });
+
+  it("falls back to singles when flag is unset and no doubles groups exist at all", () => {
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.doublesBenchmarkedAsSingles, true);
+    assert.equal(result.primaryBenchmarkGroup.key, DEMOGRAPHIC_KEY);
+  });
+
+  it("uses doubles benchmarks when flag is set and sample size is sufficient", () => {
+    process.env.USE_DOUBLES_BENCHMARK_DATASET = "true";
+    setBenchmarkData({
+      groups: [
+        { groupKey: DEMOGRAPHIC_KEY, datasetVersion: DATASET, division: "open", gender: "male", sampleSize: 500 },
+        { groupKey: DOUBLES_MALE_KEY, datasetVersion: "doubles_v1", division: "doubles_male", gender: "all", ageGroup: "all", sampleSize: 150 },
+      ],
+      metrics: [
+        metric(DEMOGRAPHIC_KEY),
+        metric(DOUBLES_MALE_KEY, "total_time", 150),
+      ],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.doublesBenchmarkedAsSingles, false);
+    assert.equal(result.useDoublesBenchmarks, true);
+    assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MALE_KEY);
+  });
+
+  it("maps mixed_doubles to the doubles_mixed group", () => {
+    process.env.USE_DOUBLES_BENCHMARK_DATASET = "true";
+    setBenchmarkData({
+      groups: [
+        { groupKey: DOUBLES_MIXED_KEY, datasetVersion: "doubles_v1", division: "doubles_mixed", gender: "all", ageGroup: "all", sampleSize: 180 },
+      ],
+      metrics: [metric(DOUBLES_MIXED_KEY, "total_time", 180)],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "mixed_doubles", sex: "female" },
+      race: { division: "mixed_doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.useDoublesBenchmarks, true);
+    assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MIXED_KEY);
+  });
+
+  it("leaves singles submissions unaffected when the flag is set", () => {
+    process.env.USE_DOUBLES_BENCHMARK_DATASET = "true";
+    const result = selectBenchmarkGroups(submission(74 * 60 + 20), { calculatorMode: "target" });
+
+    assert.equal(result.doublesBenchmarkedAsSingles, false);
+    assert.equal(result.useDoublesBenchmarks, false);
+    assert.equal(result.primaryBenchmarkGroup.key, DEMOGRAPHIC_KEY);
   });
 });
