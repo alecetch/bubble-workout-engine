@@ -6,6 +6,14 @@ function keyPart(value) {
   return String(value ?? "all").replace(/[^a-z0-9_+-]+/gi, "_").toLowerCase();
 }
 
+// Normalize single-letter sex codes to the full-word format used in DB benchmark group keys.
+function normalizeSex(raw) {
+  const v = String(raw ?? "").toLowerCase().trim();
+  if (v === "m") return "male";
+  if (v === "w" || v === "f") return "female";
+  return String(raw ?? "");
+}
+
 function groupKey({ datasetVersion = DEFAULT_DATASET_VERSION, division = null, gender = null, ageGroup = null, performanceBand = null }) {
   if (performanceBand) {
     return ["hyrox", datasetVersion, "band", keyPart(performanceBand), keyPart(division), keyPart(gender)].join(":");
@@ -98,7 +106,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const rawDivision = normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division ?? "open";
   const doublesBenchmarkedAsSingles = rawDivision === "doubles";
   const division = doublesBenchmarkedAsSingles ? "open" : rawDivision;
-  const gender = normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender ?? "unknown";
+  const gender = normalizeSex(normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender ?? "unknown");
   const ageGroup = normalisedSubmission.athlete?.ageGroup ?? null;
   const request = { datasetVersion, division, gender, ageGroup };
   const selected = selectBenchmark(request, "total_time", "overallPercentile");

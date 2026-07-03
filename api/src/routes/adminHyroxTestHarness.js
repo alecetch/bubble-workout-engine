@@ -303,6 +303,14 @@ function sexFromUrl(url) {
   return null;
 }
 
+export function normalizeSex(raw) {
+  if (!raw) return null;
+  const v = String(raw).toLowerCase().trim();
+  if (v === "m" || v === "male") return "male";
+  if (v === "w" || v === "f" || v === "female") return "female";
+  return null;
+}
+
 async function fetchAndParseHyroxUrl(url, pool) {
   const html = await fetchHtml(url);
   let parsed = parseHyroxResultsHtml(html);
@@ -319,8 +327,9 @@ async function fetchAndParseHyroxUrl(url, pool) {
   const eventLookupKey = parsedUrl.searchParams.get("event_main_group") ?? parsed.raceName ?? null;
   const event = await lookupEvent(pool, eventLookupKey);
 
-  // Sex is not extracted by the HTML/text parsers but is often encoded in the HYROX results URL
-  const urlSex = parsed.sex ?? parsed.gender ?? sexFromUrl(url);
+  // Sex is not extracted by the HTML/text parsers but is often encoded in the HYROX results URL.
+  // Normalize to "male"/"female" so benchmark group key lookups match DB values.
+  const urlSex = normalizeSex(parsed.sex ?? parsed.gender ?? sexFromUrl(url));
 
   return {
     parsed: { ...parsed, sex: urlSex },
@@ -575,6 +584,11 @@ function modeQaFlags(entry) {
         name: "target_email_does_not_show_zero_target_time",
         pass: !targetTimeZeroIssue(emailHtml),
         detail: "fails on TARGET TIME 0:00",
+      },
+      {
+        name: "target_has_goal_benchmark_group",
+        pass: result.analysisJson?.benchmarkContext?.goalBenchmarkGroup != null,
+        detail: "goalBenchmarkGroup null → target gap renders as '-' in email",
       },
     );
   }

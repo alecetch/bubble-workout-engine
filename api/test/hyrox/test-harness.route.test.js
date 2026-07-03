@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
 import { requireInternalToken } from "../../src/middleware/auth.js";
-import { createAdminHyroxTestHarnessRouter } from "../../src/routes/adminHyroxTestHarness.js";
+import { createAdminHyroxTestHarnessRouter, normalizeSex } from "../../src/routes/adminHyroxTestHarness.js";
 
 const nativeFetch = globalThis.fetch;
 const nativeInternalToken = process.env.INTERNAL_API_TOKEN;
@@ -365,4 +365,73 @@ test("metadata import keeps per-case failures in the response", async () => {
   assert.equal(body.cases[0].ok, true);
   assert.equal(body.cases[1].ok, false);
   assert.equal(body.cases[1].reason, "fetch_failed_503");
+});
+
+// --- Sex normalization regression tests ---
+// Root cause: sexFromUrl() returned "M"/"W" (uppercase single letters), but DB benchmark group
+// keys store gender as "male"/"female". normalizeSex() bridges the gap so key lookups succeed.
+
+test("normalizeSex converts uppercase M to male", () => {
+  assert.equal(normalizeSex("M"), "male");
+});
+
+test("normalizeSex converts uppercase W to female", () => {
+  assert.equal(normalizeSex("W"), "female");
+});
+
+test("normalizeSex converts uppercase F to female", () => {
+  assert.equal(normalizeSex("F"), "female");
+});
+
+test("normalizeSex passes through full-word male/female unchanged", () => {
+  assert.equal(normalizeSex("male"), "male");
+  assert.equal(normalizeSex("female"), "female");
+});
+
+test("normalizeSex returns null for null/empty input", () => {
+  assert.equal(normalizeSex(null), null);
+  assert.equal(normalizeSex(""), null);
+  assert.equal(normalizeSex(undefined), null);
+});
+
+test("URL with search[sex]=M normalizes sex to male in metadata response", async () => {
+  stubSuccessfulHyroxFetch();
+
+  const { response, body } = await request(
+    { urls: ["https://results.hyrox.com/season-8/?search%5Bsex%5D=M"] },
+    { path: "/api/admin/hyrox/test-harness/metadata" },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(body.cases[0].ok, true);
+  assert.equal(body.cases[0].sex, "male");
+});
+
+test("URL with search[sex]=W normalizes sex to female in metadata response", async () => {
+  stubSuccessfulHyroxFetch();
+
+  const { response, body } = await request(
+    { urls: ["https://results.hyrox.com/season-8/?search%5Bsex%5D=W"] },
+    { path: "/api/admin/hyrox/test-harness/metadata" },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(body.cases[0].ok, true);
+  assert.equal(body.cases[0].sex, "female");
+});
+
+test("target mode preview includes target_has_goal_benchmark_group QA flag", async () => {
+  stubSuccessfulHyroxFetch();
+
+  const { response, body } = await request({
+    url: "https://results.hyrox.com/season-8/?x=1",
+    targetTime: "1:15:00",
+    preview: true,
+  });
+
+  assert.equal(response.status, 200);
+  const targetMode = body.cases[0].modes.find((m) => m.calculatorMode === "target");
+  assert.ok(targetMode, "target mode should be present");
+  const goalFlag = targetMode.qaFlags.find((f) => f.name === "target_has_goal_benchmark_group");
+  assert.ok(goalFlag, "target_has_goal_benchmark_group QA flag must be present to catch benchmark key mismatches");
 });
