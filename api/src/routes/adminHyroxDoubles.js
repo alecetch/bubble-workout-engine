@@ -168,7 +168,7 @@ router.patch("/hyrox-doubles/jobs/:id/pause", async (req, res) => {
     req,
     res,
     `UPDATE hyrox_doubles_scrape_jobs
-     SET status='paused', paused_at=now(), updated_at=now()
+     SET status='paused', paused_at=now(), cooldown_until=NULL, updated_at=now()
      WHERE id=$1 AND status='running'
      RETURNING id, status`,
     "Can only pause a running job",
@@ -180,7 +180,7 @@ router.patch("/hyrox-doubles/jobs/:id/resume", async (req, res) => {
     req,
     res,
     `UPDATE hyrox_doubles_scrape_jobs
-     SET status='queued', resumed_at=now(), updated_at=now()
+     SET status='queued', resumed_at=now(), cooldown_until=NULL, updated_at=now()
      WHERE id=$1 AND status='paused'
      RETURNING id, status`,
     "Can only resume a paused job",
@@ -192,7 +192,7 @@ router.patch("/hyrox-doubles/jobs/:id/cancel", async (req, res) => {
     req,
     res,
     `UPDATE hyrox_doubles_scrape_jobs
-     SET status='cancelled', cancelled_at=now(), updated_at=now()
+     SET status='cancelled', cancelled_at=now(), cooldown_until=NULL, updated_at=now()
      WHERE id=$1 AND status IN ('queued','running','paused','retrying')
      RETURNING id, status`,
     "Can only cancel an active job",
@@ -208,7 +208,17 @@ router.patch("/hyrox-doubles/jobs/:id/retry-failed", async (req, res) => {
       [req.params.id],
     );
     const job = await pool.query(
-      "UPDATE hyrox_doubles_scrape_jobs SET status='retrying', updated_at=now() WHERE id=$1 RETURNING id, status",
+      `UPDATE hyrox_doubles_scrape_jobs
+       SET status='retrying',
+           total_errors=0,
+           failed_at=NULL,
+           completed_at=NULL,
+           last_error=NULL,
+           last_error_at=NULL,
+           cooldown_until=NULL,
+           updated_at=now()
+       WHERE id=$1
+       RETURNING id, status`,
       [req.params.id],
     );
     if (!job.rows.length) return res.status(404).json({ ok: false, error: "Job not found" });
