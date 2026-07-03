@@ -1,4 +1,5 @@
 import { DEFAULT_DATASET_VERSION } from "../config/benchmarkThresholds.js";
+import { featureFlags } from "../config/featureFlags.js";
 import { selectBenchmark } from "../confidence/benchmarkSelector.js";
 import { getBenchmarkGroup, hasBenchmarkData } from "./benchmarkService.js";
 
@@ -90,17 +91,66 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
       confidenceLabel: null,
       fallbacksUsed: [],
       goalBenchmarkGroup: null,
+      doublesBenchmarkedAsSingles: false,
+      useDoublesBenchmarks: false,
     };
   }
   const calculatorMode = options.calculatorMode ?? "target";
   const isAnalyseMode = calculatorMode === "analyse";
 
   const rawDivision = normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division ?? "open";
-  const doublesBenchmarkedAsSingles = rawDivision === "doubles";
-  const division = doublesBenchmarkedAsSingles ? "open" : rawDivision;
+  const isDoubles = rawDivision === "doubles" || rawDivision === "mixed_doubles";
   const gender = normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender ?? "unknown";
-  const ageGroup = normalisedSubmission.athlete?.ageGroup ?? null;
-  const request = { datasetVersion, division, gender, ageGroup };
+  let division = rawDivision;
+  let doublesBenchmarkedAsSingles = false;
+  let useDoublesBenchmarks = false;
+  let benchmarkDatasetVersion = datasetVersion;
+  let benchmarkGender = gender;
+  let benchmarkAgeGroup = normalisedSubmission.athlete?.ageGroup ?? null;
+
+  if (isDoubles) {
+    const doublesDivision =
+      rawDivision === "mixed_doubles" ? "doubles_mixed"
+        : gender === "female" ? "doubles_female"
+          : "doubles_male";
+
+    if (featureFlags.useDoublesBenchmarkDataset) {
+      const doublesRequest = {
+        datasetVersion: "doubles_v1",
+        division: doublesDivision,
+        gender: "all",
+        ageGroup: "all",
+      };
+      const doublesCheck = selectBenchmark(doublesRequest, "total_time", "overallPercentile");
+      if (!doublesCheck.suppressed && (doublesCheck.sampleSize ?? 0) >= 100) {
+        division = doublesDivision;
+        useDoublesBenchmarks = true;
+        benchmarkDatasetVersion = "doubles_v1";
+        benchmarkGender = "all";
+        benchmarkAgeGroup = "all";
+      } else {
+        division = "open";
+        doublesBenchmarkedAsSingles = true;
+      }
+    } else if (rawDivision === "mixed_doubles") {
+      division = "mixed_doubles";
+    } else {
+      const historicalDoublesCheck = selectBenchmark(
+        { datasetVersion, division: "doubles", gender, ageGroup: benchmarkAgeGroup },
+        "total_time",
+        "overallPercentile",
+      );
+      if (!historicalDoublesCheck.suppressed) {
+        division = "doubles";
+      } else {
+        division = "open";
+        doublesBenchmarkedAsSingles = true;
+      }
+    }
+  }
+
+  const ageGroup = benchmarkAgeGroup;
+  const request = { datasetVersion: benchmarkDatasetVersion, division, gender: benchmarkGender, ageGroup };
   const selected = selectBenchmark(request, "total_time", "overallPercentile");
   if (selected.suppressed) {
     return {
@@ -114,10 +164,12 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
       fallbacksUsed: selected.attempted ?? [],
       goalBenchmarkGroup: null,
       suppressedReason: selected.reason,
+      doublesBenchmarkedAsSingles,
+      useDoublesBenchmarks,
     };
   }
   const fallbacksUsed = [
-    ...(ageGroup ? [] : [{ key: groupKey({ datasetVersion, division, gender, ageGroup: "unknown" }), reason: "age_group_missing" }]),
+    ...(ageGroup ? [] : [{ key: groupKey({ datasetVersion: benchmarkDatasetVersion, division, gender: benchmarkGender, ageGroup: "unknown" }), reason: "age_group_missing" }]),
     ...(selected.fallbackLevel > 0 ? [{
       key: selected.benchmarkRequested,
       reason: selected.fallbackReason,
@@ -133,13 +185,13 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
     achievedBand = performanceBandForGoal(finishTimeSeconds);
 
     if (achievedBand) {
-      const bandRequest = { datasetVersion, division, gender, performanceBand: achievedBand };
+      const bandRequest = { datasetVersion: benchmarkDatasetVersion, division, gender: benchmarkGender, performanceBand: achievedBand };
       const bandSelection = selectBenchmark(bandRequest, "total_time", "overallPercentile", { performanceTarget: true });
 
       if (!bandSelection.suppressed) {
         const nextBand = nextPerformanceBand(achievedBand);
         const nextBandSelection = nextBand
-          ? selectBenchmark({ datasetVersion, division, gender, performanceBand: nextBand }, "total_time", "overallPercentile", { performanceTarget: true })
+          ? selectBenchmark({ datasetVersion: benchmarkDatasetVersion, division, gender: benchmarkGender, performanceBand: nextBand }, "total_time", "overallPercentile", { performanceTarget: true })
           : null;
         return {
           available: true,
@@ -152,6 +204,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
           fallbacksUsed,
           goalBenchmarkGroup: null,
           doublesBenchmarkedAsSingles,
+          useDoublesBenchmarks,
         };
       }
 
@@ -162,7 +215,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const targetSeconds = Number(normalisedSubmission.race?.targetTimeSeconds ?? normalisedSubmission.athleteContext?.goalTimeSeconds);
   const band = performanceBandForGoal(targetSeconds);
   const goalSelection = band
-    ? selectBenchmark({ datasetVersion, division, gender, ageGroup, performanceBand: band }, "total_time", "overallPercentile", { performanceTarget: true })
+    ? selectBenchmark({ datasetVersion: benchmarkDatasetVersion, division, gender: benchmarkGender, ageGroup, performanceBand: band }, "total_time", "overallPercentile", { performanceTarget: true })
     : null;
 
   return {
@@ -176,5 +229,6 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
     fallbacksUsed,
     goalBenchmarkGroup: isAnalyseMode ? null : groupFromSelection(goalSelection),
     doublesBenchmarkedAsSingles,
+    useDoublesBenchmarks,
   };
 }
