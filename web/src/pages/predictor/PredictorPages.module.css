@@ -375,6 +375,47 @@
   text-decoration: none;
 }
 
+.crossLink {
+  margin-bottom: 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.crossLink a {
+  color: var(--accent-cyan);
+  text-decoration: none;
+}
+
+.crossLink a:hover {
+  text-decoration: underline;
+}
+
+.nextStepPanel {
+  margin-top: 32px;
+}
+
+.nextStepHeading {
+  margin-bottom: 6px;
+  font-size: 18px;
+}
+
+.nextStepBody {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 14px;
+}
+
+.nextStepLink {
+  color: var(--accent-cyan);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.nextStepLink:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 980px) {
   .layout,
   .reviewLayout,

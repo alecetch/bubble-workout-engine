@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HYROX Test Harness</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --border: #d8dee6;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+        --danger: #dc3545;
+        --ok: #0f766e;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; max-width: 1180px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 22px; }
+      .controls { display: grid; gap: 12px; }
+      .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 260px; flex: 1; }
+      .control label { font-size: 12px; color: var(--muted); }
+      input, textarea, button { font: inherit; }
+      input, textarea { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; }
+      textarea { min-height: 120px; resize: vertical; line-height: 1.4; font-family: Consolas, monospace; font-size: 13px; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; min-height: 38px; }
+      button.secondary { background: #fff; color: var(--primary); }
+      button.danger { border-color: var(--danger); background: #fff; color: var(--danger); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status { margin-top: 8px; font-size: 13px; min-height: 18px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); }
+      .download-panel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .filename { color: var(--muted); font-size: 13px; font-family: Consolas, monospace; overflow-wrap: anywhere; }
+      .preview-panel { display: grid; gap: 14px; }
+      .preview-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .preview-title { margin: 0; font-size: 18px; }
+      .preview-grid { display: grid; gap: 14px; }
+      .preview-case { border-top: 1px solid var(--border); padding-top: 12px; display: grid; gap: 12px; }
+      .preview-case:first-child { border-top: 0; padding-top: 0; }
+      .preview-meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+      .mode-preview { display: grid; gap: 8px; }
+      .mode-preview h3 { margin: 0; font-size: 15px; }
+      .email-subject { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; background: #f9fafb; font-weight: 600; }
+      .email-frame { width: 100%; min-height: 720px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+      .slide-strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+      .insta-slide {
+        flex: 0 0 300px;
+        aspect-ratio: 1 / 1;
+        border: 1px solid #20242b;
+        border-radius: 8px;
+        background: #111827;
+        color: #f9fafb;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: hidden;
+      }
+      .insta-kicker { color: #93c5fd; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+      .insta-headline { font-size: 24px; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
+      .insta-hero { font-size: 36px; font-weight: 800; line-height: 1; color: #ffffff; }
+      .insta-copy { font-size: 13px; line-height: 1.35; color: #d1d5db; overflow-wrap: anywhere; }
+      .insta-fields { margin-top: auto; display: grid; gap: 5px; font-size: 11px; color: #e5e7eb; }
+      .insta-field { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid rgba(255,255,255,.12); padding-top: 5px; }
+      .insta-field span:first-child { color: #9ca3af; }
+      .insta-stations { display: grid; gap: 4px; font-size: 10px; color: #e5e7eb; }
+      .insta-station { display: grid; grid-template-columns: 1fr auto; gap: 8px; border-top: 1px solid rgba(255,255,255,.12); padding-top: 4px; }
+      .empty-preview { color: var(--muted); font-style: italic; }
+      .test-list { display: grid; gap: 8px; }
+      .test-case {
+        display: grid;
+        grid-template-columns: 42px minmax(260px, 1.5fr) 150px minmax(130px, .55fr) 110px minmax(330px, auto);
+        gap: 10px;
+        align-items: end;
+        border: 1px solid #ecf0f4;
+        border-radius: 6px;
+        padding: 8px 10px;
+      }
+      .case-number { color: var(--muted); font-size: 12px; padding-bottom: 9px; }
+      .field { display: grid; gap: 3px; min-width: 0; }
+      .field label, .metric-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+      .field input { font-family: Consolas, monospace; font-size: 12px; }
+      .metric-value { color: var(--text); font-size: 13px; font-weight: 600; padding-bottom: 9px; overflow-wrap: anywhere; }
+      .metric-value.muted { color: var(--muted); font-weight: 400; }
+      .case-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-bottom: 0; }
+      .case-actions button { min-height: 34px; padding: 6px 9px; }
+      .empty { color: var(--muted); font-style: italic; font-size: 13px; }
+      @media (max-width: 980px) {
+        .test-case { grid-template-columns: 1fr; align-items: stretch; }
+        .case-number, .metric-value { padding-bottom: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="nav-placeholder"></div>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1 class="title">HYROX Test Harness</h1>
+        </div>
+        <form id="harness-form" class="controls">
+          <div class="row">
+            <div class="control">
+              <label for="token-input">Internal API Token</label>
+              <input id="token-input" type="password" autocomplete="off" placeholder="Paste x-internal-token" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="control">
+              <label for="paste-input">Paste URLs</label>
+              <textarea id="paste-input" placeholder="Paste one HYROX results URL per line"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <button id="add-pasted-btn" class="secondary" type="button">Add Pasted URLs</button>
+            <button id="add-row-btn" class="secondary" type="button">Add Empty Row</button>
+            <button id="import-metadata-btn" class="secondary" type="button">Import Case Metadata</button>
+            <button id="generate-pack-btn" type="submit">Generate Test Pack</button>
+            <button id="generate-first-btn" class="secondary" type="button">Generate First Row</button>
+            <button id="generate-emails-btn" class="secondary" type="button">Generate All Emails</button>
+            <button id="download-email-html-btn" class="secondary" type="button">Download All Email HTML</button>
+            <button id="generate-instagram-btn" class="secondary" type="button">Generate All Instagram Packs</button>
+            <button id="preview-emails-btn" class="secondary" type="button">Preview All Emails</button>
+            <button id="preview-instagram-btn" class="secondary" type="button">Preview All Instagram</button>
+          </div>
+        </form>
+        <div id="main-status" class="status"></div>
+      </section>
+
+      <section class="section">
+        <div id="test-list" class="test-list">
+          <div class="empty">Paste URLs to build a test list.</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="download-panel">
+          <button id="download-btn" class="secondary" type="button" hidden>Download Generated File</button>
+          <span id="filename" class="filename"></span>
+        </div>
+      </section>
+
+      <section id="preview-section" class="section" hidden>
+        <div class="preview-panel">
+          <div class="preview-toolbar">
+            <h2 id="preview-title" class="preview-title">Preview</h2>
+            <button id="clear-preview-btn" class="secondary" type="button">Clear Preview</button>
+          </div>
+          <div id="preview-content" class="preview-grid"></div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_internal_api_token";
+      const METADATA_STORAGE_KEY = "hyrox_test_harness_case_metadata_v1";
+      const CASES_STORAGE_KEY = "hyrox_test_harness_cases_v1";
+
+      const form = document.getElementById("harness-form");
+      const tokenInput = document.getElementById("token-input");
+      const pasteInput = document.getElementById("paste-input");
+      const addPastedBtn = document.getElementById("add-pasted-btn");
+      const addRowBtn = document.getElementById("add-row-btn");
+      const importMetadataBtn = document.getElementById("import-metadata-btn");
+      const generatePackBtn = document.getElementById("generate-pack-btn");
+      const generateFirstBtn = document.getElementById("generate-first-btn");
+      const generateEmailsBtn = document.getElementById("generate-emails-btn");
+      const downloadEmailHtmlBtn = document.getElementById("download-email-html-btn");
+      const generateInstagramBtn = document.getElementById("generate-instagram-btn");
+      const previewEmailsBtn = document.getElementById("preview-emails-btn");
+      const previewInstagramBtn = document.getElementById("preview-instagram-btn");
+      const downloadBtn = document.getElementById("download-btn");
+      const statusEl = document.getElementById("main-status");
+      const filenameEl = document.getElementById("filename");
+      const testListEl = document.getElementById("test-list");
+      const previewSection = document.getElementById("preview-section");
+      const previewTitle = document.getElementById("preview-title");
+      const previewContent = document.getElementById("preview-content");
+      const clearPreviewBtn = document.getElementById("clear-preview-btn");
+
+      let currentDownloadUrl = "";
+      let currentFilename = "";
+      let previewFrameUrls = [];
+      let metadataCache = loadJson(METADATA_STORAGE_KEY, {});
+      let cases = loadJson(CASES_STORAGE_KEY, []);
+
+      const savedToken = sessionStorage.getItem(STORAGE_KEY);
+      if (savedToken) tokenInput.value = savedToken;
+
+      function loadJson(key, fallback) {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "null");
+          return parsed ?? fallback;
+        } catch {
+          return fallback;
+        }
+      }
+
+      function saveJson(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+
+      function setStatus(message, kind = "") {
+        statusEl.textContent = message;
+        statusEl.className = `status ${kind}`;
+      }
+
+      function resetDownload() {
+        if (currentDownloadUrl) URL.revokeObjectURL(currentDownloadUrl);
+        currentDownloadUrl = "";
+        currentFilename = "";
+        downloadBtn.hidden = true;
+        filenameEl.textContent = "";
+      }
+
+      function clearPreviewFrameUrls() {
+        for (const url of previewFrameUrls) URL.revokeObjectURL(url);
+        previewFrameUrls = [];
+      }
+
+      function emailPreviewUrl(html) {
+        const blob = new Blob([String(html ?? "")], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        previewFrameUrls.push(url);
+        return url;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function pastedUrls() {
+        return [...new Set(pasteInput.value
+          .split(/\r?\n/)
+          .map((url) => url.trim())
+          .filter(Boolean))];
+      }
+
+      function cleanCases() {
+        const seen = new Set();
+        return cases
+          .map((entry) => ({
+            url: String(entry.url ?? "").trim(),
+            targetTime: String(entry.targetTime ?? "").trim(),
+          }))
+          .filter((entry) => {
+            if (!entry.url) return true;
+            if (seen.has(entry.url)) return false;
+            seen.add(entry.url);
+            return true;
+          });
+      }
+
+      function runnableCases(selected = cases) {
+        return selected
+          .map((entry) => ({
+            url: String(entry.url ?? "").trim(),
+            targetTime: String(entry.targetTime ?? "").trim(),
+          }))
+          .filter((entry) => entry.url || entry.targetTime);
+      }
+
+      function parseTargetSeconds(raw) {
+        const value = String(raw ?? "").trim();
+        if (!value) return null;
+        if (/^\d+$/.test(value)) return Number(value);
+        const parts = value.split(":").map((part) => Number(part));
+        if (parts.some((part) => !Number.isFinite(part) || part < 0)) return null;
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return null;
+      }
+
+      function formatSeconds(seconds) {
+        if (!Number.isFinite(seconds)) return "-";
+        const value = Math.max(0, Math.round(seconds));
+        const h = Math.floor(value / 3600);
+        const m = Math.floor((value % 3600) / 60);
+        const s = value % 60;
+        if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        return `${m}:${String(s).padStart(2, "0")}`;
+      }
+
+      function targetLabel(targetTime) {
+        return formatSeconds(parseTargetSeconds(targetTime));
+      }
+
+      function persistCases() {
+        cases = cleanCases();
+        saveJson(CASES_STORAGE_KEY, cases);
+      }
+
+      function addPastedUrls() {
+        const urls = pastedUrls();
+        if (!urls.length) {
+          setStatus("Paste one or more URLs first.", "err");
+          return;
+        }
+        const existing = new Set(cases.map((entry) => entry.url).filter(Boolean));
+        for (const url of urls) {
+          if (!existing.has(url)) cases.push({ url, targetTime: "" });
+          existing.add(url);
+        }
+        pasteInput.value = "";
+        persistCases();
+        renderTestList();
+        setStatus(`Added ${urls.length} pasted URL(s).`, "ok");
+      }
+
+      function renderTestList() {
+        persistCases();
+        if (!cases.length) {
+          testListEl.innerHTML = '<div class="empty">Paste URLs to build a test list.</div>';
+          return;
+        }
+
+        testListEl.innerHTML = cases.map((entry, index) => {
+          const meta = metadataCache[entry.url] ?? {};
+          return `
+            <div class="test-case" data-index="${index}">
+              <div class="case-number">Case ${index + 1}</div>
+              <div class="field">
+                <label for="case-url-${index}">HYROX Results URL</label>
+                <input id="case-url-${index}" class="case-url-input" data-index="${index}" type="url" value="${escapeHtml(entry.url)}" placeholder="https://results.hyrox.com/..." />
+              </div>
+              <div class="field">
+                <label for="case-target-${index}">Target Time</label>
+                <input id="case-target-${index}" class="case-target-input" data-index="${index}" type="text" value="${escapeHtml(entry.targetTime)}" placeholder="59:59 or 3599" />
+              </div>
+              <div>
+                <div class="metric-label">Athlete</div>
+                <div class="metric-value">${escapeHtml(meta.athleteName || "Not imported")}</div>
+              </div>
+              <div>
+                <div class="metric-label">HYROX Time</div>
+                <div class="metric-value">${escapeHtml(meta.finishTimeFormatted || "-")}</div>
+              </div>
+              <div class="case-actions">
+                <button class="secondary run-one-btn" type="button" data-index="${index}">QA</button>
+                <button class="secondary email-one-btn" type="button" data-index="${index}">Email</button>
+                <button class="secondary instagram-one-btn" type="button" data-index="${index}">Instagram</button>
+                <button class="secondary preview-email-one-btn" type="button" data-index="${index}">View Email</button>
+                <button class="secondary preview-instagram-one-btn" type="button" data-index="${index}">View Insta</button>
+                <button class="danger remove-row-btn" type="button" data-index="${index}">Remove</button>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      function updateCaseFromInput(input) {
+        const index = Number(input.dataset.index);
+        if (!Number.isInteger(index) || !cases[index]) return;
+        if (input.classList.contains("case-url-input")) cases[index].url = input.value.trim();
+        if (input.classList.contains("case-target-input")) cases[index].targetTime = input.value.trim();
+        persistCases();
+      }
+
+      function filenameFromDisposition(value) {
+        const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(value || "");
+        return match ? decodeURIComponent(match[1].replaceAll('"', "")) : "hyrox-harness.md";
+      }
+
+      async function readError(response) {
+        const text = await response.text().catch(() => "");
+        if (!text) return `HTTP ${response.status}`;
+        try {
+          const data = JSON.parse(text);
+          return data.reason ? `${data.error}: ${data.reason}` : data.error || text;
+        } catch {
+          return text;
+        }
+      }
+
+      function setBusy(busy) {
+        importMetadataBtn.disabled = busy;
+        generatePackBtn.disabled = busy;
+        generateFirstBtn.disabled = busy;
+        generateEmailsBtn.disabled = busy;
+        downloadEmailHtmlBtn.disabled = busy;
+        generateInstagramBtn.disabled = busy;
+        previewEmailsBtn.disabled = busy;
+        previewInstagramBtn.disabled = busy;
+        clearPreviewBtn.disabled = busy;
+        addPastedBtn.disabled = busy;
+        addRowBtn.disabled = busy;
+        testListEl.querySelectorAll("button,input").forEach((el) => { el.disabled = busy; });
+      }
+
+      function validateCases(selected) {
+        if (!selected.length) return "Add at least one test case.";
+        const missingUrl = selected.some((entry) => !entry.url);
+        if (missingUrl) return "Every case needs a HYROX results URL.";
+        const missingTarget = selected.some((entry) => !entry.targetTime);
+        if (missingTarget) return "Every case needs a target time.";
+        const badTarget = selected.some((entry) => !Number.isFinite(parseTargetSeconds(entry.targetTime)));
+        if (badTarget) return "Every target time must be like 59:59, 1:15:00, or seconds.";
+        return null;
+      }
+
+      function artifactLabel(artifact) {
+        if (artifact === "email") return "email artifact";
+        if (artifact === "email_html") return "email HTML ZIP";
+        if (artifact === "instagram") return "Instagram pack";
+        return "QA markdown";
+      }
+
+      function downloadCurrentArtifact() {
+        if (!currentDownloadUrl) return;
+        const link = document.createElement("a");
+        link.href = currentDownloadUrl;
+        link.download = currentFilename || "hyrox-harness.md";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+
+      async function generateMarkdown(selectedCases, artifact = "qa") {
+        resetDownload();
+        const token = tokenInput.value.trim();
+        const selected = runnableCases(selectedCases);
+        const validationError = validateCases(selected);
+        if (!token) { setStatus("Paste your x-internal-token first.", "err"); return; }
+        if (validationError) { setStatus(validationError, "err"); return; }
+
+        sessionStorage.setItem(STORAGE_KEY, token);
+        setBusy(true);
+        const label = artifactLabel(artifact);
+        setStatus(selected.length > 1 ? `Generating ${selected.length}-case ${label}...` : `Generating ${label}...`);
+
+        try {
+          const response = await fetch("/api/admin/hyrox/test-harness", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-token": token,
+            },
+            body: JSON.stringify(selected.length > 1 ? { cases: selected, artifact } : { ...selected[0], artifact }),
+          });
+
+          if (!response.ok) throw new Error(await readError(response));
+
+          const blob = await response.blob();
+          currentDownloadUrl = URL.createObjectURL(blob);
+          currentFilename = filenameFromDisposition(response.headers.get("Content-Disposition"));
+          downloadBtn.hidden = false;
+          downloadBtn.textContent = artifact === "email_html"
+            ? "Download Email HTML ZIP"
+            : artifact === "email"
+              ? "Download Email Markdown"
+              : artifact === "instagram"
+                ? "Download Instagram Markdown"
+                : "Download QA Markdown";
+          filenameEl.textContent = currentFilename;
+          if (artifact === "email_html") downloadCurrentArtifact();
+          setStatus(selected.length > 1 ? `${label} generated for all cases.` : `${label} generated.`, "ok");
+        } catch (error) {
+          setStatus(error.message || "Generation failed", "err");
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function compactFieldEntries(value, prefix = "", out = []) {
+        if (!value || typeof value !== "object") return out;
+        for (const [key, fieldValue] of Object.entries(value)) {
+          const path = prefix ? `${prefix}.${key}` : key;
+          if (fieldValue === null || fieldValue === undefined || fieldValue === "") continue;
+          if (["string", "number", "boolean"].includes(typeof fieldValue)) {
+            out.push([path, fieldValue]);
+          } else if (Array.isArray(fieldValue)) {
+            const primitives = fieldValue.filter((item) => ["string", "number", "boolean"].includes(typeof item));
+            if (primitives.length) out.push([path, primitives.join(", ")]);
+          } else if (typeof fieldValue === "object") {
+            compactFieldEntries(fieldValue, path, out);
+          }
+        }
+        return out;
+      }
+
+      function firstSlideValue(slide, keys) {
+        for (const key of keys) {
+          if (slide?.[key] !== undefined && slide?.[key] !== null && slide?.[key] !== "") return slide[key];
+        }
+        return "";
+      }
+
+      function renderInstagramSlide(slide, index) {
+        const headline = firstSlideValue(slide, ["headline", "title", "subtitle"]) || `Slide ${index + 1}`;
+        const kicker = firstSlideValue(slide, ["kicker", "slide_id", "slideId"]) || `Slide ${index + 1}`;
+        const hero = firstSlideValue(slide, ["hero_number", "heroNumber", "metric"]);
+        const caption = firstSlideValue(slide, ["caption", "body", "copy", "cta", "button"]);
+        const stations = Array.isArray(slide?.stations) ? slide.stations : [];
+        const preferred = new Set(["comparison_basis", "legend_text", "time", "target_time", "benchmark_time", "delta", "tone"]);
+        const fields = compactFieldEntries(slide)
+          .filter(([key]) => !/(?:image|url|link|headline|title|subtitle|kicker|caption|body|copy|hero|metric|stations)/i.test(key))
+          .filter(([key]) => preferred.has(key) || preferred.has(key.split(".").at(-1)))
+          .slice(0, 6);
+
+        return `
+          <article class="insta-slide">
+            <div class="insta-kicker">${escapeHtml(kicker)}</div>
+            <div class="insta-headline">${escapeHtml(headline)}</div>
+            ${hero ? `<div class="insta-hero">${escapeHtml(hero)}</div>` : ""}
+            ${caption ? `<div class="insta-copy">${escapeHtml(caption)}</div>` : ""}
+            ${stations.length ? `
+              <div class="insta-stations">
+                ${stations.slice(0, 8).map((station) => `
+                  <div class="insta-station">
+                    <span>${escapeHtml(station.name || "-")}</span>
+                    <span>${escapeHtml(station.delta || station.target_time || station.benchmark_time || station.time || "-")}</span>
+                  </div>
+                `).join("")}
+              </div>
+            ` : `
+              <div class="insta-fields">
+                ${fields.map(([key, value]) => `
+                  <div class="insta-field"><span>${escapeHtml(key)}</span><span>${escapeHtml(value)}</span></div>
+                `).join("")}
+              </div>
+            `}
+          </article>
+        `;
+      }
+
+      function renderEmailPreview(data) {
+        clearPreviewFrameUrls();
+        previewTitle.textContent = "Email Preview";
+        previewContent.innerHTML = (data.cases || []).map((testCase) => {
+          if (!testCase.ok) {
+            return `<article class="preview-case"><h3>${escapeHtml(testCase.url)}</h3><div class="status err">${escapeHtml(testCase.reason)}</div></article>`;
+          }
+          return `
+            <article class="preview-case">
+              <div>
+                <h3>${escapeHtml(testCase.athleteName || "HYROX athlete")}</h3>
+                <div class="preview-meta">
+                  <span>HYROX ${escapeHtml(testCase.finishTimeFormatted || "-")}</span>
+                  <span>Target ${escapeHtml(testCase.targetTimeFormatted || "-")}</span>
+                  <span>${escapeHtml(testCase.url)}</span>
+                </div>
+              </div>
+              ${testCase.modes.map((mode) => mode.ok ? `
+                <section class="mode-preview">
+                  <h3>${escapeHtml(mode.modeName)}</h3>
+                  <div class="email-subject">${escapeHtml(mode.emailSubject || "(no subject)")}</div>
+                  ${mode.emailHtml
+                    ? `<iframe class="email-frame" sandbox src="${emailPreviewUrl(mode.emailHtml)}"></iframe>`
+                    : '<div class="empty-preview">No email HTML generated for this mode.</div>'}
+                </section>
+              ` : `
+                <section class="mode-preview">
+                  <h3>${escapeHtml(mode.modeName)}</h3>
+                  <div class="status err">${escapeHtml(mode.error)}</div>
+                </section>
+              `).join("")}
+            </article>
+          `;
+        }).join("");
+        previewSection.hidden = false;
+        previewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function renderInstagramPreview(data) {
+        previewTitle.textContent = "Instagram Preview";
+        previewContent.innerHTML = (data.cases || []).map((testCase) => {
+          if (!testCase.ok) {
+            return `<article class="preview-case"><h3>${escapeHtml(testCase.url)}</h3><div class="status err">${escapeHtml(testCase.reason)}</div></article>`;
+          }
+          return `
+            <article class="preview-case">
+              <div>
+                <h3>${escapeHtml(testCase.athleteName || "HYROX athlete")}</h3>
+                <div class="preview-meta">
+                  <span>HYROX ${escapeHtml(testCase.finishTimeFormatted || "-")}</span>
+                  <span>Target ${escapeHtml(testCase.targetTimeFormatted || "-")}</span>
+                  <span>${escapeHtml(testCase.url)}</span>
+                </div>
+              </div>
+              ${testCase.modes.map((mode) => mode.ok ? `
+                <section class="mode-preview">
+                  <h3>${escapeHtml(mode.modeName)}</h3>
+                  <div class="slide-strip">
+                    ${(mode.carouselSlides || []).length
+                      ? mode.carouselSlides.map(renderInstagramSlide).join("")
+                      : '<div class="empty-preview">No carousel slides generated.</div>'}
+                  </div>
+                </section>
+              ` : `
+                <section class="mode-preview">
+                  <h3>${escapeHtml(mode.modeName)}</h3>
+                  <div class="status err">${escapeHtml(mode.error)}</div>
+                </section>
+              `).join("")}
+            </article>
+          `;
+        }).join("");
+        previewSection.hidden = false;
+        previewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      async function previewOutput(selectedCases, type) {
+        const token = tokenInput.value.trim();
+        const selected = runnableCases(selectedCases);
+        const validationError = validateCases(selected);
+        if (!token) { setStatus("Paste your x-internal-token first.", "err"); return; }
+        if (validationError) { setStatus(validationError, "err"); return; }
+
+        sessionStorage.setItem(STORAGE_KEY, token);
+        setBusy(true);
+        setStatus(selected.length > 1 ? `Rendering ${selected.length} ${type} previews...` : `Rendering ${type} preview...`);
+
+        try {
+          const response = await fetch("/api/admin/hyrox/test-harness", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-token": token,
+            },
+            body: JSON.stringify(selected.length > 1 ? { cases: selected, preview: true } : { ...selected[0], preview: true }),
+          });
+
+          if (!response.ok) throw new Error(await readError(response));
+          const data = await response.json();
+          if (type === "email") renderEmailPreview(data);
+          if (type === "instagram") renderInstagramPreview(data);
+          setStatus(`${type === "email" ? "Email" : "Instagram"} preview rendered.`, "ok");
+        } catch (error) {
+          setStatus(error.message || "Preview failed", "err");
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function importMetadata() {
+        const token = tokenInput.value.trim();
+        const selected = runnableCases(cases).filter((entry) => entry.url);
+        if (!token) { setStatus("Paste your x-internal-token first.", "err"); return; }
+        if (!selected.length) { setStatus("Add at least one HYROX results URL.", "err"); return; }
+
+        sessionStorage.setItem(STORAGE_KEY, token);
+        setBusy(true);
+        setStatus(`Importing metadata for ${selected.length} case(s)...`);
+
+        try {
+          const response = await fetch("/api/admin/hyrox/test-harness/metadata", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-token": token,
+            },
+            body: JSON.stringify(selected.length > 1 ? { cases: selected } : { url: selected[0].url }),
+          });
+
+          if (!response.ok) throw new Error(await readError(response));
+          const data = await response.json();
+          let imported = 0;
+          for (const item of data.cases || []) {
+            if (!item.ok) continue;
+            metadataCache[item.url] = {
+              athleteName: item.athleteName,
+              division: item.division,
+              raceName: item.raceName,
+              eventDate: item.eventDate,
+              finishTimeSeconds: item.finishTimeSeconds,
+              finishTimeFormatted: item.finishTimeFormatted,
+              splitCount: item.splitCount,
+              confidence: item.confidence,
+              importedAt: new Date().toISOString(),
+            };
+            imported += 1;
+          }
+          saveJson(METADATA_STORAGE_KEY, metadataCache);
+          renderTestList();
+          const failed = (data.cases || []).length - imported;
+          setStatus(failed ? `Imported ${imported}; ${failed} failed.` : `Imported ${imported} case(s).`, failed ? "err" : "ok");
+        } catch (error) {
+          setStatus(error.message || "Metadata import failed", "err");
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      downloadBtn.addEventListener("click", () => {
+        downloadCurrentArtifact();
+      });
+
+      addPastedBtn.addEventListener("click", addPastedUrls);
+      addRowBtn.addEventListener("click", () => {
+        cases.push({ url: "", targetTime: "" });
+        persistCases();
+        renderTestList();
+      });
+      importMetadataBtn.addEventListener("click", importMetadata);
+      generateEmailsBtn.addEventListener("click", () => generateMarkdown(cases, "email"));
+      downloadEmailHtmlBtn.addEventListener("click", () => generateMarkdown(cases, "email_html"));
+      generateInstagramBtn.addEventListener("click", () => generateMarkdown(cases, "instagram"));
+      previewEmailsBtn.addEventListener("click", () => previewOutput(cases, "email"));
+      previewInstagramBtn.addEventListener("click", () => previewOutput(cases, "instagram"));
+      clearPreviewBtn.addEventListener("click", () => {
+        previewSection.hidden = true;
+        previewContent.innerHTML = "";
+        clearPreviewFrameUrls();
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        generateMarkdown(cases);
+      });
+      generateFirstBtn.addEventListener("click", () => generateMarkdown(cases.slice(0, 1)));
+      testListEl.addEventListener("input", (event) => updateCaseFromInput(event.target));
+      testListEl.addEventListener("change", (event) => {
+        updateCaseFromInput(event.target);
+        renderTestList();
+      });
+      testListEl.addEventListener("click", (event) => {
+        const runButton = event.target.closest(".run-one-btn");
+        if (runButton) {
+          const index = Number(runButton.dataset.index);
+          generateMarkdown(cases.slice(index, index + 1));
+          return;
+        }
+        const emailButton = event.target.closest(".email-one-btn");
+        if (emailButton) {
+          const index = Number(emailButton.dataset.index);
+          generateMarkdown(cases.slice(index, index + 1), "email");
+          return;
+        }
+        const instagramButton = event.target.closest(".instagram-one-btn");
+        if (instagramButton) {
+          const index = Number(instagramButton.dataset.index);
+          generateMarkdown(cases.slice(index, index + 1), "instagram");
+          return;
+        }
+        const previewEmailButton = event.target.closest(".preview-email-one-btn");
+        if (previewEmailButton) {
+          const index = Number(previewEmailButton.dataset.index);
+          previewOutput(cases.slice(index, index + 1), "email");
+          return;
+        }
+        const previewInstagramButton = event.target.closest(".preview-instagram-one-btn");
+        if (previewInstagramButton) {
+          const index = Number(previewInstagramButton.dataset.index);
+          previewOutput(cases.slice(index, index + 1), "instagram");
+          return;
+        }
+        const removeButton = event.target.closest(".remove-row-btn");
+        if (removeButton) {
+          const index = Number(removeButton.dataset.index);
+          cases.splice(index, 1);
+          persistCases();
+          renderTestList();
+        }
+      });
+      pasteInput.addEventListener("paste", () => {
+        setTimeout(addPastedUrls, 0);
+      });
+
+      renderTestList();
+      window.addEventListener("beforeunload", resetDownload);
+    </script>
+    <script src="/admin-ui/nav.js"></script>
+  </body>
+</html>

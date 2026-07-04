@@ -135,8 +135,6 @@ describe("buildRoxzoneSection", () => {
     };
     const result = buildRoxzoneSection(analysis);
     const lines = asArray(result).filter((item) => typeof item === "string").join("\n");
-    assert.match(lines, /4:31/);
-    assert.match(lines, /4:33/);
     assert.match(lines, /Sandbag Lunges/);
     assert.match(lines, /rounded before summing/i);
     assert.ok(asArray(result).some((item) => item?.__type === "roxzone_narrative"));

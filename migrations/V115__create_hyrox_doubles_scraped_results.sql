@@ -1,0 +1,73 @@
+CREATE TABLE IF NOT EXISTS hyrox_doubles_scraped_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  hyrox_event_id INTEGER NOT NULL REFERENCES hyrox_events(id),
+  source_contest_id TEXT NOT NULL,
+  source_athlete_id TEXT NOT NULL,
+  source_url TEXT,
+  event_name TEXT,
+  event_city TEXT,
+  event_country TEXT,
+  event_date DATE,
+  season INTEGER,
+  is_championship BOOLEAN DEFAULT false,
+  division_category TEXT NOT NULL CHECK (division_category IN ('doubles_male','doubles_female','doubles_mixed')),
+  team_name TEXT,
+  athlete_1_name TEXT,
+  athlete_2_name TEXT,
+  age_group TEXT,
+  overall_rank INTEGER,
+  division_rank INTEGER,
+  overall_time_seconds INTEGER,
+  overall_time_raw TEXT,
+  run_total_seconds INTEGER,
+  station_total_seconds INTEGER,
+  roxzone_total_seconds INTEGER,
+  split_run_1 INTEGER,
+  split_run_2 INTEGER,
+  split_run_3 INTEGER,
+  split_run_4 INTEGER,
+  split_run_5 INTEGER,
+  split_run_6 INTEGER,
+  split_run_7 INTEGER,
+  split_run_8 INTEGER,
+  split_skierg INTEGER,
+  split_sled_push INTEGER,
+  split_sled_pull INTEGER,
+  split_burpee_bj INTEGER,
+  split_row INTEGER,
+  split_farmers_carry INTEGER,
+  split_sandbag_lunge INTEGER,
+  split_wall_balls INTEGER,
+  rox_skierg_in INTEGER,
+  rox_skierg_out INTEGER,
+  rox_sled_push_in INTEGER,
+  rox_sled_push_out INTEGER,
+  rox_sled_pull_in INTEGER,
+  rox_sled_pull_out INTEGER,
+  rox_burpee_bj_in INTEGER,
+  rox_burpee_bj_out INTEGER,
+  rox_row_in INTEGER,
+  rox_row_out INTEGER,
+  rox_farmers_carry_in INTEGER,
+  rox_farmers_carry_out INTEGER,
+  rox_sandbag_lunge_in INTEGER,
+  rox_sandbag_lunge_out INTEGER,
+  data_quality_status TEXT NOT NULL DEFAULT 'pending' CHECK (data_quality_status IN ('pending','valid','invalid','partial')),
+  data_quality_flags JSONB DEFAULT '[]',
+  split_coverage_score NUMERIC(3,2),
+  raw_payload_json JSONB,
+  scrape_job_id UUID,
+  scraped_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uix_doubles_results_team
+  ON hyrox_doubles_scraped_results (hyrox_event_id, source_contest_id, source_athlete_id);
+
+CREATE INDEX IF NOT EXISTS idx_doubles_results_division
+  ON hyrox_doubles_scraped_results (division_category, overall_time_seconds)
+  WHERE data_quality_status IN ('valid','partial');
+
+CREATE INDEX IF NOT EXISTS idx_doubles_results_job
+  ON hyrox_doubles_scraped_results (scrape_job_id);

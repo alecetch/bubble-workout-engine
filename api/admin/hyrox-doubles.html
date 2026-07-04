@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HYROX Results Scraper</title>
+    <style>
+      :root { --bg:#f4f6f8; --panel:#fff; --border:#d8dee6; --text:#1f2937; --muted:#6b7280; --primary:#0f62fe; --danger:#dc3545; --ok:#0f766e; --warn:#b45309; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; }
+      .page { padding: 14px; }
+      .header, .section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+      h1, h2 { margin: 0; }
+      h1 { font-size: 22px; }
+      h2 { font-size: 17px; margin-bottom: 10px; }
+      .controls, .stats-grid, .division-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+      .control { display: grid; gap: 4px; min-width: 220px; }
+      .control.wide { min-width: 340px; }
+      .control label, .hint { font-size: 12px; color: var(--muted); }
+      input, button, select { font: inherit; }
+      input, select { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; background: #fff; width: 100%; }
+      button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+      button.secondary { background: #fff; color: var(--primary); }
+      button.danger { border-color: var(--danger); background: var(--danger); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status { margin-top: 8px; font-size: 13px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); }
+      .table-wrap { overflow-x: auto; border: 1px solid #ecf0f4; border-radius: 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ecf0f4; padding: 8px 10px; text-align: left; font-size: 13px; vertical-align: middle; }
+      th { background: #f9fbfd; font-weight: 600; white-space: nowrap; }
+      tr:hover td { background: #f5f8ff; }
+      .empty { color: var(--muted); font-style: italic; padding: 12px; text-align: center; }
+      .stat { border: 1px solid var(--border); border-radius: 6px; background: #fbfcfe; padding: 10px 12px; min-width: 150px; }
+      .stat strong { display: block; font-size: 20px; }
+      .stat span { color: var(--muted); font-size: 12px; }
+      .badge { display: inline-block; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 700; }
+      .badge-completed, .badge-valid { background: #d1fae5; color: #065f46; }
+      .badge-running, .badge-queued, .badge-retrying { background: #dbeafe; color: #1e40af; }
+      .badge-paused, .badge-partial { background: #fef3c7; color: #92400e; }
+      .badge-failed, .badge-cancelled, .badge-invalid { background: #fee2e2; color: #991b1b; }
+	      .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+	      .actions button { padding: 4px 8px; font-size: 12px; }
+	      .checkbox-cell { width: 34px; text-align: center; }
+	      .mono { font-family: Consolas, monospace; color: var(--muted); font-size: 11px; }
+	      .availability { min-width: 170px; }
+	      .availability strong { display: block; }
+	    </style>
+  </head>
+  <body>
+    <div id="nav-placeholder"></div>
+    <div class="page">
+      <section class="header">
+        <div class="top-row">
+          <h1>HYROX Results Scraper</h1>
+          <div class="controls">
+            <button id="refresh-btn" type="button" class="secondary">Refresh</button>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control wide">
+            <label for="token-input">Internal API Token</label>
+            <input id="token-input" type="password" placeholder="Paste x-internal-token" />
+          </div>
+          <button id="load-btn" type="button">Load Scraper</button>
+        </div>
+        <div id="main-status" class="status"></div>
+      </section>
+
+      <section class="section">
+        <h2>Dataset Coverage</h2>
+        <div id="stats-grid" class="stats-grid">
+          <div class="stat"><strong>-</strong><span>Total records</span></div>
+          <div class="stat"><strong>-</strong><span>Events covered</span></div>
+          <div class="stat"><strong>-</strong><span>Last scrape</span></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Create Scrape Job</h2>
+        <div class="division-row" style="margin-bottom:10px">
+          <label><input type="checkbox" data-division="open_male" /> Male singles</label>
+          <label><input type="checkbox" data-division="open_female" /> Female singles</label>
+          <label><input type="checkbox" data-division="pro_male" /> Male pro singles</label>
+          <label><input type="checkbox" data-division="pro_female" /> Female pro singles</label>
+          <label><input type="checkbox" data-division="doubles_male" checked /> Male doubles</label>
+          <label><input type="checkbox" data-division="doubles_female" checked /> Female doubles</label>
+          <label><input type="checkbox" data-division="doubles_mixed" checked /> Mixed doubles</label>
+          <label><input type="checkbox" data-division="pro_doubles_male" /> Male pro doubles</label>
+          <label><input type="checkbox" data-division="pro_doubles_female" /> Female pro doubles</label>
+          <label><input type="checkbox" data-division="pro_doubles_mixed" /> Mixed pro doubles</label>
+          <label><input type="checkbox" data-division="team_relay_male" /> Male team relay</label>
+          <label><input type="checkbox" data-division="team_relay_female" /> Female team relay</label>
+          <label><input type="checkbox" data-division="team_relay_mixed" /> Mixed team relay</label>
+          <div class="control">
+            <label for="target-count">Target record count</label>
+            <input id="target-count" type="number" min="1" value="15000" />
+          </div>
+	          <label><input id="enrich-splits" type="checkbox" /> Enrich splits</label>
+	          <button id="check-selected-availability-btn" type="button" class="secondary">Check Selected Availability</button>
+	          <button id="create-job-btn" type="button">Create Job</button>
+	        </div>
+	        <p class="hint">Select one or more events below, check live availability if needed, then create a background scrape job.</p>
+	        <div class="table-wrap">
+	          <table>
+	            <thead>
+	              <tr>
+	                <th class="checkbox-cell"><input id="select-all-events" type="checkbox" /></th>
+	                <th>Event</th><th>City</th><th>Country</th><th>Date</th><th>Season</th><th>Scraped records</th><th>Live availability</th>
+	              </tr>
+	            </thead>
+	            <tbody id="events-body"><tr><td colspan="8" class="empty">Load the scraper to view events.</td></tr></tbody>
+	          </table>
+	        </div>
+      </section>
+
+      <section class="section">
+        <h2>Scrape Jobs</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Status</th><th>Created</th><th>Progress</th><th>Records</th><th>Current</th><th>Errors</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="jobs-body"><tr><td colspan="7" class="empty">No jobs loaded.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script type="module">
+      const STORAGE_KEY = "admin_internal_api_token";
+      const tokenInput = document.getElementById("token-input");
+      const mainStatus = document.getElementById("main-status");
+      const eventsBody = document.getElementById("events-body");
+	      const jobsBody = document.getElementById("jobs-body");
+	      const statsGrid = document.getElementById("stats-grid");
+	      let loadedEvents = [];
+	      const selectedEventIdSet = new Set();
+	      const availabilityByEventId = new Map();
+	      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) tokenInput.value = saved;
+
+      function token() {
+        const value = tokenInput.value.trim();
+        if (value) sessionStorage.setItem(STORAGE_KEY, value);
+        return value;
+      }
+      function esc(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
+      function status(msg, kind = "") { mainStatus.textContent = msg; mainStatus.className = `status ${kind}`; }
+      function fmtDate(v) { return v ? new Date(v).toLocaleDateString() : "-"; }
+      function fmtDateTime(v) { return v ? new Date(v).toLocaleString() : "-"; }
+	      function badge(value) { return `<span class="badge badge-${esc(value)}">${esc(value || "-")}</span>`; }
+	      function selectedDivisions() {
+	        return [...document.querySelectorAll("input[data-division]:checked")].map((input) => input.dataset.division);
+	      }
+	      function selectedEventIds() {
+	        return [...selectedEventIdSet];
+	      }
+	      async function api(path, options = {}) {
+        const t = token();
+        if (!t) throw new Error("Paste your x-internal-token first.");
+        const res = await fetch(`/api/admin/hyrox-doubles${path}`, {
+          ...options,
+          headers: { "x-internal-token": t, ...(options.headers || {}) },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+	      function renderAvailability(eventId) {
+	        const state = availabilityByEventId.get(Number(eventId));
+	        if (!state) {
+	          return `<div class="availability"><span class="mono">Not checked</span><div class="actions"><button type="button" class="secondary" data-action="check-availability" data-event-id="${esc(eventId)}">Check</button></div></div>`;
+	        }
+	        if (state.status === "loading") {
+	          return `<div class="availability"><span class="mono">Checking...</span></div>`;
+	        }
+	        if (state.status === "error") {
+	          return `<div class="availability"><strong>Unavailable</strong><span class="mono">${esc(state.error)}</span><div class="actions"><button type="button" class="secondary" data-action="check-availability" data-event-id="${esc(eventId)}">Retry</button></div></div>`;
+	        }
+	        const availability = state.availability || {};
+	        const divisions = availability.divisions || [];
+	        const label = (division) => ({
+	          open_male: "OM",
+	          open_female: "OF",
+	          pro_male: "PM",
+	          pro_female: "PF",
+	          doubles_male: "DM",
+	          doubles_female: "DF",
+	          doubles_mixed: "DX",
+	          pro_doubles_male: "PDM",
+	          pro_doubles_female: "PDF",
+	          pro_doubles_mixed: "PDX",
+	          team_relay_male: "RM",
+	          team_relay_female: "RF",
+	          team_relay_mixed: "RX",
+	        }[division] || division);
+	        const breakdown = divisions.map((division) => `${label(division.divisionCategory)} ${division.recordsAvailable ?? 0}`).join(" · ") || "No divisions";
+	        return `<div class="availability"><strong>${esc(availability.totalRecordsAvailable ?? 0)} available</strong><span class="mono">${esc(breakdown)}</span><div class="actions"><button type="button" class="secondary" data-action="check-availability" data-event-id="${esc(eventId)}">Refresh</button></div></div>`;
+	      }
+
+	      function renderStats(data) {
+        const rows = data.byDivision || [];
+        const divisionHtml = rows.map((row) =>
+          `<div class="stat"><strong>${esc(row.totalRecords ?? 0)}</strong><span>${esc(row.divisionCategory)}</span></div>`
+        ).join("");
+        statsGrid.innerHTML = `
+          <div class="stat"><strong>${esc(data.totalRecords ?? 0)}</strong><span>Total records</span></div>
+          <div class="stat"><strong>${esc(data.eventsCovered ?? 0)}</strong><span>Events covered</span></div>
+          <div class="stat"><strong>${esc(data.lastScrapedAt ? fmtDateTime(data.lastScrapedAt) : "-")}</strong><span>Last scrape</span></div>
+          ${divisionHtml}`;
+      }
+
+	      function renderEvents(events) {
+	        loadedEvents = events;
+	        if (!events.length) {
+	          eventsBody.innerHTML = '<tr><td colspan="8" class="empty">No HYROX events with results found.</td></tr>';
+	          return;
+	        }
+	        eventsBody.innerHTML = events.map((event) => `<tr>
+	          <td class="checkbox-cell"><input type="checkbox" data-event-id="${esc(event.id)}" ${selectedEventIdSet.has(Number(event.id)) ? "checked" : ""} /></td>
+          <td>${esc(event.eventName)}<div class="mono">${esc(event.resultsPageKey || "")}</div></td>
+          <td>${esc(event.city || "-")}</td>
+          <td>${esc(event.country || "-")}</td>
+	          <td>${esc(fmtDate(event.startDate))}</td>
+	          <td>${esc(event.season || "-")}</td>
+	          <td>${esc(event.doublesRecordCount || 0)} ${event.doublesAlreadyScraped ? badge("valid") : ""}</td>
+	          <td>${renderAvailability(event.id)}</td>
+	        </tr>`).join("");
+	      }
+
+      function renderJobs(jobs) {
+        if (!jobs.length) {
+          jobsBody.innerHTML = '<tr><td colspan="7" class="empty">No scrape jobs yet.</td></tr>';
+          return;
+        }
+        jobsBody.innerHTML = jobs.map((job) => {
+          const completed = Number(job.eventsCompleted ?? job.events_completed ?? 0);
+          const total = Number(job.totalEvents ?? job.total_events ?? 0);
+          const found = Number(job.totalRecordsFound ?? job.total_records_found ?? 0);
+          const savedCount = Number(job.totalRecordsSaved ?? job.total_records_saved ?? 0);
+          const dupes = Number(job.totalDuplicatesSkipped ?? job.total_duplicates_skipped ?? 0);
+          const errors = Number(job.totalErrors ?? job.total_errors ?? 0);
+          const statusValue = job.status || "-";
+          const cooldownUntil = job.cooldownUntil || job.cooldown_until;
+          const cooldownHtml = cooldownUntil ? `<div class="mono">cooldown until ${esc(fmtDateTime(cooldownUntil))}</div>` : "";
+          return `<tr>
+            <td>${badge(statusValue)}<div class="mono">${esc((job.id || "").slice(0, 8))}</div>${cooldownHtml}</td>
+            <td>${esc(fmtDateTime(job.createdAt || job.created_at))}</td>
+            <td>${esc(completed)} / ${esc(total)}</td>
+            <td>${esc(savedCount)} saved<br><span class="mono">${esc(found)} found, ${esc(dupes)} dupes</span></td>
+            <td>${esc(job.currentDivision || job.current_division || "-")}<br><span class="mono">offset ${esc(job.currentPageOffset ?? job.current_page_offset ?? 0)}</span></td>
+            <td>${esc(errors)}${job.lastError || job.last_error ? `<br><span class="mono">${esc(job.lastError || job.last_error)}</span>` : ""}</td>
+            <td><div class="actions">
+              <button data-action="refresh-jobs" type="button" class="secondary">Refresh</button>
+              <button data-action="pause" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "running" ? "disabled" : ""}>Pause</button>
+              <button data-action="resume" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "paused" ? "disabled" : ""}>Resume</button>
+              <button data-action="retry-failed" data-job-id="${esc(job.id)}" type="button">Retry Failed</button>
+              <button data-action="cancel" data-job-id="${esc(job.id)}" type="button" class="danger" ${!["queued","running","paused","retrying"].includes(statusValue) ? "disabled" : ""}>Cancel</button>
+            </div></td>
+          </tr>`;
+        }).join("");
+      }
+
+      async function loadAll() {
+        status("Loading...");
+        const [stats, events, jobs] = await Promise.all([
+          api("/stats"),
+          api("/events"),
+          api("/jobs"),
+        ]);
+        renderStats(stats);
+        renderEvents(events.events || []);
+        renderJobs(jobs.jobs || []);
+        status("Loaded.", "ok");
+      }
+
+      document.getElementById("load-btn").addEventListener("click", () => loadAll().catch((err) => status(err.message, "err")));
+      document.getElementById("refresh-btn").addEventListener("click", () => loadAll().catch((err) => status(err.message, "err")));
+	      document.getElementById("select-all-events").addEventListener("change", (event) => {
+	        eventsBody.querySelectorAll("input[data-event-id]").forEach((input) => {
+	          input.checked = event.target.checked;
+	          const id = Number(input.dataset.eventId);
+	          if (event.target.checked) selectedEventIdSet.add(id);
+	          else selectedEventIdSet.delete(id);
+	        });
+	      });
+	      async function checkAvailability(eventId) {
+	        const divisions = selectedDivisions();
+	        availabilityByEventId.set(Number(eventId), { status: "loading" });
+	        renderEvents(loadedEvents);
+	        try {
+	          const result = await api(`/events/${encodeURIComponent(eventId)}/availability`, {
+	            method: "POST",
+	            headers: { "content-type": "application/json" },
+	            body: JSON.stringify({ selectedDivisions: divisions }),
+	          });
+	          availabilityByEventId.set(Number(eventId), { status: "ready", availability: result.availability });
+	          renderEvents(loadedEvents);
+	          return result.availability;
+	        } catch (err) {
+	          availabilityByEventId.set(Number(eventId), { status: "error", error: err.message });
+	          renderEvents(loadedEvents);
+	          throw err;
+	        }
+	      }
+	      document.getElementById("check-selected-availability-btn").addEventListener("click", async () => {
+	        const ids = selectedEventIds();
+	        if (!ids.length) {
+	          status("Select at least one event to check availability.", "err");
+	          return;
+	        }
+	        try {
+	          let checked = 0;
+	          for (const eventId of ids) {
+	            status(`Checking availability ${checked + 1} / ${ids.length}...`);
+	            await checkAvailability(eventId);
+	            checked += 1;
+	          }
+	          status(`Availability checked for ${checked} event${checked === 1 ? "" : "s"}.`, "ok");
+	        } catch (err) {
+	          status(err.message, "err");
+	        }
+	      });
+	      document.getElementById("create-job-btn").addEventListener("click", async () => {
+	        const selectedIds = selectedEventIds();
+	        const divisions = selectedDivisions();
+	        const targetRecordCount = Number(document.getElementById("target-count").value || 15000);
+	        const enrichSplits = document.getElementById("enrich-splits").checked;
+	        try {
+	          const result = await api("/jobs", {
+	            method: "POST",
+	            headers: { "content-type": "application/json" },
+	            body: JSON.stringify({ selectedEventIds: selectedIds, selectedDivisions: divisions, targetRecordCount, enrichSplits }),
+	          });
+          status(`Job created: ${result.jobId}`, "ok");
+          await loadAll();
+        } catch (err) {
+          status(err.message, "err");
+        }
+	      });
+	      eventsBody.addEventListener("click", async (event) => {
+	        const action = event.target?.dataset?.action;
+	        const eventId = event.target?.dataset?.eventId;
+	        if (action !== "check-availability" || !eventId) return;
+	        try {
+	          status("Checking availability...");
+	          const availability = await checkAvailability(Number(eventId));
+	          status(`Availability: ${availability.totalRecordsAvailable ?? 0} records available.`, "ok");
+	        } catch (err) {
+	          status(err.message, "err");
+	        }
+	      });
+	      eventsBody.addEventListener("change", (event) => {
+	        const eventId = event.target?.dataset?.eventId;
+	        if (!eventId) return;
+	        const id = Number(eventId);
+	        if (event.target.checked) selectedEventIdSet.add(id);
+	        else selectedEventIdSet.delete(id);
+	      });
+	      jobsBody.addEventListener("click", async (event) => {
+        const action = event.target?.dataset?.action;
+        const jobId = event.target?.dataset?.jobId;
+        if (action === "refresh-jobs") {
+          await loadAll().catch((err) => status(err.message, "err"));
+          return;
+        }
+        if (!action || !jobId) return;
+        try {
+          await api(`/jobs/${encodeURIComponent(jobId)}/${action}`, { method: "PATCH" });
+          await loadAll();
+        } catch (err) {
+          status(err.message, "err");
+        }
+      });
+
+      if (saved) loadAll().catch((err) => status(err.message, "err"));
+    </script>
+    <script src="/admin-ui/nav.js"></script>
+  </body>
+</html>

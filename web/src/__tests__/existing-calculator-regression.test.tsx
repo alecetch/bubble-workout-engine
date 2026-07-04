@@ -42,21 +42,22 @@ describe("existing HYROX calculator regression", () => {
 
   test("RaceDetailsPage renders without crashing", () => {
     render(
-      <MemoryRouter initialEntries={["/hyrox-calculator"]}>
+      <MemoryRouter initialEntries={["/hyrox-calculator/race-details"]}>
         <RaceDetailsPage />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: /Race details/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Analyse your race/i })).toBeInTheDocument();
   });
 
-  test("default target mode still requires target finish time before Next is enabled", () => {
+  test("target mode still requires target finish time before Next is enabled", () => {
     render(
-      <MemoryRouter initialEntries={["/hyrox-calculator"]}>
+      <MemoryRouter initialEntries={["/hyrox-calculator/race-details?mode=target"]}>
         <RaceDetailsPage />
       </MemoryRouter>,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /or enter manually/i }));
     fireEvent.change(screen.getByLabelText(/age group/i), {
       target: { value: "30-34" },
     });

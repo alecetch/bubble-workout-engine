@@ -1,4 +1,4 @@
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ConfidenceMeter } from "../../components/ConfidenceMeter";
 import { FormPanel } from "../../components/FormPanel";
 import { LimiterBar } from "../../components/LimiterBar";
@@ -7,6 +7,7 @@ import { PredictionBreakdownTable } from "../../components/PredictionBreakdownTa
 import { SecondaryButton } from "../../components/SecondaryButton";
 import { Shell } from "../../components/Shell";
 import type { HyroxPredictionResponse, PredictedSegment } from "../../types";
+import { trackEvent } from "../../utils/api";
 import { clearPredictorDraft } from "../../utils/predictorStorage";
 import { formatSeconds } from "../../utils/time";
 import styles from "./PredictorPages.module.css";
@@ -120,6 +121,19 @@ export function PredictorResultPage() {
           <SecondaryButton type="button" onClick={handleNewPrediction}>Get another prediction</SecondaryButton>
           <SecondaryButton type="button" onClick={() => void navigate("/hyrox-calculator")}>Analyse an existing result</SecondaryButton>
         </div>
+        <FormPanel className={styles.nextStepPanel}>
+          <h3 className={styles.nextStepHeading}>Ready to go deeper?</h3>
+          <p className={styles.nextStepBody}>
+            Get a full benchmarked analysis after your race.
+          </p>
+          <Link
+            to="/hyrox-calculator"
+            className={styles.nextStepLink}
+            onClick={() => trackEvent("predictor_result_analyse_clicked", { source: "predictor_result" })}
+          >
+            Analyse my next result -&gt;
+          </Link>
+        </FormPanel>
       </div>
     </Shell>
   );

@@ -36,7 +36,18 @@ function approximatePercentile(userSeconds, stats) {
     [stats.p99Seconds, 1],
   ].filter(([seconds]) => Number.isFinite(seconds)).sort((a, b) => a[0] - b[0]);
   if (points.length === 0) return null;
-  if (userSeconds <= points[0][0]) return points[0][1];
+  if (userSeconds <= points[0][0]) {
+    // Extrapolate beyond the fastest known point using the p10→p25 slope
+    if (points.length >= 2) {
+      const [a, aPct] = points[0];
+      const [b, bPct] = points[1];
+      const slope = (bPct - aPct) / Math.max(1, b - a);
+      const raw = aPct + slope * (userSeconds - a);
+      const pct = Math.min(99, Math.max(aPct, raw));
+      return pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct);
+    }
+    return points[0][1];
+  }
   if (userSeconds >= points[points.length - 1][0]) return points[points.length - 1][1];
   for (let i = 0; i < points.length - 1; i += 1) {
     const [aSeconds, aPct] = points[i];
@@ -90,6 +101,7 @@ function requestFromSubmission(normalisedSubmission, benchmarkContext) {
 export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
   const primaryGroupKey = benchmarkContext?.primaryBenchmarkGroup?.key;
   const goalGroupKey = benchmarkContext?.goalBenchmarkGroup?.key;
+  const demographicGroupKey = benchmarkContext?.demographicBenchmarkGroup?.key ?? null;
   const rows = [];
 
   for (const metricKey of ORDERED_METRICS) {
@@ -108,6 +120,8 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
     const stats = getBenchmarkStats(benchmarkGroupKey, metricKey);
     const goalStats = goalGroupKey ? getBenchmarkStats(goalGroupKey, metricKey) : null;
     const percentile = selection.suppressed ? null : approximatePercentile(userSeconds, stats);
+    const demographicStats = demographicGroupKey ? getBenchmarkStats(demographicGroupKey, metricKey) : null;
+    const fieldPercentile = (demographicStats && !selection.suppressed) ? approximatePercentile(userSeconds, demographicStats) : null;
     const median = stats?.medianSeconds ?? stats?.p50Seconds ?? null;
     const topQuartile = stats?.p75Seconds ?? null;
     const goal = goalStats?.medianSeconds ?? goalStats?.p50Seconds ?? null;
@@ -121,6 +135,7 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
       benchmarkTopQuartileSeconds: topQuartile,
       goalBenchmarkSeconds: goal,
       percentile,
+      fieldPercentile,
       timeGapToMedianSeconds: Number.isFinite(median) ? userSeconds - median : null,
       timeGapToGoalSeconds: Number.isFinite(goal) ? userSeconds - goal : Number.isFinite(median) ? userSeconds - median : null,
       rankWithinUserSegments: null,

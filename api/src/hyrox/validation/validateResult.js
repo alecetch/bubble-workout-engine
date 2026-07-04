@@ -12,7 +12,9 @@ function allSegmentsPresent(record, keys) {
 
 function plausibilityFlags(record) {
   const flags = [];
-  const thresholds = VALIDATION_THRESHOLDS.plausibility;
+  const thresholds = record.division === "doubles"
+    ? VALIDATION_THRESHOLDS.doublesPlausibility
+    : VALIDATION_THRESHOLDS.plausibility;
 
   for (const [key, segment] of Object.entries(record.segments ?? {})) {
     const seconds = segment?.seconds;
