@@ -1,5 +1,6 @@
 import express from "express";
-import archiver from "archiver";
+import { createRequire } from "module";
+const archiver = createRequire(import.meta.url)("archiver");
 import { pool as defaultPool } from "../db.js";
 import { submissionInput } from "../hyrox/hyroxController.js";
 import { parseHyroxResultsHtml } from "../hyrox/ingestion/parseHyroxResultsHtml.js";
