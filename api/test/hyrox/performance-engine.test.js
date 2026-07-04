@@ -228,6 +228,7 @@ test("target time attaches exact segment targets and uses exact limiter gap", ()
   const run = analysis.segments.find((segment) => segment.segmentKey === "run_1");
   const limiter = analysis.segments.find((segment) => segment.segmentKey === analysis.headline.biggestLimiter.segmentKey);
 
+  assert.equal(analysis.benchmarkContext.goalBenchmarkGroup.targetFinishSeconds, targetFinishTimeSeconds);
   assert.equal(total.exactTargetSeconds, targetFinishTimeSeconds);
   assert.equal(total.timeGapToExactTargetSeconds, analysis.race.finishTimeSeconds - targetFinishTimeSeconds);
   assert.ok(Number.isFinite(run.exactTargetSeconds));

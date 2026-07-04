@@ -38,7 +38,7 @@ services:
         cp package-lock.json node_modules/.package-lock.snapshot;
       fi;
       if ! node -e \"require('puppeteer').executablePath()\" >/dev/null 2>&1; then
-        npx puppeteer browsers install chrome;
+        node_modules/.bin/puppeteer browsers install chrome || true;
       fi;
       npm start
       "

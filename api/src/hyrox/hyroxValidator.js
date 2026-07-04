@@ -44,6 +44,14 @@ export const hyroxIpRateLimiter = rateLimit({
   message: { error: "too_many_requests", message: "Too many submissions. Please try again later." },
 });
 
+export const hyroxImportRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.HYROX_IMPORT_RATE_LIMIT_PER_HOUR || 60),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests", message: "Too many import attempts. Please try again later." },
+});
+
 export function hyroxEmailRateLimiter(req, res, next) {
   const email = String(req.body?.athlete?.email ?? "").trim().toLowerCase();
   if (!email || EMAIL_ALLOWLIST.has(email)) return next();

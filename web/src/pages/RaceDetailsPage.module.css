@@ -11,7 +11,6 @@
 }
 
 .eyebrow,
-.previewEyebrow,
 .groupTitle {
   font-size: 12px;
   font-weight: 800;
@@ -130,33 +129,6 @@
   gap: 13px;
 }
 
-.importTabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-900);
-  margin-bottom: 12px;
-}
-
-.importTab {
-  min-height: 38px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 800;
-  transition: background 0.16s, color 0.16s;
-}
-
-.importTabActive {
-  background: linear-gradient(135deg, rgba(15, 111, 255, 0.3), rgba(34, 211, 238, 0.16));
-  color: var(--text-primary);
-}
-
 .urlImport {
   padding: 14px;
   border: 1px solid rgba(34, 211, 238, 0.24);
@@ -245,20 +217,45 @@
   border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
-.manualSeparator {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.manualEntryLink {
+  background: none;
+  border: none;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+  padding: 8px 0;
+  display: block;
+  width: 100%;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-.manualSeparator::before,
-.manualSeparator::after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: var(--border-subtle);
+.manualEntryLink:hover {
+  color: var(--text-secondary);
+}
+
+.pasteLink {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  display: inline;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pasteLink:hover {
+  color: var(--text-secondary);
+}
+
+.formReassurance {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 4px 0 8px;
 }
 
 .fieldGroup {
@@ -315,41 +312,6 @@
   text-align: center;
   color: var(--text-muted);
   font-size: 12px;
-}
-
-.previewPanel {
-  padding: 18px;
-  border-color: rgba(34, 211, 238, 0.16);
-}
-
-.previewEyebrow {
-  color: var(--accent-cyan);
-  margin-bottom: 6px;
-}
-
-.previewTitle {
-  font-size: 16px;
-  line-height: 1.25;
-  margin-bottom: 12px;
-}
-
-.previewRows {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.previewRow {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.previewRow strong {
-  color: var(--text-primary);
-  text-align: right;
 }
 
 .mobileStickyCta {
@@ -424,7 +386,4 @@
     font-size: 28px;
   }
 
-  .previewPanel {
-    padding: 16px;
-  }
 }

@@ -161,10 +161,10 @@ test("forbidden word weakness does not appear in generated output", () => {
   assert.equal(/weakness/i.test(allStrings(report)), false);
 });
 
-test("subject line names the station when biggest limiter is a station", () => {
+test("target-mode subject uses target time analysis fallback without a goal", () => {
   const a = analysis();
   const report = assembleReport({ analysisJson: a, insights: insights(a), outputType: "email_report" });
-  assert.equal(report.emailSubject, "Your HYROX bottleneck is Wall Balls");
+  assert.equal(report.emailSubject, "Your HYROX target time analysis");
 });
 
 test("email plain text body contains no HTML tags", () => {
