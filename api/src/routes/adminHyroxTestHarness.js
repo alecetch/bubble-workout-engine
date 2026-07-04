@@ -1,6 +1,5 @@
 import express from "express";
-import { createRequire } from "module";
-const archiver = createRequire(import.meta.url)("archiver");
+import { ZipArchive } from "archiver";
 import { pool as defaultPool } from "../db.js";
 import { submissionInput } from "../hyrox/hyroxController.js";
 import { parseHyroxResultsHtml } from "../hyrox/ingestion/parseHyroxResultsHtml.js";
@@ -970,7 +969,7 @@ async function sendEmailHtmlZip(res, { filename, entries }) {
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
-  const archive = archiver("zip", { zlib: { level: 9 } });
+  const archive = new ZipArchive({ zlib: { level: 9 } });
   archive.pipe(res);
   for (const file of files) {
     archive.append(file.html, { name: file.name });
