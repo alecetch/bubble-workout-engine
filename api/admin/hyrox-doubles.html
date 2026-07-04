@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HYROX Doubles Scraper</title>
+    <title>HYROX Results Scraper</title>
     <style>
       :root { --bg:#f4f6f8; --panel:#fff; --border:#d8dee6; --text:#1f2937; --muted:#6b7280; --primary:#0f62fe; --danger:#dc3545; --ok:#0f766e; --warn:#b45309; }
       * { box-sizing: border-box; }
@@ -54,7 +54,7 @@
     <div class="page">
       <section class="header">
         <div class="top-row">
-          <h1>HYROX Doubles Scraper</h1>
+          <h1>HYROX Results Scraper</h1>
           <div class="controls">
             <button id="refresh-btn" type="button" class="secondary">Refresh</button>
           </div>
@@ -81,9 +81,19 @@
       <section class="section">
         <h2>Create Scrape Job</h2>
         <div class="division-row" style="margin-bottom:10px">
+          <label><input type="checkbox" data-division="open_male" /> Male singles</label>
+          <label><input type="checkbox" data-division="open_female" /> Female singles</label>
+          <label><input type="checkbox" data-division="pro_male" /> Male pro singles</label>
+          <label><input type="checkbox" data-division="pro_female" /> Female pro singles</label>
           <label><input type="checkbox" data-division="doubles_male" checked /> Male doubles</label>
           <label><input type="checkbox" data-division="doubles_female" checked /> Female doubles</label>
           <label><input type="checkbox" data-division="doubles_mixed" checked /> Mixed doubles</label>
+          <label><input type="checkbox" data-division="pro_doubles_male" /> Male pro doubles</label>
+          <label><input type="checkbox" data-division="pro_doubles_female" /> Female pro doubles</label>
+          <label><input type="checkbox" data-division="pro_doubles_mixed" /> Mixed pro doubles</label>
+          <label><input type="checkbox" data-division="team_relay_male" /> Male team relay</label>
+          <label><input type="checkbox" data-division="team_relay_female" /> Female team relay</label>
+          <label><input type="checkbox" data-division="team_relay_mixed" /> Mixed team relay</label>
           <div class="control">
             <label for="target-count">Target record count</label>
             <input id="target-count" type="number" min="1" value="15000" />
@@ -98,7 +108,7 @@
 	            <thead>
 	              <tr>
 	                <th class="checkbox-cell"><input id="select-all-events" type="checkbox" /></th>
-	                <th>Event</th><th>City</th><th>Country</th><th>Date</th><th>Season</th><th>Doubles records</th><th>Live availability</th>
+	                <th>Event</th><th>City</th><th>Country</th><th>Date</th><th>Season</th><th>Scraped records</th><th>Live availability</th>
 	              </tr>
 	            </thead>
 	            <tbody id="events-body"><tr><td colspan="8" class="empty">Load the scraper to view events.</td></tr></tbody>
@@ -173,7 +183,21 @@
 	        }
 	        const availability = state.availability || {};
 	        const divisions = availability.divisions || [];
-	        const label = (division) => division === "doubles_male" ? "M" : division === "doubles_female" ? "W" : "X";
+	        const label = (division) => ({
+	          open_male: "OM",
+	          open_female: "OF",
+	          pro_male: "PM",
+	          pro_female: "PF",
+	          doubles_male: "DM",
+	          doubles_female: "DF",
+	          doubles_mixed: "DX",
+	          pro_doubles_male: "PDM",
+	          pro_doubles_female: "PDF",
+	          pro_doubles_mixed: "PDX",
+	          team_relay_male: "RM",
+	          team_relay_female: "RF",
+	          team_relay_mixed: "RX",
+	        }[division] || division);
 	        const breakdown = divisions.map((division) => `${label(division.divisionCategory)} ${division.recordsAvailable ?? 0}`).join(" · ") || "No divisions";
 	        return `<div class="availability"><strong>${esc(availability.totalRecordsAvailable ?? 0)} available</strong><span class="mono">${esc(breakdown)}</span><div class="actions"><button type="button" class="secondary" data-action="check-availability" data-event-id="${esc(eventId)}">Refresh</button></div></div>`;
 	      }
@@ -221,14 +245,17 @@
           const dupes = Number(job.totalDuplicatesSkipped ?? job.total_duplicates_skipped ?? 0);
           const errors = Number(job.totalErrors ?? job.total_errors ?? 0);
           const statusValue = job.status || "-";
+          const cooldownUntil = job.cooldownUntil || job.cooldown_until;
+          const cooldownHtml = cooldownUntil ? `<div class="mono">cooldown until ${esc(fmtDateTime(cooldownUntil))}</div>` : "";
           return `<tr>
-            <td>${badge(statusValue)}<div class="mono">${esc((job.id || "").slice(0, 8))}</div></td>
+            <td>${badge(statusValue)}<div class="mono">${esc((job.id || "").slice(0, 8))}</div>${cooldownHtml}</td>
             <td>${esc(fmtDateTime(job.createdAt || job.created_at))}</td>
             <td>${esc(completed)} / ${esc(total)}</td>
             <td>${esc(savedCount)} saved<br><span class="mono">${esc(found)} found, ${esc(dupes)} dupes</span></td>
             <td>${esc(job.currentDivision || job.current_division || "-")}<br><span class="mono">offset ${esc(job.currentPageOffset ?? job.current_page_offset ?? 0)}</span></td>
             <td>${esc(errors)}${job.lastError || job.last_error ? `<br><span class="mono">${esc(job.lastError || job.last_error)}</span>` : ""}</td>
             <td><div class="actions">
+              <button data-action="refresh-jobs" type="button" class="secondary">Refresh</button>
               <button data-action="pause" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "running" ? "disabled" : ""}>Pause</button>
               <button data-action="resume" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "paused" ? "disabled" : ""}>Resume</button>
               <button data-action="retry-failed" data-job-id="${esc(job.id)}" type="button">Retry Failed</button>
@@ -337,6 +364,10 @@
 	      jobsBody.addEventListener("click", async (event) => {
         const action = event.target?.dataset?.action;
         const jobId = event.target?.dataset?.jobId;
+        if (action === "refresh-jobs") {
+          await loadAll().catch((err) => status(err.message, "err"));
+          return;
+        }
         if (!action || !jobId) return;
         try {
           await api(`/jobs/${encodeURIComponent(jobId)}/${action}`, { method: "PATCH" });

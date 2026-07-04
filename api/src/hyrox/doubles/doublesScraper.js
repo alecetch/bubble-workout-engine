@@ -10,12 +10,27 @@ import {
   parseWorkoutSummary,
 } from "../../contentStudio/hyroxScraper.js";
 
-export const DOUBLES_DIVISIONS = Object.freeze(["doubles_male", "doubles_female", "doubles_mixed"]);
+export const HYROX_SCRAPER_DIVISIONS = Object.freeze([
+  "open_male",
+  "open_female",
+  "pro_male",
+  "pro_female",
+  "doubles_male",
+  "doubles_female",
+  "doubles_mixed",
+  "pro_doubles_male",
+  "pro_doubles_female",
+  "pro_doubles_mixed",
+  "team_relay_male",
+  "team_relay_female",
+  "team_relay_mixed",
+]);
+export const DOUBLES_DIVISIONS = HYROX_SCRAPER_DIVISIONS;
 
 const PAGE_SIZE = 50;
 const HYROX_DOUBLES_NUM_RESULTS = 100;
-const ENRICH_BATCH_SIZE = Number(process.env.HYROX_DOUBLES_ENRICH_BATCH_SIZE || 5);
-const ENRICH_BATCH_DELAY_MS = Number(process.env.HYROX_DOUBLES_ENRICH_BATCH_DELAY_MS || 300);
+const ENRICH_BATCH_SIZE = Number(process.env.HYROX_DOUBLES_ENRICH_BATCH_SIZE || 2);
+const ENRICH_BATCH_DELAY_MS = Number(process.env.HYROX_DOUBLES_ENRICH_BATCH_DELAY_MS || 3000);
 const DETAIL_FETCH_TIMEOUT_MS = Number(process.env.HYROX_DOUBLES_DETAIL_TIMEOUT_MS || 10000);
 
 const RUN_SPLIT_COLUMNS = Object.freeze({
@@ -79,38 +94,86 @@ function isRateLimitError(err) {
 
 function categoriesFromDivisionLabel(label) {
   const text = String(label ?? "").toUpperCase();
-  if (text.includes("MIXED")) return [{ divisionCategory: "doubles_mixed", sexCode: "X" }];
-  if (text.includes("WOMEN") || text.includes("FEMALE")) return [{ divisionCategory: "doubles_female", sexCode: "W" }];
-  if (text.includes("MEN") || text.includes("MALE")) return [{ divisionCategory: "doubles_male", sexCode: "M" }];
-  if (text.includes("DOUBLES") || text.includes("DOUBLE")) {
-    return [
-      { divisionCategory: "doubles_male", sexCode: "M" },
-      { divisionCategory: "doubles_female", sexCode: "W" },
-      { divisionCategory: "doubles_mixed", sexCode: "X" },
-    ];
+  const isPro = text.includes("PRO");
+  const isDoubles = text.includes("DOUBLES") || text.includes("DOUBLE");
+  const isRelay = text.includes("RELAY");
+  const sexCategories = [];
+
+  if (text.includes("MIXED")) sexCategories.push({ suffix: "mixed", sexCode: "X" });
+  else if (text.includes("WOMEN") || text.includes("FEMALE")) sexCategories.push({ suffix: "female", sexCode: "W" });
+  else if (text.includes("MEN") || text.includes("MALE")) sexCategories.push({ suffix: "male", sexCode: "M" });
+  else if (isDoubles || isRelay) {
+    sexCategories.push(
+      { suffix: "male", sexCode: "M" },
+      { suffix: "female", sexCode: "W" },
+      { suffix: "mixed", sexCode: "X" },
+    );
+  } else {
+    sexCategories.push(
+      { suffix: "male", sexCode: "M" },
+      { suffix: "female", sexCode: "W" },
+    );
+  }
+
+  if (isRelay) {
+    return sexCategories.map((category) => ({
+      divisionCategory: `team_relay_${category.suffix}`,
+      sexCode: category.sexCode,
+    }));
+  }
+  if (isDoubles) {
+    const prefix = isPro ? "pro_doubles" : "doubles";
+    return sexCategories.map((category) => ({
+      divisionCategory: `${prefix}_${category.suffix}`,
+      sexCode: category.sexCode,
+    }));
+  }
+  if (isPro) {
+    return sexCategories
+      .filter((category) => category.suffix !== "mixed")
+      .map((category) => ({
+        divisionCategory: `pro_${category.suffix}`,
+        sexCode: category.sexCode,
+      }));
+  }
+  if (text.includes("HYROX") || text.includes("OPEN")) {
+    return sexCategories
+      .filter((category) => category.suffix !== "mixed")
+      .map((category) => ({
+        divisionCategory: `open_${category.suffix}`,
+        sexCode: category.sexCode,
+      }));
   }
   return [];
 }
 
 export async function discoverDoublesContestIds(resultsPageKey, season, selectedDivisions = DOUBLES_DIVISIONS, fetcher = fetchDivisions) {
   const allowed = new Set(selectedDivisions);
+  const selectionRank = new Map(selectedDivisions.map((division, index) => [division, index]));
   const divisions = await fetcher(resultsPageKey, season);
   return divisions
-    .filter((division) => String(division.contestId ?? "").toUpperCase().startsWith("HD"))
     .flatMap((division) => {
       const isPro = String(division.label ?? "").toUpperCase().includes("PRO");
+      const isDoubles = String(division.label ?? "").toUpperCase().includes("DOUBLE");
+      const isRelay = String(division.label ?? "").toUpperCase().includes("RELAY");
       return categoriesFromDivisionLabel(division.label).map((category) => ({
         contestId: division.contestId,
         divisionCategory: category.divisionCategory,
         sexCode: category.sexCode,
         label: division.label,
         isPro,
+        isDoubles,
+        isRelay,
+        selectionRank: selectionRank.get(category.divisionCategory) ?? Number.MAX_SAFE_INTEGER,
         isOverall: String(division.label ?? "").toUpperCase().includes("OVERALL"),
       }));
     })
     .filter((division) => allowed.has(division.divisionCategory))
     .sort((a, b) =>
-      Number(a.isPro) - Number(b.isPro)
+      a.selectionRank - b.selectionRank
+      || Number(a.isPro) - Number(b.isPro)
+      || Number(a.isRelay) - Number(b.isRelay)
+      || Number(a.isDoubles) - Number(b.isDoubles)
       || Number(b.isOverall) - Number(a.isOverall)
       || String(a.label ?? "").localeCompare(String(b.label ?? "")));
 }
@@ -259,6 +322,16 @@ function uniqueTeamNames(teamName) {
   return [...new Set(names)];
 }
 
+function athleteNamesForRow(row) {
+  const teamName = String(row.team_name ?? "").trim();
+  const divisionCategory = String(row.division_category ?? "");
+  if (!teamName) return [];
+  if (divisionCategory.startsWith("open_") || (divisionCategory.startsWith("pro_") && !divisionCategory.startsWith("pro_doubles_"))) {
+    return [teamName];
+  }
+  return uniqueTeamNames(teamName);
+}
+
 function sumValues(values) {
   const finite = values.filter((value) => Number.isFinite(value));
   return finite.length ? finite.reduce((sum, value) => sum + value, 0) : null;
@@ -281,7 +354,7 @@ export function enrichResultRowFromDetail(row, detailHtml) {
   const summary = parseWorkoutSummary(detailHtml);
   const roxzoneSplits = parseRaceReplay(detailHtml);
   const enriched = { ...row };
-  const teamNames = uniqueTeamNames(row.team_name);
+  const teamNames = athleteNamesForRow(row);
   enriched.athlete_1_name = teamNames[0] ?? null;
   enriched.athlete_2_name = teamNames[1] ?? null;
 
@@ -353,7 +426,6 @@ export function validateAndFlagRow(row) {
   if (!row.hyrox_event_id) criticalFlags.push("missing_event_id");
   if (!DOUBLES_DIVISIONS.includes(row.division_category)) criticalFlags.push("invalid_division");
   if (!row.overall_time_seconds || row.overall_time_seconds <= 0) criticalFlags.push("invalid_overall_time");
-  if (!row.source_contest_id?.toUpperCase().startsWith("HD")) criticalFlags.push("not_doubles_event");
   if (!row.overall_rank || row.overall_rank < 1) warningFlags.push("invalid_rank");
   if (!row.source_athlete_id) warningFlags.push("no_athlete_id");
   if (!row.team_name) warningFlags.push("no_team_name");
