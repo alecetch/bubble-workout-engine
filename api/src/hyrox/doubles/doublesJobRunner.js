@@ -8,12 +8,12 @@ import {
   validateAndFlagRow,
 } from "./doublesScraper.js";
 
-const INTER_DIVISION_DELAY_MS = Number(process.env.HYROX_DOUBLES_INTER_DIVISION_DELAY_MS || 5000);
-const INTER_PAGE_DELAY_MS = Number(process.env.HYROX_DOUBLES_INTER_PAGE_DELAY_MS || 1500);
+const INTER_DIVISION_DELAY_MS = Number(process.env.HYROX_DOUBLES_INTER_DIVISION_DELAY_MS || 60000);
+const INTER_PAGE_DELAY_MS = Number(process.env.HYROX_DOUBLES_INTER_PAGE_DELAY_MS || 8000);
 const RUNNER_INTERVAL_MS = Number(process.env.HYROX_DOUBLES_RUNNER_INTERVAL_MS || 10000);
 const PAGE_SIZE = 50;
-const PAGE_RETRY_BACKOFF_MS = [5000, 15000, 45000];
-const RATE_LIMIT_COOLDOWN_MS = Number(process.env.HYROX_DOUBLES_RATE_LIMIT_COOLDOWN_MS || 60 * 60 * 1000);
+const PAGE_RETRY_BACKOFF_MS = [30000, 120000, 300000];
+const RATE_LIMIT_COOLDOWN_MS = Number(process.env.HYROX_DOUBLES_RATE_LIMIT_COOLDOWN_MS || 4 * 60 * 60 * 1000);
 
 class RateLimitCooldownError extends Error {
   constructor(message, cooldownMs = RATE_LIMIT_COOLDOWN_MS) {

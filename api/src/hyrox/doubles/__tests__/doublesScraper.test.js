@@ -62,13 +62,13 @@ function validRow(overrides = {}) {
 }
 
 describe("discoverDoublesContestIds", () => {
-  it("returns only HD doubles divisions", async () => {
+  it("returns selected doubles divisions", async () => {
     const result = await discoverDoublesContestIds("event", 9, ["doubles_male"], async () => [
       { label: "HYROX DOUBLES MEN", contestId: "HDMM_ABC" },
       { label: "HYROX PRO", contestId: "HPRO_ABC" },
     ]);
 
-    assert.deepEqual(result, [{ contestId: "HDMM_ABC", divisionCategory: "doubles_male", sexCode: "M", label: "HYROX DOUBLES MEN", isPro: false, isOverall: false }]);
+    assert.deepEqual(result.map((row) => [row.contestId, row.divisionCategory, row.sexCode]), [["HDMM_ABC", "doubles_male", "M"]]);
   });
 
   it("maps mixed before women", async () => {
@@ -109,6 +109,30 @@ describe("discoverDoublesContestIds", () => {
 
     assert.equal(result[0].contestId, "HD_OVERALL");
     assert.equal(result[0].isOverall, true);
+  });
+
+  it("maps singles, pro singles, pro doubles, and relay labels", async () => {
+    const result = await discoverDoublesContestIds("event", 9, [
+      "open_male",
+      "open_female",
+      "pro_male",
+      "pro_doubles_female",
+      "team_relay_mixed",
+    ], async () => [
+      { label: "HYROX MEN", contestId: "HOM_ABC" },
+      { label: "HYROX WOMEN", contestId: "HOF_ABC" },
+      { label: "HYROX PRO MEN", contestId: "HPM_ABC" },
+      { label: "HYROX PRO DOUBLES WOMEN", contestId: "HPDF_ABC" },
+      { label: "HYROX TEAM RELAY MIXED", contestId: "HTRX_ABC" },
+    ]);
+
+    assert.deepEqual(result.map((row) => [row.contestId, row.divisionCategory, row.sexCode]), [
+      ["HOM_ABC", "open_male", "M"],
+      ["HOF_ABC", "open_female", "W"],
+      ["HPM_ABC", "pro_male", "M"],
+      ["HPDF_ABC", "pro_doubles_female", "W"],
+      ["HTRX_ABC", "team_relay_mixed", "X"],
+    ]);
   });
 });
 
@@ -168,6 +192,17 @@ describe("countAvailableDoublesRecords", () => {
     assert.equal(result.totalRecordsAvailable, 0);
     assert.equal(result.divisions[0].status, "no_contest");
   });
+
+  it("checks availability for selected singles divisions", async () => {
+    const result = await countAvailableDoublesRecords("event", 9, ["open_female"], {
+      divisionFetcher: async () => [{ label: "HYROX WOMEN", contestId: "HOW_ABC" }],
+      pageFetcher: async () => '<span class="list-info__text str_num">118 Results</span>',
+    });
+
+    assert.equal(result.totalRecordsAvailable, 118);
+    assert.equal(result.divisions[0].divisionCategory, "open_female");
+    assert.equal(result.divisions[0].sexCode, "W");
+  });
 });
 
 describe("buildResultRow", () => {
@@ -217,6 +252,17 @@ describe("enrichResultRowFromDetail", () => {
     assert.ok(result.split_coverage_score > 0);
     assert.equal(result.raw_payload_json.detail.roxzoneSeconds, 420);
   });
+
+  it("keeps singles names as one athlete name", () => {
+    const result = enrichResultRowFromDetail(validRow({
+      source_contest_id: "HOM_ABC",
+      division_category: "open_male",
+      team_name: "Smith, Alex",
+    }), "<html></html>");
+
+    assert.equal(result.athlete_1_name, "Smith, Alex");
+    assert.equal(result.athlete_2_name, null);
+  });
 });
 
 describe("validateAndFlagRow", () => {
@@ -238,10 +284,10 @@ describe("validateAndFlagRow", () => {
     assert.ok(result.data_quality_flags.includes("implausible_time"));
   });
 
-  it("invalidates non-HD contests", () => {
-    const result = validateAndFlagRow(validRow({ source_contest_id: "HPRO_ABC" }));
-    assert.equal(result.data_quality_status, "invalid");
-    assert.ok(result.data_quality_flags.includes("not_doubles_event"));
+  it("accepts non-doubles contest ids for singles and pro categories", () => {
+    const result = validateAndFlagRow(validRow({ source_contest_id: "HPRO_ABC", division_category: "pro_male" }));
+    assert.equal(result.data_quality_status, "valid");
+    assert.ok(!result.data_quality_flags.includes("not_doubles_event"));
   });
 
   it("marks clean rows as valid", () => {
