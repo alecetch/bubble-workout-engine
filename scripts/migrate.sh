@@ -70,4 +70,9 @@ FLYWAY_COMMON_ARGS=(
 # changed after being applied (e.g. placeholder rows with checksum 0).
 docker run "${FLYWAY_COMMON_ARGS[@]}" repair
 
+# When connecting via a proxy (e.g. Fly MPG), each Docker Flyway container opens a
+# fresh TCP connection. The proxy can briefly reset after the repair container exits,
+# causing the migrate container to get an EOF on connect. A short pause lets it settle.
+sleep 3
+
 docker run "${FLYWAY_COMMON_ARGS[@]}" migrate

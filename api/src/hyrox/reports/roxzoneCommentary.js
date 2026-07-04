@@ -57,9 +57,6 @@ function buildNarrativeSection(rox) {
   const narrative = rox.roxzoneNarrative;
   if (!narrative?.available) return null;
   return [
-    narrative.summaryCopy
-      .replace(`${narrative.replayTotalSeconds}s`, formatTime(narrative.replayTotalSeconds))
-      .replace(`${narrative.officialTotalSeconds}s`, formatTime(narrative.officialTotalSeconds)),
     narrative.interpretationCopy,
     narrative.actionCopy,
     ...entryExitLines(rox),
@@ -90,7 +87,7 @@ function buildInferredSection(rox, roxSegment) {
   } else if (percentile != null) {
     const isNearMedian = Number.isFinite(targetGap) && Math.abs(targetGap) < NEAR_MEDIAN_GAP_SECONDS;
     if (isNearMedian) {
-      lines.push(`Against comparable athletes your transition time is right around the median — you are not meaningfully behind your benchmark group here.`);
+      lines.push(`Against comparable athletes your transition time is right around the median — you are not meaningfully behind your benchmark band here.`);
       lines.push(`That said, transitions are a low-investment area where race rehearsal pays dividends. ${PRO_ROXZONE_NOTE}`);
     } else {
       lines.push(`Against comparable athletes this places you around the ${formatPercentile(percentile)}, approximately ${formatGain(targetGap)} above the median. Transitions are a low-risk efficiency opportunity — no extra training load required.`);
@@ -130,7 +127,7 @@ function buildExplicitSection(rox, roxSegment) {
   } else if (percentile != null) {
     const isNearMedian = Number.isFinite(targetGap) && Math.abs(targetGap) < NEAR_MEDIAN_GAP_SECONDS;
     if (isNearMedian) {
-      lines.push(`Against comparable athletes your transition time is right around the median — you are not meaningfully behind your benchmark group here.`);
+      lines.push(`Against comparable athletes your transition time is right around the median — you are not meaningfully behind your benchmark band here.`);
       lines.push(`That said, transitions are a low-investment area where race rehearsal pays dividends. ${PRO_ROXZONE_NOTE}`);
     } else {
       lines.push(`Against comparable athletes this places you at the ${formatPercentile(percentile)}, approximately ${formatGain(targetGap)} above the median.`);
@@ -158,6 +155,9 @@ export function buildRoxzoneSection(analysisJson = {}) {
 
   if (rox.mode === "inferred_total") {
     const content = buildInferredSection(rox, roxSegment);
+    if (rox.roxzoneNarrative?.available) {
+      return content;
+    }
     const inferredNote = "RoxZone time shown is estimated from unallocated race time and should be treated as directional.";
     return Array.isArray(content) ? [inferredNote, ...content] : [inferredNote, content].filter(Boolean);
   }

@@ -150,10 +150,11 @@ test("station and penalty contributors appear in contributors array, not rationa
     penalties: [{ station: "run_5", penaltySeconds: 300 }],
   }), [], {});
 
-  const labels = (recommendations[0].contributors ?? []).map((contributor) => contributor.label);
+  const stationRec = recommendations.find((recommendation) => recommendation.actionId?.startsWith("station_"));
+  const labels = (stationRec?.contributors ?? []).map((contributor) => contributor.label);
   assert.ok(labels.includes("Penalties"), "Penalties should be in contributors");
   assert.ok(!labels.includes("Wall Balls"), "Title station should not repeat in contributors");
-  assert.doesNotMatch(recommendations[0].rationale, /Penalties/);
+  assert.doesNotMatch(stationRec?.rationale ?? "", /Penalties/);
 });
 
 test("running gap appears as runGapNote, not in contributors", () => {
@@ -405,4 +406,36 @@ test("target mode with target time includes target time in rationale", () => {
   );
   const allText = result.map((r) => r.rationale).join(" ");
   assert.match(allText, /55:00/);
+});
+
+test("recommendations include category field", () => {
+  const result = buildRecommendations(enrichedAnalysis(), [], {});
+  assert.ok(result.length > 0);
+  assert.ok(result.every((item) => ["Fitness", "Execution", "Race management"].includes(item.category)));
+});
+
+test("includes specific cues for Burpee Broad Jump limiter", () => {
+  const result = buildRecommendations({
+    ...enrichedAnalysis(),
+    headline: {
+      biggestLimiter: {
+        segmentKey: "station_4_burpee_broad_jump",
+        label: "Burpee Broad Jump",
+        timeGapSeconds: 90,
+        percentile: 15,
+      },
+    },
+  });
+  const rationale = result[0]?.rationale ?? "";
+  assert.match(rationale, /rhythm|floor speed|hip extension/i);
+});
+
+test("includes standards review advice for penalty recommendation", () => {
+  const result = buildRecommendations({
+    ...enrichedAnalysis(),
+    penalties: [{ penaltySeconds: 300, runKey: "run_5" }],
+  });
+  const penRec = result.find((r) => r.actionId === "penalty_avoidance");
+  assert.match(penRec?.rationale ?? "", /standards|judge/i);
+  assert.equal(penRec?.category, "Execution");
 });

@@ -30,6 +30,7 @@ function stationBreakdown(segments) {
       segmentKey: segment.segmentKey,
       label: segment.label,
       percentile: segment.percentile,
+      fieldPercentile: segment.fieldPercentile ?? null,
       timeGapSeconds: Math.round(segment.frameGapSeconds ?? 0),
       confidence: segment.confidence,
       nextBandMedianSeconds: segment.nextBandMedianSeconds ?? null,
@@ -82,7 +83,7 @@ function dataQuality(normalised, benchmarkContext) {
 
 function analysisScope(input, normalised, benchmarkContext) {
   const division = normalised.athlete?.division ?? normalised.race?.division;
-  if (division && !["open", "pro"].includes(division)) return "limited";
+  if (division && !["open", "pro", "doubles", "doubles_male", "doubles_female", "doubles_mixed"].includes(division)) return "limited";
   if (!benchmarkContext.available) return "no_benchmark_data";
   const supplied = normalised.completeness.runSplits + normalised.completeness.stationSplits;
   if (supplied < 8) return "limited";
@@ -186,12 +187,16 @@ export function analyseSubmission(input = {}) {
     benchmarkContext: {
       primaryBenchmarkGroup: benchmarkContext.primaryBenchmarkGroup,
       fallbacksUsed: benchmarkContext.fallbacksUsed,
-      goalBenchmarkGroup: benchmarkContext.goalBenchmarkGroup,
+      goalBenchmarkGroup: benchmarkContext.goalBenchmarkGroup
+        ? { ...benchmarkContext.goalBenchmarkGroup, targetFinishSeconds: targetFinishSeconds ?? null }
+        : null,
       achievedBand: benchmarkContext.achievedBand ?? null,
       nextBand: benchmarkContext.nextBand ?? null,
       nextBandGroup: benchmarkContext.nextBandGroup ?? null,
       confidenceLabel: benchmarkContext.confidenceLabel ?? null,
       demographicBenchmarkGroup: benchmarkContext.demographicBenchmarkGroup ?? null,
+      doublesBenchmarkedAsSingles: benchmarkContext.doublesBenchmarkedAsSingles ?? false,
+      useDoublesBenchmarks: benchmarkContext.useDoublesBenchmarks ?? false,
       analysisFrame,
     },
     headline: {

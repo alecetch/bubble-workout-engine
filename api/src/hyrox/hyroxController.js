@@ -40,10 +40,15 @@ function daysToRace(date) {
 function contextForPipeline(body = {}) {
   const athleteContext = body.athleteContext ?? {};
   const performanceContext = body.performanceContext ?? {};
-  const fiveKmPbSeconds = intOrNull(performanceContext.fiveKmPbSeconds ?? performanceContext.fiveKSeconds);
-  const tenKmPbSeconds = intOrNull(performanceContext.tenKmPbSeconds ?? performanceContext.tenKSeconds);
-  const backSquatKg = numberOrNull(performanceContext.backSquatKg);
-  const deadliftKg = numberOrNull(performanceContext.deadliftKg);
+  const targetRaceDate = athleteContext.targetRaceDate ?? athleteContext.nextRaceDate;
+  const fiveKmPbSeconds = intOrNull(
+    athleteContext.run5kPbSeconds ?? performanceContext.fiveKmPbSeconds ?? performanceContext.fiveKSeconds,
+  );
+  const tenKmPbSeconds = intOrNull(
+    athleteContext.run10kPbSeconds ?? performanceContext.tenKmPbSeconds ?? performanceContext.tenKSeconds,
+  );
+  const backSquatKg = numberOrNull(athleteContext.backSquat3RMKg ?? performanceContext.backSquatKg);
+  const deadliftKg = numberOrNull(athleteContext.deadlift3RMKg ?? performanceContext.deadliftKg);
   const frontSquatKg = numberOrNull(performanceContext.frontSquatKg);
   const injuryConstraints = performanceContext.injuryConstraints ?? [];
 
@@ -56,8 +61,9 @@ function contextForPipeline(body = {}) {
     sex: body.athlete?.sex ?? null,
     targetFinishTimeSeconds: intOrNull(athleteContext.targetFinishTimeSeconds),
     targetTimeSeconds: intOrNull(athleteContext.targetFinishTimeSeconds),
-    nextRaceDate: athleteContext.nextRaceDate,
-    daysToRace: daysToRace(athleteContext.nextRaceDate),
+    nextRaceDate: targetRaceDate,
+    targetRaceDate,
+    daysToRace: daysToRace(targetRaceDate),
     fiveKmPbSeconds,
     fiveKPbSeconds: fiveKmPbSeconds,
     tenKmPbSeconds,
@@ -115,6 +121,18 @@ async function persistSubmission(body, normalised) {
   const race = body.race ?? {};
   const performance = body.performanceContext ?? {};
   const athleteContext = body.athleteContext ?? {};
+  const fiveKmPbSeconds = intOrNull(athleteContext.run5kPbSeconds ?? performance.fiveKmPbSeconds);
+  const tenKmPbSeconds = intOrNull(athleteContext.run10kPbSeconds ?? performance.tenKmPbSeconds);
+  const backSquatKg = numberOrNull(athleteContext.backSquat3RMKg ?? performance.backSquatKg);
+  const deadliftKg = numberOrNull(athleteContext.deadlift3RMKg ?? performance.deadliftKg);
+  const athleteContextJson = {
+    ...athleteContext,
+    ...(athleteContext.rowErg2kSeconds != null ? { rowErg2kSeconds: Number(athleteContext.rowErg2kSeconds) } : {}),
+    ...(athleteContext.skiErg1kSeconds != null ? { skiErg1kSeconds: Number(athleteContext.skiErg1kSeconds) } : {}),
+    ...(athleteContext.wallBallRepsIn2Min != null ? { wallBallRepsIn2Min: Number(athleteContext.wallBallRepsIn2Min) } : {}),
+    ...(athleteContext.farmerCarry200mSeconds != null ? { farmerCarry200mSeconds: Number(athleteContext.farmerCarry200mSeconds) } : {}),
+    ...(athleteContext.targetRaceDate != null ? { targetRaceDate: String(athleteContext.targetRaceDate) } : {}),
+  };
   const result = await pool.query(
     `INSERT INTO hyrox_submissions (
       email, display_name, sex, age_on_race_day, age_group, division, finish_time_seconds,
@@ -122,8 +140,10 @@ async function persistSubmission(body, normalised) {
       performance_context_json, marketing_consent, allow_partial, height_cm, weight_kg,
       five_km_pb_seconds, ten_km_pb_seconds, half_marathon_pb_seconds, back_squat_kg,
       deadlift_kg, front_squat_kg, max_unbroken_wall_balls, injury_constraints, equipment_access
+      , penalties_json, race_replay_json
     ) VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26::jsonb,$27::jsonb
+      ,$28::jsonb,$29::jsonb
     ) RETURNING *`,
     [
       athlete.email,
@@ -138,21 +158,23 @@ async function persistSubmission(body, normalised) {
       race.source ?? "manual",
       JSON.stringify(body.splits ?? []),
       normalised.roxzoneMode ?? "none",
-      JSON.stringify(athleteContext),
+      JSON.stringify(athleteContextJson),
       JSON.stringify(performance),
       body.marketingConsent === true,
       body.allowPartial === true,
       performance.heightCm ?? null,
       performance.weightKg ?? null,
-      performance.fiveKmPbSeconds ?? null,
-      performance.tenKmPbSeconds ?? null,
+      fiveKmPbSeconds,
+      tenKmPbSeconds,
       performance.halfMarathonPbSeconds ?? null,
-      performance.backSquatKg ?? null,
-      performance.deadliftKg ?? null,
+      backSquatKg,
+      deadliftKg,
       performance.frontSquatKg ?? null,
       performance.maxUnbrokenWallBalls ?? null,
       JSON.stringify(performance.injuryConstraints ?? []),
       JSON.stringify(performance.equipmentAccess ?? []),
+      JSON.stringify(body.penalties ?? []),
+      JSON.stringify(body.raceReplay ?? []),
     ],
   );
   return result.rows[0];
@@ -213,7 +235,7 @@ export async function analyse(req, res) {
     const body = req.body ?? {};
     const input = submissionInput(body);
     const normalised = normaliseSubmission(input);
-    const unsupportedDivision = ["doubles", "mixed_doubles", "relay"].includes(String(input.race.division).toLowerCase());
+    const unsupportedDivision = ["mixed_doubles", "relay"].includes(String(input.race.division).toLowerCase());
     const analysisJson = unsupportedDivision
       ? limitedAnalysis(body, normalised, "doubles_relay_not_supported_v1")
       : analyseSubmission(input);
