@@ -86,6 +86,15 @@ function groupFromSelection(selection) {
   };
 }
 
+const ENRICHED_DOUBLES_DIVISIONS = new Set([
+  "doubles_male",
+  "doubles_female",
+  "doubles_mixed",
+  "pro_doubles_male",
+  "pro_doubles_female",
+  "pro_doubles_mixed",
+]);
+
 export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const datasetVersion = options.datasetVersion ?? DEFAULT_DATASET_VERSION;
   if (!hasBenchmarkData()) {
@@ -107,7 +116,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const isAnalyseMode = calculatorMode === "analyse";
 
   const rawDivision = normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division ?? "open";
-  const isDoubles = rawDivision === "doubles" || rawDivision === "mixed_doubles";
+  const isDoubles = rawDivision === "doubles" || rawDivision === "mixed_doubles" || ENRICHED_DOUBLES_DIVISIONS.has(rawDivision);
   const gender = normalizeSex(normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender ?? "unknown");
   let division = rawDivision;
   let doublesBenchmarkedAsSingles = false;
@@ -118,11 +127,13 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
 
   if (isDoubles) {
     const doublesDivision =
-      rawDivision === "mixed_doubles" ? "doubles_mixed"
+      ENRICHED_DOUBLES_DIVISIONS.has(rawDivision) ? rawDivision
+        : rawDivision === "mixed_doubles" ? "doubles_mixed"
         : gender === "female" ? "doubles_female"
           : "doubles_male";
 
-    if (featureFlags.useDoublesBenchmarkDataset) {
+    const doublesSource = featureFlags.doublesBenchmarkSource;
+    if (doublesSource === "enriched" || doublesSource === "auto") {
       const doublesRequest = {
         datasetVersion: "doubles_v1",
         division: doublesDivision,

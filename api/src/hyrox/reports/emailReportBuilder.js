@@ -1848,6 +1848,20 @@ function renderDoublesCaveat(analysisJson = {}) {
   </tr>`;
 }
 
+function renderDoublesConfirmation(analysisJson = {}) {
+  if (!analysisJson.benchmarkContext?.useDoublesBenchmarks) return "";
+  const n = analysisJson.benchmarkContext?.primaryBenchmarkGroup?.sampleSize;
+  const populationText = n ? `${n.toLocaleString()} doubles teams` : "a dedicated doubles population";
+  return `<tr>
+    <td style="background-color:#ffffff;padding:0 24px 18px;">
+      <div style="background-color:#f0fdf4;border:1px solid #bbf7d0;border-left:3px solid #22c55e;border-radius:8px;padding:14px 18px;">
+        <span style="display:block;color:#166534;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">DOUBLES BENCHMARK</span>
+        <p style="color:#14532d;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:0;">This HYROX Doubles result is benchmarked against ${esc(populationText)} - a dedicated doubles dataset, not singles data.</p>
+      </div>
+    </td>
+  </tr>`;
+}
+
 function renderMethodNote(hasMaterialPenalties = false, calculatorMode = "target") {
   const penaltyNote = hasMaterialPenalties
     ? " Penalties are separated from running in the gap breakdown to avoid confusing execution leakage with run fitness."
@@ -2137,6 +2151,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
           ${renderMetricStrip(analysisJson, athleteContext, calculatorMode)}
           ${renderBenchmarkExplanation(analysisJson, calculatorMode)}
           ${renderDoublesCaveat(analysisJson)}
+          ${renderDoublesConfirmation(analysisJson)}
           ${sectionRows}
           ${renderTargetModeNudge(athleteContext, calculatorMode)}
           ${renderMethodNote(emailPenaltiesMaterial, calculatorMode)}

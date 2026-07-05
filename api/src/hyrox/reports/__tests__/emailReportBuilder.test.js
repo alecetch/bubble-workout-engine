@@ -87,6 +87,56 @@ describe("buildEmailReport visual redesign", () => {
     assert.equal(report.htmlBody.startsWith("<!DOCTYPE html>"), true);
   });
 
+  it("shows doubles confirmation note when useDoublesBenchmarks is true", () => {
+    const report = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          useDoublesBenchmarks: true,
+          doublesBenchmarkedAsSingles: false,
+          primaryBenchmarkGroup: { sampleSize: 8359 },
+        },
+      }),
+      mockContext(),
+    );
+
+    assert.ok(report.htmlBody.includes("DOUBLES BENCHMARK"));
+    assert.ok(report.htmlBody.includes("8,359 doubles teams"));
+    assert.ok(!report.htmlBody.includes("DOUBLES RESULT"));
+  });
+
+  it("does not show either doubles block for singles submissions", () => {
+    const report = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          useDoublesBenchmarks: false,
+          doublesBenchmarkedAsSingles: false,
+        },
+      }),
+      mockContext(),
+    );
+
+    assert.ok(!report.htmlBody.includes("DOUBLES BENCHMARK"));
+    assert.ok(!report.htmlBody.includes("DOUBLES RESULT"));
+  });
+
+  it("still shows legacy caveat when doublesBenchmarkedAsSingles is true", () => {
+    const report = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          useDoublesBenchmarks: false,
+          doublesBenchmarkedAsSingles: true,
+        },
+      }),
+      mockContext(),
+    );
+
+    assert.ok(report.htmlBody.includes("DOUBLES RESULT"));
+    assert.ok(!report.htmlBody.includes("DOUBLES BENCHMARK"));
+  });
+
   it("does not emit class attributes", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
     assert.equal(htmlBody.includes('class="'), false);

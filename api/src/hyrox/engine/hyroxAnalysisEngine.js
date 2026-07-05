@@ -83,7 +83,17 @@ function dataQuality(normalised, benchmarkContext) {
 
 function analysisScope(input, normalised, benchmarkContext) {
   const division = normalised.athlete?.division ?? normalised.race?.division;
-  if (division && !["open", "pro", "doubles", "doubles_male", "doubles_female", "doubles_mixed"].includes(division)) return "limited";
+  if (division && ![
+    "open",
+    "pro",
+    "doubles",
+    "doubles_male",
+    "doubles_female",
+    "doubles_mixed",
+    "pro_doubles_male",
+    "pro_doubles_female",
+    "pro_doubles_mixed",
+  ].includes(division)) return "limited";
   if (!benchmarkContext.available) return "no_benchmark_data";
   const supplied = normalised.completeness.runSplits + normalised.completeness.stationSplits;
   if (supplied < 8) return "limited";

@@ -16,6 +16,7 @@ const SUB_70_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_70:open:male";
 const DOUBLES_HISTORICAL_KEY = "hyrox:historical_hyrox_2026_06_v1:doubles:male:all";
 const DOUBLES_MALE_KEY = "hyrox:doubles_v1:doubles_male:all:all";
 const DOUBLES_MIXED_KEY = "hyrox:doubles_v1:doubles_mixed:all:all";
+const PRO_DOUBLES_MALE_KEY = "hyrox:doubles_v1:pro_doubles_male:all:all";
 
 function metric(groupKey, metricKey = "total_time", sampleSize = 500) {
   return {
@@ -56,6 +57,7 @@ function submission(finishTimeSeconds) {
 
 beforeEach(() => {
   delete process.env.USE_DOUBLES_BENCHMARK_DATASET;
+  delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
   seedBenchmarks();
 });
 
@@ -196,6 +198,75 @@ describe("selectBenchmarkGroups doubles routing", () => {
     assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MALE_KEY);
   });
 
+  it("uses enriched doubles groups when source is enriched", () => {
+    process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "enriched";
+    setBenchmarkData({
+      groups: [
+        { groupKey: DEMOGRAPHIC_KEY, datasetVersion: DATASET, division: "open", gender: "male", sampleSize: 500 },
+        { groupKey: DOUBLES_MALE_KEY, datasetVersion: "doubles_v1", division: "doubles_male", gender: "all", ageGroup: "all", sampleSize: 150 },
+      ],
+      metrics: [
+        metric(DEMOGRAPHIC_KEY),
+        metric(DOUBLES_MALE_KEY, "total_time", 150),
+      ],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.useDoublesBenchmarks, true);
+    assert.equal(result.doublesBenchmarkedAsSingles, false);
+    assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MALE_KEY);
+  });
+
+  it("uses enriched doubles groups when source is auto and sample is sufficient", () => {
+    process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "auto";
+    setBenchmarkData({
+      groups: [
+        { groupKey: DEMOGRAPHIC_KEY, datasetVersion: DATASET, division: "open", gender: "male", sampleSize: 500 },
+        { groupKey: DOUBLES_MALE_KEY, datasetVersion: "doubles_v1", division: "doubles_male", gender: "all", ageGroup: "all", sampleSize: 150 },
+      ],
+      metrics: [
+        metric(DEMOGRAPHIC_KEY),
+        metric(DOUBLES_MALE_KEY, "total_time", 150),
+      ],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.useDoublesBenchmarks, true);
+    assert.equal(result.doublesBenchmarkedAsSingles, false);
+    assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MALE_KEY);
+  });
+
+  it("falls back to singles when source is legacy even if enriched doubles groups exist", () => {
+    process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "legacy";
+    setBenchmarkData({
+      groups: [
+        { groupKey: DEMOGRAPHIC_KEY, datasetVersion: DATASET, division: "open", gender: "male", sampleSize: 500 },
+        { groupKey: DOUBLES_MALE_KEY, datasetVersion: "doubles_v1", division: "doubles_male", gender: "all", ageGroup: "all", sampleSize: 150 },
+      ],
+      metrics: [
+        metric(DEMOGRAPHIC_KEY),
+        metric(DOUBLES_MALE_KEY, "total_time", 150),
+      ],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.useDoublesBenchmarks, false);
+    assert.equal(result.doublesBenchmarkedAsSingles, true);
+    assert.equal(result.primaryBenchmarkGroup.key, DEMOGRAPHIC_KEY);
+  });
+
   it("maps mixed_doubles to the doubles_mixed group", () => {
     process.env.USE_DOUBLES_BENCHMARK_DATASET = "true";
     setBenchmarkData({
@@ -212,6 +283,24 @@ describe("selectBenchmarkGroups doubles routing", () => {
 
     assert.equal(result.useDoublesBenchmarks, true);
     assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MIXED_KEY);
+  });
+
+  it("uses enriched pro doubles groups when the submission division is explicit", () => {
+    process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "enriched";
+    setBenchmarkData({
+      groups: [
+        { groupKey: PRO_DOUBLES_MALE_KEY, datasetVersion: "doubles_v1", division: "pro_doubles_male", gender: "all", ageGroup: "all", sampleSize: 500 },
+      ],
+      metrics: [metric(PRO_DOUBLES_MALE_KEY, "total_time", 500)],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "pro_doubles_male", sex: "male" },
+      race: { division: "pro_doubles_male", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.useDoublesBenchmarks, true);
+    assert.equal(result.primaryBenchmarkGroup.key, PRO_DOUBLES_MALE_KEY);
   });
 
   it("leaves singles submissions unaffected when the flag is set", () => {

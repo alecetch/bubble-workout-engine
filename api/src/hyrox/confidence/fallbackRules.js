@@ -25,7 +25,17 @@ function adjacentAgeBand(ageGroup) {
 }
 
 function isIndividualDivision(division) {
-  return ["open", "pro", "doubles", "doubles_male", "doubles_female", "doubles_mixed"].includes(division);
+  return [
+    "open",
+    "pro",
+    "doubles",
+    "doubles_male",
+    "doubles_female",
+    "doubles_mixed",
+    "pro_doubles_male",
+    "pro_doubles_female",
+    "pro_doubles_mixed",
+  ].includes(division);
 }
 
 export function buildFallbackChain(request = {}) {

@@ -88,9 +88,9 @@ function requestFromSubmission(normalisedSubmission, benchmarkContext) {
   const group = benchmarkContext?.primaryBenchmarkGroup ?? {};
   const request = {
     datasetVersion: group.datasetVersion,
-    division: normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division,
-    gender: normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender,
-    ageGroup: normalisedSubmission.athlete?.ageGroup ?? null,
+    division: group.division ?? normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division,
+    gender: group.gender ?? normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender,
+    ageGroup: group.ageGroup ?? normalisedSubmission.athlete?.ageGroup ?? null,
   };
   if (group.performanceBand) {
     request.performanceBand = group.performanceBand;
