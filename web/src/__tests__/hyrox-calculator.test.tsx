@@ -236,11 +236,13 @@ describe("RaceDetailsPage validation", () => {
   });
 
   function renderRacePage() {
-    return render(
-      <MemoryRouter initialEntries={["/hyrox-calculator"]}>
+    const rendered = render(
+      <MemoryRouter initialEntries={["/hyrox-calculator/race-details?mode=target"]}>
         <RaceDetailsPage />
       </MemoryRouter>,
     );
+    fireEvent.click(screen.getByRole("button", { name: /or enter manually/i }));
+    return rendered;
   }
 
   test("target finish time is required before continuing past Page 1", async () => {

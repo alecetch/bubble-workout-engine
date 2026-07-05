@@ -403,16 +403,23 @@ test("selectBenchmark uses performance-target chain when option is set", () => {
 // ── Section 5 – hard-stop conditions ──────────────────────────────────────────
 
 test("non-individual division produces empty fallback chain", () => {
-  const chain = buildFallbackChain({ ...BASE_REQUEST, division: "doubles" });
+  const chain = buildFallbackChain({ ...BASE_REQUEST, division: "relay" });
 
   assert.equal(chain.length, 0);
 });
 
 test("selectBenchmark suppresses for non-individual division", () => {
-  const selection = selectBenchmark({ ...BASE_REQUEST, division: "doubles" }, "wall_balls", "overallPercentile");
+  const selection = selectBenchmark({ ...BASE_REQUEST, division: "relay" }, "wall_balls", "overallPercentile");
 
   assert.equal(selection.suppressed, true);
   assert.equal(selection.reason, "no_benchmark_meets_threshold");
+});
+
+test("doubles division is individual and produces a valid fallback chain", () => {
+  const chain = buildFallbackChain({ ...BASE_REQUEST, division: "doubles" });
+
+  assert.ok(chain.length > 0);
+  assert.equal(chain[0].division, "doubles");
 });
 
 test("pro division is individual and produces a valid fallback chain", () => {

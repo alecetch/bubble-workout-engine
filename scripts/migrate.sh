@@ -54,13 +54,25 @@ else
   DB_PASSWORD="${PGPASSWORD}"
 fi
 
-docker run --rm \
-  --network host \
-  -v "$(pwd)/migrations:/flyway/sql:ro" \
-  flyway/flyway:12 \
-  -url="${JDBC_URL}" \
-  -user="${DB_USER}" \
-  -password="${DB_PASSWORD}" \
-  -schemas=public \
-  -ignoreMigrationPatterns="*:missing" \
-  migrate
+FLYWAY_COMMON_ARGS=(
+  --rm
+  --network host
+  -v "$(pwd)/migrations:/flyway/sql:ro"
+  flyway/flyway:12
+  -url="${JDBC_URL}"
+  -user="${DB_USER}"
+  -password="${DB_PASSWORD}"
+  -schemas=public
+  -ignoreMigrationPatterns="*:missing"
+)
+
+# Repair first: updates checksums in schema history for any migrations whose files
+# changed after being applied (e.g. placeholder rows with checksum 0).
+docker run "${FLYWAY_COMMON_ARGS[@]}" repair
+
+# When connecting via a proxy (e.g. Fly MPG), each Docker Flyway container opens a
+# fresh TCP connection. The proxy can briefly reset after the repair container exits,
+# causing the migrate container to get an EOF on connect. A short pause lets it settle.
+sleep 3
+
+docker run "${FLYWAY_COMMON_ARGS[@]}" migrate

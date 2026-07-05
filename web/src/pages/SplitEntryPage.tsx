@@ -6,6 +6,7 @@ import { SplitTable } from "../components/SplitTable";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
 import { SideStepper } from "../components/SideStepper";
+import { getJourneyVariant, isRestoredTargetBranch } from "../utils/journeyUtils";
 import { loadDraft, saveDraft } from "../utils/storage";
 import { parseTimeToSeconds, formatSeconds } from "../utils/time";
 import { trackEvent } from "../utils/api";
@@ -140,7 +141,8 @@ export function SplitEntryPage() {
     }));
     saveDraft({ splits });
     trackEvent("splits_completed");
-    void navigate("/hyrox-calculator/context");
+    const variant = getJourneyVariant(loadDraft());
+    void navigate(isRestoredTargetBranch(variant) ? "/hyrox-calculator/target-calibration" : "/hyrox-calculator/context");
   }
 
   return (
@@ -202,7 +204,7 @@ export function SplitEntryPage() {
               <div className={splitsEntered === 16 ? styles.actionStatusGood : styles.actionStatusWarn}>
                 {splitsEntered}/16 complete
               </div>
-              <SecondaryButton type="button" className={styles.compactButton} onClick={() => void navigate("/hyrox-calculator")}>
+              <SecondaryButton type="button" className={styles.compactButton} onClick={() => void navigate("/hyrox-calculator/race-details")}>
                 Back
               </SecondaryButton>
               <PrimaryButton type="button" className={styles.compactButton} onClick={handleNext}>
@@ -326,7 +328,7 @@ export function SplitEntryPage() {
                           This draft has old RoxZone replay clock values. Reimport the result URL to capture Diff-column RoxZone durations.
                         </div>
                         <div className={styles.emptyActions}>
-                          <SecondaryButton type="button" onClick={() => void navigate("/hyrox-calculator")}>
+                          <SecondaryButton type="button" onClick={() => void navigate("/hyrox-calculator/race-details")}>
                             Back to Import
                           </SecondaryButton>
                         </div>

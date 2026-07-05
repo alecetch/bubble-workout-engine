@@ -22,7 +22,7 @@ export interface HyroxCalculatorDraft {
   athlete: {
     name?: string;
     email?: string;
-    gender: "male" | "female";
+    gender: "male" | "female" | "mixed";
     ageOnRaceDay?: number;
     ageGroup?: string;
   };
@@ -43,8 +43,23 @@ export interface HyroxCalculatorDraft {
     weeklyStrengthSessions?: string;
     targetFinishTimeSeconds?: number;
     additionalContext?: string;
+    run5kPbSeconds?: number;
+    run10kPbSeconds?: number;
+    backSquat3RMKg?: number;
+    deadlift3RMKg?: number;
+    rowErg2kSeconds?: number;
+    skiErg1kSeconds?: number;
+    wallBallRepsIn2Min?: number;
+    farmerCarry200mSeconds?: number;
+    targetRaceDate?: string;
   };
   marketingConsent: boolean;
+  meta?: {
+    source?: "analysis_email" | "analysis_complete";
+    sourceSubmissionId?: string;
+    calibrationCompleted?: boolean;
+    calibrationSkipped?: boolean;
+  };
 }
 
 export interface HyroxAnalysisRequest {
@@ -52,7 +67,7 @@ export interface HyroxAnalysisRequest {
   athlete: {
     name?: string;
     email: string;
-    sex: "male" | "female";
+    sex: "male" | "female" | "mixed";
     ageOnRaceDay?: number;
     ageGroup?: string;
   };
@@ -72,6 +87,15 @@ export interface HyroxAnalysisRequest {
     weeklyStrengthSessions?: string;
     targetFinishTimeSeconds?: number;
     additionalContext?: string;
+    run5kPbSeconds?: number;
+    run10kPbSeconds?: number;
+    backSquat3RMKg?: number;
+    deadlift3RMKg?: number;
+    rowErg2kSeconds?: number;
+    skiErg1kSeconds?: number;
+    wallBallRepsIn2Min?: number;
+    farmerCarry200mSeconds?: number;
+    targetRaceDate?: string;
   };
   marketingConsent: boolean;
   website?: string;
@@ -117,6 +141,11 @@ export interface HyroxAnalysisResponse {
   carouselDataAvailable: boolean;
   analysisVersion: string;
   calculatorMode?: "target" | "analyse";
+}
+
+export interface HyroxSubmissionDraftResponse {
+  submissionId: string;
+  draft: HyroxCalculatorDraft;
 }
 
 export interface SegmentDefinition {

@@ -33,9 +33,36 @@ export const VALIDATION_THRESHOLDS = Object.freeze({
     roxzone_8: Object.freeze({ min: 0, max: 300 }),
     roxzone_time: Object.freeze({ min: 0, max: 1200 }),
   }),
+  doublesPlausibility: Object.freeze({
+    run_1: Object.freeze({ min: 150, max: 900 }),
+    run_2: Object.freeze({ min: 150, max: 900 }),
+    run_3: Object.freeze({ min: 150, max: 900 }),
+    run_4: Object.freeze({ min: 150, max: 900 }),
+    run_5: Object.freeze({ min: 150, max: 900 }),
+    run_6: Object.freeze({ min: 150, max: 900 }),
+    run_7: Object.freeze({ min: 150, max: 900 }),
+    run_8: Object.freeze({ min: 150, max: 1200 }),
+    ski_erg: Object.freeze({ min: 150, max: 900 }),
+    sled_push: Object.freeze({ min: 25, max: 720 }),
+    sled_pull: Object.freeze({ min: 25, max: 720 }),
+    burpee_broad_jump: Object.freeze({ min: 75, max: 1200 }),
+    row: Object.freeze({ min: 90, max: 900 }),
+    farmers_carry: Object.freeze({ min: 45, max: 600 }),
+    sandbag_lunges: Object.freeze({ min: 60, max: 1080 }),
+    wall_balls: Object.freeze({ min: 60, max: 1200 }),
+    roxzone_1: Object.freeze({ min: 0, max: 300 }),
+    roxzone_2: Object.freeze({ min: 0, max: 300 }),
+    roxzone_3: Object.freeze({ min: 0, max: 300 }),
+    roxzone_4: Object.freeze({ min: 0, max: 300 }),
+    roxzone_5: Object.freeze({ min: 0, max: 300 }),
+    roxzone_6: Object.freeze({ min: 0, max: 300 }),
+    roxzone_7: Object.freeze({ min: 0, max: 300 }),
+    roxzone_8: Object.freeze({ min: 0, max: 300 }),
+    roxzone_time: Object.freeze({ min: 0, max: 1200 }),
+  }),
 });
 
-export const INDIVIDUAL_BENCHMARK_DIVISIONS = Object.freeze(["open", "pro"]);
+export const INDIVIDUAL_BENCHMARK_DIVISIONS = Object.freeze(["open", "pro", "doubles"]);
 export const MIN_EXACT_GROUP_SIZE = 20;
 export const PERFORMANCE_BANDS = Object.freeze([
   { key: "sub_60", maxSeconds: 60 * 60 },

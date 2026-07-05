@@ -1,6 +1,10 @@
 import { MUSCLE_GROUP_MAP } from "../config/muscleGroupMap.js";
 import { formatGain, formatPercent, formatPercentile, formatPercentileRank, formatTime, label } from "../reports/copyFormatter.js";
 
+function pluralStation(label) {
+  return /lunges|balls|jumps$/i.test(String(label ?? ""));
+}
+
 const DEFAULT_SECTION_ORDER = Object.freeze([
   "executive_summary",
   "data_confidence",
@@ -79,6 +83,22 @@ const HIGH_PERFORMER_SECTION_ORDER = Object.freeze([
   "recommendations",
 ]);
 
+const NEXT_BAND_SECTION_ORDER = Object.freeze([
+  "executive_summary",
+  "data_confidence",
+  "race_snapshot",
+  "station_breakdown",
+  "running_fatigue",
+  "roxzone_execution",
+  "split_table",
+  "biggest_strength",
+  "muscle_group",
+  "time_potential",
+  "training_volume",
+  "background_context",
+  "recommendations",
+]);
+
 const MUSCLE_BY_SEGMENT = new Map(MUSCLE_GROUP_MAP.map((row) => [row.segmentKey, row]));
 
 function finiteNumber(value) {
@@ -91,6 +111,33 @@ export function totalPenaltySeconds(analysisJson = {}) {
     .reduce((sum, p) => sum + (Number(p.penaltySeconds) || 0), 0);
 }
 
+function athleteLevel(analysisJson = {}) {
+  const penaltySeconds = totalPenaltySeconds(analysisJson);
+  const achievedBand = analysisJson.benchmarkContext?.achievedBand;
+  if (penaltySeconds >= 300) return "penalty_heavy";
+  if (achievedBand === "sub_60") return "elite";
+  if (achievedBand === "sub_65" || achievedBand === "sub_70") return "competitive";
+  if (achievedBand === "sub_75" || achievedBand === "sub_80") return "mid_pack";
+  return "developing";
+}
+
+function guardEliteLanguage(text, level) {
+  if (level !== "elite") return text;
+  return String(text)
+    .replace(/\bweakness\b/gi, "least aligned split")
+    .replace(/\bmain limiter\b/gi, "next marginal gain")
+    .replace(/\bbiggest limiter\b/gi, "next refinement area");
+}
+
+function guardCopyValue(value, level) {
+  if (typeof value === "string") return guardEliteLanguage(value, level);
+  if (Array.isArray(value)) return value.map((item) => guardCopyValue(item, level));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, guardCopyValue(item, level)]));
+  }
+  return value;
+}
+
 export function totalStationGapSeconds(analysisJson = {}) {
   return (analysisJson.stationBreakdown ?? [])
     .filter((s) => s.confidence !== "low" && s.timeGapSeconds > 0)
@@ -99,8 +146,11 @@ export function totalStationGapSeconds(analysisJson = {}) {
 
 export function totalRunGapSeconds(analysisJson = {}) {
   return (analysisJson.segments ?? [])
-    .filter((s) => s.type === "run" && Number.isFinite(s.timeGapToMedianSeconds) && s.timeGapToMedianSeconds > 0)
-    .reduce((sum, s) => sum + s.timeGapToMedianSeconds, 0);
+    .filter((s) => {
+      const gap = s.frameGapSeconds ?? s.timeGapToMedianSeconds;
+      return s.type === "run" && Number.isFinite(gap) && gap > 0;
+    })
+    .reduce((sum, s) => sum + (s.frameGapSeconds ?? s.timeGapToMedianSeconds), 0);
 }
 
 export function weakStationCount(analysisJson = {}) {
@@ -173,9 +223,10 @@ function thesis(category, analysisJson = {}, overrides = {}) {
   };
 
   if (category === "penalty") {
+    const penStr = formatGain(penalty);
     return {
       ...base,
-      headline: "Penalty time is the fastest win",
+      headline: `${penStr} of penalties is your fastest win`,
       evidenceSummary: `${formatGain(penalty)} in penalties were recorded.`,
       estimatedImpactSeconds: penalty,
       copyAngle: "urgent_fix",
@@ -184,9 +235,17 @@ function thesis(category, analysisJson = {}, overrides = {}) {
     };
   }
   if (category === "station_capacity") {
+    const level = athleteLevel(analysisJson);
+    const stationHeadlines = {
+      elite: `${limiterLabel(analysisJson)} is the least aligned split - this is where the next marginal gain sits`,
+      competitive: `${limiterLabel(analysisJson)} is what moves you toward the next band`,
+      mid_pack: `${limiterLabel(analysisJson)} is your biggest opportunity`,
+      penalty_heavy: `${limiterLabel(analysisJson)} is the main fitness limiter - but penalties are faster to fix`,
+      developing: `${limiterLabel(analysisJson)} is your biggest opportunity`,
+    };
     return {
       ...base,
-      headline: "Station capacity is the biggest limiter",
+      headline: stationHeadlines[level] ?? "Station capacity is the biggest limiter",
       evidenceSummary: stationThesisEvidence(analysisJson),
       estimatedImpactSeconds: stationGap || headlineGainSeconds(analysisJson),
       copyAngle: "next_block",
@@ -344,7 +403,17 @@ function muscleGroupConfidence(analysisJson = {}) {
   return "low";
 }
 
-export function buildSectionOrder(primaryThesis, analysisJson = {}) {
+export function buildSectionOrder(primaryThesis, analysisJson = {}, calculatorMode = "target") {
+  const frame = analysisJson.benchmarkContext?.analysisFrame?.frame;
+  if (calculatorMode === "analyse" && (frame === "next_band" || frame === "next_band_stretch")) {
+    const order = [...NEXT_BAND_SECTION_ORDER];
+    const hasPenalty = totalPenaltySeconds(analysisJson) > 0;
+    if (hasPenalty && !order.includes("penalty_callout")) {
+      const snapIdx = order.indexOf("race_snapshot");
+      order.splice(snapIdx >= 0 ? snapIdx + 1 : 2, 0, "penalty_callout");
+    }
+    return applyDataConfidenceOrder(order, analysisJson);
+  }
   if (primaryThesis?.category === "high_performer") {
     const order = [...HIGH_PERFORMER_SECTION_ORDER];
     const hasPenalty = totalPenaltySeconds(analysisJson) > 0;
@@ -373,50 +442,211 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
   const gain = headlineGainSeconds(analysisJson);
   const gainDisplay = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : null;
   const lLabel = limiterLabel(analysisJson);
+  const analysisFrame = analysisJson?.benchmarkContext?.analysisFrame;
+  const frame = analysisFrame?.frame;
+  const compBandLabel = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
+  const stretchBandLabel = analysisFrame?.stretchBand?.replace("sub_", "sub-") ?? null;
   if (category === "penalty") {
+    const winLabel = calculatorMode !== "analyse" ? "FIRST TARGET WIN" : "FASTEST WIN";
     return {
-      headline: `${formatGain(totalPenaltySeconds(analysisJson))} OF PENALTIES IS YOUR FASTEST WIN`,
-      subline: "Cleaner execution reclaims that time without a training block.",
+      headline: `${formatGain(totalPenaltySeconds(analysisJson))} OF PENALTIES IS YOUR ${winLabel}`,
+      subline: calculatorMode !== "analyse"
+        ? "Removing penalties reduces the target gap before any fitness change."
+        : "Cleaner execution reclaims that time without a training block.",
       gainDisplay: null,
     };
   }
-  if (category === "running") {
+  if (calculatorMode === "analyse" && athleteLevel(analysisJson) === "competitive") {
+    const achievedBand = analysisJson.benchmarkContext?.achievedBand;
+    const nextBandLabel = analysisJson.benchmarkContext?.nextBand?.replace("sub_", "sub-");
+    const achievedLabel = achievedBand?.replace("sub_", "sub-");
+    if (achievedLabel) {
+      return {
+        headline: nextBandLabel
+          ? `YOU ARE COMPETITIVE IN ${achievedLabel.toUpperCase()} — HERE IS WHAT MOVES YOU TOWARD ${nextBandLabel.toUpperCase()}`
+          : `You are competitive in ${achievedLabel}`,
+        subline: nextBandLabel && category === "station_capacity"
+          ? `The gap to ${nextBandLabel} is within reach. Station efficiency is the lever.`
+          : "The next gains are specific, not generic.",
+        gainDisplay: null,
+      };
+    }
+  }
+  if (calculatorMode === "analyse" && (frame === "next_band" || frame === "next_band_stretch")) {
+    const bandTarget = compBandLabel ?? "the next band";
+    if (category === "station_capacity") {
+      return {
+        headline: `${String(lLabel).toUpperCase()} IS THE KEY TO REACHING ${String(bandTarget).toUpperCase()}`,
+        subline: stretchBandLabel
+          ? `Fix this and ${stretchBandLabel} comes into view.`
+          : `This is where the time is hiding in the jump to ${bandTarget}.`,
+        gainDisplay: null,
+      };
+    }
+    if (category === "running") {
+      return {
+        headline: `YOUR RUNNING IS THE ROUTE TO ${String(bandTarget).toUpperCase()}`,
+        subline: stretchBandLabel
+          ? `Sort the running and ${stretchBandLabel} comes into view.`
+          : `Running is where ${bandTarget} athletes have an edge.`,
+        gainDisplay: null,
+      };
+    }
+  }
+  if (calculatorMode === "analyse" && frame === "competitive") {
+    const nextBandLabel = stretchBandLabel;
+    if (category === "station_capacity" && nextBandLabel) {
+      return {
+        headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
+        subline: `You are competitive in your group. This is the gap that limits ${nextBandLabel}.`,
+        gainDisplay: null,
+      };
+    }
+  }
+  if (calculatorMode === "analyse" && category === "running") {
     return { headline: "YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP", subline: "Closing that gap unlocks your finish time.", gainDisplay: null };
   }
-  if (category === "roxzone") {
+  if (calculatorMode === "analyse" && category === "roxzone") {
     return { headline: "TRANSITION LEAKAGE IS COSTING YOU FREE TIME", subline: "Roxzone efficiency is your lowest-effort gain.", gainDisplay: null };
   }
-  if (category === "pacing") {
-    return { headline: "YOU HAVE THE ENGINE - THE CEILING IS EXECUTION", subline: "Pacing discipline is the next unlock.", gainDisplay: null };
+  if (calculatorMode === "analyse" && category === "pacing") {
+    return { headline: "YOU HAVE THE ENGINE — THE CEILING IS EXECUTION", subline: "Pacing discipline is the next unlock.", gainDisplay: null };
   }
   if (category === "data_quality") {
-    return { headline: "YOUR ANALYSIS IS READY - HERE IS WHAT WE CAN SAY CONFIDENTLY", subline: null, gainDisplay: null };
+    return { headline: "YOUR ANALYSIS IS READY — HERE IS WHAT WE CAN SAY CONFIDENTLY", subline: null, gainDisplay: null };
+  }
+  if (calculatorMode !== "analyse") {
+    const totalSegment = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+    const targetSecs = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+      ?? totalSegment?.exactTargetSeconds
+      ?? null;
+    const targetStr = targetSecs ? formatTime(targetSecs) : null;
+    const isEliteBand = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+
+    if (category === "high_performer") {
+      if (isEliteBand && targetStr) {
+        return {
+          headline: `THE SUB-60 TARGET GAP STARTS WITH ${lLabel ? String(lLabel).toUpperCase() : "STATION REFINEMENT"}`,
+          subline: lLabel
+            ? `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} the first target refinement at this level.`
+            : "Protect what works. Find the smallest combination of gains.",
+          gainDisplay: null,
+        };
+      }
+      return {
+        headline: targetStr
+          ? `YOUR ENGINE IS CLOSE — THE ROUTE TO ${targetStr} IS STATION EFFICIENCY`
+          : "YOUR ENGINE IS CLOSE — STATION EFFICIENCY CLOSES THE GAP",
+        subline: "You are already competitive. The target requires precision, not a rebuild.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "station_capacity") {
+      if (isEliteBand && targetStr) {
+        return {
+          headline: lLabel
+            ? `THE SUB-60 TARGET GAP STARTS WITH ${String(lLabel).toUpperCase()}`
+            : "THE TARGET IS AN ELITE STRETCH",
+          subline: lLabel
+            ? `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} the biggest target gap. At this level, this is refinement, not remediation.`
+            : "Every second is marginal territory.",
+          gainDisplay: null,
+        };
+      }
+      return {
+        headline: targetStr && lLabel
+          ? `THE ROUTE TO ${targetStr} STARTS WITH ${String(lLabel).toUpperCase()}`
+          : "YOUR ENGINE IS CLOSE — STATION EFFICIENCY CLOSES THE GAP",
+        subline: "Station efficiency is the main lever between now and your target.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "pacing") {
+      return {
+        headline: "THE TARGET IS NOT JUST FASTER RUNNING — STATIONS CLOSE THE GAP",
+        subline: targetStr
+          ? `The route to ${targetStr} runs through station efficiency, not aerobic output.`
+          : "Engine is there. The target gap is in execution.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "running") {
+      return {
+        headline: targetStr
+          ? `THE ROUTE TO ${targetStr} RUNS THROUGH YOUR RUNNING GAP`
+          : "YOUR RUNNING GAP IS THE BIGGEST TARGET LEVER",
+        subline: "Running pace is the main target opportunity.",
+        gainDisplay: null,
+      };
+    }
+
+    if (category === "roxzone") {
+      return {
+        headline: "TRANSITION LEAKAGE IS COSTING YOU TARGET TIME",
+        subline: "Tighter RoxZone execution is a low-effort gain toward the target.",
+        gainDisplay: null,
+      };
+    }
   }
   if (category === "high_performer") {
     const band = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-") || null;
+    const isEliteBand = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+    const limiter = analysisJson.headline?.biggestLimiter?.label ?? null;
+    if (isEliteBand) {
+      return {
+        headline: "YOU ARE SUB-60 — THE NEXT GAIN IS MARGINAL",
+        subline: limiter
+          ? `At this level, we are not looking for weaknesses. ${limiter} ${pluralStation(limiter) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark.`
+          : "The next gain is not basic fitness — it is the smallest relative advantage in your race profile.",
+        gainDisplay: null,
+      };
+    }
     const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
     const pct = formatPercentileRank(totalSeg?.percentile);
-    const groupRef = band ? `the ${band} group` : "your benchmark group";
+    const groupRef = band ? `the ${band} benchmark band` : "your benchmark band";
     return {
       headline: pct
-        ? `YOU ARE IN THE ${String(pct).toUpperCase()} OF ${groupRef.toUpperCase()} - HERE IS WHAT DROVE IT`
-        : `YOUR RESULT IS ALREADY STRONG IN ${groupRef.toUpperCase()} - HERE IS WHAT DROVE IT`,
+        ? `YOU ARE IN THE ${String(pct).toUpperCase()} OF ${groupRef.toUpperCase()} — HERE IS WHAT DROVE IT`
+        : `YOUR RESULT IS ALREADY STRONG IN ${groupRef.toUpperCase()} — HERE IS WHAT DROVE IT`,
       subline: band
-        ? `This is the sharpest end of the ${band} group. Marginal gains apply here.`
+        ? `This is the sharpest end of the ${band} benchmark band. Marginal gains apply here.`
         : "This is a marginal-gains profile, not a bottleneck result.",
       gainDisplay: null,
     };
   }
   if (category === "station_capacity" && calculatorMode === "analyse") {
+    const achievedBandStr = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-");
+    const nextBandStr = (analysisJson.benchmarkContext?.nextBand ?? "").replace("sub_", "sub-");
+    const isEliteBand = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+    const isCompetitive = ["sub_65", "sub_70"].includes(analysisJson.benchmarkContext?.achievedBand ?? "");
+
+    if (isEliteBand) {
+      return {
+        headline: "YOU ARE SUB-60 — THE NEXT GAIN IS MARGINAL",
+        subline: `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark. At this level, this is a refinement, not a remediation.`,
+        gainDisplay: null,
+      };
+    }
+
+    if (isCompetitive && nextBandStr) {
+      return {
+        headline: `YOU ARE COMPETITIVE IN ${achievedBandStr.toUpperCase()} — HERE IS WHAT MOVES YOU TOWARD ${nextBandStr.toUpperCase()}`,
+        subline: `The gap to ${nextBandStr} is within reach. Station efficiency is the lever.`,
+        gainDisplay: null,
+      };
+    }
     return {
       headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
-      subline: "Not a weakness versus the field - the smallest relative advantage in your overall race profile.",
+      subline: "Not a weakness versus the field — the smallest relative advantage in your overall race profile.",
       gainDisplay: null,
     };
   }
   return {
     headline: `${String(lLabel).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`,
-    subline: gainDisplay ? "estimated opportunity against your target benchmark group." : null,
+    subline: gainDisplay ? "estimated opportunity against your benchmark band." : null,
     gainDisplay,
   };
 }
@@ -427,7 +657,6 @@ function secondaryEvidence(secondaryTheses = []) {
 }
 
 export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysisJson = {}, calculatorMode = "target") {
-  void calculatorMode;
   const category = primaryThesis?.category;
   const penalty = buildPenaltyInterpretation(analysisJson);
   const stationGap = totalStationGapSeconds(analysisJson);
@@ -444,10 +673,28 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
       .sort((a, b) => a.percentile - b.percentile)
       .slice(0, 2)
       .map((s) => s.label);
-    if (pct) bullets.push(`You placed in the ${pct} overall against your benchmark group.`);
+    if (pct) bullets.push(`You placed in the ${pct} overall against your benchmark band.`);
     if (topStrengths.length > 0) bullets.push(`Strongest stations: ${topStrengths.join(" and ")}.`);
     bullets.push("The next question is where marginal gains are most available within an already-strong result.");
     return bullets.filter(Boolean).slice(0, 3);
+  }
+
+  const frame2 = analysisJson?.benchmarkContext?.analysisFrame?.frame;
+  const compBand2 = analysisJson?.benchmarkContext?.analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
+  const achievedBandLabel2 = (analysisJson?.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-") || null;
+
+  if (calculatorMode === "analyse" && (frame2 === "next_band" || frame2 === "next_band_stretch")) {
+    const bandTarget2 = compBand2 ?? "the next band";
+    const frameBullets = [];
+    if (achievedBandLabel2) {
+      frameBullets.push(`You are ahead of the median ${achievedBandLabel2} finisher. The next step is ${bandTarget2}.`);
+    }
+    const lLabel = limiterLabel(analysisJson);
+    if (lLabel) {
+      frameBullets.push(`${lLabel} shows the biggest gap versus ${bandTarget2} athletes.`);
+    }
+    frameBullets.push(`Closing this gap is the main route to ${bandTarget2}.`);
+    return frameBullets.filter(Boolean).slice(0, 3);
   }
 
   if (category === "penalty") {
@@ -456,9 +703,38 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
   } else if (category === "station_capacity") {
     const gain = headlineGainSeconds(analysisJson);
     const gainCopy = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : formatGain(stationGap);
-    bullets.push(`${limiterLabel(analysisJson)} is your biggest opportunity - ${gainCopy} against your target benchmark group.`);
+    const achievedBandLabel = (analysisJson.benchmarkContext?.achievedBand ?? "").replace("sub_", "sub-");
+    const nextBandLabel = (analysisJson.benchmarkContext?.nextBand ?? "").replace("sub_", "sub-");
+    const isCompetitive = ["sub_65", "sub_70"].includes(analysisJson.benchmarkContext?.achievedBand ?? "");
+    const isElite = analysisJson.benchmarkContext?.achievedBand === "sub_60";
+
+    if (isElite) {
+      const _ll = limiterLabel(analysisJson);
+      bullets.push(`At this level, we are not looking for limiters. We are looking for the smallest advantage. ${_ll} ${pluralStation(_ll) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark.`);
+    } else if (isCompetitive && nextBandLabel && calculatorMode === "analyse") {
+      bullets.push(`You are already competitive in ${achievedBandLabel}. ${limiterLabel(analysisJson)} shows the biggest gap versus ${nextBandLabel} athletes - closing this is the route to the next band.`);
+    } else if (calculatorMode !== "analyse") {
+      const totalSegment = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+      const targetSecs2 = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+        ?? totalSegment?.exactTargetSeconds
+        ?? null;
+      const tStr = targetSecs2 ? formatTime(targetSecs2) : "your target";
+      const _ll = limiterLabel(analysisJson);
+      bullets.push(`To reach ${tStr}, the biggest station gap is ${_ll}. Closing this is the main target lever.`);
+    } else {
+      bullets.push(`${limiterLabel(analysisJson)} is your biggest opportunity - ${gainCopy} against your benchmark band.`);
+    }
   } else if (category === "running") {
-    bullets.push(`Your cumulative run gap (${formatGain(runGap)}) exceeds your station gap (${formatGain(stationGap)}).`);
+    if (calculatorMode !== "analyse") {
+      const totalSegment = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
+      const targetSecs2 = analysisJson.benchmarkContext?.goalBenchmarkGroup?.targetFinishSeconds
+        ?? totalSegment?.exactTargetSeconds
+        ?? null;
+      const tStr = targetSecs2 ? formatTime(targetSecs2) : "your target";
+      bullets.push(`To reach ${tStr}, running pace needs ${formatGain(runGap)} improvement.`);
+    } else {
+      bullets.push(`Your cumulative run gap (${formatGain(runGap)}) exceeds your station gap (${formatGain(stationGap)}).`);
+    }
   } else if (category === "roxzone") {
     bullets.push(`Transition time put you in the ${formatPercentile(roxPct) ?? "lower range"} of your division.`);
   } else if (category === "pacing") {
@@ -502,20 +778,22 @@ function buildSuppressedSignals(primary, secondaryTheses, analysisJson = {}) {
 
 export function buildInterpretation(analysisJson = {}, athleteContext = {}, calculatorMode = "target") {
   void athleteContext;
+  const level = athleteLevel(analysisJson);
   const primaryCategory = selectPrimaryCategory(analysisJson, calculatorMode);
   const primaryThesis = thesis(primaryCategory, analysisJson);
   const secondaryTheses = buildSecondaryTheses(primaryCategory, analysisJson);
   const penaltyInterpretation = buildPenaltyInterpretation(analysisJson);
-  return {
+  const result = {
     primaryThesis,
     secondaryTheses,
     protectedStrengths: protectedStrengths(analysisJson),
     suppressedSignals: buildSuppressedSignals(primaryCategory, secondaryTheses, analysisJson),
-    sectionOrder: buildSectionOrder(primaryThesis, analysisJson),
+    sectionOrder: buildSectionOrder(primaryThesis, analysisJson, calculatorMode),
     heroCopy: buildHeroCopy(primaryThesis, analysisJson, calculatorMode),
     summaryBullets: buildSummaryBullets(primaryThesis, secondaryTheses, analysisJson, calculatorMode),
     penaltyInterpretation,
     runPattern: analysisJson.runningAnalysis?.runPattern ?? null,
     muscleGroupConfidence: muscleGroupConfidence(analysisJson),
   };
+  return guardCopyValue(result, level);
 }

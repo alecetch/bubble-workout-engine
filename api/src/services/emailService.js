@@ -13,8 +13,8 @@ import { createHash } from "node:crypto";
 import { createTransport } from "nodemailer";
 
 const PROVIDER = (process.env.EMAIL_PROVIDER || "console").trim().toLowerCase();
-const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS || "noreply@formai.local";
-const APP_NAME = process.env.EMAIL_APP_NAME || "Formai";
+const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS || "noreply@forma.fit";
+const APP_NAME = process.env.EMAIL_APP_NAME || "Forma";
 
 // ── Resend (production) ──────────────────────────────────────────────────────
 

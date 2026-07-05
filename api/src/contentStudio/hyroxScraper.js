@@ -13,9 +13,9 @@ function buildIndexUrl(resultsPageKey, seasonNum) {
   return `${base}?event_main_group=${encodeURIComponent(resultsPageKey)}`;
 }
 
-async function fetchHtml(url) {
+async function fetchHtml(url, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { headers: FETCH_HEADERS, signal: controller.signal });
     clearTimeout(timer);
@@ -28,13 +28,13 @@ async function fetchHtml(url) {
 
 // POST multipart form to get the leaderboard HTML.
 // The Mika Timing list page renders server-side only when submitted via POST form.
-async function postListForm(resultsPageKey, contestId, seasonNum, { sex = "", numResults = 50 } = {}) {
+export async function postListForm(resultsPageKey, contestId, seasonNum, { sex = "", numResults = 50, startpage = "start_responsive" } = {}) {
   const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
   const url = `${base}?pid=list&pidp=ranking_nav`;
 
   const body = new FormData();
   body.append("lang", "EN_CAP");
-  body.append("startpage", "start_responsive");
+  body.append("startpage", startpage);
   body.append("startpage_type", "lists");
   body.append("event_main_group", resultsPageKey);
   body.append("event", contestId);
@@ -61,6 +61,21 @@ async function postListForm(resultsPageKey, contestId, seasonNum, { sex = "", nu
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function fetchListPage(resultsPageKey, contestId, seasonNum, { sex = "", numResults = 50, page = 1 } = {}) {
+  const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
+  const url = new URL(base);
+  url.searchParams.set("event", contestId);
+  url.searchParams.set("event_main_group", resultsPageKey);
+  url.searchParams.set("num_results", String(numResults));
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("pid", "list");
+  url.searchParams.set("pidp", "ranking_nav");
+  url.searchParams.set("ranking", "time_finish_netto");
+  url.searchParams.set("search[age_class]", "%");
+  if (sex) url.searchParams.set("search[sex]", sex);
+  return fetchHtml(url.toString());
 }
 
 // Parse the Mika Timing event index page to extract divisions for a specific event.
@@ -103,18 +118,19 @@ function parseDivisionsFromHtml(html, resultsPageKey) {
 // Rank:  <div class="... place-primary numeric ...">1</div>
 // Name:  <h4 class="... type-fullname ..."><a ...>Lastname, Firstname</a></h4>
 // Time:  <div class="... type-time ..."><div class="...">Total</div>00:57:01</div>
-function parseListRows(html) {
+export function parseListRows(html) {
   const rows = [];
-  const liRe = /<li class="[^"]*list-group-item row[^"]*">([\s\S]*?)(?=<li class="|<\/ul>)/gi;
+  const seen = new Set();
+  const liRe = /<li\b(?=[^>]*\blist-group-item\b)(?=[^>]*\brow\b)[^>]*>([\s\S]*?)(?=<li\b[^>]*\blist-group-item\b|<\/ul>)/gi;
   for (const liMatch of html.matchAll(liRe)) {
     const item = liMatch[1];
 
-    const rankM = item.match(/place-primary numeric[^>]*>(\d+)<\/div>/i);
+    const rankM = item.match(/(?:place-primary|field-place_all)[^>]*>\s*(\d+)\s*<\/div>/i);
     if (!rankM) continue;
     const rank = parseInt(rankM[1], 10);
     if (!Number.isFinite(rank) || rank < 1) continue;
 
-    const nameM = item.match(/type-fullname[^>]*><a[^>]*>([^<]+)<\/a>/i);
+    const nameM = item.match(/(?:type-fullname|type-relay_member)[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i);
     const name = nameM ? nameM[1].trim() : null;
     if (!name) continue;
 
@@ -123,16 +139,26 @@ function parseListRows(html) {
     const time = timeM ? timeM[1].trim() : null;
 
     // idp can contain underscores (e.g. LR3MS4JI4F6779_CWL) and href uses &amp; in HTML
-    const idpM = item.match(/type-fullname[^>]*>[\s\S]*?<a[^>]+href="[^"]*(?:[?&]|&amp;)idp=([A-Za-z0-9_]+)/i);
+    const idpM = item.match(/(?:type-fullname|type-relay_member)[^>]*>[\s\S]*?<a[^>]+href="[^"]*(?:[?&]|&amp;)idp=([A-Za-z0-9_]+)/i);
     const athleteId = idpM ? idpM[1].trim() : null;
 
+    const dedupeKey = `${rank}|${athleteId ?? ""}|${time ?? ""}|${name}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
     rows.push({ rank, name, time, athleteId });
   }
   return rows;
 }
 
 // Parse time string "H:MM:SS" or "MM:SS" → seconds
-function parseTime(str) {
+export function parseListResultCount(html) {
+  const match = html.match(/class="[^"]*\bstr_num\b[^"]*"[^>]*>\s*([\d,.]+)/i);
+  if (!match) return null;
+  const count = Number(match[1].replace(/[,.]/g, ""));
+  return Number.isFinite(count) ? count : null;
+}
+
+export function parseTime(str) {
   if (!str) return null;
   const long = str.match(/\b(\d{1,2}):([0-5]\d):([0-5]\d)\b/);
   if (long) return +long[1] * 3600 + +long[2] * 60 + +long[3];
@@ -198,9 +224,13 @@ export async function scrapeLeaderboard(resultsPageKey, divisionLabel, limit = 5
   }));
 }
 
-function buildDetailUrl(athleteId, contestId, seasonNum) {
+export function buildDetailUrl(athleteId, contestId, seasonNum) {
   const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
   return `${base}?content=detail&fpid=list&pid=list&idp=${athleteId}&lang=EN_CAP&event=${contestId}&pidp=ranking_nav`;
+}
+
+export async function fetchDetailPage(athleteId, contestId, seasonNum, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+  return fetchHtml(buildDetailUrl(athleteId, contestId, seasonNum), timeoutMs);
 }
 
 const WORKOUT_SUMMARY_MAP = {
@@ -325,7 +355,7 @@ export async function enrichAthleteSplits(athletes, _resultsPageKey, contestId, 
     const batch = enrichable.slice(i, i + ENRICH_BATCH_SIZE);
     await Promise.all(batch.map(async (athlete) => {
       try {
-        const html = await fetchHtml(buildDetailUrl(athlete.athleteId, contestId, season));
+        const html = await fetchDetailPage(athlete.athleteId, contestId, season);
         const summary = parseWorkoutSummary(html);
         const roxzoneSplits = parseRaceReplay(html);
         const instagramHandle = parseInstagramHandle(html);

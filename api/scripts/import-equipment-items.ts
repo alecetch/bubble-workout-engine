@@ -2,7 +2,9 @@ import "dotenv/config";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// @ts-expect-error luxon is runtime-installed but does not expose local TS declarations here.
 import { DateTime } from "luxon";
+// @ts-expect-error db.js is an ESM runtime module without a TypeScript declaration file.
 import { pool } from "../src/db.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -98,15 +100,17 @@ function parseCsv(content: string): Array<Record<string, string>> {
   const lines = content.split(/\r?\n/).filter((line) => line.length > 0);
   if (lines.length === 0) return [];
 
-  const headers = parseCsvLine(lines[0]).map(normalizeHeader);
+  const headers = parseCsvLine(lines[0] ?? "").map(normalizeHeader);
   const rows: Array<Record<string, string>> = [];
 
   for (let i = 1; i < lines.length; i += 1) {
-    const cols = parseCsvLine(lines[i]);
+    const cols = parseCsvLine(lines[i] ?? "");
     const row: Record<string, string> = {};
 
     for (let c = 0; c < headers.length; c += 1) {
-      row[headers[c]] = (cols[c] ?? "").trim();
+      const header = headers[c];
+      if (!header) continue;
+      row[header] = (cols[c] ?? "").trim();
     }
 
     rows.push(row);
@@ -215,6 +219,7 @@ async function main(): Promise<void> {
 
     for (let i = 0; i < rawRows.length; i += 1) {
       const raw = rawRows[i];
+      if (!raw) continue;
       const fallbackBubbleId = String(raw.unique_id || "").trim() || `row_${i + 1}`;
 
       await client.query("SAVEPOINT equipment_row_savepoint");

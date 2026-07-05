@@ -30,7 +30,59 @@ function baseLimiter(analysisJson = {}) {
 }
 
 function stationActionId(segmentKey) {
+  if (segmentKey?.startsWith("station_")) return segmentKey;
   return segmentKey ? `station_${segmentKey}` : "station_specificity";
+}
+
+const ACTION_CATEGORY = {
+  penalty_avoidance: "Execution",
+  roxzone_rehearsal: "Race management",
+  race_pacing: "Race management",
+  run_volume_base: "Fitness",
+  compromised_running: "Fitness",
+  station_strength_endurance: "Fitness",
+  maintain_taper: "Fitness",
+};
+
+function categoryFor(actionId) {
+  if (!actionId) return "Fitness";
+  if (actionId.startsWith("station_")) return "Fitness";
+  return ACTION_CATEGORY[actionId] ?? "Fitness";
+}
+
+const STATION_TRAINING_CUES = {
+  station_1_ski_erg:
+    "Focus on breathing rhythm, upper-back endurance, and consistent stroke rate under fatigue.",
+  station_2_sled_push:
+    "Focus on drive-leg power, forward lean, and stride rhythm. Practise short bursts under fatigue.",
+  station_3_sled_pull:
+    "Focus on pulling tempo, grip endurance, and step length consistency.",
+  station_4_burpee_broad_jump:
+    "Focus on rhythm under fatigue, floor speed, hip extension at take-off, repeatable jump distance, breathing control, and the movement pattern after high-intensity running.",
+  station_5_rowing:
+    "Focus on sustainable stroke rate (18-22 spm), breathing rhythm, and consistent catch timing under fatigue.",
+  station_6_farmers_carry:
+    "Focus on grip endurance, upright posture, and minimising rest breaks mid-carry.",
+  station_7_sandbag_lunges:
+    "Focus on trunk position, grip and carry setup, step rhythm, unilateral endurance, and the ability to resume quickly after a break or no-rep.",
+  station_8_wall_balls:
+    "Focus on squat endurance, breathing rhythm, no-rep avoidance (full depth, target contact), sets strategy, and target accuracy under fatigue.",
+};
+
+const ROXZONE_TRAINING_CUES =
+  "Focus on station exits (no standing still), route discipline, chalk and setup habits, no walking in the first 100m after station exit, and pacing reset drills.";
+
+const PENALTY_TRAINING_CUES =
+  "Review judge standards before race day. Practise controlled reps at target depth and height. Use a pre-race standards checklist and communicate with judges at unfamiliar stations.";
+
+const RUNNING_TRAINING_CUES =
+  "Focus on pacing discipline (negative splits), late-race pace retention under station fatigue, and compromised running practice after heavy station work. If running is already a strength, do not over-prioritise it at the expense of station capacity.";
+
+function stationCueFor(actionId) {
+  if (actionId === "penalty_avoidance") return PENALTY_TRAINING_CUES;
+  if (actionId === "roxzone_rehearsal") return ROXZONE_TRAINING_CUES;
+  if (actionId === "run_volume_base" || actionId === "compromised_running") return RUNNING_TRAINING_CUES;
+  return STATION_TRAINING_CUES[actionId] ?? null;
 }
 
 function formatPacePerKm(seconds) {
@@ -52,9 +104,12 @@ export function buildGapBreakdown(analysisJson = {}) {
   stationItems.forEach((station) => contributors.push({ label: station.label, gainSeconds: station.timeGapSeconds }));
 
   const runSegments = (analysisJson.segments ?? []).filter(
-    (segment) => segment.type === "run" && Number.isFinite(segment.timeGapToMedianSeconds) && segment.timeGapToMedianSeconds > 0,
+    (segment) => {
+      const gap = segment.frameGapSeconds ?? segment.timeGapToMedianSeconds;
+      return segment.type === "run" && Number.isFinite(gap) && gap > 0;
+    },
   );
-  const totalRunGap = runSegments.reduce((sum, segment) => sum + segment.timeGapToMedianSeconds, 0);
+  const totalRunGap = runSegments.reduce((sum, segment) => sum + (segment.frameGapSeconds ?? segment.timeGapToMedianSeconds), 0);
   if (totalRunGap >= GAP_THRESHOLD) {
     const perKmSeconds = Math.round(totalRunGap / 8);
     const pace = formatPacePerKm(perKmSeconds);
@@ -90,7 +145,7 @@ export function formatGapBreakdown(items) {
   return `Likely contributors: ${parts.join(" ")}`;
 }
 
-function buildStationContributors(analysisJson, targetTimeString, useGoalGap) {
+function buildStationContributors(analysisJson, targetTimeString, useGoalGap, benchmarkPrefix) {
   const contributors = [];
   const GAP_THRESHOLD = 30;
 
@@ -124,7 +179,7 @@ function buildStationContributors(analysisJson, targetTimeString, useGoalGap) {
       label: station.label,
       gainSeconds,
       copy: targetTimeString
-        ? `athletes finishing in ${targetTimeString} complete these ~${time} faster`
+        ? `${benchmarkPrefix}, athletes complete these ~${time} faster`
         : `~${time} above the median`,
     });
   }
@@ -132,7 +187,7 @@ function buildStationContributors(analysisJson, targetTimeString, useGoalGap) {
   return contributors.sort((a, b) => b.gainSeconds - a.gainSeconds).slice(0, 3);
 }
 
-function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap) {
+function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap, benchmarkPrefix) {
   const runSegments = (analysisJson.segments ?? []).filter((segment) => segment.type === "run");
   let totalGap = 0;
 
@@ -142,8 +197,10 @@ function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap) {
         ? segment.timeGapToExactTargetSeconds
         : useGoalGap && Number.isFinite(segment.timeGapToGoalSeconds) && segment.timeGapToGoalSeconds > 0
           ? segment.timeGapToGoalSeconds
-          : Number.isFinite(segment.timeGapToMedianSeconds) && segment.timeGapToMedianSeconds > 0
-            ? segment.timeGapToMedianSeconds
+          : Number.isFinite(segment.frameGapSeconds) && segment.frameGapSeconds > 0
+            ? segment.frameGapSeconds
+            : Number.isFinite(segment.timeGapToMedianSeconds) && segment.timeGapToMedianSeconds > 0
+              ? segment.timeGapToMedianSeconds
             : 0;
     totalGap += gap;
   }
@@ -159,7 +216,7 @@ function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap) {
   return {
     gainSeconds: totalGap,
     copy: targetTimeString
-      ? `athletes finishing in ${targetTimeString} typically run${paceClause}, saving ~${gainTime} across the race`
+      ? `${benchmarkPrefix} typically run${paceClause}, saving ~${gainTime} across the race`
       : `estimated ~${gainTime} above the median across all runs`,
   };
 }
@@ -167,7 +224,13 @@ function buildRunGapSummary(analysisJson, targetTimeString, useGoalGap) {
 function safePush(items, item) {
   if (!item) return;
   if (items.some((existing) => existing.title === item.title)) return;
-  if (items.length < 3) items.push({ ...item, priority: items.length + 1 });
+  if (items.length < 3) {
+    const cue = stationCueFor(item.actionId);
+    const rationale = cue && item.rationale && !item.rationale.includes(cue)
+      ? `${item.rationale} ${cue}`
+      : item.rationale;
+    items.push({ ...item, rationale, category: categoryFor(item.actionId), priority: items.length + 1 });
+  }
 }
 
 function penaltyRecommendation(analysisJson = {}, timeHorizon) {
@@ -192,7 +255,7 @@ function penaltyRecommendation(analysisJson = {}, timeHorizon) {
   };
 }
 
-export function buildRecommendations(analysisJson = {}, insights = [], athleteContext = {}, calculatorMode = "target") {
+export function buildRecommendations(analysisJson = {}, insights = [], athleteContext = {}, calculatorMode = "target", analysisFrame = null) {
   const days = daysToRace(athleteContext);
   const timeHorizon = horizon(days);
   const executionOnly = Number.isFinite(days) && days > 0 && days < 14;
@@ -206,8 +269,20 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
     : null;
   const effectiveTargetTimeString = calculatorMode === "analyse" ? null : targetTimeString;
   const useGoalGap = !!(goalGroupKey && targetTimeString);
-  const stationContributors = buildStationContributors(analysisJson, effectiveTargetTimeString, useGoalGap);
-  const runGapSummary = buildRunGapSummary(analysisJson, effectiveTargetTimeString, useGoalGap);
+  const frame = analysisFrame?.frame;
+  const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
+  const compBandLabel = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
+  const benchmarkPrefix = (() => {
+    if (isNextBandFrame && compBandLabel) return `Against ${compBandLabel} finishers`;
+    if (calculatorMode === "analyse") return "Compared with your benchmark band";
+    if (effectiveTargetTimeString) return `Against ${effectiveTargetTimeString} finishers`;
+    return "In your benchmark band";
+  })();
+  const comparisonTargetString = isNextBandFrame && compBandLabel ? compBandLabel : effectiveTargetTimeString;
+  const stationContributors = buildStationContributors(analysisJson, comparisonTargetString, useGoalGap, benchmarkPrefix);
+  const runGapSummary = buildRunGapSummary(analysisJson, comparisonTargetString, useGoalGap, benchmarkPrefix);
+
+  safePush(items, penaltyRecommendation(analysisJson, timeHorizon));
 
   if (!executionOnly && limiter) {
     const isRun = limiter.segmentKey?.startsWith("run") || limiter.segmentKey === "run_time";
@@ -222,11 +297,18 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
             if (effectiveTargetTimeString && runGapSummary) {
               return `${base}. To finish in ${effectiveTargetTimeString} your average run pace needs to improve by ${runGapSummary.copy}.`;
             }
+            if (isNextBandFrame && compBandLabel && runGapSummary) {
+              return `${base}. ${runGapSummary.copy}.`;
+            }
             return `${base}, estimated gap of ${formatGain(limiter.timeGapSeconds)}.`;
           }
           if (effectiveTargetTimeString) {
             const gain = formatGain(analysisJson.timePotential?.goalBasedGainSeconds ?? analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds);
             return `${base}. Against ${effectiveTargetTimeString} finishers, your ${limiterLabel} was approximately ${gain} slower.`;
+          }
+          if (isNextBandFrame && compBandLabel) {
+            const gain = formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds);
+            return `${base}. ${benchmarkPrefix}, your ${limiterLabel} was approximately ${gain} slower.`;
           }
           return `${base}, estimated gap of ${formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter.timeGapSeconds)}.`;
         })(),
@@ -340,7 +422,14 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
       { priority: 1, title: "Race execution", actionId: "race_pacing", rationale: "Race day is close, so keep work low-risk and specific.", timeHorizon, safetyNote: "With limited time before race day, focus should be on execution, pacing and low-risk efficiency gains rather than aggressive volume increases." },
       { priority: 2, title: "Transitions", actionId: "roxzone_rehearsal", rationale: "Clean station entry and exit can improve race flow without adding training load.", timeHorizon, safetyNote: null },
       { priority: 3, title: "Recovery and sharpness", actionId: "maintain_taper", rationale: "Keep sharpness while avoiding new fatigue.", timeHorizon, safetyNote: null },
-    ];
+    ].map((item) => {
+      const cue = stationCueFor(item.actionId);
+      return {
+        ...item,
+        rationale: cue ? `${item.rationale} ${cue}` : item.rationale,
+        category: categoryFor(item.actionId),
+      };
+    });
   }
 
   if (items.length === 0) {
@@ -350,5 +439,5 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
     safePush(items, { title: "Maintain strengths", actionId: "maintain_taper", rationale, timeHorizon, safetyNote: null });
   }
 
-  return items.slice(0, 3).map((item, index) => ({ ...item, priority: index + 1 }));
+  return items.slice(0, 3).map((item, index) => ({ ...item, category: categoryFor(item.actionId), priority: index + 1 }));
 }
