@@ -60,6 +60,31 @@ export function formatPercentileRank(p) {
   return `${rounded}${ordinalSuffix(rounded)} percentile`;
 }
 
+export function formatOverallStanding(p) {
+  if (p == null) return null;
+  const n = Number(p);
+  if (!Number.isFinite(n)) return null;
+  const topPct = Math.max(1, Math.round(100 - n));
+  return `Top ${topPct}% overall`;
+}
+
+export function bandScoreLabel(percentile) {
+  if (!Number.isFinite(Number(percentile))) return null;
+  const n = Number(percentile);
+  if (n >= 80) return "Strength";
+  if (n >= 60) return "Good";
+  if (n >= 40) return "On benchmark";
+  if (n >= 20) return "Opportunity";
+  return "Priority";
+}
+
+export function bandScoreColor(bsLabel) {
+  if (bsLabel === "Priority") return "#e53e3e";
+  if (bsLabel === "Strength") return "#16a34a";
+  if (bsLabel === "Good") return "#22c55e";
+  return "#64748b";
+}
+
 export function formatGain(seconds) {
   const n = Math.abs(Number(seconds));
   return Number.isFinite(n) ? formatTime(n) : null;

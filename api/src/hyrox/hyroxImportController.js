@@ -1,5 +1,6 @@
 import { parseHyroxResultsHtml } from "./ingestion/parseHyroxResultsHtml.js";
 import { parseHyroxResultsText } from "./ingestion/parseHyroxResultsText.js";
+import { detectHyroxDivisionFromUrl } from "./ingestion/detectHyroxDivision.js";
 import { lookupHyroxEventByKey } from "./services/hyroxEventsService.js";
 
 const RESULTS_URL_PREFIX = "https://results.hyrox.com/";
@@ -63,9 +64,12 @@ export function makeImportUrlHandler(pool = null) {
         }
       }
 
+      const divisionDetection = detectHyroxDivisionFromUrl(url);
+
       return res.status(200).json({
         success: true,
         parsed,
+        divisionDetection,
         ...(eventDate ? { eventDate, eventName } : {}),
       });
     } catch (err) {

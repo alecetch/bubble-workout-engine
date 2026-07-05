@@ -1,9 +1,12 @@
+import { useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { Shell } from "../components/Shell";
 import { MetricCard } from "../components/MetricCard";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { SecondaryButton } from "../components/SecondaryButton";
 import { SharePackCard } from "../components/SharePackCard";
 import type { HyroxAnalysisResponse } from "../types";
+import { trackEvent } from "../utils/api";
 import styles from "./ResultPage.module.css";
 
 interface LocationState {
@@ -24,6 +27,18 @@ export function ResultPage() {
   const location = useLocation();
   const state = location.state as LocationState | null;
   const response = state?.response;
+  const submissionId = response?.submissionId;
+  const responseMode = response?.calculatorMode ?? response?.browserSummary?.calculatorMode;
+
+  useEffect(() => {
+    if (submissionId && responseMode !== "target") {
+      trackEvent("analysis_completed_next_step_viewed", {
+        submissionId,
+        calculatorMode: responseMode,
+        source: "post_analysis",
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!response) {
     return (
@@ -43,6 +58,29 @@ export function ResultPage() {
   const timePotential = summary.timePotential;
   const biggestStrength = summary.biggestStrength;
   const calculatorMode = response.calculatorMode ?? summary.calculatorMode ?? "target";
+  const targetUrl = submissionId
+    ? `/hyrox-calculator/race-details?mode=target&source=analysis_complete&submissionId=${encodeURIComponent(submissionId)}`
+    : null;
+  const showTargetCta = Boolean(targetUrl && responseMode !== "target");
+
+  function handleTargetClick() {
+    trackEvent("post_analysis_target_clicked", {
+      submissionId,
+      source: "analysis_complete",
+      journeyVariant: "target-post-analysis",
+    });
+  }
+
+  function handleAnalyseAnotherClick() {
+    trackEvent("post_analysis_analyse_another_clicked", {
+      submissionId,
+      source: "analysis_complete",
+    });
+  }
+
+  function handleHomeClick() {
+    trackEvent("post_analysis_home_clicked", { submissionId });
+  }
 
   return (
     <Shell>
@@ -190,11 +228,52 @@ export function ResultPage() {
           <SharePackCard submissionId={response.submissionId} prefillEmail={response.reportSentTo} />
         )}
 
-        <div className={styles.actions}>
-          <Link to="/hyrox-calculator">
-            <PrimaryButton type="button">Analyse Another Result →</PrimaryButton>
-          </Link>
-        </div>
+        {submissionId && (
+          <section className={styles.nextStepPanel} aria-labelledby="next-step-heading">
+            <div className={styles.nextStepHeader}>
+              <h2 id="next-step-heading">Your analysis is ready.</h2>
+              {showTargetCta && (
+                <p>
+                  Use this result as your baseline and see what needs to change to hit your next HYROX target.
+                </p>
+              )}
+            </div>
+
+            <div className={styles.nextStepGrid}>
+              {targetUrl && showTargetCta && (
+                <article className={`${styles.nextStepCard} ${styles.nextStepPrimary}`}>
+                  <div>
+                    <h3>Hit a target time</h3>
+                    <p>
+                      We&apos;ll carry your race details, splits and context forward so you don&apos;t need to enter them again.
+                    </p>
+                  </div>
+                  <Link to={targetUrl} onClick={handleTargetClick}>
+                    <PrimaryButton type="button">Hit a target time using this race</PrimaryButton>
+                  </Link>
+                </article>
+              )}
+
+              <article className={`${styles.nextStepCard} ${showTargetCta ? "" : styles.nextStepPrimary}`}>
+                <div>
+                  <h3>Analyse another race</h3>
+                  <p>Upload a different HYROX result or compare another event.</p>
+                </div>
+                <Link to="/hyrox-calculator/race-details" onClick={handleAnalyseAnotherClick}>
+                  {showTargetCta ? (
+                    <SecondaryButton type="button">Analyse another race</SecondaryButton>
+                  ) : (
+                    <PrimaryButton type="button">Analyse another race</PrimaryButton>
+                  )}
+                </Link>
+              </article>
+            </div>
+
+            <Link to="/hyrox-calculator" className={styles.tertiaryLink} onClick={handleHomeClick}>
+              Back to calculator home
+            </Link>
+          </section>
+        )}
       </div>
     </Shell>
   );

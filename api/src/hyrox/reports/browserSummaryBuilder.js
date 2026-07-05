@@ -42,7 +42,7 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
     },
     overallPercentile: Number.isFinite(Number(total?.percentile)) ? total.percentile : null,
     overallPercentileLabel: formatPercentile(total?.percentile),
-    benchmarkGroupLabel: analysisJson.benchmarkContext?.primaryBenchmarkGroup?.label ?? analysisJson.benchmarkContext?.primaryBenchmarkGroup?.key ?? "your benchmark group",
+    benchmarkGroupLabel: analysisJson.benchmarkContext?.primaryBenchmarkGroup?.label ?? analysisJson.benchmarkContext?.primaryBenchmarkGroup?.key ?? "your benchmark band",
     biggestLimiter: limiter ? { label: limiter.label, timeGapFormatted: formatGain(limiter.timeGapSeconds) } : null,
     biggestStrength: strength ? { label: strength.label, percentile: strength.percentile } : null,
     timePotential: {
@@ -68,6 +68,12 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
             ? Math.round(analysisJson.workRunBalance.workShare * 100)
             : null,
           profileType: analysisJson.workRunBalance.profileType ?? null,
+          profileTypeLabel: {
+            transition_limited: "Transition limited",
+            runner_dominant: "Runner dominant",
+            strength_dominant: "Strength dominant",
+            balanced_hybrid: "Balanced hybrid",
+          }[analysisJson.workRunBalance.profileType] ?? null,
         }
       : null,
   };

@@ -36,6 +36,25 @@ function extractByClass(html, cls) {
   return m ? m[1].trim() : null;
 }
 
+function extractAllByClass(html, cls) {
+  const safe = cls.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`<(?:td|th|span|div|li|a)[^>]+class="(?:[^"]*\\s)?${safe}(?:\\s[^"]*|)"[^>]*>([^<]*)<\\/(?:td|th|span|div|li|a)>`, "gi");
+  return [...String(html ?? "").matchAll(re)].map((m) => m[1].trim()).filter(Boolean);
+}
+
+function extractMemberNames(html) {
+  const names = [];
+  for (const row of String(html ?? "").matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const rowHtml = row[1];
+    if (!/Member\s+\d+/i.test(rowHtml)) continue;
+    const tdMatch = rowHtml.match(/<td[^>]*>([\s\S]*?)<\/td>/i);
+    if (!tdMatch) continue;
+    const raw = stripTags(tdMatch[1]).replace(/\s*\([^)]+\)\s*$/, "").trim();
+    if (raw) names.push(raw);
+  }
+  return names;
+}
+
 function extractRowByClass(html, cls) {
   const safe = cls.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`<tr[^>]*class="[^"]*${safe}[^"]*"[^>]*>([\\s\\S]*?)<\\/tr>`, "i");
@@ -219,7 +238,11 @@ export function parseHyroxResultsHtml(html) {
 
     const finishTimeSeconds = parseHms(extractByClass(html, "f-time_finish_netto"));
     const roxzoneSeconds = parseHms(extractByClass(html, "f-time_60"));
-    const athleteName = extractByClass(html, "f-__fullname") || null;
+    const singleNames = extractAllByClass(html, "f-__fullname");
+    const allNames = singleNames.length > 0 ? singleNames : extractMemberNames(html);
+    const seenLower = new Set();
+    const uniqueNames = allNames.filter((n) => { const k = n.toLowerCase(); return seenLower.has(k) ? false : seenLower.add(k); }).slice(0, 2);
+    const athleteName = uniqueNames.length > 1 ? uniqueNames.join(" & ") : (uniqueNames[0] ?? null);
     const athleteAge = extractAge(html);
     const ageGroup = extractByClass(html, "f-_type_age_class") || null;
     const raceName = extractByClass(html, "f-__meeting") || null;
@@ -243,7 +266,7 @@ export function parseHyroxResultsHtml(html) {
 
     const warnings = [];
     if (division === "pro") warnings.push("division_pro_not_yet_benchmarked");
-    if (division === "doubles" || division === "relay") warnings.push("division_doubles_not_supported");
+    if (division === "relay") warnings.push("division_doubles_not_supported");
     if (roxzoneSeconds === null) warnings.push("roxzone_not_found");
     if (finishTimeSeconds === null) warnings.push("finish_time_not_found");
 

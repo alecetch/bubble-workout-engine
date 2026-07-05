@@ -66,3 +66,56 @@ test("findBiggestLimiter prefers named stations over aggregate station time", ()
   assert.notEqual(limiter.type, "aggregate");
   assert.equal(limiter.timeGapSeconds, 200);
 });
+
+test("findBiggestLimiter uses frameGapSeconds when present", () => {
+  const limiter = findBiggestLimiter([
+    {
+      segmentKey: "wall_balls",
+      label: "Wall Balls",
+      type: "station",
+      frameGapSeconds: 200,
+      timeGapToExactTargetSeconds: 50,
+      timeGapToMedianSeconds: 30,
+      percentile: 40,
+      confidence: "high",
+    },
+    {
+      segmentKey: "sled_push",
+      label: "Sled Push",
+      type: "station",
+      frameGapSeconds: 150,
+      timeGapToExactTargetSeconds: 80,
+      timeGapToMedianSeconds: 60,
+      percentile: 38,
+      confidence: "high",
+    },
+  ]);
+  assert.equal(limiter.segmentKey, "wall_balls");
+  assert.equal(limiter.timeGapSeconds, 200);
+});
+
+test("findBiggestLimiter returns null when all frameGapSeconds are negative", () => {
+  const limiter = findBiggestLimiter([
+    {
+      segmentKey: "wall_balls",
+      label: "Wall Balls",
+      type: "station",
+      frameGapSeconds: -40,
+      timeGapToExactTargetSeconds: null,
+      timeGapToMedianSeconds: -40,
+      percentile: 20,
+      confidence: "high",
+    },
+    {
+      segmentKey: "sled_push",
+      label: "Sled Push",
+      type: "station",
+      frameGapSeconds: -20,
+      timeGapToExactTargetSeconds: null,
+      timeGapToMedianSeconds: -20,
+      percentile: 25,
+      confidence: "high",
+    },
+  ]);
+  assert.equal(limiter, null);
+});

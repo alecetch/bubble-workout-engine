@@ -11,6 +11,8 @@ import { classifyArchetype } from "./archetypeClassifier.js";
 import { buildFocusAreas } from "./focusAreaBuilder.js";
 import { computeExactTargetMap, attachExactTargets } from "./splitTargetCalculator.js";
 import { analyseMuscleGroups } from "./muscleGroupAnalyser.js";
+import { selectAnalysisFrame } from "./analysisFrameSelector.js";
+import { getBenchmarkStats } from "./benchmarkService.js";
 
 function markSegmentRoles(segments, limiter, strength) {
   return segments.map((segment) => ({
@@ -23,16 +25,15 @@ function markSegmentRoles(segments, limiter, strength) {
 function stationBreakdown(segments) {
   return segments
     .filter((segment) => segment.type === "station" && Number.isFinite(segment.percentile))
-    .sort((a, b) =>
-      (b.timeGapToExactTargetSeconds ?? b.timeGapToMedianSeconds ?? 0) -
-      (a.timeGapToExactTargetSeconds ?? a.timeGapToMedianSeconds ?? 0)
-    )
+    .sort((a, b) => (b.frameGapSeconds ?? 0) - (a.frameGapSeconds ?? 0))
     .map((segment) => ({
       segmentKey: segment.segmentKey,
       label: segment.label,
       percentile: segment.percentile,
-      timeGapSeconds: Math.round(segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? 0),
+      fieldPercentile: segment.fieldPercentile ?? null,
+      timeGapSeconds: Math.round(segment.frameGapSeconds ?? 0),
       confidence: segment.confidence,
+      nextBandMedianSeconds: segment.nextBandMedianSeconds ?? null,
     }));
 }
 
@@ -82,7 +83,7 @@ function dataQuality(normalised, benchmarkContext) {
 
 function analysisScope(input, normalised, benchmarkContext) {
   const division = normalised.athlete?.division ?? normalised.race?.division;
-  if (division && !["open", "pro"].includes(division)) return "limited";
+  if (division && !["open", "pro", "doubles", "doubles_male", "doubles_female", "doubles_mixed"].includes(division)) return "limited";
   if (!benchmarkContext.available) return "no_benchmark_data";
   const supplied = normalised.completeness.runSplits + normalised.completeness.stationSplits;
   if (supplied < 8) return "limited";
@@ -90,10 +91,45 @@ function analysisScope(input, normalised, benchmarkContext) {
   return "full";
 }
 
+function attachNextBandStats(segments, nextBandGroupKey) {
+  if (!nextBandGroupKey) return segments;
+  return segments.map((segment) => {
+    const stats = getBenchmarkStats(nextBandGroupKey, segment.segmentKey);
+    const median = stats?.medianSeconds ?? stats?.p50Seconds ?? null;
+    return {
+      ...segment,
+      nextBandMedianSeconds: median,
+      timeGapToNextBandMedianSeconds:
+        Number.isFinite(median) && Number.isFinite(segment.userSeconds)
+          ? segment.userSeconds - median
+          : null,
+    };
+  });
+}
+
+function addFrameGaps(segments, analysisFrame, calculatorMode) {
+  const isAnalyse = calculatorMode === "analyse";
+  const frame = analysisFrame?.frame;
+  const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
+
+  return segments.map((segment) => {
+    let frameGapSeconds;
+    if (!isAnalyse) {
+      frameGapSeconds = segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
+    } else if (isNextBandFrame) {
+      frameGapSeconds = segment.timeGapToNextBandMedianSeconds ?? segment.timeGapToMedianSeconds ?? null;
+    } else {
+      frameGapSeconds = segment.timeGapToMedianSeconds ?? null;
+    }
+    return { ...segment, frameGapSeconds };
+  });
+}
+
 export function analyseSubmission(input = {}) {
+  const calculatorMode = input.calculatorMode ?? "target";
   const normalised = normaliseSubmission(input);
   const benchmarkContext = selectBenchmarkGroups(normalised, {
-    calculatorMode: input.calculatorMode ?? "target",
+    calculatorMode,
   });
   const scope = analysisScope(input, normalised, benchmarkContext);
 
@@ -105,12 +141,23 @@ export function analyseSubmission(input = {}) {
     Boolean(benchmarkContext.goalBenchmarkGroup),
   );
   const baseSegments = attachExactTargets(rawSegments, exactTargetMap);
+  const totalTimeSeg = rawSegments.find((segment) => segment.segmentKey === "total_time");
+  const analysisFrame = selectAnalysisFrame({
+    achievedBand: benchmarkContext.achievedBand ?? null,
+    nextBand: benchmarkContext.nextBand ?? null,
+    gapToBandMedianSeconds: totalTimeSeg?.timeGapToMedianSeconds ?? null,
+  });
+  const needsNextBandStats = analysisFrame.frame === "next_band" || analysisFrame.frame === "next_band_stretch";
+  const segmentsWithNextBand = needsNextBandStats
+    ? attachNextBandStats(baseSegments, benchmarkContext.nextBandGroup?.key ?? null)
+    : baseSegments;
+  const framedSegments = addFrameGaps(segmentsWithNextBand, analysisFrame, calculatorMode);
   const runFadeAnalysis = analyseRunFade(normalised, benchmarkContext);
   const roxzoneAnalysis = analyseRoxzone(normalised, benchmarkContext);
-  const scores = calculateScores(baseSegments, normalised, runFadeAnalysis);
-  const limiter = findBiggestLimiter(baseSegments);
-  const strength = findBiggestStrength(baseSegments);
-  const segments = markSegmentRoles(baseSegments, limiter, strength);
+  const scores = calculateScores(framedSegments, normalised, runFadeAnalysis);
+  const limiter = findBiggestLimiter(framedSegments);
+  const strength = findBiggestStrength(framedSegments);
+  const segments = markSegmentRoles(framedSegments, limiter, strength);
   const rankedStations = stationBreakdown(segments);
   const strengths = strength ? [strength] : [];
   const limiters = limiter ? [limiter] : [];
@@ -140,12 +187,17 @@ export function analyseSubmission(input = {}) {
     benchmarkContext: {
       primaryBenchmarkGroup: benchmarkContext.primaryBenchmarkGroup,
       fallbacksUsed: benchmarkContext.fallbacksUsed,
-      goalBenchmarkGroup: benchmarkContext.goalBenchmarkGroup,
+      goalBenchmarkGroup: benchmarkContext.goalBenchmarkGroup
+        ? { ...benchmarkContext.goalBenchmarkGroup, targetFinishSeconds: targetFinishSeconds ?? null }
+        : null,
       achievedBand: benchmarkContext.achievedBand ?? null,
       nextBand: benchmarkContext.nextBand ?? null,
       nextBandGroup: benchmarkContext.nextBandGroup ?? null,
       confidenceLabel: benchmarkContext.confidenceLabel ?? null,
       demographicBenchmarkGroup: benchmarkContext.demographicBenchmarkGroup ?? null,
+      doublesBenchmarkedAsSingles: benchmarkContext.doublesBenchmarkedAsSingles ?? false,
+      useDoublesBenchmarks: benchmarkContext.useDoublesBenchmarks ?? false,
+      analysisFrame,
     },
     headline: {
       biggestLimiter: limiter ? {

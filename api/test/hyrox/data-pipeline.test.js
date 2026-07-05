@@ -129,10 +129,11 @@ test("unknown_age_group sets status to partial and excludes from age-group bench
   assert.equal(validation.benchmarkEligibility.ageGroup, false);
 });
 
-test("doubles_record is stored but excluded from individual benchmark sets", () => {
+test("doubles_record is stored and eligible for doubles overall benchmark sets", () => {
   const { validation } = validateFixture("doubles_record.json");
   assert.equal(validation.status, "partial");
-  assert.equal(validation.benchmarkEligibility.overall, false);
+  assert.equal(validation.benchmarkEligibility.overall, true);
+  assert.equal(validation.benchmarkEligibility.run, false);
 });
 
 test("SEGMENT_MAP has exactly 40 entries", () => {

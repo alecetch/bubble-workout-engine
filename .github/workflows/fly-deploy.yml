@@ -95,6 +95,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          nc -z 127.0.0.1 15432 2>/dev/null || { echo "ERROR: MPG proxy not responding before migration"; cat /tmp/fly-mpg-proxy.log; exit 1; }
           chmod +x scripts/migrate.sh
           PROXY_URL=$(node -e '
             const u = new URL(process.env.DATABASE_URL);
@@ -107,7 +108,6 @@ jobs:
           DATABASE_URL="$PROXY_URL" npm --prefix api run qa:seeds
 
       - name: Deploy API to Fly
-        working-directory: api
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl deploy --config fly.toml --remote-only

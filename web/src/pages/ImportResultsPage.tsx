@@ -64,7 +64,7 @@ export function ImportResultsPage() {
                   <span> Press <kbd>Ctrl+A</kbd> to select all, <kbd>Ctrl+C</kbd> to copy, then paste below.</span>
                 </div>
               )}
-              <SplitImportPanel onImport={handleImport} onCancel={() => void navigate("/hyrox-calculator")} />
+              <SplitImportPanel onImport={handleImport} onCancel={() => void navigate("/hyrox-calculator/race-details")} />
             </>
           ) : (
             <div>

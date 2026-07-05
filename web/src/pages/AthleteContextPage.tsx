@@ -8,6 +8,7 @@ import { SecondaryButton } from "../components/SecondaryButton";
 import { Shell } from "../components/Shell";
 import { SideStepper } from "../components/SideStepper";
 import { trackEvent } from "../utils/api";
+import { getJourneyVariant } from "../utils/journeyUtils";
 import { loadDraft, saveDraft } from "../utils/storage";
 import { formatSeconds } from "../utils/time";
 import styles from "./AthleteContextPage.module.css";
@@ -72,7 +73,15 @@ export function AthleteContextPage() {
       },
     });
     trackEvent("athlete_context_completed");
-    void navigate("/hyrox-calculator/review");
+    const updatedDraft = loadDraft();
+    const variant = getJourneyVariant(updatedDraft);
+    if (variant === "target-direct") {
+      trackEvent("target_context_completed", {
+        journeyVariant: "target-direct",
+        hasTargetTime: !!updatedDraft?.athleteContext?.targetFinishTimeSeconds,
+      });
+    }
+    void navigate(variant === "target-direct" ? "/hyrox-calculator/target-calibration" : "/hyrox-calculator/review");
   }
 
   return (

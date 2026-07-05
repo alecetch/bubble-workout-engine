@@ -125,21 +125,25 @@ export function parseHyroxResultsText(rawText) {
     const rawLines = String(rawText ?? "").replace(/\r/g, "").split("\n").map((line) => line.trim()).filter(Boolean);
     const lines = pairLabelWithTime(rawLines);
     const splitsByKey = new Map();
+    const athleteNames = [];
     for (const line of lines) {
       const split = matchSplit(line);
       if (split) splitsByKey.set(split.segmentKey, split);
-      if (/^name\b/i.test(line)) result.athleteName = lineValue(line) || null;
+      if (/^name\b/i.test(line)) { const n = lineValue(line); if (n) athleteNames.push(n); }
       if (/^age\s+group\b/i.test(line)) result.ageGroup = lineValue(line) || null;
       if (/^race\b/i.test(line)) result.raceName = lineValue(line) || null;
       if (/^division\b/i.test(line)) result.division = parseDivision(lineValue(line));
       if (/overall\s+time/i.test(line)) result.finishTimeSeconds = parseHms(line);
       if (/roxzone\s+time/i.test(line)) result.roxzoneSeconds = parseHms(line);
     }
+    const seenLower = new Set();
+    const uniqueNames = athleteNames.filter((n) => { const k = n.toLowerCase(); return seenLower.has(k) ? false : seenLower.add(k); }).slice(0, 2);
+    result.athleteName = uniqueNames.length > 1 ? uniqueNames.join(" & ") : (uniqueNames[0] ?? null);
     result.splits = Array.from(splitsByKey.values()).sort((a, b) => a.index - b.index);
     result.penalties = parsePenalties(lines);
     if (!result.division) result.division = parseDivision(null);
     if (result.division === "pro") result.warnings.push("division_pro_not_yet_benchmarked");
-    if (result.division === "doubles" || result.division === "relay") result.warnings.push("division_doubles_not_supported");
+    if (result.division === "relay") result.warnings.push("division_doubles_not_supported");
     if (result.roxzoneSeconds === null) result.warnings.push("roxzone_not_found");
     if (result.finishTimeSeconds === null) result.warnings.push("finish_time_not_found");
     const count = result.splits.length;

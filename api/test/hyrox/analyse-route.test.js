@@ -214,6 +214,40 @@ test("POST /api/hyrox/analyse with complete valid splits persists submission and
   }
 });
 
+test("POST /api/hyrox/analyse stores target calibration fields", async (t) => {
+  if (!await dbReady(t)) return;
+  const body = validBody({
+    athleteContext: {
+      targetFinishTimeSeconds: 4500,
+      run5kPbSeconds: 1320,
+      run10kPbSeconds: 2820,
+      backSquat3RMKg: 100,
+      deadlift3RMKg: 145,
+      rowErg2kSeconds: 420,
+      targetRaceDate: "2026-11-15",
+    },
+  });
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/analyse", { method: "POST", body: JSON.stringify(body) });
+  try {
+    assert.equal(response.status, 200);
+    const submissions = await pool.query(
+      `SELECT five_km_pb_seconds, ten_km_pb_seconds, back_squat_kg, deadlift_kg, athlete_context_json
+       FROM hyrox_submissions
+       WHERE id = $1`,
+      [json.submissionId],
+    );
+    assert.equal(submissions.rows.length, 1);
+    assert.equal(submissions.rows[0].five_km_pb_seconds, 1320);
+    assert.equal(submissions.rows[0].ten_km_pb_seconds, 2820);
+    assert.equal(Number(submissions.rows[0].back_squat_kg), 100);
+    assert.equal(Number(submissions.rows[0].deadlift_kg), 145);
+    assert.equal(submissions.rows[0].athlete_context_json.rowErg2kSeconds, 420);
+    assert.equal(submissions.rows[0].athlete_context_json.targetRaceDate, "2026-11-15");
+  } finally {
+    await cleanupEmail(body.athlete.email);
+  }
+});
+
 test("allowPartial:true with missing stations returns partial and analysis omits missing stations", async (t) => {
   if (!await dbReady(t)) return;
   const body = validBody({ allowPartial: true });
@@ -231,14 +265,14 @@ test("allowPartial:true with missing stations returns partial and analysis omits
   }
 });
 
-test("division:doubles returns limited response", async (t) => {
+test("division:doubles returns complete analysis benchmarked as open", async (t) => {
   if (!await dbReady(t)) return;
   const body = validBody({ race: { division: "doubles", finishTimeSeconds: 4800, source: "manual" } });
   const { response, body: json } = await request(buildApp(), "/api/hyrox/analyse", { method: "POST", body: JSON.stringify(body) });
   try {
     assert.equal(response.status, 200);
-    assert.equal(json.status, "limited");
-    assert.equal(json.reason, "doubles_relay_not_supported_v1");
+    assert.equal(json.status, "complete");
+    assert.notEqual(json.analysisScope, "limited");
   } finally {
     await cleanupEmail(body.athlete.email);
   }
