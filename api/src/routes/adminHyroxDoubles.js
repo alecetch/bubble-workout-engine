@@ -2,7 +2,10 @@ import express from "express";
 import { pool as defaultPool } from "../db.js";
 import { countAvailableDoublesRecords, DOUBLES_DIVISIONS } from "../hyrox/doubles/doublesScraper.js";
 import { createJob } from "../hyrox/doubles/doublesJobRunner.js";
+import { backfillAgeGroupsForJob, getAgeGroupBackfillStatus } from "../hyrox/doubles/ageGroupBackfill.js";
+import { loadBenchmarkData } from "../hyrox/engine/benchmarkService.js";
 import { buildDoublesBenchmarks } from "../hyrox/scripts/buildDoublesBenchmarks.js";
+import { buildSinglesS8Benchmarks } from "../hyrox/scripts/buildSinglesS8Benchmarks.js";
 
 function toCamelRow(row) {
   return Object.fromEntries(
@@ -12,6 +15,9 @@ function toCamelRow(row) {
     ]),
   );
 }
+
+// Tracks jobs with an age-group backfill currently in-flight (in-process only).
+const activeBackfills = new Set();
 
 export function createAdminHyroxDoublesRouter(pool = defaultPool, options = {}) {
   const availabilityCounter = options.availabilityCounter ?? countAvailableDoublesRecords;
@@ -141,7 +147,9 @@ router.get("/hyrox-doubles/jobs", async (_req, res) => {
          current_event.city AS current_event_city,
          current_event.country AS current_event_country,
          location_summary.records_available AS total_records_available,
-         COALESCE(location_summary.locations, '[]'::jsonb) AS location_summary
+         COALESCE(location_summary.locations, '[]'::jsonb) AS location_summary,
+         age_coverage.age_total,
+         age_coverage.age_covered
        FROM hyrox_doubles_scrape_jobs j
        LEFT JOIN hyrox_events current_event ON current_event.id = j.current_event_id
        LEFT JOIN LATERAL (
@@ -183,6 +191,16 @@ router.get("/hyrox-doubles/jobs", async (_req, res) => {
            GROUP BY je.hyrox_event_id, e.event_name, e.city, e.country, e.start_date
          ) grouped
        ) location_summary ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(r.id)::int                                    AS age_total,
+           COUNT(r.id) FILTER (WHERE r.age_group IS NOT NULL)::int AS age_covered
+         FROM hyrox_doubles_scrape_job_events je
+         JOIN hyrox_doubles_scraped_results r
+           ON r.hyrox_event_id     = je.hyrox_event_id
+          AND r.division_category  = je.division_category
+         WHERE je.job_id = j.id
+       ) age_coverage ON TRUE
        ORDER BY j.created_at DESC
        LIMIT 50`,
     );
@@ -227,16 +245,21 @@ router.get("/hyrox-doubles/benchmark-readiness", async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
+        g.dataset_version,
         g.division,
-        g.sample_size AS sample_size,
+	        g.gender,
+	        g.age_group,
+	        g.performance_band,
+	        g.region,
+	        g.sample_size AS sample_size,
         g.created_at AS built_at,
         COUNT(m.metric_key)::int AS metric_count,
         ARRAY_AGG(m.metric_key ORDER BY m.metric_key) FILTER (WHERE m.metric_key IS NOT NULL) AS metrics_available
       FROM hyrox_benchmark_groups g
       LEFT JOIN hyrox_benchmark_metrics m ON m.group_key = g.group_key
-      WHERE g.dataset_version = 'doubles_v1'
-      GROUP BY g.division, g.sample_size, g.created_at
-      ORDER BY g.division`,
+      WHERE g.dataset_version IN ('doubles_v2', 'singles_s8_v1')
+	      GROUP BY g.dataset_version, g.division, g.gender, g.age_group, g.performance_band, g.region, g.sample_size, g.created_at
+	      ORDER BY g.dataset_version, g.division, g.gender, g.age_group, g.region NULLS FIRST, g.performance_band NULLS FIRST`,
     );
 
     const source = process.env.HYROX_DOUBLES_BENCHMARK_SOURCE ?? (process.env.USE_DOUBLES_BENCHMARK_DATASET === "true" ? "enriched" : "legacy");
@@ -245,7 +268,12 @@ router.get("/hyrox-doubles/benchmark-readiness", async (_req, res) => {
       source,
       divisions: rows.map((row) => ({
         division: row.division,
-        sampleSize: Number(row.sample_size),
+        datasetVersion: row.dataset_version,
+	        gender: row.gender,
+	        ageGroup: row.age_group,
+	        performanceBand: row.performance_band,
+	        region: row.region,
+	        sampleSize: Number(row.sample_size),
         metricCount: row.metric_count,
         metricsAvailable: row.metrics_available ?? [],
         builtAt: row.built_at,
@@ -260,7 +288,48 @@ router.get("/hyrox-doubles/benchmark-readiness", async (_req, res) => {
 router.post("/hyrox-doubles/benchmarks/build", async (_req, res) => {
   try {
     const summary = await buildDoublesBenchmarks();
-    return res.json({ ok: true, ...summary });
+    const cache = await loadBenchmarkData(pool);
+    return res.json({ ok: true, ...summary, cache });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post("/hyrox/benchmarks/build-doubles-v2", async (_req, res) => {
+  try {
+    const summary = await buildDoublesBenchmarks();
+    const cache = await loadBenchmarkData(pool);
+    return res.json({ ok: true, ...summary, cache });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post("/hyrox-doubles/benchmarks/build-doubles-v2", async (_req, res) => {
+  try {
+    const summary = await buildDoublesBenchmarks();
+    const cache = await loadBenchmarkData(pool);
+    return res.json({ ok: true, ...summary, cache });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post("/hyrox/benchmarks/build-singles-s8", async (_req, res) => {
+  try {
+    const summary = await buildSinglesS8Benchmarks();
+    const cache = await loadBenchmarkData(pool);
+    return res.json({ ok: true, ...summary, cache });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post("/hyrox-doubles/benchmarks/build-singles-s8", async (_req, res) => {
+  try {
+    const summary = await buildSinglesS8Benchmarks();
+    const cache = await loadBenchmarkData(pool);
+    return res.json({ ok: true, ...summary, cache });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
@@ -349,6 +418,36 @@ router.get("/hyrox-doubles/jobs/:id/errors", async (req, res) => {
     );
     return res.json({ ok: true, errors: rows.map(toCamelRow) });
   } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.get("/hyrox-doubles/jobs/:id/backfill-age-groups", async (req, res) => {
+  try {
+    const { total, missing } = await getAgeGroupBackfillStatus(pool, req.params.id);
+    return res.json({ ok: true, total, missing, running: activeBackfills.has(req.params.id) });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post("/hyrox-doubles/jobs/:id/backfill-age-groups", async (req, res) => {
+  const jobId = req.params.id;
+  if (activeBackfills.has(jobId)) {
+    return res.status(409).json({ ok: false, error: "Backfill already running for this job" });
+  }
+  try {
+    const { total, missing } = await getAgeGroupBackfillStatus(pool, jobId);
+    if (missing === 0) {
+      return res.json({ ok: true, started: false, total, missing });
+    }
+    activeBackfills.add(jobId);
+    backfillAgeGroupsForJob(pool, jobId)
+      .catch((err) => console.error(`Age group backfill error for job ${jobId}:`, err.message))
+      .finally(() => activeBackfills.delete(jobId));
+    return res.json({ ok: true, started: true, total, missing });
+  } catch (err) {
+    activeBackfills.delete(jobId);
     return res.status(500).json({ ok: false, error: err.message });
   }
 });

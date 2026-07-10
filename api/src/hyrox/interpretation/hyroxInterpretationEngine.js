@@ -180,10 +180,15 @@ function applyDataConfidenceOrder(order, analysisJson = {}) {
   return isPartialAnalysis(analysisJson) ? order : order.filter((key) => key !== "data_confidence");
 }
 
-function roxzoneGap(analysisJson = {}) {
-  const rox = analysisJson.roxzoneAnalysis ?? {};
+export function roxzoneGap(analysisJson = {}) {
   const segment = (analysisJson.segments ?? []).find((s) => s.segmentKey === "roxzone_time");
-  return finiteNumber(rox.timeGapToMedianSeconds) ?? finiteNumber(segment?.timeGapToMedianSeconds) ?? 0;
+  const rox = analysisJson.roxzoneAnalysis ?? {};
+  // Prefer frameGapSeconds (mode-aware: target-profile gap in target mode, band-median in analyse mode)
+  // so category selection and secondary-thesis checks use the same basis as the table and route sections.
+  return finiteNumber(segment?.frameGapSeconds)
+    ?? finiteNumber(rox.timeGapToMedianSeconds)
+    ?? finiteNumber(segment?.timeGapToMedianSeconds)
+    ?? 0;
 }
 
 function limiter(analysisJson = {}) {
@@ -314,6 +319,7 @@ export function selectPrimaryCategory(analysisJson = {}, calculatorMode = "targe
   const segmentCount = (analysisJson.segments ?? []).length;
 
   if (penalty >= 180 && penalty > stationGap * 0.5) return "penalty";
+  if (roxPct != null && roxPct < 45 && roxGap > 90 && roxGap > stationGap) return "roxzone";
   if (stationGap > runGap && weakCount >= 2) return "station_capacity";
   if (runGap > stationGap && (runFade >= 8 || (runPct != null && runPct < 45))) return "running";
   if (roxPct != null && roxPct < 35 && roxGap > 90) return "roxzone";
@@ -437,11 +443,14 @@ export function buildSectionOrder(primaryThesis, analysisJson = {}, calculatorMo
   return applyDataConfidenceOrder(order, analysisJson);
 }
 
-export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode = "target") {
+export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode = "target", emailTopLabel = null, emailTopSegType = null) {
   const category = primaryThesis?.category ?? "station_capacity";
   const gain = headlineGainSeconds(analysisJson);
   const gainDisplay = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : null;
-  const lLabel = limiterLabel(analysisJson);
+  // emailTopLabel (when provided) is the top-ranked individual segment from the email's own
+  // rankedGaps list, sorted by raw gap magnitude with no tie-breaker and excluding aggregates.
+  // This ensures the hero names the same segment as the Biggest Opportunities table.
+  const lLabel = emailTopLabel ?? limiterLabel(analysisJson);
   const analysisFrame = analysisJson?.benchmarkContext?.analysisFrame;
   const frame = analysisFrame?.frame;
   const compBandLabel = analysisFrame?.comparisonBand?.replace("sub_", "sub-") ?? null;
@@ -574,6 +583,17 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     }
 
     if (category === "running") {
+      // When the top individual segment is a station, name it — the athlete can see the
+      // biggest single-split gap in the table, and the hero should agree with it.
+      if (emailTopLabel && emailTopSegType === "station") {
+        return {
+          headline: targetStr
+            ? `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`
+            : `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL GAP`,
+          subline: "Your running pace is the larger aggregate target lever — but this station has the biggest single split to address first.",
+          gainDisplay: null,
+        };
+      }
       return {
         headline: targetStr
           ? `THE ROUTE TO ${targetStr} RUNS THROUGH YOUR RUNNING GAP`
@@ -638,10 +658,21 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
         gainDisplay: null,
       };
     }
+
+    // "Least aligned split" framing only applies when the gap is small (near-benchmark).
+    // Athletes with large gaps need direct "biggest opportunity" language.
+    const limiterGapSecs = headlineGainSeconds(analysisJson) ?? 0;
+    if (limiterGapSecs < 120) {
+      return {
+        headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
+        subline: "Not a weakness versus the field — the smallest relative advantage in your overall race profile.",
+        gainDisplay: null,
+      };
+    }
     return {
-      headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
-      subline: "Not a weakness versus the field — the smallest relative advantage in your overall race profile.",
-      gainDisplay: null,
+      headline: `${String(lLabel).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`,
+      subline: gainDisplay ? "estimated opportunity against your benchmark band." : "Address this to unlock your next finish time.",
+      gainDisplay,
     };
   }
   return {

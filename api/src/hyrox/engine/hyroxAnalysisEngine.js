@@ -1,7 +1,7 @@
 import { HYROX_ANALYSIS_VERSION } from "../config/benchmarkThresholds.js";
 import { normaliseSubmission } from "./segmentNormaliser.js";
 import { selectBenchmarkGroups } from "./benchmarkSelector.js";
-import { calculateSegmentStats } from "./percentileCalculator.js";
+import { approximatePercentile, calculateSegmentStats } from "./percentileCalculator.js";
 import { calculateScores } from "./scoreCalculator.js";
 import { findBiggestLimiter, findBiggestStrength, calculateTimePotential } from "./limiterService.js";
 import { analyseRunFade } from "./runFadeAnalyser.js";
@@ -58,6 +58,74 @@ function workRunBalance(normalised) {
   };
 }
 
+function roundedTopPercent(percentile) {
+  if (!Number.isFinite(Number(percentile))) return null;
+  const top = Math.max(1, Math.round(100 - Number(percentile)));
+  return top;
+}
+
+function comparisonOption({ id, label, groupKey, sampleSize, userSeconds, stats }) {
+  if (!groupKey || !stats || !Number.isFinite(userSeconds)) return null;
+  const percentile = approximatePercentile(userSeconds, stats);
+  if (!Number.isFinite(Number(percentile))) return null;
+  return {
+    id,
+    label,
+    groupKey,
+    percentile,
+    topPercent: roundedTopPercent(percentile),
+    sampleSize: Number(sampleSize ?? stats.sampleSize ?? 0),
+  };
+}
+
+function buildBenchmarkComparisonOptions(normalised, benchmarkContext) {
+  const userSeconds = normalised.race?.finishTimeSeconds;
+  if (!Number.isFinite(userSeconds)) return null;
+  const options = [];
+  const seen = new Set();
+  const push = (option) => {
+    if (!option || seen.has(option.groupKey)) return;
+    seen.add(option.groupKey);
+    options.push(option);
+  };
+
+  const total = benchmarkContext.totalPopulationBenchmark;
+  push(comparisonOption({
+    id: "global",
+    label: "Global",
+    groupKey: total?.groupKey ?? benchmarkContext.primaryBenchmarkGroup?.key,
+    sampleSize: total?.sampleSize ?? benchmarkContext.primaryBenchmarkGroup?.sampleSize,
+    userSeconds,
+    stats: getBenchmarkStats(total?.groupKey ?? benchmarkContext.primaryBenchmarkGroup?.key, "total_time"),
+  }));
+
+  const regional = benchmarkContext.regionalBenchmark;
+  push(comparisonOption({
+    id: "regional",
+    label: regional?.regionLabel ? regional.regionLabel : "Regional",
+    groupKey: regional?.groupKey,
+    sampleSize: regional?.sampleSize,
+    userSeconds,
+    stats: getBenchmarkStats(regional?.groupKey, "total_time"),
+  }));
+
+  const age = benchmarkContext.ageBenchmark;
+  push(comparisonOption({
+    id: "age_group",
+    label: age?.ageGroup ? `Age group ${age.ageGroup}` : "Age group",
+    groupKey: age?.groupKey,
+    sampleSize: age?.sampleSize,
+    userSeconds,
+    stats: getBenchmarkStats(age?.groupKey, "total_time"),
+  }));
+
+  if (options.length === 0) return null;
+  return {
+    defaultId: "global",
+    options,
+  };
+}
+
 function dataQuality(normalised, benchmarkContext) {
   // Inferred-total RoxZone is not missing data — only count the 16 race splits as required.
   const isExplicitRoxzone = normalised.roxzoneMode === "explicit_splits";
@@ -72,6 +140,8 @@ function dataQuality(normalised, benchmarkContext) {
   if (!Number.isFinite(normalised.race?.finishTimeSeconds)) issues.push("missing_finish_time");
   if (normalised.roxzoneMode === "inferred_total") warnings.push("roxzone_inferred_from_unallocated_time");
   if (supplied < expected) warnings.push("partial_split_data");
+  if (normalised.completeness.runSplits > 0 && normalised.completeness.runSplits < 8) warnings.push("incomplete_running_splits");
+  if (normalised.completeness.runSplits > 0 && !Number.isFinite(normalised.runTimeSeconds)) warnings.push("missing_run_total");
   return {
     inputCompleteness: Math.round((supplied / expected) * 100) / 100,
     splitMode: normalised.roxzoneMode,
@@ -186,6 +256,7 @@ export function analyseSubmission(input = {}) {
     stationBreakdown: rankedStations,
     analysisScope: scope,
   });
+  const comparisonOptions = buildBenchmarkComparisonOptions(normalised, benchmarkContext);
 
   return {
     submissionId: input.submissionId ?? null,
@@ -207,6 +278,10 @@ export function analyseSubmission(input = {}) {
       demographicBenchmarkGroup: benchmarkContext.demographicBenchmarkGroup ?? null,
       doublesBenchmarkedAsSingles: benchmarkContext.doublesBenchmarkedAsSingles ?? false,
       useDoublesBenchmarks: benchmarkContext.useDoublesBenchmarks ?? false,
+      ageBenchmark: benchmarkContext.ageBenchmark ?? { available: false },
+      regionalBenchmark: benchmarkContext.regionalBenchmark ?? { available: false },
+      totalPopulationBenchmark: benchmarkContext.totalPopulationBenchmark ?? { available: false },
+      comparisonOptions,
       analysisFrame,
     },
     headline: {

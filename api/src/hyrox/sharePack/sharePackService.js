@@ -1,8 +1,12 @@
 import { pool } from "../../db.js";
 import { buildCarouselPage, resolveCarouselData } from "../reports/carouselPageBuilder.js";
 import { buildTemplateA } from "../reports/templateSlotMapper.js";
+import { rankInsightsForOutput } from "../reports/insightRanker.js";
+import { resolveConflicts } from "../reports/conflictResolver.js";
 import { buildCaption } from "./captionBuilder.js";
 import { screenshotSlides } from "./slideScreenshotter.js";
+import { generateRaceCardPng } from "./raceCardScreenshotter.js";
+import { buildHyroxRaceCardData } from "../reports/raceCardDataMapper.js";
 import { buildZip } from "./zipBuilder.js";
 import { SLIDE_FILENAMES } from "./slideAssets.js";
 import { putObject, getPresignedUrl } from "../../services/s3Service.js";
@@ -35,7 +39,8 @@ function athleteContext(row = {}, storedCarousel = null) {
 function resolveShareCarousel(row = {}) {
   const analysisJson = objectOrNull(row.analysis_json);
   if (analysisJson && analysisJson.analysisScope !== "no_benchmark_data") {
-    const insights = Array.isArray(row.selected_insights_json) ? row.selected_insights_json : [];
+    const raw = Array.isArray(row.selected_insights_json) ? row.selected_insights_json : [];
+    const insights = resolveConflicts(rankInsightsForOutput(raw, "carousel_a"), "carousel_a");
     return buildTemplateA(analysisJson, insights, athleteContext(row, row.carousel_a_json));
   }
   return resolveCarouselData(row.carousel_a_json);
@@ -89,7 +94,22 @@ export async function getOrCreateSharePack(submissionId, db = pool) {
     slideBuffers.map((buf, index) => putObject(`${slidePrefix}${SLIDE_FILENAMES[index]}`, buf, "image/png")),
   );
 
-  const zipBuffer = await buildZip(slideBuffers, caption);
+  // Generate race card PNG; failure must not block the ZIP delivery
+  let raceCardBuffer = null;
+  try {
+    const analysisJson = objectOrNull(row.analysis_json);
+    if (analysisJson) {
+      const ctx = athleteContext(row, row.carousel_a_json);
+      const raceCardData = buildHyroxRaceCardData(analysisJson, ctx);
+      raceCardBuffer = await generateRaceCardPng(raceCardData);
+      await putObject(`${slidePrefix}race-card.png`, raceCardBuffer, "image/png");
+    }
+  } catch (raceCardErr) {
+    // eslint-disable-next-line no-console
+    console.error("[sharePackService] Race card generation failed — continuing without it:", raceCardErr?.message);
+  }
+
+  const zipBuffer = await buildZip(slideBuffers, caption, { raceCardBuffer });
   const athleteSlug = toSlug(row.display_name);
   const eventSlug = toSlug(row.race_name);
   const zipFilename = `forma-hyrox-${athleteSlug}-${eventSlug}.zip`;

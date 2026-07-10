@@ -63,6 +63,27 @@ export async function postListForm(resultsPageKey, contestId, seasonNum, { sex =
   }
 }
 
+// Fetches a list page filtered by a specific age class code (e.g. "30" for 30-34, "U24" for 16-24).
+// Uses the overall event key as both `event` and `search_event` — this is the only URL format
+// the HYROX results site accepts for the age_class filter to work.
+export async function fetchListPageByAgeClass(resultsPageKey, seasonNum, sex, ageClassCode, { numResults = 100, page = 1 } = {}) {
+  const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
+  const url = new URL(base);
+  url.searchParams.set("pid", "list");
+  url.searchParams.set("fpid", "list");
+  url.searchParams.set("lang", "EN_CAP");
+  url.searchParams.set("event", resultsPageKey);
+  url.searchParams.set("pidp", "ranking_nav");
+  url.searchParams.set("ranking", "time_finish_netto");
+  url.searchParams.set("search[sex]", sex);
+  url.searchParams.set("search[nation]", "%");
+  url.searchParams.set("search_event", resultsPageKey);
+  url.searchParams.set("num_results", String(numResults));
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("search[age_class]", ageClassCode);
+  return fetchHtml(url.toString());
+}
+
 export async function fetchListPage(resultsPageKey, contestId, seasonNum, { sex = "", numResults = 50, page = 1 } = {}) {
   const base = seasonNum ? `${RESULTS_BASE}season-${seasonNum}/` : RESULTS_BASE;
   const url = new URL(base);
@@ -98,7 +119,9 @@ function parseDivisionsFromHtml(html, resultsPageKey) {
     `<optgroup[^>]+label="${escapedKey}"[^>]*>([\\s\\S]*?)<\\/optgroup>`,
     "i",
   );
-  const optgroupMatch = selectMatch[1].match(optgroupRe);
+  // Single-day events render label="--" rather than the event name — fall back to first optgroup.
+  const fallbackRe = /<optgroup[^>]*>([\s\S]*?)<\/optgroup>/i;
+  const optgroupMatch = selectMatch[1].match(optgroupRe) ?? selectMatch[1].match(fallbackRe);
   if (!optgroupMatch) return [];
 
   const optionRe = /<option[^>]+value="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
@@ -330,6 +353,23 @@ export function parseRaceReplay(html) {
     if (seconds !== null) roxzoneSplits[RACE_REPLAY_MAP[key]] = seconds;
   }
   return roxzoneSplits;
+}
+
+// Extracts the athlete's age group from a Mika Timing detail page.
+// HYROX uses the CSS class "f-_type_age_class" on both the <tr> and the value <td>.
+// Falls back to an "Age Group" or "Age Class" label row for older season variants.
+export function parseAthleteAgeGroup(html) {
+  const classMatch = html.match(/class="[^"]*\bf-_type_age_class\b[^"]*"[^>]*>\s*([^<]{1,20}?)\s*<\//i);
+  if (classMatch) {
+    const text = classMatch[1].trim();
+    if (text) return text;
+  }
+  const labelMatch = html.match(/age\s+(?:group|class)[^<]*<\/t[hd]>\s*<td[^>]*>\s*([^<]{1,20}?)\s*<\/td>/i);
+  if (labelMatch) {
+    const text = labelMatch[1].trim();
+    if (text) return text;
+  }
+  return null;
 }
 
 export function parseInstagramHandle(html) {

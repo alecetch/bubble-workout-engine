@@ -36,8 +36,16 @@ test("worstExit is sandbag_lunges for example race", () => {
 });
 
 test("builds roxzone narrative with replay total, official difference, and display rows", () => {
-  const normalised = submissionWithReplay([5, 3, 11, 13, 17, 45, 49, 278], [31, 24, 24, 6, 17, 11, 15, null]);
-  const result = analyseRoxzone({ ...normalised, roxzoneTimeSeconds: 273 }, {});
+  const normalised = normaliseSubmission({
+    race: { finishTimeSeconds: 5000 },
+    splits: [{ segmentKey: "roxzone_time", type: "aggregate", timeSeconds: 273 }],
+    raceReplay: stations.map((station, index) => ({
+      station,
+      entrySeconds: [5, 3, 11, 13, 17, 45, 49, 278][index],
+      exitSeconds: [31, 24, 24, 6, 17, 11, 15, null][index],
+    })),
+  });
+  const result = analyseRoxzone(normalised, {});
   assert.equal(result.roxzoneNarrative.available, true);
   assert.equal(result.roxzoneNarrative.replayTotalSeconds, 271);
   assert.equal(result.roxzoneNarrative.officialTotalSeconds, 273);

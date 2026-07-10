@@ -3,6 +3,7 @@ import {
   fetchDivisions,
   fetchDetailPage,
   fetchListPage,
+  parseAthleteAgeGroup,
   parseListResultCount,
   parseListRows,
   parseRaceReplay,
@@ -75,6 +76,7 @@ const ROXZONE_COLUMNS = Object.freeze({
 const ENRICHMENT_COLUMNS = Object.freeze([
   "athlete_1_name",
   "athlete_2_name",
+  "age_group",
   "run_total_seconds",
   "station_total_seconds",
   "roxzone_total_seconds",
@@ -337,6 +339,17 @@ function sumValues(values) {
   return finite.length ? finite.reduce((sum, value) => sum + value, 0) : null;
 }
 
+function completeSumValues(values, expectedCount) {
+  const finite = values.filter((value) => Number.isFinite(value));
+  return finite.length === expectedCount ? finite.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function addQualityFlag(row, flag) {
+  const flags = new Set(Array.isArray(row.data_quality_flags) ? row.data_quality_flags : []);
+  flags.add(flag);
+  row.data_quality_flags = [...flags];
+}
+
 function splitCoverageScore(row) {
   const expectedColumns = [
     "run_total_seconds",
@@ -357,6 +370,7 @@ export function enrichResultRowFromDetail(row, detailHtml) {
   const teamNames = athleteNamesForRow(row);
   enriched.athlete_1_name = teamNames[0] ?? null;
   enriched.athlete_2_name = teamNames[1] ?? null;
+  enriched.age_group = parseAthleteAgeGroup(detailHtml) ?? null;
 
   for (const [splitKey, column] of Object.entries(RUN_SPLIT_COLUMNS)) {
     enriched[column] = summary.splits?.[splitKey] ?? null;
@@ -368,7 +382,13 @@ export function enrichResultRowFromDetail(row, detailHtml) {
     enriched[column] = roxzoneSplits?.[splitKey] ?? null;
   }
 
-  enriched.run_total_seconds = summary.runTotalSeconds ?? sumValues(Object.values(RUN_SPLIT_COLUMNS).map((column) => enriched[column]));
+  const runSplitValues = Object.values(RUN_SPLIT_COLUMNS).map((column) => enriched[column]);
+  const runSplitCount = runSplitValues.filter(Number.isFinite).length;
+  enriched.run_total_seconds = summary.runTotalSeconds ?? completeSumValues(runSplitValues, Object.keys(RUN_SPLIT_COLUMNS).length);
+  if (!Number.isFinite(summary.runTotalSeconds) && runSplitCount > 0 && runSplitCount < Object.keys(RUN_SPLIT_COLUMNS).length) {
+    addQualityFlag(enriched, "incomplete_run_splits");
+    addQualityFlag(enriched, "missing_run_total");
+  }
   enriched.station_total_seconds = sumValues(Object.values(STATION_SPLIT_COLUMNS).map((column) => enriched[column]));
   enriched.roxzone_total_seconds = summary.roxzoneSeconds ?? null;
   enriched.split_coverage_score = splitCoverageScore(enriched);
@@ -378,6 +398,7 @@ export function enrichResultRowFromDetail(row, detailHtml) {
       splits: summary.splits ?? {},
       splitRanks: summary.splitRanks ?? {},
       runTotalSeconds: summary.runTotalSeconds ?? null,
+      runSplitCount,
       bestRunLapSeconds: summary.bestRunLapSeconds ?? null,
       roxzoneSeconds: summary.roxzoneSeconds ?? null,
       roxzoneSplits,
@@ -422,6 +443,7 @@ export async function enrichDoublesRows(rows, contestId, seasonNum, detailFetche
 export function validateAndFlagRow(row) {
   const criticalFlags = [];
   const warningFlags = [];
+  const existingFlags = Array.isArray(row.data_quality_flags) ? row.data_quality_flags : [];
 
   if (!row.hyrox_event_id) criticalFlags.push("missing_event_id");
   if (!DOUBLES_DIVISIONS.includes(row.division_category)) criticalFlags.push("invalid_division");
@@ -431,8 +453,8 @@ export function validateAndFlagRow(row) {
   if (!row.team_name) warningFlags.push("no_team_name");
   if (row.overall_time_seconds < 2400 || row.overall_time_seconds > 14400) warningFlags.push("implausible_time");
 
-  const flags = [...criticalFlags, ...warningFlags];
-  const data_quality_status = criticalFlags.length ? "invalid" : warningFlags.length ? "partial" : "valid";
+  const flags = [...new Set([...existingFlags, ...criticalFlags, ...warningFlags])];
+  const data_quality_status = criticalFlags.length ? "invalid" : flags.length ? "partial" : "valid";
   return { ...row, data_quality_status, data_quality_flags: flags };
 }
 
@@ -451,6 +473,7 @@ const INSERT_COLUMNS = [
   "team_name",
   "athlete_1_name",
   "athlete_2_name",
+  "age_group",
   "overall_rank",
   "overall_time_seconds",
   "overall_time_raw",

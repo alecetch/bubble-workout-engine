@@ -45,6 +45,9 @@
 	      .actions button { padding: 4px 8px; font-size: 12px; }
 	      .job-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 8px; max-width: 150px; }
 	      .job-actions button { padding: 4px 6px; font-size: 11px; }
+	      .backfill-row { margin-top: 6px; max-width: 150px; display: grid; gap: 4px; }
+	      .backfill-row button { padding: 4px 6px; font-size: 11px; width: 100%; }
+	      .backfill-status { font-size: 11px; font-family: Consolas, monospace; color: var(--muted); }
 	      .job-scope { min-width: 240px; max-width: 360px; }
 	      .job-scope.expanded { max-width: 560px; }
 	      .scope-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
@@ -98,7 +101,8 @@
           <span style="color:var(--muted);font-size:13px">Load the scraper to view benchmark state.</span>
         </div>
         <div class="controls">
-          <button id="build-benchmarks-btn" type="button" disabled>Build Benchmarks</button>
+	          <button id="build-benchmarks-btn" type="button" disabled>Build Doubles v2 Benchmarks</button>
+	          <button id="build-singles-s8-btn" type="button" disabled>Build Singles S8 Benchmarks</button>
           <span id="build-benchmark-status" class="status"></span>
         </div>
       </section>
@@ -166,6 +170,8 @@
 	      const selectedEventIdSet = new Set();
 	      const availabilityByEventId = new Map();
 	      const expandedJobScopeIds = new Set();
+	      const backfillPolls = new Map();
+	      const backfillStatus = new Map(); // jobId → last status text, survives re-renders
 	      const saved = sessionStorage.getItem(STORAGE_KEY);
       if (saved) tokenInput.value = saved;
 
@@ -298,9 +304,10 @@
         }
         const divHtml = divisions.map((d) => {
           const readyBadge = d.isReady ? `<span class="badge badge-valid">ready</span>` : `<span class="badge badge-partial">low data</span>`;
-          return `<div class="stat">
+	          const label = `${divisionLabel(d.division)}${d.performanceBand ? ` ${d.performanceBand}` : " overall"}`;
+	          return `<div class="stat">
             <strong>${esc(d.sampleSize?.toLocaleString() ?? 0)} ${readyBadge}</strong>
-            <span>${esc(divisionLabel(d.division))}</span>
+	            <span>${esc(label)}</span>
             <span class="mono">${esc(d.metricCount ?? 0)} metrics · ${d.builtAt ? esc(fmtDate(d.builtAt)) : "never"}</span>
           </div>`;
         }).join("");
@@ -365,6 +372,9 @@
           const found = Number(job.totalRecordsFound ?? job.total_records_found ?? 0);
           const savedCount = Number(job.totalRecordsSaved ?? job.total_records_saved ?? 0);
           const dupes = Number(job.totalDuplicatesSkipped ?? job.total_duplicates_skipped ?? 0);
+          const ageTotal = Number(job.ageTotal ?? 0);
+          const ageCovered = Number(job.ageCovered ?? 0);
+          const agePct = ageTotal > 0 ? Math.round(ageCovered / ageTotal * 100) : null;
           const available = job.totalRecordsAvailable ?? job.total_records_available;
           const errors = Number(job.totalErrors ?? job.total_errors ?? 0);
           const statusValue = job.status || "-";
@@ -385,6 +395,10 @@
                 <button data-action="retry-failed" data-job-id="${esc(job.id)}" type="button">Retry</button>
                 <button data-action="cancel" data-job-id="${esc(job.id)}" type="button" class="danger" ${!["queued","running","paused","retrying"].includes(statusValue) ? "disabled" : ""}>Cancel</button>
               </div>
+              <div class="backfill-row">
+                <button data-action="backfill-age-groups" data-job-id="${esc(job.id)}" type="button" class="secondary">Backfill Ages</button>
+                <div class="backfill-status" id="backfill-status-${esc(job.id)}">—</div>
+              </div>
             </td>
             <td>${renderLocationSummary(job)}</td>
             <td>${esc(completed)} / ${esc(total)}</td>
@@ -392,6 +406,7 @@
               ${available == null ? '<span class="mono">Availability not cached</span>' : `${esc(available)} available`}
               <br>${esc(savedCount)} saved
               <br><span class="mono">${esc(found)} found, ${esc(dupes)} dupes</span>
+              ${agePct !== null ? `<br><span class="mono" style="color:${agePct === 100 ? 'var(--ok)' : agePct > 0 ? 'var(--warn)' : 'var(--danger)'}">${esc(ageCovered)} / ${esc(ageTotal)} age groups (${agePct}%)</span>` : ""}
             </td>
             <td>
               ${esc(currentEvent || "-")}
@@ -401,6 +416,11 @@
             <td>${esc(errors)}${job.lastError || job.last_error ? `<br><span class="mono">${esc(job.lastError || job.last_error)}</span>` : ""}</td>
           </tr>`;
         }).join("");
+        // Re-apply any in-progress or completed backfill statuses that survived re-render.
+        for (const [jid, text] of backfillStatus) {
+          const el = document.getElementById(`backfill-status-${jid}`);
+          if (el) el.textContent = text;
+        }
       }
 
       async function loadAll() {
@@ -416,6 +436,7 @@
         renderJobs(jobs.jobs || []);
         renderBenchmarkReadiness(benchmarks);
         document.getElementById("build-benchmarks-btn").disabled = false;
+        document.getElementById("build-singles-s8-btn").disabled = false;
         status("Loaded.", "ok");
       }
 
@@ -515,6 +536,39 @@
           await loadAll().catch((err) => status(err.message, "err"));
           return;
         }
+        if (action === "backfill-age-groups" && jobId) {
+          if (backfillPolls.has(jobId)) return;
+          function setBackfillText(text) {
+            backfillStatus.set(jobId, text);
+            const el = document.getElementById(`backfill-status-${jobId}`);
+            if (el) el.textContent = text;
+          }
+          try {
+            const res = await api(`/jobs/${encodeURIComponent(jobId)}/backfill-age-groups`, { method: "POST" });
+            setBackfillText(`Started — ${res.missing ?? "?"} remaining`);
+            const pollId = setInterval(async () => {
+              try {
+                const s = await api(`/jobs/${encodeURIComponent(jobId)}/backfill-age-groups`);
+                const text = s.running
+                  ? `Running — ${s.missing ?? 0} remaining`
+                  : `Done — ${s.missing ?? 0} missing`;
+                setBackfillText(text);
+                if (!s.running && s.missing === 0) {
+                  clearInterval(pollId);
+                  backfillPolls.delete(jobId);
+                }
+              } catch (e) {
+                setBackfillText(`Poll error: ${e.message}`);
+                clearInterval(pollId);
+                backfillPolls.delete(jobId);
+              }
+            }, 3000);
+            backfillPolls.set(jobId, pollId);
+          } catch (err) {
+            setBackfillText(`Error: ${err.message}`);
+          }
+          return;
+        }
         if (!action || !jobId) return;
         try {
           await api(`/jobs/${encodeURIComponent(jobId)}/${action}`, { method: "PATCH" });
@@ -524,14 +578,14 @@
         }
       });
 
-      document.getElementById("build-benchmarks-btn").addEventListener("click", async () => {
+	      document.getElementById("build-benchmarks-btn").addEventListener("click", async () => {
         const btn = document.getElementById("build-benchmarks-btn");
         const buildStatus = document.getElementById("build-benchmark-status");
         btn.disabled = true;
         buildStatus.textContent = "Building…";
         buildStatus.className = "status";
         try {
-          const result = await api("/benchmarks/build", { method: "POST" });
+	          const result = await api("/benchmarks/build-doubles-v2", { method: "POST" });
           const groups = (result.written ?? []).map((g) => `${esc(divisionLabel(g.groupKey.split(":")[2] ?? g.groupKey))} ${esc(g.sampleSize?.toLocaleString())} rows`).join(" · ");
           buildStatus.textContent = `Built ${result.metricCount ?? 0} metrics from ${(result.rowsProcessed ?? 0).toLocaleString()} rows. ${groups}`;
           buildStatus.className = "status ok";
@@ -543,7 +597,28 @@
         } finally {
           btn.disabled = false;
         }
-      });
+	      });
+
+	      document.getElementById("build-singles-s8-btn").addEventListener("click", async () => {
+	        const btn = document.getElementById("build-singles-s8-btn");
+	        const buildStatus = document.getElementById("build-benchmark-status");
+	        btn.disabled = true;
+	        buildStatus.textContent = "Building singles S8 benchmarks...";
+	        buildStatus.className = "status";
+	        try {
+	          const result = await api("/benchmarks/build-singles-s8", { method: "POST" });
+	          const groups = (result.written ?? []).map((g) => `${esc(divisionLabel(g.groupKey.split(":")[2] ?? g.groupKey))} ${esc(g.sampleSize?.toLocaleString())} rows`).join(" Â· ");
+	          buildStatus.textContent = `Built singles S8: ${result.metricCount ?? 0} metrics from ${(result.rowsProcessed ?? 0).toLocaleString()} rows. ${groups}`;
+	          buildStatus.className = "status ok";
+	          const benchmarks = await api("/benchmark-readiness");
+	          renderBenchmarkReadiness(benchmarks);
+	        } catch (err) {
+	          buildStatus.textContent = err.message;
+	          buildStatus.className = "status err";
+	        } finally {
+	          btn.disabled = false;
+	        }
+	      });
 
       if (saved) loadAll().catch((err) => status(err.message, "err"));
     </script>

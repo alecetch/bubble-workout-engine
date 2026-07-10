@@ -21,6 +21,7 @@ const CATEGORY_SLUG = {
   penalty: "penalty",
   data_quality: "data-quality",
   high_performer: "running",
+  station_capacity: "running",
 };
 
 function normaliseGender(sex) {
@@ -72,6 +73,18 @@ export function resolveHeroImage(analysisJson = {}, athleteContext = {}) {
     if (strength && STATION_SLUG[strength]) {
       return `${BASE}/hyrox-${STATION_SLUG[strength]}-${gender}.png`;
     }
+  }
+
+  // For station_capacity with no station identified from segments or limiters,
+  // fall back to stationBreakdown sorted by timeGapSeconds descending. For elite
+  // athletes where all gaps are negative this picks the station closest to the median
+  // (their relatively weakest station).
+  if (category === "station_capacity") {
+    const fromBreakdown = [...(analysisJson.stationBreakdown ?? [])]
+      .filter((s) => s.confidence !== "low" && STATION_SLUG[s.segmentKey])
+      .sort((a, b) => (b.timeGapSeconds ?? -Infinity) - (a.timeGapSeconds ?? -Infinity))[0]
+      ?.segmentKey;
+    if (fromBreakdown) return `${BASE}/hyrox-${STATION_SLUG[fromBreakdown]}-${gender}.png`;
   }
 
   const slug = CATEGORY_SLUG[category];

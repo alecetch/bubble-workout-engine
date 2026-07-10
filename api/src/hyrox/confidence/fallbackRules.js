@@ -4,14 +4,15 @@ function keyPart(value) {
   return String(value ?? "all").replace(/[^a-z0-9_+-]+/gi, "_").toLowerCase();
 }
 
-export function makeBenchmarkGroupKey({ datasetVersion = DEFAULT_DATASET_VERSION, division = null, gender = null, ageGroup = null, performanceBand = null }) {
+export function makeBenchmarkGroupKey({ datasetVersion = DEFAULT_DATASET_VERSION, division = null, gender = null, ageGroup = null, performanceBand = null, region = null }) {
   if (performanceBand) {
     return ["hyrox", datasetVersion, "band", keyPart(performanceBand), keyPart(division), keyPart(gender)].join(":");
   }
-  return ["hyrox", datasetVersion, keyPart(division), keyPart(gender), keyPart(ageGroup)].join(":");
+  const base = ["hyrox", datasetVersion, keyPart(division), keyPart(gender), keyPart(ageGroup)].join(":");
+  return region ? `${base}:${keyPart(region)}` : base;
 }
 
-function adjacentAgeBand(ageGroup) {
+export function adjacentAgeBand(ageGroup) {
   const text = String(ageGroup ?? "");
   const match = text.match(/^(\d{2})-(\d{2})$/);
   if (!match) return null;
@@ -43,6 +44,7 @@ export function buildFallbackChain(request = {}) {
   const division = request.division ?? "open";
   const gender = request.gender ?? request.sex ?? "unknown";
   const ageGroup = request.ageGroup ?? request.age_group ?? null;
+  const region = request.region ?? null;
 
   if (!isIndividualDivision(division)) return [];
 
@@ -50,10 +52,23 @@ export function buildFallbackChain(request = {}) {
   const requestedKey = makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup });
 
   if (ageGroup) {
+    if (region) {
+      chain.push({
+        groupKey: makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup, region }),
+        benchmarkRequested: requestedKey,
+        level: 0,
+        matchType: "exact_regional",
+        division,
+        gender,
+        ageGroup,
+        region,
+      });
+    }
+
     chain.push({
       groupKey: requestedKey,
       benchmarkRequested: requestedKey,
-      level: 0,
+      level: region ? 1 : 0,
       matchType: "exact",
       division,
       gender,
@@ -62,10 +77,23 @@ export function buildFallbackChain(request = {}) {
 
     const adjacent = adjacentAgeBand(ageGroup);
     if (adjacent) {
+      if (region) {
+        chain.push({
+          groupKey: makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup: adjacent, region }),
+          benchmarkRequested: requestedKey,
+          level: 2,
+          matchType: "adjacent_regional",
+          division,
+          gender,
+          ageGroup: adjacent,
+          region,
+        });
+      }
+
       chain.push({
         groupKey: makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup: adjacent }),
         benchmarkRequested: requestedKey,
-        level: 1,
+        level: region ? 3 : 1,
         matchType: "adjacent_age_band",
         division,
         gender,
@@ -74,10 +102,23 @@ export function buildFallbackChain(request = {}) {
     }
   }
 
+  if (region) {
+    chain.push({
+      groupKey: makeBenchmarkGroupKey({ datasetVersion, division, gender, region }),
+      benchmarkRequested: requestedKey,
+      level: ageGroup ? 4 : 0,
+      matchType: "sex_division_regional",
+      division,
+      gender,
+      ageGroup: null,
+      region,
+    });
+  }
+
   chain.push({
     groupKey: makeBenchmarkGroupKey({ datasetVersion, division, gender }),
     benchmarkRequested: requestedKey,
-    level: 2,
+    level: region ? (ageGroup ? 5 : 1) : 2,
     matchType: "sex_division",
     division,
     gender,
@@ -87,7 +128,7 @@ export function buildFallbackChain(request = {}) {
   chain.push({
     groupKey: makeBenchmarkGroupKey({ datasetVersion, division }),
     benchmarkRequested: requestedKey,
-    level: 3,
+    level: region ? (ageGroup ? 6 : 2) : 3,
     matchType: "division_only",
     division,
     gender: null,
@@ -97,7 +138,7 @@ export function buildFallbackChain(request = {}) {
   chain.push({
     groupKey: makeBenchmarkGroupKey({ datasetVersion }),
     benchmarkRequested: requestedKey,
-    level: 4,
+    level: region ? (ageGroup ? 7 : 3) : 4,
     matchType: "population",
     division: null,
     gender: null,

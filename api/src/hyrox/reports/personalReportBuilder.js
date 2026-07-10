@@ -15,7 +15,9 @@ function section(sectionKey, title, content) {
 
 const WARNING_LABELS = Object.freeze({
   roxzone_inferred_from_unallocated_time: "Transition (RoxZone) time was estimated from unallocated race time, not recorded directly.",
-  partial_split_data: "Some station splits are missing and were excluded from the analysis.",
+  partial_split_data: "Some race splits are missing and were excluded from split-level analysis.",
+  incomplete_running_splits: "HYROX did not publish complete running splits for this result, so running pace cannot be analysed reliably.",
+  missing_run_total: "HYROX did not publish an official Run Total for this result.",
 });
 
 const SECTION_KEY_MAP = Object.freeze({
@@ -319,10 +321,13 @@ function dataConfidenceSection(analysisJson = {}) {
   const warnings = (analysisJson.dataQuality?.warnings ?? [])
     .map((code) => WARNING_LABELS[code])
     .filter(Boolean);
+  const hasIncompleteRuns = (analysisJson.dataQuality?.warnings ?? []).some((code) => code === "incomplete_running_splits" || code === "missing_run_total");
   return section("data_confidence", "What We Can and Cannot Infer", [
-    "This analysis is based on partial split data. Conclusions about individual stations are directional.",
+    "This analysis is based on partial split data. Conclusions about individual splits are directional.",
     ...warnings,
-    "Overall performance percentile and running pattern are available. Specific muscle-group conclusions are limited.",
+    hasIncompleteRuns
+      ? "Overall performance, station execution and total race analysis are still shown. Running pattern and run-total comparisons are unavailable."
+      : "Overall performance percentile and running pattern are available. Specific muscle-group conclusions are limited.",
   ]);
 }
 

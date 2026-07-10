@@ -1,3 +1,54 @@
+import { readFileSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname_carousel = dirname(fileURLToPath(import.meta.url));
+
+let FORMA_LOGO_B64 = "";
+for (const rel of ["./assets/forma-logo.png", "../../../../web/src/assets/forma-logo.png"]) {
+  try {
+    FORMA_LOGO_B64 = `data:image/png;base64,${readFileSync(resolve(__dirname_carousel, rel)).toString("base64")}`;
+    break;
+  } catch {
+    // try next path; falls back to CSS "F" mark
+  }
+}
+
+// The assets directory lives at the repo root. In Docker the api source tree is at /app and
+// the assets bind-mount lands at /app/assets (3 levels up from this file). On the host the
+// repo root is 4 levels up from api/src/hyrox/reports/. Try both.
+function loadAssetB64(serverRelativePath) {
+  if (!serverRelativePath || !serverRelativePath.startsWith("/assets/")) return null;
+  const rel = serverRelativePath.slice("/assets/".length);
+  for (const base of ["../../../assets", "../../../../assets"]) {
+    try {
+      const data = readFileSync(resolve(__dirname_carousel, base, rel));
+      return `data:image/png;base64,${data.toString("base64")}`;
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
+
+function formaMark(size) {
+  const r = Math.round(size * 0.22);
+  if (FORMA_LOGO_B64) {
+    return `<img src="${FORMA_LOGO_B64}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px;border-radius:${r}px;display:block;flex-shrink:0;" />`;
+  }
+  return `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;background:#0f6fff;border-radius:${r}px;color:#fff;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;font-weight:800;line-height:1;flex-shrink:0;">F</span>`;
+}
+
+function formaBrandHeader() {
+  return `<header class="forma-brand">
+    ${formaMark(36)}
+    <div class="forma-brand-text">
+      <div class="forma-brand-name">Forma</div>
+      <div class="forma-brand-sub">Performance Engineer</div>
+    </div>
+  </header>`;
+}
+
 const CAROUSEL_CSS = `
 :root {
   --bg: #080e1a;
@@ -27,10 +78,10 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
   border-bottom: 3px solid var(--blue);
   color: var(--text);
 }
-.brand { position: absolute; top: 54px; left: 70px; line-height: 1.05; letter-spacing: 0.02em; z-index: 3; }
-.brand-name { color: var(--blue); font-size: 20px; font-weight: 600; text-transform: uppercase; }
-.brand-subtitle { color: var(--muted); font-size: 12px; text-transform: uppercase; margin-top: 4px; }
-.brand-forma .brand-name { font-size: 20px; }
+.forma-brand { position: absolute; top: 48px; left: 70px; display: flex; align-items: center; gap: 14px; z-index: 3; }
+.forma-brand-text { line-height: 1; }
+.forma-brand-name { font-family: var(--font-body); font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+.forma-brand-sub { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
 .site { position: absolute; right: 72px; bottom: 28px; color: var(--muted); font-size: 12px; z-index: 2; }
 .footer { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; color: var(--muted-2); font-size: 12px; letter-spacing: 0.03em; }
 .blue { color: var(--blue); }
@@ -82,6 +133,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .kicker.secondary { margin-top: 36px; margin-bottom: 18px; }
 .station-title { font-weight: 300; font-size: 58px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 22px; }
 .percentile { color: var(--blue); font-family: var(--font-mono); font-size: 26px; text-transform: uppercase; margin: 0 auto 26px; }
+.regional-context { color: var(--muted); font-size: 17px; font-style: italic; line-height: 1.35; max-width: 680px; margin: -12px auto 24px; text-transform: none; }
 .trophy { font-family: var(--font-body); font-size: 26px; }
 .thin-rule { width: 200px; height: 1px; background: var(--line); margin: 0 auto 36px; }
 .giant { font-family: var(--font-display); font-weight: 300; font-size: 190px; line-height: 0.9; letter-spacing: -0.04em; }
@@ -101,9 +153,9 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .feature-list li::before { content: "\\2713"; color: var(--blue); display: inline-block; width: 46px; }
 .cta-button { width: 480px; height: 62px; border: none; border-radius: 5px; background: var(--blue); color: #07101e; font-family: var(--font-mono); font-size: 18px; text-transform: uppercase; letter-spacing: 0.01em; }
 .lower { margin: 50px auto 36px; background: var(--line); height: 1px; }
+.cta-logo-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
 .cta-brand { font-size: 34px; letter-spacing: 0.04em; }
 .cta-subtitle { color: var(--muted); font-size: 14px; margin-top: 8px; }
-.opportunity-stack {}
 @media screen and (max-width: 1120px) {
   .carousel { padding: 0; gap: 12px; }
   .slide { transform-origin: top center; width: min(100vw, 1080px); height: min(100vw, 1080px); }
@@ -124,10 +176,7 @@ const RENDERER_JS = `
   document.querySelectorAll('[data-field]').forEach(el => {
     const value = get(el.getAttribute('data-field'));
     if (value !== undefined && value !== null) el.textContent = value;
-  });
-  document.querySelectorAll('[data-image-field]').forEach(el => {
-    const value = get(el.getAttribute('data-image-field'));
-    if (value) el.setAttribute('src', value);
+    else if (el.hasAttribute('data-optional')) el.style.display = 'none';
   });
   const raceTable = document.querySelector('[data-repeat="slides.1.stations"]');
   if (raceTable) {
@@ -165,6 +214,15 @@ function htmlEsc(value) {
 export function buildCarouselPage(carouselData = {}) {
   const athleteName = carouselData.slides?.[0]?.athlete_name ?? "Athlete";
   const dataJson = JSON.stringify(carouselData).replace(/<\/script>/gi, "<\\/script>");
+  const brandHeader = formaBrandHeader();
+
+  // Load the hero image as base64 so it renders correctly inside the blob URL iframe,
+  // where server-relative paths (/assets/...) may not resolve as expected in all browsers.
+  const athleteImagePath = carouselData.slides?.[0]?.athlete_image ?? "";
+  const athleteImageSrc = loadAssetB64(athleteImagePath) ?? athleteImagePath;
+  const athleteImageTag = athleteImageSrc
+    ? `<img class="athlete-image" alt="" src="${htmlEsc(athleteImageSrc)}" />`
+    : `<img class="athlete-image" alt="" />`;
 
   return `<!doctype html>
 <html lang="en">
@@ -181,12 +239,10 @@ export function buildCarouselPage(carouselData = {}) {
   </div>
   <main id="carousel" class="carousel" aria-label="Forma athlete analysis carousel">
     <section class="slide slide-hook" data-slide="A1_ATHLETE_HOOK">
-      <header class="brand brand-forma">
-        <div class="brand-name" data-field="brand.product">FORMA</div>
-        <div class="brand-subtitle" data-field="slides.0.report_type">HYROX PERFORMANCE ANALYSIS</div>
-      </header>
+      ${brandHeader}
       <div class="hook-copy">
         <div class="small-kicker" data-field="slides.0.percentile">BENCHMARKED RESULT</div>
+        <div class="regional-context" data-field="slides.0.regional_context" data-optional></div>
         <h1 class="hook-title">
           <span class="danger" data-field="slides.0.limiter_word">OPPORTUNITY</span>
           <span data-field="slides.0.headline_suffix">SETS THE STORY</span>
@@ -199,7 +255,7 @@ export function buildCarouselPage(carouselData = {}) {
           <div class="metric-value" data-field="slides.0.overall_time">-</div>
         </div>
         <div class="metric-item">
-          <div class="metric-label">WORLD RANK</div>
+          <div class="metric-label" data-field="slides.0.metric2_label">WORLD RANK</div>
           <div class="metric-value" data-field="slides.0.world_rank">-</div>
         </div>
         <div class="metric-item">
@@ -212,15 +268,12 @@ export function buildCarouselPage(carouselData = {}) {
         </div>
       </div>
       <div class="swipe-prompt"><span class="blue">&#8594;</span> <span data-field="slides.0.swipe_prompt">Swipe to see where time was gained and lost.</span></div>
-      <img class="athlete-image" alt="" data-image-field="slides.0.athlete_image" />
+      ${athleteImageTag}
       <div class="site" data-field="brand.site">forma.fit</div>
     </section>
 
     <section class="slide slide-flow" data-slide="A2_POSITION_FLOW">
-      <header class="brand">
-        <div class="brand-name">HYROX</div>
-        <div class="brand-subtitle">PERFORMANCE ANALYSIS</div>
-      </header>
+      ${brandHeader}
       <h2 class="slide-title">HOW THE RACE UNFOLDED</h2>
       <div class="flow-summary">
         <div class="summary-box positive">
@@ -239,7 +292,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-stat" data-slide="A3_BIGGEST_STRENGTH">
-      <header class="brand"><div class="brand-name">HYROX</div><div class="brand-subtitle">PERFORMANCE ANALYSIS</div></header>
+      ${brandHeader}
       <div class="center-stack">
         <div class="kicker">BIGGEST STRENGTH</div>
         <h2 class="station-title" data-field="slides.2.station">-</h2>
@@ -253,7 +306,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-stat" data-slide="A4_BIGGEST_OPPORTUNITY">
-      <header class="brand"><div class="brand-name">HYROX</div><div class="brand-subtitle">PERFORMANCE ANALYSIS</div></header>
+      ${brandHeader}
       <div class="center-stack opportunity-stack">
         <div class="kicker">BIGGEST OPPORTUNITY</div>
         <h2 class="station-title" data-field="slides.3.station">-</h2>
@@ -267,7 +320,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-insight" data-slide="A5_KEY_INSIGHT">
-      <header class="brand"><div class="brand-name">HYROX</div><div class="brand-subtitle">PERFORMANCE ANALYSIS</div></header>
+      ${brandHeader}
       <div class="insight-wrap">
         <h2 class="slide-title two-line">WHAT THE<br>DATA SHOWS</h2>
         <div class="short-rule"></div>
@@ -281,7 +334,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-cta" data-slide="A6_CTA">
-      <header class="brand"><div class="brand-name">HYROX</div><div class="brand-subtitle">PERFORMANCE ANALYSIS</div></header>
+      ${brandHeader}
       <div class="cta-wrap">
         <h2 class="slide-title two-line">DISCOVER YOUR<br>HYROX BOTTLENECK</h2>
         <div class="short-rule"></div>

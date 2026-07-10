@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseListResultCount, parseListRows } from "../../../contentStudio/hyroxScraper.js";
+import { parseAthleteAgeGroup, parseListResultCount, parseListRows } from "../../../contentStudio/hyroxScraper.js";
 import {
   buildResultRow,
   countAvailableDoublesRecords,
@@ -223,9 +223,41 @@ describe("buildResultRow", () => {
   });
 });
 
+describe("parseAthleteAgeGroup", () => {
+  it("extracts age group from f-_type_age_class CSS class on a td (standard HYROX pattern)", () => {
+    const html = `<tr class=" f-_type_age_class"><th class="desc">Age Group</th><td class="f-_type_age_class last">25-29</td></tr>`;
+    assert.equal(parseAthleteAgeGroup(html), "25-29");
+  });
+
+  it("extracts from f-_type_age_class when only the td carries the class", () => {
+    const html = `<td class="f-_type_age_class last">35-39</td>`;
+    assert.equal(parseAthleteAgeGroup(html), "35-39");
+  });
+
+  it("falls back to Age Group label row when CSS class is absent", () => {
+    const html = `<tr><th>Age Group</th><td>40-44</td></tr>`;
+    assert.equal(parseAthleteAgeGroup(html), "40-44");
+  });
+
+  it("falls back to Age Class label row (older season variant)", () => {
+    const html = `<tr><td>Age Class</td><td>30-34</td></tr>`;
+    assert.equal(parseAthleteAgeGroup(html), "30-34");
+  });
+
+  it("returns null when neither pattern is present", () => {
+    assert.equal(parseAthleteAgeGroup("<html><body>No age info here</body></html>"), null);
+  });
+
+  it("returns null for elite events that have no age group field", () => {
+    const html = `<tr class=" f-__fullname"><th>Name</th><td>Smith, John</td></tr><tr class="f-__nation"><th>Nat</th><td>USA</td></tr>`;
+    assert.equal(parseAthleteAgeGroup(html), null);
+  });
+});
+
 describe("enrichResultRowFromDetail", () => {
   it("maps detail-page splits and roxzone replay rows onto doubles columns", () => {
     const detailHtml = `
+      <td class="f-_type_age_class last">35-39</td>
       <div id="detail-box-other"><table>
         <tr class="f-time_01"><td class="f-time_01">00:04:00</td><td class="last">1</td></tr>
         <tr class="f-time_02"><td class="f-time_02">00:05:00</td><td class="last">2</td></tr>
@@ -242,6 +274,7 @@ describe("enrichResultRowFromDetail", () => {
 
     assert.equal(result.athlete_1_name, "Alice Example");
     assert.equal(result.athlete_2_name, "Bob Example");
+    assert.equal(result.age_group, "35-39");
     assert.equal(result.run_total_seconds, 540);
     assert.equal(result.station_total_seconds, 300);
     assert.equal(result.roxzone_total_seconds, 420);
@@ -251,6 +284,48 @@ describe("enrichResultRowFromDetail", () => {
     assert.equal(result.rox_skierg_out, 18);
     assert.ok(result.split_coverage_score > 0);
     assert.equal(result.raw_payload_json.detail.roxzoneSeconds, 420);
+  });
+
+  it("sets age_group to null when age class is absent from detail page", () => {
+    const result = enrichResultRowFromDetail(validRow(), "<html></html>");
+    assert.equal(result.age_group, null);
+  });
+
+  it("does not treat partial run splits as total running when official Run Total is missing", () => {
+    const detailHtml = `
+      <div id="detail-box-other"><table>
+        <tr class="f-time_01"><td class="f-time_01">00:06:19</td><td class="last">-</td></tr>
+        <tr class="f-time_11"><td class="f-time_11">00:05:29</td><td class="last">11</td></tr>
+        <tr class="f-time_12"><td class="f-time_12">00:03:33</td><td class="last">12</td></tr>
+        <tr class="f-time_13"><td class="f-time_13">00:07:30</td><td class="last">11</td></tr>
+        <tr class="f-time_14"><td class="f-time_14">00:04:53</td><td class="last">8</td></tr>
+        <tr class="f-time_15"><td class="f-time_15">00:06:09</td><td class="last">12</td></tr>
+        <tr class="f-time_16"><td class="f-time_16">00:02:59</td><td class="last">12</td></tr>
+        <tr class="f-time_17"><td class="f-time_17">00:07:34</td><td class="last">11</td></tr>
+        <tr class="f-time_18"><td class="f-time_18">00:20:10</td><td class="last">12</td></tr>
+        <tr class="f-time_49"><td class="f-time_49">-</td><td class="last">10</td></tr>
+        <tr class="f-time_60"><td class="f-time_60">-</td><td class="last">-</td></tr>
+      </table></div>`;
+    const enriched = enrichResultRowFromDetail(validRow(), detailHtml);
+    const validated = validateAndFlagRow(enriched);
+
+    assert.equal(enriched.split_run_1, 379);
+    assert.equal(enriched.run_total_seconds, null);
+    assert.equal(validated.data_quality_status, "partial");
+    assert.ok(validated.data_quality_flags.includes("incomplete_run_splits"));
+    assert.ok(validated.data_quality_flags.includes("missing_run_total"));
+  });
+
+  it("sums running only when all eight run splits are present and official Run Total is missing", () => {
+    const runRows = Array.from({ length: 8 }, (_, index) => {
+      const cls = `f-time_0${index + 1}`;
+      return `<tr class="${cls}"><td class="${cls}">00:05:00</td><td class="last">-</td></tr>`;
+    }).join("");
+    const detailHtml = `<div id="detail-box-other"><table>${runRows}</table></div>`;
+    const result = enrichResultRowFromDetail(validRow(), detailHtml);
+
+    assert.equal(result.run_total_seconds, 2400);
+    assert.ok(!(result.data_quality_flags ?? []).includes("incomplete_run_splits"));
   });
 
   it("keeps singles names as one athlete name", () => {

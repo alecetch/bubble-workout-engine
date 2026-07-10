@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pool } from "../../db.js";
 import { BENCHMARK_METRIC_KEYS, computeBenchmarkStats } from "../benchmarks/computeBenchmarkStats.js";
-import { HYROX_SCRAPER_DIVISIONS } from "../doubles/doublesScraper.js";
 import {
   AGE_GROUP_WHITELIST,
   PERFORMANCE_BANDS,
@@ -13,15 +12,8 @@ import {
   performanceBandForSeconds,
 } from "./adaptEnrichedRow.js";
 
-const DATASET_VERSION = "doubles_v2";
-const DOUBLES_BENCHMARK_DIVISIONS = Object.freeze([
-  "doubles_male",
-  "doubles_female",
-  "doubles_mixed",
-  "pro_doubles_male",
-  "pro_doubles_female",
-]);
-const DIVISIONS = HYROX_SCRAPER_DIVISIONS.filter((division) => DOUBLES_BENCHMARK_DIVISIONS.includes(division));
+const DATASET_VERSION = "singles_s8_v1";
+const SINGLES_DIVISIONS = Object.freeze(["open_male", "open_female", "pro_male", "pro_female"]);
 const MIN_GROUP_SAMPLE_SIZE = 100;
 const MIN_AGE_SEGMENT_SAMPLE_SIZE = 50;
 const MIN_REGIONAL_SAMPLE_SIZE = 200;
@@ -30,9 +22,13 @@ const REGIONS = Object.freeze(["europe", "oceania", "americas", "asia", "africa_
 export { adaptEnrichedRow, isBenchmarkSourceRowEligible, performanceBandForSeconds };
 
 function genderFromDivision(division) {
-  if (division.endsWith("_male")) return "male";
-  if (division.endsWith("_female")) return "female";
-  return "mixed";
+  return division.endsWith("_female") ? "female" : "male";
+}
+
+function toEngineDivision(divisionCategory) {
+  if (divisionCategory.startsWith("open")) return "open";
+  if (divisionCategory.startsWith("pro")) return "pro";
+  return divisionCategory;
 }
 
 export function groupKey(division, performanceBand = null, gender = "all", ageGroup = "all", region = null) {
@@ -41,10 +37,6 @@ export function groupKey(division, performanceBand = null, gender = "all", ageGr
   }
   const base = `hyrox:${DATASET_VERSION}:${division}:${gender ?? "all"}:${ageGroup ?? "all"}`;
   return region ? `${base}:${region}` : base;
-}
-
-function groupRecords(adaptedRows, division, performanceBand = null) {
-  return adaptedRows.filter((row) => row._division === division && (!performanceBand || row._performanceBand === performanceBand));
 }
 
 function makeGroup(division, records, performanceBand = null, gender = "all", ageGroup = "all", region = null) {
@@ -65,13 +57,17 @@ function makeGroup(division, records, performanceBand = null, gender = "all", ag
 export function buildGroups(adaptedRows) {
   const groups = [];
 
-  for (const division of DIVISIONS) {
-    const gender = genderFromDivision(division);
-    const records = adaptedRows.filter((row) => row._division === division);
+  for (const sourceDivision of SINGLES_DIVISIONS) {
+    const division = toEngineDivision(sourceDivision);
+    const gender = genderFromDivision(sourceDivision);
+    const records = adaptedRows.filter((row) => row._division === sourceDivision);
+
+    groups.push(makeGroup(division, records, null, gender, "all"));
     groups.push(makeGroup(division, records, null, "all", "all"));
 
     for (const band of PERFORMANCE_BANDS) {
-      groups.push(makeGroup(division, groupRecords(adaptedRows, division, band), band, "all", "all"));
+      const bandRows = records.filter((row) => row._performanceBand === band);
+      groups.push(makeGroup(division, bandRows, band, gender, "all"));
     }
 
     for (const ageGroup of AGE_GROUP_WHITELIST) {
@@ -89,7 +85,18 @@ export function buildGroups(adaptedRows) {
     }
   }
 
-  return groups.filter((group) => {
+  const byKey = new Map();
+  for (const group of groups) {
+    const existing = byKey.get(group.groupKey);
+    if (existing) {
+      existing.records = [...existing.records, ...group.records];
+      existing.sampleSize = existing.records.length;
+    } else {
+      byKey.set(group.groupKey, { ...group, records: [...group.records] });
+    }
+  }
+
+  return [...byKey.values()].filter((group) => {
     if (group.ageGroup !== "all" && group.performanceBand === null) {
       return group.sampleSize >= MIN_AGE_SEGMENT_SAMPLE_SIZE;
     }
@@ -170,7 +177,7 @@ async function upsertMetric(client, metric) {
   );
 }
 
-export async function buildDoublesBenchmarks() {
+export async function buildSinglesS8Benchmarks() {
   const { rows } = await pool.query(
     `SELECT
        division_category,
@@ -183,7 +190,7 @@ export async function buildDoublesBenchmarks() {
        split_run_1, split_run_2, split_run_3, split_run_4,
        split_run_5, split_run_6, split_run_7, split_run_8,
        split_skierg, split_sled_push, split_sled_pull, split_burpee_bj,
-	       split_row, split_farmers_carry, split_sandbag_lunge, split_wall_balls,
+       split_row, split_farmers_carry, split_sandbag_lunge, split_wall_balls,
        rox_skierg_in, rox_skierg_out,
        rox_sled_push_in, rox_sled_push_out,
        rox_sled_pull_in, rox_sled_pull_out,
@@ -192,10 +199,10 @@ export async function buildDoublesBenchmarks() {
        rox_farmers_carry_in, rox_farmers_carry_out,
        rox_sandbag_lunge_in, rox_sandbag_lunge_out,
        split_coverage_score,
-	       data_quality_flags,
+       data_quality_flags,
        event_country
      FROM hyrox_doubles_scraped_results
-       WHERE division_category IN ('doubles_male','doubles_female','doubles_mixed','pro_doubles_male','pro_doubles_female')
+     WHERE division_category IN ('open_male','open_female','pro_male','pro_female')
        AND data_quality_status IN ('valid','partial')
        AND overall_time_seconds BETWEEN 2700 AND 28800
        AND athlete_1_name NOT ILIKE 'test%'
@@ -255,7 +262,7 @@ export async function buildDoublesBenchmarks() {
 }
 
 function printSummary(summary) {
-  console.log("HYROX doubles benchmark build complete");
+  console.log("HYROX singles S8 benchmark build complete");
   console.log(`rows_processed: ${summary.rowsProcessed}`);
   console.log(`metrics_written: ${summary.metricCount}`);
   for (const group of summary.written) {
@@ -266,7 +273,7 @@ function printSummary(summary) {
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
 if (isCli) {
-  buildDoublesBenchmarks()
+  buildSinglesS8Benchmarks()
     .then(printSummary)
     .catch((err) => {
       console.error(err?.stack || err?.message || err);

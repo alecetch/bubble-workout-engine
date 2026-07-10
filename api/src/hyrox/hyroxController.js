@@ -56,7 +56,7 @@ function contextForPipeline(body = {}) {
     ...athleteContext,
     ...performanceContext,
     calculatorMode: body.calculatorMode ?? "target",
-    displayName: body.athlete?.name ?? athleteContext.displayName,
+    displayName: body.athlete?.displayName ?? body.athlete?.name ?? athleteContext.displayName,
     email: body.athlete?.email,
     sex: body.athlete?.sex ?? null,
     targetFinishTimeSeconds: intOrNull(athleteContext.targetFinishTimeSeconds),
@@ -94,6 +94,7 @@ export function submissionInput(body = {}) {
     race: {
       raceName: race.raceName ?? null,
       raceDate: race.raceDate ?? null,
+      eventCountry: race.eventCountry ?? null,
       division: race.division ?? athlete.division ?? "open",
       finishTimeSeconds: race.finishTimeSeconds,
       targetTimeSeconds: athleteContext.targetFinishTimeSeconds,
@@ -134,17 +135,17 @@ async function persistSubmission(body, normalised) {
     ...(athleteContext.targetRaceDate != null ? { targetRaceDate: String(athleteContext.targetRaceDate) } : {}),
   };
   const result = await pool.query(
-    `INSERT INTO hyrox_submissions (
-      email, display_name, sex, age_on_race_day, age_group, division, finish_time_seconds,
-      race_name, race_date, source, splits_json, roxzone_mode, athlete_context_json,
-      performance_context_json, marketing_consent, allow_partial, height_cm, weight_kg,
-      five_km_pb_seconds, ten_km_pb_seconds, half_marathon_pb_seconds, back_squat_kg,
-      deadlift_kg, front_squat_kg, max_unbroken_wall_balls, injury_constraints, equipment_access
-      , penalties_json, race_replay_json
-    ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26::jsonb,$27::jsonb
-      ,$28::jsonb,$29::jsonb
-    ) RETURNING *`,
+	    `INSERT INTO hyrox_submissions (
+	      email, display_name, sex, age_on_race_day, age_group, division, finish_time_seconds,
+	      race_name, race_date, event_country, source, splits_json, roxzone_mode, athlete_context_json,
+	      performance_context_json, marketing_consent, allow_partial, height_cm, weight_kg,
+	      five_km_pb_seconds, ten_km_pb_seconds, half_marathon_pb_seconds, back_squat_kg,
+	      deadlift_kg, front_squat_kg, max_unbroken_wall_balls, injury_constraints, equipment_access
+	      , penalties_json, race_replay_json
+	    ) VALUES (
+	      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27::jsonb,$28::jsonb
+	      ,$29::jsonb,$30::jsonb
+	    ) RETURNING *`,
     [
       athlete.email,
       athlete.name ?? null,
@@ -152,10 +153,11 @@ async function persistSubmission(body, normalised) {
       athlete.ageOnRaceDay ?? null,
       normalised.athlete?.ageGroup ?? athlete.ageGroup ?? null,
       race.division ?? "open",
-      race.finishTimeSeconds,
-      race.raceName ?? null,
-      race.raceDate ?? null,
-      race.source ?? "manual",
+	      race.finishTimeSeconds,
+	      race.raceName ?? null,
+	      race.raceDate ?? null,
+	      race.eventCountry ?? null,
+	      race.source ?? "manual",
       JSON.stringify(body.splits ?? []),
       normalised.roxzoneMode ?? "none",
       JSON.stringify(athleteContextJson),
@@ -210,7 +212,7 @@ function limitedAnalysis(body, normalised, reason) {
     analysisScope: "limited",
     reason,
     dataQuality: { confidence: "low", issues: [reason], warnings: [] },
-    benchmarkContext: { primaryBenchmarkGroup: null, fallbacksUsed: [], goalBenchmarkGroup: null },
+    benchmarkContext: { primaryBenchmarkGroup: null, fallbacksUsed: [], goalBenchmarkGroup: null, ageBenchmark: { available: false }, regionalBenchmark: { available: false } },
     race: { finishTimeSeconds: body.race?.finishTimeSeconds, division: body.race?.division },
     segments: [],
     stationBreakdown: [],

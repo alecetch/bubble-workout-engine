@@ -26,6 +26,47 @@ async function inlineAssetPaths(html) {
   return html;
 }
 
+/**
+ * Screenshots a self-contained HTML string and returns a PNG Buffer.
+ * Uses deviceScaleFactor 2 for retina-crisp output; the returned buffer is
+ * at the logical (CSS) dimensions, not doubled.
+ *
+ * @param {string} htmlString  Fully self-contained HTML (fonts/images already inline or loaded via network)
+ * @param {{ width: number, height: number }} dims
+ * @returns {Promise<Buffer>}
+ */
+export async function screenshotHtml(htmlString, { width, height }) {
+  const { default: puppeteer } = await import("puppeteer");
+  const browser = await puppeteer.launch({
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-zygote",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-default-apps",
+    ],
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width, height, deviceScaleFactor: 2 });
+    await page.setContent(htmlString, { waitUntil: "load", timeout: 30000 });
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 200)));
+    const buf = await page.screenshot({
+      type: "png",
+      clip: { x: 0, y: 0, width, height },
+      timeout: 30000,
+    });
+    return Buffer.from(buf);
+  } finally {
+    await browser.close();
+  }
+}
+
 export async function screenshotSlides(carouselHtml) {
   const { default: puppeteer } = await import("puppeteer");
   const browser = await puppeteer.launch({

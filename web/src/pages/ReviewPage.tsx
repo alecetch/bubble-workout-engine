@@ -145,9 +145,10 @@ export function ReviewPage() {
         ageGroup: athlete.ageGroup,
       },
       race: {
-        raceName: race.raceName,
-        raceDate: race.raceDate,
-        division: race.division,
+	        raceName: race.raceName,
+	        raceDate: race.raceDate,
+	        eventCountry: race.eventCountry,
+	        division: race.division,
         finishTimeSeconds: race.finishTimeSeconds,
       },
       splits,

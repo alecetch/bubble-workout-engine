@@ -1,6 +1,8 @@
 import { pool } from "../db.js";
 import { buildCarouselPage, resolveCarouselData } from "./reports/carouselPageBuilder.js";
 import { buildTemplateA } from "./reports/templateSlotMapper.js";
+import { rankInsightsForOutput } from "./reports/insightRanker.js";
+import { resolveConflicts } from "./reports/conflictResolver.js";
 
 function objectOrNull(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -21,7 +23,8 @@ function athleteContext(row = {}, storedCarousel = null) {
 function rebuildCarousel(row = {}) {
   const analysisJson = objectOrNull(row.analysis_json);
   if (!analysisJson || analysisJson.analysisScope === "no_benchmark_data") return null;
-  const insights = Array.isArray(row.selected_insights_json) ? row.selected_insights_json : [];
+  const raw = Array.isArray(row.selected_insights_json) ? row.selected_insights_json : [];
+  const insights = resolveConflicts(rankInsightsForOutput(raw, "carousel_a"), "carousel_a");
   return buildTemplateA(analysisJson, insights, athleteContext(row, row.carousel_a_json));
 }
 

@@ -43,6 +43,7 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
     overallPercentile: Number.isFinite(Number(total?.percentile)) ? total.percentile : null,
     overallPercentileLabel: formatPercentile(total?.percentile),
     benchmarkGroupLabel: analysisJson.benchmarkContext?.primaryBenchmarkGroup?.label ?? analysisJson.benchmarkContext?.primaryBenchmarkGroup?.key ?? "your benchmark band",
+    comparisonOptions: analysisJson.benchmarkContext?.comparisonOptions ?? null,
     biggestLimiter: limiter ? { label: limiter.label, timeGapFormatted: formatGain(limiter.timeGapSeconds) } : null,
     biggestStrength: strength ? { label: strength.label, percentile: strength.percentile } : null,
     timePotential: {

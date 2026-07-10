@@ -1,6 +1,8 @@
 import express from "express";
 import { ZipArchive } from "archiver";
 import { pool as defaultPool } from "../db.js";
+import { buildHyroxRaceCardData } from "../hyrox/reports/raceCardDataMapper.js";
+import { generateRaceCardPng } from "../hyrox/sharePack/raceCardScreenshotter.js";
 import { submissionInput } from "../hyrox/hyroxController.js";
 import { parseHyroxResultsHtml } from "../hyrox/ingestion/parseHyroxResultsHtml.js";
 import { parseHyroxResultsText } from "../hyrox/ingestion/parseHyroxResultsText.js";
@@ -8,6 +10,7 @@ import { analyseSubmission } from "../hyrox/engine/hyroxAnalysisEngine.js";
 import { normaliseSubmission } from "../hyrox/engine/segmentNormaliser.js";
 import { generateInsights } from "../hyrox/insights/insightEngine.js";
 import { assembleReport } from "../hyrox/reports/reportAssembler.js";
+import { buildCarouselPage } from "../hyrox/reports/carouselPageBuilder.js";
 import { lookupHyroxEventByKey } from "../hyrox/services/hyroxEventsService.js";
 import { detectHyroxDivisionFromUrl } from "../hyrox/ingestion/detectHyroxDivision.js";
 
@@ -47,6 +50,8 @@ function parseRequestedCases(body = {}) {
       .map((entry) => ({
         url: String(entry?.url ?? "").trim(),
         targetTime: entry?.targetTime,
+        label: String(entry?.label ?? "").trim(),
+        expectedCommentary: String(entry?.expectedCommentary ?? "").trim(),
       }))
       .filter((entry) => {
         if (!entry.url || seen.has(entry.url)) return false;
@@ -55,7 +60,12 @@ function parseRequestedCases(body = {}) {
       });
   }
 
-  return parseRequestedUrls(body).map((url) => ({ url, targetTime: body.targetTime }));
+  return parseRequestedUrls(body).map((url) => ({
+    url,
+    targetTime: body.targetTime,
+    label: String(body.label ?? "").trim(),
+    expectedCommentary: String(body.expectedCommentary ?? "").trim(),
+  }));
 }
 
 function validateUrlList(urls) {
@@ -244,6 +254,57 @@ function nameSlug(name) {
   return slug || "hyrox-athlete";
 }
 
+function titleCaseNamePart(value) {
+  function formatToken(part) {
+    if (/[a-z]/.test(part) && /[A-Z]/.test(part.slice(1))) return part;
+    if (part === part.toUpperCase()) return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    return part.charAt(0).toUpperCase() + part.slice(1);
+  }
+  return String(value ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(formatToken)
+    .join(" ");
+}
+
+function displayNameFromSurnameFirstPart(rawPart) {
+  const trimmed = String(rawPart ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.includes(",")) {
+    const [surname, given] = trimmed.split(",", 2).map((part) => part.trim());
+    return [titleCaseNamePart(given), titleCaseNamePart(surname)].filter(Boolean).join(" ") || null;
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return [titleCaseNamePart(parts.slice(1).join(" ")), titleCaseNamePart(parts[0])].filter(Boolean).join(" ");
+  }
+  return titleCaseNamePart(trimmed);
+}
+
+function displayAthleteName(parsed = {}) {
+  const rawName = parsed.athleteName ?? parsed.name ?? "";
+  const trimmed = String(rawName).trim();
+  if (!trimmed) return "HYROX athlete";
+  if (trimmed.includes(" & ")) {
+    const names = trimmed
+      .split(/\s+&\s+/)
+      .map(displayNameFromSurnameFirstPart)
+      .filter(Boolean);
+    if (names.length > 0) return names.join(" & ");
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length === 4 && parsed.division && /doubles/i.test(String(parsed.division))) {
+    return `${titleCaseNamePart(parts[1])} ${titleCaseNamePart(parts[0])} & ${titleCaseNamePart(parts[3])} ${titleCaseNamePart(parts[2])}`;
+  }
+  // HYROX official results use "SURNAME, FIRSTNAME" — convert to "Firstname Surname"
+  if (trimmed.includes(",")) {
+    const converted = displayNameFromSurnameFirstPart(trimmed);
+    if (converted) return converted;
+  }
+  return titleCaseNamePart(trimmed);
+}
+
 function parsedConfidence(parsed) {
   if (!parsed || typeof parsed !== "object") return "low";
   return parsed.confidence ?? parsed.parseConfidence ?? parsed.dataQuality?.confidence ?? null;
@@ -341,9 +402,10 @@ async function fetchAndParseHyroxUrl(url, pool) {
 }
 
 function buildBody({ modeName, calculatorMode, targetFinishTimeSeconds, parsed, event, sharedContext = {} }) {
+  const athleteDisplayName = displayAthleteName(parsed);
   const sharedAthlete = {
     name: parsed.athleteName ?? parsed.name ?? null,
-    displayName: parsed.athleteName ?? parsed.name ?? "HYROX athlete",
+    displayName: athleteDisplayName,
     sex: parsed.sex ?? parsed.gender ?? null,
     ageGroup: parsed.ageGroup ?? null,
     ageOnRaceDay: parsed.ageOnRaceDay ?? null,
@@ -608,18 +670,20 @@ function qaFlagsMarkdown(modeEntries) {
   return rows.join("\n");
 }
 
-function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishTimeSeconds, modeEntries, divisionDetection }) {
+function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishTimeSeconds, modeEntries, divisionDetection, label = "", expectedCommentary = "" }) {
+  const athleteDisplayName = displayAthleteName(parsed);
   const metadata = [
     "# HYROX QA Test Harness",
     "",
     "## Metadata",
     "",
     `- Generated at: ${new Date().toISOString()}`,
+    ...(label ? [`- Label: ${markdownValue(label)}`] : []),
     `- Source URL: ${sourceUrl}`,
     `- Event lookup key: ${markdownValue(eventLookupKey)}`,
     `- Event name: ${markdownValue(event?.eventName ?? parsed.raceName)}`,
     `- Event date: ${markdownValue(isoDate(event?.startDate) ?? isoDate(parsed.eventDate))}`,
-    `- Athlete: ${markdownValue(parsed.athleteName ?? parsed.name ?? "HYROX athlete")}`,
+    `- Athlete: ${markdownValue(athleteDisplayName)}`,
     `- Division: ${markdownValue(parsed.division)}`,
     `- Detected race format: ${markdownValue(divisionDetection?.raceFormat)}`,
     `- Detected division label: ${markdownValue(divisionDetection?.divisionLabel)}`,
@@ -635,7 +699,7 @@ function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishT
     "```json",
     JSON.stringify({
       athlete: {
-        displayName: parsed.athleteName ?? parsed.name ?? "HYROX athlete",
+        displayName: athleteDisplayName,
         division: parsed.division ?? null,
       },
       race: {
@@ -651,8 +715,13 @@ function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishT
     "",
   ].join("\n");
 
+  const intentSection = expectedCommentary
+    ? [`## Test Case Intent\n\n${expectedCommentary}`]
+    : [];
+
   return [
     metadata,
+    ...intentSection,
     ...modeEntries.map(modeMarkdown),
     comparisonNotes(modeEntries, parsed),
     "",
@@ -660,12 +729,13 @@ function buildMarkdown({ sourceUrl, eventLookupKey, parsed, event, targetFinishT
 }
 
 function emailArtifactMarkdown({ sourceUrl, parsed, targetFinishTimeSeconds, modeEntries }) {
+  const athleteDisplayName = displayAthleteName(parsed);
   const rows = [
     "# HYROX Email Artifact",
     "",
     `- Generated at: ${new Date().toISOString()}`,
     `- Source URL: ${sourceUrl}`,
-    `- Athlete: ${markdownValue(parsed.athleteName ?? parsed.name ?? "HYROX athlete")}`,
+    `- Athlete: ${markdownValue(athleteDisplayName)}`,
     `- Finish time: ${formatSeconds(parsed.finishTimeSeconds)}`,
     `- Target time: ${targetFinishTimeSeconds ? formatSeconds(targetFinishTimeSeconds) : "none"}`,
     "",
@@ -698,12 +768,13 @@ function emailArtifactMarkdown({ sourceUrl, parsed, targetFinishTimeSeconds, mod
 }
 
 function instagramArtifactMarkdown({ sourceUrl, parsed, targetFinishTimeSeconds, modeEntries }) {
+  const athleteDisplayName = displayAthleteName(parsed);
   const rows = [
     "# HYROX Instagram Pack",
     "",
     `- Generated at: ${new Date().toISOString()}`,
     `- Source URL: ${sourceUrl}`,
-    `- Athlete: ${markdownValue(parsed.athleteName ?? parsed.name ?? "HYROX athlete")}`,
+    `- Athlete: ${markdownValue(athleteDisplayName)}`,
     `- Finish time: ${formatSeconds(parsed.finishTimeSeconds)}`,
     `- Target time: ${targetFinishTimeSeconds ? formatSeconds(targetFinishTimeSeconds) : "none"}`,
     "",
@@ -752,7 +823,7 @@ function artifactMarkdown(artifact, result) {
 }
 
 function responseFilename(parsed) {
-  return `hyrox-harness-${nameSlug(parsed.athleteName ?? parsed.name)}-${localTimestampSlug()}.md`;
+  return `hyrox-harness-${nameSlug(displayAthleteName(parsed))}-${localTimestampSlug()}.md`;
 }
 
 function packResponseFilename(count) {
@@ -760,8 +831,8 @@ function packResponseFilename(count) {
 }
 
 function artifactResponseFilename(artifact, parsed) {
-  if (artifact === "email_html") return `hyrox-email-html-${nameSlug(parsed.athleteName ?? parsed.name)}-${localTimestampSlug()}.zip`;
-  return `hyrox-${artifact}-${nameSlug(parsed.athleteName ?? parsed.name)}-${localTimestampSlug()}.md`;
+  if (artifact === "email_html") return `hyrox-email-html-${nameSlug(displayAthleteName(parsed))}-${localTimestampSlug()}.zip`;
+  return `hyrox-${artifact}-${nameSlug(displayAthleteName(parsed))}-${localTimestampSlug()}.md`;
 }
 
 function artifactPackResponseFilename(artifact, count) {
@@ -769,21 +840,29 @@ function artifactPackResponseFilename(artifact, count) {
   return `hyrox-${artifact}-pack-${count}-${localTimestampSlug()}.md`;
 }
 
-function caseHeading(index, total, url, result) {
-  const athlete = result?.parsed?.athleteName ?? result?.parsed?.name ?? null;
-  const label = athlete ? `${athlete} - ${url}` : url;
+function caseHeading(index, total, url, result, label = "", expectedCommentary = "") {
+  const athlete = result?.parsed ? displayAthleteName(result.parsed) : null;
+  const autoLabel = athlete ? `${athlete} — ${url}` : url;
+  const displayLabel = label || autoLabel;
   const targetFinishTimeSeconds = result?.targetFinishTimeSeconds ?? null;
-  return [
-    `# Test Case ${index + 1} of ${total}`,
+  const rows = [
+    `# Test Case ${index + 1} of ${total}${label ? `: ${label}` : ""}`,
     "",
     `- URL: ${url}`,
-    `- Label: ${markdownValue(label)}`,
+    `- Label: ${markdownValue(displayLabel)}`,
     `- Target time: ${targetFinishTimeSeconds ? formatSeconds(targetFinishTimeSeconds) : "none"}`,
-    "",
-  ].join("\n");
+  ];
+  if (expectedCommentary) {
+    rows.push("", "**Expected commentary:**", "");
+    for (const line of expectedCommentary.split("\n")) {
+      if (line.trim()) rows.push(`> ${line}`);
+    }
+  }
+  rows.push("");
+  return rows.join("\n");
 }
 
-async function runHarnessCase({ url, pool, targetFinishTimeSeconds, sharedContext }) {
+async function runHarnessCase({ url, pool, targetFinishTimeSeconds, sharedContext, label = "", expectedCommentary = "" }) {
   const importResult = await fetchAndParseHyroxUrl(url, pool);
   const modes = [
     { modeName: "Mode 1: Target With Target Time", calculatorMode: "target", targetFinishTimeSeconds },
@@ -807,6 +886,8 @@ async function runHarnessCase({ url, pool, targetFinishTimeSeconds, sharedContex
   return {
     ...importResult,
     targetFinishTimeSeconds,
+    label,
+    expectedCommentary,
     modeEntries,
     markdown: buildMarkdown({
       sourceUrl: importResult.sourceUrl,
@@ -816,6 +897,8 @@ async function runHarnessCase({ url, pool, targetFinishTimeSeconds, sharedContex
       targetFinishTimeSeconds,
       modeEntries,
       divisionDetection: importResult.divisionDetection,
+      label,
+      expectedCommentary,
     }),
   };
 }
@@ -825,7 +908,8 @@ function metadataFromImportResult(importResult) {
   const event = importResult.event ?? null;
   return {
     url: importResult.sourceUrl,
-    athleteName: parsed.athleteName ?? parsed.name ?? null,
+    athleteName: displayAthleteName(parsed),
+    rawAthleteName: parsed.athleteName ?? parsed.name ?? null,
     division: parsed.division ?? null,
     sex: parsed.sex ?? parsed.gender ?? null,
     ageGroup: parsed.ageGroup ?? null,
@@ -860,7 +944,8 @@ function buildPackMarkdown({ entries }) {
     ...entries.map((entry, index) => {
       const status = entry.result ? "ok" : `failed: ${entry.reason ?? "unknown"}`;
       const target = entry.targetFinishTimeSeconds ? formatSeconds(entry.targetFinishTimeSeconds) : "invalid target";
-      return `- ${index + 1}. ${entry.url} - target ${target} - ${status}`;
+      const labelPrefix = entry.label ? `[${entry.label}] ` : "";
+      return `- ${index + 1}. ${labelPrefix}${entry.url} - target ${target} - ${status}`;
     }),
     "",
   ];
@@ -868,10 +953,10 @@ function buildPackMarkdown({ entries }) {
   for (const [index, entry] of entries.entries()) {
     rows.push("---", "");
     if (entry.result) {
-      rows.push(caseHeading(index, entries.length, entry.url, entry.result), entry.result.markdown);
+      rows.push(caseHeading(index, entries.length, entry.url, entry.result, entry.label, entry.expectedCommentary), entry.result.markdown);
     } else {
       rows.push(
-        `# Test Case ${index + 1} of ${entries.length}`,
+        `# Test Case ${index + 1} of ${entries.length}${entry.label ? `: ${entry.label}` : ""}`,
         "",
         "## Import Failure",
         "",
@@ -936,7 +1021,7 @@ function emailHtmlEntriesFromHarnessEntries(entries = []) {
   const files = [];
   for (const [caseIndex, entry] of entries.entries()) {
     if (!entry.result) continue;
-    const athlete = entry.result.parsed?.athleteName ?? entry.result.parsed?.name ?? `case-${caseIndex + 1}`;
+    const athlete = entry.result.parsed ? displayAthleteName(entry.result.parsed) : `case-${caseIndex + 1}`;
     for (const [modeIndex, modeEntry] of entry.result.modeEntries.entries()) {
       if (modeEntry.error) continue;
       const subject = modeEntry.result?.emailReport?.emailSubject ?? "";
@@ -1001,6 +1086,7 @@ function previewMode(entry) {
     emailHtml: entry.result.emailReport?.emailHtml ?? "",
     carouselText: carouselText(entry.result.carouselReport, entry.mode.calculatorMode),
     carouselSlides: entry.result.carouselReport?.slides ?? [],
+    carouselHtml: entry.result.carouselReport?.carousel ? buildCarouselPage(entry.result.carouselReport.carousel) : "",
     qaFlags: modeQaFlags(entry),
   };
 }
@@ -1020,7 +1106,7 @@ function previewCase(entry) {
   return {
     ok: true,
     url: entry.url,
-    athleteName: parsed.athleteName ?? parsed.name ?? "HYROX athlete",
+    athleteName: displayAthleteName(parsed),
     finishTimeFormatted: formatSeconds(parsed.finishTimeSeconds),
     targetTimeFormatted: entry.result.targetFinishTimeSeconds ? formatSeconds(entry.result.targetFinishTimeSeconds) : null,
     modes: entry.result.modeEntries.map(previewMode),
@@ -1033,6 +1119,47 @@ function previewPayload({ entries }) {
     generatedAt: new Date().toISOString(),
     cases: entries.map(previewCase),
   };
+}
+
+async function handleAdminRaceCard(req, res, pool, asAttachment) {
+  const { submissionId } = req.params;
+  let row;
+  try {
+    const result = await pool.query(
+      `SELECT a.analysis_json, s.display_name, s.division, s.athlete_context_json, s.performance_context_json
+       FROM hyrox_analyses a
+       LEFT JOIN hyrox_submissions s ON s.id = a.submission_id
+       WHERE a.submission_id = $1 LIMIT 1`,
+      [submissionId],
+    );
+    row = result.rows[0];
+  } catch (err) {
+    return res.status(500).json({ error: "db_error", message: err?.message });
+  }
+
+  if (!row || !row.analysis_json) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  try {
+    const athleteContext = Object.assign(
+      {},
+      row.athlete_context_json && typeof row.athlete_context_json === "object" ? row.athlete_context_json : {},
+      row.performance_context_json && typeof row.performance_context_json === "object" ? row.performance_context_json : {},
+      row.display_name ? { displayName: row.display_name } : {},
+      row.division ? { division: row.division } : {},
+    );
+    const raceCardData = buildHyroxRaceCardData(row.analysis_json, athleteContext);
+    const pngBuffer = await generateRaceCardPng(raceCardData);
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "no-store");
+    if (asAttachment) {
+      res.set("Content-Disposition", 'attachment; filename="race-card.png"');
+    }
+    return res.send(pngBuffer);
+  } catch (err) {
+    return res.status(500).json({ error: "race_card_generation_failed", message: err?.message });
+  }
 }
 
 export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
@@ -1073,13 +1200,17 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
 
       const validation = validateUrlList(urls);
       if (!validation.ok) return res.status(validation.status).json(validation.body);
-      const invalidTarget = cases.some((entry) => {
-        const targetFinishTimeSeconds = parseTargetTimeSeconds(entry.targetTime);
-        entry.targetFinishTimeSeconds = targetFinishTimeSeconds;
-        return !Number.isFinite(targetFinishTimeSeconds) || targetFinishTimeSeconds <= 0 || targetFinishTimeSeconds >= 7_200;
-      });
-      if (invalidTarget) {
-        return res.status(400).json({ error: "invalid_target_time" });
+      for (const entry of cases) {
+        entry.targetFinishTimeSeconds = parseTargetTimeSeconds(entry.targetTime);
+      }
+      const invalidCases = cases
+        .map((entry, index) => ({ entry, index }))
+        .filter(({ entry }) => !Number.isFinite(entry.targetFinishTimeSeconds) || entry.targetFinishTimeSeconds <= 0 || entry.targetFinishTimeSeconds > 10_800);
+      if (invalidCases.length) {
+        const detail = invalidCases
+          .map(({ entry, index }) => `case ${index + 1} — "${String(entry.targetTime ?? "").trim() || "(empty)"}"`)
+          .join(", ");
+        return res.status(400).json({ error: "invalid_target_time", reason: detail });
       }
 
       const sharedContext = {
@@ -1096,6 +1227,8 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
             pool,
             targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds,
             sharedContext,
+            label: cases[0].label,
+            expectedCommentary: cases[0].expectedCommentary,
           });
 	          if (req.body?.preview === true) {
 	            return res.status(200).json(previewPayload({
@@ -1127,10 +1260,12 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
             pool,
             targetFinishTimeSeconds: testCase.targetFinishTimeSeconds,
             sharedContext,
+            label: testCase.label,
+            expectedCommentary: testCase.expectedCommentary,
           });
-          entries.push({ url: testCase.url, targetFinishTimeSeconds: testCase.targetFinishTimeSeconds, result });
+          entries.push({ url: testCase.url, targetFinishTimeSeconds: testCase.targetFinishTimeSeconds, label: testCase.label, expectedCommentary: testCase.expectedCommentary, result });
         } catch (error) {
-          entries.push({ url: testCase.url, targetFinishTimeSeconds: testCase.targetFinishTimeSeconds, reason: error.reason ?? "parse_failed" });
+          entries.push({ url: testCase.url, targetFinishTimeSeconds: testCase.targetFinishTimeSeconds, label: testCase.label, expectedCommentary: testCase.expectedCommentary, reason: error.reason ?? "parse_failed" });
         }
       }
 
@@ -1150,6 +1285,145 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
       return res.status(200).send(markdown);
     } catch (error) {
       return res.status(500).json({ error: "test_harness_failed", message: error.message });
+    }
+  });
+
+  function suggestLabelAndCommentary(importResult, modeEntry) {
+    if (modeEntry.error) {
+      const division = importResult.parsed?.division ?? null;
+      return {
+        label: `Analysis failed${division ? ` — ${division}` : ""}`,
+        expectedCommentary: `Analysis failed: ${modeEntry.error.message ?? "unknown error"}`,
+      };
+    }
+
+    const result = modeEntry.result;
+    const analysis = result.analysisJson ?? {};
+    const browserSummary = result.webReport?.browserSummary ?? {};
+    const parsed = importResult.parsed ?? {};
+
+    const division = parsed.division ?? null;
+    const analysisScope = analysis.analysisScope ?? "full";
+    const penaltyCount = Array.isArray(parsed.penalties) ? parsed.penalties.length : 0;
+
+    const limiter = firstDefined(
+      analysis.limiter?.segmentName,
+      analysis.limiter?.segmentKey,
+      browserSummary.biggestLimiter?.label,
+    );
+    const strength = firstDefined(
+      analysis.strength?.segmentName,
+      analysis.strength?.segmentKey,
+      browserSummary.biggestStrength?.label,
+    );
+    const archetype = browserSummary.athleteArchetype?.label;
+    const workRunBalance = browserSummary.workRunBalance?.profileTypeLabel ?? browserSummary.workRunBalance?.profileType;
+    const heroInsight = browserSummary.heroInsight?.title;
+    const benchmarkGroup = firstDefined(
+      analysis.benchmarkContext?.primaryBenchmarkGroup?.label,
+      analysis.benchmarkContext?.primaryBenchmarkGroup?.key,
+    );
+    const timePotential = browserSummary.timePotential?.headlineGainFormatted;
+	    const overallPercentile = browserSummary.overallPercentile;
+	    const overallPercentileLabel = browserSummary.overallPercentileLabel;
+	    const ageBenchmark = analysis.benchmarkContext?.ageBenchmark;
+
+    const divisionSuffix = division ? ` — ${division}` : "";
+    let label;
+    if (analysisScope === "no_benchmark_data") {
+      label = `No benchmark data${divisionSuffix}`;
+    } else if (limiter) {
+      label = `Limiter: ${limiter}${divisionSuffix}`;
+    } else if (archetype) {
+      label = `${archetype}${divisionSuffix}`;
+    } else {
+      label = `Analysis${divisionSuffix}`;
+    }
+
+    const lines = [];
+    if (analysisScope === "no_benchmark_data") {
+      lines.push("No benchmark data — engine should degrade gracefully, no percentile or benchmark references.");
+    } else {
+	      if (overallPercentileLabel || overallPercentile != null) {
+	        lines.push(`Benchmark position: ${overallPercentileLabel ?? `${overallPercentile}th percentile`}${benchmarkGroup ? ` (${benchmarkGroup})` : ""}`);
+	      }
+	      if (ageBenchmark?.available) {
+	        lines.push(`Age benchmark available: ${ageBenchmark.label ?? ageBenchmark.ageGroup} (${ageBenchmark.sampleSize} records).`);
+	      }
+      if (limiter) lines.push(`Primary limiter: ${limiter} — commentary should address improvement strategies.`);
+      if (strength) lines.push(`Primary strength: ${strength} — commentary should acknowledge this.`);
+      if (workRunBalance) lines.push(`Run/work balance: ${workRunBalance}`);
+      if (heroInsight) lines.push(`Hero insight: "${heroInsight}"`);
+      if (timePotential) lines.push(`Time potential headline: ${timePotential}`);
+      if (penaltyCount > 0) lines.push(`${penaltyCount} penalt${penaltyCount === 1 ? "y" : "ies"} — email should address penalty management.`);
+      if (archetype) lines.push(`Athlete archetype: ${archetype}`);
+    }
+
+    return { label, expectedCommentary: lines.join("\n") };
+  }
+
+  router.post("/hyrox/test-harness/suggest", async (req, res) => {
+    try {
+      const urls = parseRequestedUrls(req.body);
+      const validation = validateUrlList(urls);
+      if (!validation.ok) return res.status(validation.status).json(validation.body);
+
+      const targetFinishTimeSeconds = parseTargetTimeSeconds(req.body?.targetTime);
+      if (!Number.isFinite(targetFinishTimeSeconds) || targetFinishTimeSeconds <= 0 || targetFinishTimeSeconds > 10_800) {
+        return res.status(400).json({ error: "invalid_target_time" });
+      }
+
+      const url = urls[0];
+      const importResult = await fetchAndParseHyroxUrl(url, pool);
+      const analyseMode = { modeName: "Analyse", calculatorMode: "analyse", targetFinishTimeSeconds: null };
+      let modeEntry;
+      try {
+        modeEntry = { mode: analyseMode, result: runMode(analyseMode, importResult.parsed, importResult.event, {}) };
+      } catch (error) {
+        modeEntry = { mode: analyseMode, error };
+      }
+
+      const suggestion = suggestLabelAndCommentary(importResult, modeEntry);
+      return res.json({ ok: true, url, ...suggestion });
+    } catch (error) {
+      return res.status(422).json({ ok: false, error: error.message ?? "suggest_failed", reason: error.reason ?? "unknown" });
+    }
+  });
+
+  // Race card: generate from a stored submission by ID (inline preview)
+  router.get("/hyrox/test-harness/race-card/:submissionId", async (req, res) => {
+    return handleAdminRaceCard(req, res, pool, false);
+  });
+
+  // Race card: generate as a downloadable attachment
+  router.get("/hyrox/test-harness/race-card/:submissionId/download", async (req, res) => {
+    return handleAdminRaceCard(req, res, pool, true);
+  });
+
+  // Race card: generate live from a URL (for test harness UI — no DB required)
+  router.post("/hyrox/test-harness/race-card-url", async (req, res) => {
+    const urls = parseRequestedUrls(req.body);
+    if (!urls.length || !isValidHyroxResultsUrl(urls[0])) {
+      return res.status(400).json({ error: "invalid_url" });
+    }
+    try {
+      const importResult = await fetchAndParseHyroxUrl(urls[0], pool);
+      const targetTime = parseTargetTimeSeconds(req.body?.targetTime);
+      const mode = { modeName: "Race Card", calculatorMode: targetTime ? "target" : "analyse", targetFinishTimeSeconds: targetTime ?? null };
+      const modeResult = runMode(mode, importResult.parsed, importResult.event, {});
+      const athleteCtx = {
+        displayName: displayAthleteName(importResult.parsed),
+        division: importResult.parsed?.division ?? null,
+        calculatorMode: mode.calculatorMode,
+        ...(targetTime ? { targetTimeSeconds: targetTime, targetFinishTimeSeconds: targetTime } : {}),
+      };
+      const raceCardData = buildHyroxRaceCardData(modeResult.analysisJson, athleteCtx);
+      const pngBuffer = await generateRaceCardPng(raceCardData);
+      res.set("Content-Type", "image/png");
+      res.set("Cache-Control", "no-store");
+      return res.send(pngBuffer);
+    } catch (error) {
+      return res.status(422).json({ error: "race_card_failed", reason: error.reason ?? error.message ?? "unknown" });
     }
   });
 

@@ -23,7 +23,7 @@ export function calculatePercentile(userSeconds, sortedBenchmarkValues) {
   return pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct);
 }
 
-function approximatePercentile(userSeconds, stats) {
+export function approximatePercentile(userSeconds, stats) {
   if (!Number.isFinite(userSeconds) || !stats) return null;
   if (Array.isArray(stats.sortedValues)) return calculatePercentile(userSeconds, stats.sortedValues);
   const points = [
@@ -59,6 +59,12 @@ function approximatePercentile(userSeconds, stats) {
     }
   }
   return null;
+}
+
+export function scoreTimeAgainstGroup(finishTimeSeconds, groupKey, metricKey = "total_time") {
+  if (!Number.isFinite(finishTimeSeconds) || !groupKey) return null;
+  const stats = getBenchmarkStats(groupKey, metricKey);
+  return approximatePercentile(finishTimeSeconds, stats);
 }
 
 function segmentSeconds(normalisedSubmission, metricKey) {

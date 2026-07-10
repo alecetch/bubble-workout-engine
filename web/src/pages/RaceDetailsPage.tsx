@@ -48,6 +48,7 @@ export function RaceDetailsPage() {
   );
   const [raceName, setRaceName] = useState(draft?.race?.raceName ?? "");
   const [raceDate, setRaceDate] = useState(draft?.race?.raceDate ?? "");
+  const [eventCountry, setEventCountry] = useState(draft?.race?.eventCountry ?? "");
   const [division, setDivision] = useState<Division>(draft?.race?.division ?? "open");
   const [finishTime, setFinishTime] = useState(
     draft?.race?.finishTimeSeconds ? formatSeconds(draft.race.finishTimeSeconds) : "",
@@ -167,6 +168,7 @@ export function RaceDetailsPage() {
         );
         setRaceName(restored.race?.raceName ?? "");
         setRaceDate(restored.race?.raceDate ?? "");
+        setEventCountry(restored.race?.eventCountry ?? findHyroxEventByName(restored.race?.raceName ?? "")?.country ?? "");
         setDivision(restored.race?.division ?? "open");
         setFinishTime(restored.race?.finishTimeSeconds ? formatSeconds(restored.race.finishTimeSeconds) : "");
         setTargetFinishTime(
@@ -231,6 +233,7 @@ export function RaceDetailsPage() {
       const knownEvent = findHyroxEventByName(result.raceName);
       if (knownEvent) {
         setRaceDate(knownEvent.startDate);
+        setEventCountry(knownEvent.country ?? "");
       }
     }
     if (result.division && VALID_DIVISIONS.includes(result.division)) {
@@ -301,9 +304,10 @@ export function RaceDetailsPage() {
         ageGroup,
       },
       race: {
-        raceName: raceName.trim() || undefined,
-        raceDate: raceDate || undefined,
-        division,
+	        raceName: raceName.trim() || undefined,
+	        raceDate: raceDate || undefined,
+	        eventCountry: eventCountry || findHyroxEventByName(raceName.trim())?.country || undefined,
+	        division,
         finishTimeSeconds: finishSeconds,
       },
       athleteContext: {
@@ -320,6 +324,7 @@ export function RaceDetailsPage() {
     const event = findHyroxEventByName(value);
     if (!event) return;
     if (!raceDate) setRaceDate(event.startDate);
+    if (!eventCountry) setEventCountry(event.country ?? "");
   }
 
   return (

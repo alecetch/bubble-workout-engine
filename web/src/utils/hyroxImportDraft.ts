@@ -96,6 +96,7 @@ export function saveImportedHyroxResult(result: HyroxParseResult): HyroxCalculat
       ...existing?.race,
       ...(result.raceName ? { raceName: result.raceName } : {}),
       ...(knownEvent ? { raceDate: knownEvent.startDate } : {}),
+      ...(knownEvent?.country ? { eventCountry: knownEvent.country } : {}),
       ...(result.division ? { division: result.division } : {}),
       ...(result.finishTimeSeconds ? { finishTimeSeconds: result.finishTimeSeconds } : {}),
     },

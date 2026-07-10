@@ -237,7 +237,14 @@ export function parseHyroxResultsHtml(html) {
     }
 
     const finishTimeSeconds = parseHms(extractByClass(html, "f-time_finish_netto"));
+    const runTotalSeconds = parseHms(extractByClass(html, "f-time_49"));
     const roxzoneSeconds = parseHms(extractByClass(html, "f-time_60"));
+    if (runTotalSeconds !== null) {
+      splits.push({ segmentKey: "run_time", label: "Total Run Time", type: "aggregate", index: 49, timeSeconds: runTotalSeconds, fieldRank: null });
+    }
+    if (roxzoneSeconds !== null) {
+      splits.push({ segmentKey: "roxzone_time", label: "Total Roxzone Time", type: "aggregate", index: 60, timeSeconds: roxzoneSeconds, fieldRank: null });
+    }
     const singleNames = extractAllByClass(html, "f-__fullname");
     const allNames = singleNames.length > 0 ? singleNames : extractMemberNames(html);
     const seenLower = new Set();
@@ -270,11 +277,11 @@ export function parseHyroxResultsHtml(html) {
     if (roxzoneSeconds === null) warnings.push("roxzone_not_found");
     if (finishTimeSeconds === null) warnings.push("finish_time_not_found");
 
-    const count = splits.length;
+    const count = splits.filter((split) => split.type !== "aggregate").length;
     const confidence = count === 16 ? "high" : count >= 8 ? "partial" : "low";
     if (count >= 8 && count < 16) warnings.push(`partial_splits_${count}_found`);
 
-    return { success: count >= 8, confidence, splits, roxzoneSeconds, roxzoneFieldRank, runTotalFieldRank, bestRunLapFieldRank, finishTimeSeconds, penalties, raceReplay, athleteName, athleteAge, ageGroup, raceName, division, warnings };
+    return { success: count >= 8, confidence, splits, runTotalSeconds, roxzoneSeconds, roxzoneFieldRank, runTotalFieldRank, bestRunLapFieldRank, finishTimeSeconds, penalties, raceReplay, athleteName, athleteAge, ageGroup, raceName, division, warnings };
   } catch {
     return emptyResult();
   }

@@ -1,6 +1,6 @@
 import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
-import { formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label } from "./copyFormatter.js";
+import { formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
 import { resolveHeroImage } from "./heroImageResolver.js";
 
 const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type !== "roxzone");
@@ -15,20 +15,24 @@ function stationSegments(analysisJson) {
 }
 
 function bestStation(analysisJson) {
+  // strengths[0] is the full framed segment (timeGapToMedianSeconds, frameGapSeconds present).
+  // headline.biggestStrength is the same station but stripped to {segmentKey, label, percentile} —
+  // no time gaps, so it can't populate position_gain. Always prefer strengths[0] for complete data.
+  if (analysisJson.strengths?.[0]?.segmentKey) return analysisJson.strengths[0];
+  if (analysisJson.headline?.biggestStrength?.segmentKey) return analysisJson.headline.biggestStrength;
   return [...stationSegments(analysisJson)]
     .filter((row) => Number.isFinite(Number(row.percentile)) && Number(row.percentile) >= 70)
     .sort((a, b) => b.percentile - a.percentile)[0]
-    ?? analysisJson.strengths?.[0]
-    ?? analysisJson.headline?.biggestStrength
     ?? null;
 }
 
 function opportunityStation(analysisJson) {
+  // Prefer the engine's frame-adjusted limiter — same source the email uses.
+  if (analysisJson.headline?.biggestLimiter?.segmentKey) return analysisJson.headline.biggestLimiter;
+  if (analysisJson.limiters?.[0]?.segmentKey) return analysisJson.limiters[0];
   return [...stationSegments(analysisJson)]
     .filter((row) => Number(row.timeGapToMedianSeconds) > 0)
     .sort((a, b) => (b.timeGapToMedianSeconds - a.timeGapToMedianSeconds) || (a.percentile - b.percentile))[0]
-    ?? analysisJson.limiters?.[0]
-    ?? analysisJson.headline?.biggestLimiter
     ?? null;
 }
 
@@ -42,20 +46,29 @@ function athleteName(athleteContext = {}) {
 
 function firstName(athleteContext = {}) {
   const name = String(athleteName(athleteContext));
+  let part;
   if (name.includes(",")) {
-    const given = name.split(",")[1]?.trim().split(/\s+/)[0];
-    if (given) return given;
+    part = name.split(",")[1]?.trim().split(/\s+/)[0];
   }
-  return name.split(/\s+/)[0] || "This athlete";
+  if (!part) part = name.split(/\s+/)[0] || "This athlete";
+  return part.charAt(0).toUpperCase() + part.slice(1);
+}
+
+function overallRankLabel(p) {
+  const n = Number(p);
+  if (!Number.isFinite(n)) return null;
+  const topPct = Math.max(1, Math.round(100 - n));
+  return `Top ${topPct}%`;
 }
 
 function rankLanguage(analysisJson, athleteContext) {
   const worldRank = athleteContext.worldRank ? `#${athleteContext.worldRank}` : null;
   const overall = segment(analysisJson, "total_time");
-  const percentile = Number(overall?.percentile ?? athleteContext.overallPercentile);
+  // fieldPercentile is the demographic-specific ranking (same field the email uses).
+  const percentile = Number(overall?.fieldPercentile ?? overall?.percentile ?? athleteContext.overallPercentile);
   if (worldRank) return { percentile: "TOP RANK WORLDWIDE", worldRank };
   if (Number.isFinite(percentile) && percentile >= 99) return { percentile: "TOP 1% WORLDWIDE", worldRank: "" };
-  return { percentile: formatPercentile(percentile) ?? "BENCHMARKED RESULT", worldRank: "" };
+  return { percentile: overallRankLabel(percentile) ?? "BENCHMARKED RESULT", worldRank: "" };
 }
 
 function athleteRankLine(rank, athleteContext) {
@@ -80,6 +93,9 @@ function targetGapSeconds(row, goalAvailable) {
   if (goalAvailable && Number.isFinite(row?.goalBenchmarkSeconds) && Number.isFinite(row?.userSeconds)) {
     return row.userSeconds - row.goalBenchmarkSeconds;
   }
+  // frameGapSeconds is the analysis-frame-adjusted gap (e.g. next-band median in analyse mode).
+  // Prefer it over the raw median gap so the carousel matches the email.
+  if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
   return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
 }
 
@@ -90,19 +106,22 @@ function comparisonLabel(analysisJson) {
 
 function flowRows(analysisJson) {
   const goalAvailable = hasGoalGroup(analysisJson);
-  return RACE_SEGMENTS.map((mapRow) => {
+  return RACE_SEGMENTS.flatMap((mapRow) => {
     const row = segment(analysisJson, mapRow.segmentKey);
+    // Skip segments with no recorded time — avoids showing blank entry/exit rows
+    // and prevents the table from overflowing the legend on slide 2.
+    if (!row || !Number.isFinite(row.userSeconds)) return [];
     const deltaSeconds = targetGapSeconds(row, goalAvailable);
     const roundedDelta = Number.isFinite(deltaSeconds) ? Math.round(deltaSeconds) : 0;
-    return {
+    return [{
       name: upper(mapRow.displayName),
-      time: formatTime(row?.userSeconds) ?? "-",
+      time: formatTime(row.userSeconds) ?? "-",
       benchmark_time: formatTime(targetSeconds(row, goalAvailable)) ?? null,
       target_time: formatTime(targetSeconds(row, goalAvailable)) ?? null,
       delta: formatTimeDiff(roundedDelta) ?? "0",
       delta_seconds: roundedDelta,
       tone: roundedDelta < 0 ? "positive" : roundedDelta > 0 ? "negative" : "neutral",
-    };
+    }];
   });
 }
 
@@ -141,6 +160,8 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
   const rows = flowRows(analysisJson);
   const rowCallouts = callouts(rows);
   const basis = comparisonLabel(analysisJson);
+  const targetSecs = athleteContext.targetFinishTimeSeconds ?? athleteContext.targetTimeSeconds ?? null;
+  const hasTarget = Number.isFinite(targetSecs) && targetSecs > 0;
 
   return {
     template_id: "A",
@@ -161,10 +182,12 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         headline_suffix: gain >= 60 ? "COST TIME" : "SETS THE STORY",
         hero_number: formatGain(gain) ?? "0:00",
         overall_time: formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "-",
-        world_rank: rank.worldRank,
+        metric2_label: hasTarget ? "TARGET" : "WORLD RANK",
+        world_rank: hasTarget ? (formatTime(targetSecs) ?? "-") : rank.worldRank,
         best_station: upper(strength?.label ?? label(strength?.segmentKey) ?? "N/A"),
         biggest_limiter: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "N/A"),
         swipe_prompt: "Swipe to see where time was gained and lost.",
+        regional_context: regionalContextLine(analysisJson) ?? null,
       },
       {
         slide_id: "A2_POSITION_FLOW",
@@ -178,7 +201,7 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         slide_id: "A3_BIGGEST_STRENGTH",
         station: upper(strength?.label ?? label(strength?.segmentKey) ?? "N/A"),
         percentile: formatPercentile(strength?.percentile) ?? "BENCHMARKED",
-        position_gain: formatTimeDiff(Math.abs(strength?.timeGapToMedianSeconds ?? strength?.timeAdvantageSeconds ?? 0)) ?? "+0:00",
+        position_gain: formatTimeDiff(Math.abs(strength?.timeAdvantageSeconds ?? strength?.timeGapToMedianSeconds ?? strength?.frameGapSeconds ?? strength?.timeGapSeconds ?? 0)) ?? "+0:00",
         caption: `${strength?.label ?? "This station"} is the strongest benchmarked area in this result.`,
       },
       {

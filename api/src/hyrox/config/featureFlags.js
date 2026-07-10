@@ -9,4 +9,10 @@ export const featureFlags = {
   get useDoublesBenchmarkDataset() {
     return this.doublesBenchmarkSource !== "legacy";
   },
+
+  get singlesBenchmarkSource() {
+    const value = process.env.HYROX_SINGLES_BENCHMARK_SOURCE ?? null;
+    if (["legacy", "s8", "auto"].includes(value)) return value;
+    return "auto";
+  },
 };

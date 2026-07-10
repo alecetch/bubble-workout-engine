@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { setBenchmarkData } from "../benchmarkService.js";
-import { calculateSegmentStats } from "../percentileCalculator.js";
+import { calculateSegmentStats, scoreTimeAgainstGroup } from "../percentileCalculator.js";
 
 const DOUBLES_MALE_KEY = "hyrox:doubles_v1:doubles_male:all:all";
 
@@ -56,5 +56,25 @@ describe("calculateSegmentStats", () => {
     const ski = rows.find((row) => row.segmentKey === "ski_erg");
     assert.equal(ski?.benchmarkGroupUsed, DOUBLES_MALE_KEY);
     assert.equal(typeof ski?.percentile, "number");
+  });
+});
+
+describe("scoreTimeAgainstGroup", () => {
+  it("returns null for null inputs", () => {
+    assert.equal(scoreTimeAgainstGroup(null, DOUBLES_MALE_KEY), null);
+    assert.equal(scoreTimeAgainstGroup(5000, null), null);
+  });
+
+  it("scores a finish time against benchmark stats", () => {
+    setBenchmarkData({
+      groups: [
+        { groupKey: DOUBLES_MALE_KEY, datasetVersion: "doubles_v1", division: "doubles_male", gender: "all", ageGroup: "all", sampleSize: 150 },
+      ],
+      metrics: [
+        metric("total_time", Array.from({ length: 150 }, (_, index) => 4200 + index * 10)),
+      ],
+    });
+
+    assert.equal(typeof scoreTimeAgainstGroup(4500, DOUBLES_MALE_KEY), "number");
   });
 });
