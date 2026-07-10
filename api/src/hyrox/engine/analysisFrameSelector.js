@@ -14,6 +14,8 @@ const COMPETITIVE_BAND_S = 60;
 const NEXT_BAND_THRESHOLD_S = 300;
 
 export function selectAnalysisFrame({ achievedBand, nextBand, gapToBandMedianSeconds }) {
+  const hasDistinctNextBand = Boolean(nextBand && nextBand !== achievedBand);
+
   if (!achievedBand) {
     return { frame: ANALYSIS_FRAMES.NO_BAND, comparisonBand: null, stretchBand: null, gapToBandMedianSeconds };
   }
@@ -55,18 +57,35 @@ export function selectAnalysisFrame({ achievedBand, nextBand, gapToBandMedianSec
   }
 
   if (gapToBandMedianSeconds >= -NEXT_BAND_THRESHOLD_S) {
+    if (!hasDistinctNextBand) {
+      return {
+        frame: ANALYSIS_FRAMES.COMPETITIVE,
+        comparisonBand: achievedBand,
+        stretchBand: null,
+        gapToBandMedianSeconds,
+      };
+    }
     return {
       frame: ANALYSIS_FRAMES.NEXT_BAND,
-      comparisonBand: nextBand ?? achievedBand,
+      comparisonBand: nextBand,
       stretchBand: null,
       gapToBandMedianSeconds,
     };
   }
 
-  const stretchBand = nextBand ? nextPerformanceBand(nextBand) : null;
+  if (!hasDistinctNextBand) {
+    return {
+      frame: ANALYSIS_FRAMES.COMPETITIVE,
+      comparisonBand: achievedBand,
+      stretchBand: null,
+      gapToBandMedianSeconds,
+    };
+  }
+
+  const stretchBand = nextPerformanceBand(nextBand);
   return {
     frame: ANALYSIS_FRAMES.NEXT_BAND_STRETCH,
-    comparisonBand: nextBand ?? achievedBand,
+    comparisonBand: nextBand,
     stretchBand,
     gapToBandMedianSeconds,
   };

@@ -42,7 +42,8 @@ Run Total\t0:32:09
 
 test("real-world paste with (1,000 m) distance suffixes parses all 16 splits", () => {
   const result = parseHyroxResultsText(REAL_WORLD_PASTE);
-  assert.equal(result.splits.length, 16, `expected 16 splits, got ${result.splits.length}`);
+  const raceSplits = result.splits.filter((s) => s.type !== "aggregate");
+  assert.equal(raceSplits.length, 16, `expected 16 race splits, got ${raceSplits.length}`);
   assert.equal(result.confidence, "high");
   assert.equal(result.success, true);
 });
@@ -75,7 +76,7 @@ test("real-world paste: Row (1,000 m) maps to row segment", () => {
 
 test("real-world paste: Best Run Lap and Run Total lines do not produce spurious splits", () => {
   const result = parseHyroxResultsText(REAL_WORLD_PASTE);
-  const spurious = result.splits.filter((s) => !s.segmentKey.startsWith("run_") && !["ski_erg","sled_push","sled_pull","burpee_broad_jump","row","farmers_carry","sandbag_lunges","wall_balls"].includes(s.segmentKey));
+  const spurious = result.splits.filter((s) => s.type !== "aggregate" && !s.segmentKey.startsWith("run_") && !["ski_erg","sled_push","sled_pull","burpee_broad_jump","row","farmers_carry","sandbag_lunges","wall_balls"].includes(s.segmentKey));
   assert.equal(spurious.length, 0);
 });
 
@@ -116,7 +117,8 @@ Overall Time\t1:08:45
 
 test("MM:SS split times: all 16 splits parsed", () => {
   const result = parseHyroxResultsText(MM_SS_PASTE);
-  assert.equal(result.splits.length, 16, `expected 16, got ${result.splits.length}`);
+  const raceSplits = result.splits.filter((s) => s.type !== "aggregate");
+  assert.equal(raceSplits.length, 16, `expected 16, got ${raceSplits.length}`);
   assert.equal(result.confidence, "high");
   assert.equal(result.success, true);
 });

@@ -20,7 +20,7 @@ const SPLITS = [
 const STATION_BY_NUMBER = ["ski_erg", "sled_push", "sled_pull", "burpee_broad_jump", "row", "farmers_carry", "sandbag_lunges", "wall_balls"];
 
 function emptyResult() {
-  return { success: false, confidence: "low", splits: [], roxzoneSeconds: null, finishTimeSeconds: null, penalties: [], athleteName: null, ageGroup: null, raceName: null, division: null, warnings: [] };
+  return { success: false, confidence: "low", splits: [], runTotalSeconds: null, roxzoneSeconds: null, finishTimeSeconds: null, penalties: [], athleteName: null, ageGroup: null, raceName: null, division: null, warnings: [] };
 }
 
 function parseHms(value) {
@@ -134,19 +134,26 @@ export function parseHyroxResultsText(rawText) {
       if (/^race\b/i.test(line)) result.raceName = lineValue(line) || null;
       if (/^division\b/i.test(line)) result.division = parseDivision(lineValue(line));
       if (/overall\s+time/i.test(line)) result.finishTimeSeconds = parseHms(line);
+      if (/run\s+total/i.test(line)) result.runTotalSeconds = parseHms(line);
       if (/roxzone\s+time/i.test(line)) result.roxzoneSeconds = parseHms(line);
     }
     const seenLower = new Set();
     const uniqueNames = athleteNames.filter((n) => { const k = n.toLowerCase(); return seenLower.has(k) ? false : seenLower.add(k); }).slice(0, 2);
     result.athleteName = uniqueNames.length > 1 ? uniqueNames.join(" & ") : (uniqueNames[0] ?? null);
     result.splits = Array.from(splitsByKey.values()).sort((a, b) => a.index - b.index);
+    if (result.runTotalSeconds !== null) {
+      result.splits.push({ segmentKey: "run_time", label: "Total Run Time", type: "aggregate", index: 49, timeSeconds: result.runTotalSeconds });
+    }
+    if (result.roxzoneSeconds !== null) {
+      result.splits.push({ segmentKey: "roxzone_time", label: "Total Roxzone Time", type: "aggregate", index: 60, timeSeconds: result.roxzoneSeconds });
+    }
     result.penalties = parsePenalties(lines);
     if (!result.division) result.division = parseDivision(null);
     if (result.division === "pro") result.warnings.push("division_pro_not_yet_benchmarked");
     if (result.division === "relay") result.warnings.push("division_doubles_not_supported");
     if (result.roxzoneSeconds === null) result.warnings.push("roxzone_not_found");
     if (result.finishTimeSeconds === null) result.warnings.push("finish_time_not_found");
-    const count = result.splits.length;
+    const count = Array.from(splitsByKey.values()).length;
     if (count === 16) {
       result.success = true;
       result.confidence = "high";

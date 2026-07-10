@@ -80,6 +80,7 @@ import * as hyroxController from "./src/hyrox/hyroxController.js";
 import { predict } from "./src/hyrox/hyroxPredictController.js";
 import { makeImportUrlHandler } from "./src/hyrox/hyroxImportController.js";
 import { hyroxCarouselHandler } from "./src/hyrox/hyroxCarouselController.js";
+import { hyroxRaceCardHandler } from "./src/hyrox/hyroxRaceCardController.js";
 import { sharePackHandlers } from "./src/hyrox/hyroxSharePackController.js";
 import { createHyroxSubmissionDraftHandler } from "./src/hyrox/hyroxSubmissionDraftController.js";
 import { runningIpRateLimiter, validateRunningSubmission } from "./src/hyrox/running/runningValidator.js";
@@ -820,6 +821,7 @@ app.get("/api/hyrox/submission-draft/:submissionId", createHyroxSubmissionDraftH
 app.get("/api/hyrox/health", hyroxController.health);
 app.get("/hyrox/carousel/:submissionId", hyroxCarouselHandler);
 app.get("/api/hyrox/carousel/:submissionId", hyroxCarouselHandler);
+app.get("/api/hyrox/race-card/:submissionId", hyroxRaceCardHandler);
 app.post("/api/hyrox/share-pack/:submissionId", sharePackHandlers.generatePack);
 app.post("/api/hyrox/share-pack/:submissionId/email", sharePackHandlers.sendPackEmail);
 app.get("/api/hyrox/share-pack/:submissionId/qr", sharePackHandlers.getQrCode);

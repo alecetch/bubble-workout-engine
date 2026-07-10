@@ -52,6 +52,78 @@
   flex-shrink: 0;
 }
 
+.comparisonPanel {
+  margin-bottom: 28px;
+  padding: 16px;
+  background: var(--panel-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.comparisonHeader {
+  margin-bottom: 12px;
+}
+
+.comparisonHeader h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.comparisonHeader p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.comparisonButtons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.comparisonButton {
+  min-height: 94px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-850);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comparisonButton:hover {
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+.comparisonButtonActive {
+  border-color: rgba(34, 211, 238, 0.75);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18);
+}
+
+.comparisonButton span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.comparisonButton strong {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.comparisonButton small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .metricsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

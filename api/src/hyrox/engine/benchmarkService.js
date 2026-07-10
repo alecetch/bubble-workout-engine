@@ -36,6 +36,7 @@ function toCamelGroup(row) {
     gender: row.gender ?? null,
     ageGroup: row.age_group ?? row.ageGroup ?? null,
     performanceBand: row.performance_band ?? row.performanceBand ?? null,
+    region: row.region ?? null,
     fallbackLevel: Number(row.fallback_level ?? row.fallbackLevel ?? 0),
     sampleSize: Number(row.sample_size ?? row.sampleSize ?? 0),
   };

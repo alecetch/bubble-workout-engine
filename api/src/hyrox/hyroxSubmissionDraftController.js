@@ -34,6 +34,7 @@ export function draftFromSubmissionRow(row = {}) {
       race: {
         raceName: row.race_name ?? undefined,
         raceDate: dateString(row.race_date),
+        eventCountry: row.event_country ?? undefined,
         division: row.division ?? "open",
         finishTimeSeconds: row.finish_time_seconds,
       },
@@ -75,6 +76,7 @@ export function createHyroxSubmissionDraftHandler(db = pool) {
            finish_time_seconds,
            race_name,
            race_date,
+           event_country,
            splits_json,
            penalties_json,
            race_replay_json,

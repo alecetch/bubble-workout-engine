@@ -34,11 +34,16 @@ function raceReplaySplits(raceReplay) {
   return splits;
 }
 
-function sumByKeys(splitMap, keys) {
-  return keys.reduce((sum, key) => {
-    const value = splitMap.get(key)?.timeSeconds;
-    return Number.isFinite(value) ? sum + value : sum;
-  }, 0);
+function sumByKeys(splitMap, keys, { requireAll = false } = {}) {
+  const values = keys
+    .map((key) => splitMap.get(key)?.timeSeconds)
+    .filter(Number.isFinite);
+  if (requireAll && values.length < keys.length) return null;
+  return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function explicitAggregate(splitMap, segmentKey) {
+  return finiteOrNull(splitMap.get(segmentKey)?.timeSeconds);
 }
 
 function buildAggregateSegments({ runTime, workTime, roxzoneTime, finishTime }) {
@@ -70,17 +75,28 @@ export function normaliseSubmission(input = {}) {
     }
   }
   const finishTimeSeconds = finiteOrNull(input.race?.finishTimeSeconds);
-  const runTime = sumByKeys(splitMap, RUN_KEYS);
-  const workTime = sumByKeys(splitMap, STATION_KEYS);
-  const explicitRoxzoneTime = sumByKeys(splitMap, ROXZONE_KEYS);
+  const runSplitCount = RUN_KEYS.filter((key) => splitMap.has(key)).length;
+  const stationSplitCount = STATION_KEYS.filter((key) => splitMap.has(key)).length;
+  const explicitRunTime = explicitAggregate(splitMap, "run_time");
+  const explicitWorkTime = explicitAggregate(splitMap, "work_time");
+  const explicitRoxzoneAggregate = explicitAggregate(splitMap, "roxzone_time");
+  const runTime = explicitRunTime ?? sumByKeys(splitMap, RUN_KEYS, { requireAll: true });
+  const workTime = explicitWorkTime ?? sumByKeys(splitMap, STATION_KEYS);
+  const explicitRoxzoneTime = explicitRoxzoneAggregate ?? sumByKeys(splitMap, ROXZONE_KEYS);
   const explicitRoxzoneCount = ROXZONE_KEYS.filter((key) => splitMap.has(key)).length;
-  const unallocatedTime = finishTimeSeconds !== null ? finishTimeSeconds - runTime - workTime : null;
+  const unallocatedTime = finishTimeSeconds !== null && Number.isFinite(runTime) && Number.isFinite(workTime)
+    ? finishTimeSeconds - runTime - workTime
+    : null;
 
   let roxzoneMode = input.roxzoneMode ?? "none";
   let roxzoneTime = null;
   let roxzoneConfidence = { aggregate: "low", segment: "low" };
 
-  if (explicitRoxzoneCount > 0 || roxzoneMode === "explicit_splits") {
+  if (explicitRoxzoneAggregate !== null) {
+    roxzoneMode = "explicit_total";
+    roxzoneTime = explicitRoxzoneAggregate;
+    roxzoneConfidence = { aggregate: "high", segment: "low" };
+  } else if (explicitRoxzoneCount > 0 || roxzoneMode === "explicit_splits") {
     roxzoneMode = "explicit_splits";
     roxzoneTime = explicitRoxzoneTime;
     roxzoneConfidence = {
@@ -107,6 +123,7 @@ export function normaliseSubmission(input = {}) {
       ...(input.race ?? {}),
       division: input.race?.division ?? input.athlete?.division ?? null,
       finishTimeSeconds,
+      eventCountry: input.race?.eventCountry ?? null,
     },
     splits: suppliedSplits,
     penalties,
@@ -120,8 +137,8 @@ export function normaliseSubmission(input = {}) {
     roxzoneMode,
     roxzoneConfidence,
     completeness: {
-      runSplits: RUN_KEYS.filter((key) => splitMap.has(key)).length,
-      stationSplits: STATION_KEYS.filter((key) => splitMap.has(key)).length,
+      runSplits: runSplitCount,
+      stationSplits: stationSplitCount,
       roxzoneSplits: explicitRoxzoneCount,
       totalExpectedSplits: 24,
     },
@@ -133,5 +150,10 @@ export function getSegmentLabel(segmentKey) {
   if (segmentKey === "run_time") return "Total Run Time";
   if (segmentKey === "work_time") return "Total Station Time";
   if (segmentKey === "roxzone_time") return "Total Roxzone Time";
-  return SEGMENT_BY_KEY.get(segmentKey)?.displayName ?? segmentKey;
+  const displayName = SEGMENT_BY_KEY.get(segmentKey)?.displayName;
+  if (displayName) return displayName;
+  // Humanise the raw key as a last resort so labels are never empty
+  return String(segmentKey ?? "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

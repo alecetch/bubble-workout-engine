@@ -12,6 +12,7 @@ function buildPool() {
   const pool = {
     state,
     async query(sql, params = []) {
+      if (/FROM hyrox_doubles_scrape_jobs j/i.test(sql)) return { rows: state.jobs };
       if (/SELECT \* FROM hyrox_doubles_scrape_jobs ORDER BY/i.test(sql)) return { rows: state.jobs };
       if (/SELECT \* FROM hyrox_doubles_scrape_jobs WHERE id=\$1/i.test(sql)) {
         return { rows: state.jobs.filter((job) => job.id === params[0]) };
@@ -141,13 +142,32 @@ test("POST /admin/hyrox-doubles/jobs validates body", async () => {
 
 test("GET /admin/hyrox-doubles/jobs lists jobs and detail", async () => {
   const { app, pool } = buildApp();
-  pool.state.jobs.push({ id: "job-1", status: "queued" });
+  pool.state.jobs.push({
+    id: "job-1",
+    status: "queued",
+    total_records_available: 120,
+    location_summary: [
+      {
+        eventId: 1,
+        eventName: "HYROX London",
+        city: "London",
+        country: "UK",
+        divisions: ["doubles_male"],
+        recordsAvailable: 120,
+        recordsFound: 80,
+        recordsSaved: 20,
+      },
+    ],
+  });
   pool.state.jobEvents.push({ id: "event-1", job_id: "job-1", status: "pending" });
 
   const list = await request(app, "/api/admin/hyrox-doubles/jobs");
   assert.equal(list.response.status, 200);
   assert.equal(list.body.ok, true);
   assert.equal(list.body.jobs.length, 1);
+  assert.equal(list.body.jobs[0].totalRecordsAvailable, 120);
+  assert.equal(list.body.jobs[0].locationSummary[0].eventName, "HYROX London");
+  assert.equal(list.body.jobs[0].locationSummary[0].recordsAvailable, 120);
 
   const detail = await request(app, "/api/admin/hyrox-doubles/jobs/job-1");
   assert.equal(detail.response.status, 200);
@@ -155,6 +175,23 @@ test("GET /admin/hyrox-doubles/jobs lists jobs and detail", async () => {
 
   const missing = await request(app, "/api/admin/hyrox-doubles/jobs/missing");
   assert.equal(missing.response.status, 404);
+});
+
+test("GET /admin/hyrox-doubles/benchmark-readiness returns ok and source", async () => {
+  const previousSource = process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+  delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+  try {
+    const { app } = buildApp();
+    const result = await request(app, "/api/admin/hyrox-doubles/benchmark-readiness");
+
+    assert.equal(result.response.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.source, "legacy");
+    assert.deepEqual(result.body.divisions, []);
+  } finally {
+    if (previousSource === undefined) delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+    else process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = previousSource;
+  }
 });
 
 test("pause, resume and cancel job lifecycle routes", async () => {
@@ -179,14 +216,15 @@ test("pause, resume and cancel job lifecycle routes", async () => {
 
 test("stats and events endpoints return expected shapes", async () => {
   const { app, pool } = buildApp();
-  pool.state.events.push({
-    id: 1,
-    event_name: "HYROX London",
-    has_results: true,
-    results_page_key: "HYROX London",
-    doubles_record_count: 0,
-    doubles_already_scraped: false,
-  });
+	pool.state.events.push({
+	  id: 1,
+	  event_name: "HYROX London",
+	  has_results: true,
+	  results_page_key: "HYROX London",
+	  doubles_record_count: 125,
+	  doubles_already_scraped: true,
+	  doubles_record_counts_by_category: { doubles_male: 50, doubles_female: 75 },
+	});
 
   const stats = await request(app, "/api/admin/hyrox-doubles/stats");
   assert.equal(stats.response.status, 200);
@@ -194,9 +232,10 @@ test("stats and events endpoints return expected shapes", async () => {
   assert.equal(stats.body.totalRecords, 0);
 
   const events = await request(app, "/api/admin/hyrox-doubles/events");
-  assert.equal(events.response.status, 200);
-  assert.equal(events.body.events.length, 1);
-  assert.equal(events.body.events[0].eventName, "HYROX London");
+	assert.equal(events.response.status, 200);
+	assert.equal(events.body.events.length, 1);
+	assert.equal(events.body.events[0].eventName, "HYROX London");
+	assert.deepEqual(events.body.events[0].doublesRecordCountsByCategory, { doubles_male: 50, doubles_female: 75 });
 });
 
 test("POST /admin/hyrox-doubles/events/:id/availability counts live records without scraping", async () => {

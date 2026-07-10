@@ -43,6 +43,23 @@
       .badge-failed, .badge-cancelled, .badge-invalid { background: #fee2e2; color: #991b1b; }
 	      .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 	      .actions button { padding: 4px 8px; font-size: 12px; }
+	      .job-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 8px; max-width: 150px; }
+	      .job-actions button { padding: 4px 6px; font-size: 11px; }
+	      .backfill-row { margin-top: 6px; max-width: 150px; display: grid; gap: 4px; }
+	      .backfill-row button { padding: 4px 6px; font-size: 11px; width: 100%; }
+	      .backfill-status { font-size: 11px; font-family: Consolas, monospace; color: var(--muted); }
+	      .job-scope { min-width: 240px; max-width: 360px; }
+	      .job-scope.expanded { max-width: 560px; }
+	      .scope-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+	      .scope-toggle { padding: 3px 7px; font-size: 11px; }
+	      .location-list { display: grid; gap: 5px; margin-top: 4px; }
+	      .location-list.expanded { gap: 8px; }
+	      .location-item { line-height: 1.25; border-top: 1px solid #ecf0f4; padding-top: 5px; }
+	      .location-item:first-child { border-top: 0; padding-top: 0; }
+	      .location-title { font-weight: 600; }
+	      .location-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; margin-top: 3px; }
+	      .compact-table th, .compact-table td { padding: 7px 8px; vertical-align: top; }
+	      .job-id { margin-top: 3px; }
 	      .checkbox-cell { width: 34px; text-align: center; }
 	      .mono { font-family: Consolas, monospace; color: var(--muted); font-size: 11px; }
 	      .availability { min-width: 170px; }
@@ -79,6 +96,18 @@
       </section>
 
       <section class="section">
+        <h2>Benchmarks</h2>
+        <div id="benchmark-readiness-grid" class="stats-grid" style="margin-bottom:10px">
+          <span style="color:var(--muted);font-size:13px">Load the scraper to view benchmark state.</span>
+        </div>
+        <div class="controls">
+	          <button id="build-benchmarks-btn" type="button" disabled>Build Doubles v2 Benchmarks</button>
+	          <button id="build-singles-s8-btn" type="button" disabled>Build Singles S8 Benchmarks</button>
+          <span id="build-benchmark-status" class="status"></span>
+        </div>
+      </section>
+
+      <section class="section">
         <h2>Create Scrape Job</h2>
         <div class="division-row" style="margin-bottom:10px">
           <label><input type="checkbox" data-division="open_male" /> Male singles</label>
@@ -98,7 +127,7 @@
             <label for="target-count">Target record count</label>
             <input id="target-count" type="number" min="1" value="15000" />
           </div>
-	          <label><input id="enrich-splits" type="checkbox" /> Enrich splits</label>
+		          <label><input id="enrich-splits" type="checkbox" checked /> Enrich splits</label>
 	          <button id="check-selected-availability-btn" type="button" class="secondary">Check Selected Availability</button>
 	          <button id="create-job-btn" type="button">Create Job</button>
 	        </div>
@@ -119,11 +148,11 @@
       <section class="section">
         <h2>Scrape Jobs</h2>
         <div class="table-wrap">
-          <table>
+          <table class="compact-table">
             <thead>
-              <tr><th>Status</th><th>Created</th><th>Progress</th><th>Records</th><th>Current</th><th>Errors</th><th>Actions</th></tr>
+              <tr><th>Job</th><th>Scope</th><th>Progress</th><th>Records</th><th>Current</th><th>Issues</th></tr>
             </thead>
-            <tbody id="jobs-body"><tr><td colspan="7" class="empty">No jobs loaded.</td></tr></tbody>
+            <tbody id="jobs-body"><tr><td colspan="6" class="empty">No jobs loaded.</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -137,8 +166,12 @@
 	      const jobsBody = document.getElementById("jobs-body");
 	      const statsGrid = document.getElementById("stats-grid");
 	      let loadedEvents = [];
+	      let loadedJobs = [];
 	      const selectedEventIdSet = new Set();
 	      const availabilityByEventId = new Map();
+	      const expandedJobScopeIds = new Set();
+	      const backfillPolls = new Map();
+	      const backfillStatus = new Map(); // jobId → last status text, survives re-renders
 	      const saved = sessionStorage.getItem(STORAGE_KEY);
       if (saved) tokenInput.value = saved;
 
@@ -149,9 +182,26 @@
       }
       function esc(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
       function status(msg, kind = "") { mainStatus.textContent = msg; mainStatus.className = `status ${kind}`; }
-      function fmtDate(v) { return v ? new Date(v).toLocaleDateString() : "-"; }
-      function fmtDateTime(v) { return v ? new Date(v).toLocaleString() : "-"; }
-	      function badge(value) { return `<span class="badge badge-${esc(value)}">${esc(value || "-")}</span>`; }
+	      function fmtDate(v) { return v ? new Date(v).toLocaleDateString() : "-"; }
+	      function fmtDateTime(v) { return v ? new Date(v).toLocaleString() : "-"; }
+		      function badge(value) { return `<span class="badge badge-${esc(value)}">${esc(value || "-")}</span>`; }
+		      function divisionLabel(division) {
+		        return ({
+		          open_male: "OM",
+		          open_female: "OF",
+		          pro_male: "PM",
+		          pro_female: "PF",
+		          doubles_male: "DM",
+		          doubles_female: "DF",
+		          doubles_mixed: "DX",
+		          pro_doubles_male: "PDM",
+		          pro_doubles_female: "PDF",
+		          pro_doubles_mixed: "PDX",
+		          team_relay_male: "RM",
+		          team_relay_female: "RF",
+		          team_relay_mixed: "RX",
+		        }[division] || division);
+		      }
 	      function selectedDivisions() {
 	        return [...document.querySelectorAll("input[data-division]:checked")].map((input) => input.dataset.division);
 	      }
@@ -183,26 +233,88 @@
 	        }
 	        const availability = state.availability || {};
 	        const divisions = availability.divisions || [];
-	        const label = (division) => ({
-	          open_male: "OM",
-	          open_female: "OF",
-	          pro_male: "PM",
-	          pro_female: "PF",
-	          doubles_male: "DM",
-	          doubles_female: "DF",
-	          doubles_mixed: "DX",
-	          pro_doubles_male: "PDM",
-	          pro_doubles_female: "PDF",
-	          pro_doubles_mixed: "PDX",
-	          team_relay_male: "RM",
-	          team_relay_female: "RF",
-	          team_relay_mixed: "RX",
-	        }[division] || division);
-	        const breakdown = divisions.map((division) => `${label(division.divisionCategory)} ${division.recordsAvailable ?? 0}`).join(" · ") || "No divisions";
-	        return `<div class="availability"><strong>${esc(availability.totalRecordsAvailable ?? 0)} available</strong><span class="mono">${esc(breakdown)}</span><div class="actions"><button type="button" class="secondary" data-action="check-availability" data-event-id="${esc(eventId)}">Refresh</button></div></div>`;
+	        const breakdown = divisions.map((division) => `${divisionLabel(division.divisionCategory)} ${division.recordsAvailable ?? 0}`).join(" · ") || "No divisions";
+	        const checkedAt = availability.checkedAt || availability.checked_at || state.checkedAt;
+	        const checkedHtml = checkedAt ? `<span class="mono">Last checked ${esc(fmtDateTime(checkedAt))}</span>` : "";
+	        return `<div class="availability"><strong>${esc(availability.totalRecordsAvailable ?? 0)} available</strong><span class="mono">${esc(breakdown)}</span>${checkedHtml}<div class="actions"><button type="button" class="secondary" data-action="check-availability" data-event-id="${esc(eventId)}">Refresh</button></div></div>`;
 	      }
 
-	      function renderStats(data) {
+      function renderScrapedRecords(event) {
+	        const total = Number(event.doublesRecordCount ?? event.doubles_record_count ?? 0);
+	        const counts = event.doublesRecordCountsByCategory || event.doubles_record_counts_by_category || {};
+	        const entries = Object.entries(counts)
+	          .filter(([, count]) => Number(count) > 0)
+	          .sort(([left], [right]) => divisionLabel(left).localeCompare(divisionLabel(right)));
+	        const breakdown = entries.map(([division, count]) => `${divisionLabel(division)} ${count}`).join(" · ");
+	        return `${esc(total)} ${event.doublesAlreadyScraped ? badge("valid") : ""}${breakdown ? `<div class="mono">${esc(breakdown)}</div>` : ""}`;
+	      }
+
+	      function renderLocationSummary(job) {
+	        const locations = job.locationSummary || job.location_summary || [];
+	        const jobId = job.id || "";
+	        const isExpanded = expandedJobScopeIds.has(jobId);
+	        if (!locations.length) {
+	          const selectedIds = job.selectedEventIds || job.selected_event_ids || [];
+	          return `<div class="job-scope"><span class="mono">${esc(selectedIds.length)} selected event${selectedIds.length === 1 ? "" : "s"}</span></div>`;
+	        }
+	        const shown = isExpanded ? locations : locations.slice(0, 4);
+	        const hidden = locations.length - shown.length;
+	        const items = shown.map((location) => {
+	          const place = [location.city, location.country].filter(Boolean).join(", ");
+	          const divisions = (location.divisions || []).map(divisionLabel).join(" / ");
+	          const recordsAvailable = location.recordsAvailable ?? location.records_available;
+	          const recordsSaved = Number(location.recordsSaved || 0);
+	          const recordsFound = Number(location.recordsFound || 0);
+	          const duplicatesSkipped = Number(location.duplicatesSkipped || 0);
+	          const statuses = location.statuses || {};
+	          const statusSummary = Object.entries(statuses)
+	            .map(([division, statusValue]) => `${divisionLabel(division)} ${statusValue}`)
+	            .join(" | ");
+	          return `<div class="location-item">
+	            <div class="location-title">${esc(location.eventName || place || `Event ${location.eventId}`)}</div>
+	            ${isExpanded
+	              ? `<div class="location-detail-grid mono">
+	                  <span>Place</span><span>${esc(place || "-")}</span>
+	                  <span>Date</span><span>${esc(fmtDate(location.startDate || location.start_date))}</span>
+	                  <span>Divisions</span><span>${esc(divisions || "-")}</span>
+	                  <span>Status</span><span>${esc(statusSummary || "-")}</span>
+	                  <span>Records</span><span>${recordsAvailable == null ? "" : `${esc(recordsAvailable)} available, `}${esc(recordsSaved)} saved, ${esc(recordsFound)} found, ${esc(duplicatesSkipped)} dupes</span>
+	                </div>`
+	              : `<div class="mono">${esc([place, divisions].filter(Boolean).join(" | "))}</div>
+	                 <div class="mono">${esc(recordsSaved)} saved, ${esc(recordsFound)} found</div>`}
+	          </div>`;
+	        }).join("");
+	        return `<div class="job-scope ${isExpanded ? "expanded" : ""}">
+	          <div class="scope-header">
+	            <strong>${esc(locations.length)} location${locations.length === 1 ? "" : "s"}</strong>
+	            <button type="button" class="secondary scope-toggle" data-action="toggle-scope" data-job-id="${esc(jobId)}">${isExpanded ? "Collapse" : "Expand"}</button>
+	          </div>
+	          <div class="location-list ${isExpanded ? "expanded" : ""}">${items}</div>
+	          ${hidden > 0 ? `<div class="mono">+ ${esc(hidden)} more</div>` : ""}
+	        </div>`;
+	      }
+
+	      function renderBenchmarkReadiness(data) {
+        const grid = document.getElementById("benchmark-readiness-grid");
+        const source = data.source ?? "-";
+        const divisions = data.divisions ?? [];
+        if (!divisions.length) {
+          grid.innerHTML = `<span style="color:var(--muted);font-size:13px">No benchmarks built yet. Click <strong>Build Benchmarks</strong> to generate.</span>`;
+          return;
+        }
+        const divHtml = divisions.map((d) => {
+          const readyBadge = d.isReady ? `<span class="badge badge-valid">ready</span>` : `<span class="badge badge-partial">low data</span>`;
+	          const label = `${divisionLabel(d.division)}${d.performanceBand ? ` ${d.performanceBand}` : " overall"}`;
+	          return `<div class="stat">
+            <strong>${esc(d.sampleSize?.toLocaleString() ?? 0)} ${readyBadge}</strong>
+	            <span>${esc(label)}</span>
+            <span class="mono">${esc(d.metricCount ?? 0)} metrics · ${d.builtAt ? esc(fmtDate(d.builtAt)) : "never"}</span>
+          </div>`;
+        }).join("");
+        grid.innerHTML = `<div class="stat"><strong>${esc(source)}</strong><span>Benchmark source</span></div>${divHtml}`;
+      }
+
+      function renderStats(data) {
         const rows = data.byDivision || [];
         const divisionHtml = rows.map((row) =>
           `<div class="stat"><strong>${esc(row.totalRecords ?? 0)}</strong><span>${esc(row.divisionCategory)}</span></div>`
@@ -216,6 +328,22 @@
 
 	      function renderEvents(events) {
 	        loadedEvents = events;
+	        for (const event of events) {
+	          const id = Number(event.id);
+	          if (availabilityByEventId.has(id)) continue;
+	          const cachedAvailability = event.doublesAvailabilityJson || event.doubles_availability_json;
+	          const cachedAt = event.doublesAvailabilityCheckedAt || event.doubles_availability_checked_at;
+	          if (cachedAvailability) {
+	            availabilityByEventId.set(id, {
+	              status: "ready",
+	              availability: {
+	                ...cachedAvailability,
+	                checkedAt: cachedAvailability.checkedAt || cachedAvailability.checked_at || cachedAt,
+	              },
+	              checkedAt: cachedAt,
+	            });
+	          }
+	        }
 	        if (!events.length) {
 	          eventsBody.innerHTML = '<tr><td colspan="8" class="empty">No HYROX events with results found.</td></tr>';
 	          return;
@@ -227,14 +355,15 @@
           <td>${esc(event.country || "-")}</td>
 	          <td>${esc(fmtDate(event.startDate))}</td>
 	          <td>${esc(event.season || "-")}</td>
-	          <td>${esc(event.doublesRecordCount || 0)} ${event.doublesAlreadyScraped ? badge("valid") : ""}</td>
+	          <td>${renderScrapedRecords(event)}</td>
 	          <td>${renderAvailability(event.id)}</td>
 	        </tr>`).join("");
 	      }
 
       function renderJobs(jobs) {
+        loadedJobs = jobs;
         if (!jobs.length) {
-          jobsBody.innerHTML = '<tr><td colspan="7" class="empty">No scrape jobs yet.</td></tr>';
+          jobsBody.innerHTML = '<tr><td colspan="6" class="empty">No scrape jobs yet.</td></tr>';
           return;
         }
         jobsBody.innerHTML = jobs.map((job) => {
@@ -243,38 +372,71 @@
           const found = Number(job.totalRecordsFound ?? job.total_records_found ?? 0);
           const savedCount = Number(job.totalRecordsSaved ?? job.total_records_saved ?? 0);
           const dupes = Number(job.totalDuplicatesSkipped ?? job.total_duplicates_skipped ?? 0);
+          const ageTotal = Number(job.ageTotal ?? 0);
+          const ageCovered = Number(job.ageCovered ?? 0);
+          const agePct = ageTotal > 0 ? Math.round(ageCovered / ageTotal * 100) : null;
+          const available = job.totalRecordsAvailable ?? job.total_records_available;
           const errors = Number(job.totalErrors ?? job.total_errors ?? 0);
           const statusValue = job.status || "-";
           const cooldownUntil = job.cooldownUntil || job.cooldown_until;
           const cooldownHtml = cooldownUntil ? `<div class="mono">cooldown until ${esc(fmtDateTime(cooldownUntil))}</div>` : "";
+          const currentPlace = [job.currentEventCity || job.current_event_city, job.currentEventCountry || job.current_event_country].filter(Boolean).join(", ");
+          const currentEvent = job.currentEventName || job.current_event_name || "";
           return `<tr>
-            <td>${badge(statusValue)}<div class="mono">${esc((job.id || "").slice(0, 8))}</div>${cooldownHtml}</td>
-            <td>${esc(fmtDateTime(job.createdAt || job.created_at))}</td>
+            <td>
+              ${badge(statusValue)}
+              <div class="mono job-id">${esc((job.id || "").slice(0, 8))}</div>
+              <div class="mono">${esc(fmtDateTime(job.createdAt || job.created_at))}</div>
+              ${cooldownHtml}
+              <div class="job-actions">
+                <button data-action="refresh-jobs" type="button" class="secondary">Refresh</button>
+                <button data-action="pause" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "running" ? "disabled" : ""}>Pause</button>
+                <button data-action="resume" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "paused" ? "disabled" : ""}>Resume</button>
+                <button data-action="retry-failed" data-job-id="${esc(job.id)}" type="button">Retry</button>
+                <button data-action="cancel" data-job-id="${esc(job.id)}" type="button" class="danger" ${!["queued","running","paused","retrying"].includes(statusValue) ? "disabled" : ""}>Cancel</button>
+              </div>
+              <div class="backfill-row">
+                <button data-action="backfill-age-groups" data-job-id="${esc(job.id)}" type="button" class="secondary">Backfill Ages</button>
+                <div class="backfill-status" id="backfill-status-${esc(job.id)}">—</div>
+              </div>
+            </td>
+            <td>${renderLocationSummary(job)}</td>
             <td>${esc(completed)} / ${esc(total)}</td>
-            <td>${esc(savedCount)} saved<br><span class="mono">${esc(found)} found, ${esc(dupes)} dupes</span></td>
-            <td>${esc(job.currentDivision || job.current_division || "-")}<br><span class="mono">offset ${esc(job.currentPageOffset ?? job.current_page_offset ?? 0)}</span></td>
+            <td>
+              ${available == null ? '<span class="mono">Availability not cached</span>' : `${esc(available)} available`}
+              <br>${esc(savedCount)} saved
+              <br><span class="mono">${esc(found)} found, ${esc(dupes)} dupes</span>
+              ${agePct !== null ? `<br><span class="mono" style="color:${agePct === 100 ? 'var(--ok)' : agePct > 0 ? 'var(--warn)' : 'var(--danger)'}">${esc(ageCovered)} / ${esc(ageTotal)} age groups (${agePct}%)</span>` : ""}
+            </td>
+            <td>
+              ${esc(currentEvent || "-")}
+              ${currentPlace ? `<br><span class="mono">${esc(currentPlace)}</span>` : ""}
+              <br><span class="mono">${esc(divisionLabel(job.currentDivision || job.current_division || "-"))} | offset ${esc(job.currentPageOffset ?? job.current_page_offset ?? 0)}</span>
+            </td>
             <td>${esc(errors)}${job.lastError || job.last_error ? `<br><span class="mono">${esc(job.lastError || job.last_error)}</span>` : ""}</td>
-            <td><div class="actions">
-              <button data-action="refresh-jobs" type="button" class="secondary">Refresh</button>
-              <button data-action="pause" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "running" ? "disabled" : ""}>Pause</button>
-              <button data-action="resume" data-job-id="${esc(job.id)}" type="button" ${statusValue !== "paused" ? "disabled" : ""}>Resume</button>
-              <button data-action="retry-failed" data-job-id="${esc(job.id)}" type="button">Retry Failed</button>
-              <button data-action="cancel" data-job-id="${esc(job.id)}" type="button" class="danger" ${!["queued","running","paused","retrying"].includes(statusValue) ? "disabled" : ""}>Cancel</button>
-            </div></td>
           </tr>`;
         }).join("");
+        // Re-apply any in-progress or completed backfill statuses that survived re-render.
+        for (const [jid, text] of backfillStatus) {
+          const el = document.getElementById(`backfill-status-${jid}`);
+          if (el) el.textContent = text;
+        }
       }
 
       async function loadAll() {
         status("Loading...");
-        const [stats, events, jobs] = await Promise.all([
+        const [stats, events, jobs, benchmarks] = await Promise.all([
           api("/stats"),
           api("/events"),
           api("/jobs"),
+          api("/benchmark-readiness"),
         ]);
         renderStats(stats);
         renderEvents(events.events || []);
         renderJobs(jobs.jobs || []);
+        renderBenchmarkReadiness(benchmarks);
+        document.getElementById("build-benchmarks-btn").disabled = false;
+        document.getElementById("build-singles-s8-btn").disabled = false;
         status("Loaded.", "ok");
       }
 
@@ -364,8 +526,47 @@
 	      jobsBody.addEventListener("click", async (event) => {
         const action = event.target?.dataset?.action;
         const jobId = event.target?.dataset?.jobId;
+        if (action === "toggle-scope" && jobId) {
+          if (expandedJobScopeIds.has(jobId)) expandedJobScopeIds.delete(jobId);
+          else expandedJobScopeIds.add(jobId);
+          renderJobs(loadedJobs);
+          return;
+        }
         if (action === "refresh-jobs") {
           await loadAll().catch((err) => status(err.message, "err"));
+          return;
+        }
+        if (action === "backfill-age-groups" && jobId) {
+          if (backfillPolls.has(jobId)) return;
+          function setBackfillText(text) {
+            backfillStatus.set(jobId, text);
+            const el = document.getElementById(`backfill-status-${jobId}`);
+            if (el) el.textContent = text;
+          }
+          try {
+            const res = await api(`/jobs/${encodeURIComponent(jobId)}/backfill-age-groups`, { method: "POST" });
+            setBackfillText(`Started — ${res.missing ?? "?"} remaining`);
+            const pollId = setInterval(async () => {
+              try {
+                const s = await api(`/jobs/${encodeURIComponent(jobId)}/backfill-age-groups`);
+                const text = s.running
+                  ? `Running — ${s.missing ?? 0} remaining`
+                  : `Done — ${s.missing ?? 0} missing`;
+                setBackfillText(text);
+                if (!s.running && s.missing === 0) {
+                  clearInterval(pollId);
+                  backfillPolls.delete(jobId);
+                }
+              } catch (e) {
+                setBackfillText(`Poll error: ${e.message}`);
+                clearInterval(pollId);
+                backfillPolls.delete(jobId);
+              }
+            }, 3000);
+            backfillPolls.set(jobId, pollId);
+          } catch (err) {
+            setBackfillText(`Error: ${err.message}`);
+          }
           return;
         }
         if (!action || !jobId) return;
@@ -376,6 +577,48 @@
           status(err.message, "err");
         }
       });
+
+	      document.getElementById("build-benchmarks-btn").addEventListener("click", async () => {
+        const btn = document.getElementById("build-benchmarks-btn");
+        const buildStatus = document.getElementById("build-benchmark-status");
+        btn.disabled = true;
+        buildStatus.textContent = "Building…";
+        buildStatus.className = "status";
+        try {
+	          const result = await api("/benchmarks/build-doubles-v2", { method: "POST" });
+          const groups = (result.written ?? []).map((g) => `${esc(divisionLabel(g.groupKey.split(":")[2] ?? g.groupKey))} ${esc(g.sampleSize?.toLocaleString())} rows`).join(" · ");
+          buildStatus.textContent = `Built ${result.metricCount ?? 0} metrics from ${(result.rowsProcessed ?? 0).toLocaleString()} rows. ${groups}`;
+          buildStatus.className = "status ok";
+          const benchmarks = await api("/benchmark-readiness");
+          renderBenchmarkReadiness(benchmarks);
+        } catch (err) {
+          buildStatus.textContent = err.message;
+          buildStatus.className = "status err";
+        } finally {
+          btn.disabled = false;
+        }
+	      });
+
+	      document.getElementById("build-singles-s8-btn").addEventListener("click", async () => {
+	        const btn = document.getElementById("build-singles-s8-btn");
+	        const buildStatus = document.getElementById("build-benchmark-status");
+	        btn.disabled = true;
+	        buildStatus.textContent = "Building singles S8 benchmarks...";
+	        buildStatus.className = "status";
+	        try {
+	          const result = await api("/benchmarks/build-singles-s8", { method: "POST" });
+	          const groups = (result.written ?? []).map((g) => `${esc(divisionLabel(g.groupKey.split(":")[2] ?? g.groupKey))} ${esc(g.sampleSize?.toLocaleString())} rows`).join(" Â· ");
+	          buildStatus.textContent = `Built singles S8: ${result.metricCount ?? 0} metrics from ${(result.rowsProcessed ?? 0).toLocaleString()} rows. ${groups}`;
+	          buildStatus.className = "status ok";
+	          const benchmarks = await api("/benchmark-readiness");
+	          renderBenchmarkReadiness(benchmarks);
+	        } catch (err) {
+	          buildStatus.textContent = err.message;
+	          buildStatus.className = "status err";
+	        } finally {
+	          btn.disabled = false;
+	        }
+	      });
 
       if (saved) loadAll().catch((err) => status(err.message, "err"));
     </script>

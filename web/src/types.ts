@@ -29,6 +29,7 @@ export interface HyroxCalculatorDraft {
   race: {
     raceName?: string;
     raceDate?: string;
+    eventCountry?: string;
     division: "open" | "pro" | "doubles" | "relay";
     finishTimeSeconds: number;
   };
@@ -74,6 +75,7 @@ export interface HyroxAnalysisRequest {
   race: {
     raceName?: string;
     raceDate?: string;
+    eventCountry?: string;
     division: string;
     finishTimeSeconds: number;
   };
@@ -109,6 +111,17 @@ export interface BrowserSummary {
   };
   overallPercentile?: number;
   benchmarkGroupLabel?: string;
+  comparisonOptions?: {
+    defaultId: string;
+    options: Array<{
+      id: "global" | "regional" | "age_group";
+      label: string;
+      groupKey: string;
+      percentile: number;
+      topPercent: number;
+      sampleSize: number;
+    }>;
+  } | null;
   biggestStrength?: {
     label: string;
     percentile?: number;

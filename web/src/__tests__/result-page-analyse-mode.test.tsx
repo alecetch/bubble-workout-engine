@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ResultPage } from "../pages/ResultPage";
 import type { HyroxAnalysisResponse } from "../types";
@@ -65,6 +65,31 @@ describe("ResultPage analyse mode", () => {
     expect(screen.getByText("Run vs Station")).toBeInTheDocument();
     expect(screen.getByText("Runner dominant")).toBeInTheDocument();
     expect(screen.getByText(/55% running - 35% stations/i)).toBeInTheDocument();
+  });
+
+  test("analyse mode renders benchmark comparison controls when options are available", () => {
+    renderResult({
+      ...baseResponse,
+      calculatorMode: "analyse",
+      browserSummary: {
+        ...baseResponse.browserSummary,
+        comparisonOptions: {
+          defaultId: "global",
+          options: [
+            { id: "global", label: "Global", groupKey: "global", percentile: 60, topPercent: 40, sampleSize: 1000 },
+            { id: "regional", label: "Europe", groupKey: "regional", percentile: 55, topPercent: 45, sampleSize: 700 },
+            { id: "age_group", label: "Age group 35-39", groupKey: "age", percentile: 62, topPercent: 38, sampleSize: 200 },
+          ],
+        },
+      },
+    });
+
+    expect(screen.getByRole("heading", { name: /benchmark view/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /global population/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /regional population/i }));
+    expect(screen.getAllByText("Europe · 700 records").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Top 45%").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /age group/i })).toBeInTheDocument();
   });
 
   test("analyse mode does not render Time Potential card", () => {

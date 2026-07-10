@@ -72,12 +72,15 @@ function buildNarrativeCopy({ replayTotalSeconds, officialTotalSeconds, rounding
     : `Your Race Replay rows add up to ${replayTotalSeconds}s of measurable RoxZone time.`;
 
   let interpretationCopy = "RoxZone is race execution time: station setup, breathing reset, movement through the zone and leaving stations cleanly under fatigue.";
+  const hasControlledLateDrift = scenarioTags.includes("controlled_roxzone") && scenarioTags.includes("late_race_drift");
   if (scenarioTags.includes("single_outlier") && worstCombined) {
     interpretationCopy = `The biggest RoxZone story is around ${station}. That station accounted for the largest entry/exit cost, which suggests it disrupted your race rhythm more than the total alone shows.`;
   } else if (scenarioTags.includes("exit_led") && worstExit) {
     interpretationCopy = `Your longer RoxZone losses came after stations, especially after ${stationLabel(worstExit.stationKey)}. That usually points to recovery debt before you could get moving again.`;
   } else if (scenarioTags.includes("entry_led") && worstEntry) {
     interpretationCopy = `Your bigger leakage came before starting stations, especially before ${stationLabel(worstEntry.stationKey)}. That points to setup, navigation or hesitation before the first rep.`;
+  } else if (hasControlledLateDrift) {
+    interpretationCopy = "Your overall RoxZone execution was controlled, but the Race Replay still shows later station entry/exit drift. Treat this as polish to protect under fatigue, not a full transition rebuild.";
   } else if (scenarioTags.includes("late_race_drift")) {
     interpretationCopy = "Your RoxZone execution slowed later in the race, so the issue is less pure logistics and more maintaining race flow under fatigue.";
   } else if (scenarioTags.includes("controlled_roxzone")) {
@@ -93,6 +96,8 @@ function buildNarrativeCopy({ replayTotalSeconds, officialTotalSeconds, rounding
     actionCopy = "Use a simple station-entry script in training: enter, locate, hands on, first rep. The target is removing the pause before work starts.";
   } else if (scenarioTags.includes("exit_led")) {
     actionCopy = "Practise finishing stations and jogging out under high breathing load. The goal is to reduce the recovery pause after the final rep.";
+  } else if (hasControlledLateDrift) {
+    actionCopy = "Keep transition practice late in longer sessions, after 45-60 minutes of work, so an already strong RoxZone profile holds when fatigue is highest.";
   } else if (scenarioTags.includes("late_race_drift")) {
     actionCopy = "Put transition practice late in longer sessions, after 45-60 minutes of work, so race flow holds when fatigue is highest.";
   }
@@ -216,7 +221,7 @@ export function analyseRoxzone(normalisedSubmission, benchmarkContext) {
     ? normalisedSubmission.roxzoneTimeSeconds / normalisedSubmission.race.finishTimeSeconds
     : null;
 
-  if (normalisedSubmission.roxzoneMode === "inferred_total") {
+  if (normalisedSubmission.roxzoneMode === "inferred_total" || normalisedSubmission.roxzoneMode === "explicit_total") {
     const roxzoneNarrative = buildRoxzoneNarrative({
       entryExit,
       totalSeconds: normalisedSubmission.roxzoneTimeSeconds,
@@ -225,7 +230,7 @@ export function analyseRoxzone(normalisedSubmission, benchmarkContext) {
     });
     return {
       available: true,
-      mode: "inferred_total",
+      mode: normalisedSubmission.roxzoneMode,
       totalSeconds: normalisedSubmission.roxzoneTimeSeconds,
       percentOfTotalTime,
       percentile: aggregate?.percentile ?? null,

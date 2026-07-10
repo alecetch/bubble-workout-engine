@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { Shell } from "../components/Shell";
 import { MetricCard } from "../components/MetricCard";
@@ -29,6 +29,7 @@ export function ResultPage() {
   const response = state?.response;
   const submissionId = response?.submissionId;
   const responseMode = response?.calculatorMode ?? response?.browserSummary?.calculatorMode;
+  const [selectedComparisonId, setSelectedComparisonId] = useState<string>("global");
 
   useEffect(() => {
     if (submissionId && responseMode !== "target") {
@@ -54,10 +55,23 @@ export function ResultPage() {
   }
 
   const summary = response.browserSummary ?? {};
+  const calculatorMode = response.calculatorMode ?? summary.calculatorMode ?? "target";
+  const comparisonOptions = summary.comparisonOptions?.options ?? [];
+  const selectedComparison =
+    comparisonOptions.find((option) => option.id === selectedComparisonId)
+    ?? comparisonOptions.find((option) => option.id === summary.comparisonOptions?.defaultId)
+    ?? comparisonOptions[0]
+    ?? null;
+  const benchmarkValue = selectedComparison
+    ? `Top ${selectedComparison.topPercent}%`
+    : summary.overallPercentile != null
+      ? `Top ${100 - summary.overallPercentile}%`
+      : null;
+  const benchmarkLabel = selectedComparison?.label ?? summary.benchmarkGroupLabel ?? "your benchmark group";
+  const hasComparisonSwitcher = calculatorMode === "analyse" && comparisonOptions.length > 1;
   const heroInsight = summary.heroInsight;
   const timePotential = summary.timePotential;
   const biggestStrength = summary.biggestStrength;
-  const calculatorMode = response.calculatorMode ?? summary.calculatorMode ?? "target";
   const targetUrl = submissionId
     ? `/hyrox-calculator/race-details?mode=target&source=analysis_complete&submissionId=${encodeURIComponent(submissionId)}`
     : null;
@@ -99,8 +113,8 @@ export function ResultPage() {
 
         <p className={styles.subline}>
           {calculatorMode === "analyse"
-            ? summary.overallPercentile != null
-              ? `You finished in the top ${100 - summary.overallPercentile}% of ${summary.benchmarkGroupLabel ?? "your benchmark group"}.`
+            ? benchmarkValue
+              ? `You finished in the ${benchmarkValue.toLowerCase()} of ${benchmarkLabel}.`
               : "Your personalised performance report has been generated."
             : heroInsight?.timeGapFormatted
               ? `We identified ${heroInsight.timeGapFormatted} of potential time gain from your top opportunity.`
@@ -116,6 +130,35 @@ export function ResultPage() {
           </span>
         </div>
 
+        {hasComparisonSwitcher && (
+          <section className={styles.comparisonPanel} aria-labelledby="comparison-heading">
+            <div className={styles.comparisonHeader}>
+              <h2 id="comparison-heading">Benchmark view</h2>
+              <p>Switch the headline benchmark without changing the report underneath.</p>
+            </div>
+            <div className={styles.comparisonButtons} role="group" aria-label="Benchmark comparison view">
+              {comparisonOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`${styles.comparisonButton} ${selectedComparison?.id === option.id ? styles.comparisonButtonActive : ""}`}
+                  onClick={() => {
+                    setSelectedComparisonId(option.id);
+                    trackEvent("hyrox_benchmark_view_changed", {
+                      submissionId,
+                      comparisonId: option.id,
+                    });
+                  }}
+                >
+                  <span>{option.id === "global" ? "Global population" : option.id === "regional" ? "Regional population" : "Age group"}</span>
+                  <strong>Top {option.topPercent}%</strong>
+                  <small>{option.label} · {option.sampleSize.toLocaleString()} records</small>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         <div className={styles.metricsGrid}>
           {summary.athleteArchetype?.label && (
             <MetricCard
@@ -127,15 +170,11 @@ export function ResultPage() {
           )}
           {calculatorMode === "analyse" && (
             <>
-              {(summary.overallPercentile != null || summary.benchmarkGroupLabel) && (
+              {(benchmarkValue || summary.benchmarkGroupLabel) && (
                 <MetricCard
                   title="Benchmark Position"
-                  value={
-                    summary.overallPercentile != null
-                      ? `Top ${100 - summary.overallPercentile}%`
-                      : (summary.benchmarkGroupLabel ?? "-")
-                  }
-                  sub={summary.benchmarkGroupLabel ?? "in your benchmark group"}
+                  value={benchmarkValue ?? (summary.benchmarkGroupLabel ?? "-")}
+                  sub={selectedComparison ? `${selectedComparison.label} · ${selectedComparison.sampleSize.toLocaleString()} records` : benchmarkLabel}
                   accent="cyan"
                 />
               )}

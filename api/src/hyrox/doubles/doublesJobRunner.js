@@ -409,25 +409,34 @@ export async function runJob(jobId, pool) {
     `SELECT
        COUNT(*) FILTER (WHERE status='failed')::int AS failed_count,
        COUNT(*) FILTER (WHERE status='skipped')::int AS skipped_count,
-       COALESCE(SUM(records_saved), 0)::int AS saved_count
+       COALESCE(SUM(records_saved), 0)::int AS saved_count,
+       COALESCE(SUM(records_found), 0)::int AS found_count,
+       COALESCE(SUM(duplicates_skipped), 0)::int AS dupe_count
      FROM hyrox_doubles_scrape_job_events
      WHERE job_id=$1`,
     [jobId],
   );
   const hasFailed = Number(summary.rows[0]?.failed_count ?? 0) > 0;
-  const allSkippedWithNoRecords = Number(summary.rows[0]?.skipped_count ?? 0) > 0 && Number(summary.rows[0]?.saved_count ?? 0) === 0;
+  const foundCount = Number(summary.rows[0]?.found_count ?? 0);
+  const dupeCount = Number(summary.rows[0]?.dupe_count ?? 0);
+  const savedCount = Number(summary.rows[0]?.saved_count ?? 0);
+  // Only treat skipped-with-no-records as a failure when nothing was found at all.
+  // If records were found but all were duplicates (already in DB), the scrape completed correctly.
+  const allSkippedWithNoRecords = Number(summary.rows[0]?.skipped_count ?? 0) > 0 && savedCount === 0 && foundCount === 0;
   const finalStatus = hasFailed || allSkippedWithNoRecords ? "failed" : "completed";
   const finalError = allSkippedWithNoRecords
     ? "No doubles records were saved for the selected event/divisions. Check job event details for missing contests or empty leaderboards."
-    : null;
+    : (savedCount === 0 && dupeCount > 0)
+      ? `All ${dupeCount} records found were already in the database — no new data for this scrape.`
+      : null;
   await pool.query(
     `UPDATE hyrox_doubles_scrape_jobs
      SET status=$2,
          completed_at=CASE WHEN $2='completed' THEN now() ELSE completed_at END,
          failed_at=CASE WHEN $2='failed' THEN now() ELSE NULL END,
          total_errors=CASE WHEN $2='completed' THEN 0 ELSE total_errors END,
-         last_error=CASE WHEN $2='completed' THEN NULL ELSE COALESCE($3, last_error) END,
-         last_error_at=CASE WHEN $2='completed' THEN NULL WHEN $3 IS NULL THEN last_error_at ELSE now() END,
+         last_error=CASE WHEN $2='completed' AND $3 IS NOT NULL THEN $3 WHEN $2='completed' THEN NULL ELSE COALESCE($3, last_error) END,
+         last_error_at=CASE WHEN $2='completed' AND $3 IS NOT NULL THEN now() WHEN $2='completed' THEN NULL WHEN $3 IS NULL THEN last_error_at ELSE now() END,
          cooldown_until=NULL,
          updated_at=now()
      WHERE id=$1 AND status='running'`,

@@ -1,3 +1,4 @@
+import { ZipArchive } from "archiver";
 import { SLIDE_FILENAMES } from "./slideAssets.js";
 
 const POSTING_INSTRUCTIONS = `How to post your Forma HYROX carousel to Instagram
@@ -12,10 +13,9 @@ const POSTING_INSTRUCTIONS = `How to post your Forma HYROX carousel to Instagram
 Tip: keep the slide order exactly as numbered.
 `;
 
-export async function buildZip(slideBuffers, caption) {
-  const { default: archiver } = await import("archiver");
+export async function buildZip(slideBuffers, caption, { raceCardBuffer = null } = {}) {
   return new Promise((resolve, reject) => {
-    const archive = archiver("zip", { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
     const chunks = [];
     archive.on("data", (chunk) => chunks.push(chunk));
     archive.on("end", () => resolve(Buffer.concat(chunks)));
@@ -24,6 +24,9 @@ export async function buildZip(slideBuffers, caption) {
     slideBuffers.forEach((buf, index) => {
       archive.append(buf, { name: SLIDE_FILENAMES[index] });
     });
+    if (raceCardBuffer) {
+      archive.append(raceCardBuffer, { name: "race-card.png" });
+    }
     archive.append(caption, { name: "caption.txt" });
     archive.append(POSTING_INSTRUCTIONS, { name: "posting-instructions.txt" });
     archive.finalize();

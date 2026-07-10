@@ -77,6 +77,28 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[1].biggest_loss.delta, "+1:00");
   });
 
+  it("keeps a slide 1 hero image for target-mode athletes who beat all station medians (stationBreakdown fallback)", () => {
+    // Athletes who beat every station median have no positive timeGapToMedianSeconds, so
+    // limiterKey returns null. The hero image must still be resolved from stationBreakdown.
+    const eliteTargetMode = analysis({
+      stationBreakdown: [
+        { segmentKey: "sled_push", label: "Sled Push", timeGapSeconds: -30, percentile: 72, confidence: "high" },
+        { segmentKey: "ski_erg", label: "SkiErg", timeGapSeconds: -90, percentile: 88, confidence: "high" },
+      ],
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 75, userSeconds: 3600 }),
+        segment("run_1", { type: "run", timeGapToMedianSeconds: -40, percentile: 70 }),
+        segment("run_2", { type: "run", timeGapToMedianSeconds: -35, percentile: 68 }),
+        segment("sled_push", { timeGapToMedianSeconds: -30, percentile: 72 }),
+        segment("ski_erg", { timeGapToMedianSeconds: -90, percentile: 88 }),
+      ],
+    });
+    const carousel = buildTemplateA(eliteTargetMode, [], { displayName: "Alice Bauer", sex: "female", calculatorMode: "target" });
+
+    // sled_push has the highest (least-negative) timeGapSeconds → relatively weakest station
+    assert.match(carousel.slides[0].athlete_image, /hyrox-sled-push-female\.png$/);
+  });
+
   it("keeps a slide 1 hero image for analyse-mode high performers", () => {
     const highPerformer = analysis({
       benchmarkContext: {
@@ -99,5 +121,27 @@ describe("buildTemplateA", () => {
     const carousel = buildTemplateA(highPerformer, [], { displayName: "Marcus Fernandes", sex: "male", calculatorMode: "analyse" });
 
     assert.match(carousel.slides[0].athlete_image, /hyrox-wall-balls-male\.png$/);
+  });
+
+  it("adds regional context to the athlete hook slide when material", () => {
+    const carousel = buildTemplateA(analysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:35-39", label: "Open Male 35-39" },
+        goalBenchmarkGroup: null,
+        regionalBenchmark: {
+          available: true,
+          region: "europe",
+          regionLabel: "Europe",
+          fieldPercentile: 45,
+        },
+      },
+      segments: [
+        segment("total_time", { type: "aggregate", fieldPercentile: 55, percentile: 55, userSeconds: 3600 }),
+        segment("wall_balls", { timeGapToMedianSeconds: 60, percentile: 45 }),
+      ],
+    }), [], { displayName: "Marcus Fernandes", sex: "male", calculatorMode: "analyse" });
+
+    assert.match(carousel.slides[0].regional_context, /Europe events attract/);
+    assert.match(carousel.slides[0].regional_context, /top 55%/);
   });
 });

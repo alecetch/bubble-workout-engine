@@ -115,3 +115,26 @@ export function deepEnforceTone(value) {
   }
   return value;
 }
+
+export function regionalContextLine(analysisJson) {
+  const regional = analysisJson?.benchmarkContext?.regionalBenchmark;
+  if (!regional?.available || !Number.isFinite(Number(regional.fieldPercentile))) return null;
+
+  const overall = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
+  const globalPct = Number(overall?.fieldPercentile ?? overall?.percentile ?? NaN);
+  const regionalPct = Number(regional.fieldPercentile);
+
+  if (!Number.isFinite(globalPct) || !Number.isFinite(regionalPct)) return null;
+
+  const gap = Math.abs(globalPct - regionalPct);
+  if (gap < 5) return null;
+
+  const regionLabel = String(regional.regionLabel ?? regional.region ?? "").trim();
+  const topPercent = (pct) => Math.max(1, Math.round(100 - pct));
+
+  if (regionalPct < globalPct) {
+    return `${regionLabel} events attract a stronger-than-average field - locally, this time ranks you top ${topPercent(regionalPct)}%.`;
+  }
+
+  return `Globally, where fields include more established athletes, you'd rank top ${topPercent(globalPct)}%.`;
+}

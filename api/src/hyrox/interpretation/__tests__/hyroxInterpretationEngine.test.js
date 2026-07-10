@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildHeroCopy, buildInterpretation, totalRunGapSeconds } from "../hyroxInterpretationEngine.js";
+import { buildHeroCopy, buildInterpretation, totalRunGapSeconds, roxzoneGap, selectPrimaryCategory } from "../hyroxInterpretationEngine.js";
 
 function station(segmentKey, timeGapSeconds, percentile = 40, confidence = "high") {
   return { segmentKey, label: segmentKey.replace(/_/g, " "), timeGapSeconds, percentile, confidence };
@@ -384,4 +384,134 @@ test("target mode: pacing category returns target-specific headline", () => {
 test("analyse mode: pacing category returns original headline", () => {
   const result = buildHeroCopy({ category: "pacing" }, {}, "analyse");
   assert.equal(result.headline, "YOU HAVE THE ENGINE — THE CEILING IS EXECUTION");
+});
+
+// B-6: gap-size guard in station_capacity + analyse fallback
+test("B-6: station_capacity + analyse + large gap (>= 120s) uses BIGGEST OPPORTUNITY framing", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [
+      station("wall_balls", 200, 28),
+      station("sandbag_lunges", 160, 30),
+    ],
+    segments: [run("run_1", 20), run("run_2", 15), run("run_3", 10), run("run_4", 5)],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 200 } },
+    timePotential: { headlineGainSeconds: 200 },
+  }), {}, "analyse");
+  assert.equal(result.primaryThesis.category, "station_capacity");
+  assert.match(result.heroCopy.headline, /BIGGEST OPPORTUNITY/i);
+  assert.doesNotMatch(result.heroCopy.headline, /LEAST ALIGNED/i);
+});
+
+test("B-6: station_capacity + analyse + small gap (< 120s) keeps LEAST ALIGNED framing", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [
+      station("wall_balls", 55, 42),
+      station("sandbag_lunges", 40, 46),
+    ],
+    segments: [run("run_1", 20), run("run_2", 15), run("run_3", 10), run("run_4", 5)],
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 55 } },
+    timePotential: { headlineGainSeconds: 55 },
+  }), {}, "analyse");
+  assert.equal(result.primaryThesis.category, "station_capacity");
+  assert.match(result.heroCopy.headline, /LEAST ALIGNED/i);
+  assert.doesNotMatch(result.heroCopy.headline, /BIGGEST OPPORTUNITY/i);
+});
+
+// M-8: roxzone wins over station_capacity when it is the dominant gap
+test("M-8: roxzone wins over station_capacity when roxGap > stationGap and roxPct < 45", () => {
+  // weakCount = 1 (below the station_capacity gate of 2), roxPct = 40 (old threshold was 35),
+  // roxGap = 150 > stationGap = 80 — this is the exact case M-8 fixes.
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [station("wall_balls", 80, 45)],
+    segments: [run("run_1", 10), run("run_2", 10)],
+    roxzoneAnalysis: { available: true, percentile: 40, timeGapToMedianSeconds: 150 },
+  }), {}, "target");
+  assert.equal(result.primaryThesis.category, "roxzone");
+});
+
+test("M-8: roxzone does not override station_capacity when roxGap <= stationGap", () => {
+  const result = buildInterpretation(makeAnalysis({
+    stationBreakdown: [station("wall_balls", 200, 30), station("sandbag_lunges", 160, 28)],
+    segments: [run("run_1", 10)],
+    roxzoneAnalysis: { available: true, percentile: 40, timeGapToMedianSeconds: 100 },
+  }), {}, "target");
+  // stationGap = 360 > roxGap = 100, so roxzone should not win
+  assert.equal(result.primaryThesis.category, "station_capacity");
+});
+
+// feature-144: hero alignment and roxzone mode-awareness fixes
+
+test("feature-144: roxzoneGap returns frameGapSeconds when present, ignoring timeGapToMedianSeconds", () => {
+  const analysisJson = {
+    segments: [{ segmentKey: "roxzone_time", frameGapSeconds: -252, timeGapToMedianSeconds: 130 }],
+    roxzoneAnalysis: { timeGapToMedianSeconds: 130 },
+  };
+  assert.equal(roxzoneGap(analysisJson), -252);
+});
+
+test("feature-144: M-8 roxzone override does not fire when frameGapSeconds is negative (athlete ahead on target)", () => {
+  const analysisJson = {
+    segments: [
+      { segmentKey: "roxzone_time", frameGapSeconds: -252, timeGapToMedianSeconds: 130 },
+      { segmentKey: "run_1", type: "run", timeGapToMedianSeconds: 1200, percentile: 50 },
+      { segmentKey: "run_time", type: "aggregate", timeGapToMedianSeconds: 800, percentile: 50 },
+      { segmentKey: "total_time", type: "aggregate", timeGapToMedianSeconds: 300, percentile: 40 },
+    ],
+    stationBreakdown: [],
+    roxzoneAnalysis: { available: true, percentile: 30, timeGapToMedianSeconds: 130 },
+    runningAnalysis: { available: true, runFadePct: 0 },
+    headline: { biggestLimiter: null },
+    timePotential: {},
+    scores: { engineScore: 60 },
+    penalties: [],
+    benchmarkConfidence: "high",
+  };
+  const result = selectPrimaryCategory(analysisJson, "target");
+  assert.notEqual(result, "roxzone");
+});
+
+test("feature-144: M-8 roxzone override fires when frameGapSeconds is large positive and roxPct < 45", () => {
+  const analysisJson = {
+    segments: [
+      { segmentKey: "roxzone_time", frameGapSeconds: 150, timeGapToMedianSeconds: 130 },
+      { segmentKey: "run_1", type: "run", timeGapToMedianSeconds: 10, percentile: 50 },
+      { segmentKey: "run_time", type: "aggregate", timeGapToMedianSeconds: 10, percentile: 50 },
+      { segmentKey: "total_time", type: "aggregate", timeGapToMedianSeconds: 200, percentile: 40 },
+    ],
+    stationBreakdown: [],
+    roxzoneAnalysis: { available: true, percentile: 30, timeGapToMedianSeconds: 130 },
+    runningAnalysis: { available: true, runFadePct: 0 },
+    headline: { biggestLimiter: null },
+    timePotential: {},
+    scores: { engineScore: 60 },
+    penalties: [],
+    benchmarkConfidence: "high",
+  };
+  const result = selectPrimaryCategory(analysisJson, "target");
+  assert.equal(result, "roxzone");
+});
+
+test("feature-144: buildHeroCopy station_capacity uses emailTopLabel instead of biggestLimiter label", () => {
+  const primaryThesis = { category: "station_capacity" };
+  const analysisJson = {
+    headline: { biggestLimiter: { label: "Total Station Time" } },
+    benchmarkContext: { goalBenchmarkGroup: { targetFinishSeconds: 4800 } },
+    segments: [{ segmentKey: "total_time", type: "aggregate", exactTargetSeconds: 4800 }],
+    timePotential: {},
+  };
+  const result = buildHeroCopy(primaryThesis, analysisJson, "target", "Run 1", "run");
+  assert.match(result.headline, /RUN 1/i);
+  assert.doesNotMatch(result.headline, /TOTAL STATION TIME/i);
+});
+
+test("feature-144: buildHeroCopy running category names station when emailTopSegType is station", () => {
+  const primaryThesis = { category: "running" };
+  const analysisJson = {
+    headline: { biggestLimiter: null },
+    benchmarkContext: { goalBenchmarkGroup: { targetFinishSeconds: 4800 } },
+    segments: [{ segmentKey: "total_time", type: "aggregate", exactTargetSeconds: 4800 }],
+    timePotential: {},
+  };
+  const result = buildHeroCopy(primaryThesis, analysisJson, "target", "Wall Balls", "station");
+  assert.match(result.headline, /WALL BALLS/i);
 });

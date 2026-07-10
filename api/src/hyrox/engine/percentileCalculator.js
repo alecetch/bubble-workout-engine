@@ -23,7 +23,7 @@ export function calculatePercentile(userSeconds, sortedBenchmarkValues) {
   return pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct);
 }
 
-function approximatePercentile(userSeconds, stats) {
+export function approximatePercentile(userSeconds, stats) {
   if (!Number.isFinite(userSeconds) || !stats) return null;
   if (Array.isArray(stats.sortedValues)) return calculatePercentile(userSeconds, stats.sortedValues);
   const points = [
@@ -61,6 +61,12 @@ function approximatePercentile(userSeconds, stats) {
   return null;
 }
 
+export function scoreTimeAgainstGroup(finishTimeSeconds, groupKey, metricKey = "total_time") {
+  if (!Number.isFinite(finishTimeSeconds) || !groupKey) return null;
+  const stats = getBenchmarkStats(groupKey, metricKey);
+  return approximatePercentile(finishTimeSeconds, stats);
+}
+
 function segmentSeconds(normalisedSubmission, metricKey) {
   if (metricKey === "total_time") return normalisedSubmission.race?.finishTimeSeconds;
   if (metricKey === "run_time") return normalisedSubmission.runTimeSeconds;
@@ -88,9 +94,9 @@ function requestFromSubmission(normalisedSubmission, benchmarkContext) {
   const group = benchmarkContext?.primaryBenchmarkGroup ?? {};
   const request = {
     datasetVersion: group.datasetVersion,
-    division: normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division,
-    gender: normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender,
-    ageGroup: normalisedSubmission.athlete?.ageGroup ?? null,
+    division: group.division ?? normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division,
+    gender: group.gender ?? normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender,
+    ageGroup: group.ageGroup ?? normalisedSubmission.athlete?.ageGroup ?? null,
   };
   if (group.performanceBand) {
     request.performanceBand = group.performanceBand;
