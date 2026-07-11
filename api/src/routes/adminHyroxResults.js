@@ -19,7 +19,7 @@ function toCamelRow(row) {
 // Tracks jobs with an age-group backfill currently in-flight (in-process only).
 const activeBackfills = new Set();
 
-export function createAdminHyroxDoublesRouter(pool = defaultPool, options = {}) {
+export function createAdminHyroxResultsRouter(pool = defaultPool, options = {}) {
   const availabilityCounter = options.availabilityCounter ?? countAvailableDoublesRecords;
   const router = express.Router();
 
@@ -35,7 +35,7 @@ function validateJobBody(body = {}) {
   return null;
 }
 
-router.get("/hyrox-doubles/events", async (_req, res) => {
+router.get("/hyrox-results/events", async (_req, res) => {
   try {
     const { rows } = await pool.query(
 	      `SELECT
@@ -64,7 +64,7 @@ router.get("/hyrox-doubles/events", async (_req, res) => {
   }
 });
 
-router.get("/hyrox-doubles/stats", async (_req, res) => {
+router.get("/hyrox-results/stats", async (_req, res) => {
   try {
     const byDivision = await pool.query(
       `SELECT
@@ -98,7 +98,7 @@ router.get("/hyrox-doubles/stats", async (_req, res) => {
   }
 });
 
-router.post("/hyrox-doubles/events/:id/availability", async (req, res) => {
+router.post("/hyrox-results/events/:id/availability", async (req, res) => {
   const selectedDivisions = req.body?.selectedDivisions ?? req.body?.selected_divisions ?? DOUBLES_DIVISIONS;
   if (!Array.isArray(selectedDivisions) || selectedDivisions.length === 0 || selectedDivisions.some((division) => !DOUBLES_DIVISIONS.includes(division))) {
     return res.status(400).json({ ok: false, error: `selectedDivisions must contain one or more of: ${DOUBLES_DIVISIONS.join(", ")}` });
@@ -138,7 +138,7 @@ router.post("/hyrox-doubles/events/:id/availability", async (req, res) => {
   }
 });
 
-router.get("/hyrox-doubles/jobs", async (_req, res) => {
+router.get("/hyrox-results/jobs", async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -210,7 +210,7 @@ router.get("/hyrox-doubles/jobs", async (_req, res) => {
   }
 });
 
-router.post("/hyrox-doubles/jobs", async (req, res) => {
+router.post("/hyrox-results/jobs", async (req, res) => {
   const validationError = validateJobBody(req.body);
   if (validationError) return res.status(400).json({ ok: false, error: validationError });
   try {
@@ -227,7 +227,7 @@ router.post("/hyrox-doubles/jobs", async (req, res) => {
   }
 });
 
-router.get("/hyrox-doubles/jobs/:id", async (req, res) => {
+router.get("/hyrox-results/jobs/:id", async (req, res) => {
   try {
     const job = await pool.query("SELECT * FROM hyrox_doubles_scrape_jobs WHERE id=$1", [req.params.id]);
     if (!job.rows.length) return res.status(404).json({ ok: false, error: "Job not found" });
@@ -241,7 +241,7 @@ router.get("/hyrox-doubles/jobs/:id", async (req, res) => {
   }
 });
 
-router.get("/hyrox-doubles/benchmark-readiness", async (_req, res) => {
+router.get("/hyrox-results/benchmark-readiness", async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -285,7 +285,7 @@ router.get("/hyrox-doubles/benchmark-readiness", async (_req, res) => {
   }
 });
 
-router.post("/hyrox-doubles/benchmarks/build", async (_req, res) => {
+router.post("/hyrox-results/benchmarks/build", async (_req, res) => {
   try {
     const summary = await buildDoublesBenchmarks();
     const cache = await loadBenchmarkData(pool);
@@ -305,7 +305,7 @@ router.post("/hyrox/benchmarks/build-doubles-v2", async (_req, res) => {
   }
 });
 
-router.post("/hyrox-doubles/benchmarks/build-doubles-v2", async (_req, res) => {
+router.post("/hyrox-results/benchmarks/build-doubles-v2", async (_req, res) => {
   try {
     const summary = await buildDoublesBenchmarks();
     const cache = await loadBenchmarkData(pool);
@@ -325,7 +325,7 @@ router.post("/hyrox/benchmarks/build-singles-s8", async (_req, res) => {
   }
 });
 
-router.post("/hyrox-doubles/benchmarks/build-singles-s8", async (_req, res) => {
+router.post("/hyrox-results/benchmarks/build-singles-s8", async (_req, res) => {
   try {
     const summary = await buildSinglesS8Benchmarks();
     const cache = await loadBenchmarkData(pool);
@@ -345,7 +345,7 @@ async function transitionJob(req, res, sql, errorMessage) {
   }
 }
 
-router.patch("/hyrox-doubles/jobs/:id/pause", async (req, res) => {
+router.patch("/hyrox-results/jobs/:id/pause", async (req, res) => {
   await transitionJob(
     req,
     res,
@@ -357,7 +357,7 @@ router.patch("/hyrox-doubles/jobs/:id/pause", async (req, res) => {
   );
 });
 
-router.patch("/hyrox-doubles/jobs/:id/resume", async (req, res) => {
+router.patch("/hyrox-results/jobs/:id/resume", async (req, res) => {
   await transitionJob(
     req,
     res,
@@ -369,7 +369,7 @@ router.patch("/hyrox-doubles/jobs/:id/resume", async (req, res) => {
   );
 });
 
-router.patch("/hyrox-doubles/jobs/:id/cancel", async (req, res) => {
+router.patch("/hyrox-results/jobs/:id/cancel", async (req, res) => {
   await transitionJob(
     req,
     res,
@@ -381,7 +381,7 @@ router.patch("/hyrox-doubles/jobs/:id/cancel", async (req, res) => {
   );
 });
 
-router.patch("/hyrox-doubles/jobs/:id/retry-failed", async (req, res) => {
+router.patch("/hyrox-results/jobs/:id/retry-failed", async (req, res) => {
   try {
     const reset = await pool.query(
       `UPDATE hyrox_doubles_scrape_job_events
@@ -410,7 +410,7 @@ router.patch("/hyrox-doubles/jobs/:id/retry-failed", async (req, res) => {
   }
 });
 
-router.get("/hyrox-doubles/jobs/:id/errors", async (req, res) => {
+router.get("/hyrox-results/jobs/:id/errors", async (req, res) => {
   try {
     const { rows } = await pool.query(
       "SELECT * FROM hyrox_doubles_scrape_errors WHERE job_id=$1 ORDER BY occurred_at DESC LIMIT 100",
@@ -422,7 +422,7 @@ router.get("/hyrox-doubles/jobs/:id/errors", async (req, res) => {
   }
 });
 
-router.get("/hyrox-doubles/jobs/:id/backfill-age-groups", async (req, res) => {
+router.get("/hyrox-results/jobs/:id/backfill-age-groups", async (req, res) => {
   try {
     const { total, missing } = await getAgeGroupBackfillStatus(pool, req.params.id);
     return res.json({ ok: true, total, missing, running: activeBackfills.has(req.params.id) });
@@ -431,7 +431,7 @@ router.get("/hyrox-doubles/jobs/:id/backfill-age-groups", async (req, res) => {
   }
 });
 
-router.post("/hyrox-doubles/jobs/:id/backfill-age-groups", async (req, res) => {
+router.post("/hyrox-results/jobs/:id/backfill-age-groups", async (req, res) => {
   const jobId = req.params.id;
   if (activeBackfills.has(jobId)) {
     return res.status(409).json({ ok: false, error: "Backfill already running for this job" });
@@ -455,4 +455,4 @@ router.post("/hyrox-doubles/jobs/:id/backfill-age-groups", async (req, res) => {
   return router;
 }
 
-export const adminHyroxDoublesRouter = createAdminHyroxDoublesRouter(defaultPool);
+export const adminHyroxResultsRouter = createAdminHyroxResultsRouter(defaultPool);

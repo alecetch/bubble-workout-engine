@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
-import { createAdminHyroxDoublesRouter } from "../src/routes/adminHyroxDoubles.js";
+import { createAdminHyroxResultsRouter } from "../src/routes/adminHyroxResults.js";
 
 function buildPool() {
   const state = {
@@ -89,7 +89,7 @@ function buildPool() {
 function buildApp(pool = buildPool(), options = {}) {
   const app = express();
   app.use(express.json());
-  app.use("/api/admin", createAdminHyroxDoublesRouter(pool, options));
+  app.use("/api/admin", createAdminHyroxResultsRouter(pool, options));
   return { app, pool };
 }
 
@@ -107,9 +107,9 @@ async function request(app, path, options = {}) {
   }
 }
 
-test("POST /admin/hyrox-doubles/jobs creates a job", async () => {
+test("POST /admin/hyrox-results/jobs creates a job", async () => {
   const { app } = buildApp();
-  const { response, body } = await request(app, "/api/admin/hyrox-doubles/jobs", {
+  const { response, body } = await request(app, "/api/admin/hyrox-results/jobs", {
     method: "POST",
     body: JSON.stringify({ selectedEventIds: [1], selectedDivisions: ["doubles_male"] }),
   });
@@ -119,28 +119,28 @@ test("POST /admin/hyrox-doubles/jobs creates a job", async () => {
   assert.match(body.jobId, /^[0-9a-f-]{36}$/i);
 });
 
-test("POST /admin/hyrox-doubles/jobs validates body", async () => {
+test("POST /admin/hyrox-results/jobs validates body", async () => {
   const { app } = buildApp();
-  const missingEvents = await request(app, "/api/admin/hyrox-doubles/jobs", {
+  const missingEvents = await request(app, "/api/admin/hyrox-results/jobs", {
     method: "POST",
     body: JSON.stringify({ selectedDivisions: ["doubles_male"] }),
   });
   assert.equal(missingEvents.response.status, 400);
 
-  const emptyDivisions = await request(app, "/api/admin/hyrox-doubles/jobs", {
+  const emptyDivisions = await request(app, "/api/admin/hyrox-results/jobs", {
     method: "POST",
     body: JSON.stringify({ selectedEventIds: [1], selectedDivisions: [] }),
   });
   assert.equal(emptyDivisions.response.status, 400);
 
-  const invalidDivision = await request(app, "/api/admin/hyrox-doubles/jobs", {
+  const invalidDivision = await request(app, "/api/admin/hyrox-results/jobs", {
     method: "POST",
     body: JSON.stringify({ selectedEventIds: [1], selectedDivisions: ["doubles"] }),
   });
   assert.equal(invalidDivision.response.status, 400);
 });
 
-test("GET /admin/hyrox-doubles/jobs lists jobs and detail", async () => {
+test("GET /admin/hyrox-results/jobs lists jobs and detail", async () => {
   const { app, pool } = buildApp();
   pool.state.jobs.push({
     id: "job-1",
@@ -161,7 +161,7 @@ test("GET /admin/hyrox-doubles/jobs lists jobs and detail", async () => {
   });
   pool.state.jobEvents.push({ id: "event-1", job_id: "job-1", status: "pending" });
 
-  const list = await request(app, "/api/admin/hyrox-doubles/jobs");
+  const list = await request(app, "/api/admin/hyrox-results/jobs");
   assert.equal(list.response.status, 200);
   assert.equal(list.body.ok, true);
   assert.equal(list.body.jobs.length, 1);
@@ -169,20 +169,20 @@ test("GET /admin/hyrox-doubles/jobs lists jobs and detail", async () => {
   assert.equal(list.body.jobs[0].locationSummary[0].eventName, "HYROX London");
   assert.equal(list.body.jobs[0].locationSummary[0].recordsAvailable, 120);
 
-  const detail = await request(app, "/api/admin/hyrox-doubles/jobs/job-1");
+  const detail = await request(app, "/api/admin/hyrox-results/jobs/job-1");
   assert.equal(detail.response.status, 200);
   assert.equal(detail.body.events.length, 1);
 
-  const missing = await request(app, "/api/admin/hyrox-doubles/jobs/missing");
+  const missing = await request(app, "/api/admin/hyrox-results/jobs/missing");
   assert.equal(missing.response.status, 404);
 });
 
-test("GET /admin/hyrox-doubles/benchmark-readiness returns ok and source", async () => {
+test("GET /admin/hyrox-results/benchmark-readiness returns ok and source", async () => {
   const previousSource = process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
   delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
   try {
     const { app } = buildApp();
-    const result = await request(app, "/api/admin/hyrox-doubles/benchmark-readiness");
+    const result = await request(app, "/api/admin/hyrox-results/benchmark-readiness");
 
     assert.equal(result.response.status, 200);
     assert.equal(result.body.ok, true);
@@ -198,18 +198,18 @@ test("pause, resume and cancel job lifecycle routes", async () => {
   const { app, pool } = buildApp();
   pool.state.jobs.push({ id: "job-1", status: "running" });
 
-  const paused = await request(app, "/api/admin/hyrox-doubles/jobs/job-1/pause", { method: "PATCH" });
+  const paused = await request(app, "/api/admin/hyrox-results/jobs/job-1/pause", { method: "PATCH" });
   assert.equal(paused.response.status, 200);
   assert.equal(paused.body.status, "paused");
 
-  const pauseAgain = await request(app, "/api/admin/hyrox-doubles/jobs/job-1/pause", { method: "PATCH" });
+  const pauseAgain = await request(app, "/api/admin/hyrox-results/jobs/job-1/pause", { method: "PATCH" });
   assert.equal(pauseAgain.response.status, 400);
 
-  const resumed = await request(app, "/api/admin/hyrox-doubles/jobs/job-1/resume", { method: "PATCH" });
+  const resumed = await request(app, "/api/admin/hyrox-results/jobs/job-1/resume", { method: "PATCH" });
   assert.equal(resumed.response.status, 200);
   assert.equal(resumed.body.status, "queued");
 
-  const cancelled = await request(app, "/api/admin/hyrox-doubles/jobs/job-1/cancel", { method: "PATCH" });
+  const cancelled = await request(app, "/api/admin/hyrox-results/jobs/job-1/cancel", { method: "PATCH" });
   assert.equal(cancelled.response.status, 200);
   assert.equal(cancelled.body.status, "cancelled");
 });
@@ -226,19 +226,19 @@ test("stats and events endpoints return expected shapes", async () => {
 	  doubles_record_counts_by_category: { doubles_male: 50, doubles_female: 75 },
 	});
 
-  const stats = await request(app, "/api/admin/hyrox-doubles/stats");
+  const stats = await request(app, "/api/admin/hyrox-results/stats");
   assert.equal(stats.response.status, 200);
   assert.equal(stats.body.ok, true);
   assert.equal(stats.body.totalRecords, 0);
 
-  const events = await request(app, "/api/admin/hyrox-doubles/events");
+  const events = await request(app, "/api/admin/hyrox-results/events");
 	assert.equal(events.response.status, 200);
 	assert.equal(events.body.events.length, 1);
 	assert.equal(events.body.events[0].eventName, "HYROX London");
 	assert.deepEqual(events.body.events[0].doublesRecordCountsByCategory, { doubles_male: 50, doubles_female: 75 });
 });
 
-test("POST /admin/hyrox-doubles/events/:id/availability counts live records without scraping", async () => {
+test("POST /admin/hyrox-results/events/:id/availability counts live records without scraping", async () => {
   const availabilityCounterCalls = [];
   const availabilityCounter = async (...args) => {
     availabilityCounterCalls.push(args);
@@ -259,7 +259,7 @@ test("POST /admin/hyrox-doubles/events/:id/availability counts live records with
     results_page_key: "HYROX Manchester",
   });
 
-  const result = await request(app, "/api/admin/hyrox-doubles/events/7/availability", {
+  const result = await request(app, "/api/admin/hyrox-results/events/7/availability", {
     method: "POST",
     body: JSON.stringify({ selectedDivisions: ["doubles_male", "doubles_female"] }),
   });
