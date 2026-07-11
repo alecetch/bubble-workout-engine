@@ -32,7 +32,7 @@
     "openai": "^6.46.0",
     "pg": "^8.22.0",
     "pino": "^10.3.1",
-    "puppeteer": "^22.0.0",
+    "puppeteer": "^25.3.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
