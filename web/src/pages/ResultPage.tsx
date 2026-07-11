@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { Shell } from "../components/Shell";
 import { MetricCard } from "../components/MetricCard";
@@ -23,13 +23,26 @@ function profileTypeLabel(profileType: string | null | undefined): string {
   return profileType && map[profileType] ? map[profileType] : "Mixed profile";
 }
 
+function topPercentFromFieldPercentile(fieldPercentile: unknown): number | null {
+  const percentile = Number(fieldPercentile);
+  if (!Number.isFinite(percentile)) return null;
+  return Math.max(1, Math.round(100 - percentile));
+}
+
+function ageGroupContextLine(response: HyroxAnalysisResponse): string | null {
+  const age = response.benchmarkContext?.ageBenchmark;
+  const topPercent = topPercentFromFieldPercentile(age?.fieldPercentile);
+  const ageGroup = String(age?.ageGroup ?? "").trim();
+  if (!age?.available || topPercent == null || !ageGroup) return null;
+  return `Top ${topPercent}% in your ${ageGroup} age group`;
+}
+
 export function ResultPage() {
   const location = useLocation();
   const state = location.state as LocationState | null;
   const response = state?.response;
   const submissionId = response?.submissionId;
   const responseMode = response?.calculatorMode ?? response?.browserSummary?.calculatorMode;
-  const [selectedComparisonId, setSelectedComparisonId] = useState<string>("global");
 
   useEffect(() => {
     if (submissionId && responseMode !== "target") {
@@ -47,7 +60,7 @@ export function ResultPage() {
         <div style={{ padding: "48px 0", textAlign: "center" }}>
           <p style={{ color: "var(--text-muted)" }}>
             No result found.{" "}
-            <Link to="/hyrox-calculator">Analyse a new result →</Link>
+            <Link to="/hyrox-calculator">Analyse a new result &rarr;</Link>
           </p>
         </div>
       </Shell>
@@ -57,18 +70,18 @@ export function ResultPage() {
   const summary = response.browserSummary ?? {};
   const calculatorMode = response.calculatorMode ?? summary.calculatorMode ?? "target";
   const comparisonOptions = summary.comparisonOptions?.options ?? [];
-  const selectedComparison =
-    comparisonOptions.find((option) => option.id === selectedComparisonId)
+  const primaryComparison =
+    comparisonOptions.find((option) => option.id === "global")
     ?? comparisonOptions.find((option) => option.id === summary.comparisonOptions?.defaultId)
     ?? comparisonOptions[0]
     ?? null;
-  const benchmarkValue = selectedComparison
-    ? `Top ${selectedComparison.topPercent}%`
+  const benchmarkValue = primaryComparison
+    ? `Top ${primaryComparison.topPercent}%`
     : summary.overallPercentile != null
       ? `Top ${100 - summary.overallPercentile}%`
       : null;
-  const benchmarkLabel = selectedComparison?.label ?? summary.benchmarkGroupLabel ?? "your benchmark group";
-  const hasComparisonSwitcher = calculatorMode === "analyse" && comparisonOptions.length > 1;
+  const benchmarkLabel = primaryComparison?.label ?? summary.benchmarkGroupLabel ?? "your benchmark group";
+  const ageContext = ageGroupContextLine(response);
   const heroInsight = summary.heroInsight;
   const timePotential = summary.timePotential;
   const biggestStrength = summary.biggestStrength;
@@ -99,7 +112,7 @@ export function ResultPage() {
   return (
     <Shell>
       <div className={styles.page}>
-        <div className={styles.badge}>✓ Analysis Complete</div>
+        <div className={styles.badge}>&#10003; Analysis Complete</div>
 
         <h1 className={styles.headline} data-testid="result-headline">
           {calculatorMode === "analyse"
@@ -121,43 +134,18 @@ export function ResultPage() {
               : "Your personalised performance report has been generated."}
         </p>
 
+        {calculatorMode === "analyse" && ageContext && (
+          <p className={styles.ageContext}>{ageContext}</p>
+        )}
+
         <div className={styles.emailNote} data-testid="email-confirmation">
-          <span className={styles.emailIcon}>📧</span>
+          <span className={styles.emailIcon}>&#128231;</span>
           <span>
             Your full analysis has been sent to{" "}
-            <strong>{response.reportSentTo}</strong>. Check your inbox —
+            <strong>{response.reportSentTo}</strong>. Check your inbox &mdash;
             sometimes it lands in spam.
           </span>
         </div>
-
-        {hasComparisonSwitcher && (
-          <section className={styles.comparisonPanel} aria-labelledby="comparison-heading">
-            <div className={styles.comparisonHeader}>
-              <h2 id="comparison-heading">Benchmark view</h2>
-              <p>Switch the headline benchmark without changing the report underneath.</p>
-            </div>
-            <div className={styles.comparisonButtons} role="group" aria-label="Benchmark comparison view">
-              {comparisonOptions.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={`${styles.comparisonButton} ${selectedComparison?.id === option.id ? styles.comparisonButtonActive : ""}`}
-                  onClick={() => {
-                    setSelectedComparisonId(option.id);
-                    trackEvent("hyrox_benchmark_view_changed", {
-                      submissionId,
-                      comparisonId: option.id,
-                    });
-                  }}
-                >
-                  <span>{option.id === "global" ? "Global population" : option.id === "regional" ? "Regional population" : "Age group"}</span>
-                  <strong>Top {option.topPercent}%</strong>
-                  <small>{option.label} · {option.sampleSize.toLocaleString()} records</small>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
 
         <div className={styles.metricsGrid}>
           {summary.athleteArchetype?.label && (
@@ -174,7 +162,7 @@ export function ResultPage() {
                 <MetricCard
                   title="Benchmark Position"
                   value={benchmarkValue ?? (summary.benchmarkGroupLabel ?? "-")}
-                  sub={selectedComparison ? `${selectedComparison.label} · ${selectedComparison.sampleSize.toLocaleString()} records` : benchmarkLabel}
+                  sub={primaryComparison ? `${primaryComparison.label} - ${primaryComparison.sampleSize.toLocaleString()} records` : benchmarkLabel}
                   accent="cyan"
                 />
               )}
@@ -225,7 +213,7 @@ export function ResultPage() {
               value={
                 summary.overallPercentile != null
                   ? `Top ${100 - summary.overallPercentile}%`
-                  : (summary.benchmarkGroupLabel ?? "—")
+                  : (summary.benchmarkGroupLabel ?? "-")
               }
               sub="in your age group &amp; division"
               accent="cyan"
@@ -249,7 +237,7 @@ export function ResultPage() {
               value={timePotential.projectedGainFormatted}
               sub={
                 timePotential.newProjectedTimeFormatted
-                  ? `→ ${timePotential.newProjectedTimeFormatted} projected`
+                  ? `-> ${timePotential.newProjectedTimeFormatted} projected`
                   : "projected gain"
               }
               accent="cyan"
@@ -260,7 +248,7 @@ export function ResultPage() {
         </div>
 
         {summary.dataQualityNote && (
-          <div className={styles.dataNote}>ℹ {summary.dataQualityNote}</div>
+          <div className={styles.dataNote}>&#8505; {summary.dataQualityNote}</div>
         )}
 
         {response.submissionId && (

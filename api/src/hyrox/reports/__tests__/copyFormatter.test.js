@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { formatOverallStanding, regionalContextLine } from "../copyFormatter.js";
+import { ageGroupContextLine, formatOverallStanding, regionalContextLine } from "../copyFormatter.js";
 
 test("formatOverallStanding: low percentile shows Top X% not raw ordinal", () => {
   assert.equal(formatOverallStanding(40), "Top 60% overall");
@@ -74,5 +74,41 @@ describe("regionalContextLine", () => {
     });
 
     assert.match(line, /^Americas events attract/);
+  });
+});
+
+describe("ageGroupContextLine", () => {
+  test("returns formatted string when fieldPercentile is available", () => {
+    const result = ageGroupContextLine({
+      benchmarkContext: {
+        ageBenchmark: { available: true, ageGroup: "35-39", fieldPercentile: 72 },
+      },
+    });
+
+    assert.equal(result, "Top 28% in your 35-39 age group");
+  });
+
+  test("returns null when ageBenchmark is not available", () => {
+    assert.equal(
+      ageGroupContextLine({ benchmarkContext: { ageBenchmark: { available: false } } }),
+      null,
+    );
+  });
+
+  test("returns null when fieldPercentile is missing", () => {
+    assert.equal(
+      ageGroupContextLine({ benchmarkContext: { ageBenchmark: { available: true, ageGroup: "35-39", fieldPercentile: null } } }),
+      null,
+    );
+  });
+
+  test("clamps to top 1% minimum", () => {
+    const result = ageGroupContextLine({
+      benchmarkContext: {
+        ageBenchmark: { available: true, ageGroup: "35-39", fieldPercentile: 99.8 },
+      },
+    });
+
+    assert.equal(result, "Top 1% in your 35-39 age group");
   });
 });

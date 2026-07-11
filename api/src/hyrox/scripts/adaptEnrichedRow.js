@@ -3,8 +3,8 @@ import { countryToRegion } from "../config/regionMapping.js";
 const MIN_SPLIT_COVERAGE_SCORE = 0.8;
 
 export const PERFORMANCE_BANDS = Object.freeze([
-  ...[60, 65, 70, 75, 80, 90, 105].map((threshold) => `sub_${threshold}`),
-  "over_105",
+  ...[60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 120].map((threshold) => `sub_${threshold}`),
+  "over_120",
 ]);
 
 export const AGE_GROUP_WHITELIST = new Set([
@@ -23,10 +23,10 @@ export function performanceBandForSeconds(seconds) {
   const numeric = toFiniteOrNull(seconds);
   if (numeric === null) return null;
   const minutes = numeric / 60;
-  for (const threshold of [60, 65, 70, 75, 80, 90, 105]) {
+  for (const threshold of [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 120]) {
     if (minutes <= threshold) return `sub_${threshold}`;
   }
-  return "over_105";
+  return "over_120";
 }
 
 export function sumOrNull(a, b) {

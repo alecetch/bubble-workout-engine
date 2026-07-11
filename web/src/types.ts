@@ -145,12 +145,25 @@ export interface BrowserSummary {
   } | null;
 }
 
+export interface HyroxBenchmarkContext {
+  ageBenchmark?: {
+    available?: boolean;
+    ageGroup?: string | null;
+    groupKey?: string | null;
+    sampleSize?: number | null;
+    datasetVersion?: string | null;
+    label?: string | null;
+    fieldPercentile?: number | null;
+  } | null;
+}
+
 export interface HyroxAnalysisResponse {
   submissionId: string;
   status: string;
   analysisScope: string;
   reportSentTo: string;
   browserSummary: BrowserSummary;
+  benchmarkContext?: HyroxBenchmarkContext;
   carouselDataAvailable: boolean;
   analysisVersion: string;
   calculatorMode?: "target" | "analyse";

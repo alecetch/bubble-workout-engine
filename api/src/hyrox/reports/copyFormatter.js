@@ -138,3 +138,14 @@ export function regionalContextLine(analysisJson) {
 
   return `Globally, where fields include more established athletes, you'd rank top ${topPercent(globalPct)}%.`;
 }
+
+export function ageGroupContextLine(analysisJson) {
+  const age = analysisJson?.benchmarkContext?.ageBenchmark;
+  if (!age?.available || age.fieldPercentile == null) return null;
+  const fieldPercentile = Number(age.fieldPercentile);
+  if (!Number.isFinite(fieldPercentile)) return null;
+  const topPct = Math.max(1, Math.round(100 - fieldPercentile));
+  const group = String(age.ageGroup ?? "").trim();
+  if (!group) return null;
+  return `Top ${topPct}% in your ${group} age group`;
+}

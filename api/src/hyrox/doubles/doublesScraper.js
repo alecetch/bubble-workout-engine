@@ -4,7 +4,6 @@ import {
   fetchDetailPage,
   fetchListPage,
   parseAthleteAgeGroup,
-  parseListResultCount,
   parseListRows,
   parseRaceReplay,
   parseTime,
@@ -186,7 +185,16 @@ export async function scrapeDoublesPage(resultsPageKey, contestId, seasonNum, pa
     numResults: HYROX_DOUBLES_NUM_RESULTS,
     page: Math.floor(pageOffset / PAGE_SIZE) + 1,
   });
-  return parseListRows(html);
+  const rows = parseListRows(html);
+  // The HYROX website sometimes renders each result row twice on the same page.
+  // De-duplicate here so PAGE_SIZE stop conditions and available-counts reflect unique athletes.
+  const seen = new Set();
+  return rows.filter((row) => {
+    const key = row.athleteId ?? `rank:${row.rank}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function* scrapeAllDoublesPages(resultsPageKey, contestId, seasonNum, {
@@ -220,19 +228,21 @@ export async function countAvailableDoublesRecords(resultsPageKey, seasonNum, se
   interPageDelayMs = 250,
   divisionFetcher = fetchDivisions,
   pageScraper = scrapeDoublesPage,
-  pageFetcher = fetchListPage,
 } = {}) {
   const contests = await discoverDoublesContestIds(resultsPageKey, seasonNum, selectedDivisions, divisionFetcher);
   const divisions = [];
 
   for (const divisionCategory of selectedDivisions) {
-    const contest = contests.find((candidate) => candidate.divisionCategory === divisionCategory);
-    if (!contest) {
+    const candidates = contests.filter((candidate) => candidate.divisionCategory === divisionCategory);
+    if (!candidates.length) {
       divisions.push({
         divisionCategory,
         contestId: null,
+        contestIds: [],
         label: null,
+        labels: [],
         sexCode: null,
+        sexCodes: [],
         recordsAvailable: 0,
         pages: 0,
         status: "no_contest",
@@ -243,20 +253,14 @@ export async function countAvailableDoublesRecords(resultsPageKey, seasonNum, se
     let recordsAvailable = 0;
     let pages = 0;
 
-    const firstPageHtml = await pageFetcher(resultsPageKey, contest.contestId, seasonNum, {
-      sex: contest.sexCode,
-      numResults: HYROX_DOUBLES_NUM_RESULTS,
-      page: 1,
-    });
-    const resultCount = parseListResultCount(firstPageHtml);
-    if (resultCount !== null) {
-      recordsAvailable = Math.min(resultCount, maxRecords);
-      pages = recordsAvailable > 0 ? Math.ceil(recordsAvailable / PAGE_SIZE) : 0;
-    } else {
+    // Always paginate to count rather than relying on the website's result-count header.
+    // The header reflects the total for the contest (all sexes combined) and does not
+    // honour the sex filter parameter, causing a 2-3x overcount for mixed-sex contests.
+    for (const candidate of candidates) {
       let offset = 0;
       let lastMaxRank = 0;
       while (recordsAvailable < maxRecords) {
-        const rows = await pageScraper(resultsPageKey, contest.contestId, seasonNum, offset, contest.sexCode);
+        const rows = await pageScraper(resultsPageKey, candidate.contestId, seasonNum, offset, candidate.sexCode);
         if (!rows.length) break;
 
         const maxRankOnPage = Math.max(...rows.map((row) => Number(row.rank ?? 0)));
@@ -274,9 +278,12 @@ export async function countAvailableDoublesRecords(resultsPageKey, seasonNum, se
 
     divisions.push({
       divisionCategory,
-      contestId: contest.contestId,
-      label: contest.label,
-      sexCode: contest.sexCode,
+      contestId: candidates[0].contestId,
+      label: candidates[0].label,
+      sexCode: candidates[0].sexCode,
+      contestIds: candidates.map((candidate) => candidate.contestId),
+      labels: candidates.map((candidate) => candidate.label),
+      sexCodes: candidates.map((candidate) => candidate.sexCode),
       recordsAvailable,
       pages,
       status: recordsAvailable > 0 ? "available" : "empty",
@@ -503,12 +510,25 @@ function valueForColumn(row, column) {
 export async function insertResultsBatch(pool, rows) {
   if (!rows.length) return { inserted: 0, duplicates: 0 };
 
+  // De-duplicate within the batch on the same conflict key Postgres uses.
+  // Without this, a single INSERT with two rows sharing (event_id, contest_id, athlete_id)
+  // throws "ON CONFLICT DO UPDATE command cannot affect row a second time".
+  const seen = new Map();
+  for (const row of rows) {
+    const athleteId = row.source_athlete_id ?? `missing:${row.overall_rank ?? "unknown"}:${row.team_name ?? "team"}`;
+    const key = `${row.hyrox_event_id}::${row.source_contest_id}::${athleteId}`;
+    seen.set(key, row);
+  }
+  const deduped = [...seen.values()];
+
   const values = [];
-  const placeholders = rows.map((row, rowIndex) => {
+  const placeholders = deduped.map((row, rowIndex) => {
     const base = rowIndex * INSERT_COLUMNS.length;
     INSERT_COLUMNS.forEach((column) => values.push(valueForColumn(row, column)));
     return `(${INSERT_COLUMNS.map((_, colIndex) => `$${base + colIndex + 1}`).join(", ")})`;
   });
+
+  const extraDupes = rows.length - deduped.length;
 
   const updatableColumns = [
     "source_url",
@@ -543,7 +563,7 @@ export async function insertResultsBatch(pool, rows) {
     values,
   );
   const inserted = result.rows.filter((row) => row.inserted).length;
-  return { inserted, duplicates: rows.length - inserted };
+  return { inserted, duplicates: deduped.length - inserted + extraDupes };
 }
 
 export { parseRaceReplay, parseWorkoutSummary };

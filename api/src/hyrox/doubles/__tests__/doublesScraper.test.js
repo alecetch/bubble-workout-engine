@@ -137,32 +137,11 @@ describe("discoverDoublesContestIds", () => {
 });
 
 describe("countAvailableDoublesRecords", () => {
-  it("counts available rows across pages for selected divisions", async () => {
+  it("paginates to count records when the full result spans multiple pages", async () => {
     const calls = [];
     const result = await countAvailableDoublesRecords("event", 9, ["doubles_male"], {
       interPageDelayMs: 0,
       divisionFetcher: async () => [{ label: "HYROX DOUBLES", contestId: "HD_ABC" }],
-      pageFetcher: async (...args) => {
-        calls.push(args);
-        return '<span class="list-info__text str_num">52 Results</span>';
-      },
-      pageScraper: async () => {
-        throw new Error("should not page when the result count is present");
-      },
-    });
-
-    assert.equal(result.totalRecordsAvailable, 52);
-    assert.equal(result.divisions[0].status, "available");
-    assert.equal(result.divisions[0].pages, 2);
-    assert.deepEqual(calls.map((call) => [call[1], call[3].sex, call[3].numResults, call[3].page]), [["HD_ABC", "M", 100, 1]]);
-  });
-
-  it("falls back to paging when a result count is unavailable", async () => {
-    const calls = [];
-    const result = await countAvailableDoublesRecords("event", 9, ["doubles_male"], {
-      interPageDelayMs: 0,
-      divisionFetcher: async () => [{ label: "HYROX DOUBLES", contestId: "HD_ABC" }],
-      pageFetcher: async () => "<html></html>",
       pageScraper: async (...args) => {
         calls.push(args);
         const offset = args[3];
@@ -181,6 +160,21 @@ describe("countAvailableDoublesRecords", () => {
     ]);
   });
 
+  it("counts correctly when all records fit on the first page", async () => {
+    const result = await countAvailableDoublesRecords("event", 9, ["doubles_male"], {
+      interPageDelayMs: 0,
+      divisionFetcher: async () => [{ label: "HYROX DOUBLES", contestId: "HD_ABC" }],
+      pageScraper: async (_, __, ___, offset) => {
+        if (offset === 0) return Array.from({ length: 30 }, (_, index) => ({ rank: index + 1 }));
+        return [];
+      },
+    });
+
+    assert.equal(result.totalRecordsAvailable, 30);
+    assert.equal(result.divisions[0].status, "available");
+    assert.equal(result.divisions[0].pages, 1);
+  });
+
   it("reports no_contest when no matching doubles division exists", async () => {
     const result = await countAvailableDoublesRecords("event", 9, ["doubles_mixed"], {
       divisionFetcher: async () => [{ label: "HYROX PRO", contestId: "HPRO_ABC" }],
@@ -195,13 +189,47 @@ describe("countAvailableDoublesRecords", () => {
 
   it("checks availability for selected singles divisions", async () => {
     const result = await countAvailableDoublesRecords("event", 9, ["open_female"], {
+      interPageDelayMs: 0,
       divisionFetcher: async () => [{ label: "HYROX WOMEN", contestId: "HOW_ABC" }],
-      pageFetcher: async () => '<span class="list-info__text str_num">118 Results</span>',
+      pageScraper: async (_, __, ___, offset) => {
+        if (offset === 0) return Array.from({ length: 50 }, (_, i) => ({ rank: i + 1 }));
+        if (offset === 50) return Array.from({ length: 50 }, (_, i) => ({ rank: 51 + i }));
+        if (offset === 100) return Array.from({ length: 18 }, (_, i) => ({ rank: 101 + i }));
+        return [];
+      },
     });
 
     assert.equal(result.totalRecordsAvailable, 118);
     assert.equal(result.divisions[0].divisionCategory, "open_female");
     assert.equal(result.divisions[0].sexCode, "W");
+  });
+
+  it("counts records across multiple sex-ambiguous contests for the same division", async () => {
+    const result = await countAvailableDoublesRecords("event", 9, ["open_male", "open_female"], {
+      interPageDelayMs: 0,
+      divisionFetcher: async () => [
+        { label: "HYROX - Saturday", contestId: "H_SAT" },
+        { label: "HYROX - Sunday", contestId: "H_SUN" },
+      ],
+      pageScraper: async (_key, contestId, _season, offset, sexCode) => {
+        if (contestId === "H_SAT") {
+          if (sexCode === "M" && offset === 0) return Array.from({ length: 30 }, (_, i) => ({ rank: i + 1 }));
+          return [];
+        }
+        if (contestId === "H_SUN") {
+          if (sexCode === "W" && offset === 0) return Array.from({ length: 25 }, (_, i) => ({ rank: i + 1 }));
+          return [];
+        }
+        return [];
+      },
+    });
+
+    assert.equal(result.divisions.find((division) => division.divisionCategory === "open_male")?.recordsAvailable, 30);
+    assert.equal(result.divisions.find((division) => division.divisionCategory === "open_female")?.recordsAvailable, 25);
+    assert.equal(result.totalRecordsAvailable, 55);
+
+    const maleDivision = result.divisions.find((division) => division.divisionCategory === "open_male");
+    assert.deepEqual(maleDivision.contestIds, ["H_SAT", "H_SUN"]);
   });
 });
 
@@ -390,5 +418,45 @@ describe("insertResultsBatch", () => {
     assert.equal(result.duplicates, 1);
     assert.match(calls[0].sql, /ON CONFLICT[\s\S]*DO UPDATE/);
     assert.ok(calls[0].values.length > 40);
+  });
+
+  it("de-duplicates rows with the same conflict key within a batch", async () => {
+    const calls = [];
+    const pool = {
+      async query(sql, values) {
+        calls.push({ sql, values });
+        // Only one row reaches the DB after dedup
+        return { rows: [{ inserted: true }] };
+      },
+    };
+    // Two rows with identical (hyrox_event_id, source_contest_id, source_athlete_id)
+    const result = await insertResultsBatch(pool, [
+      validRow({ split_run_1: 300 }),
+      validRow({ split_run_1: 310 }), // same conflict key — second wins
+    ]);
+
+    assert.equal(calls.length, 1);
+    // Only 1 placeholder row sent to DB
+    assert.equal(result.inserted, 1);
+    // The intra-batch dupe is counted as a duplicate
+    assert.equal(result.duplicates, 1);
+  });
+
+  it("counts intra-batch dupes and DB dupes together", async () => {
+    const pool = {
+      async query(_sql, _values) {
+        // Both deduplicated rows already exist in DB
+        return { rows: [{ inserted: false }, { inserted: false }] };
+      },
+    };
+    // 3 rows: 2 unique keys + 1 intra-batch dupe
+    const result = await insertResultsBatch(pool, [
+      validRow({ split_run_1: 300 }),
+      validRow({ split_run_1: 310 }), // dupe of row[0]
+      validRow({ source_athlete_id: "TEAM_2", split_run_1: 320 }),
+    ]);
+
+    assert.equal(result.inserted, 0);
+    assert.equal(result.duplicates, 3); // 1 intra-batch + 2 DB-level dupes
   });
 });

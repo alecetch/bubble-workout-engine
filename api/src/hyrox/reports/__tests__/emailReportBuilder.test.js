@@ -176,14 +176,14 @@ describe("buildEmailReport visual redesign", () => {
     assert.equal(subject, "You're in the sub-90 band. Here's the route to sub-80.");
   });
 
-  it("renders over-105 doubles bands as a distinct athlete-facing band", () => {
+  it("renders over-120 doubles bands as a distinct athlete-facing band", () => {
     const { subject, htmlBody } = buildEmailReport(
       mockReport(),
       mockAnalysis({
         benchmarkContext: {
           useDoublesBenchmarks: true,
-          achievedBand: "over_105",
-          nextBand: "sub_105",
+          achievedBand: "over_120",
+          nextBand: "sub_120",
           primaryBenchmarkGroup: { label: "Doubles Male", sampleSize: 500 },
         },
       }),
@@ -192,8 +192,8 @@ describe("buildEmailReport visual redesign", () => {
       "analyse",
     );
 
-    assert.equal(subject, "You're in the 105:00+ band. Here's the route to 90:00-105:00.");
-    assert.match(htmlBody, /105:00\+ - Doubles Male/);
+    assert.equal(subject, "You're in the 120:00+ band. Here's the route to 105:00-119:59.");
+    assert.match(htmlBody, /120:00\+ - Doubles Male/);
   });
 
   it("keeps text body plain", () => {
@@ -817,7 +817,7 @@ describe("analyse mode subject", () => {
       "analyse",
     );
 
-    assert.equal(subject, "You're in the 90:00+ band. Here's where the next time comes from.");
+    assert.equal(subject, "You're in the 100:00-104:59 band. Here's where the next time comes from.");
     assert.ok(!subject.includes("route to sub-105"));
   });
 
@@ -1505,7 +1505,7 @@ describe("analyse mode email", () => {
     assert.match(htmlBody, /SUB-60|marginal|MARGINAL/i);
   });
 
-  it("sub-105 athlete sees 90:00+ not sub-105 in athlete-facing copy", () => {
+  it("sub-105 athlete sees time range not sub-105 in athlete-facing copy", () => {
     const splitSection = {
       sectionKey: "race_split_breakdown",
       title: "Race Split Breakdown",
@@ -1528,7 +1528,7 @@ describe("analyse mode email", () => {
     });
     const { htmlBody } = buildEmailReport(mockReport([splitSection]), analysis, mockContext(), null, "analyse");
     assert.ok(!htmlBody.includes("sub-105 benchmark median"), 'should not contain "sub-105 benchmark median"');
-    assert.ok(htmlBody.includes("90:00+"), 'should contain "90:00+" in rendered email');
+    assert.ok(htmlBody.includes("100:00 and 104:59"), 'should contain time range in rendered email');
   });
 
   it("subject does not say bottleneck in analyse mode", () => {

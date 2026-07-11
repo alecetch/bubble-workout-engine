@@ -46,17 +46,21 @@ function labelForGroup(group) {
 export function performanceBandForGoal(targetSeconds, options = {}) {
   if (!Number.isFinite(targetSeconds)) return null;
   const minutes = targetSeconds / 60;
-  for (const threshold of [60, 65, 70, 75, 80, 90, 105]) {
+  for (const threshold of [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 120]) {
     if (minutes <= threshold) return `sub_${threshold}`;
   }
-  if (options.includeOver105) return "over_105";
+  if (options.includeOver105) return "over_120";
   return null;
 }
 
 const NEXT_BAND_MAP = Object.freeze({
-  over_105: "sub_105",
-  sub_105: "sub_90",
-  sub_90: "sub_80",
+  over_120: "sub_120",
+  sub_120: "sub_105",
+  sub_105: "sub_100",
+  sub_100: "sub_95",
+  sub_95: "sub_90",
+  sub_90: "sub_85",
+  sub_85: "sub_80",
   sub_80: "sub_75",
   sub_75: "sub_70",
   sub_70: "sub_65",
@@ -104,9 +108,12 @@ function buildAgeBenchmarkLabel(group) {
   return [group.ageGroup, group.gender, group.division].map(labelPart).filter(Boolean).join(" ") || null;
 }
 
-function ageBenchmarkFromKey(groupKeyValue, ageGroup) {
+function ageBenchmarkFromKey(groupKeyValue, ageGroup, finishTimeSeconds = null) {
   const group = getBenchmarkGroup(groupKeyValue);
   if (!group || Number(group.sampleSize ?? 0) < 100) return null;
+  const fieldPercentile = Number.isFinite(finishTimeSeconds)
+    ? (scoreTimeAgainstGroup(finishTimeSeconds, groupKeyValue, "total_time") ?? null)
+    : null;
   return {
     available: true,
     ageGroup,
@@ -114,19 +121,20 @@ function ageBenchmarkFromKey(groupKeyValue, ageGroup) {
     sampleSize: group.sampleSize,
     datasetVersion: group.datasetVersion,
     label: buildAgeBenchmarkLabel({ ...group, ageGroup }),
+    fieldPercentile,
   };
 }
 
-function computeAgeBenchmarkAvailability({ datasetVersion, division, gender, ageGroup }) {
+function computeAgeBenchmarkAvailability({ datasetVersion, division, gender, ageGroup, finishTimeSeconds = null }) {
   if (!ageGroup || ageGroup === "all") return { available: false };
   const exactKey = makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup });
-  const exact = ageBenchmarkFromKey(exactKey, ageGroup);
+  const exact = ageBenchmarkFromKey(exactKey, ageGroup, finishTimeSeconds);
   if (exact) return exact;
 
   const adjacent = adjacentAgeBand(ageGroup);
   if (adjacent) {
     const adjacentKey = makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup: adjacent });
-    const adjacentGroup = ageBenchmarkFromKey(adjacentKey, adjacent);
+    const adjacentGroup = ageBenchmarkFromKey(adjacentKey, adjacent, finishTimeSeconds);
     if (adjacentGroup) return adjacentGroup;
   }
 
@@ -289,6 +297,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
     division,
     gender: benchmarkGender,
     ageGroup,
+    finishTimeSeconds: normalisedSubmission.race?.finishTimeSeconds ?? null,
   });
   const regionalBenchmark = computeRegionalBenchmark({
     datasetVersion: benchmarkDatasetVersion,
@@ -337,7 +346,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
 
   if (isAnalyseMode) {
     const finishTimeSeconds = normalisedSubmission.race?.finishTimeSeconds;
-    achievedBand = performanceBandForGoal(finishTimeSeconds, { includeOver105: useDoublesBenchmarks });
+    achievedBand = performanceBandForGoal(finishTimeSeconds, { includeOver105: true });
 
     if (achievedBand) {
       const performanceGender = useDoublesBenchmarks ? "all" : benchmarkGender;
@@ -378,7 +387,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
       ?? normalisedSubmission.athleteContext?.targetTimeSeconds
       ?? normalisedSubmission.athleteContext?.goalTimeSeconds,
   );
-  const band = performanceBandForGoal(targetSeconds, { includeOver105: useDoublesBenchmarks });
+  const band = performanceBandForGoal(targetSeconds, { includeOver105: true });
   const performanceGender = useDoublesBenchmarks ? "all" : benchmarkGender;
   const goalSelection = band
     ? selectBenchmark({ datasetVersion: benchmarkDatasetVersion, division, gender: performanceGender, ageGroup, performanceBand: band }, "total_time", "overallPercentile", { performanceTarget: true })

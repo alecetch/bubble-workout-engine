@@ -290,6 +290,7 @@ export async function analyse(req, res) {
       analysisScope: analysisJson.analysisScope,
       reportSentTo: submission.email,
       browserSummary: webReport.browserSummary,
+      benchmarkContext: analysisJson.benchmarkContext,
       calculatorMode: body.calculatorMode ?? "target",
       muscleGroupProfile: analysisJson.muscleGroupProfile,
       carouselDataAvailable: Boolean(carouselA.carousel || carouselA.slides),

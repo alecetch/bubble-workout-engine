@@ -52,7 +52,7 @@ describe("adaptEnrichedRow", () => {
   it("maps all top-level time fields", () => {
     const adapted = adaptEnrichedRow(row());
     assert.equal(adapted.total_time_seconds, 5000);
-    assert.equal(adapted._performanceBand, "sub_90");
+    assert.equal(adapted._performanceBand, "sub_85");
     assert.equal(adapted._region, "europe");
     assert.equal(adapted.run_time_seconds, 2400);
     assert.equal(adapted.work_time_seconds, 2100);
@@ -123,7 +123,8 @@ describe("performanceBandForSeconds", () => {
     assert.equal(performanceBandForSeconds(60 * 60), "sub_60");
     assert.equal(performanceBandForSeconds(60 * 60 + 1), "sub_65");
     assert.equal(performanceBandForSeconds(104 * 60 + 59), "sub_105");
-    assert.equal(performanceBandForSeconds(106 * 60), "over_105");
+    assert.equal(performanceBandForSeconds(106 * 60), "sub_120");
+    assert.equal(performanceBandForSeconds(121 * 60), "over_120");
     assert.equal(performanceBandForSeconds(null), null);
   });
 });
@@ -169,20 +170,20 @@ describe("buildGroups", () => {
     assert.equal(groups.length, 0);
   });
 
-  it("creates over-105 groups when the enriched doubles sample is sufficient", () => {
-    const groups = buildGroups(records(120, "doubles_female", "over_105", 6500));
-    const band = groups.find((group) => group.groupKey === "hyrox:doubles_v2:band:over_105:doubles_female:all");
+  it("creates over-120 groups when the enriched doubles sample is sufficient", () => {
+    const groups = buildGroups(records(120, "doubles_female", "over_120", 7500));
+    const band = groups.find((group) => group.groupKey === "hyrox:doubles_v2:band:over_120:doubles_female:all");
 
     assert.equal(band?.sampleSize, 120);
-    assert.equal(band?.performanceBand, "over_105");
+    assert.equal(band?.performanceBand, "over_120");
   });
 
-  it("creates over-105 groups for pro doubles when the sample is sufficient", () => {
-    const groups = buildGroups(records(120, "pro_doubles_female", "over_105", 6500));
-    const band = groups.find((group) => group.groupKey === "hyrox:doubles_v2:band:over_105:pro_doubles_female:all");
+  it("creates over-120 groups for pro doubles when the sample is sufficient", () => {
+    const groups = buildGroups(records(120, "pro_doubles_female", "over_120", 7500));
+    const band = groups.find((group) => group.groupKey === "hyrox:doubles_v2:band:over_120:pro_doubles_female:all");
 
     assert.equal(band?.sampleSize, 120);
-    assert.equal(band?.performanceBand, "over_105");
+    assert.equal(band?.performanceBand, "over_120");
   });
   it("creates age-segmented groups when there is enough age-band data", () => {
     const groups = buildGroups(records(50, "doubles_male", "sub_80", 4700));
