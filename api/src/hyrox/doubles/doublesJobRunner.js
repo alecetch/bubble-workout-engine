@@ -242,9 +242,8 @@ export async function runJob(jobId, pool) {
     }
 
     const discovered = await discoverDoublesContestIds(event.results_page_key, event.season, [unit.division_category]);
-    const contestId = discovered[0]?.contestId;
-    const sexCode = discovered[0]?.sexCode ?? "";
-    if (!contestId) {
+    const candidates = discovered.filter((candidate) => candidate.divisionCategory === unit.division_category);
+    if (!candidates.length) {
       await pool.query(
         "UPDATE hyrox_doubles_scrape_job_events SET status='skipped', completed_at=now(), last_error=$2 WHERE id=$1",
         [unit.id, "No matching doubles contest found"],
@@ -256,7 +255,7 @@ export async function runJob(jobId, pool) {
       `UPDATE hyrox_doubles_scrape_job_events
        SET contest_id=$2, status='running', started_at=COALESCE(started_at, now())
        WHERE id=$1`,
-      [unit.id, contestId],
+      [unit.id, candidates[0].contestId],
     );
     await pool.query(
       `UPDATE hyrox_doubles_scrape_jobs
@@ -270,75 +269,81 @@ export async function runJob(jobId, pool) {
     let unitTerminalError = null;
     let activePageOffset = unit.last_page_offset ?? 0;
     try {
-      let pageOffset = activePageOffset;
       let totalYielded = 0;
-      let lastMaxRank = 0;
+      const emptyCandidates = [];
 
-      while (true) {
-        activePageOffset = pageOffset;
-        const pageRows = await scrapePageWithRetry(pool, { jobId, unit, event, contestId, sexCode, pageOffset });
-        if (!pageRows.length) {
-          if (totalYielded === 0) {
-            unitTerminalStatus = "skipped";
-            unitTerminalError = `No result rows found for contest ${contestId}${sexCode ? ` sex ${sexCode}` : ""}`;
+      for (const candidate of candidates) {
+        const { contestId, sexCode } = candidate;
+        let pageOffset = candidates.length === 1 ? activePageOffset : 0;
+        let lastMaxRank = 0;
+        let candidateYielded = 0;
+
+        while (true) {
+          activePageOffset = pageOffset;
+          const pageRows = await scrapePageWithRetry(pool, { jobId, unit, event, contestId, sexCode, pageOffset });
+          if (!pageRows.length) {
+            if (candidateYielded === 0) {
+              emptyCandidates.push(`contest ${contestId}${sexCode ? ` sex ${sexCode}` : ""}`);
+            }
+            break;
           }
-          unitCompleted = true;
-          break;
+
+          const maxRankOnPage = Math.max(...pageRows.map((row) => Number(row.rank ?? 0)));
+          if (maxRankOnPage <= lastMaxRank) break;
+          lastMaxRank = maxRankOnPage;
+
+          const eventMeta = {
+            eventName: event.event_name,
+            city: event.city,
+            country: event.country,
+            startDate: event.start_date,
+            season: event.season,
+            isChampionship: event.is_championship,
+          };
+          let rows = pageRows
+            .map((row) => buildResultRow(row, unit.hyrox_event_id, contestId, unit.division_category, jobId, eventMeta))
+            .map(validateAndFlagRow);
+          if (enrichSplits) {
+            rows = await enrichDoublesRows(rows, contestId, event.season);
+          }
+          const { inserted, duplicates } = await insertResultsBatch(pool, rows);
+
+          await pool.query(
+            `UPDATE hyrox_doubles_scrape_job_events
+             SET records_found = records_found + $2,
+                 records_saved = records_saved + $3,
+                 duplicates_skipped = duplicates_skipped + $4,
+                 pages_scraped = pages_scraped + 1,
+                 last_page_offset = $5,
+                 last_success_at = now()
+             WHERE id=$1`,
+            [unit.id, rows.length, inserted, duplicates, pageOffset],
+          );
+          await pool.query(
+            `UPDATE hyrox_doubles_scrape_jobs
+             SET current_page_offset=$2, updated_at=now()
+             WHERE id=$1`,
+            [jobId, pageOffset],
+          );
+          await updateJobAggregates(pool, jobId);
+
+          const statusResult = await pool.query("SELECT status FROM hyrox_doubles_scrape_jobs WHERE id=$1", [jobId]);
+          if (["paused", "cancelled"].includes(statusResult.rows[0]?.status)) return;
+
+          totalYielded += rows.length;
+          candidateYielded += rows.length;
+          if (rows.length < PAGE_SIZE || totalYielded >= Number.MAX_SAFE_INTEGER) break;
+          pageOffset += PAGE_SIZE;
+          await sleep(INTER_PAGE_DELAY_MS);
         }
-
-        const maxRankOnPage = Math.max(...pageRows.map((row) => Number(row.rank ?? 0)));
-        if (maxRankOnPage <= lastMaxRank) {
-          unitCompleted = true;
-          break;
-        }
-        lastMaxRank = maxRankOnPage;
-
-        const eventMeta = {
-          eventName: event.event_name,
-          city: event.city,
-          country: event.country,
-          startDate: event.start_date,
-          season: event.season,
-          isChampionship: event.is_championship,
-        };
-        let rows = pageRows
-          .map((row) => buildResultRow(row, unit.hyrox_event_id, contestId, unit.division_category, jobId, eventMeta))
-          .map(validateAndFlagRow);
-        if (enrichSplits) {
-          rows = await enrichDoublesRows(rows, contestId, event.season);
-        }
-        const { inserted, duplicates } = await insertResultsBatch(pool, rows);
-
-        await pool.query(
-          `UPDATE hyrox_doubles_scrape_job_events
-           SET records_found = records_found + $2,
-               records_saved = records_saved + $3,
-               duplicates_skipped = duplicates_skipped + $4,
-               pages_scraped = pages_scraped + 1,
-               last_page_offset = $5,
-               last_success_at = now()
-           WHERE id=$1`,
-          [unit.id, rows.length, inserted, duplicates, pageOffset],
-        );
-        await pool.query(
-          `UPDATE hyrox_doubles_scrape_jobs
-           SET current_page_offset=$2, updated_at=now()
-           WHERE id=$1`,
-          [jobId, pageOffset],
-        );
-        await updateJobAggregates(pool, jobId);
-
-        const statusResult = await pool.query("SELECT status FROM hyrox_doubles_scrape_jobs WHERE id=$1", [jobId]);
-        if (["paused", "cancelled"].includes(statusResult.rows[0]?.status)) return;
-
-        totalYielded += rows.length;
-        if (rows.length < PAGE_SIZE || totalYielded >= Number.MAX_SAFE_INTEGER) {
-          unitCompleted = true;
-          break;
-        }
-        pageOffset += PAGE_SIZE;
-        await sleep(INTER_PAGE_DELAY_MS);
       }
+
+      if (totalYielded === 0) {
+        unitTerminalStatus = "skipped";
+        unitTerminalError = `No result rows found for ${emptyCandidates.join(", ")}`;
+      }
+      unitCompleted = true;
+
       if (unitCompleted) {
         await pool.query(
           "UPDATE hyrox_doubles_scrape_job_events SET status=$2, completed_at=now(), last_error=$3 WHERE id=$1 AND status='running'",

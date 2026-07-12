@@ -211,7 +211,7 @@
 	      async function api(path, options = {}) {
         const t = token();
         if (!t) throw new Error("Paste your x-internal-token first.");
-        const res = await fetch(`/api/admin/hyrox-doubles${path}`, {
+        const res = await fetch(`/api/admin/hyrox-results${path}`, {
           ...options,
           headers: { "x-internal-token": t, ...(options.headers || {}) },
         });
@@ -302,16 +302,54 @@
           grid.innerHTML = `<span style="color:var(--muted);font-size:13px">No benchmarks built yet. Click <strong>Build Benchmarks</strong> to generate.</span>`;
           return;
         }
-        const divHtml = divisions.map((d) => {
-          const readyBadge = d.isReady ? `<span class="badge badge-valid">ready</span>` : `<span class="badge badge-partial">low data</span>`;
-	          const label = `${divisionLabel(d.division)}${d.performanceBand ? ` ${d.performanceBand}` : " overall"}`;
-	          return `<div class="stat">
-            <strong>${esc(d.sampleSize?.toLocaleString() ?? 0)} ${readyBadge}</strong>
-	            <span>${esc(label)}</span>
-            <span class="mono">${esc(d.metricCount ?? 0)} metrics · ${d.builtAt ? esc(fmtDate(d.builtAt)) : "never"}</span>
-          </div>`;
+
+        const DIVISION_FULL = {
+          open_male: "Male Singles", open_female: "Female Singles",
+          pro_male: "Male Pro", pro_female: "Female Pro",
+          doubles_male: "Male Doubles", doubles_female: "Female Doubles", doubles_mixed: "Mixed Doubles",
+          pro_doubles_male: "M Pro Dbl", pro_doubles_female: "F Pro Dbl", pro_doubles_mixed: "X Pro Dbl",
+          team_relay_male: "M Relay", team_relay_female: "F Relay", team_relay_mixed: "X Relay",
+        };
+        const DIV_ORDER = ["open_male","open_female","pro_male","pro_female","doubles_male","doubles_female","doubles_mixed","pro_doubles_male","pro_doubles_female","pro_doubles_mixed","team_relay_male","team_relay_female","team_relay_mixed"];
+
+        const divCols = [...new Set(divisions.map((d) => d.division))]
+          .sort((a, b) => DIV_ORDER.indexOf(a) - DIV_ORDER.indexOf(b));
+        const bandRows = [...new Set(divisions.map((d) => d.performanceBand ?? "overall"))]
+          .sort((a, b) => {
+            function key(band) {
+              if (!band || band === "overall") return -Infinity;
+              const sub = band.match(/^sub-(\d+)/i);
+              if (sub) return Number(sub[1]) - 0.5;
+              const m = band.match(/^(\d+)/);
+              return m ? Number(m[0]) : Infinity;
+            }
+            return key(a) - key(b);
+          });
+
+        const lookup = new Map(divisions.map((d) => [`${d.division}::${d.performanceBand ?? "overall"}`, d]));
+
+        const colHeaders = divCols.map((div) => `<th>${esc(DIVISION_FULL[div] ?? div)}</th>`).join("");
+        const bodyRows = bandRows.map((band) => {
+          const cells = divCols.map((div) => {
+            const entry = lookup.get(`${div}::${band}`);
+            if (!entry) return `<td style="color:var(--muted);text-align:center">—</td>`;
+            const readyIcon = entry.isReady
+              ? `<span class="badge badge-valid">✓</span>`
+              : `<span class="badge badge-partial">low</span>`;
+            return `<td>${readyIcon} ${esc(Number(entry.sampleSize ?? 0).toLocaleString())}<div class="mono">${esc(entry.metricCount ?? 0)} metrics${entry.builtAt ? ` · ${esc(fmtDate(entry.builtAt))}` : ""}</div></td>`;
+          }).join("");
+          const label = band === "overall" ? "Overall" : esc(band);
+          return `<tr><th style="white-space:nowrap">${label}</th>${cells}</tr>`;
         }).join("");
-        grid.innerHTML = `<div class="stat"><strong>${esc(source)}</strong><span>Benchmark source</span></div>${divHtml}`;
+
+        grid.innerHTML = `
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Source: <strong style="color:var(--text)">${esc(source)}</strong></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Band</th>${colHeaders}</tr></thead>
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </div>`;
       }
 
       function renderStats(data) {

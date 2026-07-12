@@ -70,6 +70,10 @@ export const PERFORMANCE_BANDS = Object.freeze([
   { key: "sub_70", maxSeconds: 70 * 60 },
   { key: "sub_75", maxSeconds: 75 * 60 },
   { key: "sub_80", maxSeconds: 80 * 60 },
+  { key: "sub_85", maxSeconds: 85 * 60 },
   { key: "sub_90", maxSeconds: 90 * 60 },
+  { key: "sub_95", maxSeconds: 95 * 60 },
+  { key: "sub_100", maxSeconds: 100 * 60 },
   { key: "sub_105", maxSeconds: 105 * 60 },
+  { key: "sub_120", maxSeconds: 120 * 60 },
 ]);

@@ -144,4 +144,28 @@ describe("buildTemplateA", () => {
     assert.match(carousel.slides[0].regional_context, /Europe events attract/);
     assert.match(carousel.slides[0].regional_context, /top 55%/);
   });
+
+  it("includes age_group_context in A1_ATHLETE_HOOK when fieldPercentile is available", () => {
+    const carousel = buildTemplateA(analysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:40-44", label: "Open Male 40-44" },
+        goalBenchmarkGroup: null,
+        ageBenchmark: { available: true, ageGroup: "40-44", fieldPercentile: 65 },
+      },
+    }), [], {});
+
+    assert.equal(carousel.slides[0].age_group_context, "Top 35% in your 40-44 age group");
+  });
+
+  it("sets age_group_context to null when ageBenchmark is not available", () => {
+    const carousel = buildTemplateA(analysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:40-44", label: "Open Male 40-44" },
+        goalBenchmarkGroup: null,
+        ageBenchmark: { available: false },
+      },
+    }), [], {});
+
+    assert.equal(carousel.slides[0].age_group_context, null);
+  });
 });

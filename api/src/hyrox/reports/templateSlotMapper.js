@@ -1,6 +1,6 @@
 import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
-import { formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
+import { ageGroupContextLine, formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
 import { resolveHeroImage } from "./heroImageResolver.js";
 
 const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type !== "roxzone");
@@ -188,6 +188,7 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         biggest_limiter: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "N/A"),
         swipe_prompt: "Swipe to see where time was gained and lost.",
         regional_context: regionalContextLine(analysisJson) ?? null,
+        age_group_context: ageGroupContextLine(analysisJson) ?? null,
       },
       {
         slide_id: "A2_POSITION_FLOW",

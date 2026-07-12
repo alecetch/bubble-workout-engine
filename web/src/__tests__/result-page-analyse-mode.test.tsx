@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ResultPage } from "../pages/ResultPage";
 import type { HyroxAnalysisResponse } from "../types";
@@ -67,10 +67,13 @@ describe("ResultPage analyse mode", () => {
     expect(screen.getByText(/55% running - 35% stations/i)).toBeInTheDocument();
   });
 
-  test("analyse mode renders benchmark comparison controls when options are available", () => {
+  test("analyse mode renders static age group context instead of benchmark comparison controls", () => {
     renderResult({
       ...baseResponse,
       calculatorMode: "analyse",
+      benchmarkContext: {
+        ageBenchmark: { available: true, ageGroup: "35-39", fieldPercentile: 62 },
+      },
       browserSummary: {
         ...baseResponse.browserSummary,
         comparisonOptions: {
@@ -84,12 +87,12 @@ describe("ResultPage analyse mode", () => {
       },
     });
 
-    expect(screen.getByRole("heading", { name: /benchmark view/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /global population/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /regional population/i }));
-    expect(screen.getAllByText("Europe · 700 records").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Top 45%").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /age group/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /benchmark view/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /global population/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /regional population/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Europe.*700 records/)).not.toBeInTheDocument();
+    expect(screen.getByText("Top 38% in your 35-39 age group")).toBeInTheDocument();
+    expect(screen.getAllByText("Top 40%").length).toBeGreaterThan(0);
   });
 
   test("analyse mode does not render Time Potential card", () => {

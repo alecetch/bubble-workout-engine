@@ -30,7 +30,19 @@
   font-size: 16px;
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-bottom: 40px;
+  margin-bottom: 16px;
+}
+
+.subline + .emailNote {
+  margin-top: 24px;
+}
+
+.ageContext {
+  margin: 0 0 32px;
+  color: var(--accent-cyan);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .emailNote {

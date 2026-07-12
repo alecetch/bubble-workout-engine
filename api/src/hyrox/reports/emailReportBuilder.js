@@ -30,8 +30,9 @@ function eliteBandLabel(bsLabel) {
 
 function bandDisplayLabel(band, options = {}) {
   if (!band) return null;
-  if (band === "over_105") return "105:00+";
-  if (band === "sub_105") return options.useOver105Band ? "90:00-105:00" : "90:00+";
+  if (band === "over_120") return "120:00+";
+  if (band === "sub_120") return "105:00-119:59";
+  if (band === "sub_105") return "100:00-104:59";
   return band.replace("sub_", "sub-");
 }
 
@@ -368,9 +369,13 @@ const BAND_RANGES = {
   sub_70: "between 65:00 and 69:59",
   sub_75: "between 70:00 and 74:59",
   sub_80: "between 75:00 and 79:59",
-  sub_90: "between 80:00 and 89:59",
-  sub_105: null,
-  over_105: "over 105:00",
+  sub_85: "between 80:00 and 84:59",
+  sub_90: "between 85:00 and 89:59",
+  sub_95: "between 90:00 and 94:59",
+  sub_100: "between 95:00 and 99:59",
+  sub_105: "between 100:00 and 104:59",
+  sub_120: "between 105:00 and 119:59",
+  over_120: "120:00 and above",
 };
 
 function renderBenchmarkExplanation(analysisJson = {}, calculatorMode = "target", athleteContext = {}) {
@@ -385,15 +390,10 @@ function renderBenchmarkExplanation(analysisJson = {}, calculatorMode = "target"
     const confidenceLabel = analysisJson.benchmarkContext?.confidenceLabel;
     const isLowSample = ["low-confidence", "directional"].includes(confidenceLabel);
 
-    let explanation;
-    if (achievedBand === "sub_105" && !useOver105Band) {
-      explanation = `Your benchmark band: ${divLabel} athletes finishing in the 90:00+ performance range. This is a wider comparison band because the field spreads out more at this end of the results.`;
-    } else {
-      const range = BAND_RANGES[achievedBand];
-      explanation = range
-        ? `Your benchmark band: ${divLabel} athletes finishing ${range}. This compares you with athletes at a similar race level, so the analysis reflects realistic opportunities for improvement.`
-        : `Your benchmark band is the ${achievedBand.replace("sub_", "sub-")} group.`;
-    }
+    const range = BAND_RANGES[achievedBand];
+    const explanation = range
+      ? `Your benchmark band: ${divLabel} athletes finishing ${range}. This compares you with athletes at a similar race level, so the analysis reflects realistic opportunities for improvement.`
+      : `Your benchmark band is the ${achievedBand.replace("sub_", "sub-")} group.`;
 
     const lowSampleNote = isLowSample
       ? " This benchmark band has a smaller sample size, so treat band scores as directional. The priority areas are still useful."

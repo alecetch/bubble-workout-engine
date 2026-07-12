@@ -53,7 +53,7 @@ import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { adminHyroxRouter } from "./src/routes/adminHyrox.js";
 import { adminHyroxTestHarnessRouter } from "./src/routes/adminHyroxTestHarness.js";
 import { adminContentStudioRouter } from "./src/routes/adminContentStudio.js";
-import { adminHyroxDoublesRouter } from "./src/routes/adminHyroxDoubles.js";
+import { adminHyroxResultsRouter } from "./src/routes/adminHyroxResults.js";
 import { authRouter } from "./src/routes/auth.js";
 import { coachPortalRouter } from "./src/routes/coachPortal.js";
 import { exerciseGuidanceRouter } from "./src/routes/exerciseGuidance.js";
@@ -328,7 +328,7 @@ app.get("/admin/seed-history", adminCspMiddleware, (_req, res) => sendAdminPage(
 app.get("/admin/coaches", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coaches.html"));
 app.get("/admin/hyrox", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox.html"));
 app.get("/admin/hyrox-test-harness", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox-test-harness.html"));
-app.get("/admin/hyrox-doubles", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox-doubles.html"));
+app.get("/admin/hyrox-results", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hyrox-results.html"));
 app.get("/admin/content-studio", adminCspMiddleware, (_req, res) => sendAdminPage(res, "content-studio.html"));
 app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
 // /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
@@ -784,7 +784,7 @@ app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", requireInternalToken, adminHyroxTestHarnessRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin", ...adminOnly, adminContentStudioRouter);
-app.use("/api/admin", ...adminOnly, adminHyroxDoublesRouter);
+app.use("/api/admin", ...adminOnly, adminHyroxResultsRouter);
 app.use("/api/admin/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/api/admin/observability/hyrox", ...adminOnly, createAdminHyroxObservabilityRouter(pool));
 
@@ -881,7 +881,7 @@ app.use("/admin", ...adminOnly, adminUsersRouter);
 app.use("/admin", ...adminOnly, adminSeedHistoryRouter);
 app.use("/admin", ...adminOnly, adminHyroxRouter);
 app.use("/admin", ...adminOnly, adminContentStudioRouter);
-app.use("/admin", ...adminOnly, adminHyroxDoublesRouter);
+app.use("/admin", ...adminOnly, adminHyroxResultsRouter);
 // Canonical (new)
 app.use("/api", generateProgramV2Router);
 // DEPRECATED — remove after Bubble client updates
