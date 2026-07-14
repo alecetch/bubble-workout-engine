@@ -1,3 +1,5 @@
+import { BENCHMARK_THRESHOLDS } from "../config/benchmarkThresholds.js";
+
 function result(key, label, confidence, evidence) {
   return { key, label, confidence, evidence };
 }
@@ -26,19 +28,22 @@ export function classifyArchetype(scores, normalisedSubmission, runFadeAnalysis,
   if (runFadeAnalysis?.available && runFadeAnalysis.runFadePct > 10 && runFadeAnalysis.interpretation === "materially_above_benchmark") {
     return result("late_fade_athlete", "Late fade athlete", "medium", [`Run fade ${runFadeAnalysis.runFadePct}%`, "Above benchmark fade"]);
   }
-  if (limiter?.segmentKey === "wall_balls" && limiter.timeGapSeconds > 45) {
+  if (limiter?.segmentKey === "wall_balls" && limiter.timeGapSeconds > BENCHMARK_THRESHOLDS.wallBallBottleneckGapSeconds) {
     return result("wall_ball_bottleneck", "Wall ball bottleneck", "high", [`Wall balls gap ${limiter.timeGapSeconds}s`, "Primary limiter"]);
   }
   if (previousRaces === 0 && (roxzoneAnalysis?.percentile ?? 100) < 40) {
     return result("first_timer_execution_leak", "First-timer execution leak", "medium", [`Roxzone percentile ${roxzoneAnalysis?.percentile}`, "No previous HYROX races"]);
   }
-  if ((scores.overallPerformanceScore ?? 0) > 85 && stationGaps.every((row) => row.timeGapToMedianSeconds < 30)) {
+  if (
+    (scores.overallPerformanceScore ?? 0) > BENCHMARK_THRESHOLDS.eliteOverallPercentile &&
+    stationGaps.every((row) => row.timeGapToMedianSeconds < BENCHMARK_THRESHOLDS.eliteMaxStationGapSeconds)
+  ) {
     return result("elite_marginal_gains", "Advanced marginal gains", "medium", [`Overall score ${scores.overallPerformanceScore}`, "All station gaps under 30s"]);
   }
   if (Number.isFinite(engine) && Number.isFinite(strength) && Math.abs(engine - strength) < 15 && (execution ?? 100) >= 45) {
     return result("balanced_hybrid", "Balanced hybrid", "medium", [`Engine score ${engine}`, `Strength score ${strength}`]);
   }
-  if (wallBalls?.timeGapToMedianSeconds > 45) {
+  if (wallBalls?.timeGapToMedianSeconds > BENCHMARK_THRESHOLDS.wallBallBottleneckGapSeconds) {
     return result("wall_ball_bottleneck", "Wall ball bottleneck", "medium", [`Wall balls gap ${Math.round(wallBalls.timeGapToMedianSeconds)}s`]);
   }
   return result("balanced_hybrid", "Balanced hybrid", "low", ["No dominant limiter pattern"]);

@@ -29,6 +29,7 @@ export interface HyroxParseResult {
   ageGroup: string | null;
   raceName: string | null;
   division: "open" | "pro" | "doubles" | "relay" | null;
+  divisionSex?: "male" | "female" | "mixed";
   warnings: string[];
 }
 
@@ -88,6 +89,11 @@ function parseHms(value: string): number | null {
   const short = value.match(/\b(\d{1,2}):([0-5]\d)\b/);
   if (short) return Number(short[1]) * 60 + Number(short[2]);
   return null;
+}
+
+function parseDivisionSex(raw: string | null): HyroxParseResult["divisionSex"] {
+  const value = String(raw ?? "").trim().toLowerCase();
+  return value.includes("mixed") ? "mixed" : undefined;
 }
 
 function findTimeIndex(line: string): number {
@@ -276,7 +282,11 @@ export function parseHyroxResults(rawText: string): HyroxParseResult {
       if (/^age\b(?!\s+group\b)/i.test(line)) result.athleteAge = parseAge(lineValue(line));
       if (/^age\s+group\b/i.test(line)) result.ageGroup = lineValue(line) || null;
       if (/^race\b/i.test(line)) result.raceName = lineValue(line) || null;
-      if (/^division\b/i.test(line)) result.division = parseDivision(lineValue(line));
+      if (/^division\b/i.test(line)) {
+        const divisionText = lineValue(line);
+        result.division = parseDivision(divisionText);
+        result.divisionSex = parseDivisionSex(divisionText);
+      }
       if (/overall\s+time/i.test(line)) result.finishTimeSeconds = parseHms(line);
       if (/roxzone\s+time/i.test(line)) result.roxzoneSeconds = parseHms(line);
     }

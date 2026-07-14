@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { buildTemplateA } from "../../reports/templateSlotMapper.js";
 import { buildCaption } from "../captionBuilder.js";
 
 describe("buildCaption", () => {
@@ -34,6 +35,32 @@ describe("buildCaption", () => {
   it("omits strength when best station is missing", () => {
     const caption = buildCaption({ slide0: { overall_time: "1:02:10", biggest_limiter: "Wall Balls" } });
     assert.equal(caption.includes("Biggest strength:"), false);
+  });
+
+  it("uses the carousel's run limiter in the Instagram caption", () => {
+    const analysisJson = {
+      race: { finishTimeSeconds: 4200 },
+      benchmarkContext: { primaryBenchmarkGroup: { label: "Open Male" }, goalBenchmarkGroup: null },
+      timePotential: { headlineGainSeconds: 45 },
+      headline: {
+        biggestLimiter: { segmentKey: "run_5", label: "Run 5", type: "run", timeGapSeconds: 45, percentile: 22 },
+        biggestStrength: { segmentKey: "sled_pull", label: "Sled Pull", percentile: 82 },
+      },
+      limiters: [{ segmentKey: "run_5", label: "Run 5", type: "run", timeGapSeconds: 45, percentile: 22 }],
+      strengths: [{ segmentKey: "sled_pull", label: "Sled Pull", type: "station", percentile: 82, timeGapToMedianSeconds: -30 }],
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total Time", userSeconds: 4200, percentile: 45 },
+        { segmentKey: "run_5", type: "run", label: "Run 5", userSeconds: 390, timeGapToMedianSeconds: 45, frameGapSeconds: 45, percentile: 22 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 360, timeGapToMedianSeconds: 30, frameGapSeconds: 30, percentile: 35 },
+        { segmentKey: "sled_pull", type: "station", label: "Sled Pull", userSeconds: 100, timeGapToMedianSeconds: -30, frameGapSeconds: -30, percentile: 82 },
+      ],
+    };
+    const carousel = buildTemplateA(analysisJson, [], { displayName: "Marcus Fernandes" });
+    const caption = buildCaption({ slide0: carousel.slides[0], athleteContext: {}, analysisJson });
+
+    assert.equal(carousel.slides[0].biggest_limiter, "RUN 5");
+    assert.match(caption, /Biggest opportunity: RUN 5/);
+    assert.doesNotMatch(caption, /Biggest opportunity: WALL BALLS/);
   });
 
   it("handles empty input", () => {

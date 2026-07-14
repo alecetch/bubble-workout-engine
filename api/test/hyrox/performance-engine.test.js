@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { BENCHMARK_THRESHOLDS } from "../../src/hyrox/config/benchmarkThresholds.js";
+import { INDIVIDUAL_ANALYSIS_DIVISIONS } from "../../src/hyrox/config/divisionGroups.js";
 import { SEGMENT_MAP, ROXZONE_KEYS, RUN_KEYS, STATION_KEYS } from "../../src/hyrox/config/segmentMap.js";
+import { isIndividualDivision } from "../../src/hyrox/confidence/fallbackRules.js";
 import { setBenchmarkData } from "../../src/hyrox/engine/benchmarkService.js";
 import { analyseSubmission } from "../../src/hyrox/engine/hyroxAnalysisEngine.js";
 import { normaliseSubmission } from "../../src/hyrox/engine/segmentNormaliser.js";
@@ -22,6 +25,8 @@ const FALLBACK_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:all";
 const GOAL_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_70:open:male";
 const SUB_65_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_65:open:male";
 const SUB_60_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_60:open:male";
+const DOUBLES_MIXED_KEY = "hyrox:historical_hyrox_2026_06_v1:doubles_mixed:mixed:30-34";
+const DOUBLES_MIXED_SUB_75_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_75:doubles_mixed:mixed";
 
 const BASE_MEDIANS = Object.freeze({
   total_time: 4440,
@@ -202,6 +207,59 @@ test("elite_small_gaps fixture classifies as elite_marginal_gains", () => {
 test("doubles_result returns analysisScope: limited", () => {
   const analysis = analyseSubmission(readFixture("doubles_result.json"));
   assert.equal(analysis.analysisScope, "limited");
+});
+
+test("mixed_doubles analyse mode with a real benchmark is not limited by raw input spelling", () => {
+  const previousSource = process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+  process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "legacy";
+  const metrics = [];
+  for (const [metricKey, median] of Object.entries(BASE_MEDIANS)) {
+    metrics.push(metric(DOUBLES_MIXED_KEY, metricKey, median));
+    metrics.push(metric(DOUBLES_MIXED_SUB_75_KEY, metricKey, metricKey === "total_time" ? 4440 : median));
+  }
+  setBenchmarkData({
+    groups: [
+      { groupKey: DOUBLES_MIXED_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "doubles_mixed", gender: "mixed", ageGroup: "30-34", sampleSize: 500 },
+      { groupKey: DOUBLES_MIXED_SUB_75_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "doubles_mixed", gender: "mixed", performanceBand: "sub_75", sampleSize: 500 },
+    ],
+    metrics,
+  });
+
+  try {
+    const submission = readFixture("balanced_athlete.json");
+    submission.athlete.sex = "mixed";
+    submission.athlete.division = "mixed_doubles";
+    submission.race.division = "mixed_doubles";
+    submission.calculatorMode = "analyse";
+
+    const analysis = analyseSubmission(submission);
+
+    assert.ok(analysis.benchmarkContext.primaryBenchmarkGroup);
+    assert.equal(analysis.benchmarkContext.primaryBenchmarkGroup.division, "doubles_mixed");
+    assert.ok(!analysis.dataQuality.issues.includes("no_benchmark_data"));
+    assert.notEqual(analysis.analysisScope, "limited");
+    assert.equal(analysis.analysisScope, "full");
+  } finally {
+    if (previousSource === undefined) {
+      delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+    } else {
+      process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = previousSource;
+    }
+  }
+});
+
+test("fallback rules and analysis scope agree on individual analysis divisions", () => {
+  setBenchmarkData({ groups: [], metrics: [] });
+
+  for (const division of INDIVIDUAL_ANALYSIS_DIVISIONS) {
+    const submission = readFixture("balanced_athlete.json");
+    submission.athlete.division = division;
+    submission.race.division = division;
+    submission.calculatorMode = "analyse";
+
+    assert.equal(isIndividualDivision(division), true);
+    assert.equal(analyseSubmission(submission).analysisScope, "no_benchmark_data");
+  }
 });
 
 test("potential gain is 0 when user is already faster than median", () => {
@@ -388,6 +446,92 @@ test("archetype classifier fires wall_ball_bottleneck when wall_balls limiter ga
     [],
   );
   assert.equal(archetype.key, "wall_ball_bottleneck");
+});
+
+test("archetype classifier uses configured wall-ball limiter threshold", () => {
+  const threshold = BENCHMARK_THRESHOLDS.wallBallBottleneckGapSeconds;
+  const baseScores = { engineScore: 50, strengthScore: 50, executionScore: 50 };
+  const below = classifyArchetype(
+    baseScores,
+    { athleteContext: {} },
+    { available: false },
+    null,
+    { segmentKey: "wall_balls", timeGapSeconds: threshold - 1 },
+    [],
+  );
+  const above = classifyArchetype(
+    baseScores,
+    { athleteContext: {} },
+    { available: false },
+    null,
+    { segmentKey: "wall_balls", timeGapSeconds: threshold + 1 },
+    [],
+  );
+
+  assert.notEqual(below.key, "wall_ball_bottleneck");
+  assert.equal(above.key, "wall_ball_bottleneck");
+});
+
+test("archetype classifier uses configured wall-ball segment-gap threshold", () => {
+  const threshold = BENCHMARK_THRESHOLDS.wallBallBottleneckGapSeconds;
+  const baseScores = { engineScore: 56, strengthScore: 72, executionScore: 50 };
+  const below = classifyArchetype(
+    baseScores,
+    { athleteContext: {} },
+    { available: false },
+    null,
+    null,
+    [{ segmentKey: "wall_balls", type: "station", timeGapToMedianSeconds: threshold - 1 }],
+  );
+  const above = classifyArchetype(
+    baseScores,
+    { athleteContext: {} },
+    { available: false },
+    null,
+    null,
+    [{ segmentKey: "wall_balls", type: "station", timeGapToMedianSeconds: threshold + 1 }],
+  );
+
+  assert.notEqual(below.key, "wall_ball_bottleneck");
+  assert.equal(above.key, "wall_ball_bottleneck");
+});
+
+test("archetype classifier uses configured elite marginal-gains thresholds", () => {
+  const scoreThreshold = BENCHMARK_THRESHOLDS.eliteOverallPercentile;
+  const stationGapThreshold = BENCHMARK_THRESHOLDS.eliteMaxStationGapSeconds;
+  const stationGapsBelowThreshold = [
+    { segmentKey: "ski_erg", type: "station", timeGapToMedianSeconds: stationGapThreshold - 1 },
+    { segmentKey: "wall_balls", type: "station", timeGapToMedianSeconds: stationGapThreshold - 1 },
+  ];
+
+  const belowScore = classifyArchetype(
+    { overallPerformanceScore: scoreThreshold, engineScore: 56, strengthScore: 72, executionScore: 50 },
+    { athleteContext: {} },
+    { available: false },
+    null,
+    null,
+    stationGapsBelowThreshold,
+  );
+  const gapAtThreshold = classifyArchetype(
+    { overallPerformanceScore: scoreThreshold + 1, engineScore: 56, strengthScore: 72, executionScore: 50 },
+    { athleteContext: {} },
+    { available: false },
+    null,
+    null,
+    [{ segmentKey: "ski_erg", type: "station", timeGapToMedianSeconds: stationGapThreshold }],
+  );
+  const aboveScoreWithGapsBelowThreshold = classifyArchetype(
+    { overallPerformanceScore: scoreThreshold + 1, engineScore: 56, strengthScore: 72, executionScore: 50 },
+    { athleteContext: {} },
+    { available: false },
+    null,
+    null,
+    stationGapsBelowThreshold,
+  );
+
+  assert.notEqual(belowScore.key, "elite_marginal_gains");
+  assert.notEqual(gapAtThreshold.key, "elite_marginal_gains");
+  assert.equal(aboveScoreWithGapsBelowThreshold.key, "elite_marginal_gains");
 });
 
 test("archetype classifier fires first_timer_execution_leak for zero races and poor roxzone", () => {

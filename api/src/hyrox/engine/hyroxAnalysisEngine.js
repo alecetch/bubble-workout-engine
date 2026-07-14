@@ -1,4 +1,5 @@
 import { HYROX_ANALYSIS_VERSION } from "../config/benchmarkThresholds.js";
+import { isIndividualAnalysisDivision } from "../config/divisionGroups.js";
 import { normaliseSubmission } from "./segmentNormaliser.js";
 import { selectBenchmarkGroups } from "./benchmarkSelector.js";
 import { approximatePercentile, calculateSegmentStats } from "./percentileCalculator.js";
@@ -153,17 +154,7 @@ function dataQuality(normalised, benchmarkContext) {
 
 function analysisScope(input, normalised, benchmarkContext) {
   const division = normalised.athlete?.division ?? normalised.race?.division;
-  if (division && ![
-    "open",
-    "pro",
-    "doubles",
-    "doubles_male",
-    "doubles_female",
-    "doubles_mixed",
-    "pro_doubles_male",
-    "pro_doubles_female",
-    "pro_doubles_mixed",
-  ].includes(division)) return "limited";
+  if (division && !isIndividualAnalysisDivision(division)) return "limited";
   if (!benchmarkContext.available) return "no_benchmark_data";
   const supplied = normalised.completeness.runSplits + normalised.completeness.stationSplits;
   if (supplied < 8) return "limited";

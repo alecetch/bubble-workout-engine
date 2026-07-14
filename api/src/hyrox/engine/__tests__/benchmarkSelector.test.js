@@ -13,7 +13,10 @@ const DEMOGRAPHIC_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:all";
 const SUB_60_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_60:open:male";
 const SUB_75_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_75:open:male";
 const SUB_70_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_70:open:male";
+const OPEN_MALE_16_24_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:16-24";
+const OPEN_MALE_70_PLUS_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:70+";
 const DOUBLES_HISTORICAL_KEY = "hyrox:historical_hyrox_2026_06_v1:doubles:male:all";
+const DOUBLES_MIXED_HISTORICAL_KEY = "hyrox:historical_hyrox_2026_06_v1:doubles_mixed:mixed:all";
 const DOUBLES_MALE_KEY = "hyrox:doubles_v2:doubles_male:all:all";
 const DOUBLES_MALE_AGE_KEY = "hyrox:doubles_v2:doubles_male:male:35-39";
 const DOUBLES_MALE_THIN_AGE_KEY = "hyrox:doubles_v2:doubles_male:male:40-44";
@@ -136,6 +139,52 @@ describe("selectBenchmarkGroups analyse mode", () => {
     assert.equal(result.primaryBenchmarkGroup.key, SUB_75_KEY);
     assert.equal(result.nextBand, "sub_70");
     assert.equal(result.nextBandGroup.key, SUB_70_KEY);
+  });
+});
+
+describe("selectBenchmarkGroups age vocabulary", () => {
+  it("maps legacy lower-cap age group 18-24 to the 16-24 benchmark group", () => {
+    setBenchmarkData({
+      groups: [
+        { groupKey: OPEN_MALE_16_24_KEY, datasetVersion: DATASET, division: "open", gender: "male", ageGroup: "16-24", sampleSize: 500 },
+      ],
+      metrics: [metric(OPEN_MALE_16_24_KEY)],
+    });
+
+    const canonical = selectBenchmarkGroups({
+      athlete: { division: "open", sex: "male", ageGroup: "16-24" },
+      race: { division: "open", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+    const legacy = selectBenchmarkGroups({
+      athlete: { division: "open", sex: "male", ageGroup: "18-24" },
+      race: { division: "open", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(canonical.primaryBenchmarkGroup.key, OPEN_MALE_16_24_KEY);
+    assert.equal(legacy.primaryBenchmarkGroup.key, canonical.primaryBenchmarkGroup.key);
+    assert.equal(legacy.primaryBenchmarkGroup.ageGroup, "16-24");
+  });
+
+  it("maps legacy upper-cap age group 65-69 to the 70+ benchmark group", () => {
+    setBenchmarkData({
+      groups: [
+        { groupKey: OPEN_MALE_70_PLUS_KEY, datasetVersion: DATASET, division: "open", gender: "male", ageGroup: "70+", sampleSize: 500 },
+      ],
+      metrics: [metric(OPEN_MALE_70_PLUS_KEY)],
+    });
+
+    const canonical = selectBenchmarkGroups({
+      athlete: { division: "open", sex: "male", ageGroup: "70+" },
+      race: { division: "open", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+    const legacy = selectBenchmarkGroups({
+      athlete: { division: "open", sex: "male", ageGroup: "65-69" },
+      race: { division: "open", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(canonical.primaryBenchmarkGroup.key, OPEN_MALE_70_PLUS_KEY);
+    assert.equal(legacy.primaryBenchmarkGroup.key, canonical.primaryBenchmarkGroup.key);
+    assert.equal(legacy.primaryBenchmarkGroup.ageGroup, "70+");
   });
 });
 
@@ -405,6 +454,26 @@ describe("selectBenchmarkGroups doubles routing", () => {
 
     assert.equal(result.useDoublesBenchmarks, true);
     assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MIXED_KEY);
+    assert.equal(result.primaryBenchmarkGroup.division, "doubles_mixed");
+  });
+
+  it("normalizes mixed_doubles to doubles_mixed for legacy doubles benchmarks", () => {
+    process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "legacy";
+    setBenchmarkData({
+      groups: [
+        { groupKey: DOUBLES_MIXED_HISTORICAL_KEY, datasetVersion: DATASET, division: "doubles_mixed", gender: "mixed", sampleSize: 180 },
+      ],
+      metrics: [metric(DOUBLES_MIXED_HISTORICAL_KEY, "total_time", 180)],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "mixed_doubles", sex: "mixed" },
+      race: { division: "mixed_doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "analyse" });
+
+    assert.equal(result.primaryBenchmarkGroup.key, DOUBLES_MIXED_HISTORICAL_KEY);
+    assert.equal(result.primaryBenchmarkGroup.division, "doubles_mixed");
+    assert.notEqual(result.primaryBenchmarkGroup.division, "mixed_doubles");
   });
 
   it("uses enriched pro doubles groups when the submission division is explicit", () => {

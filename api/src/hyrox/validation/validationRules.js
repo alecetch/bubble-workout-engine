@@ -1,5 +1,6 @@
 import { RUN_KEYS, ROXZONE_KEYS, STATION_KEYS } from "../config/segmentMap.js";
-import { INDIVIDUAL_BENCHMARK_DIVISIONS, VALIDATION_THRESHOLDS } from "../config/validationThresholds.js";
+import { isIndividualAnalysisDivision } from "../config/divisionGroups.js";
+import { VALIDATION_THRESHOLDS } from "../config/validationThresholds.js";
 
 function result(pass, flag, severity = "warning", meta = {}) {
   return { pass, flag: pass ? null : flag, severity, ...meta };
@@ -48,7 +49,7 @@ export function V010_totalTimeValid(record) {
 }
 
 export function V011_totalTimePlausible(record) {
-  if (!INDIVIDUAL_BENCHMARK_DIVISIONS.includes(record.division)) {
+  if (!isIndividualAnalysisDivision(record.division)) {
     return { pass: true, flag: null, severity: "info" };
   }
   const { individualMin, individualMax } = VALIDATION_THRESHOLDS.totalTime;

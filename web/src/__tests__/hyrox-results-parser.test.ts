@@ -214,6 +214,14 @@ describe("parseHyroxResults", () => {
 
     const doubles = parseHyroxResults(`Division\tDOUBLES\n${SPLITS_ONLY}`);
     expect(doubles.division).toBe("doubles");
+    expect(doubles.divisionSex).toBeUndefined();
     expect(doubles.warnings).toContain("division_doubles_not_supported");
+  });
+
+  test("preserves mixed signal for mixed doubles division text", () => {
+    const result = parseHyroxResults(`Division\tMixed Doubles\n${SPLITS_ONLY}`);
+
+    expect(result.division).toBe("doubles");
+    expect(result.divisionSex).toBe("mixed");
   });
 });

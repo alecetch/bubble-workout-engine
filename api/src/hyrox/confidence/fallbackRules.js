@@ -1,4 +1,5 @@
 import { DEFAULT_DATASET_VERSION } from "../config/benchmarkThresholds.js";
+import { isIndividualAnalysisDivision } from "../config/divisionGroups.js";
 
 function keyPart(value) {
   return String(value ?? "all").replace(/[^a-z0-9_+-]+/gi, "_").toLowerCase();
@@ -25,18 +26,8 @@ export function adjacentAgeBand(ageGroup) {
   return "broad_40_plus";
 }
 
-function isIndividualDivision(division) {
-  return [
-    "open",
-    "pro",
-    "doubles",
-    "doubles_male",
-    "doubles_female",
-    "doubles_mixed",
-    "pro_doubles_male",
-    "pro_doubles_female",
-    "pro_doubles_mixed",
-  ].includes(division);
+export function isIndividualDivision(division) {
+  return isIndividualAnalysisDivision(division);
 }
 
 export function buildFallbackChain(request = {}) {
