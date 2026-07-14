@@ -222,6 +222,6 @@ test("race replay creates visible roxzone commentary in the email report", () =>
 
   assert.equal(analysis.roxzoneAnalysis.entryExitAvailable, true);
   assert.match(report.emailHtml, /ROXZONE AND EXECUTION PROFILE/i);
-  assert.match(report.emailHtml, /Race replay detail/i);
+  assert.match(report.emailHtml, /combined/i);
   assert.match(report.emailHtml, /Sandbag Lunges/i);
 });
