@@ -48,11 +48,15 @@ export function selectAnalysisFrame({ achievedBand, nextBand, gapToBandMedianSec
   }
 
   if (gapToBandMedianSeconds >= -COMPETITIVE_BAND_S) {
+    // When the athlete has already beaten the achieved band median and a next band exists,
+    // compare against the next band so gap data matches the "move to next band" narrative.
+    const aheadOfMedian = gapToBandMedianSeconds < 0 && hasDistinctNextBand;
     return {
       frame: ANALYSIS_FRAMES.COMPETITIVE,
-      comparisonBand: achievedBand,
+      comparisonBand: aheadOfMedian ? nextBand : achievedBand,
       stretchBand: nextBand,
       gapToBandMedianSeconds,
+      useNextBandGaps: aheadOfMedian,
     };
   }
 

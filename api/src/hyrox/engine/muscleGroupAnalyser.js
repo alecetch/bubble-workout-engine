@@ -2,20 +2,14 @@ import { MUSCLE_GROUP_LABELS, MUSCLE_GROUP_MAP, TRAINING_HINTS } from "../config
 
 const MAP_BY_KEY = new Map(MUSCLE_GROUP_MAP.map((entry) => [entry.segmentKey, entry]));
 
-// Relative classification: split this athlete's own stations into bottom/top thirds by percentile.
-// This always produces signals regardless of absolute benchmark standing — an athlete at the 30th
-// percentile across the board still has relative strengths and weaknesses worth coaching.
-function relativeClassify(stations) {
-  const sorted = [...stations].sort((a, b) => (a.percentile ?? 50) - (b.percentile ?? 50));
-  const cutSize = Math.max(1, Math.ceil(sorted.length / 3));
-  const weakKeys = new Set(sorted.slice(0, cutSize).map((s) => s.segmentKey));
-  const strongKeys = new Set(sorted.slice(-cutSize).map((s) => s.segmentKey));
-  return new Map(
-    sorted.map((s) => [
-      s.segmentKey,
-      weakKeys.has(s.segmentKey) ? "weak" : strongKeys.has(s.segmentKey) ? "strong" : "neutral",
-    ]),
-  );
+// Classify stations by gap direction — same axis as the losses table.
+// Positive timeGapSeconds means the athlete is slower than the benchmark for that station (weak).
+// Negative means faster (strong). Zero is neutral.
+function gapClassify(stations) {
+  return new Map(stations.map((s) => [
+    s.segmentKey,
+    s.timeGapSeconds > 0 ? "weak" : s.timeGapSeconds < 0 ? "strong" : "neutral",
+  ]));
 }
 
 function buildHeadline(primaryLimiters, primaryAssets, allBelowBenchmark) {
@@ -74,7 +68,7 @@ export function analyseMuscleGroups(analysisResult = {}) {
   );
   if (stations.length < 3) return { available: false };
 
-  const relClassMap = relativeClassify(stations);
+  const relClassMap = gapClassify(stations);
 
   const stationClassifications = stations.map((s) => ({
     segmentKey: s.segmentKey,
@@ -96,14 +90,14 @@ export function analyseMuscleGroups(analysisResult = {}) {
     }
   }
 
-  // Limiter: most appearances in relative-weak stations (weak must meet or exceed strong count)
+  // Limiter: appears in any weak station, with weak count meeting or exceeding strong count
   const primaryLimiters = Object.values(groupCounters)
     .filter((g) => g.weakCount > 0 && g.weakCount >= g.strongCount)
     .sort((a, b) => b.weakCount - a.weakCount || a.strongCount - b.strongCount)
     .slice(0, 2)
     .map((g) => g.groupId);
 
-  // Asset: most appearances in relative-strong stations (strong must strictly exceed weak count)
+  // Asset: appears in any strong station, with strong count strictly exceeding weak count
   const primaryAssets = Object.values(groupCounters)
     .filter((g) => g.strongCount > 0 && g.strongCount > g.weakCount)
     .sort((a, b) => b.strongCount - a.strongCount || a.weakCount - b.weakCount)

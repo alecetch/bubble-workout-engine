@@ -51,7 +51,7 @@ import { adminCoachesRouter } from "./src/routes/adminCoaches.js";
 import { adminUsersRouter } from "./src/routes/adminUsers.js";
 import { adminSeedHistoryRouter } from "./src/routes/adminSeedHistory.js";
 import { adminHyroxRouter } from "./src/routes/adminHyrox.js";
-import { adminHyroxTestHarnessRouter } from "./src/routes/adminHyroxTestHarness.js";
+import { adminHyroxTestHarnessRouter, hyroxPageCacheRouter } from "./src/routes/adminHyroxTestHarness.js";
 import { adminContentStudioRouter } from "./src/routes/adminContentStudio.js";
 import { adminHyroxResultsRouter } from "./src/routes/adminHyroxResults.js";
 import { authRouter } from "./src/routes/auth.js";
@@ -782,6 +782,8 @@ app.use("/api/auth", authRouter);
 // internal-token–guarded admin routers.
 app.use("/api/admin", adminCoachesRouter);
 app.use("/api/admin", requireInternalToken, adminHyroxTestHarnessRouter);
+// Public (no auth) endpoint for browser bookmarklet to cache HYROX HTML pages
+app.use("/api", hyroxPageCacheRouter);
 app.use("/api/admin", ...adminOnly, adminCoverageRouter);
 app.use("/api/admin", ...adminOnly, adminContentStudioRouter);
 app.use("/api/admin", ...adminOnly, adminHyroxResultsRouter);

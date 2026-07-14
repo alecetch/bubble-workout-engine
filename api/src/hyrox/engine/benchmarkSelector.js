@@ -68,6 +68,11 @@ const NEXT_BAND_MAP = Object.freeze({
   sub_60: null,
 });
 
+export const PERFORMANCE_BAND_ORDER = Object.freeze([
+  "sub_60", "sub_65", "sub_70", "sub_75", "sub_80", "sub_85",
+  "sub_90", "sub_95", "sub_100", "sub_105", "sub_120", "over_120",
+]);
+
 export function nextPerformanceBand(band) {
   return NEXT_BAND_MAP[band] ?? null;
 }
@@ -223,7 +228,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const isAnalyseMode = calculatorMode === "analyse";
 
   const rawDivision = normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division ?? "open";
-  const isDoubles = rawDivision === "doubles" || rawDivision === "mixed_doubles" || rawDivision === "mixed" || ENRICHED_DOUBLES_DIVISIONS.has(rawDivision);
+  const isDoubles = rawDivision === "doubles" || rawDivision === "pro_doubles" || rawDivision === "mixed_doubles" || rawDivision === "mixed" || ENRICHED_DOUBLES_DIVISIONS.has(rawDivision);
   const gender = normalizeSex(normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender ?? "unknown");
   let division = rawDivision;
   let doublesBenchmarkedAsSingles = false;
@@ -237,6 +242,8 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   if (isDoubles) {
     const doublesDivision =
       ENRICHED_DOUBLES_DIVISIONS.has(rawDivision) ? rawDivision
+        : rawDivision === "pro_doubles"
+          ? (gender === "female" ? "pro_doubles_female" : gender === "mixed" ? "pro_doubles_mixed" : "pro_doubles_male")
         : (rawDivision === "mixed_doubles" || rawDivision === "mixed") ? "doubles_mixed"
         : gender === "female" ? "doubles_female"
           : "doubles_male";

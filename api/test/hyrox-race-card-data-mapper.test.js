@@ -142,21 +142,29 @@ test("splitRows excludes aggregate segments", () => {
   assert.ok(!keys.includes("run_time"), "run_time should be excluded");
 });
 
-test("splitRows capped at 10 when more than 10 non-aggregate segments exist", () => {
+test("splitRows includes all 16 race events in race order", () => {
   const data = buildHyroxRaceCardData(makeAnalysisJson());
-  // fixture has 16 run+station segments
-  assert.ok(data.splitRows.length <= 10, `Expected ≤10 rows, got ${data.splitRows.length}`);
-});
-
-test("splitRows sorted by |frameGapSeconds| descending", () => {
-  const data = buildHyroxRaceCardData(makeAnalysisJson());
-  const abs = data.splitRows.map((r) => {
-    const parts = r.delta.replace(/[+\-]/, "").split(":");
-    return Number(parts[0]) * 60 + Number(parts[1]);
-  });
-  for (let i = 1; i < abs.length; i++) {
-    assert.ok(abs[i] <= abs[i - 1], `Row ${i} abs delta ${abs[i]} > previous ${abs[i - 1]}`);
-  }
+  assert.deepEqual(
+    data.splitRows.map((r) => r.key),
+    [
+      "run_1",
+      "ski_erg",
+      "run_2",
+      "sled_push",
+      "run_3",
+      "sled_pull",
+      "run_4",
+      "burpee_broad_jump",
+      "run_5",
+      "row",
+      "run_6",
+      "farmers_carry",
+      "run_7",
+      "sandbag_lunges",
+      "run_8",
+      "wall_balls",
+    ],
+  );
 });
 
 test("splitRow tone is positive for negative frameGapSeconds", () => {

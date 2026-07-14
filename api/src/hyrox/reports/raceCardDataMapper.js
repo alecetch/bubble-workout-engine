@@ -1,3 +1,5 @@
+import { SEGMENT_MAP } from "../config/segmentMap.js";
+
 function formatSeconds(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return null;
   const total = Math.round(seconds);
@@ -31,7 +33,24 @@ function ordinalRank(percentile) {
   return `${n}${suffix} percentile`;
 }
 
-const AGGREGATE_KEYS = new Set(["run_time", "work_time", "roxzone_time", "total_time"]);
+const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type === "run" || segment.type === "station");
+
+function segment(analysisJson, key) {
+  return analysisJson.segments?.find((row) => row.segmentKey === key) ?? null;
+}
+
+function hasGoalGroup(analysisJson) {
+  return Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup);
+}
+
+function targetGapSeconds(row, goalAvailable) {
+  if (Number.isFinite(row?.timeGapToExactTargetSeconds)) return row.timeGapToExactTargetSeconds;
+  if (goalAvailable && Number.isFinite(row?.goalBenchmarkSeconds) && Number.isFinite(row?.userSeconds)) {
+    return row.userSeconds - row.goalBenchmarkSeconds;
+  }
+  if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
+  return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
+}
 
 /**
  * Maps analysisJson + optional athleteContext to the HyroxRaceCardData shape
@@ -114,24 +133,21 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
       }
     : null;
 
-  // Split rows: runs and stations only, sorted by |frameGapSeconds| desc, capped at 10
-  const segments = Array.isArray(aj.segments) ? aj.segments : [];
-  const splitRows = segments
-    .filter(
-      (seg) =>
-        (seg.type === "run" || seg.type === "station") &&
-        !AGGREGATE_KEYS.has(seg.segmentKey) &&
-        Number.isFinite(seg.frameGapSeconds),
-    )
-    .sort((a, b) => Math.abs(b.frameGapSeconds) - Math.abs(a.frameGapSeconds))
-    .slice(0, 10)
-    .map((seg) => ({
-      key: seg.segmentKey,
-      label: seg.label,
+  // Race split profile: mirror the carousel "How the race unfolded" flow order.
+  const goalAvailable = hasGoalGroup(aj);
+  const splitRows = RACE_SEGMENTS.flatMap((mapRow) => {
+    const seg = segment(aj, mapRow.segmentKey);
+    if (!seg || !Number.isFinite(seg.userSeconds)) return [];
+    const gapSeconds = targetGapSeconds(seg, goalAvailable);
+    const roundedGap = Number.isFinite(gapSeconds) ? Math.round(gapSeconds) : 0;
+    return [{
+      key: mapRow.segmentKey,
+      label: mapRow.displayName,
       userTime: formatSeconds(seg.userSeconds) ?? "-",
-      delta: formatTimeDelta(seg.frameGapSeconds) ?? "0:00",
-      tone: seg.frameGapSeconds < 0 ? "positive" : seg.frameGapSeconds > 0 ? "negative" : "neutral",
-    }));
+      delta: roundedGap === 0 ? "0:00" : formatTimeDelta(roundedGap),
+      tone: roundedGap < 0 ? "positive" : roundedGap > 0 ? "negative" : "neutral",
+    }];
+  });
 
   // Doubles flag
   const division = String(

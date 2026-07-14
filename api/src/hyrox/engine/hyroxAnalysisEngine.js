@@ -191,12 +191,13 @@ function addFrameGaps(segments, analysisFrame, calculatorMode) {
   const isAnalyse = calculatorMode === "analyse";
   const frame = analysisFrame?.frame;
   const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
+  const useNextBandGaps = isNextBandFrame || Boolean(analysisFrame?.useNextBandGaps);
 
   return segments.map((segment) => {
     let frameGapSeconds;
     if (!isAnalyse) {
       frameGapSeconds = segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
-    } else if (isNextBandFrame) {
+    } else if (useNextBandGaps) {
       frameGapSeconds = segment.timeGapToNextBandMedianSeconds ?? segment.timeGapToMedianSeconds ?? null;
     } else {
       frameGapSeconds = segment.timeGapToMedianSeconds ?? null;
@@ -227,7 +228,7 @@ export function analyseSubmission(input = {}) {
     nextBand: benchmarkContext.nextBand ?? null,
     gapToBandMedianSeconds: totalTimeSeg?.timeGapToMedianSeconds ?? null,
   });
-  const needsNextBandStats = analysisFrame.frame === "next_band" || analysisFrame.frame === "next_band_stretch";
+  const needsNextBandStats = analysisFrame.frame === "next_band" || analysisFrame.frame === "next_band_stretch" || Boolean(analysisFrame.useNextBandGaps);
   const segmentsWithNextBand = needsNextBandStats
     ? attachNextBandStats(baseSegments, benchmarkContext.nextBandGroup?.key ?? null)
     : baseSegments;

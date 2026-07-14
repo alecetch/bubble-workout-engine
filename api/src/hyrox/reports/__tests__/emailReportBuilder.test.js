@@ -351,12 +351,12 @@ describe("buildEmailReport visual redesign", () => {
     assert.match(htmlBody, /www\.getforma\.fit/);
   });
 
-  it("suppresses athlete background section when present", () => {
+  it("renders athlete background section when present", () => {
     const { htmlBody } = buildEmailReport(mockReport([
       { sectionKey: "athlete_background", title: "Your Background in Context", content: "Your running background gives useful context." },
     ]), mockAnalysis(), mockContext());
-    assert.equal(htmlBody.includes("YOUR BACKGROUND IN CONTEXT"), false);
-    assert.equal(htmlBody.includes("Your running background gives useful context."), false);
+    assert.equal(htmlBody.includes("YOUR BACKGROUND IN CONTEXT"), true);
+    assert.equal(htmlBody.includes("Your running background gives useful context."), true);
   });
 
   it("omits athlete background section when absent", () => {
@@ -662,6 +662,13 @@ describe("muscle group signal labelling", () => {
     const htmlBody = renderMuscleEmail(
       {
         benchmarkContext: { achievedBand: "sub_80" },
+        muscleGroupProfile: {
+          available: true,
+          muscleGroupSignals: [
+            { groupId: "quad_dominant", label: "Quad-dominant", weakCount: 1, strongCount: 0, signal: "limiter" },
+            { groupId: "upper_back_pull", label: "Upper back / pull", weakCount: 0, strongCount: 2, signal: "asset" },
+          ],
+        },
       },
       ["your upper back / pull is a clear strength"],
     );
@@ -1344,10 +1351,18 @@ describe("analyse mode email", () => {
     assert.doesNotMatch(htmlBody.toLowerCase(), /subgroup/);
   });
 
-  it("shows OVERALL STANDING not OVERALL RANK in metric strip", () => {
-    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse");
+  it("shows OVERALL STANDING (not OVERALL RANK) in metric strip, and Band standing in split table", () => {
+    const splitSection = { sectionKey: "race_split_breakdown", title: "Race Split Breakdown", tableData: {} };
+    const { htmlBody } = buildEmailReport(
+      mockReport([splitSection]),
+      mockAnalysis(),
+      mockContext(),
+      null,
+      "analyse",
+    );
     assert.match(htmlBody, /OVERALL STANDING/);
     assert.doesNotMatch(htmlBody, /OVERALL RANK/);
+    assert.match(htmlBody, /Band standing/);
   });
 
   it("renders benchmark explanation in analyse mode", () => {
@@ -1528,7 +1543,7 @@ describe("analyse mode email", () => {
     });
     const { htmlBody } = buildEmailReport(mockReport([splitSection]), analysis, mockContext(), null, "analyse");
     assert.ok(!htmlBody.includes("sub-105 benchmark median"), 'should not contain "sub-105 benchmark median"');
-    assert.ok(htmlBody.includes("100:00 and 104:59"), 'should contain time range in rendered email');
+    assert.ok(/100:00\S*104:59/.test(htmlBody), "should contain time range in rendered email");
   });
 
   it("subject does not say bottleneck in analyse mode", () => {
@@ -1568,7 +1583,7 @@ describe("analyse mode email", () => {
     assert.match(email.htmlBody, /Open Men 35-39/);
   });
 
-  it("analyse mode subject uses top-band copy for sub-60 athletes", () => {
+  it("analyse mode subject uses top-band copy for sub-60 athletes at or below median", () => {
     const personal = mockReport();
     const analysis = mockAnalysis({
       benchmarkContext: {
@@ -1576,10 +1591,41 @@ describe("analyse mode email", () => {
         achievedBand: "sub_60",
         nextBand: null,
         confidenceLabel: "strong",
+        analysisFrame: { frame: "sub60_internal", comparisonBand: "sub_60", stretchBand: null, gapToBandMedianSeconds: 45 },
       },
     });
     const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
     assert.equal(email.subject, "You're sub-60. Here's what separates you from the top of the group.");
+  });
+
+  it("analyse mode subject uses percentile copy for sub-60 athletes faster than the median", () => {
+    const personal = mockReport();
+    const analysis = mockAnalysis({
+      segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 82, userSeconds: 3480 }],
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:band:sub_60:open:male", label: "Open Male" },
+        achievedBand: "sub_60",
+        nextBand: null,
+        confidenceLabel: "strong",
+        analysisFrame: { frame: "sub60_internal", comparisonBand: "sub_60", stretchBand: null, gapToBandMedianSeconds: -90 },
+      },
+    });
+    const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
+    assert.equal(email.subject, "You're in the top 18% of sub-60 finishers. Here's the next refinement.");
+  });
+
+  it("analyse mode hero includes comparison group context line", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:band:sub_85:open:male", label: "Open Male", sampleSize: 13587 },
+        achievedBand: "sub_85",
+        nextBand: "sub_80",
+        confidenceLabel: "strong",
+        analysisFrame: { frame: "catch_up", comparisonBand: "sub_85", stretchBand: null, gapToBandMedianSeconds: 120 },
+      },
+    });
+    const email = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+    assert.match(email.htmlBody, /Compared against 13,587 80:00.84:59 finishers/);
   });
 
   it("analyse mode subject points to the next faster band when one exists", () => {
@@ -2543,7 +2589,7 @@ describe("renderSplitTable", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithSplits, {}, null,
     );
-    assert.ok(htmlBody.includes("Overall standing"), `expected "Overall standing" header, not found in HTML`);
+    assert.ok(htmlBody.includes("Band standing"), `expected "Band standing" header, not found in HTML`);
     assert.ok(htmlBody.includes("Band score"), `expected "Band score" header, not found in HTML`);
   });
 
@@ -2760,6 +2806,152 @@ describe("renderSplitTable", () => {
     );
     const count = (htmlBody.match(/letter-spacing:0\.09em/g) ?? []).length;
     assert.ok(count >= 3, `expected at least 3 eyebrow labels with canonical letter-spacing, found ${count}`);
+  });
+});
+
+describe("renderBenchmarkLensCard (analyse mode)", () => {
+  it("renders BENCHMARK LENS heading with data-section attribute", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ benchmarkContext: { achievedBand: "sub_100" } }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    assert.ok(htmlBody.includes("BENCHMARK LENS"));
+    assert.ok(htmlBody.includes('data-section="benchmark-lens"'));
+  });
+
+  it("renders finish time, comparison group label, and within-band percentile", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: { achievedBand: "sub_100", confidenceLabel: "strong" },
+        race: { finishTimeSeconds: 5738 },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 38, fieldPercentile: 99 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    assert.ok(htmlBody.includes("1:35:38"), "should show finish time");
+    assert.ok(htmlBody.includes("95:00"), "should show comparison group range");
+    assert.ok(htmlBody.includes("99:59"), "should show comparison group range end");
+    assert.ok(htmlBody.includes("38th percentile"), "should show within-band percentile");
+    assert.ok(htmlBody.includes("within this band"), "should qualify percentile scope");
+  });
+
+  it("uses high-in-band copy when within-band percentile is 80 or above", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: { achievedBand: "sub_100" },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 93, fieldPercentile: 93 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    assert.ok(htmlBody.includes("high within this band"));
+    assert.ok(htmlBody.includes("band ahead"));
+  });
+
+  it("omits Your standing row when percentile is absent or non-finite", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: { achievedBand: "sub_95" },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: Number.NaN }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    assert.ok(!htmlBody.includes("within this band"), "should omit percentile row");
+  });
+
+  it("returns empty string when finish band is unknown or finish time is missing", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ benchmarkContext: {}, race: { finishTimeSeconds: Number.NaN } }),
+      mockContext({ finishTimeSeconds: Number.NaN }),
+      null,
+      "analyse",
+    );
+    assert.ok(!htmlBody.includes("BENCHMARK LENS"));
+  });
+});
+
+describe("renderTargetLensCard (target mode)", () => {
+  it("renders TARGET LENS heading with data-section attribute in target mode", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ race: { finishTimeSeconds: 5738 } }),
+      mockContext({ targetFinishTimeSeconds: 4800 }),
+      null,
+      "target",
+    );
+    assert.ok(htmlBody.includes("TARGET LENS"));
+    assert.ok(htmlBody.includes('data-section="target-lens"'));
+  });
+
+  it("renders current and target finish times with their band labels", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ race: { finishTimeSeconds: 5738 } }),
+      mockContext({ targetFinishTimeSeconds: 4800 }),
+      null,
+      "target",
+    );
+    assert.ok(htmlBody.includes("1:35:38"), "should show current finish time");
+    assert.ok(htmlBody.includes("1:20:00"), "should show target finish time");
+    assert.match(htmlBody, /95\S*100/, "should show current band label");
+    assert.match(htmlBody, /75\S*80/, "should show target band label");
+  });
+
+  it("shows N-bands-ahead explanation when target is in a faster band", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ race: { finishTimeSeconds: 5738 } }),
+      mockContext({ targetFinishTimeSeconds: 4800 }),
+      null,
+      "target",
+    );
+    assert.ok(/4 bands ahead/.test(htmlBody));
+  });
+
+  it("shows same-band refinement copy when target is in the same band as current", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ race: { finishTimeSeconds: 5738 } }),
+      mockContext({ targetFinishTimeSeconds: 5800 }),
+      null,
+      "target",
+    );
+    assert.ok(htmlBody.includes("refinement"));
+  });
+
+  it("shows already-ahead copy when athlete is faster than their target", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ race: { finishTimeSeconds: 4500 } }),
+      mockContext({ targetFinishTimeSeconds: 5612 }),
+      null,
+      "target",
+    );
+    assert.ok(htmlBody.includes("already") && htmlBody.includes("ahead"));
+  });
+
+  it("falls back to BENCHMARK LENS when no target time is present in target mode", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({ benchmarkContext: { achievedBand: "sub_95" } }),
+      mockContext({ targetFinishTimeSeconds: null }),
+      null,
+      "target",
+    );
+    assert.ok(htmlBody.includes("BENCHMARK LENS"), "should fall back to benchmark lens");
+    assert.ok(!htmlBody.includes("TARGET LENS"), "should not show target lens");
   });
 });
 

@@ -17,10 +17,37 @@ import { detectHyroxDivisionFromUrl } from "../hyrox/ingestion/detectHyroxDivisi
 const RESULTS_URL_PREFIX = "https://results.hyrox.com/";
 const FETCH_TIMEOUT_MS = 12_000;
 
+// In-process HTML cache — populated by the browser bookmarklet (bypasses WAF)
+const htmlCache = new Map(); // normalisedKey -> { html, url, cachedAt }
+
+function normaliseCacheKey(url) {
+  try {
+    const u = new URL(url);
+    const keepParams = ["idp", "event", "fpid", "pid", "pidp", "content", "lang"];
+    const kept = {};
+    for (const p of keepParams) if (u.searchParams.has(p)) kept[p] = u.searchParams.get(p);
+    const sex = u.searchParams.get("search[sex]");
+    if (sex) kept["search[sex]"] = sex;
+    return u.origin + u.pathname + "?" + new URLSearchParams(Object.entries(kept).sort()).toString();
+  } catch {
+    return url;
+  }
+}
+
 const FETCH_HEADERS = {
-  "user-agent": "Mozilla/5.0 (compatible; Forma-HYROX-TestHarness/1.0)",
-  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
   "accept-language": "en-GB,en;q=0.9",
+  "accept-encoding": "gzip, deflate, br",
+  referer: "https://results.hyrox.com/",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "same-origin",
+  "sec-fetch-user": "?1",
+  "sec-ch-ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "upgrade-insecure-requests": "1",
 };
 
 function isValidHyroxResultsUrl(value) {
@@ -318,6 +345,10 @@ function parsedIsLowConfidence(parsed) {
 }
 
 async function fetchHtml(url) {
+  const cacheKey = normaliseCacheKey(url);
+  const cached = htmlCache.get(cacheKey);
+  if (cached) return cached.html;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -865,8 +896,8 @@ function caseHeading(index, total, url, result, label = "", expectedCommentary =
 async function runHarnessCase({ url, pool, targetFinishTimeSeconds, sharedContext, label = "", expectedCommentary = "" }) {
   const importResult = await fetchAndParseHyroxUrl(url, pool);
   const modes = [
-    { modeName: "Mode 1: Target With Target Time", calculatorMode: "target", targetFinishTimeSeconds },
-    { modeName: "Mode 2: Analyse Without Target Time", calculatorMode: "analyse", targetFinishTimeSeconds: null },
+    { modeName: "Mode 1: Analyse my race", calculatorMode: "analyse", targetFinishTimeSeconds: null },
+    { modeName: "Mode 3: Hit a target time", calculatorMode: "target", targetFinishTimeSeconds },
   ];
 
   const modeEntries = modes.map((mode) => {
@@ -1431,3 +1462,48 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
 }
 
 export const adminHyroxTestHarnessRouter = createAdminHyroxTestHarnessRouter();
+
+// Unauthenticated router for the browser bookmarklet cache.
+// No sensitive data — only accepts valid results.hyrox.com HTML payloads.
+// Mounted separately in server.js WITHOUT requireInternalToken.
+export function createHyroxPageCacheRouter() {
+  const router = express.Router();
+
+  router.options("/hyrox/page-cache", (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+    return res.sendStatus(204);
+  });
+
+  router.post("/hyrox/page-cache", express.json({ limit: "10mb" }), (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    const { url, html } = req.body ?? {};
+    if (!isValidHyroxResultsUrl(url) || typeof html !== "string" || html.length < 200) {
+      return res.status(400).json({ error: "invalid_payload" });
+    }
+    const key = normaliseCacheKey(url);
+    htmlCache.set(key, { html, url, cachedAt: Date.now() });
+    return res.json({ ok: true, key, htmlLength: html.length, cachedAt: new Date().toISOString() });
+  });
+
+  router.get("/hyrox/page-cache", (req, res) => {
+    const entries = [...htmlCache.entries()].map(([key, val]) => ({
+      key,
+      url: val.url,
+      cachedAt: new Date(val.cachedAt).toISOString(),
+      htmlLength: val.html.length,
+    }));
+    return res.json({ count: entries.length, entries });
+  });
+
+  router.delete("/hyrox/page-cache", (req, res) => {
+    const count = htmlCache.size;
+    htmlCache.clear();
+    return res.json({ ok: true, cleared: count });
+  });
+
+  return router;
+}
+
+export const hyroxPageCacheRouter = createHyroxPageCacheRouter();

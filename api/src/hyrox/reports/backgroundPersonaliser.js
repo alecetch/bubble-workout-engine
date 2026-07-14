@@ -1,4 +1,22 @@
 const BACKGROUND_COPY = Object.freeze({
+  // Current frontend keys
+  new_to_strength: {
+    aligned: "You're newer to strength training, and HYROX's loaded stations — sled, sandbag, carries, and wall balls — are where a strengthening investment will pay the sharpest returns. Even a short consistent phase of progressively loaded work typically unlocks clear station-time improvements at your next race. The movements flagged in the focus areas below are a practical starting point.",
+    inverted: "Even without a deep strength background, your station performance wasn't the limiting factor here — your running pattern is where the gap sits. This suggests aerobic durability under race conditions is the priority rather than strength volume. Build running consistency first, then revisit station-specific loading as your engine develops.",
+  },
+  general_gym: {
+    aligned: "A general gym background gives you a foundation for HYROX stations, but the data points to station execution as the gap. The highest-leverage change is typically specificity rather than volume: shifting sessions toward HYROX-weighted loading patterns — carries, sled-equivalent loading, wall ball pacing — transfers more directly than general strength work.",
+    inverted: "General gym work appears to be supporting your station performance adequately — your data points to the running as the gap. A shift toward structured steady-state running at moderate intensity is typically the most effective lever for athletes in your position.",
+  },
+  crossfit_hybrid: {
+    aligned: "CrossFit movement patterns translate well to HYROX station mechanics — the foundations of the loaded movements are already in your training. The gap for CrossFit athletes in HYROX typically isn't raw capacity but specificity: WOD-style training builds fitness across a broad range of demands, while HYROX rewards the ability to sustain station output at a specific pace across a 60–120 minute effort. Shifting some training time toward HYROX-specific loading (race-pace reps, exact competition weights) will sharpen this more efficiently than adding generic volume.",
+    inverted: "CrossFit athletes often find station work is relatively comfortable in HYROX given the movement overlap — and your data supports this. The gap is in the running, which is less common. Sustained aerobic running at HYROX pace is a distinct demand from the short conditioning runs most CrossFit programming includes. Building a base of steady-state aerobic running at moderate intensity is typically the highest-leverage change here.",
+  },
+  strength_sport: {
+    aligned: "Your strength background provides a direct foundation for HYROX's loaded stations — sled, sandbag, farmers carry, and wall balls all reward force production. The gap that strength-sport athletes typically encounter in HYROX is aerobic: maintaining output across 8 km of running while absorbing 8 stations takes a different energy system than a typical strength training block. The engine score from this race gives you the clearest signal of where that ceiling sits.",
+    inverted: "Strength-sport athletes in HYROX typically find aerobic durability is the binding constraint — but your data suggests station performance is where the time is being lost. This sometimes points to a movement specificity gap rather than a strength gap: HYROX station weights are moderate but the demand is sustained under aerobic fatigue, which differs from a pure strength environment. Race-pace station rehearsal is likely more valuable here than adding heavier loading.",
+  },
+  // Legacy keys (kept for backward compat with stored athlete_context_json)
   running: {
     aligned: "Your running background gives you a structural advantage in the 8 km of running that runs through HYROX — aerobic durability and pacing under fatigue are typically strengths. The race data reflects a pattern common in runners: the gap sits in station capacity rather than the engine. Athletes from a running background often see the sharpest gains by redirecting one or two running sessions per week toward HYROX-specific loaded work — particularly the movements flagged in the focus areas below.",
     inverted: "Most runners find station strength is the bigger gap in HYROX, but your data points the other way — running is where the time is being lost. This is less common and worth investigating: pacing strategy under station fatigue, or a drop-off in later run splits, is often the cause rather than raw aerobic capacity. Your run fade profile below will indicate which.",

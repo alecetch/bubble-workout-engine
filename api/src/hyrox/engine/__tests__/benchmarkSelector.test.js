@@ -425,6 +425,24 @@ describe("selectBenchmarkGroups doubles routing", () => {
     assert.equal(result.primaryBenchmarkGroup.key, PRO_DOUBLES_MALE_KEY);
   });
 
+  it("maps pro_doubles division (from HTML parser) to pro_doubles_male using sex", () => {
+    process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "enriched";
+    setBenchmarkData({
+      groups: [
+        { groupKey: PRO_DOUBLES_MALE_KEY, datasetVersion: "doubles_v2", division: "pro_doubles_male", gender: "all", ageGroup: "all", sampleSize: 500 },
+      ],
+      metrics: [metric(PRO_DOUBLES_MALE_KEY, "total_time", 500)],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "pro_doubles", sex: "male" },
+      race: { division: "pro_doubles", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.useDoublesBenchmarks, true);
+    assert.equal(result.primaryBenchmarkGroup.key, PRO_DOUBLES_MALE_KEY);
+  });
+
   it("leaves singles submissions unaffected when the flag is set", () => {
     process.env.USE_DOUBLES_BENCHMARK_DATASET = "true";
     const result = selectBenchmarkGroups(submission(74 * 60 + 20), { calculatorMode: "target" });
