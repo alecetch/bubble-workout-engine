@@ -328,11 +328,11 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
     return `<div style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:12px;font-style:italic;margin-top:6px;">${esc(text)}</div>`;
   })();
   const comparisonContextLine = (() => {
-    const achievedBand = analysisJson?.benchmarkContext?.achievedBand;
     const isAnalyseMode = Boolean(analysisJson?.benchmarkContext?.analysisFrame);
+    const { achievedBand, comparisonBand, group } = resolvedComparisonBandInfo(analysisJson);
     if (!isAnalyseMode || !achievedBand) return "";
-    const groupLabel = benchmarkLensComparisonGroupLabel(achievedBand);
-    const sampleSize = Number(analysisJson?.benchmarkContext?.primaryBenchmarkGroup?.sampleSize);
+    const groupLabel = benchmarkLensComparisonGroupLabel(comparisonBand);
+    const sampleSize = Number(group?.sampleSize);
     const sampleText = Number.isFinite(sampleSize) && sampleSize > 0
       ? `${sampleSize.toLocaleString()} `
       : "";
@@ -417,6 +417,22 @@ function benchmarkLensComparisonGroupLabel(band) {
   return `${rawRange.replace("between ", "").replace(" and ", "–")} finishers`;
 }
 
+// Mirrors the escalation check in hyroxAnalysisEngine.js's addFrameGaps() so the email copy
+// (comparison group label, sample size, explanation text) always matches the band the
+// station/run gap numbers were actually computed against, not just the athlete's own band.
+function resolvedComparisonBandInfo(analysisJson = {}, fallbackAchievedBand = null) {
+  const benchmarkContext = analysisJson.benchmarkContext ?? {};
+  const achievedBand = benchmarkContext.achievedBand ?? fallbackAchievedBand ?? null;
+  const analysisFrame = benchmarkContext.analysisFrame ?? {};
+  const frame = analysisFrame.frame;
+  const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
+  const useNextBandGaps = isNextBandFrame || analysisFrame.useNextBandGaps === true;
+  const comparisonBand = useNextBandGaps ? (analysisFrame.comparisonBand ?? achievedBand) : achievedBand;
+  const isEscalated = useNextBandGaps && Boolean(comparisonBand) && comparisonBand !== achievedBand;
+  const group = isEscalated ? benchmarkContext.nextBandGroup : benchmarkContext.primaryBenchmarkGroup;
+  return { achievedBand, comparisonBand: comparisonBand ?? achievedBand, isEscalated, group };
+}
+
 function renderLensDataRow({ label, value, valueColor, valueSize = "13px", valueWeight = "400", valueFamily = "Inter,Arial,Helvetica,sans-serif", divided = false }) {
   const tableStyle = divided
     ? "border-top:1px solid #1c3350;padding-top:10px;margin-top:10px;"
@@ -438,7 +454,8 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   const finishTime = formatTime(finishSeconds);
   if (!finishTime) return "";
 
-  const comparisonGroupLabel = benchmarkLensComparisonGroupLabel(currentBand);
+  const { comparisonBand, isEscalated } = resolvedComparisonBandInfo(analysisJson, currentBand);
+  const comparisonGroupLabel = benchmarkLensComparisonGroupLabel(comparisonBand);
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
 
   // Benchmark median — same source as the metric strip's comparison time
@@ -455,13 +472,11 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
     : null;
   const isHighInBand = Number.isFinite(percentileValue) && percentileValue >= 80;
   const isLowSample = ["directional", "low-confidence"].includes(analysisJson.benchmarkContext?.confidenceLabel);
-  const lensFrame = analysisJson.benchmarkContext?.analysisFrame ?? {};
-  const lensUseNextBandGaps = lensFrame.useNextBandGaps === true;
-  const lensCompBandLabel = lensUseNextBandGaps ? bandDisplayLabel(lensFrame.comparisonBand) : null;
+  const lensCompBandLabel = isEscalated ? bandDisplayLabel(comparisonBand) : null;
   const lensBandLabel = bandDisplayLabel(currentBand);
 
   let explanationText;
-  if (lensUseNextBandGaps && lensCompBandLabel) {
+  if (isEscalated && lensCompBandLabel) {
     explanationText = `The standing above ranks you within the ${lensBandLabel} band. Because you've already beaten that band's median, the station and run gaps further down are measured against the ${lensCompBandLabel} band instead — that's the next benchmark worth chasing.`;
   } else if (isHighInBand) {
     explanationText = "You are high within this band. The next useful comparison is the band ahead.";

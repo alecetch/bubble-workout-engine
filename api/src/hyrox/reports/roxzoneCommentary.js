@@ -35,18 +35,37 @@ function stationLabel(stationKey) {
   return SEGMENT_LABELS.get(stationKey) ?? String(stationKey ?? "").replace(/_/g, " ");
 }
 
+function secondaryCombinedLine(combined, namedStationKey) {
+  if (!combined || combined.stationKey === namedStationKey) return null;
+  return `Separately, your biggest combined entry+exit overhead was at ${stationLabel(combined.stationKey)}: ${formatTime(combined.totalSeconds)} total (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`;
+}
+
 function entryExitLines(rox) {
   if (!rox.entryExitAvailable) return [];
   const lines = [];
   const combined = Array.isArray(rox.stationOverhead) ? rox.stationOverhead[0] : null;
-  if (combined) {
+  const scenarioTags = rox.roxzoneNarrative?.scenarioTags ?? [];
+  const worstEntry = rox.worstEntry ?? null;
+  const worstExit = rox.worstExit ?? null;
+
+  // The interpretation copy names a specific station (worst single exit/entry) when
+  // exit_led or entry_led fires — the illustrative number here must match that same
+  // station, not silently default to the worst *combined* station, which can differ.
+  if (scenarioTags.includes("exit_led") && worstExit) {
+    lines.push(`${stationLabel(worstExit.stationKey)} exit: ${formatTime(worstExit.seconds)} — the slowest single exit of the race.`);
+    const secondary = secondaryCombinedLine(combined, worstExit.stationKey);
+    if (secondary) lines.push(secondary);
+  } else if (scenarioTags.includes("entry_led") && worstEntry) {
+    lines.push(`${stationLabel(worstEntry.stationKey)} entry: ${formatTime(worstEntry.seconds)} — the slowest single entry of the race.`);
+    const secondary = secondaryCombinedLine(combined, worstEntry.stationKey);
+    if (secondary) lines.push(secondary);
+  } else if (combined) {
     lines.push(`${stationLabel(combined.stationKey)}: ${formatTime(combined.totalSeconds)} combined (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`);
   } else {
-    const entry = rox.worstEntry ?? null;
-    const exit = rox.worstExit ?? null;
-    if (entry) lines.push(`Race replay detail: your slowest station entry was ${stationLabel(entry.stationKey)} at ${formatTime(entry.seconds)}.`);
-    if (exit) lines.push(`Race replay detail: your slowest station exit was ${stationLabel(exit.stationKey)} at ${formatTime(exit.seconds)}.`);
+    if (worstEntry) lines.push(`Race replay detail: your slowest station entry was ${stationLabel(worstEntry.stationKey)} at ${formatTime(worstEntry.seconds)}.`);
+    if (worstExit) lines.push(`Race replay detail: your slowest station exit was ${stationLabel(worstExit.stationKey)} at ${formatTime(worstExit.seconds)}.`);
   }
+
   if (rox.entryTrend === "rising") {
     lines.push("Station entries also got progressively slower as the race went on — typically a sign of setup friction or breathing reset under fatigue.");
   }

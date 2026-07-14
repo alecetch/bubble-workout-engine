@@ -1,5 +1,7 @@
-import { ENTRY_KEYS, EXIT_KEYS, ROXZONE_KEYS, STATION_KEYS } from "../config/segmentMap.js";
+import { ENTRY_KEYS, EXIT_KEYS, ROXZONE_KEYS, SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { calculateSegmentStats } from "./percentileCalculator.js";
+
+const SEGMENT_LABELS = new Map(SEGMENT_MAP.map((segment) => [segment.segmentKey, segment.displayName]));
 
 const MAX_REASONABLE_REPLAY_DIFF_SECONDS = 10 * 60;
 const DISPLAY_STATIONS = Object.freeze([
@@ -27,7 +29,7 @@ function trendFromSlope(slope) {
 }
 
 function stationLabel(stationKey) {
-  return String(stationKey ?? "")
+  return SEGMENT_LABELS.get(stationKey) ?? String(stationKey ?? "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase())
     .replace(/\bErg\b/, "Erg");

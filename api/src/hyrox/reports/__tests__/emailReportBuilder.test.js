@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildEmailReport, gapPill } from "../emailReportBuilder.js";
 import { bandScoreLabel, formatOverallStanding } from "../copyFormatter.js";
+import { ANALYSIS_FRAMES } from "../../engine/analysisFrameSelector.js";
 
 function mockReport(extraSections = []) {
   return {
@@ -79,6 +80,20 @@ function mockContext(overrides = {}) {
 
 function withoutDataUris(html) {
   return String(html).replace(/data:image\/[^;"']+;base64,[^"']+/g, "data:image;base64,");
+}
+
+function benchmarkLensSection(html) {
+  const start = String(html).indexOf('data-section="benchmark-lens"');
+  if (start < 0) return "";
+  const nextRow = String(html).indexOf("\n  <tr", start + 1);
+  return nextRow > start ? String(html).slice(start, nextRow) : String(html).slice(start);
+}
+
+function comparisonGroupRow(html) {
+  const start = String(html).indexOf("Comparison group");
+  if (start < 0) return "";
+  const end = String(html).indexOf("</table>", start);
+  return end > start ? String(html).slice(start, end) : String(html).slice(start);
 }
 
 describe("buildEmailReport visual redesign", () => {
@@ -2880,6 +2895,93 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     );
     assert.ok(!htmlBody.includes("BENCHMARK LENS"));
   });
+
+  it("explains band escalation and shows the next-band comparison group for a next_band frame (no explicit useNextBandGaps flag)", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          achievedBand: "sub_90",
+          nextBand: "sub_85",
+          analysisFrame: { frame: "next_band", comparisonBand: "sub_85", stretchBand: null, gapToBandMedianSeconds: -80 },
+          primaryBenchmarkGroup: { label: "Doubles Female", sampleSize: 4200 },
+          nextBandGroup: { label: "Doubles Female", sampleSize: 10725 },
+        },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 73, fieldPercentile: 52 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    assert.ok(
+      htmlBody.includes(
+        "The standing above ranks you within the sub-90 band. Because you've already beaten that band's median, the station and run gaps further down are measured against the sub-85 band instead — that's the next benchmark worth chasing.",
+      ),
+      "should render the band-escalation explanation sentence",
+    );
+    assert.ok(htmlBody.includes("80:00"), "Comparison group should show the escalated sub-85 range, not the athlete's own sub-90 range");
+    assert.ok(htmlBody.includes("84:59"), "Comparison group should show the escalated sub-85 range end");
+    assert.ok(htmlBody.includes("10,725"), "hero 'Compared against' sample size should come from the escalated band's group");
+  });
+
+  for (const frame of Object.values(ANALYSIS_FRAMES)) {
+    for (const useNextBandGaps of [true, false, undefined]) {
+      const flagLabel = useNextBandGaps === undefined ? "undefined" : String(useNextBandGaps);
+      it(`uses the engine escalation predicate for frame=${frame}, useNextBandGaps=${flagLabel}`, () => {
+        const analysisFrame = {
+          frame,
+          comparisonBand: "sub_85",
+          stretchBand: "sub_80",
+          gapToBandMedianSeconds: -30,
+        };
+        if (useNextBandGaps !== undefined) analysisFrame.useNextBandGaps = useNextBandGaps;
+
+        const { htmlBody } = buildEmailReport(
+          mockReport(),
+          mockAnalysis({
+            benchmarkContext: {
+              achievedBand: "sub_90",
+              nextBand: "sub_85",
+              analysisFrame,
+              primaryBenchmarkGroup: { label: "Open Male", sampleSize: 9000 },
+              nextBandGroup: { label: "Open Male", sampleSize: 6000 },
+            },
+            segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 80 }],
+          }),
+          mockContext(),
+          null,
+          "analyse",
+        );
+        const lens = benchmarkLensSection(htmlBody);
+        const shouldEscalate =
+          frame === ANALYSIS_FRAMES.NEXT_BAND ||
+          frame === ANALYSIS_FRAMES.NEXT_BAND_STRETCH ||
+          useNextBandGaps === true;
+
+        assert.ok(lens.includes("BENCHMARK LENS"), "sanity check: Benchmark Lens section rendered");
+        assert.equal(
+          lens.includes("that's the next benchmark worth chasing"),
+          shouldEscalate,
+          "escalation explanation should match the engine predicate",
+        );
+
+        if (shouldEscalate) {
+          const row = comparisonGroupRow(lens);
+          assert.ok(row.includes("80:00"), "comparison group should use comparisonBand range start");
+          assert.ok(row.includes("84:59"), "comparison group should use comparisonBand range end");
+          assert.equal(row.includes("85:00"), false, "comparison group should not use achievedBand range start");
+          assert.equal(row.includes("89:59"), false, "comparison group should not use achievedBand range end");
+        } else {
+          const row = comparisonGroupRow(lens);
+          assert.ok(row.includes("85:00"), "comparison group should use achievedBand range start");
+          assert.ok(row.includes("89:59"), "comparison group should use achievedBand range end");
+          assert.equal(row.includes("80:00"), false, "comparison group should not use comparisonBand range start");
+          assert.equal(row.includes("84:59"), false, "comparison group should not use comparisonBand range end");
+        }
+      });
+    }
+  }
 });
 
 describe("renderTargetLensCard (target mode)", () => {
