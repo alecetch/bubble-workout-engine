@@ -167,9 +167,9 @@ test("generates markdown for both harness modes", async () => {
   assert.match(response.headers.get("content-type") ?? "", /text\/markdown/);
   assert.match(response.headers.get("content-disposition") ?? "", /hyrox-harness-/);
   assert.match(body, /# HYROX QA Test Harness/);
-  assert.match(body, /## Mode 1: Target With Target Time/);
-  assert.match(body, /## Mode 2: Analyse Without Target Time/);
-  assert.doesNotMatch(body, /## Mode 3/);
+  assert.match(body, /## Mode 1: Analyse my race/);
+  assert.match(body, /## Mode 3: Hit a target time/);
+  assert.doesNotMatch(body, /## Mode 2/);
   assert.match(body, /```html/);
   assert.match(body, /## Comparison Notes/);
   assert.match(body, /## QA Flags/);
@@ -190,8 +190,8 @@ test("generates a single-case email artifact", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-disposition") ?? "", /hyrox-email-/);
   assert.match(body, /# HYROX Email Artifact/);
-  assert.match(body, /## Mode 1: Target With Target Time/);
-  assert.match(body, /## Mode 2: Analyse Without Target Time/);
+  assert.match(body, /## Mode 1: Analyse my race/);
+  assert.match(body, /## Mode 3: Hit a target time/);
   assert.match(body, /### HTML/);
   assert.match(body, /```html/);
 });
@@ -251,7 +251,7 @@ test("returns structured preview data for rendered harness output", async () => 
   assert.equal(body.cases[0].finishTimeFormatted, "1:42:00");
   assert.equal(body.cases[0].targetTimeFormatted, "1:15:00");
   assert.equal(body.cases[0].modes.length, 2);
-  assert.equal(body.cases[0].modes[0].calculatorMode, "target");
+  assert.equal(body.cases[0].modes[0].calculatorMode, "analyse");
   assert.equal(typeof body.cases[0].modes[0].emailHtml, "string");
   assert.ok(Array.isArray(body.cases[0].modes[0].carouselSlides));
   assert.ok(Array.isArray(body.cases[0].modes[0].qaFlags));
@@ -274,7 +274,7 @@ test("generates a combined markdown test pack for multiple URLs", async () => {
   assert.match(body, /- URL count: 2/);
   assert.match(body, /# Test Case 1 of 2/);
   assert.match(body, /# Test Case 2 of 2/);
-  assert.match(body, /## Mode 1: Target With Target Time/);
+  assert.match(body, /## Mode 1: Analyse my race/);
 });
 
 test("generates a combined markdown test pack with per-case target times", async () => {

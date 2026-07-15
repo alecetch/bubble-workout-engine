@@ -19,15 +19,20 @@ test("+120s slower than median uses catch_up frame", () => {
   assert.equal(result.comparisonBand, "sub_70");
 });
 
-test("+30s within band uses competitive frame", () => {
+test("+30s within band (behind median) uses competitive frame comparing vs achieved band", () => {
   const result = selectAnalysisFrame({ achievedBand: "sub_70", nextBand: "sub_65", gapToBandMedianSeconds: 30 });
   assert.equal(result.frame, ANALYSIS_FRAMES.COMPETITIVE);
+  assert.equal(result.comparisonBand, "sub_70", "comparison band stays on achieved band when behind median");
   assert.equal(result.stretchBand, "sub_65");
+  assert.equal(result.useNextBandGaps, false, "useNextBandGaps not set when behind median");
 });
 
-test("-30s within band uses competitive frame", () => {
+test("-30s within band (ahead of median) uses competitive frame with next-band comparisons", () => {
   const result = selectAnalysisFrame({ achievedBand: "sub_70", nextBand: "sub_65", gapToBandMedianSeconds: -30 });
   assert.equal(result.frame, ANALYSIS_FRAMES.COMPETITIVE);
+  assert.equal(result.comparisonBand, "sub_65", "comparison band should be next band when ahead of median");
+  assert.equal(result.stretchBand, "sub_65", "stretch band preserved for subject line");
+  assert.equal(result.useNextBandGaps, true, "useNextBandGaps flag set");
 });
 
 test("-63s faster than median uses next_band frame", () => {

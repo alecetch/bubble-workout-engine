@@ -1,3 +1,25 @@
+import { readFileSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname_raceCard = dirname(fileURLToPath(import.meta.url));
+const iconB64Cache = new Map();
+
+function loadIconB64(filename, mimeType = "image/png") {
+  if (!filename) return "";
+  const cacheKey = `${mimeType}:${filename}`;
+  if (iconB64Cache.has(cacheKey)) return iconB64Cache.get(cacheKey);
+  let result = "";
+  try {
+    const data = readFileSync(resolve(__dirname_raceCard, "./assets", filename));
+    result = `data:${mimeType};base64,${data.toString("base64")}`;
+  } catch {
+    // Missing artwork should never break race-card generation.
+  }
+  iconB64Cache.set(cacheKey, result);
+  return result;
+}
+
 function escapeHtml(str) {
   return String(str ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -9,24 +31,63 @@ function deltaToSeconds(delta) {
   return parts.length === 2 ? Number(parts[0]) * 60 + Number(parts[1]) : Number(parts[0]);
 }
 
-// Split name into [line1, line2]: handles "LAST, FIRST" and "FIRST LAST"
-function splitName(name) {
-  const n = String(name ?? "").trim().toUpperCase();
+function splitPersonName(name) {
+  const n = String(name ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+  if (!n) return { first: "", last: "" };
   if (n.includes(",")) {
     const [last, first] = n.split(",").map((p) => p.trim());
-    return [first || last, first ? last : ""];
+    return { first: first || last, last: first ? last : "" };
   }
   const words = n.split(/\s+/);
-  if (words.length <= 1) return [words[0] ?? "", ""];
-  if (words.length === 2) return [words[0], words[1]];
-  return [words[0], words.slice(1).join(" ")];
+  if (words.length <= 1) return { first: words[0] ?? "", last: "" };
+  return { first: words[0], last: words.slice(1).join(" ") };
 }
 
-function nameFontSize(name, isDoubles) {
-  const len = String(name ?? "").replace(/[^a-zA-Z]/g, "").length;
-  if (isDoubles || len > 24) return 38;
-  if (len > 16) return 46;
+function splitDoublesAthletes(name) {
+  const parts = String(name ?? "")
+    .split(/\s*(?:&|\+|\/|\band\b)\s*/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length >= 2 ? parts.slice(0, 2).map(splitPersonName) : null;
+}
+
+function nameLines(name, isDoubles) {
+  const doubles = isDoubles ? splitDoublesAthletes(name) : null;
+  if (doubles) {
+    return doubles.map((person) => [
+      { text: person.first, tone: "white" },
+      ...(person.last ? [{ text: person.last, tone: "cyan" }] : []),
+    ]);
+  }
+
+  const person = splitPersonName(name);
+  return [
+    [{ text: person.first, tone: "white" }],
+    ...(person.last ? [[{ text: person.last, tone: "cyan" }]] : []),
+  ];
+}
+
+function nameFontSize(name, isDoubles, lines = null) {
+  const renderedLines = lines ?? nameLines(name, isDoubles);
+  const longest = Math.max(
+    0,
+    ...renderedLines.map((line) => line.map((part) => part.text).join(" ").replace(/[^a-zA-Z]/g, "").length),
+  );
+  if (isDoubles) {
+    if (longest > 24) return 32;
+    if (longest > 18) return 35;
+    return 38;
+  }
+  if (longest > 24) return 38;
+  if (longest > 16) return 46;
   return 54;
+}
+
+function renderNameLine(line) {
+  return `<div class="sname">${line
+    .filter((part) => part.text)
+    .map((part) => `<span class="${part.tone === "cyan" ? "name-cy" : "name-wh"}">${escapeHtml(part.text)}</span>`)
+    .join(" ")}</div>`;
 }
 
 // ── SVG assets ────────────────────────────────────────────────────────────────
@@ -35,6 +96,44 @@ const FORMA_LOGO = `<svg viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg" 
   <rect width="38" height="38" rx="7" fill="#22d3ee"/>
   <path d="M9 9h20v5H15v4h11v4H15v7H9V9z" fill="#06111e"/>
 </svg>`;
+
+function formaLogoMark(size = 38) {
+  const src = loadIconB64("forma-logo.png");
+  if (!src) return FORMA_LOGO;
+  const r = Math.max(6, Math.round(size * 0.18));
+  return `<img src="${src}" alt="Forma" width="${size}" height="${size}" style="display:block;width:${size}px;height:${size}px;border-radius:${r}px;object-fit:contain;flex-shrink:0;" />`;
+}
+
+const STATION_ARTWORK = Object.freeze({
+  run: { hexFile: "hex-running.png", simpleFile: "simple-running.png" },
+  ski: { hexFile: "hex-skierg.png", simpleFile: "simple-skierg.png" },
+  sledPush: { hexFile: "hex-sled-push.png", simpleFile: "simple-sled-push.png" },
+  sledPull: { hexFile: "hex-sled-pull.png", simpleFile: "simple-sled-pull.png" },
+  burpee: { hexFile: "hex-burpee.png", simpleFile: "simple-burpee.png" },
+  row: { hexFile: "hex-row.png", simpleFile: "simple-row.png" },
+  farmers: { hexFile: "hex-farmers.png", simpleFile: "simple-farmers.png" },
+  sandbag: { hexFile: "hex-sandbag.png", simpleFile: "simple-sandbag.png" },
+  wallBalls: { hexFile: "hex-wall-balls.png", simpleFile: "simple-wall-ball.png" },
+});
+
+function stationArtworkKey(label) {
+  const k = String(label ?? "").toLowerCase().trim();
+  if (!k) return null;
+  if (k.includes("ski")) return "ski";
+  if (k.includes("sled push")) return "sledPush";
+  if (k.includes("sled pull")) return "sledPull";
+  if (k.includes("burpee")) return "burpee";
+  if (k.includes("row")) return "row";
+  if (k.includes("farmer") || k.includes("carry")) return "farmers";
+  if (k.includes("sandbag") || k.includes("lunge")) return "sandbag";
+  if (k.includes("wall ball")) return "wallBalls";
+  return "run";
+}
+
+function stationArtwork(label) {
+  const key = stationArtworkKey(label);
+  return key ? STATION_ARTWORK[key] : null;
+}
 
 function runnerSvg() {
   return `<svg viewBox="0 0 230 300" xmlns="http://www.w3.org/2000/svg" width="218" height="285" aria-hidden="true">
@@ -104,8 +203,8 @@ function scoreRingSvg(formaScore) {
   ${has ? `<circle cx="124" cy="124" r="${r}" fill="none" stroke="#22d3ee" stroke-width="16"
     stroke-dasharray="${filled.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="round"
     transform="rotate(-90 124 124)" filter="url(#ringglow)"/>` : ""}
-  <text x="124" y="98"  text-anchor="middle" fill="#64748b" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="13" letter-spacing="2.5">FORMA</text>
-  <text x="124" y="114" text-anchor="middle" fill="#64748b" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="13" letter-spacing="2.5">SCORE</text>
+  <text x="124" y="84"  text-anchor="middle" fill="#64748b" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="13" letter-spacing="2.5">FORMA</text>
+  <text x="124" y="100" text-anchor="middle" fill="#64748b" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="13" letter-spacing="2.5">SCORE</text>
   <text x="124" y="${numY.toFixed(0)}" text-anchor="middle" fill="#f0f6ff" font-family="'Inter Tight',Arial,sans-serif" font-weight="900" font-size="${numSize}">${num}</text>
   ${has ? `<text x="124" y="${(numY + 24).toFixed(0)}" text-anchor="middle" fill="#475569" font-family="Inter,Arial,sans-serif" font-weight="600" font-size="17">/100</text>` : ""}
 </svg>`;
@@ -191,11 +290,37 @@ function stationIconPaths(name, color) {
 }
 
 function hexIcon(name, color) {
+  const artwork = stationArtwork(name);
+  const iconSrc = loadIconB64(artwork?.hexFile);
+  if (iconSrc) {
+    return `<img src="${iconSrc}" width="80" height="80" alt="" style="display:block;width:80px;height:80px;object-fit:contain;flex-shrink:0;" />`;
+  }
+
   const bg = color === "#22d3ee" ? "rgba(34,211,238,0.1)" : "rgba(251,191,36,0.1)";
   return `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="80" height="80" style="display:block;flex-shrink:0;">
   <polygon points="40,4 72,22 72,58 40,76 8,58 8,22" fill="${escapeHtml(bg)}" stroke="${escapeHtml(color)}" stroke-width="1.8"/>
   ${stationIconPaths(name, color)}
 </svg>`;
+}
+
+function headerHeroImage() {
+  const heroSrc = loadIconB64("hero-race-end.jpg", "image/jpeg");
+  if (!heroSrc) return runnerSvg();
+  return `<div style="position:relative;width:220px;height:300px;border-radius:16px;overflow:hidden;border:1px solid var(--border);">
+    <img src="${heroSrc}" width="220" height="300" alt="" style="display:block;width:220px;height:300px;object-fit:cover;border-radius:16px;" />
+    <div style="position:absolute;left:0;right:0;bottom:0;height:108px;background:linear-gradient(180deg,rgba(6,16,30,0) 0%,var(--bg) 100%);"></div>
+  </div>`;
+}
+
+function chartIconImage(label, mx, y, compact = false) {
+  const artwork = stationArtwork(label);
+  if (!artwork) return "";
+  const filename = artwork.simpleFile ?? artwork.hexFile;
+  const src = loadIconB64(filename);
+  if (!src) return "";
+  const size = compact ? (artwork.simpleFile ? 48 : 50) : (artwork.simpleFile ? 44 : 46);
+  const x = (Number(mx) - size / 2).toFixed(1);
+  return `<image data-station-icon="${escapeHtml(filename)}" href="${src}" x="${x}" y="${y.toFixed(1)}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet"/>`;
 }
 
 // Station label for the chart x-axis
@@ -216,14 +341,15 @@ function stationLines(label) {
 
 function buildChart(splitRows) {
   if (!splitRows || splitRows.length < 2) return "";
-  const rows = splitRows.slice(0, 9);
+  const rows = splitRows.slice(0, 16);
   const n = rows.length;
+  const compact = n > 12;
 
   const W = 990;
   const yLW = 58;        // y-label column width
   const barW_total = W - yLW;
   const chartH = 230;    // height of bar zone
-  const labelH = 82;     // station labels below
+  const labelH = compact ? 178 : 146;    // station icons + labels below
   const totalH = chartH + labelH;
   const midY = chartH / 2;  // centre line
 
@@ -231,7 +357,12 @@ function buildChart(splitRows) {
   const pxPerSec = midY / maxSec;
 
   const slotW = barW_total / n;
-  const barW = Math.min(58, Math.floor(slotW * 0.52));
+  const barW = Math.min(compact ? 34 : 58, Math.floor(slotW * 0.52));
+  const valueFont = compact ? 12 : 13;
+  const labelFont = compact ? 9.2 : 10.5;
+  const labelStep = compact ? 13.2 : 16;
+  const labelTop = compact ? chartH + 62 : chartH + 66;
+  const timeY = compact ? chartH + 166 : chartH + 134;
 
   const p = [];
 
@@ -243,7 +374,7 @@ function buildChart(splitRows) {
     const y = (midY - s * pxPerSec).toFixed(1);
     const isZero = s === 0;
     p.push(`<line x1="${yLW}" y1="${y}" x2="${W}" y2="${y}" stroke="${isZero ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.09)"}" stroke-width="${isZero ? 1.5 : 0.9}"/>`);
-    p.push(`<text x="${yLW - 8}" y="${(+y + 4.5).toFixed(1)}" text-anchor="end" fill="${isZero ? "#94a3b8" : "#475569"}" font-size="11" font-family="Inter,sans-serif" font-weight="500">${lbl}</text>`);
+    p.push(`<text x="${yLW - 8}" y="${(+y + 4.5).toFixed(1)}" text-anchor="end" fill="${isZero ? "#94a3b8" : "#475569"}" font-size="12" font-family="Inter,sans-serif" font-weight="600">${lbl}</text>`);
   }
 
   for (let i = 0; i < rows.length; i++) {
@@ -263,16 +394,22 @@ function buildChart(splitRows) {
     if (isFast) {
       const by = (midY - hPx).toFixed(1);
       p.push(`<rect x="${bx}" y="${by}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
-      p.push(`<text x="${mx}" y="${(midY - hPx - 8).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="12" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
+      p.push(`<text x="${mx}" y="${(midY - hPx - 8).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
     } else {
       p.push(`<rect x="${bx}" y="${midY.toFixed(1)}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
-      p.push(`<text x="${mx}" y="${(midY + hPx + 17).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="12" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
+      p.push(`<text x="${mx}" y="${(midY + hPx + 17).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
     }
+
+    const icon = chartIconImage(row.label, mx, compact ? chartH - 2 : chartH + 8, compact);
+    if (icon) p.push(icon);
 
     // Station label lines below
     const lines = stationLines(row.label);
     for (let li = 0; li < lines.length; li++) {
-      p.push(`<text x="${mx}" y="${(chartH + 16 + li * 16).toFixed(1)}" text-anchor="middle" fill="#64748b" font-size="10" font-family="Inter,sans-serif">${lines[li]}</text>`);
+      p.push(`<text x="${mx}" y="${(labelTop + li * labelStep).toFixed(1)}" text-anchor="middle" fill="#64748b" font-size="${labelFont}" font-family="Inter,sans-serif">${lines[li]}</text>`);
+    }
+    if (row.userTime) {
+      p.push(`<text x="${mx}" y="${timeY.toFixed(1)}" text-anchor="middle" fill="#94a3b8" font-size="${compact ? 10.2 : 11.2}" font-weight="700" font-family="'Inter Tight',sans-serif">${escapeHtml(row.userTime)}</text>`);
     }
   }
 
@@ -298,8 +435,8 @@ export function buildRaceCardHtml(data) {
     isDoubles    = false,
   } = data ?? {};
 
-  const [firstName, lastName] = splitName(athleteName);
-  const nfs = nameFontSize(athleteName, isDoubles);
+  const athleteNameLines = nameLines(athleteName, isDoubles);
+  const nfs = nameFontSize(athleteName, isDoubles, athleteNameLines);
   const chart = splitRows.length >= 2 ? buildChart(splitRows) : "";
   const hasCards = strongestStation || biggestLimiter;
 
@@ -340,8 +477,11 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .h-mid   { flex: 1; display: flex; justify-content: center; align-items: center; }
 .h-right { flex: 0 0 220px; display: flex; justify-content: flex-end; align-items: flex-start; padding-top: 4px; }
 
-.logo-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-.logo-word { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 20px; letter-spacing: 4px; color: var(--text); }
+.logo-row { display: flex; align-items: center; gap: 11px; margin-bottom: 18px; }
+.brand-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.logo-word { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 18px; letter-spacing: 4.3px; color: var(--text); line-height: 1; }
+.brand-role { font-size: 9px; font-weight: 800; letter-spacing: 1.9px; color: var(--cyan); line-height: 1.05; text-transform: uppercase; }
+.brand-site { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; color: var(--muted); line-height: 1.1; }
 
 .t-hyrox { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 68px; line-height: 1; color: var(--text); letter-spacing: -1px; }
 .t-perf  { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 40px; line-height: 1.1; color: var(--cyan); letter-spacing: -0.5px; }
@@ -362,7 +502,8 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 
 .slbl { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; color: var(--sub); text-transform: uppercase; margin-bottom: 3px; }
 .sname { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: ${nfs}px; line-height: 1.06; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sname.cy { color: var(--cyan); }
+.name-wh { color: var(--text); }
+.name-cy { color: var(--cyan); }
 .stime { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 54px; line-height: 1.02; color: var(--text); letter-spacing: -0.5px; }
 .smeta { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--cyan); letter-spacing: 0.2px; }
 .smeta.am { color: var(--amber); }
@@ -394,20 +535,20 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 /* ─── SPLIT PROFILE ─── */
 .splits { padding: 20px 44px 0; flex: 1; min-height: 0; overflow: hidden; }
 .sp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.sp-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 16px; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
+.sp-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 19px; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
 .sp-legend { display: flex; align-items: center; gap: 16px; }
-.leg { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.3px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.leg { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.3px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .dot.bl { background: var(--blue); } .dot.rd { background: var(--neg); }
 
 /* ─── FOOTER ─── */
 .footer { padding: 16px 44px 26px; display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0; border-top: 1px solid var(--border); margin-top: auto; }
 .f-left { display: flex; align-items: center; gap: 10px; }
-.f-brand { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 15px; letter-spacing: 3px; color: var(--text); }
-.f-pipe { width: 1px; height: 18px; background: var(--border); }
-.f-sub { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--cyan); text-transform: uppercase; }
-.f-right { font-family: 'Inter Tight',Arial,sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
+.f-copy { display: flex; flex-direction: column; gap: 2px; }
+.f-brand { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 15px; letter-spacing: 3.2px; color: var(--text); line-height: 1; }
+.f-sub { font-size: 9px; font-weight: 800; letter-spacing: 1.6px; color: var(--cyan); text-transform: uppercase; line-height: 1.1; }
+.f-right { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -417,8 +558,12 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <div class="header">
     <div class="h-left">
       <div class="logo-row">
-        ${FORMA_LOGO}
-        <span class="logo-word">FORMA</span>
+        ${formaLogoMark(38)}
+        <div class="brand-copy">
+          <span class="logo-word">FORMA</span>
+          <span class="brand-role">PERFORMANCE ENGINEER</span>
+          <span class="brand-site">www.getforma.fit</span>
+        </div>
       </div>
       <div class="t-hyrox">HYROX</div>
       <div class="t-perf">PERFORMANCE</div>
@@ -426,7 +571,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
       <div class="tagline"><span class="em">YOUR RACE,</span> DECODED.</div>
     </div>
     <div class="h-mid">${scoreRingSvg(formaScore)}</div>
-    <div class="h-right">${runnerSvg()}</div>
+    <div class="h-right">${headerHeroImage()}</div>
   </div>
 
   <div class="hr"></div>
@@ -434,10 +579,9 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <!-- ── ATHLETE STRIP ── -->
   <div class="strip">
     <div class="sc">
-      <div class="slbl">Athlete</div>
-      <div class="sname">${escapeHtml(firstName)}</div>
-      ${lastName ? `<div class="sname cy">${escapeHtml(lastName)}</div>` : ""}
-    </div>
+	      <div class="slbl">Athlete</div>
+	      ${athleteNameLines.map(renderNameLine).join("")}
+	    </div>
     <div class="sdiv"></div>
     <div class="sc">
       <div class="slbl">Finish Time</div>
@@ -521,14 +665,15 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 
   <!-- ── FOOTER ── -->
   <div class="footer">
-    <div class="f-left">
-      ${FORMA_LOGO}
-      <span class="f-brand">FORMA</span>
-      <div class="f-pipe"></div>
-      <span class="f-sub">Data. Insight. Performance.</span>
-    </div>
-    <div class="f-right">Train Smarter. Race Faster.</div>
-  </div>
+	    <div class="f-left">
+	      ${formaLogoMark(34)}
+	      <div class="f-copy">
+	        <span class="f-brand">FORMA</span>
+	        <span class="f-sub">PERFORMANCE ENGINEER</span>
+	      </div>
+	    </div>
+	    <div class="f-right">www.getforma.fit</div>
+	  </div>
 
 </div>
 </body>

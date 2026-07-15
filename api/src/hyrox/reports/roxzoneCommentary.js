@@ -35,28 +35,48 @@ function stationLabel(stationKey) {
   return SEGMENT_LABELS.get(stationKey) ?? String(stationKey ?? "").replace(/_/g, " ");
 }
 
+function secondaryCombinedLine(combined, namedStationKey) {
+  if (!combined || combined.stationKey === namedStationKey) return null;
+  return `Separately, your biggest combined entry+exit overhead was at ${stationLabel(combined.stationKey)}: ${formatTime(combined.totalSeconds)} total (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`;
+}
+
 function entryExitLines(rox) {
   if (!rox.entryExitAvailable) return [];
   const lines = [];
   const combined = Array.isArray(rox.stationOverhead) ? rox.stationOverhead[0] : null;
-  if (combined) {
-    lines.push(`Race replay detail: your slowest combined station entry and exit was ${stationLabel(combined.stationKey)} at ${formatTime(combined.totalSeconds)} (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`);
+  const scenarioTags = rox.roxzoneNarrative?.scenarioTags ?? [];
+  const worstEntry = rox.worstEntry ?? null;
+  const worstExit = rox.worstExit ?? null;
+
+  // The interpretation copy names a specific station (worst single exit/entry) when
+  // exit_led or entry_led fires — the illustrative number here must match that same
+  // station, not silently default to the worst *combined* station, which can differ.
+  if (scenarioTags.includes("exit_led") && worstExit) {
+    lines.push(`${stationLabel(worstExit.stationKey)} exit: ${formatTime(worstExit.seconds)} — the slowest single exit of the race.`);
+    const secondary = secondaryCombinedLine(combined, worstExit.stationKey);
+    if (secondary) lines.push(secondary);
+  } else if (scenarioTags.includes("entry_led") && worstEntry) {
+    lines.push(`${stationLabel(worstEntry.stationKey)} entry: ${formatTime(worstEntry.seconds)} — the slowest single entry of the race.`);
+    const secondary = secondaryCombinedLine(combined, worstEntry.stationKey);
+    if (secondary) lines.push(secondary);
+  } else if (combined) {
+    lines.push(`${stationLabel(combined.stationKey)}: ${formatTime(combined.totalSeconds)} combined (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`);
   } else {
-    const entry = rox.worstEntry ?? null;
-    const exit = rox.worstExit ?? null;
-    if (entry) lines.push(`Race replay detail: your slowest station entry was ${stationLabel(entry.stationKey)} at ${formatTime(entry.seconds)}.`);
-    if (exit) lines.push(`Race replay detail: your slowest station exit was ${stationLabel(exit.stationKey)} at ${formatTime(exit.seconds)}.`);
+    if (worstEntry) lines.push(`Race replay detail: your slowest station entry was ${stationLabel(worstEntry.stationKey)} at ${formatTime(worstEntry.seconds)}.`);
+    if (worstExit) lines.push(`Race replay detail: your slowest station exit was ${stationLabel(worstExit.stationKey)} at ${formatTime(worstExit.seconds)}.`);
   }
+
   if (rox.entryTrend === "rising") {
-    lines.push("Your station entries got slower later in the race, which usually points to navigation, breathing reset or setup friction under fatigue.");
+    lines.push("Station entries also got progressively slower as the race went on — typically a sign of setup friction or breathing reset under fatigue.");
   }
   return lines;
 }
 
-function buildNarrativeSection(rox) {
+function buildNarrativeSection(rox, onBenchmarkNote = null) {
   const narrative = rox.roxzoneNarrative;
   if (!narrative?.available) return null;
   return [
+    ...(onBenchmarkNote ? [onBenchmarkNote] : []),
     narrative.interpretationCopy,
     narrative.actionCopy,
     ...entryExitLines(rox),
@@ -65,8 +85,8 @@ function buildNarrativeSection(rox) {
   ];
 }
 
-function buildInferredSection(rox, roxSegment) {
-  const narrativeSection = buildNarrativeSection(rox);
+function buildInferredSection(rox, roxSegment, onBenchmarkNote = null) {
+  const narrativeSection = buildNarrativeSection(rox, onBenchmarkNote);
   if (narrativeSection) return narrativeSection;
 
   const percentile = finiteNumber(rox.percentile);
@@ -105,8 +125,8 @@ function buildInferredSection(rox, roxSegment) {
   return lines;
 }
 
-function buildExplicitSection(rox, roxSegment) {
-  const narrativeSection = buildNarrativeSection(rox);
+function buildExplicitSection(rox, roxSegment, onBenchmarkNote = null) {
+  const narrativeSection = buildNarrativeSection(rox, onBenchmarkNote);
   if (narrativeSection) return narrativeSection;
 
   const percentile = finiteNumber(rox.percentile);
@@ -145,6 +165,16 @@ function buildExplicitSection(rox, roxSegment) {
   return lines;
 }
 
+const ON_BENCHMARK_THRESHOLD_S = 30;
+
+function onBenchmarkNote(roxSegment, rox) {
+  const frameGap = finiteNumber(roxSegment?.frameGapSeconds) ?? finiteNumber(rox.timeGapToMedianSeconds);
+  if (frameGap === null || Math.abs(frameGap) > ON_BENCHMARK_THRESHOLD_S) return null;
+  return frameGap <= 0
+    ? "Your overall transition time was ahead of the benchmark — the detail below is worth monitoring but did not cost you time here."
+    : "Your overall transition time was on benchmark — the detail below shows where time was distributed within that.";
+}
+
 export function buildRoxzoneSection(analysisJson = {}) {
   const rox = analysisJson.roxzoneAnalysis ?? {};
   const roxSegment = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "roxzone_time") ?? null;
@@ -153,8 +183,10 @@ export function buildRoxzoneSection(analysisJson = {}) {
     return "No transition time data was available for this result.";
   }
 
+  const benchmarkNote = onBenchmarkNote(roxSegment, rox);
+
   if (rox.mode === "inferred_total") {
-    const content = buildInferredSection(rox, roxSegment);
+    const content = buildInferredSection(rox, roxSegment, benchmarkNote);
     if (rox.roxzoneNarrative?.available) {
       return content;
     }
@@ -162,5 +194,5 @@ export function buildRoxzoneSection(analysisJson = {}) {
     return Array.isArray(content) ? [inferredNote, ...content] : [inferredNote, content].filter(Boolean);
   }
 
-  return buildExplicitSection(rox, roxSegment);
+  return buildExplicitSection(rox, roxSegment, benchmarkNote);
 }

@@ -256,8 +256,11 @@ export function parseHyroxResultsHtml(html) {
 
     const divisionRaw = (extractByClass(html, "f-__event") ?? "").toLowerCase();
     let division = "open";
-    if (divisionRaw.includes("pro")) division = "pro";
-    else if (divisionRaw.includes("double") || divisionRaw.includes("mixed")) division = "doubles";
+    const hasDouble = divisionRaw.includes("double") || divisionRaw.includes("mixed");
+    const hasPro = divisionRaw.includes("pro");
+    if (hasDouble && hasPro) division = "pro_doubles";
+    else if (hasDouble) division = "doubles";
+    else if (hasPro) division = "pro";
     else if (divisionRaw.includes("relay")) division = "relay";
 
     const penalties = [];

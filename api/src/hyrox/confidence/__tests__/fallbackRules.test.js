@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildFallbackChain, makeBenchmarkGroupKey } from "../fallbackRules.js";
+import { INDIVIDUAL_ANALYSIS_DIVISIONS } from "../../config/divisionGroups.js";
+import { buildFallbackChain, isIndividualDivision, makeBenchmarkGroupKey } from "../fallbackRules.js";
 
 describe("makeBenchmarkGroupKey", () => {
   it("appends region to non-performance group keys", () => {
@@ -63,5 +64,15 @@ describe("buildFallbackChain regional matching", () => {
     const keys = chain.map((candidate) => candidate.groupKey);
     assert.equal(keys.length, new Set(keys).size);
     assert.equal(keys[0], "hyrox:singles_s8_v1:open:male:all:europe");
+  });
+});
+
+describe("isIndividualDivision", () => {
+  it("accepts every shared individual analysis division and mixed doubles aliases", () => {
+    for (const division of INDIVIDUAL_ANALYSIS_DIVISIONS) {
+      assert.equal(isIndividualDivision(division), true);
+    }
+    assert.equal(isIndividualDivision("mixed_doubles"), true);
+    assert.equal(isIndividualDivision("mixed"), true);
   });
 });

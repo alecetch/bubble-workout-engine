@@ -73,6 +73,30 @@ describe("RaceDetailsPage inline import panel", () => {
     expect(screen.queryByText(/Wall Balls cost you the most time/i)).not.toBeInTheDocument();
   });
 
+  test("mixed doubles paste import sets gender to mixed and division to doubles", async () => {
+    renderPage();
+    const mixedDoublesText = FULL_PAGE_TEXT.replace("Division\tHYROX", "Division\tMixed Doubles");
+
+    fireEvent.click(screen.getByRole("button", { name: /paste results text instead/i }));
+    fireEvent.change(screen.getByTestId("paste-area"), { target: { value: mixedDoublesText } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("parse-btn"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("confirm-btn"));
+    });
+
+    expect(loadDraft()?.athlete?.gender).toBe("mixed");
+    expect(loadDraft()?.race?.division).toBe("doubles");
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: /next: check splits/i })[0]);
+    });
+
+    expect(loadDraft()?.athlete?.gender).toBe("mixed");
+    expect(loadDraft()?.race?.division).toBe("doubles");
+  });
+
   test("Existing draft athlete name renders in title case", () => {
     saveDraft({
       athlete: { name: "gaston vanadia", gender: "male", ageGroup: "35-39" },

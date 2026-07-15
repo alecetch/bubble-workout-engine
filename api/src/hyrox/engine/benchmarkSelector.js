@@ -1,5 +1,10 @@
 import { DEFAULT_DATASET_VERSION } from "../config/benchmarkThresholds.js";
 import { featureFlags } from "../config/featureFlags.js";
+import {
+  ENRICHED_DOUBLES_DIVISIONS,
+  isDoublesAnalysisDivision,
+  normaliseAnalysisDivision,
+} from "../config/divisionGroups.js";
 import { countryToRegion, REGION_LABELS } from "../config/regionMapping.js";
 import { selectBenchmark } from "../confidence/benchmarkSelector.js";
 import { adjacentAgeBand, makeBenchmarkGroupKey } from "../confidence/fallbackRules.js";
@@ -16,6 +21,13 @@ function normalizeSex(raw) {
   if (v === "m") return "male";
   if (v === "w" || v === "f") return "female";
   return String(raw ?? "");
+}
+
+function normalizeBenchmarkAgeGroup(ageGroup) {
+  const key = String(ageGroup ?? "").trim();
+  if (key === "18-24") return "16-24";
+  if (key === "65-69") return "70+";
+  return ageGroup ?? null;
 }
 
 function groupKey({ datasetVersion = DEFAULT_DATASET_VERSION, division = null, gender = null, ageGroup = null, performanceBand = null, region = null }) {
@@ -67,6 +79,11 @@ const NEXT_BAND_MAP = Object.freeze({
   sub_65: "sub_60",
   sub_60: null,
 });
+
+export const PERFORMANCE_BAND_ORDER = Object.freeze([
+  "sub_60", "sub_65", "sub_70", "sub_75", "sub_80", "sub_85",
+  "sub_90", "sub_95", "sub_100", "sub_105", "sub_120", "over_120",
+]);
 
 export function nextPerformanceBand(band) {
   return NEXT_BAND_MAP[band] ?? null;
@@ -190,14 +207,7 @@ function resolveSinglesDatasetVersion(flag, request) {
   };
 }
 
-const ENRICHED_DOUBLES_DIVISIONS = new Set([
-  "doubles_male",
-  "doubles_female",
-  "doubles_mixed",
-  "pro_doubles_male",
-  "pro_doubles_female",
-  "pro_doubles_mixed",
-]);
+const ENRICHED_DOUBLES_DIVISION_SET = new Set(ENRICHED_DOUBLES_DIVISIONS);
 
 export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const datasetVersion = options.datasetVersion ?? DEFAULT_DATASET_VERSION;
@@ -223,21 +233,24 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
   const isAnalyseMode = calculatorMode === "analyse";
 
   const rawDivision = normalisedSubmission.athlete?.division ?? normalisedSubmission.race?.division ?? "open";
-  const isDoubles = rawDivision === "doubles" || rawDivision === "mixed_doubles" || rawDivision === "mixed" || ENRICHED_DOUBLES_DIVISIONS.has(rawDivision);
+  const canonicalDivision = normaliseAnalysisDivision(rawDivision);
+  const isDoubles = isDoublesAnalysisDivision(rawDivision);
   const gender = normalizeSex(normalisedSubmission.athlete?.sex ?? normalisedSubmission.athlete?.gender ?? "unknown");
   let division = rawDivision;
   let doublesBenchmarkedAsSingles = false;
   let useDoublesBenchmarks = false;
   let benchmarkDatasetVersion = datasetVersion;
   let benchmarkGender = gender;
-  let benchmarkAgeGroup = normalisedSubmission.athlete?.ageGroup ?? null;
+  let benchmarkAgeGroup = normalizeBenchmarkAgeGroup(normalisedSubmission.athlete?.ageGroup);
   const eventCountry = normalisedSubmission.race?.eventCountry ?? null;
   const athleteRegion = countryToRegion(eventCountry);
 
   if (isDoubles) {
     const doublesDivision =
-      ENRICHED_DOUBLES_DIVISIONS.has(rawDivision) ? rawDivision
-        : (rawDivision === "mixed_doubles" || rawDivision === "mixed") ? "doubles_mixed"
+      ENRICHED_DOUBLES_DIVISION_SET.has(canonicalDivision) ? canonicalDivision
+        : canonicalDivision === "pro_doubles"
+          ? (gender === "female" ? "pro_doubles_female" : gender === "mixed" ? "pro_doubles_mixed" : "pro_doubles_male")
+        : canonicalDivision === "doubles_mixed" ? "doubles_mixed"
         : gender === "female" ? "doubles_female"
           : "doubles_male";
 
@@ -260,8 +273,8 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
         division = "open";
         doublesBenchmarkedAsSingles = true;
       }
-    } else if (rawDivision === "mixed_doubles") {
-      division = "mixed_doubles";
+    } else if (canonicalDivision === "doubles_mixed") {
+      division = "doubles_mixed";
     } else {
       const historicalDoublesCheck = selectBenchmark(
         { datasetVersion, division: "doubles", gender, ageGroup: benchmarkAgeGroup },

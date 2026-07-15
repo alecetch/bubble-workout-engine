@@ -1,4 +1,5 @@
 import { HYROX_ANALYSIS_VERSION } from "../config/benchmarkThresholds.js";
+import { isIndividualAnalysisDivision } from "../config/divisionGroups.js";
 import { normaliseSubmission } from "./segmentNormaliser.js";
 import { selectBenchmarkGroups } from "./benchmarkSelector.js";
 import { approximatePercentile, calculateSegmentStats } from "./percentileCalculator.js";
@@ -153,17 +154,7 @@ function dataQuality(normalised, benchmarkContext) {
 
 function analysisScope(input, normalised, benchmarkContext) {
   const division = normalised.athlete?.division ?? normalised.race?.division;
-  if (division && ![
-    "open",
-    "pro",
-    "doubles",
-    "doubles_male",
-    "doubles_female",
-    "doubles_mixed",
-    "pro_doubles_male",
-    "pro_doubles_female",
-    "pro_doubles_mixed",
-  ].includes(division)) return "limited";
+  if (division && !isIndividualAnalysisDivision(division)) return "limited";
   if (!benchmarkContext.available) return "no_benchmark_data";
   const supplied = normalised.completeness.runSplits + normalised.completeness.stationSplits;
   if (supplied < 8) return "limited";
@@ -191,12 +182,13 @@ function addFrameGaps(segments, analysisFrame, calculatorMode) {
   const isAnalyse = calculatorMode === "analyse";
   const frame = analysisFrame?.frame;
   const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
+  const useNextBandGaps = isNextBandFrame || Boolean(analysisFrame?.useNextBandGaps);
 
   return segments.map((segment) => {
     let frameGapSeconds;
     if (!isAnalyse) {
       frameGapSeconds = segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
-    } else if (isNextBandFrame) {
+    } else if (useNextBandGaps) {
       frameGapSeconds = segment.timeGapToNextBandMedianSeconds ?? segment.timeGapToMedianSeconds ?? null;
     } else {
       frameGapSeconds = segment.timeGapToMedianSeconds ?? null;
@@ -227,7 +219,7 @@ export function analyseSubmission(input = {}) {
     nextBand: benchmarkContext.nextBand ?? null,
     gapToBandMedianSeconds: totalTimeSeg?.timeGapToMedianSeconds ?? null,
   });
-  const needsNextBandStats = analysisFrame.frame === "next_band" || analysisFrame.frame === "next_band_stretch";
+  const needsNextBandStats = analysisFrame.frame === "next_band" || analysisFrame.frame === "next_band_stretch" || Boolean(analysisFrame.useNextBandGaps);
   const segmentsWithNextBand = needsNextBandStats
     ? attachNextBandStats(baseSegments, benchmarkContext.nextBandGroup?.key ?? null)
     : baseSegments;

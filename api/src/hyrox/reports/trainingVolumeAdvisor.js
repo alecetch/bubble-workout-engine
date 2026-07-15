@@ -17,6 +17,12 @@ const AGE_RUNNING_MODIFIER = Object.freeze({
 });
 
 const BUCKET_MIDPOINTS = Object.freeze({
+  // Current frontend keys
+  "under_15_km": 10,
+  "15_30_km": 22,
+  "30_45_km": 37,
+  "45_plus_km": 55,
+  // Legacy keys (kept for backward compat with stored athlete_context_json)
   "0_10_km": 5,
   "11_20_km": 15,
   "21_40_km": 30,
@@ -25,6 +31,11 @@ const BUCKET_MIDPOINTS = Object.freeze({
 });
 
 const STRENGTH_VERDICTS = Object.freeze({
+  // Current frontend keys
+  "2_3_days_week": "optimal",
+  "4_5_days_week": "upper_range",
+  "6_plus_days_week": "excessive",
+  // Legacy keys
   "0_1": "below_minimum",
   "2_3": "optimal",
   "4_5": "upper_range",
@@ -40,11 +51,23 @@ const TIER_LABELS = Object.freeze({
 });
 
 const RUNNING_BACKGROUND_COPY = Object.freeze({
+  // Current frontend keys
+  new_to_strength: "Building a foundation of strength training alongside your running is likely the key lever for HYROX performance - consistent loaded work will unlock improvement in station output.",
+  general_gym: "General gym work provides a solid station base. Shift some training toward HYROX-paced loading and carry-specific movements to build race-specific output.",
+  crossfit_hybrid: "CrossFit movement patterns transfer well to HYROX stations, but sessions that focus on HYROX-specific pacing and loading rather than generic WODs will sharpen station performance more efficiently.",
+  strength_sport: "As an athlete from a strength sports background, it is common to default to more lifting than a hybrid event requires. The key question is whether your additional sessions are improving HYROX-specific output or adding fatigue that limits your running.",
+  // Legacy keys
   strength_sports: "As an athlete from a strength background, the aerobic ceiling is often the limiter that unlocks the next tier - running volume has an outsized return here.",
   team_sports: "Team sports typically develop short-burst conditioning rather than aerobic durability - longer aerobic work at easy to moderate intensity fills this gap.",
 });
 
 const STRENGTH_BACKGROUND_COPY = Object.freeze({
+  // Current frontend keys
+  new_to_strength: "As an athlete new to strength training, the loaded stations in HYROX become the key focus area - building a consistent strength base now will pay the sharpest dividends in your next race.",
+  general_gym: "General gym work gives you a solid foundation for HYROX stations. Shifting toward HYROX-specific loading patterns and pace will sharpen station output more efficiently than adding generic volume.",
+  crossfit_hybrid: "CrossFit movement patterns transfer well to HYROX stations, but sessions that focus on HYROX-specific pacing and loading rather than generic WODs will sharpen station performance more efficiently.",
+  strength_sport: "As an athlete from a strength sports background, it is common to default to more lifting than a hybrid event requires. The key question is whether your additional sessions are improving HYROX-specific output or adding fatigue that limits your running.",
+  // Legacy keys
   running: "For athletes with a stronger running base, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
   crossfit: "CrossFit movement patterns transfer well to HYROX stations, but sessions that focus on HYROX-specific pacing and loading rather than generic WODs will sharpen station performance more efficiently.",
   strength_sports: "As an athlete from a strength sports background, it is common to default to more lifting than a hybrid event requires. The key question is whether your additional sessions are improving HYROX-specific output or adding fatigue that limits your running.",

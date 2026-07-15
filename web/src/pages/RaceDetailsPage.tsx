@@ -21,7 +21,7 @@ import styles from "./RaceDetailsPage.module.css";
 type Division = "open" | "pro" | "doubles" | "relay";
 
 const VALID_DIVISIONS: Division[] = ["open", "pro", "doubles", "relay"];
-const AGE_GROUP_OPTIONS = ["18-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69"];
+export const AGE_GROUP_OPTIONS = ["16-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70+"];
 
 function formatDivisionLabel(value: Division): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -238,6 +238,10 @@ export function RaceDetailsPage() {
     }
     if (result.division && VALID_DIVISIONS.includes(result.division)) {
       setDivision(result.division);
+    }
+    if (result.divisionSex === "mixed") {
+      setGender("mixed");
+      setDivision("doubles");
     }
     if (result.finishTimeSeconds && result.finishTimeSeconds > 0) {
       setFinishTime(formatSeconds(result.finishTimeSeconds));

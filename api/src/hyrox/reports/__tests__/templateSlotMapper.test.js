@@ -77,6 +77,49 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[1].biggest_loss.delta, "+1:00");
   });
 
+  it("uses the engine headline limiter when a run gap is larger than every station gap", () => {
+    const runLimitedAnalysis = analysis({
+      timePotential: { headlineGainSeconds: 45 },
+      headline: {
+        biggestLimiter: { segmentKey: "run_5", label: "Run 5", type: "run", timeGapSeconds: 45, percentile: 22 },
+      },
+      limiters: [{ segmentKey: "run_5", label: "Run 5", type: "run", timeGapSeconds: 45, percentile: 22 }],
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 45, userSeconds: 4200 }),
+        segment("run_5", {
+          type: "run",
+          label: "Run 5",
+          userSeconds: 390,
+          timeGapToMedianSeconds: 45,
+          frameGapSeconds: 45,
+          percentile: 22,
+        }),
+        segment("wall_balls", {
+          label: "Wall Balls",
+          userSeconds: 360,
+          timeGapToMedianSeconds: 30,
+          frameGapSeconds: 30,
+          percentile: 35,
+        }),
+        segment("sled_push", {
+          label: "Sled Push",
+          userSeconds: 145,
+          timeGapToMedianSeconds: 15,
+          frameGapSeconds: 15,
+          percentile: 45,
+        }),
+      ],
+    });
+
+    const carousel = buildTemplateA(runLimitedAnalysis, [], { displayName: "Marcus Fernandes" });
+
+    assert.equal(carousel.slides[0].biggest_limiter, "RUN 5");
+    assert.equal(carousel.slides[0].limiter_word, "RUN 5");
+    assert.equal(carousel.slides[3].station, "RUN 5");
+    assert.equal(carousel.slides[4].loss_station, "run 5");
+    assert.notEqual(carousel.slides[0].biggest_limiter, "WALL BALLS");
+  });
+
   it("keeps a slide 1 hero image for target-mode athletes who beat all station medians (stationBreakdown fallback)", () => {
     // Athletes who beat every station median have no positive timeGapToMedianSeconds, so
     // limiterKey returns null. The hero image must still be resolved from stationBreakdown.

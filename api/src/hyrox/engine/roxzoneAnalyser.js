@@ -1,5 +1,7 @@
-import { ENTRY_KEYS, EXIT_KEYS, ROXZONE_KEYS, STATION_KEYS } from "../config/segmentMap.js";
+import { ENTRY_KEYS, EXIT_KEYS, ROXZONE_KEYS, SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { calculateSegmentStats } from "./percentileCalculator.js";
+
+const SEGMENT_LABELS = new Map(SEGMENT_MAP.map((segment) => [segment.segmentKey, segment.displayName]));
 
 const MAX_REASONABLE_REPLAY_DIFF_SECONDS = 10 * 60;
 const DISPLAY_STATIONS = Object.freeze([
@@ -27,7 +29,7 @@ function trendFromSlope(slope) {
 }
 
 function stationLabel(stationKey) {
-  return String(stationKey ?? "")
+  return SEGMENT_LABELS.get(stationKey) ?? String(stationKey ?? "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase())
     .replace(/\bErg\b/, "Erg");
@@ -74,7 +76,7 @@ function buildNarrativeCopy({ replayTotalSeconds, officialTotalSeconds, rounding
   let interpretationCopy = "RoxZone is race execution time: station setup, breathing reset, movement through the zone and leaving stations cleanly under fatigue.";
   const hasControlledLateDrift = scenarioTags.includes("controlled_roxzone") && scenarioTags.includes("late_race_drift");
   if (scenarioTags.includes("single_outlier") && worstCombined) {
-    interpretationCopy = `The biggest RoxZone story is around ${station}. That station accounted for the largest entry/exit cost, which suggests it disrupted your race rhythm more than the total alone shows.`;
+    interpretationCopy = `${station} had the largest station overhead of the race — more disruption to your rhythm than the station time alone shows.`;
   } else if (scenarioTags.includes("exit_led") && worstExit) {
     interpretationCopy = `Your longer RoxZone losses came after stations, especially after ${stationLabel(worstExit.stationKey)}. That usually points to recovery debt before you could get moving again.`;
   } else if (scenarioTags.includes("entry_led") && worstEntry) {
@@ -91,7 +93,7 @@ function buildNarrativeCopy({ replayTotalSeconds, officialTotalSeconds, rounding
 
   let actionCopy = "Rehearse station entry and exit inside compromised HYROX blocks: arrive, locate, hands on, go; then finish and move out without a full reset.";
   if (scenarioTags.includes("single_outlier") && worstCombined) {
-    actionCopy = `Prioritise compromised ${station} practice, then rehearse leaving the station immediately so the station does not cost time twice.`;
+    actionCopy = `Training cue: rehearse leaving ${station} immediately at the end. That station cost time twice.`;
   } else if (scenarioTags.includes("entry_led")) {
     actionCopy = "Use a simple station-entry script in training: enter, locate, hands on, first rep. The target is removing the pause before work starts.";
   } else if (scenarioTags.includes("exit_led")) {
@@ -102,9 +104,7 @@ function buildNarrativeCopy({ replayTotalSeconds, officialTotalSeconds, rounding
     actionCopy = "Put transition practice late in longer sessions, after 45-60 minutes of work, so race flow holds when fatigue is highest.";
   }
 
-  const caveatCopy = Number.isFinite(roundingDifferenceSeconds)
-    ? "Race Replay checkpoint rows are rounded before summing, so the station-by-station total may differ by a few seconds from the official RoxZone total."
-    : null;
+  const caveatCopy = null;
 
   return { summaryCopy, interpretationCopy, actionCopy, caveatCopy };
 }

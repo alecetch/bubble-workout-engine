@@ -25,8 +25,8 @@
       .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
       .control { display: grid; gap: 4px; min-width: 260px; flex: 1; }
       .control label { font-size: 12px; color: var(--muted); }
-      input, textarea, button { font: inherit; }
-      input, textarea { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; }
+      input, textarea, select, button { font: inherit; }
+      input, textarea, select { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; background: #fff; }
       textarea { min-height: 120px; resize: vertical; line-height: 1.4; font-family: Consolas, monospace; font-size: 13px; }
       button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 8px 12px; cursor: pointer; min-height: 38px; }
       button.secondary { background: #fff; color: var(--primary); }
@@ -94,6 +94,23 @@
         .test-case-annotations { grid-template-columns: 1fr; padding-left: 0; }
         .case-number, .metric-value { padding-bottom: 0; }
       }
+      .section-heading { margin: 0 0 10px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+      .predict-case { border: 1px solid #ecf0f4; border-radius: 6px; padding: 8px 10px; display: grid; gap: 8px; }
+      .predict-case-fields { display: grid; grid-template-columns: 42px 1fr 90px 90px 110px 100px 100px 110px minmax(220px, auto); gap: 10px; align-items: end; }
+      .predict-result { background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 13px; line-height: 1.6; }
+      .predict-result .pred-time { font-size: 22px; font-weight: 700; font-family: Consolas, monospace; color: var(--primary); }
+      .predict-result .pred-range { color: var(--muted); font-size: 12px; }
+      .predict-result .pred-confidence { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; background: #e5e7eb; color: #374151; margin-left: 8px; }
+      .predict-result .pred-section { margin-top: 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+      .predict-result .pred-items { margin: 2px 0 0; padding: 0 0 0 16px; font-size: 12px; color: var(--text); }
+      @media (max-width: 980px) {
+        .predict-case-fields { grid-template-columns: 1fr; }
+      }
+      .fetch-cache-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; font-size: 12px; }
+      .fetch-cache-bar .bookmarklet-link { display: inline-block; padding: 4px 10px; background: #1e40af; color: #fff; border-radius: 4px; text-decoration: none; font-size: 12px; cursor: grab; white-space: nowrap; }
+      .fetch-cache-bar .bookmarklet-link:hover { background: #1d3a9e; }
+      .fetch-cache-bar .cache-count { font-weight: 600; }
+      .fetch-cache-bar .cache-entries { font-size: 11px; color: var(--muted); }
     </style>
   </head>
   <body>
@@ -117,6 +134,37 @@
             </div>
           </div>
           <div class="row">
+            <div class="control">
+              <label for="training-frequency-select">How often do you currently train?*</label>
+              <select id="training-frequency-select">
+                <option value="">Not set</option>
+                <option value="2_3_days_week">2-3 days/week (maintenance)</option>
+                <option value="4_5_days_week">4-5 days/week (consistent)</option>
+                <option value="6_plus_days_week">6+ days/week (high volume)</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="running-volume-select">What is your current running volume?*</label>
+              <select id="running-volume-select">
+                <option value="">Not set</option>
+                <option value="under_15_km">Under 15 km (low)</option>
+                <option value="15_30_km">15-30 km (moderate)</option>
+                <option value="30_45_km">30-45 km (strong)</option>
+                <option value="45_plus_km">45+ km (high)</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="strength-background-select">What best describes your strength background?*</label>
+              <select id="strength-background-select">
+                <option value="">Not set</option>
+                <option value="new_to_strength">New to strength (needs base)</option>
+                <option value="general_gym">General gym (solid)</option>
+                <option value="crossfit_hybrid">CrossFit / hybrid (specific)</option>
+                <option value="strength_sport">Strength sport (power bias)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
             <button id="add-pasted-btn" class="secondary" type="button">Add Pasted URLs</button>
             <button id="add-row-btn" class="secondary" type="button">Add Empty Row</button>
             <button id="import-metadata-btn" class="secondary" type="button">Import Case Metadata</button>
@@ -133,16 +181,45 @@
             <span id="storage-summary"></span>
             <button id="export-cases-btn" class="secondary" type="button">Export Cases</button>
             <button id="import-cases-btn" class="secondary" type="button">Import Cases</button>
+            <button id="merge-cases-btn" class="secondary" type="button">Merge Cases</button>
             <button id="restore-backup-btn" class="secondary" type="button" hidden>Restore Last Backup</button>
             <input id="import-cases-file" type="file" accept="application/json,.json" hidden />
+            <input id="merge-cases-file" type="file" accept="application/json,.json" hidden />
           </div>
         </form>
         <div id="main-status" class="status"></div>
       </section>
 
       <section class="section">
+        <p class="section-heading">Fetch cache (browser bookmarklet)</p>
+        <div class="fetch-cache-bar">
+          <span>HYROX pages are blocked from the server — use this bookmarklet to pre-load pages from your browser:</span>
+          <a id="hyrox-bookmarklet" class="bookmarklet-link" href="#" title="Drag this to your bookmarks bar">📎 Cache HYROX Page</a>
+          <button id="refresh-cache-btn" class="secondary" type="button" style="min-height:28px;padding:3px 8px;font-size:12px;">Refresh status</button>
+          <button id="clear-cache-btn" class="secondary" type="button" style="min-height:28px;padding:3px 8px;font-size:12px;">Clear cache</button>
+          <span id="cache-status-label" class="cache-count">—</span>
+        </div>
+        <div id="cache-entries-list" class="cache-entries" style="margin-top:4px;"></div>
+      </section>
+
+      <section class="section">
+        <p class="section-heading">Mode 1: Analyse my race &amp; Mode 3: Hit a target time — cases</p>
         <div id="test-list" class="test-list">
           <div class="empty">Paste URLs to build a test list.</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="top-row">
+          <p class="section-heading" style="margin-bottom:0;">Mode 2: Predict My First HYROX — cases</p>
+          <div style="display:flex;gap:8px;">
+            <button id="add-predict-btn" class="secondary" type="button">Add Predict Case</button>
+            <button id="run-all-predict-btn" class="secondary" type="button">Run All</button>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">No HYROX URL needed. Required: 5k time, back squat 3RM, deadlift 3RM. Calls <code>/api/hyrox/predict</code> directly.</p>
+        <div id="predict-list" class="test-list">
+          <div class="empty">No predict cases yet.</div>
         </div>
       </section>
 
@@ -173,6 +250,9 @@
       const form = document.getElementById("harness-form");
       const tokenInput = document.getElementById("token-input");
       const pasteInput = document.getElementById("paste-input");
+      const trainingFrequencySelect = document.getElementById("training-frequency-select");
+      const runningVolumeSelect = document.getElementById("running-volume-select");
+      const strengthBackgroundSelect = document.getElementById("strength-background-select");
       const addPastedBtn = document.getElementById("add-pasted-btn");
       const addRowBtn = document.getElementById("add-row-btn");
       const importMetadataBtn = document.getElementById("import-metadata-btn");
@@ -187,8 +267,15 @@
       const exportCasesBtn = document.getElementById("export-cases-btn");
       const importCasesBtn = document.getElementById("import-cases-btn");
       const importCasesFile = document.getElementById("import-cases-file");
+      const mergeCasesBtn = document.getElementById("merge-cases-btn");
+      const mergeCasesFile = document.getElementById("merge-cases-file");
       const restoreBackupBtn = document.getElementById("restore-backup-btn");
       const storageSummary = document.getElementById("storage-summary");
+      const hyroxBookmarklet = document.getElementById("hyrox-bookmarklet");
+      const refreshCacheBtn = document.getElementById("refresh-cache-btn");
+      const clearCacheBtn = document.getElementById("clear-cache-btn");
+      const cacheStatusLabel = document.getElementById("cache-status-label");
+      const cacheEntriesList = document.getElementById("cache-entries-list");
       const downloadBtn = document.getElementById("download-btn");
       const statusEl = document.getElementById("main-status");
       const filenameEl = document.getElementById("filename");
@@ -281,6 +368,14 @@
           .split(/\r?\n/)
           .map((url) => url.trim())
           .filter(Boolean))];
+      }
+
+      function sharedAthleteContext() {
+        const context = {};
+        if (trainingFrequencySelect.value) context.weeklyStrengthSessions = trainingFrequencySelect.value;
+        if (runningVolumeSelect.value) context.weeklyRunningVolume = runningVolumeSelect.value;
+        if (strengthBackgroundSelect.value) context.primaryBackground = strengthBackgroundSelect.value;
+        return context;
       }
 
       function cleanCases() {
@@ -382,6 +477,28 @@
         persistCases();
         renderTestList();
         setStatus(`Imported ${cases.length} case(s).`, "ok");
+      }
+
+      function mergeImportedCases(payload) {
+        const importedCases = Array.isArray(payload) ? payload : payload?.cases;
+        if (!Array.isArray(importedCases)) throw new Error("Import file does not contain a cases array.");
+        const existing = new Set(cases.map((c) => c.url));
+        const toAdd = importedCases
+          .map((entry) => ({
+            url: String(entry?.url ?? "").trim(),
+            targetTime: String(entry?.targetTime ?? "").trim(),
+            label: String(entry?.label ?? "").trim(),
+            expectedCommentary: String(entry?.expectedCommentary ?? ""),
+          }))
+          .filter((entry) => (entry.url || entry.targetTime) && !existing.has(entry.url));
+        cases.push(...toAdd);
+        if (payload?.metadata && typeof payload.metadata === "object") {
+          metadataCache = { ...metadataCache, ...payload.metadata };
+          saveJson(METADATA_STORAGE_KEY, metadataCache);
+        }
+        persistCases();
+        renderTestList();
+        setStatus(`Merged ${toAdd.length} new case(s) (${importedCases.length - toAdd.length} already present).`, "ok");
       }
 
       function restoreBackup() {
@@ -509,6 +626,9 @@
         generateRaceCardsBtn.disabled = busy;
         exportCasesBtn.disabled = busy;
         importCasesBtn.disabled = busy;
+        mergeCasesBtn.disabled = busy;
+        refreshCacheBtn.disabled = busy;
+        clearCacheBtn.disabled = busy;
         restoreBackupBtn.disabled = busy;
         clearPreviewBtn.disabled = busy;
         addPastedBtn.disabled = busy;
@@ -567,7 +687,9 @@
               "Content-Type": "application/json",
               "x-internal-token": token,
             },
-            body: JSON.stringify(selected.length > 1 ? { cases: selected, artifact } : { ...selected[0], artifact }),
+            body: JSON.stringify(selected.length > 1
+              ? { cases: selected, artifact, ...sharedAthleteContext() }
+              : { ...selected[0], artifact, ...sharedAthleteContext() }),
           });
 
           if (!response.ok) throw new Error(await readError(response));
@@ -686,7 +808,9 @@
               "Content-Type": "application/json",
               "x-internal-token": token,
             },
-            body: JSON.stringify(selected.length > 1 ? { cases: selected, preview: true } : { ...selected[0], preview: true }),
+            body: JSON.stringify(selected.length > 1
+              ? { cases: selected, preview: true, ...sharedAthleteContext() }
+              : { ...selected[0], preview: true, ...sharedAthleteContext() }),
           });
 
           if (!response.ok) throw new Error(await readError(response));
@@ -807,6 +931,70 @@
           setStatus(error.message || "Could not import cases.", "err");
         }
       });
+      mergeCasesBtn.addEventListener("click", () => mergeCasesFile.click());
+      mergeCasesFile.addEventListener("change", async () => {
+        const file = mergeCasesFile.files?.[0];
+        mergeCasesFile.value = "";
+        if (!file) return;
+        try {
+          mergeImportedCases(JSON.parse(await file.text()));
+        } catch (error) {
+          setStatus(error.message || "Could not merge cases.", "err");
+        }
+      });
+      // --- Fetch cache bookmarklet & cache status ---
+      (function initFetchCache() {
+        // Build the bookmarklet href. The code runs on results.hyrox.com and POSTs HTML to local API.
+        const bmCode = `(function(){
+  var u=location.href;
+  if(!u.includes('results.hyrox.com')){alert('Navigate to a HYROX results page first.');return;}
+  var h=document.documentElement.outerHTML;
+  fetch('http://localhost:3000/api/hyrox/page-cache',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({url:u,html:h})
+  }).then(function(r){return r.json();}).then(function(d){
+    alert(d.ok?'Cached! ('+Math.round(h.length/1024)+' KB)  \\nKey: '+d.key:'Error: '+JSON.stringify(d));
+  }).catch(function(e){alert('POST failed. Is the API running on port 3000?\\n'+e.message);});
+})();`;
+        hyroxBookmarklet.href = "javascript:" + encodeURIComponent(bmCode);
+
+        async function refreshCacheStatus() {
+          try {
+            const resp = await fetch("/api/hyrox/page-cache");
+            const data = await resp.json();
+            cacheStatusLabel.textContent = `${data.count} page${data.count !== 1 ? "s" : ""} cached`;
+            if (data.count > 0) {
+              cacheEntriesList.innerHTML = data.entries.map((e) => {
+                let label;
+                try { label = new URL(e.url).searchParams.get("idp") ?? e.key; } catch { label = e.key; }
+                return `<span style="margin-right:12px;" title="${escapeHtml(e.url)}">✓ ${escapeHtml(label)} (${Math.round(e.htmlLength / 1024)} KB)</span>`;
+              }).join("");
+            } else {
+              cacheEntriesList.textContent = "";
+            }
+          } catch {
+            cacheStatusLabel.textContent = "cache unavailable";
+          }
+        }
+
+        refreshCacheBtn.addEventListener("click", refreshCacheStatus);
+
+        clearCacheBtn.addEventListener("click", async () => {
+          try {
+            const resp = await fetch("/api/hyrox/page-cache", { method: "DELETE" });
+            const data = await resp.json();
+            cacheStatusLabel.textContent = `Cleared ${data.cleared} page${data.cleared !== 1 ? "s" : ""}`;
+            cacheEntriesList.textContent = "";
+          } catch (e) {
+            setStatus("Could not clear cache: " + e.message, "err");
+          }
+        });
+
+        // Check status on load
+        refreshCacheStatus();
+      })();
+
       restoreBackupBtn.addEventListener("click", restoreBackup);
       addPastedBtn.addEventListener("click", addPastedUrls);
       addRowBtn.addEventListener("click", () => {
@@ -951,6 +1139,201 @@
       pasteInput.addEventListener("paste", () => {
         setTimeout(addPastedUrls, 0);
       });
+
+      // ── Predict cases (Mode 2) ──────────────────────────────────────────────
+      const PREDICT_CASES_KEY = "hyrox_test_harness_predict_cases_v1";
+      const PREDICT_SAMPLE = {
+        label: "Male open, recreational runner — baseline case",
+        sex: "male",
+        division: "open",
+        run5kTime: "22:00",
+        backSquat3RM: 90,
+        deadlift3RM: 110,
+        targetTime: "1:15:00",
+      };
+
+      let predictCases = loadJson(PREDICT_CASES_KEY, [PREDICT_SAMPLE]);
+
+      function savePredictCases() {
+        saveJson(PREDICT_CASES_KEY, predictCases);
+      }
+
+      function parseTimeToSeconds(raw) {
+        const value = String(raw ?? "").trim();
+        if (!value) return null;
+        if (/^\d+$/.test(value)) return Number(value);
+        const parts = value.split(":").map(Number);
+        if (parts.some((p) => !Number.isFinite(p) || p < 0)) return null;
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return null;
+      }
+
+      function formatPredictTime(seconds) {
+        if (!Number.isFinite(seconds)) return "-";
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.round(seconds % 60);
+        return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      }
+
+      function renderPredictList() {
+        const el = document.getElementById("predict-list");
+        if (!predictCases.length) {
+          el.innerHTML = '<div class="empty">No predict cases yet.</div>';
+          return;
+        }
+        el.innerHTML = predictCases.map((entry, i) => `
+          <div class="predict-case" data-predict-index="${i}">
+            <div class="predict-case-fields">
+              <div class="case-number">Case ${i + 1}</div>
+              <div class="field">
+                <label>Label</label>
+                <input class="predict-label-input" data-predict-index="${i}" type="text" value="${escapeHtml(entry.label ?? "")}" placeholder="e.g. Strong runner, moderate strength" />
+              </div>
+              <div class="field">
+                <label>Sex</label>
+                <select class="predict-sex-select" data-predict-index="${i}">
+                  <option value="male" ${entry.sex === "male" ? "selected" : ""}>Male</option>
+                  <option value="female" ${entry.sex === "female" ? "selected" : ""}>Female</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Division</label>
+                <select class="predict-division-select" data-predict-index="${i}">
+                  <option value="open" ${entry.division === "open" ? "selected" : ""}>Open</option>
+                  <option value="pro" ${entry.division === "pro" ? "selected" : ""}>Pro</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>5k time (mm:ss)</label>
+                <input class="predict-5k-input" data-predict-index="${i}" type="text" value="${escapeHtml(entry.run5kTime ?? "")}" placeholder="22:00" style="font-family:Consolas,monospace;font-size:12px;" />
+              </div>
+              <div class="field">
+                <label>Back squat 3RM (kg)</label>
+                <input class="predict-squat-input" data-predict-index="${i}" type="number" min="1" max="400" value="${escapeHtml(String(entry.backSquat3RM ?? ""))}" placeholder="90" style="font-family:Consolas,monospace;font-size:12px;" />
+              </div>
+              <div class="field">
+                <label>Deadlift 3RM (kg)</label>
+                <input class="predict-deadlift-input" data-predict-index="${i}" type="number" min="1" max="500" value="${escapeHtml(String(entry.deadlift3RM ?? ""))}" placeholder="110" style="font-family:Consolas,monospace;font-size:12px;" />
+              </div>
+              <div class="field">
+                <label>Target time (optional)</label>
+                <input class="predict-target-input" data-predict-index="${i}" type="text" value="${escapeHtml(entry.targetTime ?? "")}" placeholder="1:10:00" style="font-family:Consolas,monospace;font-size:12px;" />
+              </div>
+              <div class="case-actions">
+                <button class="secondary predict-run-btn" type="button" data-predict-index="${i}">Run</button>
+                <button class="danger predict-remove-btn" type="button" data-predict-index="${i}">Remove</button>
+              </div>
+            </div>
+            <div class="predict-result-area" id="predict-result-${i}" hidden></div>
+          </div>
+        `).join("");
+      }
+
+      function updatePredictCaseFromInputs(el) {
+        const i = Number(el.dataset.predictIndex);
+        if (!Number.isInteger(i) || !predictCases[i]) return;
+        const c = predictCases[i];
+        if (el.classList.contains("predict-label-input")) c.label = el.value;
+        if (el.classList.contains("predict-sex-select")) c.sex = el.value;
+        if (el.classList.contains("predict-division-select")) c.division = el.value;
+        if (el.classList.contains("predict-5k-input")) c.run5kTime = el.value.trim();
+        if (el.classList.contains("predict-squat-input")) c.backSquat3RM = el.value ? Number(el.value) : "";
+        if (el.classList.contains("predict-deadlift-input")) c.deadlift3RM = el.value ? Number(el.value) : "";
+        if (el.classList.contains("predict-target-input")) c.targetTime = el.value.trim();
+        savePredictCases();
+      }
+
+      function confidenceColor(label) {
+        if (label === "high") return "#0f766e";
+        if (label === "good") return "#1d4ed8";
+        if (label === "moderate") return "#d97706";
+        return "#dc3545";
+      }
+
+      async function runPredictCase(i) {
+        const entry = predictCases[i];
+        const resultEl = document.getElementById(`predict-result-${i}`);
+        if (!resultEl) return;
+
+        const run5kSeconds = parseTimeToSeconds(entry.run5kTime);
+        const backSquat = Number(entry.backSquat3RM);
+        const deadlift = Number(entry.deadlift3RM);
+
+        if (!run5kSeconds || run5kSeconds <= 0) { resultEl.hidden = false; resultEl.innerHTML = '<div class="status err">Enter a valid 5k time (mm:ss).</div>'; return; }
+        if (!backSquat || backSquat <= 0) { resultEl.hidden = false; resultEl.innerHTML = '<div class="status err">Enter a valid back squat 3RM (kg).</div>'; return; }
+        if (!deadlift || deadlift <= 0) { resultEl.hidden = false; resultEl.innerHTML = '<div class="status err">Enter a valid deadlift 3RM (kg).</div>'; return; }
+
+        resultEl.hidden = false;
+        resultEl.innerHTML = '<div class="status">Running prediction…</div>';
+
+        const body = {
+          athlete: { email: "harness@forma.internal", sex: entry.sex || "male", division: entry.division || "open" },
+          benchmarks: { run5kSeconds, backSquat3RM: backSquat, deadlift3RM: deadlift },
+        };
+        const targetSecs = parseTimeToSeconds(entry.targetTime);
+        if (targetSecs) body.race = { targetFinishTimeSeconds: targetSecs };
+
+        try {
+          const resp = await fetch("/api/hyrox/predict", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            const errText = (data.errors || []).map((e) => e.message).join(", ") || JSON.stringify(data);
+            resultEl.innerHTML = `<div class="status err">Prediction failed: ${escapeHtml(errText)}</div>`;
+            return;
+          }
+
+          const limiters = (data.topLimiters || []).slice(0, 3).map((l) => escapeHtml(l.label || l.segmentKey || "")).filter(Boolean);
+          const opportunities = (data.topOpportunities || []).slice(0, 3).map((o) => escapeHtml(o.label || o.segmentKey || "")).filter(Boolean);
+          const targetCmp = data.targetComparison;
+
+          resultEl.innerHTML = `
+            <div class="predict-result">
+              <div>
+                <span class="pred-time">${escapeHtml(data.predictedFinishFormatted || "-")}</span>
+                <span class="pred-confidence" style="background:${confidenceColor(data.confidenceLabel)};color:#fff;">${escapeHtml(data.confidenceLabel || "")}</span>
+                <span class="pred-range">Range: ${escapeHtml(data.rangeLowFormatted || "-")} – ${escapeHtml(data.rangeHighFormatted || "-")}</span>
+              </div>
+              ${targetCmp ? `<div style="margin-top:6px;font-size:12px;color:var(--muted);">vs target ${escapeHtml(targetCmp.targetFormatted || "")}: <strong style="color:${(targetCmp.gapSeconds || 0) >= 0 ? "#0f766e" : "#dc3545"};">${escapeHtml(targetCmp.gapFormatted || "")}</strong> ${(targetCmp.gapSeconds || 0) >= 0 ? "under target" : "over target"}</div>` : ""}
+              ${limiters.length ? `<div class="pred-section">Predicted limiters</div><ul class="pred-items">${limiters.map((l) => `<li>${l}</li>`).join("")}</ul>` : ""}
+              ${opportunities.length ? `<div class="pred-section">Predicted opportunities</div><ul class="pred-items">${opportunities.map((o) => `<li>${o}</li>`).join("")}</ul>` : ""}
+            </div>
+          `;
+        } catch (err) {
+          resultEl.innerHTML = `<div class="status err">${escapeHtml(err.message || "Prediction failed")}</div>`;
+        }
+      }
+
+      document.getElementById("add-predict-btn").addEventListener("click", () => {
+        predictCases.push({ label: "", sex: "male", division: "open", run5kTime: "", backSquat3RM: "", deadlift3RM: "", targetTime: "" });
+        savePredictCases();
+        renderPredictList();
+      });
+
+      document.getElementById("run-all-predict-btn").addEventListener("click", async () => {
+        for (let i = 0; i < predictCases.length; i++) await runPredictCase(i);
+      });
+
+      document.getElementById("predict-list").addEventListener("input", (e) => updatePredictCaseFromInputs(e.target));
+      document.getElementById("predict-list").addEventListener("change", (e) => updatePredictCaseFromInputs(e.target));
+      document.getElementById("predict-list").addEventListener("click", async (e) => {
+        const runBtn = e.target.closest(".predict-run-btn");
+        if (runBtn) { await runPredictCase(Number(runBtn.dataset.predictIndex)); return; }
+        const removeBtn = e.target.closest(".predict-remove-btn");
+        if (removeBtn) {
+          predictCases.splice(Number(removeBtn.dataset.predictIndex), 1);
+          savePredictCases();
+          renderPredictList();
+        }
+      });
+
+      renderPredictList();
+      // ── End predict cases ─────────────────────────────────────────────────────
 
       renderTestList();
       window.addEventListener("beforeunload", resetDownload);

@@ -596,7 +596,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       }
       return {
         headline: targetStr
-          ? `THE ROUTE TO ${targetStr} RUNS THROUGH YOUR RUNNING GAP`
+          ? `YOUR RUNNING GAP IS THE MAIN LEVER TO ${targetStr}`
           : "YOUR RUNNING GAP IS THE BIGGEST TARGET LEVER",
         subline: "Running pace is the main target opportunity.",
         gainDisplay: null,

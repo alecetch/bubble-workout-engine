@@ -40,12 +40,12 @@ export function normalizeName(raw: string | null): string | null {
 export function ageGroupFromAge(age: number | null | undefined): string | null {
   if (!Number.isFinite(age)) return null;
   const n = Number(age);
-  if (n < 18) return null;
-  if (n < 25) return "18-24";
-  if (n >= 65) return "65-69";
+  if (n < 16) return null;
+  if (n < 25) return "16-24";
+  if (n >= 70) return "70+";
   const lower = Math.floor(n / 5) * 5;
-  const start = Math.max(18, lower);
-  const end = start === 18 ? 24 : start + 4;
+  const start = Math.max(25, lower);
+  const end = start + 4;
   return `${start}-${end}`;
 }
 
@@ -53,13 +53,21 @@ export function normalizeAgeGroup(raw: string | null | undefined): string | null
   if (!raw) return null;
   const text = String(raw).trim().toUpperCase();
   const direct = text.match(/(\d{2})\s*[-–]\s*(\d{2})/);
-  if (direct) return `${direct[1]}-${direct[2]}`;
+  if (direct) {
+    const lower = Number(direct[1]);
+    const upper = Number(direct[2]);
+    if (lower >= 16 && lower <= 24 && upper === 24) return "16-24";
+    if (lower >= 25 && lower < 70 && upper === lower + 4) return `${lower}-${upper}`;
+    return null;
+  }
   const hyroxBand = text.match(/[MF]\s*(\d{2})/);
   if (hyroxBand) {
     const lower = Number(hyroxBand[1]);
-    if (lower >= 65) return "65-69";
+    if (lower >= 70) return "70+";
+    if (lower >= 16 && lower < 25) return "16-24";
     return `${lower}-${lower + 4}`;
   }
+  if (/^70\s*(\+|PLUS)$/.test(text)) return "70+";
   return null;
 }
 
@@ -91,6 +99,7 @@ export function saveImportedHyroxResult(result: HyroxParseResult): HyroxCalculat
       ...existing?.athlete,
       ...(normalizedName ? { name: normalizedName } : {}),
       ...(importedAgeGroup ? { ageGroup: importedAgeGroup } : {}),
+      ...(result.divisionSex === "mixed" ? { gender: "mixed" as const } : {}),
     },
     race: {
       ...existing?.race,

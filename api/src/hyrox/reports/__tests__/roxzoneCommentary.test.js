@@ -106,11 +106,176 @@ describe("buildRoxzoneSection", () => {
       },
     };
     const lines = asArray(buildRoxzoneSection(analysis)).join("\n");
-    assert.match(lines, /Race replay detail/i);
+    assert.match(lines, /combined \(/i);
     assert.match(lines, /Sandbag Lunges/);
     assert.match(lines, /2:19/);
-    assert.match(lines, /got slower later/i);
+    assert.match(lines, /progressively slower/i);
     assert.match(lines, /estimated from unallocated/i);
+  });
+
+  it("exit_led scenario: numeric detail matches the named exit station, with combined overhead shown separately when it differs", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 300,
+        percentOfTotalTime: 0.05,
+        entryExitAvailable: true,
+        entryTrend: "stable",
+        worstExit: { stationKey: "ski_erg", stationIndex: 1, seconds: 62 },
+        worstEntry: { stationKey: "row", stationIndex: 5, seconds: 40 },
+        stationOverhead: [
+          { stationKey: "sandbag_lunges", entrySeconds: 49, exitSeconds: 48, totalSeconds: 97 },
+        ],
+        roxzoneNarrative: {
+          available: true,
+          scenarioTags: ["exit_led"],
+          interpretationCopy: "Your longer RoxZone losses came after stations, especially after SkiErg. That usually points to recovery debt before you could get moving again.",
+          actionCopy: "Practise finishing stations and jogging out under high breathing load. The goal is to reduce the recovery pause after the final rep.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /SkiErg exit: 1:02/);
+    assert.match(lines, /Separately, your biggest combined entry\+exit overhead was at Sandbag Lunges/);
+    assert.match(lines, /0:49 in, 0:48 out/);
+  });
+
+  it("exit_led scenario: no separate combined line when the named exit station is also the combined-overhead leader", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 300,
+        percentOfTotalTime: 0.05,
+        entryExitAvailable: true,
+        entryTrend: "stable",
+        worstExit: { stationKey: "ski_erg", stationIndex: 1, seconds: 62 },
+        stationOverhead: [
+          { stationKey: "ski_erg", entrySeconds: 20, exitSeconds: 62, totalSeconds: 82 },
+        ],
+        roxzoneNarrative: {
+          available: true,
+          scenarioTags: ["exit_led"],
+          interpretationCopy: "Your longer RoxZone losses came after stations, especially after SkiErg.",
+          actionCopy: "Practise finishing stations and jogging out under high breathing load.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /SkiErg exit: 1:02/);
+    assert.equal(lines.includes("Separately"), false);
+  });
+
+  it("entry_led scenario: numeric detail matches the named entry station, with combined overhead shown separately when it differs", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 300,
+        percentOfTotalTime: 0.05,
+        entryExitAvailable: true,
+        entryTrend: "stable",
+        worstEntry: { stationKey: "wall_balls", stationIndex: 8, seconds: 58 },
+        stationOverhead: [
+          { stationKey: "sled_pull", entrySeconds: 45, exitSeconds: 40, totalSeconds: 85 },
+        ],
+        roxzoneNarrative: {
+          available: true,
+          scenarioTags: ["entry_led"],
+          interpretationCopy: "Your bigger leakage came before starting stations, especially before Wall Balls. That points to setup, navigation or hesitation before the first rep.",
+          actionCopy: "Use a simple station-entry script in training: enter, locate, hands on, first rep.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /Wall Balls entry: 0:58/);
+    assert.match(lines, /Separately, your biggest combined entry\+exit overhead was at Sled Pull/);
+  });
+
+  it("prepends on-benchmark note when frameGapSeconds is within threshold and narrative fires", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 307,
+        percentOfTotalTime: 0.046,
+        roxzoneNarrative: {
+          available: true,
+          replayTotalSeconds: 305,
+          officialTotalSeconds: 307,
+          roundingDifferenceSeconds: 2,
+          summaryCopy: "Your Race Replay rows add up to 305s.",
+          interpretationCopy: "Your longer RoxZone losses came after stations, especially after SkiErg.",
+          actionCopy: "Practise finishing stations and jogging out under high breathing load.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+      segments: [{ segmentKey: "roxzone_time", frameGapSeconds: 9 }],
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /on benchmark/i);
+    assert.match(lines, /detail below/i);
+    assert.match(lines, /SkiErg/);
+  });
+
+  it("does not prepend on-benchmark note when frameGapSeconds exceeds threshold", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 420,
+        percentOfTotalTime: 0.06,
+        roxzoneNarrative: {
+          available: true,
+          replayTotalSeconds: 418,
+          officialTotalSeconds: 420,
+          roundingDifferenceSeconds: 2,
+          summaryCopy: "Your Race Replay rows add up to 418s.",
+          interpretationCopy: "Sandbag Lunges had the largest station overhead.",
+          actionCopy: "Training cue: rehearse leaving Sandbag Lunges immediately.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+      segments: [{ segmentKey: "roxzone_time", frameGapSeconds: 95 }],
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
+    assert.doesNotMatch(lines, /on benchmark/i);
+    assert.doesNotMatch(lines, /detail below/i);
+  });
+
+  it("prepends ahead-of-benchmark note when frameGapSeconds is negative and within threshold", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 280,
+        percentOfTotalTime: 0.04,
+        roxzoneNarrative: {
+          available: true,
+          replayTotalSeconds: 279,
+          officialTotalSeconds: 280,
+          roundingDifferenceSeconds: 1,
+          summaryCopy: "Your Race Replay rows add up to 279s.",
+          interpretationCopy: "Your RoxZone execution was controlled.",
+          actionCopy: "Keep transition practice late in longer sessions.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+      segments: [{ segmentKey: "roxzone_time", frameGapSeconds: -15 }],
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /ahead of the benchmark/i);
+    assert.match(lines, /did not cost you time/i);
   });
 
   it("uses roxzone narrative copy and rounded checkpoint caveat when available", () => {

@@ -1,5 +1,6 @@
 import { RUN_KEYS, ROXZONE_KEYS, STATION_KEYS } from "../config/segmentMap.js";
-import { INDIVIDUAL_BENCHMARK_DIVISIONS, VALIDATION_THRESHOLDS } from "../config/validationThresholds.js";
+import { isDoublesAnalysisDivision, isIndividualAnalysisDivision } from "../config/divisionGroups.js";
+import { VALIDATION_THRESHOLDS } from "../config/validationThresholds.js";
 import { VALIDATION_RULES } from "./validationRules.js";
 
 function isFiniteSeconds(value) {
@@ -12,7 +13,7 @@ function allSegmentsPresent(record, keys) {
 
 function plausibilityFlags(record) {
   const flags = [];
-  const thresholds = record.division === "doubles"
+  const thresholds = isDoublesAnalysisDivision(record.division)
     ? VALIDATION_THRESHOLDS.doublesPlausibility
     : VALIDATION_THRESHOLDS.plausibility;
 
@@ -61,7 +62,7 @@ export function validateResult(record, options = {}) {
   const ruleResults = VALIDATION_RULES.map((rule) => rule(record));
   const flags = [...new Set(ruleResults.map((r) => r.flag).filter(Boolean).concat(plausibilityFlags(record)))];
 
-  const individualDivision = INDIVIDUAL_BENCHMARK_DIVISIONS.includes(record.division);
+  const individualDivision = isIndividualAnalysisDivision(record.division);
   const validTotal = isFiniteSeconds(record.total_time_seconds) && record.total_time_seconds > 0 && record.gender !== "unknown";
   const runConsistent = !flags.includes("run_split_sum_mismatch_fail") && allSegmentsPresent(record, RUN_KEYS) && isFiniteSeconds(record.run_time_seconds);
   const stationConsistent = !flags.includes("work_split_sum_mismatch_fail") && allSegmentsPresent(record, STATION_KEYS) && isFiniteSeconds(record.work_time_seconds);

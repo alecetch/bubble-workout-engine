@@ -150,10 +150,7 @@ function opportunityGap(row, analysisJson) {
 }
 
 export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athleteContext = {}) {
-  const limiter = [...stationSegments(analysisJson)]
-    .filter((row) => opportunityGap(row, analysisJson) > 0)
-    .sort((a, b) => (opportunityGap(b, analysisJson) - opportunityGap(a, analysisJson)) || (a.percentile - b.percentile))[0]
-    ?? opportunityStation(analysisJson);
+  const limiter = opportunityStation(analysisJson);
   const strength = bestStation(analysisJson);
   const gain = analysisJson.timePotential?.headlineGainSeconds ?? analysisJson.headline?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? limiter?.timeGapToMedianSeconds ?? 0;
   const rank = rankLanguage(analysisJson, athleteContext);

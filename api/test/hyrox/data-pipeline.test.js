@@ -136,6 +136,19 @@ test("doubles_record is stored and eligible for doubles overall benchmark sets",
   assert.equal(validation.benchmarkEligibility.run, false);
 });
 
+test("enriched and mixed doubles divisions use individual eligibility and doubles plausibility", () => {
+  for (const division of ["doubles_mixed", "mixed_doubles"]) {
+    const record = normaliseResult(readFixture("valid_complete_record.json"));
+    record.division = division;
+    record.segments.row.seconds = 100;
+
+    const validation = validateResult(record);
+
+    assert.equal(validation.benchmarkEligibility.overall, true);
+    assert.ok(!validation.flags.includes("plausibility_row"));
+  }
+});
+
 test("SEGMENT_MAP has exactly 40 entries", () => {
   assert.equal(SEGMENT_MAP.length, 40);
 });
