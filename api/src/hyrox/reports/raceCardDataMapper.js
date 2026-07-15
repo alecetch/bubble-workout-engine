@@ -1,6 +1,8 @@
 import { SEGMENT_MAP } from "../config/segmentMap.js";
 import { isDoublesAnalysisDivision } from "../config/divisionGroups.js";
-import { comparisonOptionsArray, worldwideTopPercentFromComparison } from "./comparisonOptions.js";
+import { comparisonLabel, hasGoalGroup } from "./comparisonBasis.js";
+import { benchmarkConfidenceQualifier, comparisonOptionsArray, percentileTextWithFallback } from "./comparisonOptions.js";
+import { penaltyContext } from "./penaltyContext.js";
 
 function formatSeconds(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return null;
@@ -41,16 +43,12 @@ function segment(analysisJson, key) {
   return analysisJson.segments?.find((row) => row.segmentKey === key) ?? null;
 }
 
-function hasGoalGroup(analysisJson) {
-  return Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup);
-}
-
 function targetGapSeconds(row, goalAvailable) {
+  if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
   if (Number.isFinite(row?.timeGapToExactTargetSeconds)) return row.timeGapToExactTargetSeconds;
   if (goalAvailable && Number.isFinite(row?.goalBenchmarkSeconds) && Number.isFinite(row?.userSeconds)) {
     return row.userSeconds - row.goalBenchmarkSeconds;
   }
-  if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
   return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
 }
 
@@ -70,6 +68,8 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   const athlete = aj.athlete ?? {};
   const benchmarkContext = aj.benchmarkContext ?? {};
   const timePotential = aj.timePotential ?? {};
+  const penalty = penaltyContext(aj);
+  const comparisonBasis = comparisonLabel(aj);
 
   // Athlete name — prefer context displayName, then athlete.name
   const athleteName =
@@ -85,14 +85,17 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   const targetTimeSeconds = race.targetTimeSeconds ?? null;
   const targetTime = targetTimeSeconds != null ? formatSeconds(targetTimeSeconds) : null;
 
-  // Analysis mode
-  const mode = targetTimeSeconds != null ? "target" : "analyse";
+  // Analysis mode — prefer the analysis engine's own calculatorMode (authoritative) when present;
+  // fall back to inferring from the comparison basis for callers/fixtures that predate that field.
+  const mode = aj.calculatorMode === "analyse" || aj.calculatorMode === "target"
+    ? aj.calculatorMode
+    : comparisonBasis === "MEDIAN" ? "analyse" : "target";
 
   // Percentile text from first available comparison option.
   const compOpts = comparisonOptionsArray(benchmarkContext);
-  const worldwideTopPercent = worldwideTopPercentFromComparison(benchmarkContext);
-  const percentileText =
-    worldwideTopPercent != null ? `TOP ${worldwideTopPercent}% WORLDWIDE` : null;
+  const overall = segment(aj, "total_time");
+  const percentileText = percentileTextWithFallback(benchmarkContext, overall, athleteContext.overallPercentile);
+  const confidenceQualifier = benchmarkConfidenceQualifier(benchmarkContext);
 
   // Forma Score — use the total-population percentile from comparisonOptions (same source as
   // "TOP N% WORLDWIDE" label) so both figures are always consistent. overallPerformanceScore is
@@ -117,7 +120,15 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   const biggestLimiterData = headline.biggestLimiter ?? null;
   const headlineGainSeconds =
     timePotential.headlineGainSeconds ?? headline.headlineGainSeconds ?? null;
-  const biggestLimiter = biggestLimiterData
+  const biggestLimiter = penalty.usePenaltyHero
+    ? {
+        name: "Penalties",
+        potentialGain: formatSeconds(penalty.totalPenaltySeconds),
+        rankText: null,
+        caption: "Fastest controllable win",
+        isPenalty: true,
+      }
+    : biggestLimiterData
     ? {
         name: biggestLimiterData.label,
         potentialGain:
@@ -127,6 +138,13 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
             ? ordinalRank(biggestLimiterData.percentile)
             : null,
         caption: null,
+      }
+    : null;
+  const penaltySummary = penalty.totalPenaltySeconds >= 60
+    ? {
+        label: "Penalties",
+        value: formatSeconds(penalty.totalPenaltySeconds),
+        isDominant: penalty.usePenaltyHero,
       }
     : null;
 
@@ -155,10 +173,13 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
     finishTime,
     targetTime,
     percentileText,
+    confidenceQualifier,
     formaScore,
     mode,
+    comparisonBasis,
     strongestStation,
     biggestLimiter,
+    penaltySummary,
     splitRows,
     isDoubles,
   };

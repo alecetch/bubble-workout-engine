@@ -452,7 +452,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
   const gain = headlineGainSeconds(analysisJson);
   const gainDisplay = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : null;
   // emailTopLabel (when provided) is the top-ranked individual segment from the email's own
-  // rankedGaps list, sorted by raw gap magnitude with no tie-breaker and excluding aggregates.
+  // opportunity table basis, using the canonical limiter tie-break.
   // This ensures the hero names the same segment as the Biggest Opportunities table.
   const lLabel = emailTopLabel ?? limiterLabel(analysisJson);
   const analysisFrame = analysisJson?.benchmarkContext?.analysisFrame;

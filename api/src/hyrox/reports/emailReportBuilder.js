@@ -1,6 +1,8 @@
 import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatTime, regionalContextLine } from "./copyFormatter.js";
 import { buildHeroCopy } from "../interpretation/hyroxInterpretationEngine.js";
 import { PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
+import { findBiggestLimiter } from "../engine/limiterService.js";
+import { penaltyContext } from "./penaltyContext.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -185,25 +187,6 @@ function applyUnifiedDarkTheme(html) {
 
 function limiterName(analysisJson = {}) {
   return analysisJson.headline?.biggestLimiter?.label ?? analysisJson.limiters?.[0]?.label ?? null;
-}
-
-function penaltyContext(analysisJson = {}) {
-  const penalties = analysisJson.penalties ?? [];
-  const totalPenaltySeconds = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
-  const totalTimeSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
-  const totalGapSeconds = Math.max(0, splitGapSeconds(totalTimeSeg, Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup)) ?? 0);
-  const penaltiesAreMaterial =
-    totalPenaltySeconds >= 60 ||
-    (totalGapSeconds > 0 && totalPenaltySeconds / totalGapSeconds >= 0.10);
-  const usePenaltyHero =
-    totalPenaltySeconds >= 180 &&
-    totalGapSeconds > 0 &&
-    totalPenaltySeconds / totalGapSeconds >= 0.25;
-  const raceTimeSeconds = analysisJson.race?.finishTimeSeconds ?? null;
-  const adjustedRaceTimeSeconds = totalPenaltySeconds > 0 && Number.isFinite(raceTimeSeconds)
-    ? raceTimeSeconds - totalPenaltySeconds
-    : null;
-  return { penalties, totalPenaltySeconds, totalGapSeconds, penaltiesAreMaterial, usePenaltyHero, adjustedRaceTimeSeconds };
 }
 
 function contentText(content) {
@@ -617,8 +600,12 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     : selectedTargetSeconds;
   const benchmarkTime = comparisonSeconds ? formatTime(comparisonSeconds) : "-";
   const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "-";
-  // Deliberately demographic-wide: fieldPercentile can differ from the band-relative Benchmark Lens standing.
+  const usesAgeGroupStanding = Number.isFinite(Number(totalSeg?.fieldPercentile))
+    && analysisJson.benchmarkContext?.ageBenchmark?.available === true;
+  // Deliberately demographic-wide: fieldPercentile can differ from the band-relative Benchmark Lens standing
+  // and from the share-pack's all-ages worldwide comparison. Qualify the label when it is age-relative.
   const rank = esc(formatOverallStanding(totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
+  const rankLabel = usesAgeGroupStanding ? "OVERALL STANDING (AGE GROUP)" : "OVERALL STANDING";
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds;
   const targetGapSeconds = Number.isFinite(finishSeconds) && Number.isFinite(selectedTargetSeconds)
     ? finishSeconds - selectedTargetSeconds
@@ -667,7 +654,7 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
         )
 		      : metricCell("TARGET TIME", esc(benchmarkTime), "#f8fafc", true);
   const thirdCell = calculatorMode === "analyse"
-    ? metricCell("OVERALL STANDING", rank, "#f8fafc", hasPenalties, "Inter,Arial,Helvetica,sans-serif")
+    ? metricCell(rankLabel, rank, "#f8fafc", hasPenalties, "Inter,Arial,Helvetica,sans-serif")
     : metricCell(
         "TARGET GAP",
         esc(targetGap),
@@ -2402,7 +2389,12 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
 }
 
 export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target") {
-  const { totalPenaltySeconds: emailPenaltySeconds, penaltiesAreMaterial: emailPenaltiesMaterial, usePenaltyHero } = penaltyContext(analysisJson);
+  const {
+    penalties: emailPenalties,
+    totalPenaltySeconds: emailPenaltySeconds,
+    penaltiesAreMaterial: emailPenaltiesMaterial,
+    usePenaltyHero,
+  } = penaltyContext(analysisJson);
   const legacyLimiter = limiterName(analysisJson);
 
   // Compute the email's top-ranked opportunity using the same gap basis as renderSegmentHighlights,
@@ -2416,12 +2408,38 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     }
     return seg.frameGapSeconds ?? seg.timeGapToMedianSeconds ?? null;
   }
-  const emailTopRanked = SPLIT_TABLE_RACE_ORDER
-    .map((key) => ({ key, seg: emailSegMap.get(key), gap: emailGapSeconds(emailSegMap.get(key)) }))
-    .filter((r) => r.seg?.label && Number.isFinite(r.gap) && r.gap > 0)
-    .sort((a, b) => b.gap - a.gap);
-  const emailTopLabel = emailTopRanked[0]?.seg?.label ?? legacyLimiter;
-  const emailTopSegType = emailTopRanked[0]?.seg?.type ?? null;
+  function emailPenaltySecondsForSegmentKey(segmentKey) {
+    return emailPenalties.reduce((sum, penalty) => {
+      const keys = [penalty.segmentKey, penalty.runKey, penalty.station]
+        .filter(Boolean)
+        .map((value) => String(value));
+      return keys.includes(segmentKey) ? sum + (Number(penalty.penaltySeconds) || 0) : sum;
+    }, 0);
+  }
+  function emailOpportunityGapSeconds(seg) {
+    const rawGap = emailGapSeconds(seg);
+    if (!emailPenaltiesMaterial || !seg?.segmentKey || !Number.isFinite(rawGap)) return rawGap;
+    const segmentPenaltySeconds = emailPenaltySecondsForSegmentKey(seg.segmentKey);
+    return segmentPenaltySeconds > 0 ? rawGap - segmentPenaltySeconds : rawGap;
+  }
+  const emailOpportunitySegments = SPLIT_TABLE_RACE_ORDER
+    .map((key) => {
+      const seg = emailSegMap.get(key);
+      const gap = emailOpportunityGapSeconds(seg);
+      if (!seg?.label || !Number.isFinite(gap)) return null;
+      return {
+        ...seg,
+        frameGapSeconds: gap,
+        timeGapToExactTargetSeconds: undefined,
+        timeGapToMedianSeconds: gap,
+        confidence: seg.confidence ?? "high",
+      };
+    })
+    .filter(Boolean);
+  const emailTopLimiter = findBiggestLimiter(emailOpportunitySegments);
+  const emailTopSeg = emailTopLimiter?.segmentKey ? emailSegMap.get(emailTopLimiter.segmentKey) : null;
+  const emailTopLabel = emailTopLimiter?.label ?? legacyLimiter;
+  const emailTopSegType = emailTopLimiter?.type ?? emailTopSeg?.type ?? null;
   const heroOverrideCopy = interpretation?.primaryThesis
     ? buildHeroCopy(interpretation.primaryThesis, analysisJson, calculatorMode, emailTopLabel, emailTopSegType)
     : null;

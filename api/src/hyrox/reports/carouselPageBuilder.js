@@ -299,7 +299,7 @@ export function buildCarouselPage(carouselData = {}) {
         <div class="percentile"><span class="trophy">&#127942;</span> <span data-field="slides.2.percentile">BENCHMARKED</span></div>
         <div class="thin-rule"></div>
         <div class="giant" data-field="slides.2.position_gain">-</div>
-        <div class="subhero blue">TIME AHEAD OF MEDIAN</div>
+        <div class="subhero blue" data-field="slides.2.position_gain_label">TIME AHEAD OF MEDIAN</div>
         <p class="caption" data-field="slides.2.caption">This is the strongest benchmarked area in this result.</p>
       </div>
       <div class="footer">DATA SOURCE: HYROX OFFICIAL</div>

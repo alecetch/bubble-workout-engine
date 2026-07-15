@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildEmailReport, gapPill } from "../emailReportBuilder.js";
+import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
+import { buildTemplateA } from "../templateSlotMapper.js";
 import { bandScoreLabel, formatOverallStanding } from "../copyFormatter.js";
+import { buildCaption } from "../../sharePack/captionBuilder.js";
 import { ANALYSIS_FRAMES } from "../../engine/analysisFrameSelector.js";
 
 function mockReport(extraSections = []) {
@@ -1196,6 +1199,29 @@ describe("target mode email", () => {
     const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
     assert.ok(!htmlBody.includes("percentile overall"), "email must not contain raw percentile ordinal");
     assert.ok(htmlBody.includes("Top ") && htmlBody.includes("% overall"), "email must contain Top X% overall");
+  });
+
+  it("qualifies the email metric-strip standing when it uses age-group population", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_80",
+        primaryBenchmarkGroup: { label: "Open Male" },
+        ageBenchmark: { available: true, ageGroup: "45-49", fieldPercentile: 94 },
+        comparisonOptions: [
+          { id: "global", label: "Global", percentile: 86, topPercent: 14 },
+          { id: "age_group", label: "Age group 45-49", percentile: 94, topPercent: 6 },
+        ],
+      },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+
+    assert.match(htmlBody, /OVERALL STANDING \(AGE GROUP\)/i);
+    assert.match(htmlBody, /Top 6% overall/i);
+    assert.doesNotMatch(htmlBody, /Top 14% overall/i);
   });
 
   it("target mode route section does not put run splits in station-efficiency bullet", () => {
@@ -3242,7 +3268,7 @@ describe("feature-144: gapPill directional badge and route guard", () => {
     assert.doesNotMatch(htmlBody, /from station efficiency/i);
   });
 
-  it("buildEmailReport hero headline uses emailTopLabel when it differs from biggestLimiter", () => {
+  it("buildEmailReport hero headline uses canonical limiter tie-break when gaps are close", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60" },
@@ -3271,7 +3297,50 @@ describe("feature-144: gapPill directional badge and route guard", () => {
       tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
     };
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), interpretation, "target");
-    assert.match(htmlBody, /SKIERG/i);
-    assert.doesNotMatch(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+    assert.match(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+    assert.doesNotMatch(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SKIERG/i);
+  });
+
+  it("keeps email, carousel, race card, and caption on the same limiter after tie-break", () => {
+    const analysis = mockAnalysis({
+      race: { finishTimeSeconds: 4361, targetTimeSeconds: 3600 },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+        comparisonOptions: [{ percentile: 72, topPercent: 28 }],
+        achievedBand: "sub_65",
+      },
+      headline: {
+        biggestLimiter: { label: "Sled Push", segmentKey: "sled_push", type: "station", timeGapSeconds: 95, percentile: 30 },
+        biggestStrength: { label: "SkiErg", segmentKey: "ski_erg", type: "station", percentile: 82 },
+      },
+      timePotential: { headlineGainSeconds: 95 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", frameGapSeconds: 761, goalBenchmarkSeconds: 3600, userSeconds: 4361, percentile: 45 },
+        { segmentKey: "ski_erg", type: "station", label: "SkiErg", frameGapSeconds: -20, userSeconds: 280, percentile: 82 },
+        { segmentKey: "sled_push", type: "station", label: "Sled Push", frameGapSeconds: 95, userSeconds: 250, percentile: 30 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 105, userSeconds: 400, percentile: 60 },
+      ],
+    });
+    const interpretation = {
+      primaryThesis: { category: "station_capacity", confidence: "high" },
+      heroCopy: { headline: "THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH", subline: null, gainDisplay: null },
+      sectionOrder: [],
+      summaryBullets: [],
+      secondaryTheses: [],
+    };
+    const athleteContext = { displayName: "Alex Smith", targetFinishTimeSeconds: 3600 };
+    const email = buildEmailReport(mockReport(), analysis, athleteContext, interpretation, "target");
+    const carousel = buildTemplateA(analysis, [], athleteContext);
+    const raceCard = buildHyroxRaceCardData(analysis, athleteContext);
+    const caption = buildCaption({ slide0: carousel.slides[0], athleteContext, analysisJson: analysis });
+
+    assert.match(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH/i);
+    assert.doesNotMatch(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+    assert.equal(carousel.slides[0].biggest_limiter, "SLED PUSH");
+    assert.equal(carousel.slides[3].station, "SLED PUSH");
+    assert.equal(raceCard.biggestLimiter.name, "Sled Push");
+    assert.match(caption, /Biggest opportunity: SLED PUSH/);
+    assert.doesNotMatch(caption, /Biggest opportunity: WALL BALLS/);
   });
 });

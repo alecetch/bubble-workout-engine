@@ -18,3 +18,31 @@ export function worldwideTopPercentFromComparison(benchmarkContext = {}) {
   if (!Number.isFinite(percentile)) return null;
   return Math.max(1, Math.round(100 - percentile));
 }
+
+export function overallRankLabel(percentile) {
+  const n = Number(percentile);
+  if (!Number.isFinite(n)) return null;
+  const topPct = Math.max(1, Math.round(100 - n));
+  return `Top ${topPct}%`;
+}
+
+export function percentileTextWithFallback(benchmarkContext = {}, overallSegment = {}, athleteOverallPercentile = null) {
+  const worldwideTopPercent = worldwideTopPercentFromComparison(benchmarkContext);
+  if (worldwideTopPercent != null) return `TOP ${worldwideTopPercent}% WORLDWIDE`;
+
+  return overallRankLabel(
+    overallSegment?.fieldPercentile ??
+    overallSegment?.percentile ??
+    athleteOverallPercentile,
+  );
+}
+
+export function benchmarkConfidenceQualifier(benchmarkContext = {}) {
+  if (
+    benchmarkContext?.confidenceLabel === "insufficient" ||
+    benchmarkContext?.doublesBenchmarkedAsSingles === true
+  ) {
+    return "directional";
+  }
+  return null;
+}

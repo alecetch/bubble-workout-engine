@@ -51,8 +51,13 @@ function splitDoublesAthletes(name) {
   return parts.length >= 2 ? parts.slice(0, 2).map(splitPersonName) : null;
 }
 
+function hasDoublesNameShape(name) {
+  return /\s&\s/.test(String(name ?? ""));
+}
+
 function nameLines(name, isDoubles) {
-  const doubles = isDoubles ? splitDoublesAthletes(name) : null;
+  const shouldSplitDoublesName = isDoubles || hasDoublesNameShape(name);
+  const doubles = shouldSplitDoublesName ? splitDoublesAthletes(name) : null;
   if (doubles) {
     return doubles.map((person) => [
       { text: person.first, tone: "white" },
@@ -69,11 +74,12 @@ function nameLines(name, isDoubles) {
 
 function nameFontSize(name, isDoubles, lines = null) {
   const renderedLines = lines ?? nameLines(name, isDoubles);
+  const shouldUseDoublesSizing = isDoubles || hasDoublesNameShape(name);
   const longest = Math.max(
     0,
     ...renderedLines.map((line) => line.map((part) => part.text).join(" ").replace(/[^a-zA-Z]/g, "").length),
   );
-  if (isDoubles) {
+  if (shouldUseDoublesSizing) {
     if (longest > 24) return 32;
     if (longest > 18) return 35;
     return 38;
@@ -427,10 +433,13 @@ export function buildRaceCardHtml(data) {
     finishTime   = "--:--",
     targetTime   = null,
     percentileText = null,
+    confidenceQualifier = null,
     formaScore   = null,
     mode         = "analyse",
+    comparisonBasis = mode === "target" ? "TARGET" : "MEDIAN",
     strongestStation = null,
     biggestLimiter   = null,
+    penaltySummary = null,
     splitRows    = [],
     isDoubles    = false,
   } = data ?? {};
@@ -439,6 +448,16 @@ export function buildRaceCardHtml(data) {
   const nfs = nameFontSize(athleteName, isDoubles, athleteNameLines);
   const chart = splitRows.length >= 2 ? buildChart(splitRows) : "";
   const hasCards = strongestStation || biggestLimiter;
+  const basisLabel = escapeHtml(comparisonBasis || (mode === "target" ? "TARGET" : "MEDIAN"));
+  const modeTitle = mode === "target" ? "TARGET" : "ANALYSE";
+  const modeSubtitle = comparisonBasis === "TARGET BENCHMARK"
+    ? "TARGET BENCHMARK"
+    : comparisonBasis === "TARGET"
+    ? "TARGET COMPARISON"
+    : "BENCHMARK MEDIAN";
+  const percentileDisplay = percentileText && confidenceQualifier
+    ? `${percentileText} (${confidenceQualifier})`
+    : percentileText;
 
   // Rank ordinal for limiter stat box: "3rd percentile" → "3RD"
   const rankOrdinal = biggestLimiter?.rankText
@@ -586,11 +605,15 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
     <div class="sc">
       <div class="slbl">Finish Time</div>
       <div class="stime">${escapeHtml(finishTime ?? "--:--")}</div>
-      ${percentileText ? `<div class="smeta">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        ${escapeHtml(percentileText)}
-      </div>` : ""}
-    </div>
+	      ${percentileDisplay ? `<div class="smeta">
+	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+	        ${escapeHtml(percentileDisplay)}
+	      </div>` : ""}
+	      ${penaltySummary ? `<div class="smeta am">
+	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+	        PENALTIES: ${escapeHtml(penaltySummary.value)}
+	      </div>` : ""}
+	    </div>
     <div class="sdiv"></div>
     <div class="sc">
       ${targetTime ? `
@@ -601,8 +624,8 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
         YOU'VE GOT MORE IN THE TANK.
       </div>` : `
       <div class="slbl">Mode</div>
-      <div class="stime" style="font-size:32px;color:var(--cyan);margin-top:4px;">ANALYSE</div>
-      <div class="smeta" style="margin-top:6px;">BENCHMARK COMPARISON</div>`}
+      <div class="stime" style="font-size:32px;color:var(--cyan);margin-top:4px;">${modeTitle}</div>
+      <div class="smeta" style="margin-top:6px;">${escapeHtml(modeSubtitle)}</div>`}
     </div>
   </div>
 
@@ -623,7 +646,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
     </div>` : ""}
 
     ${biggestLimiter ? `<div class="card am-card">
-      <div class="card-hdr am">Biggest Limiter</div>
+	      <div class="card-hdr am">${biggestLimiter.isPenalty ? "Biggest Opportunity" : "Biggest Limiter"}</div>
       <div class="card-body">
         <div>${hexIcon(biggestLimiter.name, "#fbbf24")}</div>
         <div class="card-info">
@@ -634,19 +657,19 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
               <div class="stat-val am">${rankOrdinal}</div>
               <div class="stat-sub">Percentile</div>
             </div>` : ""}
-            ${biggestLimiter.potentialGain ? `<div class="stat-box">
-              <div class="stat-lbl">Potential Gain</div>
-              <div class="stat-val am">${escapeHtml(biggestLimiter.potentialGain)}</div>
-              <div class="stat-sub">In This Station</div>
-            </div>` : ""}
+	            ${biggestLimiter.potentialGain ? `<div class="stat-box">
+	              <div class="stat-lbl">${biggestLimiter.isPenalty ? "Fastest Win" : "Potential Gain"}</div>
+	              <div class="stat-val am">${escapeHtml(biggestLimiter.potentialGain)}</div>
+	              <div class="stat-sub">${biggestLimiter.isPenalty ? "Execution Time" : "In This Station"}</div>
+	            </div>` : ""}
           </div>` : ""}
         </div>
       </div>
       <div class="card-div"></div>
       <div class="card-cta am">
         <svg class="cta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-        THIS IS WHAT HELD YOU BACK.<br/>FOCUS HERE, UNLOCK BIG TIME.
-      </div>
+	        ${biggestLimiter.isPenalty ? "CLEAN THIS UP FIRST.<br/>RECLAIM TIME BEFORE CHASING FITNESS." : "THIS IS WHAT HELD YOU BACK.<br/>FOCUS HERE, UNLOCK BIG TIME."}
+	      </div>
     </div>` : ""}
 
   </div>` : ""}
@@ -656,8 +679,8 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
     <div class="sp-head">
       <div class="sp-title">Race Split Profile</div>
       <div class="sp-legend">
-        <div class="leg"><div class="dot bl"></div>FASTER THAN YOUR AVERAGE</div>
-        <div class="leg"><div class="dot rd"></div>SLOWER THAN YOUR AVERAGE</div>
+        <div class="leg"><div class="dot bl"></div>FASTER THAN ${basisLabel}</div>
+        <div class="leg"><div class="dot rd"></div>SLOWER THAN ${basisLabel}</div>
       </div>
     </div>
     ${chart}

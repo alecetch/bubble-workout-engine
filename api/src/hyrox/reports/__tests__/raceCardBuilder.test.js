@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildRaceCardHtml } from "../raceCardBuilder.js";
+import { buildTemplateA } from "../templateSlotMapper.js";
 
 function fixtureData(overrides = {}) {
   return {
@@ -89,6 +90,39 @@ function assertDoublesNameSplit(html) {
   assert.doesNotMatch(athlete, /<div class="sname"><span class="name-wh">ALICE<\/span><\/div>\s*<div class="sname"><span class="name-cy">SMITH &amp; JONES, BOB<\/span><\/div>/);
 }
 
+function dominantPenaltyAnalysis() {
+  return {
+    athlete: { name: "Alex Smith", division: "open" },
+    race: { finishTimeSeconds: 5600, targetTimeSeconds: 5000 },
+    benchmarkContext: {
+      goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "Target" },
+    },
+    headline: {
+      biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 },
+    },
+    timePotential: { headlineGainSeconds: 90 },
+    penalties: [{ station: "run_5", penaltySeconds: 200 }],
+    segments: [
+      { segmentKey: "total_time", type: "aggregate", userSeconds: 5600, frameGapSeconds: 600, percentile: 45 },
+      { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 380, frameGapSeconds: 90, percentile: 35 },
+    ],
+  };
+}
+
+function confidenceCaveatAnalysis(benchmarkContextOverrides = {}) {
+  return {
+    athlete: { name: "Alex Smith", division: "open" },
+    race: { finishTimeSeconds: 5738 },
+    benchmarkContext: {
+      comparisonOptions: [{ percentile: 96, topPercent: 4 }],
+      ...benchmarkContextOverrides,
+    },
+    segments: [
+      { segmentKey: "total_time", type: "aggregate", userSeconds: 5738, percentile: 96 },
+    ],
+  };
+}
+
 describe("buildRaceCardHtml asset-backed artwork", () => {
   it("renders the header hero as an image when the asset loads", () => {
     const html = buildRaceCardHtml(fixtureData());
@@ -163,10 +197,135 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assertDoublesNameSplit(html);
   });
 
+  it("splits ampersand-joined athlete names even when doubles metadata is absent", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      athleteName: "John Smith & Jane Doe",
+      isDoubles: false,
+    }));
+    const athlete = sectionBetween(html, '<div class="slbl">Athlete</div>', '<div class="sdiv"></div>');
+
+    assert.match(athlete, /<div class="sname"><span class="name-wh">JOHN<\/span> <span class="name-cy">SMITH<\/span><\/div>/);
+    assert.match(athlete, /<div class="sname"><span class="name-wh">JANE<\/span> <span class="name-cy">DOE<\/span><\/div>/);
+    assert.doesNotMatch(athlete, /SMITH &amp; JANE DOE/);
+  });
+
   it("splits mapped pro-doubles and mixed-doubles athlete names into one athlete per line", () => {
     for (const division of ["pro_doubles_male", "mixed", "mixed_doubles"]) {
       assertDoublesNameSplit(mappedRaceCardHtmlForDivision(division));
     }
+  });
+
+  it("uses penalties as the race-card headline opportunity when penalties dominate the total gap", () => {
+    const data = buildHyroxRaceCardData(dominantPenaltyAnalysis());
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.biggestLimiter.name, "Penalties");
+    assert.equal(data.biggestLimiter.potentialGain, "3:20");
+    assert.equal(data.biggestLimiter.isPenalty, true);
+    assert.equal(data.penaltySummary.value, "3:20");
+    assert.match(html, /Biggest Opportunity/);
+    assert.match(html, /<div class="card-title">Penalties<\/div>/);
+    assert.match(html, /PENALTIES: 3:20/);
+    assert.doesNotMatch(html, /<div class="card-title">Wall Balls<\/div>/);
+  });
+
+  it("labels split chart bars with the same comparison basis as the carousel", () => {
+    const medianBasedAnalysis = {
+      athlete: { name: "Alex Smith", division: "open" },
+      race: { finishTimeSeconds: 5738 },
+      benchmarkContext: {
+        comparisonOptions: [{ percentile: 72, topPercent: 28 }],
+      },
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 66, percentile: 18 },
+        biggestStrength: { segmentKey: "sled_pull", label: "Sled Pull", type: "station", percentile: 88 },
+      },
+      timePotential: { headlineGainSeconds: 66 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", userSeconds: 5738, frameGapSeconds: 240, percentile: 72 },
+        { segmentKey: "run_1", type: "run", label: "Run 1", userSeconds: 300, benchmarkMedianSeconds: 330, frameGapSeconds: -30, timeGapToMedianSeconds: -30, percentile: 76 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 386, benchmarkMedianSeconds: 320, frameGapSeconds: 66, timeGapToMedianSeconds: 66, percentile: 18 },
+        { segmentKey: "sled_pull", type: "station", label: "Sled Pull", userSeconds: 170, benchmarkMedianSeconds: 190, frameGapSeconds: -20, timeGapToMedianSeconds: -20, percentile: 88 },
+      ],
+    };
+
+    const raceCard = buildHyroxRaceCardData(medianBasedAnalysis);
+    const carousel = buildTemplateA(medianBasedAnalysis, [], { displayName: "Alex Smith", calculatorMode: "analyse" });
+    const html = buildRaceCardHtml(raceCard);
+
+    assert.equal(raceCard.comparisonBasis, carousel.slides[1].comparison_basis);
+    assert.equal(raceCard.comparisonBasis, "MEDIAN");
+    assert.match(html, /FASTER THAN MEDIAN/);
+    assert.match(html, /SLOWER THAN MEDIAN/);
+    assert.doesNotMatch(html, /YOUR AVERAGE/);
+  });
+
+  it("renders frame-adjusted split gaps before goal-derived gaps", () => {
+    const data = buildHyroxRaceCardData({
+      calculatorMode: "analyse",
+      athlete: { name: "Alex Smith", division: "open" },
+      race: { finishTimeSeconds: 3600 },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3300, label: "55:00 target" },
+        comparisonOptions: [],
+      },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", userSeconds: 3600, frameGapSeconds: 300, percentile: 70 },
+        {
+          segmentKey: "run_1",
+          type: "run",
+          label: "Run 1",
+          userSeconds: 300,
+          goalBenchmarkSeconds: 250,
+          frameGapSeconds: -12,
+          timeGapToMedianSeconds: 20,
+          percentile: 70,
+        },
+        {
+          segmentKey: "wall_balls",
+          type: "station",
+          label: "Wall Balls",
+          userSeconds: 360,
+          goalBenchmarkSeconds: 300,
+          frameGapSeconds: 45,
+          timeGapToMedianSeconds: 80,
+          percentile: 40,
+        },
+      ],
+    });
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.splitRows.find((row) => row.key === "run_1").delta, "-0:12");
+    assert.match(html, />\+0:12</);
+    assert.doesNotMatch(html, />-0:50</);
+  });
+
+  it("marks low-confidence race-card percentiles as directional", () => {
+    const data = buildHyroxRaceCardData(confidenceCaveatAnalysis({ confidenceLabel: "insufficient" }));
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.confidenceQualifier, "directional");
+    assert.match(html, /TOP 4% WORLDWIDE \(directional\)/);
+  });
+
+  it("marks doubles-benchmarked-as-singles race-card percentiles as directional", () => {
+    const data = buildHyroxRaceCardData(confidenceCaveatAnalysis({ doublesBenchmarkedAsSingles: true }));
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.confidenceQualifier, "directional");
+    assert.match(html, /TOP 4% WORLDWIDE \(directional\)/);
+  });
+
+  it("does not mark high-confidence race-card percentiles as directional", () => {
+    const data = buildHyroxRaceCardData(confidenceCaveatAnalysis({
+      confidenceLabel: "strong",
+      doublesBenchmarkedAsSingles: false,
+    }));
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.confidenceQualifier, null);
+    assert.match(html, /TOP 4% WORLDWIDE/);
+    assert.doesNotMatch(html, /\(directional\)/);
   });
 
   it("does not throw when cards and split rows are absent", () => {
