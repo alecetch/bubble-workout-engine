@@ -529,3 +529,22 @@ test("feature-144: buildHeroCopy running category names station when emailTopSeg
   const result = buildHeroCopy(primaryThesis, analysisJson, "target", "Wall Balls", "station");
   assert.match(result.headline, /WALL BALLS/i);
 });
+
+test("running hero with station top split does not claim running is larger when station aggregate gap is larger", () => {
+  const primaryThesis = { category: "running" };
+  const analysisJson = {
+    headline: { biggestLimiter: null },
+    benchmarkContext: { goalBenchmarkGroup: { targetFinishSeconds: 3600 } },
+    segments: [
+      { segmentKey: "total_time", type: "aggregate", exactTargetSeconds: 3600 },
+      { segmentKey: "work_time", type: "aggregate", frameGapSeconds: 247, userSeconds: 2047, goalBenchmarkSeconds: 1800 },
+      { segmentKey: "run_time", type: "aggregate", frameGapSeconds: 227, userSeconds: 2027, goalBenchmarkSeconds: 1800 },
+    ],
+    timePotential: {},
+  };
+
+  const result = buildHeroCopy(primaryThesis, analysisJson, "target", "Sled Push", "station");
+  assert.match(result.headline, /SLED PUSH/i);
+  assert.doesNotMatch(result.subline, /running pace is the larger aggregate target lever/i);
+  assert.match(result.subline, /Station work is the larger aggregate target lever/i);
+});

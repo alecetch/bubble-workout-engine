@@ -120,6 +120,8 @@ describe("buildEmailReport visual redesign", () => {
 
     assert.ok(report.htmlBody.includes("8,359 teams"), "doubles sample size appears in method note");
     assert.ok(report.htmlBody.includes("dedicated doubles dataset"), "doubles data source note appears in method note");
+    assert.ok(report.htmlBody.includes("this comparison group includes 8,359 teams"), "doubles sample size is scoped to the comparison group");
+    assert.doesNotMatch(report.htmlBody, /dedicated doubles dataset \(\d[\d,]* teams\)/i);
     assert.ok(!report.htmlBody.includes("DOUBLES BENCHMARK"), "standalone doubles benchmark box is no longer rendered");
     assert.ok(!report.htmlBody.includes("DOUBLES RESULT"));
   });
@@ -1252,6 +1254,40 @@ describe("target mode email", () => {
     assert.ok(!htmlBody.includes("from station efficiency, led by Wall Balls and Run 6"));
   });
 
+  it("target route running figure matches the running gap stated in MAIN INSIGHT", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60", key: "sub_60" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+        achievedBand: "sub_85",
+      },
+      headline: {
+        biggestLimiter: { label: "Run 4", segmentKey: "run_4", type: "run", timeGapSeconds: 2213, percentile: 20 },
+      },
+      timePotential: { headlineGainSeconds: 2213 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total", frameGapSeconds: 1280, userSeconds: 4880, goalBenchmarkSeconds: 3600, exactTargetSeconds: 3600 },
+        { segmentKey: "work_time", type: "aggregate", label: "Stations", frameGapSeconds: 1000, userSeconds: 2800, goalBenchmarkSeconds: 1800, exactTargetSeconds: 1800 },
+        { segmentKey: "run_time", type: "aggregate", label: "Running", frameGapSeconds: 2213, userSeconds: 4013, goalBenchmarkSeconds: 1800, exactTargetSeconds: 1800 },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", frameGapSeconds: 120, userSeconds: 220, goalBenchmarkSeconds: 100, exactTargetSeconds: 100 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 1000, userSeconds: 1360, goalBenchmarkSeconds: 360, exactTargetSeconds: 360, percentile: 30 },
+        { segmentKey: "run_4", type: "run", label: "Run 4", frameGapSeconds: 2213, userSeconds: 2513, goalBenchmarkSeconds: 300, exactTargetSeconds: 300, percentile: 20 },
+      ],
+    });
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const insightHtml = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+    const routeHtml = htmlBody.slice(htmlBody.indexOf("YOUR ROUTE TO"), htmlBody.indexOf("TARGET PRIORITIES"));
+
+    assert.match(insightHtml, /\+36:53/);
+    assert.match(routeHtml, /around 36:53 from running pace/i);
+    assert.doesNotMatch(routeHtml, /around 2:40 from running pace/i);
+  });
+
   it("target mode RoxZone gap of +15 s is On target not Opportunity", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
@@ -2044,6 +2080,37 @@ describe("renderSplitTable", () => {
     assert.doesNotMatch(snippetFor("RoxZone"), /background-color:#22c55e/);
   });
 
+  it("segment profile station legend shows the true negative station gap", () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: {
+        achievedBand: "sub_90",
+        primaryBenchmarkGroup: { label: "Open Men 30-39" },
+      },
+      overrides: {
+        work_time: {
+          timeGapToMedianSeconds: -862,
+          frameGapSeconds: -862,
+        },
+        run_time: {
+          timeGapToMedianSeconds: 1000,
+          frameGapSeconds: 1000,
+        },
+        roxzone_time: {
+          timeGapToMedianSeconds: 0,
+          frameGapSeconds: 0,
+        },
+        total_time: {
+          timeGapToMedianSeconds: 138,
+          frameGapSeconds: 138,
+        },
+      },
+    }, "analyse");
+    const profileHtml = htmlBody.slice(htmlBody.indexOf("SEGMENT PROFILE"), htmlBody.indexOf("Strengths to protect"));
+    const stationsSnippet = profileHtml.slice(profileHtml.indexOf("Stations") - 180, profileHtml.indexOf("Stations") + 160);
+    assert.match(stationsSnippet, /Stations -14:22|Stations −14:22/);
+    assert.doesNotMatch(stationsSnippet, /Stations 0:00/);
+  });
+
   it("segment profile colors positive RoxZone target gaps as non-green", () => {
     const htmlBody = renderSplit({
       overrides: {
@@ -2114,6 +2181,55 @@ describe("renderSplitTable", () => {
     const profileHtml = htmlBody.slice(htmlBody.indexOf("SEGMENT PROFILE"), htmlBody.indexOf("Strengths to protect"));
     const roxSnippet = profileHtml.slice(profileHtml.indexOf("RoxZone") - 180, profileHtml.indexOf("RoxZone") + 120);
     assert.match(roxSnippet, /background-color:#22c55e/);
+  });
+
+  it("flags impossible-fast station splits and avoids confident main-limiter wording", () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: {
+        achievedBand: "sub_90",
+        primaryBenchmarkGroup: { label: "Open Men 30-39" },
+      },
+      overrides: {
+        sandbag_lunges: {
+          userSeconds: 3,
+          benchmarkMedianSeconds: 186,
+          timeGapToMedianSeconds: -183,
+          frameGapSeconds: -183,
+          percentile: 95,
+        },
+        work_time: {
+          userSeconds: 2114,
+          benchmarkMedianSeconds: 2100,
+          timeGapToMedianSeconds: 14,
+          frameGapSeconds: 14,
+        },
+        run_time: {
+          userSeconds: 1947,
+          benchmarkMedianSeconds: 2100,
+          timeGapToMedianSeconds: -153,
+          frameGapSeconds: -153,
+        },
+        roxzone_time: {
+          userSeconds: 405,
+          benchmarkMedianSeconds: 180,
+          timeGapToMedianSeconds: 225,
+          frameGapSeconds: 225,
+          percentile: 5,
+        },
+        total_time: {
+          userSeconds: 4656,
+          benchmarkMedianSeconds: 4416,
+          timeGapToMedianSeconds: 240,
+          frameGapSeconds: 240,
+        },
+      },
+    }, "analyse");
+    const insightHtml = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+    assert.match(insightHtml, /split values look unusual|directional until those times are checked/i);
+    assert.doesNotMatch(insightHtml, /largest positive gap is stations|stations are the largest contributor/i);
+
+    const profileHtml = htmlBody.slice(htmlBody.indexOf("Biggest opportunities"), htmlBody.indexOf("Strengths to protect"));
+    assert.match(profileHtml, /unusually large gap|double-check/i);
   });
 
   it("segment profile does not render green when all aggregate gaps are positive", () => {
@@ -2687,10 +2803,71 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes(">STN<"), "split table should contain STN pill");
   });
 
-  it('split table uses "Gap vs median" column header instead of "+/-"', () => {
+  it('target mode reduced split table uses "Gap vs target" column header', () => {
     const htmlBody = renderSplit();
+    assert.ok(htmlBody.includes("Gap vs target"), 'expected "Gap vs target" column header');
+    assert.ok(!htmlBody.includes("Gap vs median"), 'target mode should not show "Gap vs median" column header');
+    assert.ok(!htmlBody.includes("+/−"), 'should not contain old "+/−" header');
+  });
+
+  it('analyse mode split table keeps "Gap vs median" column header instead of "+/-"', () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
+    }, "analyse");
     assert.ok(htmlBody.includes("Gap vs median"), 'expected "Gap vs median" column header');
     assert.ok(!htmlBody.includes("+/−"), 'should not contain old "+/−" header');
+  });
+
+  it("target mode empty strengths fallback references target profile, not benchmark", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        sled_pull: { timeGapToExactTargetSeconds: 20, frameGapSeconds: 20 },
+      },
+    }, "target");
+    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    assert.match(strengthsHtml, /No segments clearly ahead of target profile/i);
+    assert.doesNotMatch(strengthsHtml, /ahead of benchmark/i);
+  });
+
+  it("analyse mode empty strengths fallback keeps benchmark wording", () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
+      overrides: {
+        sled_pull: { timeGapToMedianSeconds: 20, frameGapSeconds: 20 },
+      },
+    }, "analyse");
+    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    assert.match(strengthsHtml, /No segments clearly ahead of benchmark/i);
+  });
+
+  it("target mode anomalous-gap warning references target profile, not benchmark", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        wall_balls: {
+          userSeconds: 130,
+          timeGapToExactTargetSeconds: 100,
+          frameGapSeconds: 100,
+        },
+      },
+    }, "target");
+    const opportunitiesHtml = htmlBody.slice(htmlBody.indexOf("Biggest opportunities"), htmlBody.indexOf("Strengths to protect"));
+    assert.match(opportunitiesHtml, /unusually large gap vs the target profile/i);
+    assert.doesNotMatch(opportunitiesHtml, /gap vs the benchmark/i);
+  });
+
+  it("analyse mode anomalous-gap warning keeps benchmark wording", () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
+      overrides: {
+        wall_balls: {
+          userSeconds: 130,
+          timeGapToMedianSeconds: 100,
+          frameGapSeconds: 100,
+        },
+      },
+    }, "analyse");
+    const opportunitiesHtml = htmlBody.slice(htmlBody.indexOf("Biggest opportunities"), htmlBody.indexOf("Strengths to protect"));
+    assert.match(opportunitiesHtml, /unusually large gap vs the benchmark/i);
   });
 
   it("split table does not add up-arrow indicators in the gap column", () => {
@@ -2703,6 +2880,20 @@ describe("renderSplitTable", () => {
       { sections: [splitSection] }, analysisWithFullSplits, {}, null,
     );
     assert.ok(htmlBody.includes("MAIN INSIGHT"));
+  });
+
+  it("MAIN INSIGHT names running when the small running gap is larger than stations", () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
+      overrides: {
+        run_time: { frameGapSeconds: undefined, timeGapToMedianSeconds: 50 },
+        work_time: { frameGapSeconds: undefined, timeGapToMedianSeconds: 22 },
+        total_time: { frameGapSeconds: undefined, timeGapToMedianSeconds: 72 },
+      },
+    }, "analyse");
+    const insightHtml = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+    assert.match(insightHtml, /Running is the largest contributor/i);
+    assert.doesNotMatch(insightHtml, /Stations are the largest contributor at[^.]*0:22/i);
   });
 
   it("renders all four summary card labels", () => {
@@ -2980,6 +3171,32 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     assert.ok(htmlBody.includes("80:00"), "Comparison group should show the escalated sub-85 range, not the athlete's own sub-90 range");
     assert.ok(htmlBody.includes("84:59"), "Comparison group should show the escalated sub-85 range end");
     assert.ok(htmlBody.includes("10,725"), "hero 'Compared against' sample size should come from the escalated band's group");
+  });
+
+  it("doubles method note scopes sample size to the resolved comparison group", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          useDoublesBenchmarks: true,
+          doublesBenchmarkedAsSingles: false,
+          achievedBand: "sub_90",
+          nextBand: "sub_85",
+          analysisFrame: { frame: "next_band", comparisonBand: "sub_85", stretchBand: null, gapToBandMedianSeconds: -80 },
+          primaryBenchmarkGroup: { label: "Doubles Female", sampleSize: 4200 },
+          nextBandGroup: { label: "Doubles Female", sampleSize: 10725 },
+        },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 73, fieldPercentile: 52 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    assert.match(htmlBody, /Compared against 10,725 80:00.84:59 finishers/);
+    assert.match(htmlBody, /this comparison group includes 10,725 teams, not singles data/i);
+    assert.doesNotMatch(htmlBody, /dedicated doubles dataset \(10,725 teams\)/i);
+    assert.doesNotMatch(htmlBody, /this comparison group includes 4,200 teams/i);
   });
 
   for (const frame of Object.values(ANALYSIS_FRAMES)) {
@@ -3342,5 +3559,128 @@ describe("feature-144: gapPill directional badge and route guard", () => {
     assert.equal(raceCard.biggestLimiter.name, "Sled Push");
     assert.match(caption, /Biggest opportunity: SLED PUSH/);
     assert.doesNotMatch(caption, /Biggest opportunity: WALL BALLS/);
+  });
+
+  it("keeps subject, hero, opportunities table, and target priorities on the canonical opportunity", () => {
+    const analysis = mockAnalysis({
+      race: { finishTimeSeconds: 4361, targetTimeSeconds: 3600 },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+        achievedBand: "sub_65",
+      },
+      headline: {
+        biggestLimiter: { label: "Sled Push", segmentKey: "sled_push", type: "station", timeGapSeconds: 95, percentile: 30 },
+        biggestStrength: { label: "SkiErg", segmentKey: "ski_erg", type: "station", percentile: 82 },
+      },
+      timePotential: { headlineGainSeconds: 95 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total", frameGapSeconds: 761, goalBenchmarkSeconds: 3600, userSeconds: 4361, percentile: 45 },
+        { segmentKey: "work_time", type: "aggregate", label: "Stations", frameGapSeconds: 220, userSeconds: 2200, percentile: 44 },
+        { segmentKey: "run_time", type: "aggregate", label: "Running", frameGapSeconds: 540, userSeconds: 2161, percentile: 48 },
+        { segmentKey: "ski_erg", type: "station", label: "SkiErg", frameGapSeconds: -20, userSeconds: 280, percentile: 82 },
+        { segmentKey: "sled_push", type: "station", label: "Sled Push", frameGapSeconds: 95, userSeconds: 250, percentile: 30 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 105, userSeconds: 400, percentile: 60 },
+      ],
+    });
+    const interpretation = {
+      primaryThesis: { category: "station_capacity", confidence: "high" },
+      heroCopy: { headline: "THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH", subline: null, gainDisplay: null },
+      sectionOrder: [],
+      summaryBullets: [],
+      secondaryTheses: [],
+    };
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const { subject, htmlBody } = buildEmailReport(
+      { sections: [splitSection] },
+      analysis,
+      mockContext({ targetFinishTimeSeconds: 3600 }),
+      interpretation,
+      "target",
+    );
+
+    assert.match(subject, /start with Sled Push/i);
+    assert.doesNotMatch(subject, /Wall Balls/i);
+    assert.match(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH/i);
+    assert.doesNotMatch(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+
+    function sectionBetween(startMarker, endMarker) {
+      const start = htmlBody.lastIndexOf(startMarker);
+      const end = htmlBody.indexOf(endMarker, start);
+      if (start === -1 || end === -1 || end <= start) return "";
+      return htmlBody.slice(start, end);
+    }
+
+    const opportunitiesSection = sectionBetween("Biggest opportunities", "Strengths to protect");
+    assert.ok(opportunitiesSection.indexOf("Sled Push") > -1, "Sled Push should appear in opportunities");
+    assert.ok(opportunitiesSection.indexOf("Wall Balls") > -1, "Wall Balls should remain eligible");
+    assert.ok(
+      opportunitiesSection.indexOf("Sled Push") < opportunitiesSection.indexOf("Wall Balls"),
+      "Sled Push should be the first opportunity after canonical tie-break",
+    );
+
+    const prioritiesSection = sectionBetween("TARGET PRIORITIES", "Biggest opportunities");
+    assert.match(prioritiesSection, /Sled Push and station efficiency/i);
+    assert.doesNotMatch(prioritiesSection, /Wall Balls and station efficiency/i);
+  });
+
+  it("keeps Run 7 ahead of Run 8 when close target gaps tie-break by percentile", () => {
+    const analysis = mockAnalysis({
+      race: { finishTimeSeconds: 7200, targetTimeSeconds: 6300 },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 6300, label: "sub-105" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+        achievedBand: "sub_120",
+      },
+      headline: {
+        biggestLimiter: { label: "Run 7", segmentKey: "run_7", type: "run", timeGapSeconds: 857, percentile: 12 },
+      },
+      timePotential: { headlineGainSeconds: 857 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total", frameGapSeconds: 900, goalBenchmarkSeconds: 6300, userSeconds: 7200, percentile: 45 },
+        { segmentKey: "work_time", type: "aggregate", label: "Stations", frameGapSeconds: 90, userSeconds: 2600, percentile: 44 },
+        { segmentKey: "run_time", type: "aggregate", label: "Running", frameGapSeconds: 810, userSeconds: 4600, percentile: 18 },
+        { segmentKey: "run_7", type: "run", label: "Run 7", frameGapSeconds: 857, userSeconds: 720, percentile: 12 },
+        { segmentKey: "run_8", type: "run", label: "Run 8", frameGapSeconds: 865, userSeconds: 730, percentile: 90 },
+      ],
+    });
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const { subject, htmlBody } = buildEmailReport(
+      { sections: [splitSection] },
+      analysis,
+      mockContext({ targetFinishTimeSeconds: 6300 }),
+      null,
+      "target",
+    );
+
+    function sectionBetween(startMarker, endMarker) {
+      const start = htmlBody.lastIndexOf(startMarker);
+      const end = htmlBody.indexOf(endMarker, start);
+      if (start === -1 || end === -1 || end <= start) return "";
+      return htmlBody.slice(start, end);
+    }
+
+    assert.match(subject, /start with Run 7/i);
+    assert.doesNotMatch(subject, /Run 8/i);
+
+    const opportunitiesSection = sectionBetween("Biggest opportunities", "Strengths to protect");
+    assert.ok(opportunitiesSection.indexOf("Run 7") > -1, "Run 7 should appear in opportunities");
+    assert.ok(opportunitiesSection.indexOf("Run 8") > -1, "Run 8 should remain eligible");
+    assert.ok(
+      opportunitiesSection.indexOf("Run 7") < opportunitiesSection.indexOf("Run 8"),
+      "Run 7 should rank before Run 8 after canonical tie-break",
+    );
+
+    const prioritiesSection = sectionBetween("TARGET PRIORITIES", "Biggest opportunities");
+    assert.match(prioritiesSection, /Run 7 and station efficiency/i);
+    assert.doesNotMatch(prioritiesSection, /Run 8 and station efficiency/i);
   });
 });

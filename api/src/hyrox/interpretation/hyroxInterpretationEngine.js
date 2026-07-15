@@ -157,6 +157,21 @@ export function totalRunGapSeconds(analysisJson = {}) {
     .reduce((sum, s) => sum + (s.frameGapSeconds ?? s.timeGapToMedianSeconds), 0);
 }
 
+function segmentGapSeconds(segment, hasGoalGroup) {
+  if (Number.isFinite(segment?.frameGapSeconds)) return segment.frameGapSeconds;
+  if (Number.isFinite(segment?.timeGapToExactTargetSeconds)) return segment.timeGapToExactTargetSeconds;
+  if (hasGoalGroup && Number.isFinite(segment?.goalBenchmarkSeconds) && Number.isFinite(segment?.userSeconds)) {
+    return segment.userSeconds - segment.goalBenchmarkSeconds;
+  }
+  return Number.isFinite(segment?.timeGapToMedianSeconds) ? segment.timeGapToMedianSeconds : null;
+}
+
+function aggregateSplitGapSeconds(analysisJson = {}, segmentKey) {
+  const hasGoalGroup = Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup);
+  const segment = (analysisJson.segments ?? []).find((s) => s.segmentKey === segmentKey);
+  return segmentGapSeconds(segment, hasGoalGroup);
+}
+
 export function weakStationCount(analysisJson = {}) {
   return (analysisJson.stationBreakdown ?? [])
     .filter((s) => s.confidence !== "low" && (s.percentile == null || s.percentile < 50))
@@ -590,11 +605,20 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       // When the top individual segment is a station, name it — the athlete can see the
       // biggest single-split gap in the table, and the hero should agree with it.
       if (emailTopLabel && emailTopSegType === "station") {
+        const stationAggregateGap = aggregateSplitGapSeconds(analysisJson, "work_time");
+        const runningAggregateGap = aggregateSplitGapSeconds(analysisJson, "run_time");
+        const subline = Number.isFinite(runningAggregateGap) && Number.isFinite(stationAggregateGap)
+          ? runningAggregateGap > stationAggregateGap
+            ? "Your running pace is the larger aggregate target lever — but this station has the biggest single split to address first."
+            : stationAggregateGap > runningAggregateGap
+              ? "Station work is the larger aggregate target lever, and this station has the biggest single split to address first."
+              : "The aggregate target levers are close, but this station has the biggest single split to address first."
+          : "This station has the biggest single split to address first.";
         return {
           headline: targetStr
             ? `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`
             : `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL GAP`,
-          subline: "Your running pace is the larger aggregate target lever — but this station has the biggest single split to address first.",
+          subline,
           gainDisplay: null,
         };
       }

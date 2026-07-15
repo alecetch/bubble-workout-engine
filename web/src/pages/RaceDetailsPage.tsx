@@ -15,13 +15,22 @@ import { fetchHyroxResultsImport, fetchHyroxSubmissionDraft, trackEvent } from "
 import { ageGroupFromAge, normalizeAgeGroup, normalizeName, saveImportedHyroxResult } from "../utils/hyroxImportDraft";
 import type { HyroxParseResult } from "../utils/hyroxResultsParser";
 import { loadDraft, saveDraft } from "../utils/storage";
-import { formatSeconds, normalizeTimeInputValue, parseTimeToSeconds } from "../utils/time";
+import {
+  formatSeconds,
+  isPlausibleHyroxTargetTimeSeconds,
+  normalizeTimeInputValue,
+  parseTimeToSeconds,
+} from "../utils/time";
 import styles from "./RaceDetailsPage.module.css";
 
 type Division = "open" | "pro" | "doubles" | "relay";
 
 const VALID_DIVISIONS: Division[] = ["open", "pro", "doubles", "relay"];
 export const AGE_GROUP_OPTIONS = ["16-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70+"];
+const TARGET_FINISH_TIME_PLAUSIBILITY_ERROR =
+  "That doesn't look like a realistic HYROX target time. Use 1:30:00 for 1 hour 30 minutes.";
+const GOAL_TIME_PLAUSIBILITY_ERROR =
+  "That doesn't look like a realistic HYROX goal time. Use 1:30:00 for 1 hour 30 minutes, or leave it blank.";
 
 function formatDivisionLabel(value: Division): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -81,6 +90,10 @@ export function RaceDetailsPage() {
         ? targetTimeRequired
           ? "Enter target finish time as MM:SS or H:MM:SS, e.g. 55:00 or 1:05:00."
           : "Enter goal time as MM:SS or H:MM:SS, e.g. 55:00, or leave it blank."
+        : !isPlausibleHyroxTargetTimeSeconds(parsedTargetFinishTime)
+          ? targetTimeRequired
+            ? TARGET_FINISH_TIME_PLAUSIBILITY_ERROR
+            : GOAL_TIME_PLAUSIBILITY_ERROR
         : parsedFinishTime !== null && !isTargetFasterThanFinish
           ? targetTimeRequired
             ? "Target time must be faster than your current finish time."
@@ -207,6 +220,8 @@ export function RaceDetailsPage() {
       const parsedTarget = parseTimeToSeconds(targetFinishTime);
       if (!targetFinishTime || parsedTarget === null) {
         errs.targetFinishTime = "Enter target finish time as MM:SS or H:MM:SS, e.g. 55:00 or 1:05:00.";
+      } else if (!isPlausibleHyroxTargetTimeSeconds(parsedTarget)) {
+        errs.targetFinishTime = TARGET_FINISH_TIME_PLAUSIBILITY_ERROR;
       } else if (parsedFinish !== null && parsedTarget >= parsedFinish) {
         errs.targetFinishTime = "Target time must be faster than your current finish time.";
       }
@@ -214,6 +229,8 @@ export function RaceDetailsPage() {
       const parsedTarget = parseTimeToSeconds(targetFinishTime);
       if (parsedTarget === null) {
         errs.targetFinishTime = "Enter goal time as MM:SS or H:MM:SS, e.g. 55:00, or leave it blank.";
+      } else if (!isPlausibleHyroxTargetTimeSeconds(parsedTarget)) {
+        errs.targetFinishTime = GOAL_TIME_PLAUSIBILITY_ERROR;
       } else if (parsedFinish !== null && parsedTarget >= parsedFinish) {
         errs.targetFinishTime = "Goal time must be faster than your finish time.";
       }

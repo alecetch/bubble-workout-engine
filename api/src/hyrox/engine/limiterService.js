@@ -12,7 +12,7 @@ function effectiveGapSeconds(segment) {
   return segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
 }
 
-function preferLimiter(a, b) {
+export function compareLimiterSegments(a, b) {
   if (a.type === "aggregate" && b.type === "station") return 1;
   if (b.type === "aggregate" && a.type === "station") return -1;
   const gapA = effectiveGapSeconds(a) ?? 0;
@@ -39,7 +39,12 @@ function toLimiter(segment) {
 }
 
 export function findBiggestLimiter(segmentStats) {
-  const candidates = segmentStats
+  const candidates = rankLimiterSegments(segmentStats);
+  return toLimiter(candidates[0] ?? null);
+}
+
+export function rankLimiterSegments(segmentStats) {
+  return segmentStats
     .filter((segment) => confidenceAtLeastLow(segment))
     .filter((segment) => {
       const gap = effectiveGapSeconds(segment);
@@ -47,8 +52,7 @@ export function findBiggestLimiter(segmentStats) {
     })
     .filter((segment) => segment.segmentKey !== "total_time")
     .filter((segment) => !segment.segmentKey.startsWith("roxzone_"))
-    .sort(preferLimiter);
-  return toLimiter(candidates[0] ?? null);
+    .sort(compareLimiterSegments);
 }
 
 export function findBiggestStrength(segmentStats) {

@@ -34,6 +34,18 @@ export function parseTimeToSeconds(
   return null;
 }
 
+export const HYROX_TARGET_TIME_MIN_SECONDS = 35 * 60;
+export const HYROX_TARGET_TIME_MAX_SECONDS = 4 * 60 * 60 + 30 * 60;
+
+export function isPlausibleHyroxTargetTimeSeconds(seconds: number | null): seconds is number {
+  return (
+    typeof seconds === "number" &&
+    Number.isFinite(seconds) &&
+    seconds >= HYROX_TARGET_TIME_MIN_SECONDS &&
+    seconds <= HYROX_TARGET_TIME_MAX_SECONDS
+  );
+}
+
 export function normalizeTimeInputValue(value: string): string {
   if (!value || typeof value !== "string") return "";
   const trimmed = value.trim();

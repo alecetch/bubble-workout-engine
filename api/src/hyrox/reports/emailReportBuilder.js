@@ -1,7 +1,7 @@
 import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatTime, regionalContextLine } from "./copyFormatter.js";
 import { buildHeroCopy } from "../interpretation/hyroxInterpretationEngine.js";
 import { PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
-import { findBiggestLimiter } from "../engine/limiterService.js";
+import { compareLimiterSegments, findBiggestLimiter } from "../engine/limiterService.js";
 import { penaltyContext } from "./penaltyContext.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
@@ -1124,13 +1124,90 @@ function renderSplitTable(section, analysisJson) {
     return Math.max(0, segment.userSeconds - penaltySecondsForSegmentKey(segment.segmentKey));
   }
 
+  function opportunitySegmentForRanking(segment, gap) {
+    if (!segment) return null;
+    return {
+      ...segment,
+      frameGapSeconds: gap,
+      timeGapToExactTargetSeconds: undefined,
+      timeGapToMedianSeconds: gap,
+      confidence: segment.confidence ?? "high",
+    };
+  }
+
+  function compareOpportunityRows(a, b) {
+    return compareLimiterSegments(
+      opportunitySegmentForRanking(a.seg, a.gap),
+      opportunitySegmentForRanking(b.seg, b.gap),
+    );
+  }
+
+  function athleteSplitSeconds(segment) {
+    return Number.isFinite(segment?.userSeconds)
+      ? segment.userSeconds
+      : Number.isFinite(segment?.timeSeconds)
+        ? segment.timeSeconds
+        : null;
+  }
+
+  function comparisonSplitSeconds(segment, gap) {
+    const targetSeconds = splitTargetSeconds(segment, hasGoalGroup);
+    if (Number.isFinite(targetSeconds)) return targetSeconds;
+    const athleteSeconds = athleteSplitSeconds(segment);
+    if (Number.isFinite(athleteSeconds) && Number.isFinite(gap)) return athleteSeconds - gap;
+    return null;
+  }
+
+  function isAnomalousSplitRow(row) {
+    if (!row?.seg || row.key === "__penalty__" || !Number.isFinite(row.gap)) return false;
+    const athleteSeconds = athleteSplitSeconds(row.seg);
+    const comparisonSeconds = comparisonSplitSeconds(row.seg, row.gap);
+    if (!Number.isFinite(comparisonSeconds) || comparisonSeconds <= 0) return false;
+
+    if (isNarrativeBlockingSplitRow(row)) return true;
+
+    return row.gap > 0 && row.gap > 2.5 * comparisonSeconds;
+  }
+
+  function isNarrativeBlockingSplitRow(row) {
+    if (!row?.seg || !Number.isFinite(row.gap)) return false;
+    const athleteSeconds = athleteSplitSeconds(row.seg);
+    const comparisonSeconds = comparisonSplitSeconds(row.seg, row.gap);
+    if (!Number.isFinite(comparisonSeconds) || comparisonSeconds <= 0) return false;
+
+    const hasImpossibleFastStation =
+      row.seg.type === "station"
+      && Number.isFinite(athleteSeconds)
+      && athleteSeconds > 0
+      && comparisonSeconds >= 30
+      && athleteSeconds <= Math.min(10, comparisonSeconds * 0.1);
+    const hasRoxZoneOutlier =
+      row.key === "roxzone_time"
+      && row.gap > 0
+      && row.gap > 2.5 * comparisonSeconds;
+    return hasImpossibleFastStation || hasRoxZoneOutlier;
+  }
+
   const workGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
   const runGap = Number.isFinite(runGapRaw) ? runGapRaw : 0;
 
+  const anomalousSplitRows = [
+    ...SPLIT_TABLE_RACE_ORDER.map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) })),
+    { key: "roxzone_time", seg: segMap.get("roxzone_time"), gap: splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) },
+  ].filter(isAnomalousSplitRow);
+  const hasDataAnomaly = anomalousSplitRows.length > 0;
+  const hasNarrativeDataAnomaly = anomalousSplitRows.some(isNarrativeBlockingSplitRow);
+  const dataAnomalySentence = hasNarrativeDataAnomaly
+    ? " Treat the limiter ranking as directional until those times are checked."
+    : "";
+
   const rankedGaps = SPLIT_TABLE_RACE_ORDER
-    .map((key) => ({ key, gap: splitOpportunityGap(segMap.get(key)) }))
-    .filter((row) => Number.isFinite(row.gap) && row.gap > 0)
-    .sort((a, b) => b.gap - a.gap);
+    .map((key) => {
+      const seg = segMap.get(key);
+      return { key, seg, gap: splitOpportunityGap(seg) };
+    })
+    .filter((row) => row.seg?.label && Number.isFinite(row.gap) && row.gap > 0)
+    .sort(compareOpportunityRows);
   const top1 = rankedGaps[0]?.key ?? null;
   const top2 = rankedGaps[1]?.key ?? null;
   const top3 = rankedGaps[2]?.key ?? null;
@@ -1181,6 +1258,9 @@ function renderSplitTable(section, analysisJson) {
     if (Number.isFinite(runGapRawValue) && runGapRawValue >= 60) {
       return ` ${prefix}${both} stations (<strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>) and running (<strong style="color:#0f172a;">${splitSafe(runStr)}</strong>) are contributing, for a total gap of <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong> ${refPhrase}.`;
     }
+    if (Number.isFinite(runGapRawValue) && runGapRawValue > stationGap) {
+      return ` ${prefix}${prefix ? "running" : "Running"} is the largest contributor at <strong style="color:#0f172a;">${splitSafe(runStr)}</strong>. ${stations} are also contributing <strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>, for a total gap of <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong> ${refPhrase}.`;
+    }
     return ` ${prefix}${stations} are the largest contributor at <strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>, for a total gap of <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong> ${refPhrase}.`;
   }
 
@@ -1191,7 +1271,7 @@ function renderSplitTable(section, analysisJson) {
       const fitnessLosses = SPLIT_TABLE_RACE_ORDER
         .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
         .filter((row) => row.seg?.type === "station" && Number.isFinite(row.gap) && row.gap >= 60)
-        .sort((a, b) => b.gap - a.gap)
+        .sort(compareOpportunityRows)
         .slice(0, 3);
       const fitnessNames = fitnessLosses.map((row) => row.seg?.label ?? row.key);
       const fitnessSentence = fitnessNames.length
@@ -1210,14 +1290,18 @@ function renderSplitTable(section, analysisJson) {
         hasGoalGroup ? null : bandDisplayLabel(achievedBand),
         hasGoalGroup ? "Against the target profile, " : null,
       );
+      const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
       const runningPenaltySentence = Number.isFinite(runGapRaw) && Number.isFinite(runGapNetOfPenalties)
         ? `Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.`
         : `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is execution leakage, but HYROX did not publish enough running data to separate it cleanly from running fitness.`;
+      const penaltyLeadSentence = hasNarrativeDataAnomaly
+        ? "One or more split values look unusual, so check the race splits before naming a main limiter. Penalties are still a controllable win."
+        : `${hasGoalGroup ? "Stations remain the largest target gap" : "Stations remain the largest fitness limiter"}, but penalties are your fastest controllable win.`;
       return `<tr>
         <td style="background-color:#ffffff;padding:18px 24px;">
           <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
             <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-            <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${hasGoalGroup ? "Stations remain the largest target gap" : "Stations remain the largest fitness limiter"}, but penalties are your fastest controllable win.${gapSentence}<br><br>${runningPenaltySentence}<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
+            <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(penaltyLeadSentence)}${splitSafe(dataAnomalySentence)}${safeGapSentence}<br><br>${runningPenaltySentence}<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
           </div>
         </td>
       </tr>`;
@@ -1333,6 +1417,9 @@ function renderSplitTable(section, analysisJson) {
       }
       mainLimiter = `${feasibility} ${mainLimiter}`;
     }
+    if (hasNarrativeDataAnomaly) {
+      mainLimiter = "One or more split values look unusual, so check the race splits before naming a main limiter.";
+    }
 
     const roxRef = hasGoalGroup ? "target profile" : "benchmark";
     const roxNote = roxGap < -30
@@ -1343,7 +1430,7 @@ function renderSplitTable(section, analysisJson) {
     const topLosses = SPLIT_TABLE_RACE_ORDER
       .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
       .filter((row) => Number.isFinite(row.gap) && row.gap >= 60)
-      .sort((a, b) => b.gap - a.gap)
+      .sort(compareOpportunityRows)
       .slice(0, 3);
     const lossNames = topLosses.map((row) => row.seg?.label ?? row.key).join(", ");
     const biggestNote = lossNames ? ` Biggest opportunities: ${lossNames}.` : "";
@@ -1356,6 +1443,7 @@ function renderSplitTable(section, analysisJson) {
       hasGoalGroup ? null : bandDisplayLabel(gapComparisonBand),
       hasGoalGroup ? "Against the target profile, " : null,
     );
+    const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
     const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
     let penaltySentence = "";
     if (penaltiesAreMaterial) {
@@ -1369,7 +1457,7 @@ function renderSplitTable(section, analysisJson) {
       <td style="background-color:#ffffff;padding:18px 24px;">
         <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
           <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-          <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(enforceTone(mainLimiter))}${gapSentence}${penaltySentence}<br><br>${secondParagraph}</p>
+          <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(enforceTone(mainLimiter))}${splitSafe(dataAnomalySentence)}${safeGapSentence}${penaltySentence}<br><br>${secondParagraph}</p>
         </div>
       </td>
     </tr>`;
@@ -1377,14 +1465,15 @@ function renderSplitTable(section, analysisJson) {
 
 	  function renderGapBreakdown() {
 	    if (totalGapSeconds <= 0) return "";
-	    const stationGap = Math.max(0, splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0);
+		    const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
+		    const stationForBar = Math.max(0, stationGap);
 	    const penaltyForBar = penaltiesAreMaterial ? totalPenaltySeconds : 0;
 		    const runningGap = penaltiesAreMaterial ? runGapNetOfPenalties : runGapRaw;
 		    const runningForBar = Math.max(0, runningGap);
 	    const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
 	    const roxForBar = Math.max(0, roxGap);
-	    const positiveTotal = stationGap + penaltyForBar + runningForBar + roxForBar;
-	    const stationPct = positiveTotal > 0 ? Math.round((stationGap / positiveTotal) * 100) : 0;
+		    const positiveTotal = stationForBar + penaltyForBar + runningForBar + roxForBar;
+		    const stationPct = positiveTotal > 0 ? Math.round((stationForBar / positiveTotal) * 100) : 0;
 	    const penaltyPct = positiveTotal > 0 ? Math.round((penaltyForBar / positiveTotal) * 100) : 0;
 	    const runningPct = Math.max(0, Math.min(100 - stationPct - penaltyPct, positiveTotal > 0 ? Math.round((runningForBar / positiveTotal) * 100) : 0));
 	    const roxPct = Math.max(0, Math.min(100 - stationPct - penaltyPct - runningPct, positiveTotal > 0 ? Math.round((roxForBar / positiveTotal) * 100) : 0));
@@ -1592,7 +1681,7 @@ function renderSplitTable(section, analysisJson) {
     const stationCredit = Math.max(0, -stationGap2);
     const roxCredit = Math.max(0, -roxGap2);
     const effectiveRunRequirement = Number.isFinite(runGapForRoute)
-      ? Math.max(0, Math.min(runGapForRoute, totalGapSeconds - Math.max(0, stationGap2) - Math.max(0, roxGap2)))
+      ? Math.max(0, runGapForRoute)
       : 0;
     const hasStationCredit = stationCredit > 60;
     const hasRoxCredit = roxCredit > 60;
@@ -1743,7 +1832,7 @@ function renderSplitTable(section, analysisJson) {
         if (!hasGoalGroup && Number.isFinite(row.seg.percentile) && row.seg.percentile >= 40) return false;
         return true;
       })
-      .sort((a, b) => b.gap - a.gap);
+      .sort(compareOpportunityRows);
     if (penaltiesAreMaterial) {
       losses.unshift({
         key: "__penalty__",
@@ -1853,13 +1942,15 @@ function renderSplitTable(section, analysisJson) {
     const lossRows = topLosses.length >= 1
       ? topLosses.map((item, idx) => lossRow(item, idx)).join("")
       : `<tr><td colspan="3" style="padding:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No significant time losses detected.</td></tr>`;
+    const strengthFallbackRef = hasGoalGroup ? "target profile" : "benchmark";
+    const anomalyGapRef = hasGoalGroup ? "target profile" : "benchmark";
     const strengthRows = topStrengths.length > 0
       ? topStrengths.map((item) => strengthRow(item)).join("")
-      : `<tr><td colspan="3" style="padding:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No segments clearly ahead of benchmark.</td></tr>`;
+      : `<tr><td colspan="3" style="padding:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#94a3b8;font-style:italic;">No segments clearly ahead of ${strengthFallbackRef}.</td></tr>`;
 
-    // Flag rows where the gap is implausibly large — over 2.5× the benchmark median for that split.
+    // Flag rows where the gap is implausibly large — over 2.5x the comparison time for that split.
     // This catches likely data entry errors (e.g., athlete typed a wall balls time of 30 min).
-    const hasAnomalousGap = topLosses.some((item) => {
+    const hasAnomalousGap = hasDataAnomaly || topLosses.some((item) => {
       if (item.key === "__penalty__" || !Number.isFinite(item.gap) || item.gap <= 0) return false;
       const athleteTime = item.seg?.userSeconds ?? item.seg?.timeSeconds;
       if (!Number.isFinite(athleteTime)) return false;
@@ -1867,7 +1958,7 @@ function renderSplitTable(section, analysisJson) {
       return benchmarkTime > 0 && item.gap > 2.5 * benchmarkTime;
     });
     const anomalyNote = hasAnomalousGap
-      ? `<tr><td colspan="3" style="padding:6px 12px 8px;"><span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#f59e0b;">⚠ One or more splits show an unusually large gap vs the benchmark — double-check those times are entered correctly.</span></td></tr>`
+      ? `<tr><td colspan="3" style="padding:6px 12px 8px;"><span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#f59e0b;">⚠ One or more splits show an unusually large gap vs the ${anomalyGapRef} — double-check those times are entered correctly.</span></td></tr>`
       : "";
 
     function panelHeader(title, subtitle) {
@@ -2093,6 +2184,11 @@ function renderSplitTable(section, analysisJson) {
   const splitReportLink = splitReportUrl
     ? `<a href="${esc(splitReportUrl)}" target="_blank" style="display:block;background-color:#e8f7fd;border:1px solid #bdeafb;border-radius:8px;padding:14px 16px;margin-top:12px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;text-decoration:none;">View the full split report &#8594;</a>`
     : "";
+  const reducedGapHeader = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
+    ? `Gap vs ${bandDisplayLabel(gapComparisonBand)}`
+    : hasGoalGroup
+      ? "Gap vs target"
+      : "Gap vs median";
 
 	  return `
 	    ${renderSplitHeader()}
@@ -2111,7 +2207,7 @@ function renderSplitTable(section, analysisJson) {
 	            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">${hasGoalGroup ? "Target basis" : "Band standing"}</th>
             <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">${hasGoalGroup ? "Target status" : "Band score"}</th>
             <th style="padding:7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your split</th>
-            <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">${!hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand ? `Gap vs ${bandDisplayLabel(gapComparisonBand)}` : "Gap vs median"}</th>
+            <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">${reducedGapHeader}</th>
           </tr>
           ${penaltyRowHtml}
           ${reducedRows}
@@ -2169,9 +2265,10 @@ function renderMethodNote(hasMaterialPenalties = false, calculatorMode = "target
     : "";
   const doublesNote = analysisJson.benchmarkContext?.useDoublesBenchmarks
     ? (() => {
-        const n = analysisJson.benchmarkContext?.primaryBenchmarkGroup?.sampleSize;
+        const { group } = resolvedComparisonBandInfo(analysisJson);
+        const n = Number(group?.sampleSize);
         return n
-          ? ` Doubles benchmarks use a dedicated doubles dataset (${n.toLocaleString()} teams) — not singles data.`
+          ? ` Doubles benchmarks use a dedicated doubles dataset — this comparison group includes ${n.toLocaleString()} teams, not singles data.`
           : " Doubles benchmarks use a dedicated doubles dataset — not singles data.";
       })()
     : "";
