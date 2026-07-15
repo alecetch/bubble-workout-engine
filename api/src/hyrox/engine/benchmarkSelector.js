@@ -1,4 +1,9 @@
-import { DEFAULT_DATASET_VERSION } from "../config/benchmarkThresholds.js";
+import {
+  DEFAULT_DATASET_VERSION,
+  PERFORMANCE_BAND_KEYS_WITH_OVER_120,
+  PERFORMANCE_BAND_THRESHOLDS_MINUTES,
+} from "../config/benchmarkThresholds.js";
+import { isHistoricalBenchmarkDataset } from "../config/ageGroups.js";
 import { featureFlags } from "../config/featureFlags.js";
 import {
   ENRICHED_DOUBLES_DIVISIONS,
@@ -7,7 +12,7 @@ import {
 } from "../config/divisionGroups.js";
 import { countryToRegion, REGION_LABELS } from "../config/regionMapping.js";
 import { selectBenchmark } from "../confidence/benchmarkSelector.js";
-import { adjacentAgeBand, makeBenchmarkGroupKey } from "../confidence/fallbackRules.js";
+import { adjacentAgeBands, makeBenchmarkGroupKey } from "../confidence/fallbackRules.js";
 import { getBenchmarkGroup, hasBenchmarkData } from "./benchmarkService.js";
 import { scoreTimeAgainstGroup } from "./percentileCalculator.js";
 
@@ -23,10 +28,10 @@ function normalizeSex(raw) {
   return String(raw ?? "");
 }
 
-function normalizeBenchmarkAgeGroup(ageGroup) {
+function normalizeBenchmarkAgeGroup(ageGroup, { datasetVersion = null } = {}) {
   const key = String(ageGroup ?? "").trim();
   if (key === "18-24") return "16-24";
-  if (key === "65-69") return "70+";
+  if (key === "65-69" && isHistoricalBenchmarkDataset(datasetVersion)) return "70+";
   return ageGroup ?? null;
 }
 
@@ -58,41 +63,25 @@ function labelForGroup(group) {
 export function performanceBandForGoal(targetSeconds, options = {}) {
   if (!Number.isFinite(targetSeconds)) return null;
   const minutes = targetSeconds / 60;
-  for (const threshold of [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 120]) {
-    if (minutes <= threshold) return `sub_${threshold}`;
+  for (const threshold of PERFORMANCE_BAND_THRESHOLDS_MINUTES) {
+    if (minutes < threshold) return `sub_${threshold}`;
   }
   if (options.includeOver105) return "over_120";
   return null;
 }
 
-const NEXT_BAND_MAP = Object.freeze({
-  over_120: "sub_120",
-  sub_120: "sub_105",
-  sub_105: "sub_100",
-  sub_100: "sub_95",
-  sub_95: "sub_90",
-  sub_90: "sub_85",
-  sub_85: "sub_80",
-  sub_80: "sub_75",
-  sub_75: "sub_70",
-  sub_70: "sub_65",
-  sub_65: "sub_60",
-  sub_60: null,
-});
-
-export const PERFORMANCE_BAND_ORDER = Object.freeze([
-  "sub_60", "sub_65", "sub_70", "sub_75", "sub_80", "sub_85",
-  "sub_90", "sub_95", "sub_100", "sub_105", "sub_120", "over_120",
-]);
+export const PERFORMANCE_BAND_ORDER = PERFORMANCE_BAND_KEYS_WITH_OVER_120;
 
 export function nextPerformanceBand(band) {
-  return NEXT_BAND_MAP[band] ?? null;
+  const index = PERFORMANCE_BAND_ORDER.indexOf(band);
+  return index > 0 ? PERFORMANCE_BAND_ORDER[index - 1] : null;
 }
 
 export function confidenceLabelFromSampleSize(n) {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return "insufficient";
   if (num >= 100) return "strong";
+  // Forward-compatible vocabulary if overallPercentile ever allows sub-100 sample bands through.
   if (num >= 30) return "directional";
   return "low-confidence";
 }
@@ -148,8 +137,7 @@ function computeAgeBenchmarkAvailability({ datasetVersion, division, gender, age
   const exact = ageBenchmarkFromKey(exactKey, ageGroup, finishTimeSeconds);
   if (exact) return exact;
 
-  const adjacent = adjacentAgeBand(ageGroup);
-  if (adjacent) {
+  for (const adjacent of adjacentAgeBands(ageGroup, datasetVersion)) {
     const adjacentKey = makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup: adjacent });
     const adjacentGroup = ageBenchmarkFromKey(adjacentKey, adjacent, finishTimeSeconds);
     if (adjacentGroup) return adjacentGroup;
@@ -277,7 +265,7 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
       division = "doubles_mixed";
     } else {
       const historicalDoublesCheck = selectBenchmark(
-        { datasetVersion, division: "doubles", gender, ageGroup: benchmarkAgeGroup },
+        { datasetVersion, division: "doubles", gender, ageGroup: normalizeBenchmarkAgeGroup(benchmarkAgeGroup, { datasetVersion }) },
         "total_time",
         "overallPercentile",
       );
@@ -301,6 +289,8 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
     benchmarkDatasetVersion = resolved.datasetVersion;
     singlesDatasetFallback = resolved.fallback;
   }
+
+  benchmarkAgeGroup = normalizeBenchmarkAgeGroup(benchmarkAgeGroup, { datasetVersion: benchmarkDatasetVersion });
 
   const ageGroup = benchmarkAgeGroup;
   const request = { datasetVersion: benchmarkDatasetVersion, division, gender: benchmarkGender, ageGroup };

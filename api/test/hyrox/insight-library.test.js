@@ -212,12 +212,17 @@ test("volume-increasing recommendations suppressed when daysToRace < 14", () => 
 
 test("INSIGHT_046 fires when wall_balls gap rank <= 2 in sub_75 group", () => {
   setBenchmarkData({
-    groups: [{ groupKey: GROUP_KEY, sampleSize: 1200 }],
-    metrics: STATION_KEYS.map((key) => stationMetric(key, key === "wall_balls" ? 70 : key === "row" ? 80 : key === "sled_push" ? 20 : key === "sled_pull" ? 10 : 30)),
+    groups: [{ groupKey: GROUP_KEY, sampleSize: 2500 }],
+    metrics: STATION_KEYS.map((key) => ({
+      ...stationMetric(key, key === "wall_balls" ? 70 : key === "row" ? 80 : key === "sled_push" ? 20 : key === "sled_pull" ? 10 : 30, 2500),
+      cv: 0.05,
+      missingnessRate: 0,
+    })),
   });
   const insights = generatePopulationInsights(GROUP_KEY, def("INSIGHT_046"));
   assert.equal(insights.length, 1);
   assert.equal(insights[0].evidenceValues.segmentKey, "wall_balls");
+  assert.equal(insights[0].evidenceValues.confidenceGrade, "A");
 });
 
 test("INSIGHT_096 fires when inputCompleteness != complete", () => {

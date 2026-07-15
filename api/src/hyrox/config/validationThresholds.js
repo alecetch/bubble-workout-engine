@@ -1,4 +1,5 @@
 import { INDIVIDUAL_ANALYSIS_DIVISIONS } from "./divisionGroups.js";
+import { PERFORMANCE_BAND_KEYS, PERFORMANCE_BAND_THRESHOLDS_MINUTES } from "./benchmarkThresholds.js";
 
 export const VALIDATION_THRESHOLDS = Object.freeze({
   totalTime: Object.freeze({ individualMin: 40 * 60, individualMax: 3 * 60 * 60 }),
@@ -66,16 +67,9 @@ export const VALIDATION_THRESHOLDS = Object.freeze({
 
 export const INDIVIDUAL_BENCHMARK_DIVISIONS = INDIVIDUAL_ANALYSIS_DIVISIONS;
 export const MIN_EXACT_GROUP_SIZE = 20;
-export const PERFORMANCE_BANDS = Object.freeze([
-  { key: "sub_60", maxSeconds: 60 * 60 },
-  { key: "sub_65", maxSeconds: 65 * 60 },
-  { key: "sub_70", maxSeconds: 70 * 60 },
-  { key: "sub_75", maxSeconds: 75 * 60 },
-  { key: "sub_80", maxSeconds: 80 * 60 },
-  { key: "sub_85", maxSeconds: 85 * 60 },
-  { key: "sub_90", maxSeconds: 90 * 60 },
-  { key: "sub_95", maxSeconds: 95 * 60 },
-  { key: "sub_100", maxSeconds: 100 * 60 },
-  { key: "sub_105", maxSeconds: 105 * 60 },
-  { key: "sub_120", maxSeconds: 120 * 60 },
-]);
+export const PERFORMANCE_BANDS = Object.freeze(
+  PERFORMANCE_BAND_THRESHOLDS_MINUTES.map((threshold, index) => Object.freeze({
+    key: PERFORMANCE_BAND_KEYS[index],
+    maxSeconds: threshold * 60,
+  })),
+);

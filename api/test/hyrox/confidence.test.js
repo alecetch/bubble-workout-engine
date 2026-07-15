@@ -6,6 +6,7 @@ import {
   buildFallbackChain,
   buildPerformanceTargetFallbackChain,
 } from "../../src/hyrox/confidence/fallbackRules.js";
+import { GRADE_RANK } from "../../src/hyrox/confidence/confidenceConfig.js";
 import { selectBenchmark } from "../../src/hyrox/confidence/benchmarkSelector.js";
 import {
   shouldShowInsight,
@@ -85,13 +86,12 @@ test("exact benchmark below absolute sample floor returns grade E", () => {
 });
 
 test("high sample with CV over 0.30 loses at least one grade", () => {
-  const rank = { E: 0, D: 1, C: 2, B: 3, A: 4 };
   const candidate = { matchType: "exact" };
   const stable = calculateConfidence(metric("exact", { sampleSize: 3000, cv: 0.05 }), candidate, BASE_REQUEST);
   const noisy = calculateConfidence(metric("exact", { sampleSize: 3000, cv: 0.38 }), candidate, BASE_REQUEST);
 
   assert.equal(stable.grade, "A");
-  assert.ok(rank[gradeFromScore(noisy.score)] <= rank[stable.grade] - 1);
+  assert.ok(GRADE_RANK[gradeFromScore(noisy.score)] <= GRADE_RANK[stable.grade] - 1);
   assert.equal(noisy.isNoisy, true);
 });
 

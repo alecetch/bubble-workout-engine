@@ -195,10 +195,10 @@ function comparisonGroupRow(html) {
 
 function rangeAssertionsForBand(band) {
   const ranges = {
-    sub_120: ["105:00", "119:59"],
-    sub_105: ["100:00", "104:59"],
-    sub_70: ["65:00", "69:59"],
-    sub_65: ["60:00", "64:59"],
+    sub_120: ["Under 120:00"],
+    sub_105: ["Under 105:00"],
+    sub_70: ["Under 70:00"],
+    sub_65: ["Under 65:00"],
   };
   return ranges[band];
 }
@@ -235,20 +235,20 @@ for (const scenario of scenarios) {
     const analysisFrame = analysis.benchmarkContext.analysisFrame;
     const expectedBand = escalated ? analysisFrame.comparisonBand : analysis.benchmarkContext.achievedBand;
     const unexpectedBand = escalated ? analysis.benchmarkContext.achievedBand : analysisFrame.comparisonBand;
-    const [expectedStart, expectedEnd] = rangeAssertionsForBand(expectedBand);
+    const expectedLabels = rangeAssertionsForBand(expectedBand);
     const unexpectedRange = rangeAssertionsForBand(unexpectedBand);
     const lens = benchmarkLensSection(report.emailHtml);
     const comparisonRow = comparisonGroupRow(lens);
 
     assert.equal(analysisFrame.frame, scenario.expectedFrame);
     assert.equal(Boolean(analysisFrame.useNextBandGaps), scenario.name === "competitive ahead of median");
-    assert.ok(comparisonRow.includes(expectedStart), "Benchmark Lens comparison group should use the band that supplied frame gaps");
-    assert.ok(comparisonRow.includes(expectedEnd), "Benchmark Lens comparison group should use the band that supplied frame gaps");
+    assert.ok(expectedLabels.every((label) => comparisonRow.includes(label)), "Benchmark Lens comparison group should describe the band that supplied frame gaps");
     assert.ok(report.emailHtml.includes(`Compared against ${BAND_SAMPLE_SIZES[expectedBand].toLocaleString()} `));
 
     if (unexpectedRange && unexpectedBand !== expectedBand) {
-      assert.equal(comparisonRow.includes(unexpectedRange[0]), false, "Benchmark Lens comparison group should not use the other band's range start");
-      assert.equal(comparisonRow.includes(unexpectedRange[1]), false, "Benchmark Lens comparison group should not use the other band's range end");
+      for (const label of unexpectedRange) {
+        assert.equal(comparisonRow.includes(label), false, "Benchmark Lens comparison group should not use the other band's label");
+      }
       assert.equal(
         report.emailHtml.includes(`Compared against ${BAND_SAMPLE_SIZES[unexpectedBand].toLocaleString()} `),
         false,

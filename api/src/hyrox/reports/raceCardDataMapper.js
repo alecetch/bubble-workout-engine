@@ -1,4 +1,6 @@
 import { SEGMENT_MAP } from "../config/segmentMap.js";
+import { isDoublesAnalysisDivision } from "../config/divisionGroups.js";
+import { comparisonOptionsArray, worldwideTopPercentFromComparison } from "./comparisonOptions.js";
 
 function formatSeconds(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return null;
@@ -87,15 +89,10 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   const mode = targetTimeSeconds != null ? "target" : "analyse";
 
   // Percentile text from first available comparison option.
-  // comparisonOptions may be a flat array (test fixtures) or { defaultId, options: [] } (engine output).
-  const compOpts = Array.isArray(benchmarkContext.comparisonOptions)
-    ? benchmarkContext.comparisonOptions
-    : Array.isArray(benchmarkContext.comparisonOptions?.options)
-      ? benchmarkContext.comparisonOptions.options
-      : [];
-  const primaryComp = compOpts[0] ?? null;
+  const compOpts = comparisonOptionsArray(benchmarkContext);
+  const worldwideTopPercent = worldwideTopPercentFromComparison(benchmarkContext);
   const percentileText =
-    primaryComp?.topPercent != null ? `TOP ${primaryComp.topPercent}% WORLDWIDE` : null;
+    worldwideTopPercent != null ? `TOP ${worldwideTopPercent}% WORLDWIDE` : null;
 
   // Forma Score — use the total-population percentile from comparisonOptions (same source as
   // "TOP N% WORLDWIDE" label) so both figures are always consistent. overallPerformanceScore is
@@ -150,10 +147,8 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   });
 
   // Doubles flag
-  const division = String(
-    athlete.division ?? athleteContext.division ?? "",
-  ).toLowerCase();
-  const isDoubles = division.startsWith("doubles");
+  const division = athlete.division ?? athleteContext.division ?? "";
+  const isDoubles = isDoublesAnalysisDivision(division);
 
   return {
     athleteName,

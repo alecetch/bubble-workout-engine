@@ -10,6 +10,15 @@ const RECENCY_WEIGHTS = {
   historic: 0.25,
 };
 
+const WEEKLY_VOLUME_KM_MAP = Object.freeze({
+  "0_10": 5,
+  "11_20": 15,
+  "21_35": 28,
+  "36_50": 43,
+  "51_70": 60,
+  "70_plus": 75,
+});
+
 // Approximate HYROX open running contribution ratio for projection
 // (rough: HYROX total ≈ run_time * 1.6 for a balanced athlete)
 const HYROX_RUN_MULTIPLIER = 1.6;
@@ -72,15 +81,7 @@ function computeConfidence(performances) {
  * Returns: 'sufficient' | 'borderline' | 'insufficient'
  */
 function volumeSufficiency(weeklyRunningVolume, primaryGoals) {
-  const volumeMap = {
-    "0_10": 5,
-    "11_20": 15,
-    "21_35": 28,
-    "36_50": 43,
-    "51_70": 60,
-    "70_plus": 75,
-  };
-  const volKm = volumeMap[weeklyRunningVolume] ?? 0;
+  const volKm = WEEKLY_VOLUME_KM_MAP[weeklyRunningVolume] ?? 0;
   const wantsHyrox = primaryGoals?.includes("improve_hyrox");
   const wantsFast5k10k = primaryGoals?.includes("get_faster_5k_10k");
   const wantsMuscle = primaryGoals?.includes("maintain_build_muscle");
@@ -225,8 +226,7 @@ function buildLimiters(trainingProfile, context, scores, best5k, best10k) {
     });
   }
 
-  const volMap = { "0_10": 5, "11_20": 15, "21_35": 28, "36_50": 43, "51_70": 60, "70_plus": 75 };
-  const volKm = volMap[trainingProfile.weeklyRunningVolume] ?? 0;
+  const volKm = WEEKLY_VOLUME_KM_MAP[trainingProfile.weeklyRunningVolume] ?? 0;
   const wantsFaster = trainingProfile.primaryGoals?.includes("get_faster_5k_10k");
   if (wantsFaster && volKm < 21 && context.currentConcern !== "running_hurts_strength_muscle") {
     limiters.push({

@@ -86,7 +86,9 @@ test("A1 hook uses percentile or rank language for elite result", () => {
   const a = analysis();
   const report = assembleReport({ analysisJson: a, insights: insights(a), athleteContext: { displayName: "Daniel Gallego" }, outputType: "carousel_a" });
   assert.equal(report.slides[0].slide_id, "A1_ATHLETE_HOOK");
-  assert.match(report.slides[0].percentile, /TOP|BENCHMARKED/);
+  // No comparisonOptions on this fixture, so this correctly falls back to the demographic
+  // "Top N%" label rather than a "WORLDWIDE" claim it can't back up with global data.
+  assert.match(report.slides[0].percentile, /TOP|BENCHMARKED|Top \d+%/);
 });
 
 test("A4 opportunity uses Opportunity label, never weakness", () => {

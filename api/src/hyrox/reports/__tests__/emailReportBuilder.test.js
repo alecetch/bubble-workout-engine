@@ -1414,11 +1414,11 @@ describe("analyse mode email", () => {
     assert.doesNotMatch(htmlBody, /account for.*of your total/i);
   });
 
-  it("includes small-sample note when confidenceLabel is directional", () => {
+  it("includes small-sample note when confidenceLabel is insufficient", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_75",
-        confidenceLabel: "directional",
+        confidenceLabel: "insufficient",
         primaryBenchmarkGroup: { label: "Open Men" },
       },
     }), mockContext(), null, "analyse");
@@ -1657,14 +1657,14 @@ describe("analyse mode email", () => {
     assert.equal(email.subject, "You're in the sub-75 band. Here's the route to sub-70.");
   });
 
-  it("analyse mode metric strip includes band and directional confidence", () => {
+  it("analyse mode metric strip marks insufficient band confidence as directional", () => {
     const personal = mockReport();
     const analysis = mockAnalysis({
       benchmarkContext: {
         primaryBenchmarkGroup: { key: "hyrox:v1:band:sub_65:open:female", label: "Open Female" },
         achievedBand: "sub_65",
         nextBand: "sub_60",
-        confidenceLabel: "directional",
+        confidenceLabel: "insufficient",
       },
     });
     const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
@@ -2856,6 +2856,37 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     assert.ok(htmlBody.includes("within this band"), "should qualify percentile scope");
   });
 
+  it("labels historical benchmark-band groups as cumulative under-threshold populations", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          analysisFrame: ANALYSIS_FRAMES.COMPETITIVE,
+          achievedBand: "sub_85",
+          confidenceLabel: "strong",
+          primaryBenchmarkGroup: {
+            label: "Open Male",
+            sampleSize: 13587,
+            datasetVersion: "historical_hyrox_2026_06_v1",
+            performanceBand: "sub_85",
+          },
+        },
+        race: { finishTimeSeconds: 4980 },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 42 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    const lens = benchmarkLensSection(htmlBody);
+    const comparisonRow = comparisonGroupRow(lens);
+
+    assert.match(comparisonRow, /Under 85:00 finishers/);
+    assert.doesNotMatch(comparisonRow, /80:00/);
+    assert.doesNotMatch(comparisonRow, /84:59/);
+    assert.match(htmlBody, /Compared against 13,587 Under 85:00 finishers/);
+  });
+
   it("uses high-in-band copy when within-band percentile is 80 or above", () => {
     const { htmlBody } = buildEmailReport(
       mockReport(),
@@ -3008,7 +3039,7 @@ describe("renderTargetLensCard (target mode)", () => {
     assert.ok(htmlBody.includes("1:35:38"), "should show current finish time");
     assert.ok(htmlBody.includes("1:20:00"), "should show target finish time");
     assert.match(htmlBody, /95\S*100/, "should show current band label");
-    assert.match(htmlBody, /75\S*80/, "should show target band label");
+    assert.match(htmlBody, /80\S*85/, "should show target band label");
   });
 
   it("shows N-bands-ahead explanation when target is in a faster band", () => {
@@ -3019,7 +3050,7 @@ describe("renderTargetLensCard (target mode)", () => {
       null,
       "target",
     );
-    assert.ok(/4 bands ahead/.test(htmlBody));
+    assert.ok(/3 bands ahead/.test(htmlBody));
   });
 
   it("shows same-band refinement copy when target is in the same band as current", () => {

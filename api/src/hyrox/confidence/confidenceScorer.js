@@ -5,6 +5,7 @@ import {
   SAMPLE_SIZE_SCORES,
   VARIANCE_SCORES,
   GRADE_CUTOFFS,
+  GRADE_RANK,
 } from "./confidenceConfig.js";
 
 function pointsFromMinTable(value, table) {
@@ -27,8 +28,7 @@ export function gradeFromScore(score) {
 }
 
 export function isGradeAtLeast(grade, minimumGrade) {
-  const rank = { E: 0, D: 1, C: 2, B: 3, A: 4 };
-  return (rank[grade] ?? 0) >= (rank[minimumGrade] ?? 0);
+  return (GRADE_RANK[grade] ?? 0) >= (GRADE_RANK[minimumGrade] ?? 0);
 }
 
 function relevancePoints(candidate) {

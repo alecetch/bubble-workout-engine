@@ -74,10 +74,15 @@ function contextCopy(analysisJson, athleteContext = {}) {
   if (Number(athleteContext.weeklyKm) < 20 && analysisJson.scores?.engineScore < 55) {
     return "A gradual increase in running frequency is likely to improve your ceiling, provided recovery is managed.";
   }
-  if (Number(athleteContext.weeklyKm) >= 40 && analysisJson.runningAnalysis?.runFadePct >= 8) {
+  if (Number(athleteContext.weeklyKm) >= 40 && hasMaterialRunFade(analysisJson.runningAnalysis)) {
     return "More volume may not be the main answer; your result points toward durability and pacing under station fatigue.";
   }
   return null;
+}
+
+function hasMaterialRunFade(runningAnalysis = {}) {
+  return runningAnalysis.interpretation === "materially_above_benchmark"
+    || runningAnalysis.interpretation === "late_fade_present";
 }
 
 function stationBreakdownSection(analysisJson) {
@@ -292,7 +297,7 @@ function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
 }
 
 function shouldIncludeRunFadeInSummary(analysisJson, interpretation) {
-  if (!analysisJson.runningAnalysis?.runFadePct || analysisJson.runningAnalysis.runFadePct < 8) return false;
+  if (!hasMaterialRunFade(analysisJson.runningAnalysis)) return false;
   if (!interpretation) return true;
   const categories = new Set([
     interpretation.primaryThesis?.category,
