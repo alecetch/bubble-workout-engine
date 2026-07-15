@@ -40,6 +40,18 @@ function findTimeIndex(line) {
   return line.search(/\b\d{1,2}:[0-5]\d\b/);
 }
 
+function timeMatches(line) {
+  return [...String(line ?? "").matchAll(/\b\d{1,2}:[0-5]\d(?::[0-5]\d)?\b/g)]
+    .map((match) => ({ index: match.index ?? -1, value: match[0] }))
+    .filter((match) => match.index >= 0);
+}
+
+function onlyTimeValue(line) {
+  const matches = timeMatches(String(line ?? "").trim());
+  if (matches.length !== 1) return null;
+  return String(line ?? "").replace(matches[0].value, "").trim() ? null : matches[0].value;
+}
+
 function cleanLabel(value) {
   return String(value ?? "")
     .replace(/\([^)]*\)/g, "")           // strip "(1,000 m)", "(100 reps)", "(300s)" etc.
@@ -99,17 +111,23 @@ function parsePenalties(lines) {
   return penalties;
 }
 
-function pairLabelWithTime(lines) {
+function pairLabelWithReplayDiffTime(lines) {
   const out = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     if (findTimeIndex(line) < 0 && i + 1 < lines.length) {
-      const next = lines[i + 1];
-      const nextTimeIdx = findTimeIndex(next);
-      if (nextTimeIdx >= 0 && !next.slice(0, nextTimeIdx).trim()) {
-        out.push(line + "\t" + next);
-        i += 2;
+      const followingTimes = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const time = onlyTimeValue(lines[j]);
+        if (!time) break;
+        followingTimes.push(time);
+        j += 1;
+      }
+      if (followingTimes.length > 0) {
+        out.push(line + "\t" + followingTimes[followingTimes.length - 1]);
+        i = j;
         continue;
       }
     }
@@ -123,7 +141,7 @@ export function parseHyroxResultsText(rawText) {
   try {
     const result = emptyResult();
     const rawLines = String(rawText ?? "").replace(/\r/g, "").split("\n").map((line) => line.trim()).filter(Boolean);
-    const lines = pairLabelWithTime(rawLines);
+    const lines = pairLabelWithReplayDiffTime(rawLines);
     const splitsByKey = new Map();
     const athleteNames = [];
     for (const line of lines) {

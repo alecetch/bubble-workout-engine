@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildRaceCardHtml } from "../raceCardBuilder.js";
 
 function fixtureData(overrides = {}) {
@@ -60,6 +61,32 @@ function sectionBetween(html, start, end) {
   const endIndex = html.indexOf(end, startIndex);
   assert.ok(endIndex > startIndex, `missing end marker ${end}`);
   return html.slice(startIndex, endIndex);
+}
+
+function mappedRaceCardHtmlForDivision(division) {
+  const data = buildHyroxRaceCardData({
+    athlete: {
+      name: "Smith, Alice & Jones, Bob",
+      division,
+    },
+    race: {
+      finishTimeSeconds: 5738,
+    },
+    benchmarkContext: {
+      comparisonOptions: [{ percentile: 72, topPercent: 28 }],
+    },
+  });
+
+  assert.equal(data.isDoubles, true);
+  return buildRaceCardHtml(data);
+}
+
+function assertDoublesNameSplit(html) {
+  const athlete = sectionBetween(html, '<div class="slbl">Athlete</div>', '<div class="sdiv"></div>');
+
+  assert.match(athlete, /<div class="sname"><span class="name-wh">ALICE<\/span> <span class="name-cy">SMITH<\/span><\/div>/);
+  assert.match(athlete, /<div class="sname"><span class="name-wh">BOB<\/span> <span class="name-cy">JONES<\/span><\/div>/);
+  assert.doesNotMatch(athlete, /<div class="sname"><span class="name-wh">ALICE<\/span><\/div>\s*<div class="sname"><span class="name-cy">SMITH &amp; JONES, BOB<\/span><\/div>/);
 }
 
 describe("buildRaceCardHtml asset-backed artwork", () => {
@@ -132,11 +159,14 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
       athleteName: "Smith, Alice & Jones, Bob",
       isDoubles: true,
     }));
-    const athlete = sectionBetween(html, '<div class="slbl">Athlete</div>', '<div class="sdiv"></div>');
 
-    assert.match(athlete, /<div class="sname"><span class="name-wh">ALICE<\/span> <span class="name-cy">SMITH<\/span><\/div>/);
-    assert.match(athlete, /<div class="sname"><span class="name-wh">BOB<\/span> <span class="name-cy">JONES<\/span><\/div>/);
-    assert.doesNotMatch(athlete, /<div class="sname"><span class="name-wh">ALICE<\/span><\/div>\s*<div class="sname"><span class="name-cy">SMITH &amp; JONES, BOB<\/span><\/div>/);
+    assertDoublesNameSplit(html);
+  });
+
+  it("splits mapped pro-doubles and mixed-doubles athlete names into one athlete per line", () => {
+    for (const division of ["pro_doubles_male", "mixed", "mixed_doubles"]) {
+      assertDoublesNameSplit(mappedRaceCardHtmlForDivision(division));
+    }
   });
 
   it("does not throw when cards and split rows are absent", () => {

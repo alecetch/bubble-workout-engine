@@ -132,6 +132,46 @@ test("volume_increase recommendation suppressed when concern is running_hurts_st
   assert.ok(!recTitles.includes("Training Volume"), "Should not push volume increase when concern is muscle interference");
 });
 
+test("low weekly volume for faster 5k/10k goal is insufficient and adds training-volume limiter", () => {
+  const result = analyseRunningProfile({
+    athlete: { email: "test@example.com", age: 35, gender: "male" },
+    trainingProfile: {
+      backgrounds: ["running"],
+      primaryGoals: ["get_faster_5k_10k"],
+      weeklyRunningVolume: "11_20",
+      strengthSessionsPerWeek: "2_3",
+    },
+    performances: [{ distance: "5k", timeSeconds: 1500, recency: "current" }],
+    context: {},
+  });
+
+  assert.equal(result.analysis.volumeSufficiency, "insufficient");
+  assert.ok(
+    result.analysis.limiters.some((limiter) => limiter.title === "Training Volume"),
+    "Should flag volume below 21km as a limiter for faster 5k/10k goals",
+  );
+});
+
+test("21-35km weekly volume for faster 5k/10k goal is borderline and avoids training-volume limiter", () => {
+  const result = analyseRunningProfile({
+    athlete: { email: "test@example.com", age: 35, gender: "male" },
+    trainingProfile: {
+      backgrounds: ["running"],
+      primaryGoals: ["get_faster_5k_10k"],
+      weeklyRunningVolume: "21_35",
+      strengthSessionsPerWeek: "2_3",
+    },
+    performances: [{ distance: "5k", timeSeconds: 1500, recency: "current" }],
+    context: {},
+  });
+
+  assert.equal(result.analysis.volumeSufficiency, "borderline");
+  assert.ok(
+    !result.analysis.limiters.some((limiter) => limiter.title === "Training Volume"),
+    "Should not flag the volume limiter once the shared 21-35km bucket clears 21km",
+  );
+});
+
 test("knee_ankle_foot injury adds disclaimer to all running recommendations", () => {
   const result = analyseRunningProfile({
     athlete: { email: "test@example.com", age: 50, gender: "female" },

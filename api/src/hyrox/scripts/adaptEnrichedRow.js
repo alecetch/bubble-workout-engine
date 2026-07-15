@@ -1,17 +1,12 @@
+import { GRANULAR_BENCHMARK_AGE_GROUPS } from "../config/ageGroups.js";
+import { PERFORMANCE_BAND_KEYS_WITH_OVER_120, PERFORMANCE_BAND_THRESHOLDS_MINUTES } from "../config/benchmarkThresholds.js";
 import { countryToRegion } from "../config/regionMapping.js";
 
 const MIN_SPLIT_COVERAGE_SCORE = 0.8;
 
-export const PERFORMANCE_BANDS = Object.freeze([
-  ...[60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 120].map((threshold) => `sub_${threshold}`),
-  "over_120",
-]);
+export const PERFORMANCE_BANDS = PERFORMANCE_BAND_KEYS_WITH_OVER_120;
 
-export const AGE_GROUP_WHITELIST = new Set([
-  "16-24", "25-29", "30-34", "35-39", "40-44", "45-49",
-  "50-54", "55-59", "60-64", "65-69", "70-74", "75-79",
-  "80-84", "85-89", "90+",
-]);
+export const AGE_GROUP_WHITELIST = new Set(GRANULAR_BENCHMARK_AGE_GROUPS);
 
 export function toFiniteOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -23,8 +18,8 @@ export function performanceBandForSeconds(seconds) {
   const numeric = toFiniteOrNull(seconds);
   if (numeric === null) return null;
   const minutes = numeric / 60;
-  for (const threshold of [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 120]) {
-    if (minutes <= threshold) return `sub_${threshold}`;
+  for (const threshold of PERFORMANCE_BAND_THRESHOLDS_MINUTES) {
+    if (minutes < threshold) return `sub_${threshold}`;
   }
   return "over_120";
 }

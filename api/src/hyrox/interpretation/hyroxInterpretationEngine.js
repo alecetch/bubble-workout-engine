@@ -121,6 +121,10 @@ function athleteLevel(analysisJson = {}) {
   return "developing";
 }
 
+function isForwardMovingFrame(frame) {
+  return ["competitive", "next_band", "next_band_stretch"].includes(frame);
+}
+
 function guardEliteLanguage(text, level) {
   if (level !== "elite") return text;
   return String(text)
@@ -465,7 +469,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       gainDisplay: null,
     };
   }
-  if (calculatorMode === "analyse" && athleteLevel(analysisJson) === "competitive") {
+  if (calculatorMode === "analyse" && athleteLevel(analysisJson) === "competitive" && isForwardMovingFrame(frame)) {
     const achievedBand = analysisJson.benchmarkContext?.achievedBand;
     const nextBandLabel = analysisJson.benchmarkContext?.nextBand?.replace("sub_", "sub-");
     const achievedLabel = achievedBand?.replace("sub_", "sub-");
@@ -651,7 +655,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       };
     }
 
-    if (isCompetitive && nextBandStr) {
+    if (isCompetitive && nextBandStr && isForwardMovingFrame(frame)) {
       return {
         headline: `YOU ARE COMPETITIVE IN ${achievedBandStr.toUpperCase()} — HERE IS WHAT MOVES YOU TOWARD ${nextBandStr.toUpperCase()}`,
         subline: `The gap to ${nextBandStr} is within reach. Station efficiency is the lever.`,

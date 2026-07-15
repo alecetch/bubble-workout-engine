@@ -138,3 +138,38 @@ test("MM:SS split times: H:MM:SS overall and roxzone still parsed correctly", ()
   assert.equal(result.finishTimeSeconds, 1 * 3600 + 8 * 60 + 45, "finish = 1:08:45");
   assert.equal(result.roxzoneSeconds, 5 * 60 + 23, "roxzone = 0:05:23");
 });
+
+test("multi-line replay-diff format uses final bare time after split label", () => {
+  const result = parseHyroxResultsText([
+    "1000m SkiErg",
+    "08:55:21",
+    "00:05:14",
+    "00:05",
+  ].join("\n"));
+  const ski = result.splits.find((s) => s.segmentKey === "ski_erg");
+
+  assert.ok(ski, "ski_erg found");
+  assert.equal(ski.timeSeconds, 5);
+});
+
+test("doubles names are aggregated and deduplicated", () => {
+  const result = parseHyroxResultsText([
+    "Name\tSmith, Alice",
+    "Name\tJones, Bob",
+    "Name\tSmith, Alice",
+    "Division\tDoubles",
+    MM_SS_PASTE,
+  ].join("\n"));
+
+  assert.equal(result.athleteName, "Smith, Alice & Jones, Bob");
+});
+
+test("doubles divisions are supported while relay still warns", () => {
+  const doubles = parseHyroxResultsText(`Division\tDoubles\n${MM_SS_PASTE}`);
+  assert.equal(doubles.division, "doubles");
+  assert.equal(doubles.warnings.includes("division_doubles_not_supported"), false);
+
+  const relay = parseHyroxResultsText(`Division\tRelay\n${MM_SS_PASTE}`);
+  assert.equal(relay.division, "relay");
+  assert.equal(relay.warnings.includes("division_doubles_not_supported"), true);
+});

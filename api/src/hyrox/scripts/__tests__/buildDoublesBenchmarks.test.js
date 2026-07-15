@@ -120,10 +120,11 @@ describe("adaptEnrichedRow", () => {
 describe("performanceBandForSeconds", () => {
   it("matches the calculator performance band thresholds", () => {
     assert.equal(performanceBandForSeconds(59 * 60 + 59), "sub_60");
-    assert.equal(performanceBandForSeconds(60 * 60), "sub_60");
+    assert.equal(performanceBandForSeconds(60 * 60), "sub_65");
     assert.equal(performanceBandForSeconds(60 * 60 + 1), "sub_65");
     assert.equal(performanceBandForSeconds(104 * 60 + 59), "sub_105");
     assert.equal(performanceBandForSeconds(106 * 60), "sub_120");
+    assert.equal(performanceBandForSeconds(120 * 60), "over_120");
     assert.equal(performanceBandForSeconds(121 * 60), "over_120");
     assert.equal(performanceBandForSeconds(null), null);
   });

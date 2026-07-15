@@ -208,7 +208,7 @@ export function normaliseDivisionSex(label) {
 
 export function normaliseDivisionType(label) {
   const lower = label.toLowerCase();
-  if (lower.includes("pro") && lower.includes("double")) return "doubles_pro";
+  if (lower.includes("pro") && lower.includes("double")) return "pro_doubles";
   if (lower.includes("pro")) return "pro";
   if (lower.includes("double") && lower.includes("mixed")) return "doubles_mixed";
   if (lower.includes("double")) return "doubles";

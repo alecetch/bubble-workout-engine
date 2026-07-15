@@ -1,4 +1,7 @@
-const CONFIDENCE = Object.freeze({ high: 1, medium: 0.7, low: 0.4, A: 1, B: 0.85, C: 0.65, D: 0.4, E: 0 });
+import { GRADE_RANK } from "../confidence/confidenceConfig.js";
+
+export const CONFIDENCE = Object.freeze({ high: 1, medium: 0.7, low: 0.4, A: 1, B: 0.85, C: 0.65, D: 0.4, E: 0 });
+export const CONFIDENCE_GRADE_KEYS = Object.freeze(Object.keys(GRADE_RANK));
 
 function clamp01(value) {
   const n = Number(value);

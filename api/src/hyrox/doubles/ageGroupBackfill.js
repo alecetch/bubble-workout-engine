@@ -1,4 +1,5 @@
 import { fetchListPageByAgeClass, parseListResultCount, parseListRows } from "../../contentStudio/hyroxScraper.js";
+import { HYROX_SCRAPER_DIVISIONS } from "./doublesScraper.js";
 
 // Mika Timing filter codes → display values stored in the DB.
 // Codes come from the search[age_class] dropdown on the HYROX results site.
@@ -21,9 +22,41 @@ export const AGE_CLASS_MAP = Object.freeze([
 ]);
 
 const PAGE_SIZE = 100;
+const KNOWN_DIVISION_CATEGORIES = new Set(HYROX_SCRAPER_DIVISIONS);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function sexCodeForDivisionCategory(divisionCategory) {
+  const category = String(divisionCategory ?? "").trim().toLowerCase();
+  if (!KNOWN_DIVISION_CATEGORIES.has(category)) {
+    throw new Error(`Unknown HYROX division category for age-group backfill: ${divisionCategory}`);
+  }
+  if (category.endsWith("_male")) return "M";
+  if (category.endsWith("_female")) return "W";
+  if (category.endsWith("_mixed")) return "X";
+  throw new Error(`HYROX division category has no sex suffix for age-group backfill: ${divisionCategory}`);
+}
+
+export function buildAgeGroupBackfillPairs(rows = []) {
+  const pairsByKey = new Map();
+  for (const row of rows) {
+    const sourceContestId = row.source_contest_id;
+    const season = row.season;
+    const sexCode = sexCodeForDivisionCategory(row.division_category);
+    const key = `${sourceContestId ?? ""}\u0000${season ?? ""}\u0000${sexCode}`;
+    if (!pairsByKey.has(key)) {
+      pairsByKey.set(key, {
+        source_contest_id: sourceContestId,
+        season,
+        sex_code: sexCode,
+      });
+    }
+  }
+  return [...pairsByKey.values()].sort((a, b) =>
+    String(a.source_contest_id ?? "").localeCompare(String(b.source_contest_id ?? ""))
+    || String(a.sex_code ?? "").localeCompare(String(b.sex_code ?? "")));
 }
 
 export async function getAgeGroupBackfillStatus(pool, jobId) {
@@ -47,26 +80,19 @@ export async function backfillAgeGroupsForJob(pool, jobId, {
   // One row per (source_contest_id, sex) pair that still has records without age_group.
   // source_contest_id is the real Mika Timing key (e.g. HD_AMS26_OVERALL) — NOT results_page_key
   // which stores human-readable names and cannot be used in API URLs.
-  const { rows: pairs } = await pool.query(
+  const { rows: pairRows } = await pool.query(
     `SELECT DISTINCT
        r.source_contest_id,
        e.season,
-       CASE
-         WHEN r.division_category = ANY($2::text[]) THEN 'M'
-         WHEN r.division_category = ANY($3::text[]) THEN 'X'
-         ELSE 'W'
-       END AS sex_code
+       r.division_category
      FROM hyrox_doubles_scraped_results r
      JOIN hyrox_events e ON e.id = r.hyrox_event_id
      WHERE r.scrape_job_id = $1
        AND r.age_group IS NULL
-     ORDER BY r.source_contest_id, sex_code`,
-    [
-      jobId,
-      ["open_male",   "pro_male",   "doubles_male",   "pro_doubles_male",   "team_relay_male"],
-      ["doubles_mixed", "pro_doubles_mixed", "team_relay_mixed"],
-    ],
+     ORDER BY r.source_contest_id, r.division_category`,
+    [jobId],
   );
+  const pairs = buildAgeGroupBackfillPairs(pairRows);
 
   let totalUpdated = 0;
 

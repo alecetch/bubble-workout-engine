@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { GRADE_RANK } from "../confidence/confidenceConfig.js";
 import { shouldShowInsight } from "../confidence/suppressionRules.js";
 import { scoreInsight } from "./insightScorer.js";
 import { selectInsights } from "./insightSelector.js";
@@ -13,7 +14,8 @@ import { ACTION_MAP, VOLUME_INCREASING_ACTIONS } from "./recommendedActions.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REGISTRY_PATH = path.join(__dirname, "insightRegistry.json");
-const GRADE_RANK = Object.freeze({ E: 0, D: 1, C: 2, B: 3, A: 4 });
+
+export { GRADE_RANK as INSIGHT_ENGINE_GRADE_RANK };
 
 let registryCache = null;
 

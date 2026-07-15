@@ -1,4 +1,5 @@
 import { DEFAULT_DATASET_VERSION } from "../config/benchmarkThresholds.js";
+import { adjacentGranularAgeGroups, usesGranularBenchmarkAgeGroups } from "../config/ageGroups.js";
 import { isIndividualAnalysisDivision } from "../config/divisionGroups.js";
 
 function keyPart(value) {
@@ -24,6 +25,12 @@ export function adjacentAgeBand(ageGroup) {
   if (start < 50) return "broad_40_49";
   if (start < 60) return "broad_50_59";
   return "broad_40_plus";
+}
+
+export function adjacentAgeBands(ageGroup, datasetVersion = DEFAULT_DATASET_VERSION) {
+  if (usesGranularBenchmarkAgeGroups(datasetVersion)) return adjacentGranularAgeGroups(ageGroup);
+  const legacyAdjacent = adjacentAgeBand(ageGroup);
+  return legacyAdjacent ? [legacyAdjacent] : [];
 }
 
 export function isIndividualDivision(division) {
@@ -66,8 +73,7 @@ export function buildFallbackChain(request = {}) {
       ageGroup,
     });
 
-    const adjacent = adjacentAgeBand(ageGroup);
-    if (adjacent) {
+    for (const adjacent of adjacentAgeBands(ageGroup, datasetVersion)) {
       if (region) {
         chain.push({
           groupKey: makeBenchmarkGroupKey({ datasetVersion, division, gender, ageGroup: adjacent, region }),

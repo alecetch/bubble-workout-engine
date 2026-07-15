@@ -215,7 +215,11 @@ describe("parseHyroxResults", () => {
     const doubles = parseHyroxResults(`Division\tDOUBLES\n${SPLITS_ONLY}`);
     expect(doubles.division).toBe("doubles");
     expect(doubles.divisionSex).toBeUndefined();
-    expect(doubles.warnings).toContain("division_doubles_not_supported");
+    expect(doubles.warnings).not.toContain("division_doubles_not_supported");
+
+    const relay = parseHyroxResults(`Division\tRelay\n${SPLITS_ONLY}`);
+    expect(relay.division).toBe("relay");
+    expect(relay.warnings).toContain("division_doubles_not_supported");
   });
 
   test("preserves mixed signal for mixed doubles division text", () => {
@@ -223,5 +227,17 @@ describe("parseHyroxResults", () => {
 
     expect(result.division).toBe("doubles");
     expect(result.divisionSex).toBe("mixed");
+  });
+
+  test("aggregates up to two unique athlete names for doubles pages", () => {
+    const result = parseHyroxResults([
+      "Name\tSmith, Alice",
+      "Name\tJones, Bob",
+      "Name\tSmith, Alice",
+      "Division\tDoubles",
+      SPLITS_ONLY,
+    ].join("\n"));
+
+    expect(result.athleteName).toBe("Smith, Alice & Jones, Bob");
   });
 });

@@ -159,4 +159,30 @@ describe("buildPersonalReport - race_split_breakdown section", () => {
     assert.ok(limiterSection.content.includes("Protect this strength: SkiErg — ahead of target profile."));
     assert.ok(!limiterSection.content.join(" ").includes("vs your benchmark band"));
   });
+
+  it("does not flag exactly 8% manageable run fade as material in the summary", () => {
+    const analysis = minimalAnalysis({
+      runningAnalysis: { available: true, runFadePct: 8, interpretation: "manageable_late_fade" },
+    });
+    const { sections } = buildPersonalReport(analysis, [], {}, {
+      primaryThesis: { category: "running" },
+      secondaryTheses: [],
+    });
+    const summary = sections.find((section) => section.sectionKey === "executive_summary");
+
+    assert.doesNotMatch(summary.content.join(" "), /fatigue resistance and pacing deserve attention/i);
+  });
+
+  it("flags material run fade in the summary when interpretation says late fade is present", () => {
+    const analysis = minimalAnalysis({
+      runningAnalysis: { available: true, runFadePct: 9, interpretation: "late_fade_present" },
+    });
+    const { sections } = buildPersonalReport(analysis, [], {}, {
+      primaryThesis: { category: "running" },
+      secondaryTheses: [],
+    });
+    const summary = sections.find((section) => section.sectionKey === "executive_summary");
+
+    assert.match(summary.content.join(" "), /fatigue resistance and pacing deserve attention/i);
+  });
 });

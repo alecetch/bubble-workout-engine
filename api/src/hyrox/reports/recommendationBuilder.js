@@ -362,7 +362,10 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
     });
   }
 
-  if (analysisJson.runningAnalysis?.available && (analysisJson.runningAnalysis.runFadePct ?? 0) >= 8) {
+  const hasMaterialRunFade = analysisJson.runningAnalysis?.interpretation === "materially_above_benchmark"
+    || analysisJson.runningAnalysis?.interpretation === "late_fade_present";
+
+  if (analysisJson.runningAnalysis?.available && hasMaterialRunFade) {
     safePush(items, {
       title: "Pacing under fatigue",
       actionId: "race_pacing",
@@ -402,7 +405,7 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
 
   if (
     !executionOnly
-    && (analysisJson.runningAnalysis?.runFadePct ?? 0) < 8
+    && !hasMaterialRunFade
     && runGapSummary
     && runGapSummary.gainSeconds >= 120
     && limiter

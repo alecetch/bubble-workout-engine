@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildTemplateA } from "../templateSlotMapper.js";
 
 function segment(segmentKey, overrides = {}) {
@@ -62,6 +63,42 @@ describe("buildTemplateA", () => {
     const carousel = buildTemplateA(analysis(), [], { displayName: "Marcus Fernandes" });
 
     assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the Top 10%");
+  });
+
+  it("uses the race-card global comparison option for WORLDWIDE percentile copy", () => {
+    const divergentPercentiles = analysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:45-49", label: "Open Male 45-49" },
+        goalBenchmarkGroup: null,
+        comparisonOptions: [
+          { id: "global", label: "Global", groupKey: "open_male", percentile: 96, topPercent: 4, sampleSize: 5000 },
+          { id: "age_group", label: "Age group 45-49", groupKey: "open_male_45_49", percentile: 99, topPercent: 1, sampleSize: 300 },
+        ],
+      },
+      segments: [
+        segment("total_time", { type: "aggregate", fieldPercentile: 99, percentile: 99, userSeconds: 3600 }),
+        segment("wall_balls", { timeGapToMedianSeconds: 60, percentile: 45 }),
+      ],
+    });
+
+    const carousel = buildTemplateA(divergentPercentiles, [], { displayName: "Marcus Fernandes" });
+    const raceCard = buildHyroxRaceCardData(divergentPercentiles, { displayName: "Marcus Fernandes" });
+
+    assert.equal(raceCard.percentileText, "TOP 4% WORLDWIDE");
+    assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 4% WORLDWIDE");
+    assert.doesNotMatch(carousel.slides[0].percentile, /TOP 1% WORLDWIDE/);
+  });
+
+  it("keeps explicit world-rank copy ahead of derived comparison percentiles", () => {
+    const carousel = buildTemplateA(analysis({
+      benchmarkContext: {
+        comparisonOptions: [
+          { id: "global", label: "Global", groupKey: "open_male", percentile: 96, topPercent: 4, sampleSize: 5000 },
+        ],
+      },
+    }), [], { displayName: "Marcus Fernandes", worldRank: 27 });
+
+    assert.equal(carousel.slides[0].percentile, "Marcus Fernandes has a top rank worldwide");
   });
 
   it("uses exact target gaps before goal benchmark and median gaps in carousel rows", () => {

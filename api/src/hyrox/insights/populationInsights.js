@@ -1,5 +1,8 @@
 import { STATION_KEYS } from "../config/segmentMap.js";
+import { calculateConfidence } from "../confidence/confidenceScorer.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
+
+const POPULATION_INSIGHT_CANDIDATE = Object.freeze({ matchType: "sex_division" });
 
 function gapFor(stats) {
   const median = Number(stats?.medianSeconds ?? stats?.p50Seconds);
@@ -9,7 +12,7 @@ function gapFor(stats) {
 }
 
 function confidenceGradeFor(stats) {
-  return Number(stats?.sampleSize ?? 0) >= 1000 ? "A" : "E";
+  return calculateConfidence(stats, POPULATION_INSIGHT_CANDIDATE).grade;
 }
 
 export function rankStationGaps(benchmarkGroupKey) {
@@ -50,7 +53,7 @@ export function generatePopulationInsights(benchmarkGroupKey, insightDef = null)
       wallBallGapRank: wall.rank,
       stationGapRankings: byKey,
       sampleSize: wall.sampleSize,
-      confidenceGrade: "A",
+      confidenceGrade: wall.confidenceGrade,
       evidenceType: "population",
       coreClaim: "population_wall_balls_not_sled",
     },

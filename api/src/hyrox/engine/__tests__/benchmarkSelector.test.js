@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
+import { PERFORMANCE_BAND_THRESHOLDS_MINUTES } from "../../config/benchmarkThresholds.js";
+import { PERFORMANCE_BANDS } from "../../config/validationThresholds.js";
 import { setBenchmarkData } from "../benchmarkService.js";
 import {
   confidenceLabelFromSampleSize,
   nextPerformanceBand,
+  PERFORMANCE_BAND_ORDER,
   performanceBandForGoal,
   selectBenchmarkGroups,
 } from "../benchmarkSelector.js";
@@ -27,6 +30,7 @@ const DOUBLES_MIXED_KEY = "hyrox:doubles_v2:doubles_mixed:all:all";
 const PRO_DOUBLES_MALE_KEY = "hyrox:doubles_v2:pro_doubles_male:all:all";
 const S8_OPEN_MALE_KEY = "hyrox:singles_s8_v1:open:male:all";
 const S8_OPEN_MALE_AGE_KEY = "hyrox:singles_s8_v1:open:male:35-39";
+const S8_OPEN_MALE_65_69_KEY = "hyrox:singles_s8_v1:open:male:65-69";
 const S8_OPEN_MALE_EUROPE_KEY = "hyrox:singles_s8_v1:open:male:all:europe";
 
 function metric(groupKey, metricKey = "total_time", sampleSize = 500) {
@@ -74,10 +78,25 @@ beforeEach(() => {
 });
 
 describe("performance band helpers", () => {
+  it("derives engine and validation band shapes from the canonical threshold list", () => {
+    const thresholdsFromOrder = PERFORMANCE_BAND_ORDER
+      .filter((band) => band.startsWith("sub_"))
+      .map((band) => Number(band.replace("sub_", "")));
+    const thresholdsFromValidation = PERFORMANCE_BANDS.map((band) => band.maxSeconds / 60);
+
+    assert.deepEqual(thresholdsFromOrder, PERFORMANCE_BAND_THRESHOLDS_MINUTES);
+    assert.deepEqual(thresholdsFromValidation, PERFORMANCE_BAND_THRESHOLDS_MINUTES);
+    assert.deepEqual(PERFORMANCE_BANDS.map((band) => band.key), PERFORMANCE_BAND_ORDER.filter((band) => band.startsWith("sub_")));
+  });
+
   it("maps finish times to achieved bands", () => {
     assert.equal(performanceBandForGoal(59 * 60 + 8), "sub_60");
+    assert.equal(performanceBandForGoal(60 * 60), "sub_65");
+    assert.equal(performanceBandForGoal(65 * 60), "sub_70");
     assert.equal(performanceBandForGoal(74 * 60 + 20), "sub_75");
     assert.equal(performanceBandForGoal(106 * 60), "sub_120");
+    assert.equal(performanceBandForGoal(120 * 60), null);
+    assert.equal(performanceBandForGoal(120 * 60, { includeOver105: true }), "over_120");
     assert.equal(performanceBandForGoal(121 * 60), null);
     assert.equal(performanceBandForGoal(121 * 60, { includeOver105: true }), "over_120");
   });
@@ -114,7 +133,7 @@ describe("selectBenchmarkGroups analyse mode", () => {
   it("keeps target mode on the demographic primary benchmark", () => {
     const result = selectBenchmarkGroups({
       ...submission(74 * 60 + 20),
-      race: { ...submission(74 * 60 + 20).race, targetTimeSeconds: 70 * 60 },
+      race: { ...submission(74 * 60 + 20).race, targetTimeSeconds: 70 * 60 - 1 },
     }, { calculatorMode: "target" });
 
     assert.equal(result.achievedBand, null);
@@ -125,7 +144,7 @@ describe("selectBenchmarkGroups analyse mode", () => {
   it("uses athleteContext targetFinishTimeSeconds when selecting the target benchmark", () => {
     const result = selectBenchmarkGroups({
       ...submission(74 * 60 + 20),
-      athleteContext: { targetFinishTimeSeconds: 70 * 60 },
+      athleteContext: { targetFinishTimeSeconds: 70 * 60 - 1 },
     }, { calculatorMode: "target" });
 
     assert.equal(result.primaryBenchmarkGroup.key, DEMOGRAPHIC_KEY);
@@ -185,6 +204,25 @@ describe("selectBenchmarkGroups age vocabulary", () => {
     assert.equal(canonical.primaryBenchmarkGroup.key, OPEN_MALE_70_PLUS_KEY);
     assert.equal(legacy.primaryBenchmarkGroup.key, canonical.primaryBenchmarkGroup.key);
     assert.equal(legacy.primaryBenchmarkGroup.ageGroup, "70+");
+  });
+
+  it("keeps 65-69 when routing to the singles S8 granular age dataset", () => {
+    setBenchmarkData({
+      groups: [
+        { groupKey: S8_OPEN_MALE_65_69_KEY, datasetVersion: "singles_s8_v1", division: "open", gender: "male", ageGroup: "65-69", sampleSize: 500 },
+      ],
+      metrics: [metric(S8_OPEN_MALE_65_69_KEY)],
+    });
+
+    const result = selectBenchmarkGroups({
+      athlete: { division: "open", sex: "male", ageGroup: "65-69" },
+      race: { division: "open", finishTimeSeconds: 3900 },
+    }, { calculatorMode: "target" });
+
+    assert.equal(result.primaryBenchmarkGroup.key, S8_OPEN_MALE_65_69_KEY);
+    assert.equal(result.primaryBenchmarkGroup.datasetVersion, "singles_s8_v1");
+    assert.equal(result.primaryBenchmarkGroup.ageGroup, "65-69");
+    assert.equal(result.ageBenchmark.groupKey, S8_OPEN_MALE_65_69_KEY);
   });
 });
 

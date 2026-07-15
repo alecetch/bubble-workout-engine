@@ -1,5 +1,6 @@
 import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
+import { worldwideTopPercentFromComparison } from "./comparisonOptions.js";
 import { ageGroupContextLine, formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
 import { resolveHeroImage } from "./heroImageResolver.js";
 
@@ -63,11 +64,15 @@ function overallRankLabel(p) {
 
 function rankLanguage(analysisJson, athleteContext) {
   const worldRank = athleteContext.worldRank ? `#${athleteContext.worldRank}` : null;
-  const overall = segment(analysisJson, "total_time");
-  // fieldPercentile is the demographic-specific ranking (same field the email uses).
-  const percentile = Number(overall?.fieldPercentile ?? overall?.percentile ?? athleteContext.overallPercentile);
   if (worldRank) return { percentile: "TOP RANK WORLDWIDE", worldRank };
-  if (Number.isFinite(percentile) && percentile >= 99) return { percentile: "TOP 1% WORLDWIDE", worldRank: "" };
+
+  const worldwideTopPercent = worldwideTopPercentFromComparison(analysisJson.benchmarkContext);
+  if (worldwideTopPercent != null) {
+    return { percentile: `TOP ${worldwideTopPercent}% WORLDWIDE`, worldRank: "" };
+  }
+
+  const overall = segment(analysisJson, "total_time");
+  const percentile = Number(overall?.fieldPercentile ?? overall?.percentile ?? athleteContext.overallPercentile);
   return { percentile: overallRankLabel(percentile) ?? "BENCHMARKED RESULT", worldRank: "" };
 }
 

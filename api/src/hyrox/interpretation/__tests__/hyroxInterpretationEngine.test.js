@@ -216,6 +216,15 @@ test("competitive frame hero copy references current and next band", () => {
   assert.doesNotMatch(result.heroCopy.headline, /KEY TO REACHING/i);
 });
 
+test("catch_up frame in a competitive band does not claim next-band competitiveness", () => {
+  const result = buildInterpretation(analysisWithFrame("catch_up", "sub_70"), {}, "analyse");
+
+  assert.equal(result.primaryThesis.category, "station_capacity");
+  assert.doesNotMatch(result.heroCopy.headline, /YOU ARE COMPETITIVE/i);
+  assert.doesNotMatch(result.heroCopy.headline, /HERE IS WHAT MOVES YOU TOWARD/i);
+  assert.match(result.heroCopy.headline, /LEAST ALIGNED|BIGGEST OPPORTUNITY/i);
+});
+
 test("totalRunGapSeconds uses positive frameGapSeconds from run segments", () => {
   const analysis = makeAnalysis({
     segments: [
@@ -253,7 +262,11 @@ test("headline includes 'fastest win' or 'penalties' for penalty-heavy athlete",
 
 test("headline references current and next band for competitive athlete", () => {
   const result = buildInterpretation(makeAnalysis({
-    benchmarkContext: { achievedBand: "sub_70", nextBand: "sub_65" },
+    benchmarkContext: {
+      achievedBand: "sub_70",
+      nextBand: "sub_65",
+      analysisFrame: { frame: "competitive", comparisonBand: "sub_70", stretchBand: "sub_65", gapToBandMedianSeconds: -30 },
+    },
     stationBreakdown: [
       station("wall_balls", 90, 38),
       station("sandbag_lunges", 70, 42),
@@ -277,6 +290,7 @@ test("competitive athlete hero headline uses em dash not plain hyphen", () => {
     benchmarkContext: {
       achievedBand: "sub_65",
       nextBand: "sub_60",
+      analysisFrame: { frame: "competitive", comparisonBand: "sub_65", stretchBand: "sub_60", gapToBandMedianSeconds: -30 },
     },
   }), {}, "analyse");
 

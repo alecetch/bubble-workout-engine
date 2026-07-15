@@ -331,7 +331,7 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
     const isAnalyseMode = Boolean(analysisJson?.benchmarkContext?.analysisFrame);
     const { achievedBand, comparisonBand, group } = resolvedComparisonBandInfo(analysisJson);
     if (!isAnalyseMode || !achievedBand) return "";
-    const groupLabel = benchmarkLensComparisonGroupLabel(comparisonBand);
+    const groupLabel = benchmarkLensComparisonGroupLabel(comparisonBand, group);
     const sampleSize = Number(group?.sampleSize);
     const sampleText = Number.isFinite(sampleSize) && sampleSize > 0
       ? `${sampleSize.toLocaleString()} `
@@ -370,8 +370,8 @@ function analyseBenchmarkCellLabel(analysisJson) {
   const bandLabel = bandDisplayLabel(achievedBand, { useOver105Band });
   const groupLabel = analysisJson?.benchmarkContext?.primaryBenchmarkGroup?.label ?? "Your division";
   const confidence = analysisJson?.benchmarkContext?.confidenceLabel;
-  const confidenceSuffix = ["directional", "low-confidence"].includes(confidence)
-    ? ` (${confidence})`
+  const confidenceSuffix = confidence === "insufficient"
+    ? " (directional)"
     : "";
   return bandLabel ? `${bandLabel} - ${groupLabel}${confidenceSuffix}` : `${groupLabel}${confidenceSuffix}`;
 }
@@ -408,12 +408,21 @@ function targetFinishBand(analysisJson = {}, athleteContext = {}) {
   return seconds ? performanceBandForGoal(seconds, { includeOver105: true }) : null;
 }
 
-function benchmarkLensComparisonGroupLabel(band) {
+function isCumulativePerformanceBandGroup(group = null) {
+  const datasetVersion = String(group?.datasetVersion ?? group?.dataset_version ?? "");
+  return datasetVersion.startsWith("historical_hyrox_");
+}
+
+function benchmarkLensComparisonGroupLabel(band, group = null) {
   const bandShortLabel = FINISH_BAND_SHORT_LABELS[band] ?? band;
   const rawRange = BAND_RANGES[band];
   if (!rawRange) return `${bandShortLabel} min band`;
   if (rawRange.startsWith("under")) return "Sub-60 finishers";
   if (rawRange.includes("and above")) return "120+ finishers";
+  if (isCumulativePerformanceBandGroup(group)) {
+    const threshold = String(band ?? "").match(/^sub_(\d+)$/)?.[1];
+    return threshold ? `Under ${threshold}:00 finishers` : `${bandShortLabel} finishers`;
+  }
   return `${rawRange.replace("between ", "").replace(" and ", "–")} finishers`;
 }
 
@@ -454,8 +463,8 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   const finishTime = formatTime(finishSeconds);
   if (!finishTime) return "";
 
-  const { comparisonBand, isEscalated } = resolvedComparisonBandInfo(analysisJson, currentBand);
-  const comparisonGroupLabel = benchmarkLensComparisonGroupLabel(comparisonBand);
+  const { comparisonBand, isEscalated, group } = resolvedComparisonBandInfo(analysisJson, currentBand);
+  const comparisonGroupLabel = benchmarkLensComparisonGroupLabel(comparisonBand, group);
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
 
   // Benchmark median — same source as the metric strip's comparison time
@@ -466,12 +475,13 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   );
   const bandMedianTime = bandMedianSecs ? formatTime(bandMedianSecs) : null;
 
+  // Deliberately band-relative: Benchmark Lens standing compares within the selected performance band.
   const percentileValue = Number(totalSeg?.percentile);
   const percentileText = Number.isFinite(percentileValue)
     ? `${formatPercentileRank(percentileValue)} within this band`
     : null;
   const isHighInBand = Number.isFinite(percentileValue) && percentileValue >= 80;
-  const isLowSample = ["directional", "low-confidence"].includes(analysisJson.benchmarkContext?.confidenceLabel);
+  const isLowSample = analysisJson.benchmarkContext?.confidenceLabel === "insufficient";
   const lensCompBandLabel = isEscalated ? bandDisplayLabel(comparisonBand) : null;
   const lensBandLabel = bandDisplayLabel(currentBand);
 
@@ -607,6 +617,7 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     : selectedTargetSeconds;
   const benchmarkTime = comparisonSeconds ? formatTime(comparisonSeconds) : "-";
   const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "-";
+  // Deliberately demographic-wide: fieldPercentile can differ from the band-relative Benchmark Lens standing.
   const rank = esc(formatOverallStanding(totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds;
   const targetGapSeconds = Number.isFinite(finishSeconds) && Number.isFinite(selectedTargetSeconds)

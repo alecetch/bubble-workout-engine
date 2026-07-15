@@ -249,6 +249,7 @@ test("pacing rationale includes started_too_fast language when diagnosis is star
     runningAnalysis: {
       available: true,
       runFadePct: 10,
+      interpretation: "late_fade_present",
       run1PacingDiagnosis: "started_too_fast",
       run1VsMedianPct: 9.5,
     },
@@ -263,6 +264,7 @@ test("pacing rationale uses late-fade language when diagnosis is appropriate", (
     runningAnalysis: {
       available: true,
       runFadePct: 10,
+      interpretation: "late_fade_present",
       run1PacingDiagnosis: "appropriate",
       run1VsMedianPct: 2,
     },
@@ -270,6 +272,35 @@ test("pacing rationale uses late-fade language when diagnosis is appropriate", (
   const pacingRec = recs.find((recommendation) => recommendation.actionId === "race_pacing");
   assert.ok(pacingRec, "pacing recommendation expected");
   assert.match(pacingRec.rationale, /station fatigue|later legs/i);
+});
+
+test("exactly 8% manageable run fade does not produce pacing-under-fatigue recommendation", () => {
+  const recs = buildRecommendations(enrichedAnalysis({
+    runningAnalysis: {
+      available: true,
+      runFadePct: 8,
+      interpretation: "manageable_late_fade",
+      run1PacingDiagnosis: "appropriate",
+    },
+  }), [], {});
+
+  assert.equal(recs.some((recommendation) => recommendation.actionId === "race_pacing" && recommendation.title === "Pacing under fatigue"), false);
+  assert.doesNotMatch(recs.map((recommendation) => recommendation.rationale).join(" "), /Run fade was 8%/i);
+});
+
+test("late-fade interpretation produces pacing-under-fatigue recommendation", () => {
+  const recs = buildRecommendations(enrichedAnalysis({
+    runningAnalysis: {
+      available: true,
+      runFadePct: 9,
+      interpretation: "late_fade_present",
+      run1PacingDiagnosis: "appropriate",
+    },
+  }), [], {});
+  const pacingRec = recs.find((recommendation) => recommendation.actionId === "race_pacing");
+
+  assert.ok(pacingRec, "pacing recommendation expected");
+  assert.match(pacingRec.rationale, /Run fade was 9%/i);
 });
 
 test("contributors sub-list has no single-item list when only one station", () => {
