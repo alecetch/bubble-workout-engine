@@ -166,6 +166,26 @@ describe("RaceDetailsPage progressive disclosure", () => {
     expect(screen.queryByText("What do you want to know?")).not.toBeInTheDocument();
   });
 
+  test("target mode rejects ambiguous implausible target time but accepts compact digit entry", () => {
+    renderPage("/hyrox-calculator/race-details?mode=target");
+    revealManualFields();
+    fillRequiredRaceDetails();
+
+    fireEvent.change(screen.getByLabelText(/target finish time/i), {
+      target: { value: "1:30" },
+    });
+
+    expect(screen.getByText(/realistic HYROX target time/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/next: check splits/i)[0]).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/target finish time/i), {
+      target: { value: "9000" },
+    });
+
+    expect(screen.queryByText(/realistic HYROX target time/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/next: check splits/i)[0]).not.toBeDisabled();
+  });
+
   test("default mode is analyse and only requires age group and finish time after reveal", () => {
     renderPage();
     revealManualFields();

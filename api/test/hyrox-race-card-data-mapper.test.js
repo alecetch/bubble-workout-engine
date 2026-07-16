@@ -69,7 +69,7 @@ function makeAnalysisJson(overrides = {}) {
 // ── Golden path ─────────────────────────────────────────────────────────────
 
 test("golden path — all fields populated", () => {
-  const data = buildHyroxRaceCardData(makeAnalysisJson(), { displayName: "Marcus Fernandes" });
+  const data = buildHyroxRaceCardData(makeAnalysisJson({ calculatorMode: "target" }), { displayName: "Marcus Fernandes" });
 
   assert.equal(data.athleteName, "Marcus Fernandes");
   assert.equal(data.finishTime, "59:08");
@@ -108,6 +108,19 @@ test("formaScore falls back to overallPerformanceScore when comparisonOptions is
   const aj = makeAnalysisJson({ benchmarkContext: { comparisonOptions: { defaultId: "global", options: [] } } });
   const data = buildHyroxRaceCardData(aj);
   assert.equal(data.formaScore, 91); // falls back to scores.overallPerformanceScore
+});
+
+test("percentileText falls back to demographic percentile when comparisonOptions is empty", () => {
+  const aj = makeAnalysisJson({
+    benchmarkContext: { comparisonOptions: { defaultId: "global", options: [] } },
+    segments: [
+      { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 3548, fieldPercentile: 65, percentile: 40 },
+      { segmentKey: "ski_erg", label: "SkiErg", type: "station", userSeconds: 240, frameGapSeconds: -18, percentile: 87 },
+    ],
+  });
+  const data = buildHyroxRaceCardData(aj);
+
+  assert.equal(data.percentileText, "Top 35%");
 });
 
 // ── Mode / target time ───────────────────────────────────────────────────────
@@ -179,6 +192,33 @@ test("splitRow tone is negative for positive frameGapSeconds", () => {
   const data = buildHyroxRaceCardData(makeAnalysisJson());
   const lungesRow = data.splitRows.find((r) => r.key === "sandbag_lunges");
   if (lungesRow) assert.equal(lungesRow.tone, "negative");
+});
+
+test("splitRows prefer frameGapSeconds over goal-derived gap when both are present", () => {
+  const data = buildHyroxRaceCardData(makeAnalysisJson({
+    calculatorMode: "analyse",
+    benchmarkContext: {
+      goalBenchmarkGroup: { targetFinishSeconds: 3300, label: "55:00 target" },
+      comparisonOptions: [],
+    },
+    segments: [
+      { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 3548, frameGapSeconds: 248, percentile: 65 },
+      {
+        segmentKey: "run_1",
+        label: "Run 1",
+        type: "run",
+        userSeconds: 300,
+        goalBenchmarkSeconds: 250,
+        frameGapSeconds: -12,
+        timeGapToMedianSeconds: 20,
+        percentile: 70,
+      },
+    ],
+  }));
+  const runRow = data.splitRows.find((r) => r.key === "run_1");
+
+  assert.equal(runRow.delta, "-0:12");
+  assert.equal(runRow.tone, "positive");
 });
 
 // ── Time formatting ──────────────────────────────────────────────────────────

@@ -254,6 +254,7 @@ export function analyseSubmission(input = {}) {
     submissionId: input.submissionId ?? null,
     analysisVersion: HYROX_ANALYSIS_VERSION,
     analysisScope: scope,
+    calculatorMode,
     athlete: normalised.athlete,
     race: normalised.race,
     dataQuality: dataQuality(normalised, benchmarkContext),

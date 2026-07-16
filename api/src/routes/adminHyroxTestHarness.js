@@ -16,6 +16,8 @@ import { detectHyroxDivisionFromUrl } from "../hyrox/ingestion/detectHyroxDivisi
 
 const RESULTS_URL_PREFIX = "https://results.hyrox.com/";
 const FETCH_TIMEOUT_MS = 12_000;
+const HYROX_TARGET_TIME_MIN_SECONDS = 25 * 60;
+const HYROX_TARGET_TIME_MAX_SECONDS = 5 * 60 * 60;
 
 // In-process HTML cache — populated by the browser bookmarklet (bypasses WAF)
 const htmlCache = new Map(); // normalisedKey -> { html, url, cachedAt }
@@ -119,6 +121,18 @@ export function parseTargetTimeSeconds(raw) {
   return null;
 }
 
+function hasTargetTimeInput(raw) {
+  return raw !== undefined && raw !== null && String(raw).trim() !== "";
+}
+
+function isPlausibleHyroxTargetTimeSeconds(seconds) {
+  return (
+    Number.isFinite(seconds) &&
+    seconds >= HYROX_TARGET_TIME_MIN_SECONDS &&
+    seconds <= HYROX_TARGET_TIME_MAX_SECONDS
+  );
+}
+
 function formatSeconds(seconds) {
   if (!Number.isFinite(seconds)) return "-";
   const value = Math.max(0, Math.round(seconds));
@@ -127,6 +141,20 @@ function formatSeconds(seconds) {
   const s = value % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function validateTargetTimeInput(raw, label = "targetTime") {
+  const seconds = parseTargetTimeSeconds(raw);
+  if (isPlausibleHyroxTargetTimeSeconds(seconds)) {
+    return { ok: true, seconds };
+  }
+
+  const entered = String(raw ?? "").trim() || "(empty)";
+  return {
+    ok: false,
+    seconds,
+    message: `${label} target time "${entered}" must be a realistic HYROX finish time between ${formatSeconds(HYROX_TARGET_TIME_MIN_SECONDS)} and ${formatSeconds(HYROX_TARGET_TIME_MAX_SECONDS)}. Use 1:30:00 for 1 hour 30 minutes.`,
+  };
 }
 
 function isoDate(value) {
@@ -1231,17 +1259,24 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
 
       const validation = validateUrlList(urls);
       if (!validation.ok) return res.status(validation.status).json(validation.body);
-      for (const entry of cases) {
-        entry.targetFinishTimeSeconds = parseTargetTimeSeconds(entry.targetTime);
-      }
-      const invalidCases = cases
-        .map((entry, index) => ({ entry, index }))
-        .filter(({ entry }) => !Number.isFinite(entry.targetFinishTimeSeconds) || entry.targetFinishTimeSeconds <= 0 || entry.targetFinishTimeSeconds > 10_800);
+      const invalidCases = [];
+      cases.forEach((entry, index) => {
+        const targetValidation = validateTargetTimeInput(entry.targetTime, `case ${index + 1}`);
+        if (targetValidation.ok) {
+          entry.targetFinishTimeSeconds = targetValidation.seconds;
+        } else {
+          invalidCases.push({ entry, index, targetValidation });
+        }
+      });
       if (invalidCases.length) {
         const detail = invalidCases
           .map(({ entry, index }) => `case ${index + 1} — "${String(entry.targetTime ?? "").trim() || "(empty)"}"`)
           .join(", ");
-        return res.status(400).json({ error: "invalid_target_time", reason: detail });
+        return res.status(400).json({
+          error: "invalid_target_time",
+          reason: detail,
+          message: invalidCases.map(({ targetValidation }) => targetValidation.message).join(", "),
+        });
       }
 
       const sharedContext = {
@@ -1399,9 +1434,9 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
       const validation = validateUrlList(urls);
       if (!validation.ok) return res.status(validation.status).json(validation.body);
 
-      const targetFinishTimeSeconds = parseTargetTimeSeconds(req.body?.targetTime);
-      if (!Number.isFinite(targetFinishTimeSeconds) || targetFinishTimeSeconds <= 0 || targetFinishTimeSeconds > 10_800) {
-        return res.status(400).json({ error: "invalid_target_time" });
+      const targetValidation = validateTargetTimeInput(req.body?.targetTime, "targetTime");
+      if (!targetValidation.ok) {
+        return res.status(400).json({ error: "invalid_target_time", message: targetValidation.message });
       }
 
       const url = urls[0];
@@ -1438,8 +1473,15 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
       return res.status(400).json({ error: "invalid_url" });
     }
     try {
+      const rawTargetTime = req.body?.targetTime;
+      const hasTargetTime = hasTargetTimeInput(rawTargetTime);
+      const targetValidation = hasTargetTime ? validateTargetTimeInput(rawTargetTime, "targetTime") : { ok: true, seconds: null };
+      if (!targetValidation.ok) {
+        return res.status(400).json({ error: "invalid_target_time", message: targetValidation.message });
+      }
+
       const importResult = await fetchAndParseHyroxUrl(urls[0], pool);
-      const targetTime = parseTargetTimeSeconds(req.body?.targetTime);
+      const targetTime = targetValidation.seconds;
       const mode = { modeName: "Race Card", calculatorMode: targetTime ? "target" : "analyse", targetFinishTimeSeconds: targetTime ?? null };
       const modeResult = runMode(mode, importResult.parsed, importResult.event, {});
       const athleteCtx = {

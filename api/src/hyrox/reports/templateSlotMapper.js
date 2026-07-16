@@ -1,8 +1,10 @@
 import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
-import { worldwideTopPercentFromComparison } from "./comparisonOptions.js";
+import { benchmarkConfidenceQualifier, percentileTextWithFallback } from "./comparisonOptions.js";
+import { comparisonLabel, hasGoalGroup } from "./comparisonBasis.js";
 import { ageGroupContextLine, formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
 import { resolveHeroImage } from "./heroImageResolver.js";
+import { penaltyContext } from "./penaltyContext.js";
 
 const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type !== "roxzone");
 const FEATURES = Object.freeze(["Biggest Limiter", "Time Potential", "Strongest Station", "Percentile Ranking", "Race Efficiency Score"]);
@@ -41,50 +43,80 @@ function upper(value) {
   return String(value ?? "").toUpperCase();
 }
 
-function athleteName(athleteContext = {}) {
+function titleCaseName(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\S+/g, (word) => word.replace(/(^|[-'])(\w)/g, (_, prefix, char) => `${prefix}${char.toUpperCase()}`));
+}
+
+function isUppercaseNameToken(value) {
+  return /[A-Z]/.test(String(value ?? "")) && String(value ?? "").length > 1 && String(value ?? "") === String(value ?? "").toUpperCase();
+}
+
+function normaliseOneAthleteName(rawName) {
+  const trimmed = String(rawName ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.includes(",")) {
+    const commaIdx = trimmed.indexOf(",");
+    const last = trimmed.slice(0, commaIdx).trim();
+    const first = trimmed.slice(commaIdx + 1).trim();
+    return titleCaseName(first && last ? `${first} ${last}` : first || last);
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2 && isUppercaseNameToken(parts[0]) && !isUppercaseNameToken(parts[1])) {
+    return titleCaseName(`${parts.slice(1).join(" ")} ${parts[0]}`);
+  }
+  return titleCaseName(trimmed);
+}
+
+function firstNameFromOneAthlete(rawName) {
+  const normalised = normaliseOneAthleteName(rawName);
+  return normalised.split(/\s+/)[0] || null;
+}
+
+function rawAthleteName(athleteContext = {}) {
   return athleteContext.displayName ?? athleteContext.name ?? "Your athlete";
 }
 
-function firstName(athleteContext = {}) {
-  const name = String(athleteName(athleteContext));
-  let part;
-  if (name.includes(",")) {
-    part = name.split(",")[1]?.trim().split(/\s+/)[0];
+function athleteName(athleteContext = {}) {
+  const raw = String(rawAthleteName(athleteContext));
+  if (raw.includes(" & ")) {
+    const parts = raw.split(" & ").map(normaliseOneAthleteName).filter(Boolean);
+    return parts.length > 0 ? parts.join(" & ") : "Your athlete";
   }
-  if (!part) part = name.split(/\s+/)[0] || "This athlete";
-  return part.charAt(0).toUpperCase() + part.slice(1);
+  return normaliseOneAthleteName(raw) || "Your athlete";
 }
 
-function overallRankLabel(p) {
-  const n = Number(p);
-  if (!Number.isFinite(n)) return null;
-  const topPct = Math.max(1, Math.round(100 - n));
-  return `Top ${topPct}%`;
+function firstName(athleteContext = {}) {
+  const raw = String(rawAthleteName(athleteContext));
+  if (raw.includes(" & ")) {
+    const parts = raw.split(" & ").map(firstNameFromOneAthlete).filter(Boolean);
+    return parts.length > 0 ? parts.join(" & ") : "This athlete";
+  }
+  return firstNameFromOneAthlete(raw) ?? "This athlete";
 }
 
 function rankLanguage(analysisJson, athleteContext) {
   const worldRank = athleteContext.worldRank ? `#${athleteContext.worldRank}` : null;
   if (worldRank) return { percentile: "TOP RANK WORLDWIDE", worldRank };
 
-  const worldwideTopPercent = worldwideTopPercentFromComparison(analysisJson.benchmarkContext);
-  if (worldwideTopPercent != null) {
-    return { percentile: `TOP ${worldwideTopPercent}% WORLDWIDE`, worldRank: "" };
-  }
-
+  const qualifier = benchmarkConfidenceQualifier(analysisJson.benchmarkContext);
+  const qualifierSuffix = qualifier ? ` (${qualifier})` : "";
   const overall = segment(analysisJson, "total_time");
-  const percentile = Number(overall?.fieldPercentile ?? overall?.percentile ?? athleteContext.overallPercentile);
-  return { percentile: overallRankLabel(percentile) ?? "BENCHMARKED RESULT", worldRank: "" };
+  const percentileLabel = percentileTextWithFallback(
+    analysisJson.benchmarkContext,
+    overall,
+    athleteContext.overallPercentile,
+  ) ?? "BENCHMARKED RESULT";
+  return { percentile: `${percentileLabel}${qualifierSuffix}`, worldRank: "" };
 }
 
 function athleteRankLine(rank, athleteContext) {
   const name = athleteName(athleteContext);
-  if (!rank?.percentile || rank.percentile === "BENCHMARKED RESULT") return rank?.percentile ?? "BENCHMARKED RESULT";
+  if (!rank?.percentile || rank.percentile.startsWith("BENCHMARKED RESULT")) return rank?.percentile ?? "BENCHMARKED RESULT";
   if (rank.percentile === "TOP RANK WORLDWIDE") return `${name} has a top rank worldwide`;
   return `${name} is in the ${rank.percentile}`;
-}
-
-function hasGoalGroup(analysisJson) {
-  return Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup);
 }
 
 function targetSeconds(row, goalAvailable) {
@@ -94,19 +126,12 @@ function targetSeconds(row, goalAvailable) {
 }
 
 function targetGapSeconds(row, goalAvailable) {
+  if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
   if (Number.isFinite(row?.timeGapToExactTargetSeconds)) return row.timeGapToExactTargetSeconds;
   if (goalAvailable && Number.isFinite(row?.goalBenchmarkSeconds) && Number.isFinite(row?.userSeconds)) {
     return row.userSeconds - row.goalBenchmarkSeconds;
   }
-  // frameGapSeconds is the analysis-frame-adjusted gap (e.g. next-band median in analyse mode).
-  // Prefer it over the raw median gap so the carousel matches the email.
-  if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
   return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
-}
-
-function comparisonLabel(analysisJson) {
-  if ((analysisJson.segments ?? []).some((row) => Number.isFinite(row?.exactTargetSeconds))) return "TARGET";
-  return hasGoalGroup(analysisJson) ? "TARGET BENCHMARK" : "MEDIAN";
 }
 
 function flowRows(analysisJson) {
@@ -154,10 +179,22 @@ function opportunityGap(row, analysisJson) {
   return Number.isFinite(gap) ? gap : Number(row?.timeGapSeconds ?? 0);
 }
 
+function strengthGapSeconds(row, analysisJson) {
+  const gap = targetGapSeconds(row, hasGoalGroup(analysisJson));
+  if (Number.isFinite(gap)) return gap;
+  if (Number.isFinite(row?.timeAdvantageSeconds)) return -Math.abs(row.timeAdvantageSeconds);
+  return Number.isFinite(row?.timeGapSeconds) ? row.timeGapSeconds : 0;
+}
+
 export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athleteContext = {}) {
-  const limiter = opportunityStation(analysisJson);
+  const penalty = penaltyContext(analysisJson);
+  const limiter = penalty.usePenaltyHero
+    ? { segmentKey: "penalties", label: "Penalties", type: "penalty", timeGapSeconds: penalty.totalPenaltySeconds, percentile: null }
+    : opportunityStation(analysisJson);
   const strength = bestStation(analysisJson);
-  const gain = analysisJson.timePotential?.headlineGainSeconds ?? analysisJson.headline?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? limiter?.timeGapToMedianSeconds ?? 0;
+  const gain = penalty.usePenaltyHero
+    ? penalty.totalPenaltySeconds
+    : analysisJson.timePotential?.headlineGainSeconds ?? analysisJson.headline?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? limiter?.timeGapToMedianSeconds ?? 0;
   const rank = rankLanguage(analysisJson, athleteContext);
   const rows = flowRows(analysisJson);
   const rowCallouts = callouts(rows);
@@ -204,16 +241,17 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         slide_id: "A3_BIGGEST_STRENGTH",
         station: upper(strength?.label ?? label(strength?.segmentKey) ?? "N/A"),
         percentile: formatPercentile(strength?.percentile) ?? "BENCHMARKED",
-        position_gain: formatTimeDiff(Math.abs(strength?.timeAdvantageSeconds ?? strength?.timeGapToMedianSeconds ?? strength?.frameGapSeconds ?? strength?.timeGapSeconds ?? 0)) ?? "+0:00",
+        position_gain: formatTimeDiff(Math.abs(strengthGapSeconds(strength, analysisJson))) ?? "+0:00",
+        position_gain_label: `TIME AHEAD OF ${basis}`,
         caption: `${strength?.label ?? "This station"} is the strongest benchmarked area in this result.`,
       },
       {
         slide_id: "A4_BIGGEST_OPPORTUNITY",
         station: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "N/A"),
-        label: "Opportunity",
+        label: penalty.usePenaltyHero ? "Fastest Win" : "Opportunity",
         potential_gain: formatGain(gain) ?? "0:00",
         potential_gain_text: wordsForSeconds(gain),
-        current_station_rank: formatPercentile(limiter?.percentile) ?? "BENCHMARKED",
+        current_station_rank: penalty.usePenaltyHero ? "EXECUTION" : formatPercentile(limiter?.percentile) ?? "BENCHMARKED",
       },
       {
         slide_id: "A5_KEY_INSIGHT",

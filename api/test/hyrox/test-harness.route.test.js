@@ -139,6 +139,21 @@ test("rejects unparseable target times", async () => {
   assert.equal(body.error, "invalid_target_time");
 });
 
+test("rejects ambiguous implausible target times before generating harness output", async () => {
+  const { response, body } = await request({
+    cases: [
+      { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" },
+      { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:30" },
+    ],
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(body.error, "invalid_target_time");
+  assert.match(body.message, /case 2/);
+  assert.match(body.message, /1:30/);
+  assert.match(body.message, /1:30:00/);
+});
+
 test("returns 422 when the HYROX page cannot be imported", async () => {
   globalThis.fetch = async (url, options) => {
     if (String(url).startsWith("http://127.0.0.1")) return nativeFetch(url, options);

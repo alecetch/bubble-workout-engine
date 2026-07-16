@@ -30,21 +30,22 @@ function normaliseGender(sex) {
 }
 
 function limiterKey(analysisJson) {
-  return [...(analysisJson.segments ?? [])]
+  return analysisJson.headline?.biggestLimiter?.segmentKey
+    ?? analysisJson.limiters?.[0]?.segmentKey
+    ?? [...(analysisJson.segments ?? [])]
     .filter((s) => STATION_KEYS.includes(s.segmentKey) && Number(s.timeGapToMedianSeconds) > 0)
     .sort((a, b) => b.timeGapToMedianSeconds - a.timeGapToMedianSeconds)[0]
     ?.segmentKey
-    ?? analysisJson.limiters?.[0]?.segmentKey
     ?? null;
 }
 
 function strengthKey(analysisJson) {
-  return [...(analysisJson.segments ?? [])]
+  return analysisJson.strengths?.[0]?.segmentKey
+    ?? analysisJson.headline?.biggestStrength?.segmentKey
+    ?? [...(analysisJson.segments ?? [])]
     .filter((s) => STATION_KEYS.includes(s.segmentKey) && Number.isFinite(Number(s.percentile)))
     .sort((a, b) => Number(b.percentile) - Number(a.percentile))[0]
     ?.segmentKey
-    ?? analysisJson.strengths?.[0]?.segmentKey
-    ?? analysisJson.headline?.biggestStrength?.segmentKey
     ?? null;
 }
 

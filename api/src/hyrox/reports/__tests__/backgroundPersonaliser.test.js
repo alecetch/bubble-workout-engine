@@ -14,6 +14,65 @@ function mockAnalysis({ limiterSegmentKey = null, limiterType = null } = {}) {
   };
 }
 
+const LIMITER_COPY_EXPECTATIONS = [
+  {
+    background: "new_to_strength",
+    run: /running pattern is where the gap sits/,
+    station: /loaded stations.*where a strengthening investment/s,
+  },
+  {
+    background: "general_gym",
+    run: /running as the gap/,
+    station: /station execution as the gap/,
+  },
+  {
+    background: "crossfit_hybrid",
+    run: /gap is in the running/,
+    station: /sustain station output/,
+  },
+  {
+    background: "strength_sport",
+    run: /gap.*is aerobic.*8 km of running/s,
+    station: /station performance is where the time is being lost/,
+  },
+  {
+    background: "running",
+    run: /running is where the time is being lost/,
+    station: /gap sits in station capacity/,
+  },
+  {
+    background: "crossfit",
+    run: /gap is in the running/,
+    station: /sustain station output/,
+  },
+  {
+    background: "strength_sports",
+    run: /gap.*is aerobic.*8 km of running/s,
+    station: /station performance is where the time is being lost/,
+  },
+  {
+    background: "team_sports",
+    run: /8 km of running.*highest-leverage aerobic investment/s,
+    station: /station performance as the limiter/,
+  },
+];
+
+test("background copy names the actual limiter area for every recognised background", () => {
+  for (const { background, run, station } of LIMITER_COPY_EXPECTATIONS) {
+    const runCopy = buildBackgroundSection(
+      mockAnalysis({ limiterSegmentKey: "run_3", limiterType: "run" }),
+      { primaryBackground: background },
+    );
+    const stationCopy = buildBackgroundSection(
+      mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }),
+      { primaryBackground: background },
+    );
+
+    assert.match(runCopy, run, `${background} should identify running when the limiter is a run`);
+    assert.match(stationCopy, station, `${background} should identify stations when the limiter is a station`);
+  }
+});
+
 test("running background with station limiter returns aligned copy", () => {
   const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }), { primaryBackground: "running" });
   assert.equal(typeof copy, "string");

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
+import { buildCarouselPage } from "../carouselPageBuilder.js";
 import { buildTemplateA } from "../templateSlotMapper.js";
 
 function segment(segmentKey, overrides = {}) {
@@ -58,6 +59,23 @@ function analysis(overrides = {}) {
   };
 }
 
+function worldwideComparisonAnalysis(benchmarkContextOverrides = {}) {
+  return analysis({
+    benchmarkContext: {
+      primaryBenchmarkGroup: { key: "open:male:45-49", label: "Open Male 45-49" },
+      goalBenchmarkGroup: null,
+      comparisonOptions: [
+        { id: "global", label: "Global", groupKey: "open_male", percentile: 96, topPercent: 4, sampleSize: 5000 },
+      ],
+      ...benchmarkContextOverrides,
+    },
+    segments: [
+      segment("total_time", { type: "aggregate", fieldPercentile: 99, percentile: 99, userSeconds: 3600 }),
+      segment("wall_balls", { timeGapToMedianSeconds: 60, percentile: 45 }),
+    ],
+  });
+}
+
 describe("buildTemplateA", () => {
   it("uses the athlete name in the first-slide percentile line", () => {
     const carousel = buildTemplateA(analysis(), [], { displayName: "Marcus Fernandes" });
@@ -66,18 +84,10 @@ describe("buildTemplateA", () => {
   });
 
   it("uses the race-card global comparison option for WORLDWIDE percentile copy", () => {
-    const divergentPercentiles = analysis({
-      benchmarkContext: {
-        primaryBenchmarkGroup: { key: "open:male:45-49", label: "Open Male 45-49" },
-        goalBenchmarkGroup: null,
-        comparisonOptions: [
-          { id: "global", label: "Global", groupKey: "open_male", percentile: 96, topPercent: 4, sampleSize: 5000 },
-          { id: "age_group", label: "Age group 45-49", groupKey: "open_male_45_49", percentile: 99, topPercent: 1, sampleSize: 300 },
-        ],
-      },
-      segments: [
-        segment("total_time", { type: "aggregate", fieldPercentile: 99, percentile: 99, userSeconds: 3600 }),
-        segment("wall_balls", { timeGapToMedianSeconds: 60, percentile: 45 }),
+    const divergentPercentiles = worldwideComparisonAnalysis({
+      comparisonOptions: [
+        { id: "global", label: "Global", groupKey: "open_male", percentile: 96, topPercent: 4, sampleSize: 5000 },
+        { id: "age_group", label: "Age group 45-49", groupKey: "open_male_45_49", percentile: 99, topPercent: 1, sampleSize: 300 },
       ],
     });
 
@@ -87,6 +97,37 @@ describe("buildTemplateA", () => {
     assert.equal(raceCard.percentileText, "TOP 4% WORLDWIDE");
     assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 4% WORLDWIDE");
     assert.doesNotMatch(carousel.slides[0].percentile, /TOP 1% WORLDWIDE/);
+  });
+
+  it("marks low-confidence carousel percentiles as directional", () => {
+    const carousel = buildTemplateA(
+      worldwideComparisonAnalysis({ confidenceLabel: "insufficient" }),
+      [],
+      { displayName: "Marcus Fernandes" },
+    );
+
+    assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 4% WORLDWIDE (directional)");
+  });
+
+  it("marks doubles-benchmarked-as-singles carousel percentiles as directional", () => {
+    const carousel = buildTemplateA(
+      worldwideComparisonAnalysis({ doublesBenchmarkedAsSingles: true }),
+      [],
+      { displayName: "Marcus Fernandes" },
+    );
+
+    assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 4% WORLDWIDE (directional)");
+  });
+
+  it("does not mark high-confidence carousel percentiles as directional", () => {
+    const carousel = buildTemplateA(
+      worldwideComparisonAnalysis({ confidenceLabel: "strong", doublesBenchmarkedAsSingles: false }),
+      [],
+      { displayName: "Marcus Fernandes" },
+    );
+
+    assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 4% WORLDWIDE");
+    assert.doesNotMatch(carousel.slides[0].percentile, /\(directional\)/);
   });
 
   it("keeps explicit world-rank copy ahead of derived comparison percentiles", () => {
@@ -112,6 +153,87 @@ describe("buildTemplateA", () => {
     assert.equal(rows.find((row) => row.name === "SKIERG").target_time, "4:30");
     assert.equal(carousel.slides[1].biggest_gain.delta, "-0:15");
     assert.equal(carousel.slides[1].biggest_loss.delta, "+1:00");
+  });
+
+  it("uses frame-adjusted gaps before goal-derived gaps in carousel rows", () => {
+    const carousel = buildTemplateA(analysis({
+      calculatorMode: "analyse",
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:35-39", label: "Open Male 35-39" },
+        goalBenchmarkGroup: { targetFinishSeconds: 3300, label: "55:00 target" },
+      },
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 3600, frameGapSeconds: 300, percentile: 70 }),
+        segment("run_1", {
+          userSeconds: 300,
+          goalBenchmarkSeconds: 250,
+          frameGapSeconds: -12,
+          timeGapToMedianSeconds: 20,
+          percentile: 70,
+        }),
+        segment("wall_balls", {
+          userSeconds: 360,
+          goalBenchmarkSeconds: 300,
+          frameGapSeconds: 45,
+          timeGapToMedianSeconds: 80,
+          percentile: 40,
+        }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+    const rows = carousel.slides[1].stations;
+
+    assert.equal(rows.find((row) => row.name === "RUN 1").delta, "-0:12");
+    assert.equal(rows.find((row) => row.name === "WALL BALLS").delta, "+0:45");
+    assert.notEqual(rows.find((row) => row.name === "RUN 1").delta, "+0:50");
+  });
+
+  it("uses the frame-adjusted strength gap for slide A3 position gain", () => {
+    const carousel = buildTemplateA(analysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:sub_90", label: "Open Male Sub 90" },
+        goalBenchmarkGroup: null,
+      },
+      strengths: [{
+        segmentKey: "sled_pull",
+        label: "Sled Pull",
+        type: "station",
+        userSeconds: 210,
+        percentile: 91,
+        timeAdvantageSeconds: 35,
+        timeGapToMedianSeconds: -35,
+        frameGapSeconds: -8,
+      }],
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 90, userSeconds: 3600 }),
+        segment("sled_pull", {
+          label: "Sled Pull",
+          userSeconds: 210,
+          percentile: 91,
+          timeAdvantageSeconds: 35,
+          timeGapToMedianSeconds: -35,
+          frameGapSeconds: -8,
+        }),
+        segment("wall_balls", { userSeconds: 360, timeGapToMedianSeconds: 60, frameGapSeconds: 60, percentile: 45 }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+
+    const flowRow = carousel.slides[1].stations.find((row) => row.name === "SLED PULL");
+
+    assert.equal(flowRow.delta, "-0:08");
+    assert.equal(carousel.slides[2].position_gain, "+0:08");
+    assert.equal(carousel.slides[2].position_gain_label, "TIME AHEAD OF MEDIAN");
+    assert.notEqual(carousel.slides[2].position_gain, "+0:35");
+  });
+
+  it("renders doubles athlete names with both partners in carousel copy and page title", () => {
+    const carousel = buildTemplateA(analysis(), [], { displayName: "SMITH, John & DOE, Jane" });
+    const html = buildCarouselPage(carousel);
+
+    assert.equal(carousel.slides[0].athlete_name, "John Smith & Jane Doe");
+    assert.equal(carousel.slides[4].athlete_first_name, "John & Jane");
+    assert.match(carousel.slides[4].insight, /John & Jane/);
+    assert.match(html, /<title>HYROX Analysis . John Smith &amp; Jane Doe \| FORMA<\/title>/);
+    assert.doesNotMatch(html, /SMITH, John &amp; DOE, Jane/);
   });
 
   it("uses the engine headline limiter when a run gap is larger than every station gap", () => {
@@ -154,6 +276,33 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[0].limiter_word, "RUN 5");
     assert.equal(carousel.slides[3].station, "RUN 5");
     assert.equal(carousel.slides[4].loss_station, "run 5");
+    assert.notEqual(carousel.slides[0].biggest_limiter, "WALL BALLS");
+  });
+
+  it("uses penalties as the carousel headline opportunity when penalties dominate the total gap", () => {
+    const carousel = buildTemplateA(analysis({
+      race: { finishTimeSeconds: 5600, targetTimeSeconds: 5000 },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "Target" },
+        primaryBenchmarkGroup: { key: "open:male", label: "Open Male" },
+      },
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 },
+      },
+      timePotential: { headlineGainSeconds: 90 },
+      penalties: [{ station: "run_5", penaltySeconds: 200 }],
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 5600, frameGapSeconds: 600, percentile: 45 }),
+        segment("wall_balls", { label: "Wall Balls", userSeconds: 380, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35 }),
+      ],
+    }), [], { displayName: "Alex Smith" });
+
+    assert.equal(carousel.slides[0].biggest_limiter, "PENALTIES");
+    assert.equal(carousel.slides[0].limiter_word, "PENALTIES");
+    assert.equal(carousel.slides[3].station, "PENALTIES");
+    assert.equal(carousel.slides[3].label, "Fastest Win");
+    assert.equal(carousel.slides[3].potential_gain, "3:20");
+    assert.equal(carousel.slides[4].loss_station, "penalties");
     assert.notEqual(carousel.slides[0].biggest_limiter, "WALL BALLS");
   });
 
