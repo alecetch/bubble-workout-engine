@@ -50,29 +50,6 @@ const TIER_LABELS = Object.freeze({
   T5: "120+ minute",
 });
 
-const RUNNING_BACKGROUND_COPY = Object.freeze({
-  // Current frontend keys
-  new_to_strength: "Building a foundation of strength training alongside your running is likely the key lever for HYROX performance - consistent loaded work will unlock improvement in station output.",
-  general_gym: "General gym work provides a solid station base. Shift some training toward HYROX-paced loading and carry-specific movements to build race-specific output.",
-  crossfit_hybrid: "CrossFit movement patterns transfer well to HYROX stations, but sessions that focus on HYROX-specific pacing and loading rather than generic WODs will sharpen station performance more efficiently.",
-  strength_sport: "As an athlete from a strength sports background, it is common to default to more lifting than a hybrid event requires. The key question is whether your additional sessions are improving HYROX-specific output or adding fatigue that limits your running.",
-  // Legacy keys
-  strength_sports: "As an athlete from a strength background, the aerobic ceiling is often the limiter that unlocks the next tier - running volume has an outsized return here.",
-  team_sports: "Team sports typically develop short-burst conditioning rather than aerobic durability - longer aerobic work at easy to moderate intensity fills this gap.",
-});
-
-const STRENGTH_BACKGROUND_COPY = Object.freeze({
-  // Current frontend keys
-  new_to_strength: "As an athlete new to strength training, the loaded stations in HYROX become the key focus area - building a consistent strength base now will pay the sharpest dividends in your next race.",
-  general_gym: "General gym work gives you a solid foundation for HYROX stations. Shifting toward HYROX-specific loading patterns and pace will sharpen station output more efficiently than adding generic volume.",
-  crossfit_hybrid: "CrossFit movement patterns transfer well to HYROX stations, but sessions that focus on HYROX-specific pacing and loading rather than generic WODs will sharpen station performance more efficiently.",
-  strength_sport: "As an athlete from a strength sports background, it is common to default to more lifting than a hybrid event requires. The key question is whether your additional sessions are improving HYROX-specific output or adding fatigue that limits your running.",
-  // Legacy keys
-  running: "For athletes with a stronger running base, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
-  crossfit: "CrossFit movement patterns transfer well to HYROX stations, but sessions that focus on HYROX-specific pacing and loading rather than generic WODs will sharpen station performance more efficiently.",
-  strength_sports: "As an athlete from a strength sports background, it is common to default to more lifting than a hybrid event requires. The key question is whether your additional sessions are improving HYROX-specific output or adding fatigue that limits your running.",
-});
-
 function finishTimeTier(seconds) {
   if (!Number.isFinite(seconds)) return null;
   if (seconds < 3600) return "T1";
@@ -84,7 +61,7 @@ function finishTimeTier(seconds) {
 
 function ageModifier(ageGroup) {
   if (!ageGroup) return AGE_RUNNING_MODIFIER.under_35;
-  const n = parseInt(String(ageGroup).split(/[-–]/)[0], 10);
+  const n = parseInt(String(ageGroup).split(/-/)[0], 10);
   if (!Number.isFinite(n)) return AGE_RUNNING_MODIFIER.under_35;
   if (n >= 55) return AGE_RUNNING_MODIFIER["55_plus"];
   if (n >= 50) return AGE_RUNNING_MODIFIER["50_54"];
@@ -103,96 +80,45 @@ function runningVerdict(midpoint, benchmarks, mod) {
   return { verdict: "excessive", adjLow, adjHigh };
 }
 
-function scoreModulation(verdict, score, highThreshold, lowThreshold) {
-  if (!Number.isFinite(score)) return "neutral";
-  const isLow = verdict === "critically_low" || verdict === "below_minimum" || verdict === "below_optimal";
-  const isHigh = verdict === "excessive" || verdict === "upper_range";
-  if (isLow && score < lowThreshold) return "amplified";
-  if (isLow && score >= highThreshold) return "toned_down";
-  if (!isLow && !isHigh && score >= highThreshold) return "affirmed";
-  return "neutral";
-}
-
-function isAge50Plus(ageGroup) {
-  const n = parseInt(String(ageGroup ?? "").split(/[-–]/)[0], 10);
-  return Number.isFinite(n) && n >= 50;
-}
-
 function runningBucketLabel(midpoint) {
   if (midpoint === 5) return "< 10 km/week";
   return `approximately ${midpoint} km/week`;
 }
 
-function appendAddendum(parts, text) {
-  if (text) parts.push(text);
+function runningPosition(verdict) {
+  if (verdict === "critically_low" || verdict === "below_optimal") return "below that range";
+  if (verdict === "on_track") return "within that range";
+  if (verdict === "upper_range") return "above the typical range but below the high-volume threshold";
+  if (verdict === "excessive") return "above the typical range";
+  return "relative to that range";
 }
 
-function buildRunningCopy(verdict, adjLow, adjHigh, midpoint, tierLabel, engineScore, modulation, ageGroup, primaryBackground, benchmarks) {
+function buildRunningCopy(verdict, adjLow, adjHigh, midpoint, tierLabel, ageGroup, benchmarks) {
   const ageCaveat = ageGroup ? " after age adjustment" : "";
-  const parts = [];
-
-  if (verdict === "critically_low") {
-    parts.push(`Your reported running volume (${runningBucketLabel(midpoint)}) is significantly below the recommended floor of ${benchmarks.minViable} km/week for a ${tierLabel} HYROX athlete.`);
-    if (modulation === "toned_down") {
-      parts.push(`Your race data suggests aerobic capacity isn't the primary limiter right now, but maintaining at least ${benchmarks.minViable} km/week will protect your base.`);
-    } else {
-      parts.push("A low aerobic base is likely to limit your run splits and your recovery between stations. Increasing gradually, targeting no more than 10% additional volume per week, is the most impactful training change you could make.");
-      if (modulation === "amplified") parts.push("Your engine score from this race confirms the aerobic system is a current rate-limiter.");
-    }
-  } else if (verdict === "below_optimal") {
-    parts.push(`Your reported volume of approximately ${midpoint} km/week is at the lower end for your performance level.`);
-    parts.push(`The recommended range for a ${tierLabel} HYROX athlete${ageCaveat} is ${adjLow}-${adjHigh} km/week.`);
-    if (modulation === "toned_down") {
-      parts.push(`Your race data suggests aerobic capacity isn't the primary limiter right now, but maintaining at least ${benchmarks.minViable} km/week will protect your base.`);
-    } else {
-      parts.push(`Building gradually toward ${adjLow} km/week would strengthen your aerobic base without over-stressing recovery.`);
-      if (modulation === "amplified") parts.push("Your run splits from this race suggest the aerobic system has room to grow - additional volume would compound over time.");
-    }
-  } else if (verdict === "on_track") {
-    parts.push(`Your reported running volume of approximately ${midpoint} km/week is well-matched for a ${tierLabel} HYROX athlete.`);
-    parts.push("Consistency at this volume, with a mix of easy and threshold work, is more valuable than adding quantity.");
-    if (modulation === "affirmed") parts.push("Your engine score supports this - aerobic capacity is a relative strength in your profile.");
-  } else if (verdict === "upper_range") {
-    parts.push(`Your volume of approximately ${midpoint} km/week is at the upper end for a ${tierLabel} HYROX athlete.`);
-    parts.push("This is manageable if your station training is still progressing, but watch for signs that run fatigue is crowding out quality strength work or slowing station recovery.");
-  } else if (verdict === "excessive") {
-    parts.push(`At approximately ${midpoint} km/week, your running load is higher than the typical optimum for a ${tierLabel} HYROX athlete.`);
-    parts.push("This level of volume can be sustained by experienced aerobic athletes, but if your station performance is lagging, it is worth checking whether run fatigue is the cause.");
-  }
-
-  appendAddendum(parts, RUNNING_BACKGROUND_COPY[primaryBackground]);
-  if ((verdict === "on_track" || verdict === "upper_range") && isAge50Plus(ageGroup)) {
-    parts.push("At this training age, prioritising running frequency (4-5 short runs per week) over single-session volume helps maintain adaptation while managing recovery.");
-  }
-  return parts.join(" ");
+  const floorText = midpoint < benchmarks.minViable
+    ? ` The minimum benchmark floor for this tier is ${benchmarks.minViable} km/week.`
+    : "";
+  return `Your reported running volume is ${runningBucketLabel(midpoint)}. For a ${tierLabel} HYROX athlete${ageCaveat}, the typical range is ${adjLow}-${adjHigh} km/week.${floorText} Your reported volume is ${runningPosition(verdict)}.`;
 }
 
-function buildStrengthCopy(verdict, strengthScore, modulation, primaryBackground, limiterLabel) {
-  const parts = [];
+function strengthBucketLabel(bucket) {
+  if (bucket === "0_1") return "one or fewer strength sessions per week";
+  if (bucket === "2_3" || bucket === "2_3_days_week") return "2-3 strength sessions per week";
+  if (bucket === "4_5" || bucket === "4_5_days_week") return "4-5 strength sessions per week";
+  if (bucket === "6_plus" || bucket === "6_plus_days_week") return "6 or more strength sessions per week";
+  return "the reported strength-session range";
+}
 
-  if (verdict === "below_minimum") {
-    if (modulation === "toned_down") {
-      parts.push("Interestingly, your station scores suggest your current approach is sustaining reasonable functional capacity. Whatever functional training you're doing appears to carry over - but formal loading sessions would give you more headroom under race fatigue.");
-    } else {
-      parts.push("One or fewer strength sessions per week is below the minimum most HYROX athletes need to maintain the functional capacity required across 8 stations.");
-      parts.push("Aim for at least 2 sessions per week with compound lower-body movements (squats, lunges, Romanian deadlifts) and pulling patterns (rows, pull-downs) that transfer directly to HYROX stations.");
-    }
-    if (modulation === "amplified") parts.push("Your station performance from this race supports this - the data points to station capacity as a current limiter.");
-  } else if (verdict === "optimal") {
-    parts.push("Two to three strength sessions per week is the optimal range for most HYROX athletes - enough volume to maintain and develop station capacity without compromising running recovery.");
-    parts.push("The priority at this frequency is specificity: compound lower-body loading, unilateral movements, and pulling patterns that map to the HYROX stations.");
-    if (limiterLabel) parts.push(`Given that ${limiterLabel} is your current biggest limiter, ensure at least one session per week directly targets that movement pattern.`);
-    if (modulation === "amplified") parts.push("Your station performance from this race supports this - the data points to station capacity as a current limiter.");
-  } else if (verdict === "upper_range") {
-    parts.push("Four to five strength sessions per week is workable with careful programming, but it carries a risk of compromising run quality through accumulated fatigue.");
-    parts.push("Ensure these sessions are HYROX-specific (sled work, row ergometry, sandbag and farmer carry patterns) rather than traditional training splits that add load without station specificity.");
-  } else if (verdict === "excessive") {
-    parts.push("Six or more strength sessions per week is a high training load for a hybrid athlete.");
-    parts.push("Unless these are short, HYROX-targeted, and well-separated from running sessions, this volume is likely limiting your aerobic adaptation. Most HYROX coaches would recommend redistributing 2-3 of these sessions toward running or recovery work.");
-  }
+function strengthPosition(verdict) {
+  if (verdict === "below_minimum") return "below that range";
+  if (verdict === "optimal") return "within that range";
+  if (verdict === "upper_range") return "above that range";
+  if (verdict === "excessive") return "well above that range";
+  return "relative to that range";
+}
 
-  appendAddendum(parts, STRENGTH_BACKGROUND_COPY[primaryBackground]);
-  return parts.join(" ");
+function buildStrengthCopy(verdict, bucket) {
+  return `Your reported strength volume is ${strengthBucketLabel(bucket)}. For most HYROX athletes, the typical strength-session range is 2-3 sessions per week. Your reported strength volume is ${strengthPosition(verdict)}.`;
 }
 
 export function buildTrainingVolumeAdvice(analysisJson = {}, athleteContext = {}) {
@@ -204,11 +130,7 @@ export function buildTrainingVolumeAdvice(analysisJson = {}, athleteContext = {}
     ?? athleteContext.targetFinishTimeSeconds
     ?? null;
   const tierId = finishTimeTier(finishSeconds);
-  const engineScore = analysisJson.scores?.engineScore ?? null;
-  const strengthScore = analysisJson.scores?.strengthScore ?? null;
   const ageGroup = analysisJson.athlete?.ageGroup ?? athleteContext.ageGroup ?? null;
-  const background = athleteContext.primaryBackground ?? null;
-  const limiterLabel = analysisJson.headline?.biggestLimiter?.label ?? null;
 
   let runningAdvice = null;
   if (hasRunning && tierId) {
@@ -217,7 +139,6 @@ export function buildTrainingVolumeAdvice(analysisJson = {}, athleteContext = {}
     const midpoint = BUCKET_MIDPOINTS[athleteContext.weeklyRunningVolume] ?? null;
     if (Number.isFinite(midpoint)) {
       const { verdict, adjLow, adjHigh } = runningVerdict(midpoint, benchmarks, mod);
-      const modulation = scoreModulation(verdict, engineScore, 70, 50);
       runningAdvice = {
         verdict,
         athleteKmMidpoint: midpoint,
@@ -225,8 +146,7 @@ export function buildTrainingVolumeAdvice(analysisJson = {}, athleteContext = {}
         tierId,
         tierLabel: TIER_LABELS[tierId],
         ageGroupModifierApplied: mod.upperMod !== 1.0,
-        scoreModulation: modulation,
-        copy: buildRunningCopy(verdict, adjLow, adjHigh, midpoint, TIER_LABELS[tierId], engineScore, modulation, ageGroup, background, benchmarks),
+        copy: buildRunningCopy(verdict, adjLow, adjHigh, midpoint, TIER_LABELS[tierId], ageGroup, benchmarks),
       };
     }
   }
@@ -235,14 +155,11 @@ export function buildTrainingVolumeAdvice(analysisJson = {}, athleteContext = {}
   if (hasStrength) {
     const verdict = STRENGTH_VERDICTS[athleteContext.weeklyStrengthSessions] ?? null;
     if (verdict) {
-      let modulation = scoreModulation(verdict, strengthScore, 70, 45);
-      if (Number.isFinite(strengthScore) && strengthScore < 45) modulation = "amplified";
-      if (verdict === "below_minimum" && Number.isFinite(strengthScore) && strengthScore >= 70) modulation = "toned_down";
       strengthAdvice = {
         verdict,
         bucket: athleteContext.weeklyStrengthSessions,
-        scoreModulation: modulation,
-        copy: buildStrengthCopy(verdict, strengthScore, modulation, background, limiterLabel),
+        typicalRange: { low: 2, high: 3 },
+        copy: buildStrengthCopy(verdict, athleteContext.weeklyStrengthSessions),
       };
     }
   }

@@ -1,5 +1,6 @@
 import { formatGain, formatPercentile, formatTime } from "./copyFormatter.js";
 import { SEGMENT_MAP } from "../config/segmentMap.js";
+import { hasGoalGroup } from "./comparisonBasis.js";
 
 const TRANSITION_TIPS = Object.freeze([
   "Ways to cut transition time without adding training load:",
@@ -167,23 +168,35 @@ function buildExplicitSection(rox, roxSegment, onBenchmarkNote = null) {
 
 const ON_BENCHMARK_THRESHOLD_S = 30;
 
-function onBenchmarkNote(roxSegment, rox) {
+function targetModeForRoxzoneSection(analysisJson = {}, calculatorMode = null) {
+  return calculatorMode === "target"
+    || analysisJson.calculatorMode === "target"
+    || hasGoalGroup(analysisJson);
+}
+
+function onBenchmarkNote(roxSegment, rox, isTargetMode = false) {
   const frameGap = finiteNumber(roxSegment?.frameGapSeconds) ?? finiteNumber(rox.timeGapToMedianSeconds);
   if (frameGap === null || Math.abs(frameGap) > ON_BENCHMARK_THRESHOLD_S) return null;
+  if (isTargetMode) {
+    return frameGap <= 0
+      ? "Your overall transition time was ahead of target - the detail below is worth monitoring but did not cost you time here."
+      : "Your overall transition time was on target - the detail below shows where time was distributed within that.";
+  }
   return frameGap <= 0
     ? "Your overall transition time was ahead of the benchmark — the detail below is worth monitoring but did not cost you time here."
     : "Your overall transition time was on benchmark — the detail below shows where time was distributed within that.";
 }
 
-export function buildRoxzoneSection(analysisJson = {}) {
+export function buildRoxzoneSection(analysisJson = {}, options = {}) {
   const rox = analysisJson.roxzoneAnalysis ?? {};
   const roxSegment = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "roxzone_time") ?? null;
+  const isTargetMode = targetModeForRoxzoneSection(analysisJson, options.calculatorMode);
 
   if (!rox.available) {
     return "No transition time data was available for this result.";
   }
 
-  const benchmarkNote = onBenchmarkNote(roxSegment, rox);
+  const benchmarkNote = onBenchmarkNote(roxSegment, rox, isTargetMode);
 
   if (rox.mode === "inferred_total") {
     const content = buildInferredSection(rox, roxSegment, benchmarkNote);

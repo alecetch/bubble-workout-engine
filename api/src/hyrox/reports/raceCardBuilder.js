@@ -459,9 +459,9 @@ export function buildRaceCardHtml(data) {
     ? `${percentileText} (${confidenceQualifier})`
     : percentileText;
 
-  // Rank ordinal for limiter stat box: "3rd percentile" → "3RD"
-  const rankOrdinal = biggestLimiter?.rankText
-    ? escapeHtml(biggestLimiter.rankText.replace(/ percentile$/i, "").toUpperCase())
+  // Seconds-gap label for the limiter stat box.
+  const limiterGapText = biggestLimiter?.rankText
+    ? escapeHtml(biggestLimiter.rankText.toUpperCase())
     : null;
 
   return `<!DOCTYPE html>
@@ -651,12 +651,12 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
         <div>${hexIcon(biggestLimiter.name, "#fbbf24")}</div>
         <div class="card-info">
           <div class="card-title">${escapeHtml(biggestLimiter.name)}</div>
-          ${(rankOrdinal || biggestLimiter.potentialGain) ? `<div class="stat-row">
-            ${rankOrdinal ? `<div class="stat-box">
-              <div class="stat-lbl">Station Rank</div>
-              <div class="stat-val am">${rankOrdinal}</div>
-              <div class="stat-sub">Percentile</div>
-            </div>` : ""}
+	          ${(limiterGapText || biggestLimiter.potentialGain) ? `<div class="stat-row">
+	            ${limiterGapText ? `<div class="stat-box">
+	              <div class="stat-lbl">Split Gap</div>
+	              <div class="stat-val am">${limiterGapText}</div>
+	              <div class="stat-sub">Seconds</div>
+	            </div>` : ""}
 	            ${biggestLimiter.potentialGain ? `<div class="stat-box">
 	              <div class="stat-lbl">${biggestLimiter.isPenalty ? "Fastest Win" : "Potential Gain"}</div>
 	              <div class="stat-val am">${escapeHtml(biggestLimiter.potentialGain)}</div>

@@ -63,6 +63,29 @@ function segment(analysisJson, key) {
   return analysisJson.segments?.find((row) => row.segmentKey === key) ?? null;
 }
 
+function segmentGapSeconds(row) {
+  if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
+  if (Number.isFinite(row?.timeGapToExactTargetSeconds)) return row.timeGapToExactTargetSeconds;
+  if (Number.isFinite(row?.timeGapToMedianSeconds)) return row.timeGapToMedianSeconds;
+  if (Number.isFinite(row?.timeGapSeconds)) return row.timeGapSeconds;
+  if (Number.isFinite(row?.timeAdvantageSeconds)) return -Math.abs(row.timeAdvantageSeconds);
+  return null;
+}
+
+function segmentComparisonSeconds(row) {
+  if (Number.isFinite(row?.exactTargetSeconds)) return row.exactTargetSeconds;
+  if (Number.isFinite(row?.goalBenchmarkSeconds)) return row.goalBenchmarkSeconds;
+  if (Number.isFinite(row?.benchmarkMedianSeconds)) return row.benchmarkMedianSeconds;
+  if (Number.isFinite(row?.userSeconds) && Number.isFinite(segmentGapSeconds(row))) {
+    return row.userSeconds - segmentGapSeconds(row);
+  }
+  return null;
+}
+
+function splitStatusLabel(row) {
+  return bandScoreLabel(segmentGapSeconds(row), segmentComparisonSeconds(row));
+}
+
 function contextCopy(analysisJson, athleteContext = {}) {
   const limiterKey = analysisJson.headline?.biggestLimiter?.segmentKey;
   if ((athleteContext.fiveKPbSeconds || athleteContext.engineScore >= 65) && limiterKey === "wall_balls") {
@@ -113,12 +136,12 @@ function stationBreakdownSection(analysisJson) {
 
   const lines = ["Your weakest stations against your benchmark band:"];
   weak.forEach((station, index) => {
-    const bsLabel = bandScoreLabel(station.percentile);
+    const bsLabel = splitStatusLabel(station);
     const bsCopy = bsLabel ? `${bsLabel} vs your benchmark band` : "on benchmark";
     lines.push(`${index + 1}. ${station.label} - ${bsCopy} (+${formatGain(station.timeGapSeconds)} vs benchmark)`);
   });
   if (strong) {
-    const strongBs = bandScoreLabel(strong.percentile);
+    const strongBs = splitStatusLabel(strong);
     const strongCopy = strongBs ? `${strongBs} vs your benchmark band` : "Strength vs your benchmark band";
     const stationIntro = (strongBs === "Strength" || !strongBs) ? "Your strongest station" : "Your best relative station";
     lines.push(`${stationIntro}: ${strong.label} - ${strongCopy}.`);
@@ -282,14 +305,14 @@ function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
   const weakStations = stationClassifications.filter((s) => s.relativeClass === "weak");
   const strongStations = stationClassifications.filter((s) => s.relativeClass === "strong");
   const pct = (s) => {
-    const bs = bandScoreLabel(s.percentile);
+    const bs = splitStatusLabel(s);
     return bs ? `${bs} vs benchmark band` : "on benchmark";
   };
   if (weakStations.length > 0) {
     content.push(`Weakest stations: ${weakStations.map((s) => `${s.label} (${pct(s)})`).join(", ")}`);
   }
   if (strongStations.length > 0) {
-    const isRelative = strongStations.every((s) => (s.percentile ?? 0) < 50);
+    const isRelative = strongStations.every((s) => (s.timeGapSeconds ?? 0) > -30);
     const prefix = isRelative ? "Relative strengths" : "Strongest stations";
     content.push(`${prefix}: ${strongStations.map((s) => `${s.label} (${pct(s)})`).join(", ")}`);
   }
@@ -351,7 +374,7 @@ function ctaCopy(calculatorMode = "target", primaryCategory = null) {
 
 export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null, calculatorMode = "target") {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
-  const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
+  const strength = analysisJson.strengths?.[0] ?? analysisJson.headline?.biggestStrength ?? null;
   const total = segment(analysisJson, "total_time");
   const recommendations = buildRecommendations(
     analysisJson,
@@ -380,7 +403,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     sections.push(dataConfidenceSection(analysisJson));
   }
 
-  const totalBs = bandScoreLabel(total?.percentile);
+  const totalBs = splitStatusLabel(total);
   const snapshot = [
     `Finish time: ${formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "not supplied"}.`,
     `Division: ${athleteContext.division ?? analysisJson.race?.division ?? analysisJson.athlete?.division ?? "not supplied"}.`,
@@ -433,7 +456,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     sections.push(section("muscle_group_profile", "Muscle Group Profile", buildMuscleGroupSection(muscleGroupProfile, sex)));
   }
   sections.push(section("running_fatigue", "Running and Fatigue Profile", runningFatigueContent(analysisJson)));
-  const strengthBs = bandScoreLabel(strength?.percentile);
+  const strengthBs = splitStatusLabel(strength);
   sections.push(section("biggest_strength", "Biggest Strength", strength ? `${strength.label} is the strongest benchmarked area${strengthBs ? ` - ${strengthBs} vs your benchmark band` : ""}.` : "No single high-confidence strength dominated this result."));
   sections.push(section(
     "biggest_limiter",
@@ -450,7 +473,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   if (backgroundCopy) {
     sections.push(section("athlete_background", "Your Background in Context", backgroundCopy));
   }
-  sections.push(section("roxzone_execution", "Roxzone and Execution Profile", buildRoxzoneSection(analysisJson)));
+  sections.push(section("roxzone_execution", "Roxzone and Execution Profile", buildRoxzoneSection(analysisJson, { calculatorMode })));
 
   if (ctxCopy) {
     sections.push(section("training_context", "Training Context Interpretation", ctxCopy));

@@ -279,6 +279,43 @@ describe("buildTemplateA", () => {
     assert.notEqual(carousel.slides[0].biggest_limiter, "WALL BALLS");
   });
 
+  it("uses a canonical RoxZone limiter in carousel opportunity slots", () => {
+    const roxLimitedAnalysis = analysis({
+      timePotential: { headlineGainSeconds: 200 },
+      headline: {
+        biggestLimiter: { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 200, percentile: 18 },
+      },
+      limiters: [{ segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 200, percentile: 18 }],
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 45, userSeconds: 4200 }),
+        segment("roxzone_time", {
+          type: "aggregate",
+          label: "RoxZone",
+          userSeconds: 420,
+          frameGapSeconds: 200,
+          timeGapToMedianSeconds: 200,
+          percentile: 18,
+        }),
+        segment("sled_pull", {
+          label: "Sled Pull",
+          userSeconds: 220,
+          timeGapToMedianSeconds: 63,
+          frameGapSeconds: 63,
+          percentile: 35,
+        }),
+      ],
+    });
+
+    const carousel = buildTemplateA(roxLimitedAnalysis, [], { displayName: "Marcus Fernandes" });
+
+    assert.equal(carousel.slides[0].biggest_limiter, "ROXZONE");
+    assert.equal(carousel.slides[0].limiter_word, "ROXZONE");
+    assert.equal(carousel.slides[3].station, "ROXZONE");
+    assert.equal(carousel.slides[3].potential_gain, "3:20");
+    assert.equal(carousel.slides[4].loss_station, "roxzone");
+    assert.notEqual(carousel.slides[0].biggest_limiter, "SLED PULL");
+  });
+
   it("uses penalties as the carousel headline opportunity when penalties dominate the total gap", () => {
     const carousel = buildTemplateA(analysis({
       race: { finishTimeSeconds: 5600, targetTimeSeconds: 5000 },

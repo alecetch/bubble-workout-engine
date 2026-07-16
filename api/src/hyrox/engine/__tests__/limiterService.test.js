@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findBiggestLimiter, calculateTimePotential } from "../limiterService.js";
+import { findBiggestLimiter, findBiggestStrength, calculateTimePotential } from "../limiterService.js";
 
 test("calculateTimePotential returns non-zero gain when limiter is a run segment", () => {
   const segments = [
@@ -118,4 +118,51 @@ test("findBiggestLimiter returns null when all frameGapSeconds are negative", ()
     },
   ]);
   assert.equal(limiter, null);
+});
+
+test("findBiggestLimiter ranks by seconds gap only when percentiles disagree", () => {
+  const limiter = findBiggestLimiter([
+    {
+      segmentKey: "sled_push",
+      label: "Sled Push",
+      type: "station",
+      frameGapSeconds: 95,
+      percentile: 30,
+      confidence: "high",
+    },
+    {
+      segmentKey: "wall_balls",
+      label: "Wall Balls",
+      type: "station",
+      frameGapSeconds: 105,
+      percentile: 60,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(limiter.segmentKey, "wall_balls");
+  assert.equal(limiter.timeGapSeconds, 105);
+});
+
+test("findBiggestStrength ranks by seconds advantage without requiring percentile", () => {
+  const strength = findBiggestStrength([
+    {
+      segmentKey: "sled_pull",
+      label: "Sled Pull",
+      type: "station",
+      frameGapSeconds: -35,
+      confidence: "high",
+    },
+    {
+      segmentKey: "ski_erg",
+      label: "SkiErg",
+      type: "station",
+      frameGapSeconds: -55,
+      percentile: 62,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(strength.segmentKey, "ski_erg");
+  assert.equal(strength.timeAdvantageSeconds, 55);
 });

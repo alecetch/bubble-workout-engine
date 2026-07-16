@@ -23,20 +23,6 @@ function formatTimeDelta(seconds) {
   return seconds >= 0 ? `+${formatted}` : `-${formatted}`;
 }
 
-function ordinalRank(percentile) {
-  if (!Number.isFinite(percentile)) return null;
-  const n = Math.round(percentile);
-  const mod100 = n % 100;
-  const mod10 = n % 10;
-  const suffix =
-    mod100 >= 11 && mod100 <= 13 ? "th"
-    : mod10 === 1 ? "st"
-    : mod10 === 2 ? "nd"
-    : mod10 === 3 ? "rd"
-    : "th";
-  return `${n}${suffix} percentile`;
-}
-
 const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type === "run" || segment.type === "station");
 
 function segment(analysisJson, key) {
@@ -50,6 +36,16 @@ function targetGapSeconds(row, goalAvailable) {
     return row.userSeconds - row.goalBenchmarkSeconds;
   }
   return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
+}
+
+function strengthGapText(strength) {
+  const seconds = Number.isFinite(strength?.timeAdvantageSeconds)
+    ? -Math.abs(strength.timeAdvantageSeconds)
+    : targetGapSeconds(strength, false);
+  if (!Number.isFinite(seconds)) return null;
+  if (seconds < 0) return `Ahead by ${formatSeconds(Math.abs(seconds))}`;
+  if (seconds > 0) return `+${formatSeconds(seconds)} gap`;
+  return "On comparison";
 }
 
 /**
@@ -105,13 +101,14 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
 
   // Strongest station
   const biggestStrength = headline.biggestStrength ?? null;
+  const biggestStrengthSegment = biggestStrength?.segmentKey ? segment(aj, biggestStrength.segmentKey) : null;
+  const strongestStationData = biggestStrength
+    ? { ...(biggestStrengthSegment ?? {}), ...biggestStrength }
+    : null;
   const strongestStation = biggestStrength
     ? {
         name: biggestStrength.label,
-        percentile:
-          biggestStrength.percentile != null
-            ? `Top ${Math.max(1, Math.round(100 - biggestStrength.percentile))}%`
-            : null,
+        percentile: strengthGapText(strongestStationData),
         caption: null,
       }
     : null;
@@ -134,8 +131,8 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
         potentialGain:
           headlineGainSeconds != null ? formatTimeDelta(headlineGainSeconds) : null,
         rankText:
-          biggestLimiterData.percentile != null
-            ? ordinalRank(biggestLimiterData.percentile)
+          Number.isFinite(biggestLimiterData.timeGapSeconds)
+            ? `${formatTimeDelta(biggestLimiterData.timeGapSeconds)} gap`
             : null,
         caption: null,
       }

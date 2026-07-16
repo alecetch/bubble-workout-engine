@@ -81,12 +81,12 @@ test("golden path — all fields populated", () => {
 
   assert.ok(data.strongestStation, "strongestStation should be present");
   assert.equal(data.strongestStation.name, "SkiErg");
-  assert.equal(data.strongestStation.percentile, "Top 13%");
+  assert.equal(data.strongestStation.percentile, "Ahead by 0:18");
 
   assert.ok(data.biggestLimiter, "biggestLimiter should be present");
   assert.equal(data.biggestLimiter.name, "Sandbag Lunges");
   assert.equal(data.biggestLimiter.potentialGain, "+1:21");
-  assert.equal(data.biggestLimiter.rankText, "3rd percentile");
+  assert.equal(data.biggestLimiter.rankText, "+1:21 gap");
 });
 
 // ── formaScore fallback ──────────────────────────────────────────────────────

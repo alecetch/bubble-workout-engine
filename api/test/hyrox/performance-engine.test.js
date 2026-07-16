@@ -401,12 +401,12 @@ test("archetype classifier can fire balanced_transition_limited directly", () =>
   assert.equal(archetype.key, "balanced_transition_limited");
 });
 
-test("limiter tie-breaks on lower percentile when gaps are close", () => {
+test("limiter ranks by largest seconds gap when percentiles disagree", () => {
   const limiter = findBiggestLimiter([
     { segmentKey: "sled_push", label: "Sled Push", type: "station", timeGapToMedianSeconds: 60, percentile: 40, confidence: "high" },
     { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapToMedianSeconds: 55, percentile: 20, confidence: "high" },
   ]);
-  assert.equal(limiter.segmentKey, "wall_balls");
+  assert.equal(limiter.segmentKey, "sled_push");
 });
 
 test("balanced_athlete fixture produces stable AnalysisJSON snapshot", (t) => {

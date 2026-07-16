@@ -292,7 +292,7 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
         actionId: isRun ? "run_volume_base" : stationActionId(limiter.segmentKey),
         rationale: (() => {
           const limiterLabel = isRun ? "Running" : limiter.label ?? label(limiter.segmentKey);
-          const base = `${limiterLabel}: ${formatPercentile(limiter.percentile) ?? "below benchmark"}`;
+          const base = `${limiterLabel}: ${formatGain(limiter.timeGapSeconds) ?? "time"} gap`;
           if (isRun) {
             if (effectiveTargetTimeString && runGapSummary) {
               return `${base}. To finish in ${effectiveTargetTimeString} your average run pace needs to improve by ${runGapSummary.copy}.`;

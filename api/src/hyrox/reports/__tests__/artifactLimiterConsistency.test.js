@@ -16,14 +16,14 @@ function tieBreakAnalysis() {
     },
     headline: {
       biggestLimiter: {
-        segmentKey: "sled_push",
-        label: "Sled Push",
+        segmentKey: "wall_balls",
+        label: "Wall Balls",
         type: "station",
-        timeGapSeconds: 95,
-        percentile: 30,
+        timeGapSeconds: 105,
+        percentile: 60,
       },
     },
-    timePotential: { headlineGainSeconds: 95 },
+    timePotential: { headlineGainSeconds: 105 },
     segments: [
       { segmentKey: "total_time", type: "aggregate", label: "Total Time", userSeconds: 4361, frameGapSeconds: 761, percentile: 45 },
       { segmentKey: "sled_push", type: "station", label: "Sled Push", userSeconds: 420, frameGapSeconds: 95, timeGapToMedianSeconds: 95, percentile: 30, confidence: "high" },
@@ -34,7 +34,7 @@ function tieBreakAnalysis() {
 }
 
 describe("HYROX artifact limiter consistency", () => {
-  it("names the canonical tie-break limiter across email, carousel, race card, and caption", () => {
+  it("names the largest seconds-gap limiter across email, carousel, race card, and caption", () => {
     const analysisJson = tieBreakAnalysis();
     const athleteContext = { displayName: "Alex Smith", targetFinishTimeSeconds: 3600 };
     const interpretation = {
@@ -49,12 +49,12 @@ describe("HYROX artifact limiter consistency", () => {
     const raceCard = buildHyroxRaceCardData(analysisJson, athleteContext);
     const caption = buildCaption({ slide0: carousel.slides[0], athleteContext, analysisJson });
 
-    assert.match(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH/i);
-    assert.doesNotMatch(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
-    assert.equal(carousel.slides[0].biggest_limiter, "SLED PUSH");
-    assert.equal(carousel.slides[3].station, "SLED PUSH");
-    assert.equal(raceCard.biggestLimiter.name, "Sled Push");
-    assert.match(caption, /Biggest opportunity: SLED PUSH/);
-    assert.doesNotMatch(caption, /Biggest opportunity: WALL BALLS/);
+    assert.match(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+    assert.doesNotMatch(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH/i);
+    assert.equal(carousel.slides[0].biggest_limiter, "WALL BALLS");
+    assert.equal(carousel.slides[3].station, "WALL BALLS");
+    assert.equal(raceCard.biggestLimiter.name, "Wall Balls");
+    assert.match(caption, /Biggest opportunity: WALL BALLS/);
+    assert.doesNotMatch(caption, /Biggest opportunity: SLED PUSH/);
   });
 });

@@ -42,20 +42,23 @@ test("missing finish time and target time returns null running advice", () => {
   assert.equal(advice, null);
 });
 
-test("low volume with high engine score is toned down", () => {
-  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 6000, engineScore: 72 }), { weeklyRunningVolume: "11_20_km" });
-  assert.equal(advice.runningAdvice.scoreModulation, "toned_down");
+test("running copy is identical regardless of engine score", () => {
+  const lowScore = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 6000, engineScore: 30 }), { weeklyRunningVolume: "11_20_km" });
+  const highScore = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 6000, engineScore: 90 }), { weeklyRunningVolume: "11_20_km" });
+  assert.equal(lowScore.runningAdvice.copy, highScore.runningAdvice.copy);
+  assert.equal("scoreModulation" in lowScore.runningAdvice, false);
 });
 
-test("critically low volume with low engine score is amplified", () => {
-  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, engineScore: 44 }), { weeklyRunningVolume: "0_10_km" });
-  assert.equal(advice.runningAdvice.scoreModulation, "amplified");
+test("running copy reports actual volume and typical range", () => {
+  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000 }), { weeklyRunningVolume: "21_40_km" });
+  assert.match(advice.runningAdvice.copy, /approximately 30 km\/week/);
+  assert.match(advice.runningAdvice.copy, /38-52 km\/week/);
+  assert.match(advice.runningAdvice.copy, /75-90 minute HYROX athlete/);
 });
 
-test("on-track volume with high engine score is affirmed", () => {
-  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, engineScore: 75 }), { weeklyRunningVolume: "41_60_km" });
-  assert.equal(advice.runningAdvice.verdict, "on_track");
-  assert.equal(advice.runningAdvice.scoreModulation, "affirmed");
+test("running copy does not diagnose whether aerobic capacity is a limiter", () => {
+  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, engineScore: 30 }), { weeklyRunningVolume: "0_10_km" });
+  assert.doesNotMatch(advice.runningAdvice.copy, /limiter|rate-limiter|aerobic capacity|engine score|most impactful|recommend|protect your base/i);
 });
 
 test("strength bucket 0-1 is below minimum", () => {
@@ -78,29 +81,23 @@ test("strength bucket 6 plus is excessive", () => {
   assert.equal(advice.strengthAdvice.verdict, "excessive");
 });
 
-test("optimal strength count with low strength score is amplified", () => {
-  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, strengthScore: 40 }), { weeklyStrengthSessions: "2_3" });
-  assert.equal(advice.strengthAdvice.scoreModulation, "amplified");
+test("strength copy is identical regardless of strength score", () => {
+  const lowScore = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, strengthScore: 30 }), { weeklyStrengthSessions: "2_3" });
+  const highScore = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, strengthScore: 90 }), { weeklyStrengthSessions: "2_3" });
+  assert.equal(lowScore.strengthAdvice.copy, highScore.strengthAdvice.copy);
+  assert.equal("scoreModulation" in lowScore.strengthAdvice, false);
 });
 
-test("below-minimum strength count with high strength score is toned down", () => {
-  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, strengthScore: 72 }), { weeklyStrengthSessions: "0_1" });
-  assert.equal(advice.strengthAdvice.scoreModulation, "toned_down");
+test("strength copy reports actual sessions and typical range", () => {
+  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000 }), { weeklyStrengthSessions: "4_5" });
+  assert.match(advice.strengthAdvice.copy, /4-5 strength sessions per week/);
+  assert.match(advice.strengthAdvice.copy, /2-3 sessions per week/);
+  assert.deepEqual(advice.strengthAdvice.typicalRange, { low: 2, high: 3 });
 });
 
-test("strength copy names the biggest limiter", () => {
+test("strength copy does not diagnose or prescribe station limiter work", () => {
   const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000, limiterLabel: "Sled Pull" }), { weeklyStrengthSessions: "2_3" });
-  assert.match(advice.strengthAdvice.copy, /Sled Pull/);
-});
-
-test("running background appends strength-side addendum", () => {
-  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000 }), { weeklyStrengthSessions: "2_3", primaryBackground: "running" });
-  assert.match(advice.strengthAdvice.copy, /stronger running base/i);
-});
-
-test("strength sports background appends running-side addendum", () => {
-  const advice = buildTrainingVolumeAdvice(mockAnalysis({ finishSeconds: 5000 }), { weeklyRunningVolume: "21_40_km", primaryBackground: "strength_sports" });
-  assert.match(advice.runningAdvice.copy, /strength background/i);
+  assert.doesNotMatch(advice.strengthAdvice.copy, /Sled Pull|limiter|station performance|targets that movement|Aim for|recommend|likely limiting/i);
 });
 
 test("no volume context returns null", () => {
