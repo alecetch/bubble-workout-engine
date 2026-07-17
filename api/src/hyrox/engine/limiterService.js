@@ -1,6 +1,8 @@
 import { BENCHMARK_THRESHOLDS } from "../config/benchmarkThresholds.js";
 
 const CONFIDENCE_RANK = Object.freeze({ low: 1, medium: 2, high: 3 });
+const ROXZONE_LIMITER_MIN_GAP_SECONDS = 90;
+const ROXZONE_LIMITER_DOMINANCE_RATIO = 2.5;
 
 function confidenceAtLeastLow(segment) {
   return (CONFIDENCE_RANK[segment.confidence] ?? 0) >= 1;
@@ -17,7 +19,29 @@ function isRoxzoneSegment(segment) {
   return segment?.segmentKey === "roxzone_time" || String(segment?.segmentKey ?? "").startsWith("roxzone_");
 }
 
+function isCanonicalRoxzoneSegment(segment) {
+  return segment?.segmentKey === "roxzone_time";
+}
+
+function isDominantRoxzoneLimiter(segment, nonRoxzoneCandidates) {
+  const roxzoneGap = effectiveGapSeconds(segment);
+  if (!Number.isFinite(roxzoneGap) || roxzoneGap < ROXZONE_LIMITER_MIN_GAP_SECONDS) return false;
+
+  const nextLargestGap = Math.max(
+    0,
+    ...nonRoxzoneCandidates.map((candidate) => effectiveGapSeconds(candidate) ?? 0),
+  );
+  return nextLargestGap <= 0 || roxzoneGap >= nextLargestGap * ROXZONE_LIMITER_DOMINANCE_RATIO;
+}
+
 export function compareLimiterSegments(a, b) {
+  const aIsRoxzone = isCanonicalRoxzoneSegment(a);
+  const bIsRoxzone = isCanonicalRoxzoneSegment(b);
+  if (aIsRoxzone || bIsRoxzone) {
+    const gapA = effectiveGapSeconds(a) ?? 0;
+    const gapB = effectiveGapSeconds(b) ?? 0;
+    return gapB - gapA;
+  }
   if (a.type === "aggregate" && b.type === "station") return 1;
   if (b.type === "aggregate" && a.type === "station") return -1;
   const gapA = effectiveGapSeconds(a) ?? 0;
@@ -45,15 +69,19 @@ export function findBiggestLimiter(segmentStats) {
 }
 
 export function rankLimiterSegments(segmentStats) {
-  return segmentStats
+  const candidates = segmentStats
     .filter((segment) => confidenceAtLeastLow(segment))
     .filter((segment) => {
       const gap = effectiveGapSeconds(segment);
       return Number.isFinite(gap) && gap > 0;
     })
-    .filter((segment) => segment.segmentKey !== "total_time")
-    .filter((segment) => !segment.segmentKey.startsWith("roxzone_"))
-    .sort(compareLimiterSegments);
+    .filter((segment) => segment.segmentKey !== "total_time");
+  const nonRoxzoneCandidates = candidates.filter((segment) => !isRoxzoneSegment(segment));
+  const roxzoneCandidates = candidates
+    .filter((segment) => isCanonicalRoxzoneSegment(segment))
+    .filter((segment) => isDominantRoxzoneLimiter(segment, nonRoxzoneCandidates));
+
+  return [...nonRoxzoneCandidates, ...roxzoneCandidates].sort(compareLimiterSegments);
 }
 
 export function findBiggestStrength(segmentStats) {

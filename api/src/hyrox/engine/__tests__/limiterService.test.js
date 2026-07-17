@@ -144,6 +144,69 @@ test("findBiggestLimiter ranks by seconds gap only when percentiles disagree", (
   assert.equal(limiter.timeGapSeconds, 105);
 });
 
+test("findBiggestLimiter selects RoxZone when its gap clearly dominates the field", () => {
+  const limiter = findBiggestLimiter([
+    {
+      segmentKey: "roxzone_time",
+      label: "RoxZone",
+      type: "aggregate",
+      frameGapSeconds: 200,
+      timeGapToMedianSeconds: 200,
+      percentile: 18,
+      confidence: "high",
+    },
+    {
+      segmentKey: "sled_pull",
+      label: "Sled Pull",
+      type: "station",
+      frameGapSeconds: 63,
+      timeGapToMedianSeconds: 63,
+      percentile: 35,
+      confidence: "high",
+    },
+    {
+      segmentKey: "wall_balls",
+      label: "Wall Balls",
+      type: "station",
+      frameGapSeconds: 52,
+      timeGapToMedianSeconds: 52,
+      percentile: 42,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(limiter.segmentKey, "roxzone_time");
+  assert.equal(limiter.label, "RoxZone");
+  assert.equal(limiter.type, "aggregate");
+  assert.equal(limiter.timeGapSeconds, 200);
+});
+
+test("findBiggestLimiter ignores RoxZone when it is not a dominant gap", () => {
+  const limiter = findBiggestLimiter([
+    {
+      segmentKey: "roxzone_time",
+      label: "RoxZone",
+      type: "aggregate",
+      frameGapSeconds: 100,
+      timeGapToMedianSeconds: 100,
+      percentile: 30,
+      confidence: "high",
+    },
+    {
+      segmentKey: "sled_pull",
+      label: "Sled Pull",
+      type: "station",
+      frameGapSeconds: 55,
+      timeGapToMedianSeconds: 55,
+      percentile: 35,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(limiter.segmentKey, "sled_pull");
+  assert.equal(limiter.timeGapSeconds, 55);
+});
+
 test("findBiggestStrength ranks by seconds advantage without requiring percentile", () => {
   const strength = findBiggestStrength([
     {

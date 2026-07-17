@@ -2228,6 +2228,25 @@ describe("renderSplitTable", () => {
     assert.match(profileHtml, /unusually large gap|double-check/i);
   });
 
+  it("suppresses impossible-fast station splits from the strengths panel", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        sandbag_lunges: {
+          userSeconds: 3,
+          goalBenchmarkSeconds: 182,
+          timeGapToExactTargetSeconds: -179,
+          frameGapSeconds: -179,
+          percentile: 95,
+        },
+      },
+    }, "target");
+
+    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    assert.doesNotMatch(strengthsHtml, /STRONG[\s\S]*Sandbag Lunges/i);
+    assert.doesNotMatch(strengthsHtml, /Sandbag Lunges[\s\S]*Ahead of target[\s\S]*−2:59/i);
+    assert.match(strengthsHtml, /strong-looking splits are affected by unusual data/i);
+  });
+
   it("segment profile does not render green when all aggregate gaps are positive", () => {
     const htmlBody = renderSplit({
       benchmarkContext: {
@@ -3195,6 +3214,52 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     assert.match(htmlBody, /this comparison group includes 10,725 teams, not singles data/i);
     assert.doesNotMatch(htmlBody, /dedicated doubles dataset \(10,725 teams\)/i);
     assert.doesNotMatch(htmlBody, /this comparison group includes 4,200 teams/i);
+  });
+
+  it("doubles method note uses the goal benchmark group sample size in target mode", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          useDoublesBenchmarks: true,
+          doublesBenchmarkedAsSingles: false,
+          achievedBand: "sub_95",
+          primaryBenchmarkGroup: { label: "Doubles Male 95:00-99:59", sampleSize: 10419 },
+          goalBenchmarkGroup: { label: "Doubles Male 90:00-94:59", sampleSize: 12504, targetFinishSeconds: 5400 },
+        },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 73, userSeconds: 5700, goalBenchmarkSeconds: 5400 }],
+      }),
+      mockContext(),
+      null,
+      "target",
+    );
+
+    assert.match(htmlBody, /Target times are based on your selected target profile/i);
+    assert.match(htmlBody, /this comparison group includes 12,504 teams, not singles data/i);
+    assert.doesNotMatch(htmlBody, /this comparison group includes 10,419 teams/i);
+  });
+
+  it("doubles method note keeps the resolved benchmark comparison group in analyse mode", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          useDoublesBenchmarks: true,
+          doublesBenchmarkedAsSingles: false,
+          achievedBand: "sub_95",
+          primaryBenchmarkGroup: { label: "Doubles Male 95:00-99:59", sampleSize: 10419 },
+          goalBenchmarkGroup: { label: "Doubles Male 90:00-94:59", sampleSize: 12504, targetFinishSeconds: 5400 },
+        },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 73, userSeconds: 5700, benchmarkMedianSeconds: 5600 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    assert.match(htmlBody, /Benchmarks are based on your selected benchmark band/i);
+    assert.match(htmlBody, /this comparison group includes 10,419 teams, not singles data/i);
+    assert.doesNotMatch(htmlBody, /this comparison group includes 12,504 teams/i);
   });
 
   for (const frame of Object.values(ANALYSIS_FRAMES)) {

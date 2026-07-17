@@ -425,6 +425,14 @@ function resolvedComparisonBandInfo(analysisJson = {}, fallbackAchievedBand = nu
   return { achievedBand, comparisonBand: comparisonBand ?? achievedBand, isEscalated, group };
 }
 
+function methodNoteComparisonGroup(analysisJson = {}, calculatorMode = "target") {
+  const benchmarkContext = analysisJson.benchmarkContext ?? {};
+  if (calculatorMode === "target" && benchmarkContext.goalBenchmarkGroup) {
+    return benchmarkContext.goalBenchmarkGroup;
+  }
+  return resolvedComparisonBandInfo(analysisJson).group;
+}
+
 function renderLensDataRow({ label, value, valueColor, valueSize = "13px", valueWeight = "400", valueFamily = "Inter,Arial,Helvetica,sans-serif", divided = false }) {
   const tableStyle = divided
     ? "border-top:1px solid #1c3350;padding-top:10px;margin-top:10px;"
@@ -1857,9 +1865,9 @@ function renderSplitTable(section, analysisJson) {
       });
     }
     const topLosses = losses.slice(0, hasGoalGroup ? 3 : 5);
-    const strengths = SPLIT_TABLE_RACE_ORDER
+    const strengthCandidates = SPLIT_TABLE_RACE_ORDER
       .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
-	      .filter((row) => row.seg && Number.isFinite(row.gap) && row.gap < 0)
+      .filter((row) => row.seg && Number.isFinite(row.gap) && row.gap < 0)
       .sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
 
     const roxAggregateSeg = segMap.get("roxzone_time");
@@ -1869,13 +1877,15 @@ function renderSplitTable(section, analysisJson) {
       && Number.isFinite(roxAggregateGap)
 	      && roxAggregateGap < -30
     ) {
-      strengths.push({
+      strengthCandidates.push({
         key: "roxzone_time",
         seg: { ...roxAggregateSeg, label: "RoxZone" },
         gap: roxAggregateGap,
       });
-      strengths.sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
+      strengthCandidates.sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
     }
+    const suppressedStrengthRows = strengthCandidates.filter(isAnomalousSplitRow);
+    const strengths = strengthCandidates.filter((row) => !isAnomalousSplitRow(row));
     const topStrengths = strengths.slice(0, 3);
     const isEliteAthlete = achievedBand === "sub_60";
 
@@ -1973,6 +1983,9 @@ function renderSplitTable(section, analysisJson) {
     const anomalyNote = hasAnomalousGap
       ? `<tr><td colspan="3" style="padding:6px 12px 8px;"><span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#f59e0b;">⚠ One or more splits show an unusually large gap vs the ${anomalyGapRef} — double-check those times are entered correctly.</span></td></tr>`
       : "";
+    const strengthsAnomalyNote = suppressedStrengthRows.length > 0
+      ? `<tr><td colspan="3" style="padding:6px 12px 8px;"><span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#f59e0b;">⚠ One or more strong-looking splits are affected by unusual data — double-check those times.</span></td></tr>`
+      : "";
 
     function panelHeader(title, subtitle) {
       return `<tr style="background-color:#f8fafc;">
@@ -1991,6 +2004,7 @@ function renderSplitTable(section, analysisJson) {
     const strengthTable = `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background-color:#ffffff;">
       ${panelHeader("Strengths to protect", hasGoalGroup ? "Areas already ahead of target profile" : "Good areas to preserve")}
       ${strengthRows}
+      ${strengthsAnomalyNote}
     </table>`;
 
     return `
@@ -2260,10 +2274,10 @@ function renderMethodNote(hasMaterialPenalties = false, calculatorMode = "target
   const penaltyNote = hasMaterialPenalties
     ? " Penalties are separated from running in the gap breakdown to avoid confusing execution leakage with run fitness."
     : "";
-  const doublesNote = analysisJson.benchmarkContext?.useDoublesBenchmarks
-    ? (() => {
-        const { group } = resolvedComparisonBandInfo(analysisJson);
-        const n = Number(group?.sampleSize);
+	  const doublesNote = analysisJson.benchmarkContext?.useDoublesBenchmarks
+	    ? (() => {
+	        const group = methodNoteComparisonGroup(analysisJson, calculatorMode);
+	        const n = Number(group?.sampleSize);
         return n
           ? ` Doubles benchmarks use a dedicated doubles dataset — this comparison group includes ${n.toLocaleString()} teams, not singles data.`
           : " Doubles benchmarks use a dedicated doubles dataset — not singles data.";

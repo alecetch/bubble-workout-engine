@@ -533,6 +533,28 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       };
     }
   }
+  if (calculatorMode === "analyse" && emailTopLabel && emailTopSegType === "station" && ["running", "roxzone", "pacing"].includes(category)) {
+    const stationAggregateGap = aggregateSplitGapSeconds(analysisJson, "work_time");
+    const runningAggregateGap = aggregateSplitGapSeconds(analysisJson, "run_time");
+    const roxAggregateGap = aggregateSplitGapSeconds(analysisJson, "roxzone_time");
+    let aggregateClarifier = "The aggregate benchmark-band signal and the biggest individual split are different here.";
+    if (category === "running" && Number.isFinite(runningAggregateGap) && Number.isFinite(stationAggregateGap)) {
+      aggregateClarifier = runningAggregateGap > stationAggregateGap
+        ? "Your total running gap is the larger aggregate benchmark-band lever, but this station has the biggest individual split to address first."
+        : stationAggregateGap > runningAggregateGap
+          ? "Station work is the larger aggregate benchmark-band lever, and this station has the biggest individual split to address first."
+          : "The aggregate benchmark-band levers are close, but this station has the biggest individual split to address first.";
+    } else if (category === "roxzone" && Number.isFinite(roxAggregateGap)) {
+      aggregateClarifier = "RoxZone is the aggregate benchmark-band signal, but this station has the biggest individual split to address first.";
+    } else if (category === "pacing") {
+      aggregateClarifier = "Pacing is the aggregate race signal, but this station has the biggest individual split to address first.";
+    }
+    return {
+      headline: `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`,
+      subline: aggregateClarifier,
+      gainDisplay: null,
+    };
+  }
   if (calculatorMode === "analyse" && category === "running") {
     return { headline: "YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP", subline: "Closing that gap unlocks your finish time.", gainDisplay: null };
   }
