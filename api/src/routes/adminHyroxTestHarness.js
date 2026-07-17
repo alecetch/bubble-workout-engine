@@ -232,6 +232,42 @@ export function slidesToText(slides = []) {
   }).join("\n\n");
 }
 
+function raceCardMarkdown(raceCardData) {
+  if (!raceCardData) return "_No race card data generated._";
+
+  const strongest = raceCardData.strongestStation;
+  const limiter = raceCardData.biggestLimiter;
+  const penalty = raceCardData.penaltySummary;
+  const splitRows = Array.isArray(raceCardData.splitRows) ? raceCardData.splitRows : [];
+
+  const rows = [
+    `- Athlete: ${markdownValue(raceCardData.athleteName)}`,
+    `- Mode: ${markdownValue(raceCardData.mode)}`,
+    `- Comparison basis: ${markdownValue(raceCardData.comparisonBasis)}`,
+    `- Finish time: ${markdownValue(raceCardData.finishTime)}`,
+    `- Target time: ${markdownValue(raceCardData.targetTime)}`,
+    `- Percentile text: ${markdownValue(raceCardData.percentileText)}`,
+    `- Confidence qualifier: ${markdownValue(raceCardData.confidenceQualifier)}`,
+    `- Forma score: ${markdownValue(raceCardData.formaScore)}`,
+    `- Is doubles: ${markdownValue(raceCardData.isDoubles)}`,
+    `- Strongest station: ${strongest ? `${markdownValue(strongest.name)} (${markdownValue(strongest.percentile)})` : "-"}`,
+    `- Biggest limiter: ${limiter ? `${markdownValue(limiter.name)} — potential gain ${markdownValue(limiter.potentialGain)}, ${markdownValue(limiter.rankText)}${limiter.isPenalty ? " [penalty]" : ""}` : "-"}`,
+    `- Penalty summary: ${penalty ? `${markdownValue(penalty.label)} ${markdownValue(penalty.value)}${penalty.isDominant ? " (dominant)" : ""}` : "-"}`,
+    `- Split rows: ${splitRows.length}`,
+  ];
+
+  if (splitRows.length) {
+    rows.push("", "Split row detail:");
+    for (const row of splitRows) {
+      rows.push(`  - ${markdownValue(row.label)}: ${markdownValue(row.userTime)}, delta ${markdownValue(row.delta)} (${markdownValue(row.tone)})`);
+    }
+  }
+
+  rows.push("", "```json", maybeJson(raceCardData), "```");
+
+  return rows.join("\n");
+}
+
 function carouselText(carouselReport = {}, calculatorMode = null) {
   const slides = carouselReport?.slides ?? [];
   const rows = [
@@ -535,6 +571,7 @@ function runMode(mode, parsed, event, sharedContext) {
     emailReport: assembleReport({ ...reportRequest, outputType: "email_report" }),
     webReport: assembleReport({ ...reportRequest, outputType: "web_report" }),
     carouselReport: assembleReport({ ...reportRequest, outputType: "carousel_a" }),
+    raceCardData: buildHyroxRaceCardData(analysisJson, athleteContext),
   };
 }
 
@@ -610,6 +647,10 @@ function modeMarkdown(entry) {
     "```html",
     result.emailReport?.emailHtml ?? "",
     "```",
+    "",
+    "### Race Card",
+    "",
+    raceCardMarkdown(result.raceCardData),
     "",
     "### Carousel Text",
     "",

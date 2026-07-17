@@ -1330,6 +1330,8 @@ function renderSplitTable(section, analysisJson) {
     const achievedStr = achievedBand?.replace("sub_", "sub-") ?? null;
     // Use the email's own ranked-gap order so Main Insight and Biggest Opportunities always agree.
     const limiterStr = rankedGaps[0] ? (segMap.get(rankedGaps[0].key)?.label ?? analysisJson.headline?.biggestLimiter?.label ?? null) : (analysisJson.headline?.biggestLimiter?.label ?? null);
+    const stationLimiterStr = rankedGaps.find((row) => row.seg?.type === "station")?.seg?.label ?? null;
+    const runLimiterStr = rankedGaps.find((row) => row.seg?.type === "run")?.seg?.label ?? null;
     const runIsStrength = runGapRaw < -30;
     const targetTimeFmt2 = hasGoalGroup
       ? formatTime(goalGroup?.targetFinishSeconds ?? segMap.get("total_time")?.goalBenchmarkSeconds)
@@ -1347,8 +1349,10 @@ function renderSplitTable(section, analysisJson) {
             ? "You matched or beat your benchmark band overall. Your next refinement is run consistency."
             : "You matched or beat your benchmark band overall.";
       } else if (isCompetitive && achievedStr && nextBandStr) {
-        if (limiterStr && runIsStrength) {
-          mainLimiter = `You are already ahead of the ${achievedStr} benchmark overall. Running is a strength, so the move toward ${nextBandStr} is station efficiency, led by ${limiterStr}${roxGap < -30 ? "" : ", plus cleaner RoxZone flow"}.`;
+        if (stationLimiterStr && runIsStrength) {
+          mainLimiter = `You are already ahead of the ${achievedStr} benchmark overall. Running is a strength, so the move toward ${nextBandStr} is station efficiency, led by ${stationLimiterStr}${roxGap < -30 ? "" : ", plus cleaner RoxZone flow"}.`;
+        } else if (runIsStrength) {
+          mainLimiter = `You are already ahead of the ${achievedStr} benchmark overall. Running is a strength, so the move toward ${nextBandStr} is station efficiency${roxGap < -30 ? "." : ", plus cleaner RoxZone flow."}`;
         } else if (limiterStr) {
           mainLimiter = `You matched or beat the ${achievedStr} benchmark. ${limiterStr} shows the clearest gap versus ${nextBandStr} athletes.`;
         } else {
@@ -1364,14 +1368,14 @@ function renderSplitTable(section, analysisJson) {
     } else if (workGap > runGap + 60) {
       if (hasGoalGroup) {
         mainLimiter = targetTimeFmt2
-          ? `To hit ${targetTimeFmt2}, the gap is led by station performance.${limiterStr ? ` ${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}`
-          : `The main target gap is station performance.${limiterStr ? ` ${limiterStr} leads.` : ""}`;
+          ? `To hit ${targetTimeFmt2}, the gap is led by station performance.${stationLimiterStr ? ` ${stationLimiterStr} ${pluralStation(stationLimiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}`
+          : `The main target gap is station performance.${stationLimiterStr ? ` ${stationLimiterStr} leads.` : ""}`;
       } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in station performance.";
       } else if (isCompetitive && achievedStr && nextBandStr) {
         mainLimiter = `You are competitive in the ${achievedStr} benchmark band. ${
-          limiterStr
-            ? `Your clearest gap toward ${nextBandStr} is station performance, especially ${limiterStr}.`
+          stationLimiterStr
+            ? `Your clearest gap toward ${nextBandStr} is station performance, especially ${stationLimiterStr}.`
             : `Your clearest gap toward ${nextBandStr} is station performance.`
         }`;
       } else {
@@ -1380,12 +1384,16 @@ function renderSplitTable(section, analysisJson) {
     } else if (runGap > workGap + 60) {
       if (hasGoalGroup) {
         mainLimiter = targetTimeFmt2
-          ? `To hit ${targetTimeFmt2}, the gap is led by running pace.${runIsStrength ? " Running is strong against your current benchmark, but still needs time against the target profile." : ""}`
-          : "The main target gap is running pace.";
+          ? `To hit ${targetTimeFmt2}, the gap is led by running pace.${runLimiterStr ? ` ${runLimiterStr} is the biggest target opportunity.` : ""}${runIsStrength ? " Running is strong against your current benchmark, but still needs time against the target profile." : ""}`
+          : `The main target gap is running pace.${runLimiterStr ? ` ${runLimiterStr} leads.` : ""}`;
       } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in running pace.";
       } else if (isCompetitive && achievedStr && nextBandStr) {
-        mainLimiter = `You are competitive in the ${achievedStr} benchmark band. Running pace shows the clearest gap versus ${nextBandStr} athletes.`;
+        mainLimiter = `You are competitive in the ${achievedStr} benchmark band. ${
+          runLimiterStr
+            ? `Your clearest gap toward ${nextBandStr} is running pace, especially ${runLimiterStr}.`
+            : `Running pace shows the clearest gap versus ${nextBandStr} athletes.`
+        }`;
       } else {
         mainLimiter = "The main limiter is running pace.";
       }
