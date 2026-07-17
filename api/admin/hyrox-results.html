@@ -333,10 +333,9 @@
           .sort((a, b) => {
             function key(band) {
               if (!band || band === "overall") return -Infinity;
-              const sub = band.match(/^sub-(\d+)/i);
-              if (sub) return Number(sub[1]) - 0.5;
-              const m = band.match(/^(\d+)/);
-              return m ? Number(m[0]) : Infinity;
+              const sub = band.match(/^sub_(\d+)$/i);
+              if (sub) return Number(sub[1]);
+              return Infinity;
             }
             return key(a) - key(b);
           });
