@@ -198,6 +198,22 @@ async function updateJobAggregates(pool, jobId) {
   );
 }
 
+export async function finalizeJobStatus(pool, jobId, finalStatus, finalError) {
+  await pool.query(
+    `UPDATE hyrox_doubles_scrape_jobs
+     SET status=$2,
+         completed_at=CASE WHEN $2='completed' THEN now() ELSE completed_at END,
+         failed_at=CASE WHEN $2='failed' THEN now() ELSE NULL END,
+         total_errors=CASE WHEN $2='completed' THEN 0 ELSE total_errors END,
+         last_error=CASE WHEN $2='completed' AND $3::text IS NOT NULL THEN $3::text WHEN $2='completed' THEN NULL ELSE COALESCE($3::text, last_error) END,
+         last_error_at=CASE WHEN $2='completed' AND $3::text IS NOT NULL THEN now() WHEN $2='completed' THEN NULL WHEN $3::text IS NULL THEN last_error_at ELSE now() END,
+         cooldown_until=NULL,
+         updated_at=now()
+     WHERE id=$1 AND status='running'`,
+    [jobId, finalStatus, finalError],
+  );
+}
+
 export async function runJob(jobId, pool) {
   await pool.query(
     `UPDATE hyrox_doubles_scrape_jobs
@@ -434,19 +450,7 @@ export async function runJob(jobId, pool) {
     : (savedCount === 0 && dupeCount > 0)
       ? `All ${dupeCount} records found were already in the database — no new data for this scrape.`
       : null;
-  await pool.query(
-    `UPDATE hyrox_doubles_scrape_jobs
-     SET status=$2,
-         completed_at=CASE WHEN $2='completed' THEN now() ELSE completed_at END,
-         failed_at=CASE WHEN $2='failed' THEN now() ELSE NULL END,
-         total_errors=CASE WHEN $2='completed' THEN 0 ELSE total_errors END,
-         last_error=CASE WHEN $2='completed' AND $3 IS NOT NULL THEN $3 WHEN $2='completed' THEN NULL ELSE COALESCE($3, last_error) END,
-         last_error_at=CASE WHEN $2='completed' AND $3 IS NOT NULL THEN now() WHEN $2='completed' THEN NULL WHEN $3 IS NULL THEN last_error_at ELSE now() END,
-         cooldown_until=NULL,
-         updated_at=now()
-     WHERE id=$1 AND status='running'`,
-    [jobId, finalStatus, finalError],
-  );
+  await finalizeJobStatus(pool, jobId, finalStatus, finalError);
   await updateJobAggregates(pool, jobId);
 }
 
