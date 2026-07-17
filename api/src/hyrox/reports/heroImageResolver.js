@@ -43,8 +43,8 @@ function strengthKey(analysisJson) {
   return analysisJson.strengths?.[0]?.segmentKey
     ?? analysisJson.headline?.biggestStrength?.segmentKey
     ?? [...(analysisJson.segments ?? [])]
-    .filter((s) => STATION_KEYS.includes(s.segmentKey) && Number.isFinite(Number(s.percentile)))
-    .sort((a, b) => Number(b.percentile) - Number(a.percentile))[0]
+    .filter((s) => STATION_KEYS.includes(s.segmentKey) && Number(s.timeGapToMedianSeconds) < 0)
+    .sort((a, b) => Number(a.timeGapToMedianSeconds) - Number(b.timeGapToMedianSeconds))[0]
     ?.segmentKey
     ?? null;
 }

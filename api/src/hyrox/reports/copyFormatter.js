@@ -68,13 +68,28 @@ export function formatOverallStanding(p) {
   return `Top ${topPct}% overall`;
 }
 
-export function bandScoreLabel(percentile) {
-  if (!Number.isFinite(Number(percentile))) return null;
-  const n = Number(percentile);
-  if (n >= 80) return "Strength";
-  if (n >= 60) return "Good";
-  if (n >= 40) return "On benchmark";
-  if (n >= 20) return "Opportunity";
+export function bandScoreLabel(gapSeconds, comparisonSeconds = null) {
+  if (gapSeconds === null || gapSeconds === undefined || gapSeconds === "") return null;
+  const gap = Number(gapSeconds);
+  if (!Number.isFinite(gap)) return null;
+
+  const comparison = Number(comparisonSeconds);
+  if (Number.isFinite(comparison) && comparison > 0) {
+    // Segment difficulty is judged by seconds lost/gained relative to that split's own
+    // comparison time. This keeps split labels seconds-based without treating a 20s
+    // station gap the same as a 20s aggregate/run gap.
+    const ratio = gap / comparison;
+    if (ratio <= -0.05) return "Strength";
+    if (ratio <= -0.02) return "Good";
+    if (ratio <= 0.05) return "On benchmark";
+    if (ratio <= 0.15) return "Opportunity";
+    return "Priority";
+  }
+
+  if (gap <= -30) return "Strength";
+  if (gap <= -10) return "Good";
+  if (gap <= 30) return "On benchmark";
+  if (gap <= 90) return "Opportunity";
   return "Priority";
 }
 

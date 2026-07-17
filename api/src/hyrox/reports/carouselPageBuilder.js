@@ -314,7 +314,7 @@ export function buildCarouselPage(carouselData = {}) {
         <div class="thin-rule"></div>
         <div class="giant blue" data-field="slides.3.potential_gain">0:00</div>
         <p class="caption">Improving to benchmark average could save<br><span data-field="slides.3.potential_gain_text">time.</span></p>
-        <div class="subhero blue small">CURRENT STATION RANK:<br><span data-field="slides.3.current_station_rank">BENCHMARKED</span></div>
+        <div class="subhero blue small">CURRENT SPLIT GAP:<br><span data-field="slides.3.current_station_rank">BENCHMARKED</span></div>
       </div>
       <div class="footer">DATA SOURCE: HYROX OFFICIAL</div>
     </section>

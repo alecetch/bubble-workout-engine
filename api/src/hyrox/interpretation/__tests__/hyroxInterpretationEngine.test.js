@@ -548,3 +548,29 @@ test("running hero with station top split does not claim running is larger when 
   assert.doesNotMatch(result.subline, /running pace is the larger aggregate target lever/i);
   assert.match(result.subline, /Station work is the larger aggregate target lever/i);
 });
+
+test("analyse running hero names station top split and disambiguates aggregate vs individual gap", () => {
+  const analysisJson = makeAnalysis({
+    stationBreakdown: [
+      { segmentKey: "wall_balls", label: "Wall Balls", timeGapSeconds: 100, percentile: 35, confidence: "high" },
+    ],
+    segments: [
+      { segmentKey: "wall_balls", label: "Wall Balls", type: "station", frameGapSeconds: 100, timeGapToMedianSeconds: 100 },
+      { segmentKey: "run_1", label: "Run 1", type: "run", frameGapSeconds: 70, timeGapToMedianSeconds: 70, percentile: 40 },
+      { segmentKey: "run_2", label: "Run 2", type: "run", frameGapSeconds: 70, timeGapToMedianSeconds: 70, percentile: 40 },
+      { segmentKey: "work_time", label: "Stations", type: "aggregate", frameGapSeconds: 100, timeGapToMedianSeconds: 100 },
+      { segmentKey: "run_time", label: "Running", type: "aggregate", frameGapSeconds: 140, timeGapToMedianSeconds: 140, percentile: 40 },
+    ],
+    runningAnalysis: { available: true, runFadePct: 9, runPattern: "positive_split" },
+    headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 100 } },
+  });
+
+  assert.equal(selectPrimaryCategory(analysisJson, "analyse"), "running");
+
+  const result = buildHeroCopy({ category: "running" }, analysisJson, "analyse", "Wall Balls", "station");
+  assert.match(result.headline, /WALL BALLS/);
+  assert.match(result.headline, /BIGGEST INDIVIDUAL OPPORTUNITY/);
+  assert.match(result.subline, /total running gap.*larger aggregate benchmark-band lever/i);
+  assert.match(result.subline, /biggest individual split/i);
+  assert.doesNotMatch(result.headline, /YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP/i);
+});

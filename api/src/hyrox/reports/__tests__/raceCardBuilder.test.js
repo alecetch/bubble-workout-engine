@@ -12,8 +12,8 @@ function fixtureData(overrides = {}) {
     percentileText: "38th percentile",
     formaScore: 72,
     mode: "target",
-    strongestStation: { name: "Sled Pull", percentile: "Top 12%" },
-    biggestLimiter: { name: "Wall Balls", rankText: "18th percentile", potentialGain: "2:44" },
+    strongestStation: { name: "Sled Pull", percentile: "Ahead by 0:18" },
+    biggestLimiter: { name: "Wall Balls", rankText: "+1:06 gap", potentialGain: "2:44" },
     splitRows: [
       { label: "Run 3", delta: "+0:32", tone: "negative" },
       { label: "Sled Push", delta: "+0:51", tone: "negative" },
@@ -133,21 +133,21 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
   });
 
   it("renders the strongest station card with a bundled image icon", () => {
-    const html = buildRaceCardHtml(fixtureData({ strongestStation: { name: "Sled Pull", percentile: "Top 12%" } }));
+    const html = buildRaceCardHtml(fixtureData({ strongestStation: { name: "Sled Pull", percentile: "Ahead by 0:18" } }));
     const card = sectionBetween(html, "Strongest Station", "YOU POWERED THROUGH HERE");
 
     assert.match(card, /<img src="data:image\/png;base64,/);
   });
 
   it("renders the biggest limiter card with a bundled image icon", () => {
-    const html = buildRaceCardHtml(fixtureData({ biggestLimiter: { name: "Wall Balls", rankText: "18th percentile" } }));
+    const html = buildRaceCardHtml(fixtureData({ biggestLimiter: { name: "Wall Balls", rankText: "+1:06 gap" } }));
     const card = sectionBetween(html, "Biggest Limiter", "THIS IS WHAT HELD YOU BACK");
 
     assert.match(card, /<img src="data:image\/png;base64,/);
   });
 
   it("falls back to the hand-drawn SVG icon when no station icon can resolve", () => {
-    const html = buildRaceCardHtml(fixtureData({ strongestStation: { name: "", percentile: "Top 12%" } }));
+    const html = buildRaceCardHtml(fixtureData({ strongestStation: { name: "", percentile: "Ahead by 0:18" } }));
     const card = sectionBetween(html, "Strongest Station", "YOU POWERED THROUGH HERE");
 
     assert.match(card, /<svg viewBox="0 0 80 80"/);
@@ -227,6 +227,32 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(html, /<div class="card-title">Penalties<\/div>/);
     assert.match(html, /PENALTIES: 3:20/);
     assert.doesNotMatch(html, /<div class="card-title">Wall Balls<\/div>/);
+  });
+
+  it("renders a canonical RoxZone limiter from headline data", () => {
+    const data = buildHyroxRaceCardData({
+      athlete: { name: "Alex Smith", division: "open" },
+      race: { finishTimeSeconds: 5738 },
+      benchmarkContext: {
+        comparisonOptions: [{ percentile: 72, topPercent: 28 }],
+      },
+      headline: {
+        biggestLimiter: { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 200, percentile: 18 },
+      },
+      timePotential: { headlineGainSeconds: 200 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", userSeconds: 5738, percentile: 72 },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 420, frameGapSeconds: 200, timeGapToMedianSeconds: 200, percentile: 18 },
+        { segmentKey: "sled_pull", type: "station", label: "Sled Pull", userSeconds: 220, frameGapSeconds: 63, timeGapToMedianSeconds: 63, percentile: 35 },
+      ],
+    });
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.biggestLimiter.name, "RoxZone");
+    assert.equal(data.biggestLimiter.rankText, "+3:20 gap");
+    assert.equal(data.biggestLimiter.potentialGain, "+3:20");
+    assert.match(html, /<div class="card-title">RoxZone<\/div>/);
+    assert.doesNotMatch(html, /<div class="card-title">Sled Pull<\/div>/);
   });
 
   it("labels split chart bars with the same comparison basis as the carousel", () => {

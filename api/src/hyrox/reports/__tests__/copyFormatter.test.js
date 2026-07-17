@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { ageGroupContextLine, formatOverallStanding, regionalContextLine } from "../copyFormatter.js";
+import { ageGroupContextLine, bandScoreLabel, formatOverallStanding, regionalContextLine } from "../copyFormatter.js";
 
 test("formatOverallStanding: low percentile shows Top X% not raw ordinal", () => {
   assert.equal(formatOverallStanding(40), "Top 60% overall");
@@ -110,5 +110,28 @@ describe("ageGroupContextLine", () => {
     });
 
     assert.equal(result, "Top 1% in your 35-39 age group");
+  });
+});
+
+describe("bandScoreLabel", () => {
+  test("classifies split gaps by percentage of comparison time", () => {
+    assert.equal(bandScoreLabel(-50, 1000), "Strength");
+    assert.equal(bandScoreLabel(-20, 1000), "Good");
+    assert.equal(bandScoreLabel(50, 1000), "On benchmark");
+    assert.equal(bandScoreLabel(150, 1000), "Opportunity");
+    assert.equal(bandScoreLabel(151, 1000), "Priority");
+  });
+
+  test("uses seconds fallback when comparison time is unavailable", () => {
+    assert.equal(bandScoreLabel(-30), "Strength");
+    assert.equal(bandScoreLabel(-10), "Good");
+    assert.equal(bandScoreLabel(30), "On benchmark");
+    assert.equal(bandScoreLabel(90), "Opportunity");
+    assert.equal(bandScoreLabel(91), "Priority");
+  });
+
+  test("returns null for missing split gap", () => {
+    assert.equal(bandScoreLabel(null, 1000), null);
+    assert.equal(bandScoreLabel("abc", 1000), null);
   });
 });

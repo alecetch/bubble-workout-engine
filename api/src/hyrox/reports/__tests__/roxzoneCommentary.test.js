@@ -226,6 +226,37 @@ describe("buildRoxzoneSection", () => {
     assert.match(lines, /SkiErg/);
   });
 
+  it("prepends on-target note in target mode when frameGapSeconds is within threshold", () => {
+    const analysis = {
+      calculatorMode: "target",
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 4800, label: "80:00 target" },
+      },
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 307,
+        percentOfTotalTime: 0.046,
+        roxzoneNarrative: {
+          available: true,
+          replayTotalSeconds: 305,
+          officialTotalSeconds: 307,
+          roundingDifferenceSeconds: 2,
+          summaryCopy: "Your Race Replay rows add up to 305s.",
+          interpretationCopy: "Your longer RoxZone losses came after stations, especially after SkiErg.",
+          actionCopy: "Practise finishing stations and jogging out under high breathing load.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+      segments: [{ segmentKey: "roxzone_time", frameGapSeconds: 9 }],
+    };
+    const lines = asArray(buildRoxzoneSection(analysis, { calculatorMode: "target" })).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /on target/i);
+    assert.doesNotMatch(lines, /on benchmark/i);
+    assert.match(lines, /detail below/i);
+  });
+
   it("does not prepend on-benchmark note when frameGapSeconds exceeds threshold", () => {
     const analysis = {
       roxzoneAnalysis: {
@@ -275,6 +306,37 @@ describe("buildRoxzoneSection", () => {
     };
     const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
     assert.match(lines, /ahead of the benchmark/i);
+    assert.match(lines, /did not cost you time/i);
+  });
+
+  it("prepends ahead-of-target note in target mode when frameGapSeconds is negative and within threshold", () => {
+    const analysis = {
+      calculatorMode: "target",
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 4800, label: "80:00 target" },
+      },
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 280,
+        percentOfTotalTime: 0.04,
+        roxzoneNarrative: {
+          available: true,
+          replayTotalSeconds: 279,
+          officialTotalSeconds: 280,
+          roundingDifferenceSeconds: 1,
+          summaryCopy: "Your Race Replay rows add up to 279s.",
+          interpretationCopy: "Your RoxZone execution was controlled.",
+          actionCopy: "Keep transition practice late in longer sessions.",
+          caveatCopy: null,
+          displayRows: [],
+        },
+      },
+      segments: [{ segmentKey: "roxzone_time", frameGapSeconds: -15 }],
+    };
+    const lines = asArray(buildRoxzoneSection(analysis, { calculatorMode: "target" })).filter((item) => typeof item === "string").join("\n");
+    assert.match(lines, /ahead of target/i);
+    assert.doesNotMatch(lines, /ahead of the benchmark/i);
     assert.match(lines, /did not cost you time/i);
   });
 

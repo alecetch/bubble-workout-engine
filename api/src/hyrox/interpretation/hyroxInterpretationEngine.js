@@ -174,7 +174,7 @@ function aggregateSplitGapSeconds(analysisJson = {}, segmentKey) {
 
 export function weakStationCount(analysisJson = {}) {
   return (analysisJson.stationBreakdown ?? [])
-    .filter((s) => s.confidence !== "low" && (s.percentile == null || s.percentile < 50))
+    .filter((s) => s.confidence !== "low" && Number(s.timeGapSeconds) > 0)
     .length;
 }
 
@@ -387,7 +387,7 @@ function buildSecondaryTheses(primary, analysisJson = {}) {
 }
 
 function protectedStrengths(analysisJson = {}) {
-  const stations = (analysisJson.stationBreakdown ?? []).filter((s) => s.confidence !== "low" && Number.isFinite(s.percentile));
+  const stations = (analysisJson.stationBreakdown ?? []).filter((s) => s.confidence !== "low" && Number.isFinite(s.timeGapSeconds));
   if (stations.length === 0) return [];
   const topGapKeys = new Set([...stations]
     .filter((s) => Number(s.timeGapSeconds) > 0)
@@ -396,13 +396,15 @@ function protectedStrengths(analysisJson = {}) {
     .map((s) => s.segmentKey));
   const best = [...stations]
     .filter((s) => !topGapKeys.has(s.segmentKey))
-    .sort((a, b) => a.percentile - b.percentile)[0];
-  if (!best || best.percentile >= 50) return [];
+    .filter((s) => Number(s.timeGapSeconds) < 0)
+    .sort((a, b) => a.timeGapSeconds - b.timeGapSeconds)[0];
+  if (!best) return [];
+  const advantage = formatGain(best.timeGapSeconds);
   return [thesis("station_capacity", analysisJson, {
     id: `protect_${best.segmentKey ?? "station"}`,
     category: "station_capacity",
     headline: `${best.label} is worth protecting`,
-    evidenceSummary: `${best.label} is your strongest protected station at ${formatPercentile(best.percentile)}.`,
+    evidenceSummary: `${best.label} is your strongest protected station, ${advantage ?? "time"} ahead of benchmark.`,
     estimatedImpactSeconds: null,
     copyAngle: "protect_strength",
     confidence: "medium",
@@ -411,7 +413,7 @@ function protectedStrengths(analysisJson = {}) {
 
 function muscleGroupConfidence(analysisJson = {}) {
   const weak = (analysisJson.stationBreakdown ?? [])
-    .filter((s) => s.confidence !== "low" && (s.percentile == null || s.percentile < 50));
+    .filter((s) => s.confidence !== "low" && Number(s.timeGapSeconds) > 0);
   if (weak.length === 0) return "none";
   const counters = new Map();
   const secondaryCounters = new Map();
@@ -467,7 +469,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
   const gain = headlineGainSeconds(analysisJson);
   const gainDisplay = Number.isFinite(gain) && gain > 0 ? formatGain(gain) : null;
   // emailTopLabel (when provided) is the top-ranked individual segment from the email's own
-  // opportunity table basis, using the canonical limiter tie-break.
+  // opportunity table basis, using the canonical seconds-gap limiter ranking.
   // This ensures the hero names the same segment as the Biggest Opportunities table.
   const lLabel = emailTopLabel ?? limiterLabel(analysisJson);
   const analysisFrame = analysisJson?.benchmarkContext?.analysisFrame;
@@ -530,6 +532,28 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
         gainDisplay: null,
       };
     }
+  }
+  if (calculatorMode === "analyse" && emailTopLabel && emailTopSegType === "station" && ["running", "roxzone", "pacing"].includes(category)) {
+    const stationAggregateGap = aggregateSplitGapSeconds(analysisJson, "work_time");
+    const runningAggregateGap = aggregateSplitGapSeconds(analysisJson, "run_time");
+    const roxAggregateGap = aggregateSplitGapSeconds(analysisJson, "roxzone_time");
+    let aggregateClarifier = "The aggregate benchmark-band signal and the biggest individual split are different here.";
+    if (category === "running" && Number.isFinite(runningAggregateGap) && Number.isFinite(stationAggregateGap)) {
+      aggregateClarifier = runningAggregateGap > stationAggregateGap
+        ? "Your total running gap is the larger aggregate benchmark-band lever, but this station has the biggest individual split to address first."
+        : stationAggregateGap > runningAggregateGap
+          ? "Station work is the larger aggregate benchmark-band lever, and this station has the biggest individual split to address first."
+          : "The aggregate benchmark-band levers are close, but this station has the biggest individual split to address first.";
+    } else if (category === "roxzone" && Number.isFinite(roxAggregateGap)) {
+      aggregateClarifier = "RoxZone is the aggregate benchmark-band signal, but this station has the biggest individual split to address first.";
+    } else if (category === "pacing") {
+      aggregateClarifier = "Pacing is the aggregate race signal, but this station has the biggest individual split to address first.";
+    }
+    return {
+      headline: `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`,
+      subline: aggregateClarifier,
+      gainDisplay: null,
+    };
   }
   if (calculatorMode === "analyse" && category === "running") {
     return { headline: "YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP", subline: "Closing that gap unlocks your finish time.", gainDisplay: null };
@@ -728,8 +752,8 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
     const totalSeg = (analysisJson.segments ?? []).find((s) => s.segmentKey === "total_time");
     const pct = formatPercentile(totalSeg?.percentile);
     const topStrengths = (analysisJson.stationBreakdown ?? [])
-      .filter((s) => s.confidence !== "low" && Number.isFinite(s.percentile))
-      .sort((a, b) => a.percentile - b.percentile)
+      .filter((s) => s.confidence !== "low" && Number.isFinite(s.timeGapSeconds) && s.timeGapSeconds < 0)
+      .sort((a, b) => a.timeGapSeconds - b.timeGapSeconds)
       .slice(0, 2)
       .map((s) => s.label);
     if (pct) bullets.push(`You placed in the ${pct} overall against your benchmark band.`);

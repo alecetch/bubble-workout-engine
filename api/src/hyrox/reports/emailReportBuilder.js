@@ -425,6 +425,14 @@ function resolvedComparisonBandInfo(analysisJson = {}, fallbackAchievedBand = nu
   return { achievedBand, comparisonBand: comparisonBand ?? achievedBand, isEscalated, group };
 }
 
+function methodNoteComparisonGroup(analysisJson = {}, calculatorMode = "target") {
+  const benchmarkContext = analysisJson.benchmarkContext ?? {};
+  if (calculatorMode === "target" && benchmarkContext.goalBenchmarkGroup) {
+    return benchmarkContext.goalBenchmarkGroup;
+  }
+  return resolvedComparisonBandInfo(analysisJson).group;
+}
+
 function renderLensDataRow({ label, value, valueColor, valueSize = "13px", valueWeight = "400", valueFamily = "Inter,Arial,Helvetica,sans-serif", divided = false }) {
   const tableStyle = divided
     ? "border-top:1px solid #1c3350;padding-top:10px;margin-top:10px;"
@@ -769,21 +777,14 @@ function renderTimePotential(section) {
 }
 
 function renderTextCard(section, interpretation = null, analysisJson = {}) {
-  const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
-  const { penaltiesAreMaterial } = penaltyContext(analysisJson);
-  const filteredItems = items.filter(Boolean);
-  const paragraphs = section.sectionKey === "training_volume" && filteredItems.length >= 2
-    ? filteredItems.map((item, index) => {
-      const labels = ["Running volume", "Strength frequency"];
-      const marginTop = index === 0 ? "margin-top:0;" : "margin-top:12px;";
-      const rawText = String(item).replace(
-        "As a runner, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
-        "For athletes with a stronger running base, building station-specific strength is often the highest-leverage change - prioritise functional loading over additional aerobic work.",
-      );
-      const text = penaltiesAreMaterial && index === 0 && !/penalty-inflated/i.test(rawText)
-        ? `${rawText} Because the Run 5 loss is penalty-inflated, do not treat the full raw running gap as a running-volume problem.`
-        : rawText;
-      return `<div style="${marginTop}">
+	  const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
+	  const filteredItems = items.filter(Boolean);
+	  const paragraphs = section.sectionKey === "training_volume" && filteredItems.length >= 2
+	    ? filteredItems.map((item, index) => {
+	      const labels = ["Running volume", "Strength frequency"];
+	      const marginTop = index === 0 ? "margin-top:0;" : "margin-top:12px;";
+	      const text = String(item);
+	      return `<div style="${marginTop}">
         <span style="font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#475569;display:block;margin-bottom:4px;">${esc(labels[index] ?? `Point ${index + 1}`)}</span>
         <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;margin:0;">${esc(enforceTone(text))}</p>
       </div>`;
@@ -1004,6 +1005,7 @@ const AGGREGATE_LABELS = Object.freeze({
   roxzone_time: "Total RoxZone",
   total_time: "Total Race Time",
 });
+const TOP_LEVEL_GAP_RECONCILIATION_BLOCK_SECONDS = 180;
 
 function splitSafe(value) {
   return esc(enforceTone(String(value ?? "")));
@@ -1158,6 +1160,10 @@ function renderSplitTable(section, analysisJson) {
     return null;
   }
 
+  function splitBandLabel(segment, gap) {
+    return bandScoreLabel(gap, comparisonSplitSeconds(segment, gap));
+  }
+
   function isAnomalousSplitRow(row) {
     if (!row?.seg || row.key === "__penalty__" || !Number.isFinite(row.gap)) return false;
     const athleteSeconds = athleteSplitSeconds(row.seg);
@@ -1191,12 +1197,30 @@ function renderSplitTable(section, analysisJson) {
   const workGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
   const runGap = Number.isFinite(runGapRaw) ? runGapRaw : 0;
 
+  function topLevelGapReconciliationAnomaly() {
+    if (hasGoalGroup) return null;
+    const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
+    const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup);
+    const runningGap = penaltiesAreMaterial && Number.isFinite(runGapNetOfPenalties)
+      ? runGapNetOfPenalties
+      : runGapRaw;
+    if (![totalGapSeconds, stationGap, runningGap, roxGap].every(Number.isFinite) || totalGapSeconds <= 0) return null;
+
+    const reconciledVisibleGap = stationGap + runningGap + roxGap + (penaltiesAreMaterial ? totalPenaltySeconds : 0);
+    const discrepancySeconds = Math.abs(totalGapSeconds - reconciledVisibleGap);
+    const toleranceSeconds = Math.max(TOP_LEVEL_GAP_RECONCILIATION_BLOCK_SECONDS, totalGapSeconds * 0.5);
+    return discrepancySeconds > toleranceSeconds
+      ? { discrepancySeconds, reconciledVisibleGap, totalGapSeconds }
+      : null;
+  }
+
   const anomalousSplitRows = [
     ...SPLIT_TABLE_RACE_ORDER.map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) })),
     { key: "roxzone_time", seg: segMap.get("roxzone_time"), gap: splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) },
   ].filter(isAnomalousSplitRow);
-  const hasDataAnomaly = anomalousSplitRows.length > 0;
-  const hasNarrativeDataAnomaly = anomalousSplitRows.some(isNarrativeBlockingSplitRow);
+  const unreconciledTotalAnomaly = topLevelGapReconciliationAnomaly();
+  const hasDataAnomaly = anomalousSplitRows.length > 0 || Boolean(unreconciledTotalAnomaly);
+  const hasNarrativeDataAnomaly = anomalousSplitRows.some(isNarrativeBlockingSplitRow) || Boolean(unreconciledTotalAnomaly);
   const dataAnomalySentence = hasNarrativeDataAnomaly
     ? " Treat the limiter ranking as directional until those times are checked."
     : "";
@@ -1211,13 +1235,6 @@ function renderSplitTable(section, analysisJson) {
   const top1 = rankedGaps[0]?.key ?? null;
   const top2 = rankedGaps[1]?.key ?? null;
   const top3 = rankedGaps[2]?.key ?? null;
-
-  function segmentBand(gap, percentile) {
-    if (!Number.isFinite(gap)) return "mid";
-    if (gap < 0 || (Number.isFinite(percentile) && percentile >= 60)) return "strong";
-    if (gap >= 60 || (Number.isFinite(percentile) && percentile < 35)) return "needs_work";
-    return "mid";
-  }
 
   function splitRowBgNew(gap) {
     if (!Number.isFinite(gap)) return "#ffffff";
@@ -1382,6 +1399,10 @@ function renderSplitTable(section, analysisJson) {
           mainLimiter = targetTimeFmt2
             ? `Your running is already ahead of the target profile. To hit ${targetTimeFmt2}, the remaining gap is in station performance.`
             : "Your running is already ahead of the target profile.";
+        } else if (workGap <= 0 && runGap <= 0) {
+          mainLimiter = targetTimeFmt2
+            ? `Your station time and running are already at or ahead of the target profile. To hit ${targetTimeFmt2}, check the remaining transition and split-detail gaps.`
+            : "Your station time and running are already ahead of the target profile.";
         } else {
           mainLimiter = targetTimeFmt2
             ? `To hit ${targetTimeFmt2}, both stations and running are contributing to the gap.${penaltiesAreMaterial ? " The first controllable win is penalty removal." : ""}`
@@ -1392,6 +1413,8 @@ function renderSplitTable(section, analysisJson) {
           mainLimiter = "Your station performance is ahead of the benchmark. Running pace is the main area to improve.";
         } else if (runGap <= 0 && workGap > 0) {
           mainLimiter = "Your running is ahead of the benchmark. Station performance is the main area to improve.";
+        } else if (workGap <= 0 && runGap <= 0) {
+          mainLimiter = "Your station performance and running are both ahead of the benchmark.";
         } else {
           mainLimiter = "Both running and station performance are contributing to the gap vs the benchmark.";
         }
@@ -1826,12 +1849,13 @@ function renderSplitTable(section, analysisJson) {
           adjusted: isPenaltyAdjustedSegment(seg),
         };
       })
-      .filter((row) => {
-        if (!row.seg?.label || !Number.isFinite(row.gap) || row.gap < 30) return false;
-        // In analyse mode (no goal group), exclude segments the athlete is already near-median on.
-        if (!hasGoalGroup && Number.isFinite(row.seg.percentile) && row.seg.percentile >= 40) return false;
-        return true;
-      })
+	      .filter((row) => {
+	        if (!row.seg?.label || !Number.isFinite(row.gap) || row.gap < 30) return false;
+	        // In analyse mode (no goal group), exclude segments that are already near the
+	        // comparison split time. Eligibility is seconds-gap based, not percentile based.
+	        if (!hasGoalGroup && !["Opportunity", "Priority"].includes(splitBandLabel(row.seg, row.gap))) return false;
+	        return true;
+	      })
       .sort(compareOpportunityRows);
     if (penaltiesAreMaterial) {
       losses.unshift({
@@ -1841,12 +1865,9 @@ function renderSplitTable(section, analysisJson) {
       });
     }
     const topLosses = losses.slice(0, hasGoalGroup ? 3 : 5);
-    const strengths = SPLIT_TABLE_RACE_ORDER
+    const strengthCandidates = SPLIT_TABLE_RACE_ORDER
       .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
-      .filter((row) => row.seg && (
-        (Number.isFinite(row.gap) && row.gap < 0)
-        || (Number.isFinite(row.seg.percentile) && row.seg.percentile >= 60)
-      ))
+      .filter((row) => row.seg && Number.isFinite(row.gap) && row.gap < 0)
       .sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
 
     const roxAggregateSeg = segMap.get("roxzone_time");
@@ -1854,15 +1875,17 @@ function renderSplitTable(section, analysisJson) {
     if (
       roxAggregateSeg
       && Number.isFinite(roxAggregateGap)
-      && (roxAggregateGap < -30 || (Number.isFinite(roxAggregateSeg.percentile) && roxAggregateSeg.percentile >= 60))
+	      && roxAggregateGap < -30
     ) {
-      strengths.push({
+      strengthCandidates.push({
         key: "roxzone_time",
         seg: { ...roxAggregateSeg, label: "RoxZone" },
         gap: roxAggregateGap,
       });
-      strengths.sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
+      strengthCandidates.sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
     }
+    const suppressedStrengthRows = strengthCandidates.filter(isAnomalousSplitRow);
+    const strengths = strengthCandidates.filter((row) => !isAnomalousSplitRow(row));
     const topStrengths = strengths.slice(0, 3);
     const isEliteAthlete = achievedBand === "sub_60";
 
@@ -1891,7 +1914,7 @@ function renderSplitTable(section, analysisJson) {
             }
             return `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#d97706;">${splitSafe(targetLabel)}</span>`;
           }
-	          const rawLabel = bandScoreLabel(item.seg?.percentile);
+		          const rawLabel = splitBandLabel(item.seg, item.gap);
 	          if (!rawLabel) return "";
 	          const displayLabel = isEliteAthlete ? eliteBandLabel(rawLabel) : rawLabel;
 	          const bsColor = isEliteAthlete && ["Priority", "Opportunity"].includes(rawLabel) ? "#d97706" : bandScoreColor(rawLabel);
@@ -1923,7 +1946,7 @@ function renderSplitTable(section, analysisJson) {
         if (Number.isFinite(item.gap) && item.gap < 0) {
           return `<span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#16a34a;">Strength vs your benchmark band</span>`;
         }
-        const rawLabel = bandScoreLabel(item.seg?.percentile);
+	        const rawLabel = splitBandLabel(item.seg, item.gap);
         if (!rawLabel) return "";
         const displayLabel = isEliteAthlete ? eliteBandLabel(rawLabel) : rawLabel;
         const bsColor = bandScoreColor(rawLabel);
@@ -1960,6 +1983,9 @@ function renderSplitTable(section, analysisJson) {
     const anomalyNote = hasAnomalousGap
       ? `<tr><td colspan="3" style="padding:6px 12px 8px;"><span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#f59e0b;">⚠ One or more splits show an unusually large gap vs the ${anomalyGapRef} — double-check those times are entered correctly.</span></td></tr>`
       : "";
+    const strengthsAnomalyNote = suppressedStrengthRows.length > 0
+      ? `<tr><td colspan="3" style="padding:6px 12px 8px;"><span style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;font-style:italic;color:#f59e0b;">⚠ One or more strong-looking splits are affected by unusual data — double-check those times.</span></td></tr>`
+      : "";
 
     function panelHeader(title, subtitle) {
       return `<tr style="background-color:#f8fafc;">
@@ -1978,6 +2004,7 @@ function renderSplitTable(section, analysisJson) {
     const strengthTable = `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background-color:#ffffff;">
       ${panelHeader("Strengths to protect", hasGoalGroup ? "Areas already ahead of target profile" : "Good areas to preserve")}
       ${strengthRows}
+      ${strengthsAnomalyNote}
     </table>`;
 
     return `
@@ -1993,32 +2020,16 @@ function renderSplitTable(section, analysisJson) {
     </tr>`;
   }
 
-  function rankColor(gap, pct) {
-    if (Number.isFinite(gap)) {
-      if (gap < 0) return "#22c55e";
-      if (isEliteBenchmark && !hasGoalGroup && gap < 90) return "#d97706";
-      if (gap >= 90) return "#e53e3e";
-      if (gap >= 60) return "#d97706";
-      return "#94a3b8";
-    }
-    return pct >= 60 ? "#22c55e" : pct <= 30 ? "#e53e3e" : "#94a3b8";
-  }
-
   function pctCells(segment, isAggregate, gap = null) {
     const dash = `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">&ndash;</td>`;
-    if (isAggregate || segment.confidence === "low" || !Number.isFinite(segment.percentile)) {
+    if (isAggregate || segment.confidence === "low") {
       return `${dash}${dash}`;
     }
-    const color = rankColor(gap, segment.percentile);
-    const overallCell = hasGoalGroup
-      ? (() => {
-          const targetSecs = splitTargetSeconds(segment, hasGoalGroup);
-          const targetText = Number.isFinite(targetSecs) ? formatTime(targetSecs) : null;
-          return targetText
-            ? `<td style="padding:7px 6px;text-align:left;font-family:'Courier New',Courier,monospace;font-size:11px;color:#64748b;">${splitSafe(targetText)}</td>`
-            : dash;
-        })()
-      : `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:${color};">${splitSafe(formatPercentileRank(segment.percentile))}</td>`;
+    const targetSecs = splitTargetSeconds(segment, hasGoalGroup);
+    const targetText = Number.isFinite(targetSecs) ? formatTime(targetSecs) : null;
+    const overallCell = targetText
+      ? `<td style="padding:7px 6px;text-align:left;font-family:'Courier New',Courier,monospace;font-size:11px;color:#64748b;">${splitSafe(targetText)}</td>`
+      : dash;
     let bandScoreCell;
     if (hasGoalGroup) {
       const isEliteBand = achievedBand === "sub_60";
@@ -2045,7 +2056,7 @@ function renderSplitTable(section, analysisJson) {
         ? `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${tColor};">${splitSafe(targetLabel)}</td>`
         : dash;
     } else {
-      const rawBsLabel = Number.isFinite(gap) && gap < 0 ? "Strength" : bandScoreLabel(segment.percentile);
+      const rawBsLabel = splitBandLabel(segment, gap);
       const bsLabel = isEliteBenchmark && Number.isFinite(gap) && gap > 0 && gap < 90 && rawBsLabel === "Priority"
         ? "Next refinement"
         : isEliteBenchmark && Number.isFinite(gap) && gap > 0 && gap < 90 && rawBsLabel === "Opportunity"
@@ -2176,7 +2187,7 @@ function renderSplitTable(section, analysisJson) {
     return `<tr>
 	      <td style="background-color:#f8fafc;padding:12px 24px 16px;border-top:1px solid #e2e8f0;">
 	        <span style="display:block;color:#94a3b8;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px;">HOW TO READ THIS</span>
-        <p style="color:#94a3b8;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">${hasGoalGroup ? "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Target status shows whether each segment is ahead of target, on target, or an opportunity against the selected target profile." : "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Band score shows whether each segment is a Strength, Good, On benchmark, Opportunity, or Priority versus athletes who finished in the same time band."}</p>
+	        <p style="color:#94a3b8;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:1.6;margin:0;">${hasGoalGroup ? "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than target. Target status shows whether each segment is ahead of target, on target, or an opportunity against the selected target profile." : "Red highlights the most actionable losses. Amber flags moderate gaps. Green means faster than the comparison time. Split status uses the seconds gap for that segment, not a split percentile."}</p>
       </td>
     </tr>`;
   }
@@ -2204,8 +2215,8 @@ function renderSplitTable(section, analysisJson) {
 	        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-collapse:collapse;width:100%;">
           <tr style="background-color:#f1f5f9;border-bottom:2px solid #e2e8f0;">
             <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:32%;">Segment</th>
-	            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">${hasGoalGroup ? "Target basis" : "Band standing"}</th>
-            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">${hasGoalGroup ? "Target status" : "Band score"}</th>
+		            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">${hasGoalGroup ? "Target basis" : "Comparison"}</th>
+	            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">${hasGoalGroup ? "Target status" : "Split status"}</th>
             <th style="padding:7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your split</th>
             <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">${reducedGapHeader}</th>
           </tr>
@@ -2263,10 +2274,10 @@ function renderMethodNote(hasMaterialPenalties = false, calculatorMode = "target
   const penaltyNote = hasMaterialPenalties
     ? " Penalties are separated from running in the gap breakdown to avoid confusing execution leakage with run fitness."
     : "";
-  const doublesNote = analysisJson.benchmarkContext?.useDoublesBenchmarks
-    ? (() => {
-        const { group } = resolvedComparisonBandInfo(analysisJson);
-        const n = Number(group?.sampleSize);
+	  const doublesNote = analysisJson.benchmarkContext?.useDoublesBenchmarks
+	    ? (() => {
+	        const group = methodNoteComparisonGroup(analysisJson, calculatorMode);
+	        const n = Number(group?.sampleSize);
         return n
           ? ` Doubles benchmarks use a dedicated doubles dataset — this comparison group includes ${n.toLocaleString()} teams, not singles data.`
           : " Doubles benchmarks use a dedicated doubles dataset — not singles data.";

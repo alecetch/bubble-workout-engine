@@ -2,7 +2,7 @@ import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
 import { benchmarkConfidenceQualifier, percentileTextWithFallback } from "./comparisonOptions.js";
 import { comparisonLabel, hasGoalGroup } from "./comparisonBasis.js";
-import { ageGroupContextLine, formatGain, formatPercent, formatPercentile, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
+import { ageGroupContextLine, formatGain, formatPercent, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
 import { resolveHeroImage } from "./heroImageResolver.js";
 import { penaltyContext } from "./penaltyContext.js";
 
@@ -19,13 +19,14 @@ function stationSegments(analysisJson) {
 
 function bestStation(analysisJson) {
   // strengths[0] is the full framed segment (timeGapToMedianSeconds, frameGapSeconds present).
-  // headline.biggestStrength is the same station but stripped to {segmentKey, label, percentile} —
+  // headline.biggestStrength is the same station but stripped of frame-adjusted gap detail —
   // no time gaps, so it can't populate position_gain. Always prefer strengths[0] for complete data.
   if (analysisJson.strengths?.[0]?.segmentKey) return analysisJson.strengths[0];
   if (analysisJson.headline?.biggestStrength?.segmentKey) return analysisJson.headline.biggestStrength;
   return [...stationSegments(analysisJson)]
-    .filter((row) => Number.isFinite(Number(row.percentile)) && Number(row.percentile) >= 70)
-    .sort((a, b) => b.percentile - a.percentile)[0]
+    .map((row) => ({ row, gap: strengthGapSeconds(row, analysisJson) }))
+    .filter(({ gap }) => Number.isFinite(gap) && gap < 0)
+    .sort((a, b) => a.gap - b.gap)[0]?.row
     ?? null;
 }
 
@@ -35,7 +36,7 @@ function opportunityStation(analysisJson) {
   if (analysisJson.limiters?.[0]?.segmentKey) return analysisJson.limiters[0];
   return [...stationSegments(analysisJson)]
     .filter((row) => Number(row.timeGapToMedianSeconds) > 0)
-    .sort((a, b) => (b.timeGapToMedianSeconds - a.timeGapToMedianSeconds) || (a.percentile - b.percentile))[0]
+    .sort((a, b) => b.timeGapToMedianSeconds - a.timeGapToMedianSeconds)[0]
     ?? null;
 }
 
@@ -186,6 +187,14 @@ function strengthGapSeconds(row, analysisJson) {
   return Number.isFinite(row?.timeGapSeconds) ? row.timeGapSeconds : 0;
 }
 
+function splitGapSummary(row, analysisJson, fallback = "BENCHMARKED") {
+  const gap = strengthGapSeconds(row, analysisJson);
+  if (!Number.isFinite(gap)) return fallback;
+  if (gap < 0) return `${formatTimeDiff(gap)} ahead`;
+  if (gap > 0) return `${formatTimeDiff(gap)} gap`;
+  return "On comparison";
+}
+
 export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athleteContext = {}) {
   const penalty = penaltyContext(analysisJson);
   const limiter = penalty.usePenaltyHero
@@ -238,25 +247,25 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         stations: rows,
       },
       {
-        slide_id: "A3_BIGGEST_STRENGTH",
-        station: upper(strength?.label ?? label(strength?.segmentKey) ?? "N/A"),
-        percentile: formatPercentile(strength?.percentile) ?? "BENCHMARKED",
-        position_gain: formatTimeDiff(Math.abs(strengthGapSeconds(strength, analysisJson))) ?? "+0:00",
+	        slide_id: "A3_BIGGEST_STRENGTH",
+	        station: upper(strength?.label ?? label(strength?.segmentKey) ?? "N/A"),
+	        percentile: splitGapSummary(strength, analysisJson),
+	        position_gain: formatTimeDiff(Math.abs(strengthGapSeconds(strength, analysisJson))) ?? "+0:00",
         position_gain_label: `TIME AHEAD OF ${basis}`,
         caption: `${strength?.label ?? "This station"} is the strongest benchmarked area in this result.`,
       },
       {
         slide_id: "A4_BIGGEST_OPPORTUNITY",
         station: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "N/A"),
-        label: penalty.usePenaltyHero ? "Fastest Win" : "Opportunity",
-        potential_gain: formatGain(gain) ?? "0:00",
-        potential_gain_text: wordsForSeconds(gain),
-        current_station_rank: penalty.usePenaltyHero ? "EXECUTION" : formatPercentile(limiter?.percentile) ?? "BENCHMARKED",
+	        label: penalty.usePenaltyHero ? "Fastest Win" : "Opportunity",
+	        potential_gain: formatGain(gain) ?? "0:00",
+	        potential_gain_text: wordsForSeconds(gain),
+	        current_station_rank: penalty.usePenaltyHero ? "EXECUTION" : splitGapSummary(limiter, analysisJson),
       },
       {
         slide_id: "A5_KEY_INSIGHT",
         athlete_first_name: firstName(athleteContext),
-        gain_text: `${formatPercentile(strength?.percentile) ?? "a stronger benchmark"} performance`,
+	        gain_text: `${splitGapSummary(strength, analysisJson, "a stronger benchmark")} performance`,
         gain_station: String(strength?.label ?? "the strongest station").toLowerCase(),
         loss_text: `${formatGain(gain) ?? "time"} potential gain`,
         loss_station: String(limiter?.label ?? "the limiter").toLowerCase(),

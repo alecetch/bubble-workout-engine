@@ -23,16 +23,16 @@ function markSegmentRoles(segments, limiter, strength) {
   }));
 }
 
-function stationBreakdown(segments) {
+function stationBreakdown(segments, { gapField = "frameGapSeconds" } = {}) {
   return segments
     .filter((segment) => segment.type === "station" && Number.isFinite(segment.percentile))
-    .sort((a, b) => (b.frameGapSeconds ?? 0) - (a.frameGapSeconds ?? 0))
+    .sort((a, b) => (b[gapField] ?? 0) - (a[gapField] ?? 0))
     .map((segment) => ({
       segmentKey: segment.segmentKey,
       label: segment.label,
       percentile: segment.percentile,
       fieldPercentile: segment.fieldPercentile ?? null,
-      timeGapSeconds: Math.round(segment.frameGapSeconds ?? 0),
+      timeGapSeconds: Math.round(segment[gapField] ?? 0),
       confidence: segment.confidence,
       nextBandMedianSeconds: segment.nextBandMedianSeconds ?? null,
     }));
@@ -244,8 +244,15 @@ export function analyseSubmission(input = {}) {
     contextAnalysis,
     timePotential,
   });
+  const muscleBenchmarkContext = calculatorMode === "target"
+    ? selectBenchmarkGroups(normalised, { calculatorMode: "analyse" })
+    : benchmarkContext;
+  const muscleSegments = calculatorMode === "target" && muscleBenchmarkContext?.available
+    ? calculateSegmentStats(normalised, muscleBenchmarkContext)
+    : segments;
+  const muscleStationBreakdown = stationBreakdown(muscleSegments, { gapField: "timeGapToMedianSeconds" });
   const muscleGroupProfile = analyseMuscleGroups({
-    stationBreakdown: rankedStations,
+    stationBreakdown: muscleStationBreakdown,
     analysisScope: scope,
   });
   const comparisonOptions = buildBenchmarkComparisonOptions(normalised, benchmarkContext);
@@ -290,6 +297,7 @@ export function analyseSubmission(input = {}) {
         segmentKey: strength.segmentKey,
         label: strength.label,
         percentile: strength.percentile,
+        timeAdvantageSeconds: strength.timeAdvantageSeconds,
       } : null,
       headlineGainSeconds: timePotential.headlineGainSeconds,
       projectedTimeSeconds: timePotential.newProjectedTimeSeconds,
