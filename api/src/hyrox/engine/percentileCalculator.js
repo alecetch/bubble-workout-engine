@@ -104,6 +104,23 @@ function requestFromSubmission(normalisedSubmission, benchmarkContext) {
   return request;
 }
 
+function fallbackStatsForSuppressedBandMetric(metricKey, benchmarkContext) {
+  const candidateGroupKeys = [
+    benchmarkContext?.demographicBenchmarkGroup?.key,
+    benchmarkContext?.totalPopulationBenchmark?.groupKey,
+  ];
+  const seen = new Set();
+
+  for (const groupKey of candidateGroupKeys) {
+    if (!groupKey || seen.has(groupKey)) continue;
+    seen.add(groupKey);
+    const stats = getBenchmarkStats(groupKey, metricKey);
+    if (stats) return { groupKey, stats };
+  }
+
+  return null;
+}
+
 export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
   const primaryGroupKey = benchmarkContext?.primaryBenchmarkGroup?.key;
   const goalGroupKey = benchmarkContext?.goalBenchmarkGroup?.key;
@@ -122,12 +139,21 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
       outputTypeForMetric(metricKey, metricType),
       isBandMode ? { performanceTarget: true } : {},
     );
-    const benchmarkGroupKey = selection.suppressed ? primaryGroupKey : selection.benchmarkUsed;
-    const stats = getBenchmarkStats(benchmarkGroupKey, metricKey);
+    let benchmarkGroupKey = selection.suppressed ? primaryGroupKey : selection.benchmarkUsed;
+    let stats = getBenchmarkStats(benchmarkGroupKey, metricKey);
+    let metricFallbackReason = null;
+    if (selection.suppressed && isBandMode && !stats) {
+      const fallback = fallbackStatsForSuppressedBandMetric(metricKey, benchmarkContext);
+      if (fallback) {
+        benchmarkGroupKey = fallback.groupKey;
+        stats = fallback.stats;
+        metricFallbackReason = "performance_band_metric_unavailable";
+      }
+    }
     const goalStats = goalGroupKey ? getBenchmarkStats(goalGroupKey, metricKey) : null;
-    const percentile = selection.suppressed ? null : approximatePercentile(userSeconds, stats);
+    const percentile = selection.suppressed && !metricFallbackReason ? null : approximatePercentile(userSeconds, stats);
     const demographicStats = demographicGroupKey ? getBenchmarkStats(demographicGroupKey, metricKey) : null;
-    const fieldPercentile = (demographicStats && !selection.suppressed) ? approximatePercentile(userSeconds, demographicStats) : null;
+    const fieldPercentile = (demographicStats && (!selection.suppressed || metricFallbackReason)) ? approximatePercentile(userSeconds, demographicStats) : null;
     const median = stats?.medianSeconds ?? stats?.p50Seconds ?? null;
     const topQuartile = stats?.p75Seconds ?? null;
     const goal = goalStats?.medianSeconds ?? goalStats?.p50Seconds ?? null;
@@ -152,11 +178,11 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
       benchmarkValueSeconds: median,
       benchmarkRequested: selection.benchmarkRequested ?? benchmarkContext?.primaryBenchmarkGroup?.benchmarkRequested ?? primaryGroupKey ?? null,
       fallbackLevel: selection.fallbackLevel ?? 0,
-      fallbackReason: selection.fallbackReason ?? null,
+      fallbackReason: metricFallbackReason ?? selection.fallbackReason ?? null,
       confidenceScore: selection.confidenceScore ?? null,
       confidenceGrade: selection.confidenceGrade ?? null,
       confidenceAudit: selection.confidence ?? null,
-      suppressed: Boolean(selection.suppressed),
+      suppressed: Boolean(selection.suppressed && !metricFallbackReason),
       suppressionReason: selection.reason ?? null,
       sampleSize: stats?.sampleSize ?? 0,
     });
