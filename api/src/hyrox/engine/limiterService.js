@@ -23,6 +23,14 @@ function isCanonicalRoxzoneSegment(segment) {
   return segment?.segmentKey === "roxzone_time";
 }
 
+function isIndividualSplitSegment(segment) {
+  return segment?.type === "run" || segment?.type === "station";
+}
+
+function isDeprioritizedAggregateSegment(segment) {
+  return segment?.type === "aggregate" && !isCanonicalRoxzoneSegment(segment);
+}
+
 function isDominantRoxzoneLimiter(segment, nonRoxzoneCandidates) {
   const roxzoneGap = effectiveGapSeconds(segment);
   if (!Number.isFinite(roxzoneGap) || roxzoneGap < ROXZONE_LIMITER_MIN_GAP_SECONDS) return false;
@@ -42,8 +50,8 @@ export function compareLimiterSegments(a, b) {
     const gapB = effectiveGapSeconds(b) ?? 0;
     return gapB - gapA;
   }
-  if (a.type === "aggregate" && b.type === "station") return 1;
-  if (b.type === "aggregate" && a.type === "station") return -1;
+  if (isDeprioritizedAggregateSegment(a) && isIndividualSplitSegment(b)) return 1;
+  if (isDeprioritizedAggregateSegment(b) && isIndividualSplitSegment(a)) return -1;
   const gapA = effectiveGapSeconds(a) ?? 0;
   const gapB = effectiveGapSeconds(b) ?? 0;
   return gapB - gapA;
@@ -89,7 +97,11 @@ export function findBiggestStrength(segmentStats) {
     .map((segment) => ({ segment, gap: effectiveGapSeconds(segment) }))
     .filter(({ segment, gap }) => Number.isFinite(gap) && gap < -BENCHMARK_THRESHOLDS.strengthMinimumAdvantageSeconds)
     .filter(({ segment }) => !isRoxzoneSegment(segment) || segment.segmentKey === "roxzone_time")
-    .sort((a, b) => a.gap - b.gap);
+    .sort((a, b) => {
+      if (isDeprioritizedAggregateSegment(a.segment) && isIndividualSplitSegment(b.segment)) return 1;
+      if (isDeprioritizedAggregateSegment(b.segment) && isIndividualSplitSegment(a.segment)) return -1;
+      return a.gap - b.gap;
+    });
 
   const segment = candidates[0]?.segment;
   const gap = candidates[0]?.gap;

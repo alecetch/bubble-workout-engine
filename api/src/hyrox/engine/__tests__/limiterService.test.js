@@ -144,6 +144,62 @@ test("findBiggestLimiter ranks by seconds gap only when percentiles disagree", (
   assert.equal(limiter.timeGapSeconds, 105);
 });
 
+test("findBiggestLimiter prefers an individual split over a larger aggregate run gap", () => {
+  const limiter = findBiggestLimiter([
+    {
+      segmentKey: "run_time",
+      label: "Total Run Time",
+      type: "aggregate",
+      frameGapSeconds: 121,
+      percentile: 25,
+      confidence: "high",
+    },
+    {
+      segmentKey: "run_1",
+      label: "Run 1",
+      type: "run",
+      frameGapSeconds: 72,
+      percentile: 35,
+      confidence: "high",
+    },
+    {
+      segmentKey: "burpee_broad_jump",
+      label: "Burpee Broad Jump",
+      type: "station",
+      frameGapSeconds: 54,
+      percentile: 38,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(limiter.segmentKey, "run_1");
+  assert.equal(limiter.timeGapSeconds, 72);
+});
+
+test("findBiggestLimiter can still select an aggregate when no individual split qualifies", () => {
+  const limiter = findBiggestLimiter([
+    {
+      segmentKey: "run_time",
+      label: "Total Run Time",
+      type: "aggregate",
+      frameGapSeconds: 121,
+      percentile: 25,
+      confidence: "high",
+    },
+    {
+      segmentKey: "run_1",
+      label: "Run 1",
+      type: "run",
+      frameGapSeconds: -12,
+      percentile: 70,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(limiter.segmentKey, "run_time");
+  assert.equal(limiter.timeGapSeconds, 121);
+});
+
 test("findBiggestLimiter selects RoxZone when its gap clearly dominates the field", () => {
   const limiter = findBiggestLimiter([
     {
@@ -205,6 +261,95 @@ test("findBiggestLimiter ignores RoxZone when it is not a dominant gap", () => {
 
   assert.equal(limiter.segmentKey, "sled_pull");
   assert.equal(limiter.timeGapSeconds, 55);
+});
+
+test("findBiggestStrength prefers an individual split over a larger aggregate run advantage", () => {
+  const strength = findBiggestStrength([
+    {
+      segmentKey: "run_time",
+      label: "Total Run Time",
+      type: "aggregate",
+      frameGapSeconds: -184,
+      percentile: 95,
+      confidence: "high",
+    },
+    {
+      segmentKey: "run_8",
+      label: "Run 8",
+      type: "run",
+      frameGapSeconds: -64,
+      percentile: 88,
+      confidence: "high",
+    },
+    {
+      segmentKey: "sled_pull",
+      label: "Sled Pull",
+      type: "station",
+      frameGapSeconds: -58,
+      percentile: 86,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(strength.segmentKey, "run_8");
+  assert.equal(strength.timeAdvantageSeconds, 64);
+});
+
+test("findBiggestStrength prefers a doubles station split over a larger total station advantage", () => {
+  const strength = findBiggestStrength([
+    {
+      segmentKey: "work_time",
+      label: "Total Station Time",
+      type: "aggregate",
+      frameGapSeconds: -893,
+      percentile: 95,
+      confidence: "high",
+    },
+    {
+      segmentKey: "burpee_broad_jump",
+      label: "Burpee Broad Jump",
+      type: "station",
+      frameGapSeconds: -178,
+      percentile: 84,
+      confidence: "low",
+    },
+    {
+      segmentKey: "sled_pull",
+      label: "Sled Pull",
+      type: "station",
+      frameGapSeconds: -151,
+      percentile: 82,
+      confidence: "low",
+    },
+  ]);
+
+  assert.equal(strength.segmentKey, "burpee_broad_jump");
+  assert.equal(strength.label, "Burpee Broad Jump");
+  assert.equal(strength.timeAdvantageSeconds, 178);
+});
+
+test("findBiggestStrength can still select an aggregate when no individual split qualifies", () => {
+  const strength = findBiggestStrength([
+    {
+      segmentKey: "work_time",
+      label: "Total Station Time",
+      type: "aggregate",
+      frameGapSeconds: -70,
+      percentile: 90,
+      confidence: "high",
+    },
+    {
+      segmentKey: "sled_pull",
+      label: "Sled Pull",
+      type: "station",
+      frameGapSeconds: -8,
+      percentile: 70,
+      confidence: "high",
+    },
+  ]);
+
+  assert.equal(strength.segmentKey, "work_time");
+  assert.equal(strength.timeAdvantageSeconds, 70);
 });
 
 test("findBiggestStrength ranks by seconds advantage without requiring percentile", () => {

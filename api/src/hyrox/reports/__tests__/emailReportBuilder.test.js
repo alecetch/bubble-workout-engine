@@ -3515,6 +3515,104 @@ describe("content accuracy fixes (feature-143)", () => {
     assert.doesNotMatch(mainInsight, /Both running and station performance are contributing[\s\S]*station time is already ahead/i);
     assert.match(htmlBody, /unusually large gap|double-check/i);
   });
+
+  it("MAIN INSIGHT station-performance framing does not name a run split", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_70",
+        nextBand: "sub_65",
+        primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4200, benchmarkMedianSeconds: 3830, frameGapSeconds: 370, confidence: "high" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, benchmarkMedianSeconds: 1980, frameGapSeconds: 220, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 1700, benchmarkMedianSeconds: 1550, frameGapSeconds: 150, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 300, benchmarkMedianSeconds: 300, frameGapSeconds: 0, confidence: "high" },
+        { segmentKey: "run_1", label: "Run 1", type: "run", userSeconds: 480, benchmarkMedianSeconds: 300, frameGapSeconds: 180, confidence: "high" },
+        { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 390, benchmarkMedianSeconds: 300, frameGapSeconds: 90, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.match(mainInsight, /station performance, especially Wall Balls/i);
+    assert.doesNotMatch(mainInsight, /station performance, especially Run 1/i);
+  });
+
+  it("MAIN INSIGHT running-pace framing does not name a station split", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_70",
+        nextBand: "sub_65",
+        primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4200, benchmarkMedianSeconds: 3830, frameGapSeconds: 370, confidence: "high" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, benchmarkMedianSeconds: 2050, frameGapSeconds: 150, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 1700, benchmarkMedianSeconds: 1480, frameGapSeconds: 220, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 300, benchmarkMedianSeconds: 300, frameGapSeconds: 0, confidence: "high" },
+        { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 480, benchmarkMedianSeconds: 300, frameGapSeconds: 180, confidence: "high" },
+        { segmentKey: "run_1", label: "Run 1", type: "run", userSeconds: 390, benchmarkMedianSeconds: 300, frameGapSeconds: 90, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.match(mainInsight, /running pace, especially Run 1/i);
+    assert.doesNotMatch(mainInsight, /running pace, especially Wall Balls/i);
+  });
+
+  it("target MAIN INSIGHT station-performance framing names only station splits", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_70",
+        goalBenchmarkGroup: { targetFinishSeconds: 3900, label: "sub-65" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4270, goalBenchmarkSeconds: 3900, exactTargetSeconds: 3900, frameGapSeconds: 370, confidence: "high" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, goalBenchmarkSeconds: 1980, exactTargetSeconds: 1980, frameGapSeconds: 220, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 1700, goalBenchmarkSeconds: 1550, exactTargetSeconds: 1550, frameGapSeconds: 150, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 370, goalBenchmarkSeconds: 370, exactTargetSeconds: 370, frameGapSeconds: 0, confidence: "high" },
+        { segmentKey: "run_1", label: "Run 1", type: "run", userSeconds: 480, goalBenchmarkSeconds: 300, exactTargetSeconds: 300, frameGapSeconds: 180, confidence: "high" },
+        { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 390, goalBenchmarkSeconds: 300, exactTargetSeconds: 300, frameGapSeconds: 90, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.match(mainInsight, /gap is led by station performance/i);
+    assert.match(mainInsight, /Wall Balls are the biggest target opportunity/i);
+    assert.doesNotMatch(mainInsight, /Run 1 is the biggest target opportunity/i);
+  });
+
+  it("target MAIN INSIGHT running-pace framing names only run splits", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_70",
+        goalBenchmarkGroup: { targetFinishSeconds: 3900, label: "sub-65" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4270, goalBenchmarkSeconds: 3900, exactTargetSeconds: 3900, frameGapSeconds: 370, confidence: "high" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, goalBenchmarkSeconds: 2050, exactTargetSeconds: 2050, frameGapSeconds: 150, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 1700, goalBenchmarkSeconds: 1480, exactTargetSeconds: 1480, frameGapSeconds: 220, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 370, goalBenchmarkSeconds: 370, exactTargetSeconds: 370, frameGapSeconds: 0, confidence: "high" },
+        { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 480, goalBenchmarkSeconds: 300, exactTargetSeconds: 300, frameGapSeconds: 180, confidence: "high" },
+        { segmentKey: "run_1", label: "Run 1", type: "run", userSeconds: 390, goalBenchmarkSeconds: 300, exactTargetSeconds: 300, frameGapSeconds: 90, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.match(mainInsight, /gap is led by running pace/i);
+    assert.match(mainInsight, /Run 1 is the biggest target opportunity/i);
+    assert.doesNotMatch(mainInsight, /Wall Balls is the biggest target opportunity/i);
+  });
 });
 
 describe("feature-144: gapPill directional badge and route guard", () => {
