@@ -537,17 +537,17 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     const stationAggregateGap = aggregateSplitGapSeconds(analysisJson, "work_time");
     const runningAggregateGap = aggregateSplitGapSeconds(analysisJson, "run_time");
     const roxAggregateGap = aggregateSplitGapSeconds(analysisJson, "roxzone_time");
-    let aggregateClarifier = "The aggregate benchmark-band signal and the biggest individual split are different here.";
+    let aggregateClarifier = "Your overall gap points elsewhere, but this station is still your biggest single gap.";
     if (category === "running" && Number.isFinite(runningAggregateGap) && Number.isFinite(stationAggregateGap)) {
       aggregateClarifier = runningAggregateGap > stationAggregateGap
-        ? "Your total running gap is the larger aggregate benchmark-band lever, but this station has the biggest individual split to address first."
+        ? "Running adds up to your biggest overall gap — but of any single segment, this station is the biggest one."
         : stationAggregateGap > runningAggregateGap
-          ? "Station work is the larger aggregate benchmark-band lever, and this station has the biggest individual split to address first."
-          : "The aggregate benchmark-band levers are close, but this station has the biggest individual split to address first.";
+          ? "Station work adds up to your biggest overall gap, and this station is the biggest single one."
+          : "Running and station work are close overall — but this station is your biggest single gap.";
     } else if (category === "roxzone" && Number.isFinite(roxAggregateGap)) {
-      aggregateClarifier = "RoxZone is the aggregate benchmark-band signal, but this station has the biggest individual split to address first.";
+      aggregateClarifier = "RoxZone adds up to your biggest overall gap, but this station is your biggest single one.";
     } else if (category === "pacing") {
-      aggregateClarifier = "Pacing is the aggregate race signal, but this station has the biggest individual split to address first.";
+      aggregateClarifier = "Pacing is your biggest overall signal, but this station is your biggest single gap.";
     }
     return {
       headline: `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`,
@@ -633,11 +633,11 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
         const runningAggregateGap = aggregateSplitGapSeconds(analysisJson, "run_time");
         const subline = Number.isFinite(runningAggregateGap) && Number.isFinite(stationAggregateGap)
           ? runningAggregateGap > stationAggregateGap
-            ? "Your running pace is the larger aggregate target lever — but this station has the biggest single split to address first."
+            ? "Running is your biggest overall gap to the target — but of any single segment, this station is the biggest one."
             : stationAggregateGap > runningAggregateGap
-              ? "Station work is the larger aggregate target lever, and this station has the biggest single split to address first."
-              : "The aggregate target levers are close, but this station has the biggest single split to address first."
-          : "This station has the biggest single split to address first.";
+              ? "Station work is your biggest overall gap to the target, and this station is the biggest single one."
+              : "Running and station work are close overall — but this station is your biggest single gap."
+          : "This station is your biggest single gap.";
         return {
           headline: targetStr
             ? `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`
