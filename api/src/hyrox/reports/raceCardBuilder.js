@@ -98,16 +98,27 @@ function renderNameLine(line) {
 
 // ── SVG assets ────────────────────────────────────────────────────────────────
 
-const FORMA_LOGO = `<svg viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg" width="38" height="38">
-  <rect width="38" height="38" rx="7" fill="#22d3ee"/>
-  <path d="M9 9h20v5H15v4h11v4H15v7H9V9z" fill="#06111e"/>
+const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
+const FORMA_BRAND_BLUE = "#00a3f5";
+
+function formaLogoFallback(size) {
+  const iconWidth = size;
+  const barHeight = Math.round(size * 0.24);
+  const barGap = Math.round(size * 0.06);
+  const textSize = Math.round(size * 0.6);
+  return `<svg viewBox="0 0 ${iconWidth + 4} ${size}" xmlns="http://www.w3.org/2000/svg" width="${iconWidth + 4}" height="${size}" style="flex-shrink:0;">
+  <polygon points="2,0 ${iconWidth},0 ${iconWidth - barHeight * 0.6},${barHeight} 2,${barHeight}" fill="#ffffff"/>
+  <polygon points="2,${barHeight + barGap} ${iconWidth - barHeight * 0.35},${barHeight + barGap} ${iconWidth - barHeight * 0.95},${barHeight * 2 + barGap} 2,${barHeight * 2 + barGap}" fill="${FORMA_BRAND_BLUE}"/>
+  <polygon points="2,${barHeight * 2 + barGap * 2} ${iconWidth - barHeight * 1.3},${barHeight * 2 + barGap * 2} ${iconWidth - barHeight * 1.9},${size},2,${size}" fill="#ffffff"/>
+  <text x="${iconWidth + 12}" y="${Math.round(size * 0.68)}" font-family="'Inter Tight',Arial,sans-serif" font-size="${textSize}" font-weight="800" fill="#f8fafc">FORMA</text>
 </svg>`;
+}
 
 function formaLogoMark(size = 38) {
+  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
   const src = loadIconB64("forma-logo.png");
-  if (!src) return FORMA_LOGO;
-  const r = Math.max(6, Math.round(size * 0.18));
-  return `<img src="${src}" alt="Forma" width="${size}" height="${size}" style="display:block;width:${size}px;height:${size}px;border-radius:${r}px;object-fit:contain;flex-shrink:0;" />`;
+  if (!src) return formaLogoFallback(size);
+  return `<img src="${src}" alt="Forma — Measure. Understand. Improve." width="${width}" height="${size}" style="display:block;width:${width}px;height:${size}px;object-fit:contain;flex-shrink:0;" />`;
 }
 
 const STATION_ARTWORK = Object.freeze({
@@ -498,15 +509,11 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 
 .logo-row { display: flex; align-items: center; gap: 11px; margin-bottom: 18px; }
 .brand-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.logo-word { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 18px; letter-spacing: 4.3px; color: var(--text); line-height: 1; }
-.brand-role { font-size: 9px; font-weight: 800; letter-spacing: 1.9px; color: var(--cyan); line-height: 1.05; text-transform: uppercase; }
 .brand-site { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; color: var(--muted); line-height: 1.1; }
 
 .t-hyrox { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 68px; line-height: 1; color: var(--text); letter-spacing: -1px; }
 .t-perf  { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 40px; line-height: 1.1; color: var(--cyan); letter-spacing: -0.5px; }
 .t-rep   { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 40px; line-height: 1.1; color: var(--cyan); letter-spacing: -0.5px; }
-.tagline { margin-top: 14px; font-size: 14px; font-weight: 500; color: var(--muted); letter-spacing: 0.3px; }
-.tagline .em { color: var(--cyan); font-weight: 700; }
 
 /* ─── HORIZONTAL RULE ─── */
 .hr { margin: 0 44px; height: 1px; flex-shrink: 0;
@@ -564,9 +571,6 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .footer { padding: 16px 44px 26px; display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0; border-top: 1px solid var(--border); margin-top: auto; }
 .f-left { display: flex; align-items: center; gap: 10px; }
-.f-copy { display: flex; flex-direction: column; gap: 2px; }
-.f-brand { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 15px; letter-spacing: 3.2px; color: var(--text); line-height: 1; }
-.f-sub { font-size: 9px; font-weight: 800; letter-spacing: 1.6px; color: var(--cyan); text-transform: uppercase; line-height: 1.1; }
 .f-right { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; color: var(--muted); }
 </style>
 </head>
@@ -579,15 +583,12 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
       <div class="logo-row">
         ${formaLogoMark(38)}
         <div class="brand-copy">
-          <span class="logo-word">FORMA</span>
-          <span class="brand-role">PERFORMANCE ENGINEER</span>
           <span class="brand-site">www.getforma.fit</span>
         </div>
       </div>
       <div class="t-hyrox">HYROX</div>
       <div class="t-perf">PERFORMANCE</div>
       <div class="t-rep">REPORT</div>
-      <div class="tagline"><span class="em">YOUR RACE,</span> DECODED.</div>
     </div>
     <div class="h-mid">${scoreRingSvg(formaScore)}</div>
     <div class="h-right">${headerHeroImage()}</div>
@@ -690,10 +691,6 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <div class="footer">
 	    <div class="f-left">
 	      ${formaLogoMark(34)}
-	      <div class="f-copy">
-	        <span class="f-brand">FORMA</span>
-	        <span class="f-sub">PERFORMANCE ENGINEER</span>
-	      </div>
 	    </div>
 	    <div class="f-right">www.getforma.fit</div>
 	  </div>

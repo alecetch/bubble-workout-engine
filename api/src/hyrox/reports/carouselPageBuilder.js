@@ -31,21 +31,24 @@ function loadAssetB64(serverRelativePath) {
   return null;
 }
 
+const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
+const FORMA_BRAND_BLUE = "#00a3f5";
+
 function formaMark(size) {
-  const r = Math.round(size * 0.22);
+  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
   if (FORMA_LOGO_B64) {
-    return `<img src="${FORMA_LOGO_B64}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px;border-radius:${r}px;display:block;flex-shrink:0;" />`;
+    return `<img src="${FORMA_LOGO_B64}" alt="Forma — Measure. Understand. Improve." width="${width}" height="${size}" style="width:${width}px;height:${size}px;display:block;flex-shrink:0;" />`;
   }
-  return `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;background:#0f6fff;border-radius:${r}px;color:#fff;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;font-weight:800;line-height:1;flex-shrink:0;">F</span>`;
+  const r = Math.round(size * 0.22);
+  return `<span style="display:inline-flex;align-items:center;gap:${Math.round(size * 0.2)}px;flex-shrink:0;">
+    <span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;background:${FORMA_BRAND_BLUE};border-radius:${r}px;color:#fff;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;font-weight:800;line-height:1;">F</span>
+    <span style="font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:${Math.round(size * 0.55)}px;font-weight:700;color:#fff;">FORMA</span>
+  </span>`;
 }
 
 function formaBrandHeader() {
   return `<header class="forma-brand">
     ${formaMark(36)}
-    <div class="forma-brand-text">
-      <div class="forma-brand-name">Forma</div>
-      <div class="forma-brand-sub">Performance Engineer</div>
-    </div>
   </header>`;
 }
 
@@ -78,10 +81,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
   border-bottom: 3px solid var(--blue);
   color: var(--text);
 }
-.forma-brand { position: absolute; top: 48px; left: 70px; display: flex; align-items: center; gap: 14px; z-index: 3; }
-.forma-brand-text { line-height: 1; }
-.forma-brand-name { font-family: var(--font-body); font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
-.forma-brand-sub { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
+.forma-brand { position: absolute; top: 48px; left: 70px; display: flex; align-items: center; z-index: 3; }
 .site { position: absolute; right: 72px; bottom: 28px; color: var(--muted); font-size: 12px; z-index: 2; }
 .footer { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; color: var(--muted-2); font-size: 12px; letter-spacing: 0.03em; }
 .blue { color: var(--blue); }
@@ -269,7 +269,7 @@ export function buildCarouselPage(carouselData = {}) {
       </div>
       <div class="swipe-prompt"><span class="blue">&#8594;</span> <span data-field="slides.0.swipe_prompt">Swipe to see where time was gained and lost.</span></div>
       ${athleteImageTag}
-      <div class="site" data-field="brand.site">forma.fit</div>
+      <div class="site" data-field="brand.site">www.getforma.fit</div>
     </section>
 
     <section class="slide slide-flow" data-slide="A2_POSITION_FLOW">
@@ -288,7 +288,7 @@ export function buildCarouselPage(carouselData = {}) {
       <div class="table-head pos-head">GAP</div>
       <div class="race-table" data-repeat="slides.1.stations"></div>
       <div class="legend"><span class="blue">BLUE</span> = FASTER THAN <span data-field="slides.1.comparison_basis">TARGET</span> &nbsp;&nbsp;&nbsp;&nbsp; <span class="danger">RED</span> = SLOWER THAN <span data-field="slides.1.comparison_basis">TARGET</span></div>
-      <div class="footer">FORMA &nbsp;|&nbsp; THE PERFORMANCE ENGINEER</div>
+      <div class="footer">FORMA &nbsp;|&nbsp; MEASURE. UNDERSTAND. IMPROVE.</div>
     </section>
 
     <section class="slide slide-stat" data-slide="A3_BIGGEST_STRENGTH">
@@ -330,7 +330,7 @@ export function buildCarouselPage(carouselData = {}) {
         <p class="payoff">Closing this gap could move closer to</p>
         <div class="top-ten blue" data-field="slides.4.outcome_text">YOUR NEXT PB</div>
       </div>
-      <div class="footer">FORMA &nbsp;|&nbsp; THE PERFORMANCE ENGINEER</div>
+      <div class="footer">FORMA &nbsp;|&nbsp; MEASURE. UNDERSTAND. IMPROVE.</div>
     </section>
 
     <section class="slide slide-cta" data-slide="A6_CTA">
@@ -342,7 +342,7 @@ export function buildCarouselPage(carouselData = {}) {
         <button class="cta-button" data-field="slides.5.button">ANALYSE MY HYROX RESULT</button>
         <div class="short-rule lower"></div>
         <div class="cta-brand" data-field="brand.product">FORMA</div>
-        <div class="cta-subtitle" data-field="brand.strapline">Performance Analytics for Hybrid Athletes</div>
+        <div class="cta-subtitle" data-field="brand.strapline">Measure. Understand. Improve.</div>
       </div>
       <div class="footer">DATA SOURCE: HYROX OFFICIAL</div>
     </section>
