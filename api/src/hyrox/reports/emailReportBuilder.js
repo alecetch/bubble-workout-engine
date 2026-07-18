@@ -222,15 +222,23 @@ function headingDot(accentColor) {
   return `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${accentColor};margin-right:6px;vertical-align:middle;"></span>`;
 }
 
+const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
+const FORMA_BRAND_BLUE = "#00a3f5";
+
 function logoMark(size = 28) {
+  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
   if (FORMA_LOGO_B64) {
-    return `<img src="${FORMA_LOGO_B64}" alt="Forma" width="${size}" height="${size}"
-      style="width:${size}px;height:${size}px;border-radius:6px;display:block;" />`;
+    return `<img src="${FORMA_LOGO_B64}" alt="Forma — Measure. Understand. Improve." width="${width}" height="${size}"
+      style="width:${width}px;height:${size}px;display:block;" />`;
   }
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;
-    width:${size}px;height:${size}px;background-color:#0f6fff;border-radius:6px;
-    color:#ffffff;font-family:'Inter Tight',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;
-    font-weight:800;line-height:1;">F</span>`;
+  return `<span style="display:inline-flex;align-items:center;gap:${Math.round(size * 0.2)}px;">
+    <span style="display:inline-flex;align-items:center;justify-content:center;
+      width:${size}px;height:${size}px;background-color:${FORMA_BRAND_BLUE};border-radius:6px;
+      color:#ffffff;font-family:'Inter Tight',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;
+      font-weight:800;line-height:1;">F</span>
+    <span style="font-family:'Inter Tight','Arial Narrow',Arial,sans-serif;font-size:${Math.round(size * 0.6)}px;
+      font-weight:700;color:#f8fafc;letter-spacing:0.5px;line-height:1;">FORMA</span>
+  </span>`;
 }
 
 function renderHeader() {
@@ -238,20 +246,7 @@ function renderHeader() {
     <td style="background-color:#07111f;padding:20px 32px;border-radius:8px 8px 0 0;">
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         <tr>
-          <td style="vertical-align:middle;">
-            <table cellpadding="0" cellspacing="0" border="0" role="presentation">
-              <tr>
-                <td style="vertical-align:middle;padding-right:10px;">${logoMark(28)}</td>
-                <td style="vertical-align:middle;">
-                  <span style="display:block;font-family:'Inter Tight','Arial Narrow',Arial,sans-serif;
-                    font-size:18px;font-weight:700;color:#f8fafc;letter-spacing:-0.3px;line-height:1;">Forma</span>
-                  <span style="display:block;font-family:Inter,Arial,sans-serif;font-size:10px;
-                    font-weight:500;color:#64748b;letter-spacing:0.08em;text-transform:uppercase;
-                    margin-top:3px;">PERFORMANCE ENGINEER</span>
-                </td>
-              </tr>
-            </table>
-          </td>
+          <td style="vertical-align:middle;">${logoMark(28)}</td>
           <td style="text-align:right;vertical-align:middle;">
             <span style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:11px;">www.getforma.fit</span>
           </td>
@@ -2248,9 +2243,7 @@ function renderFooter() {
           <td style="vertical-align:middle;">
             <p style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:11px;
               letter-spacing:0.04em;margin:0 0 3px;">
-              <span style="color:#f8fafc;font-family:'Inter Tight',Arial,sans-serif;
-                font-size:13px;font-weight:700;">Forma</span>
-              &nbsp;&#183;&nbsp; www.getforma.fit &nbsp;&#183;&nbsp; Performance Analytics for Hybrid Athletes
+              www.getforma.fit
             </p>
             <p style="color:#4a5568;font-family:Inter,Arial,sans-serif;font-size:10px;margin:0;">
               This analysis is for guidance only. Individual results vary.

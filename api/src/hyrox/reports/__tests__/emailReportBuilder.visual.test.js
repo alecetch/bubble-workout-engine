@@ -120,8 +120,10 @@ test("email does not contain getformai.com", () => {
   assert.doesNotMatch(fixture(), /getformai\.com/i);
 });
 
-test("email contains performance engineer header subtitle", () => {
-  assert.match(fixture(), /PERFORMANCE ENGINEER/);
+test("email contains the new masthead tagline and not the old header subtitle", () => {
+  const html = fixture();
+  assert.doesNotMatch(html, /PERFORMANCE ENGINEER/);
+  assert.match(html, /alt="Forma — Measure\. Understand\. Improve\."/);
 });
 
 test("email contains the inline Forma logo image", () => {
