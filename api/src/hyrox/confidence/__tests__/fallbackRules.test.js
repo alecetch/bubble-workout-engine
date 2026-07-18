@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { INDIVIDUAL_ANALYSIS_DIVISIONS } from "../../config/divisionGroups.js";
 import { setBenchmarkData } from "../../engine/benchmarkService.js";
 import { selectBenchmark } from "../benchmarkSelector.js";
-import { buildFallbackChain, isIndividualDivision, makeBenchmarkGroupKey } from "../fallbackRules.js";
+import { buildFallbackChain, buildPerformanceTargetFallbackChain, isIndividualDivision, makeBenchmarkGroupKey } from "../fallbackRules.js";
 
 describe("makeBenchmarkGroupKey", () => {
   it("appends region to non-performance group keys", () => {
@@ -119,6 +119,30 @@ describe("buildFallbackChain regional matching", () => {
     const keys = chain.map((candidate) => candidate.groupKey);
     assert.equal(keys.length, new Set(keys).size);
     assert.equal(keys[0], "hyrox:singles_s8_v1:open:male:all:europe");
+  });
+
+  it("uses gender-agnostic keys instead of impossible unknown-sex keys", () => {
+    const chain = buildFallbackChain({
+      datasetVersion: "doubles_v2",
+      division: "doubles_male",
+      gender: "unknown",
+      ageGroup: "30-34",
+    });
+
+    assert.equal(chain.some((candidate) => candidate.groupKey.includes(":unknown:")), false);
+    assert.ok(chain.some((candidate) => candidate.groupKey === "hyrox:doubles_v2:doubles_male:all:all"));
+  });
+
+  it("uses gender-agnostic performance-band keys for unknown sex", () => {
+    const chain = buildPerformanceTargetFallbackChain({
+      datasetVersion: "doubles_v2",
+      division: "doubles_male",
+      gender: "unknown",
+      performanceBand: "over_120",
+    });
+
+    assert.equal(chain.some((candidate) => candidate.groupKey.includes(":unknown")), false);
+    assert.equal(chain[0].groupKey, "hyrox:doubles_v2:band:over_120:doubles_male:all");
   });
 });
 

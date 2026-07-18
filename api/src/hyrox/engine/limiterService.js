@@ -1,4 +1,5 @@
 import { BENCHMARK_THRESHOLDS } from "../config/benchmarkThresholds.js";
+import { RUN_KEYS, STATION_KEYS } from "../config/segmentMap.js";
 
 const CONFIDENCE_RANK = Object.freeze({ low: 1, medium: 2, high: 3 });
 const ROXZONE_LIMITER_MIN_GAP_SECONDS = 90;
@@ -24,7 +25,10 @@ function isCanonicalRoxzoneSegment(segment) {
 }
 
 function isIndividualSplitSegment(segment) {
-  return segment?.type === "run" || segment?.type === "station";
+  return segment?.type === "run"
+    || segment?.type === "station"
+    || RUN_KEYS.includes(segment?.segmentKey)
+    || STATION_KEYS.includes(segment?.segmentKey);
 }
 
 function isDeprioritizedAggregateSegment(segment) {
@@ -40,6 +44,27 @@ function isDominantRoxzoneLimiter(segment, nonRoxzoneCandidates) {
     ...nonRoxzoneCandidates.map((candidate) => effectiveGapSeconds(candidate) ?? 0),
   );
   return nextLargestGap <= 0 || roxzoneGap >= nextLargestGap * ROXZONE_LIMITER_DOMINANCE_RATIO;
+}
+
+function strengthAdvantageSeconds(candidate) {
+  const gap = candidate?.gap ?? effectiveGapSeconds(candidate?.segment);
+  return Number.isFinite(gap) && gap < 0 ? Math.abs(gap) : 0;
+}
+
+function isDominantRoxzoneStrength(candidate, nonRoxzoneCandidates) {
+  if (!isCanonicalRoxzoneSegment(candidate?.segment)) return false;
+  const roxzoneAdvantage = strengthAdvantageSeconds(candidate);
+  if (roxzoneAdvantage < ROXZONE_LIMITER_MIN_GAP_SECONDS) return false;
+
+  const nextLargestAdvantage = Math.max(
+    0,
+    ...nonRoxzoneCandidates.map((other) => strengthAdvantageSeconds(other)),
+  );
+  return nextLargestAdvantage <= 0 || roxzoneAdvantage >= nextLargestAdvantage * ROXZONE_LIMITER_DOMINANCE_RATIO;
+}
+
+function compareStrengthCandidates(a, b) {
+  return a.gap - b.gap;
 }
 
 export function compareLimiterSegments(a, b) {
@@ -96,15 +121,32 @@ export function findBiggestStrength(segmentStats) {
   const candidates = segmentStats
     .map((segment) => ({ segment, gap: effectiveGapSeconds(segment) }))
     .filter(({ segment, gap }) => Number.isFinite(gap) && gap < -BENCHMARK_THRESHOLDS.strengthMinimumAdvantageSeconds)
-    .filter(({ segment }) => !isRoxzoneSegment(segment) || segment.segmentKey === "roxzone_time")
-    .sort((a, b) => {
-      if (isDeprioritizedAggregateSegment(a.segment) && isIndividualSplitSegment(b.segment)) return 1;
-      if (isDeprioritizedAggregateSegment(b.segment) && isIndividualSplitSegment(a.segment)) return -1;
-      return a.gap - b.gap;
-    });
+    .filter(({ segment }) => !isRoxzoneSegment(segment) || segment.segmentKey === "roxzone_time");
 
-  const segment = candidates[0]?.segment;
-  const gap = candidates[0]?.gap;
+  const individualCandidates = candidates
+    .filter(({ segment }) => isIndividualSplitSegment(segment))
+    .sort(compareStrengthCandidates);
+  const aggregateCandidates = candidates
+    .filter(({ segment }) => isDeprioritizedAggregateSegment(segment))
+    .sort(compareStrengthCandidates);
+  const nonRoxzoneCandidates = candidates.filter(({ segment }) => !isRoxzoneSegment(segment));
+  const roxzoneCandidates = candidates
+    .filter(({ segment }) => isCanonicalRoxzoneSegment(segment));
+  const dominantRoxzoneCandidates = roxzoneCandidates
+    .filter((candidate) => isDominantRoxzoneStrength(candidate, nonRoxzoneCandidates))
+    .sort(compareStrengthCandidates);
+  const secondaryRoxzoneCandidates = roxzoneCandidates
+    .filter((candidate) => !dominantRoxzoneCandidates.includes(candidate))
+    .sort(compareStrengthCandidates);
+
+  const rankedCandidates = [
+    ...[...individualCandidates, ...dominantRoxzoneCandidates].sort(compareStrengthCandidates),
+    ...secondaryRoxzoneCandidates,
+    ...aggregateCandidates,
+  ];
+
+  const segment = rankedCandidates[0]?.segment;
+  const gap = rankedCandidates[0]?.gap;
   if (!segment) return null;
   return {
     segmentKey: segment.segmentKey,

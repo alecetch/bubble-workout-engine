@@ -328,6 +328,40 @@ test("findBiggestStrength prefers a doubles station split over a larger total st
   assert.equal(strength.timeAdvantageSeconds, 178);
 });
 
+test("findBiggestStrength ranks the real doubles candidate set without non-transitive aggregate ordering", () => {
+  const strength = findBiggestStrength([
+    { segmentKey: "work_time", label: "Total Station Time", type: "aggregate", frameGapSeconds: -893, confidence: "high" },
+    { segmentKey: "roxzone_time", label: "Total Roxzone Time", type: "aggregate", frameGapSeconds: -288, confidence: "high" },
+    { segmentKey: "ski_erg", label: "SkiErg", type: "station", frameGapSeconds: -58, confidence: "high" },
+    { segmentKey: "sled_push", label: "Sled Push", type: "station", frameGapSeconds: -65, confidence: "high" },
+    { segmentKey: "sled_pull", label: "Sled Pull", type: "station", frameGapSeconds: -151, confidence: "high" },
+    { segmentKey: "burpee_broad_jump", label: "Burpee Broad Jump", type: "station", frameGapSeconds: -178, confidence: "high" },
+    { segmentKey: "row", label: "Row", type: "station", frameGapSeconds: -93, confidence: "high" },
+    { segmentKey: "farmers_carry", label: "Farmers Carry", type: "station", frameGapSeconds: -11, confidence: "high" },
+    { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", type: "station", frameGapSeconds: -138, confidence: "high" },
+    { segmentKey: "wall_balls", label: "Wall Balls", type: "station", frameGapSeconds: -142, confidence: "high" },
+    { segmentKey: "run_3", label: "Run 3", type: "run", frameGapSeconds: -40, confidence: "high" },
+    { segmentKey: "run_4", label: "Run 4", type: "run", frameGapSeconds: -36, confidence: "high" },
+  ]);
+
+  assert.equal(strength.segmentKey, "burpee_broad_jump");
+  assert.equal(strength.label, "Burpee Broad Jump");
+  assert.equal(strength.timeAdvantageSeconds, 178);
+});
+
+test("findBiggestStrength allows a genuinely dominant RoxZone strength to win", () => {
+  const strength = findBiggestStrength([
+    { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", frameGapSeconds: -500, confidence: "high" },
+    { segmentKey: "burpee_broad_jump", label: "Burpee Broad Jump", type: "station", frameGapSeconds: -120, confidence: "high" },
+    { segmentKey: "sled_pull", label: "Sled Pull", type: "station", frameGapSeconds: -90, confidence: "high" },
+    { segmentKey: "work_time", label: "Total Station Time", type: "aggregate", frameGapSeconds: -200, confidence: "high" },
+  ]);
+
+  assert.equal(strength.segmentKey, "roxzone_time");
+  assert.equal(strength.label, "RoxZone");
+  assert.equal(strength.timeAdvantageSeconds, 500);
+});
+
 test("findBiggestStrength can still select an aggregate when no individual split qualifies", () => {
   const strength = findBiggestStrength([
     {
