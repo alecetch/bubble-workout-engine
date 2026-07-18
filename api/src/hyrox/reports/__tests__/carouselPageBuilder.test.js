@@ -19,4 +19,17 @@ describe("buildCarouselPage", () => {
     assert.match(html, /data-optional/);
     assert.match(html, /regional-context/);
   });
+
+  it("renders the Forma masthead logo and drops the old brand text", () => {
+    const html = buildCarouselPage({
+      brand: { site: "www.getforma.fit", product: "FORMA", strapline: "Measure. Understand. Improve." },
+      slides: [{ athlete_name: "Alex Smith", percentile: "Alex Smith is in the Top 45%" }],
+    });
+
+    assert.match(html, /alt="Forma — Measure\. Understand\. Improve\."/);
+    assert.equal(html.includes("PERFORMANCE ENGINEER"), false);
+    assert.equal(html.includes("Performance Analytics for Hybrid Athletes"), false);
+    assert.equal(/(^|[^.])forma\.fit/i.test(html.replace(/getforma\.fit/gi, "")), false, "should not contain bare forma.fit");
+    assert.match(html, /www\.getforma\.fit/);
+  });
 });

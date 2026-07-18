@@ -7,11 +7,11 @@ export function TopNav() {
     <nav className={styles.nav}>
       <div className={styles.inner}>
         <Link to="/hyrox-calculator" className={styles.logo}>
-          <img className={styles.logoMark} src={formaLogoUrl} alt="Forma" />
-          <div>
-            <div className={styles.logoText}>Forma</div>
-            <div className={styles.logoSub}>Performance Engineer</div>
-          </div>
+          <img
+            className={styles.logoMasthead}
+            src={formaLogoUrl}
+            alt="Forma — Measure. Understand. Improve."
+          />
         </Link>
         <div className={styles.links}>
           <Link to="/hyrox-calculator/sample-report" className={styles.link}>

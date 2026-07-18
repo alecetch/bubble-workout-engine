@@ -30,7 +30,7 @@ export function RunningProfilerLandingPage() {
       <div className={styles.page} data-testid="landing-page">
         <div className={styles.layout}>
           <div className={styles.heroCol}>
-            <div className={styles.eyebrow}>Forma — Performance Engineer</div>
+            <div className={styles.eyebrow}>Forma — MEASURE. UNDERSTAND. IMPROVE.</div>
             <h1 className={styles.headline} data-testid="landing-headline">
               Running is a tool.
               <br />

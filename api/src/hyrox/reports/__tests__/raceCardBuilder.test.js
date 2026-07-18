@@ -179,11 +179,14 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(splitProfile, />12:25</);
   });
 
-  it("uses the email-style Forma lockup and tagline", () => {
+  it("uses the Forma masthead lockup and drops the old tagline text", () => {
     const html = buildRaceCardHtml(fixtureData());
 
-    assert.match(html, /alt="Forma"/);
-    assert.match(html, /PERFORMANCE ENGINEER/);
+    assert.match(html, /alt="Forma — Measure\. Understand\. Improve\."/);
+    assert.equal((html.match(/alt="Forma — Measure\. Understand\. Improve\."/g) ?? []).length, 2, "expected the masthead image in both header and footer");
+    assert.equal(html.includes("PERFORMANCE ENGINEER"), false);
+    assert.equal(html.includes("YOUR RACE"), false);
+    assert.equal(html.includes("DECODED"), false);
     assert.match(html, /www\.getforma\.fit/);
     assert.doesNotMatch(html, /Data\. Insight\. Performance\./);
   });
