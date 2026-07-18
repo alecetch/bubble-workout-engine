@@ -3568,7 +3568,7 @@ describe("content accuracy fixes (feature-143)", () => {
     assert.doesNotMatch(mainInsight, /running pace, especially Wall Balls/i);
   });
 
-  it("target MAIN INSIGHT station-performance framing names only station splits", () => {
+  it("target MAIN INSIGHT station-performance framing names the true top split even when it's a run", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_70",
@@ -3588,12 +3588,15 @@ describe("content accuracy fixes (feature-143)", () => {
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
     const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
 
+    // Stations lead the aggregate gap, but Run 1's single-segment gap (180s) is bigger than
+    // Wall Balls' (90s), so the "biggest target opportunity" claim must match the split table's
+    // #1 row, not just the leading category.
     assert.match(mainInsight, /gap is led by station performance/i);
-    assert.match(mainInsight, /Wall Balls are the biggest target opportunity/i);
-    assert.doesNotMatch(mainInsight, /Run 1 is the biggest target opportunity/i);
+    assert.match(mainInsight, /Run 1 is the biggest target opportunity/i);
+    assert.doesNotMatch(mainInsight, /Wall Balls (is|are) the biggest target opportunity/i);
   });
 
-  it("target MAIN INSIGHT running-pace framing names only run splits", () => {
+  it("target MAIN INSIGHT running-pace framing names the true top split even when it's a station", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_70",
@@ -3613,9 +3616,13 @@ describe("content accuracy fixes (feature-143)", () => {
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
     const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
 
+    // Running leads the aggregate gap, but Wall Balls' single-segment gap (180s) is bigger than
+    // Run 1's (90s) — this is the exact shape of the reported bug (Farmers Carry vs. Run 8):
+    // the "biggest target opportunity" claim must name the station, matching the split table's
+    // #1 row, not just the leading category.
     assert.match(mainInsight, /gap is led by running pace/i);
-    assert.match(mainInsight, /Run 1 is the biggest target opportunity/i);
-    assert.doesNotMatch(mainInsight, /Wall Balls is the biggest target opportunity/i);
+    assert.match(mainInsight, /Wall Balls are the biggest target opportunity/i);
+    assert.doesNotMatch(mainInsight, /Run 1 is the biggest target opportunity/i);
   });
 });
 
