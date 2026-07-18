@@ -496,7 +496,7 @@ async function fetchAndParseHyroxUrl(url, pool) {
   };
 }
 
-function buildBody({ modeName, calculatorMode, targetFinishTimeSeconds, parsed, event, sharedContext = {} }) {
+export function buildHarnessBody({ modeName, calculatorMode, targetFinishTimeSeconds, parsed, event, sharedContext = {} }) {
   const athleteDisplayName = displayAthleteName(parsed);
   const sharedAthlete = {
     name: parsed.athleteName ?? parsed.name ?? null,
@@ -532,8 +532,8 @@ function buildBody({ modeName, calculatorMode, targetFinishTimeSeconds, parsed, 
   };
 }
 
-function runMode(mode, parsed, event, sharedContext) {
-  const body = buildBody({ ...mode, parsed, event, sharedContext });
+export function runHarnessMode(mode, parsed, event, sharedContext) {
+  const body = buildHarnessBody({ ...mode, parsed, event, sharedContext });
   const input = submissionInput(body);
   const normalised = normaliseSubmission(input);
   const analysisJson = analyseSubmission(input);
@@ -971,7 +971,7 @@ async function runHarnessCase({ url, pool, targetFinishTimeSeconds, sharedContex
 
   const modeEntries = modes.map((mode) => {
     try {
-      return { mode, result: runMode(mode, importResult.parsed, importResult.event, sharedContext) };
+      return { mode, result: runHarnessMode(mode, importResult.parsed, importResult.event, sharedContext) };
     } catch (error) {
       return { mode, error };
     }
@@ -1485,7 +1485,7 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
       const analyseMode = { modeName: "Analyse", calculatorMode: "analyse", targetFinishTimeSeconds: null };
       let modeEntry;
       try {
-        modeEntry = { mode: analyseMode, result: runMode(analyseMode, importResult.parsed, importResult.event, {}) };
+        modeEntry = { mode: analyseMode, result: runHarnessMode(analyseMode, importResult.parsed, importResult.event, {}) };
       } catch (error) {
         modeEntry = { mode: analyseMode, error };
       }
@@ -1524,7 +1524,7 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
       const importResult = await fetchAndParseHyroxUrl(urls[0], pool);
       const targetTime = targetValidation.seconds;
       const mode = { modeName: "Race Card", calculatorMode: targetTime ? "target" : "analyse", targetFinishTimeSeconds: targetTime ?? null };
-      const modeResult = runMode(mode, importResult.parsed, importResult.event, {});
+      const modeResult = runHarnessMode(mode, importResult.parsed, importResult.event, {});
       const athleteCtx = {
         displayName: displayAthleteName(importResult.parsed),
         division: importResult.parsed?.division ?? null,
