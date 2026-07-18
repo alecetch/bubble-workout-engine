@@ -8,5 +8,10 @@
     "file": "src/components/SplitImportPanel.tsx",
     "status": "covered",
     "testFile": "src/__tests__/import-results-page.test.tsx"
+  },
+  {
+    "file": "src/components/TopNav.tsx",
+    "status": "covered",
+    "testFile": "src/components/__tests__/TopNav.test.tsx"
   }
 ]

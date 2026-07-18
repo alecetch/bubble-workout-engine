@@ -216,8 +216,8 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
     template_name: "Athlete Breakdown",
     brand: {
       product: "FORMA",
-      site: "forma.fit",
-      strapline: "Performance Analytics for Hybrid Athletes",
+      site: "www.getforma.fit",
+      strapline: "Measure. Understand. Improve.",
     },
     slides: [
       {
@@ -313,8 +313,8 @@ export function buildTemplateB(benchmarkGroupKey, targetBand = "sub-75") {
     template: "population-research",
     brand: "FORMA",
     category: "HYROX POPULATION RESEARCH",
-    footerUrl: "forma.fit",
-    footerMeta: `FORMA | THE PERFORMANCE ENGINEER | ${sample} RESULTS`,
+    footerUrl: "www.getforma.fit",
+    footerMeta: `FORMA | MEASURE. UNDERSTAND. IMPROVE. | ${sample} RESULTS`,
     hook: {
       sampleSize: `${sample} RESULTS ANALYSED`,
       question: `What stops athletes breaking ${targetBand.replace("sub-", "")} minutes?`,
@@ -367,7 +367,7 @@ export function buildTemplateB(benchmarkGroupKey, targetBand = "sub-75") {
       title: "Discover your HYROX bottleneck",
       bullets: [...FEATURES],
       button: "Analyse my HYROX result",
-      brandLine: "Performance Analytics for Hybrid Athletes",
+      brandLine: "Measure. Understand. Improve.",
     },
   };
 }

@@ -25,28 +25,11 @@
   text-decoration: none;
 }
 
-.logoMark {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.logoMasthead {
+  height: 34px;
+  width: auto;
   display: block;
-  object-fit: cover;
-}
-
-.logoText {
-  font-family: "Inter Tight", Inter, sans-serif;
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--text-primary);
-  letter-spacing: -0.3px;
-}
-
-.logoSub {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
+  object-fit: contain;
 }
 
 .links {
@@ -71,8 +54,8 @@
   .inner {
     padding: 0 16px;
   }
-  .logoSub {
-    display: none;
+  .logoMasthead {
+    height: 26px;
   }
   .links {
     gap: 12px;

@@ -226,9 +226,13 @@ describe("buildEmailReport visual redesign", () => {
     assert.match(htmlBody, /background-color:#07111f/);
   });
 
-  it("renders the Forma brand", () => {
+  it("renders the Forma masthead logo and drops the old text tagline", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
-    assert.match(htmlBody, />Forma</);
+    assert.match(htmlBody, /alt="Forma — Measure\. Understand\. Improve\."/);
+    assert.equal((htmlBody.match(/alt="Forma — Measure\. Understand\. Improve\."/g) ?? []).length, 2, "expected the masthead image in both header and footer");
+    assert.equal(htmlBody.includes("PERFORMANCE ENGINEER"), false);
+    assert.equal(htmlBody.includes("Performance Analytics for Hybrid Athletes"), false);
+    assert.ok(htmlBody.includes("www.getforma.fit"));
   });
 
   it("replaces the old blue accent", () => {
