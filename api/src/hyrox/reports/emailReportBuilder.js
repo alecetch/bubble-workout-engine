@@ -1363,7 +1363,7 @@ function renderSplitTable(section, analysisJson) {
     } else if (workGap > runGap + 60) {
       if (hasGoalGroup) {
         mainLimiter = targetTimeFmt2
-          ? `To hit ${targetTimeFmt2}, the gap is led by station performance.${stationLimiterStr ? ` ${stationLimiterStr} ${pluralStation(stationLimiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}`
+          ? `To hit ${targetTimeFmt2}, the gap is led by station performance.${limiterStr ? ` ${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}`
           : `The main target gap is station performance.${stationLimiterStr ? ` ${stationLimiterStr} leads.` : ""}`;
       } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in station performance.";
@@ -1379,7 +1379,7 @@ function renderSplitTable(section, analysisJson) {
     } else if (runGap > workGap + 60) {
       if (hasGoalGroup) {
         mainLimiter = targetTimeFmt2
-          ? `To hit ${targetTimeFmt2}, the gap is led by running pace.${runLimiterStr ? ` ${runLimiterStr} is the biggest target opportunity.` : ""}${runIsStrength ? " Running is strong against your current benchmark, but still needs time against the target profile." : ""}`
+          ? `To hit ${targetTimeFmt2}, the gap is led by running pace.${limiterStr ? ` ${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}${runIsStrength ? " Running is strong against your current benchmark, but still needs time against the target profile." : ""}`
           : `The main target gap is running pace.${runLimiterStr ? ` ${runLimiterStr} leads.` : ""}`;
       } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in running pace.";
