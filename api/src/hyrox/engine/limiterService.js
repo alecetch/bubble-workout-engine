@@ -2,7 +2,6 @@ import { BENCHMARK_THRESHOLDS } from "../config/benchmarkThresholds.js";
 import { RUN_KEYS, STATION_KEYS } from "../config/segmentMap.js";
 
 const CONFIDENCE_RANK = Object.freeze({ low: 1, medium: 2, high: 3 });
-const ROXZONE_LIMITER_MIN_GAP_SECONDS = 90;
 const ROXZONE_LIMITER_DOMINANCE_RATIO = 2.5;
 
 function confidenceAtLeastLow(segment) {
@@ -37,7 +36,7 @@ function isDeprioritizedAggregateSegment(segment) {
 
 function isDominantRoxzoneLimiter(segment, nonRoxzoneCandidates) {
   const roxzoneGap = effectiveGapSeconds(segment);
-  if (!Number.isFinite(roxzoneGap) || roxzoneGap < ROXZONE_LIMITER_MIN_GAP_SECONDS) return false;
+  if (!Number.isFinite(roxzoneGap) || roxzoneGap <= 0) return false;
 
   const nextLargestGap = Math.max(
     0,
@@ -54,7 +53,7 @@ function strengthAdvantageSeconds(candidate) {
 function isDominantRoxzoneStrength(candidate, nonRoxzoneCandidates) {
   if (!isCanonicalRoxzoneSegment(candidate?.segment)) return false;
   const roxzoneAdvantage = strengthAdvantageSeconds(candidate);
-  if (roxzoneAdvantage < ROXZONE_LIMITER_MIN_GAP_SECONDS) return false;
+  if (roxzoneAdvantage <= 0) return false;
 
   const nextLargestAdvantage = Math.max(
     0,

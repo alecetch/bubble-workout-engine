@@ -263,6 +263,21 @@ test("findBiggestLimiter ignores RoxZone when it is not a dominant gap", () => {
   assert.equal(limiter.timeGapSeconds, 55);
 });
 
+test("findBiggestLimiter selects a dominant RoxZone gap under 90s for a tight elite race", () => {
+  // Mirrors a real sub-60 profile: every station/run gap is small, but RoxZone is
+  // clearly the standout weakness by the 2.5x dominance ratio even though its
+  // absolute gap (50s) is well under what a larger-margin race would show.
+  const limiter = findBiggestLimiter([
+    { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", frameGapSeconds: 50, percentile: 20, confidence: "high" },
+    { segmentKey: "wall_balls", label: "Wall Balls", type: "station", frameGapSeconds: 19, percentile: 60, confidence: "high" },
+    { segmentKey: "burpee_broad_jump", label: "Burpee Broad Jump", type: "station", frameGapSeconds: 16, percentile: 65, confidence: "high" },
+  ]);
+
+  assert.equal(limiter.segmentKey, "roxzone_time");
+  assert.equal(limiter.label, "RoxZone");
+  assert.equal(limiter.timeGapSeconds, 50);
+});
+
 test("findBiggestStrength prefers an individual split over a larger aggregate run advantage", () => {
   const strength = findBiggestStrength([
     {
