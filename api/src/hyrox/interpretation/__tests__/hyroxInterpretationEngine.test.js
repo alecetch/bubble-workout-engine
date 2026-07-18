@@ -545,8 +545,8 @@ test("running hero with station top split does not claim running is larger when 
 
   const result = buildHeroCopy(primaryThesis, analysisJson, "target", "Sled Push", "station");
   assert.match(result.headline, /SLED PUSH/i);
-  assert.doesNotMatch(result.subline, /running pace is the larger aggregate target lever/i);
-  assert.match(result.subline, /Station work is the larger aggregate target lever/i);
+  assert.doesNotMatch(result.subline, /Running is your biggest overall gap/i);
+  assert.match(result.subline, /Station work is your biggest overall gap to the target/i);
 });
 
 test("analyse running hero names station top split and disambiguates aggregate vs individual gap", () => {
@@ -570,7 +570,7 @@ test("analyse running hero names station top split and disambiguates aggregate v
   const result = buildHeroCopy({ category: "running" }, analysisJson, "analyse", "Wall Balls", "station");
   assert.match(result.headline, /WALL BALLS/);
   assert.match(result.headline, /BIGGEST INDIVIDUAL OPPORTUNITY/);
-  assert.match(result.subline, /total running gap.*larger aggregate benchmark-band lever/i);
-  assert.match(result.subline, /biggest individual split/i);
+  assert.match(result.subline, /Running adds up to your biggest overall gap/i);
+  assert.match(result.subline, /this station is the biggest one/i);
   assert.doesNotMatch(result.headline, /YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP/i);
 });

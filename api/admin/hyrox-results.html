@@ -304,29 +304,43 @@
         }
 
         const DIVISION_FULL = {
-          open_male: "Male Singles", open_female: "Female Singles",
-          pro_male: "Male Pro", pro_female: "Female Pro",
+          open_male: "Male Singles", open_female: "Female Singles", open: "Singles (All Genders)",
+          pro_male: "Male Pro", pro_female: "Female Pro", pro: "Pro (All Genders)",
           doubles_male: "Male Doubles", doubles_female: "Female Doubles", doubles_mixed: "Mixed Doubles",
           pro_doubles_male: "M Pro Dbl", pro_doubles_female: "F Pro Dbl", pro_doubles_mixed: "X Pro Dbl",
           team_relay_male: "M Relay", team_relay_female: "F Relay", team_relay_mixed: "X Relay",
         };
-        const DIV_ORDER = ["open_male","open_female","pro_male","pro_female","doubles_male","doubles_female","doubles_mixed","pro_doubles_male","pro_doubles_female","pro_doubles_mixed","team_relay_male","team_relay_female","team_relay_mixed"];
+        const DIV_ORDER = ["open_male","open_female","pro_male","pro_female","doubles_male","doubles_female","doubles_mixed","pro_doubles_male","pro_doubles_female","pro_doubles_mixed","team_relay_male","team_relay_female","team_relay_mixed","open","pro"];
 
-        const divCols = [...new Set(divisions.map((d) => d.division))]
+        // Doubles divisions already encode gender in the division string (e.g. "doubles_male").
+        // Singles divisions ("open"/"pro") store gender separately, so male/female rows share the
+        // same division value and would otherwise collide onto one column.
+        function benchmarkColumnKey(entry) {
+          const division = entry.division ?? "";
+          if (/_(male|female|mixed)$/.test(division)) return division;
+          if (entry.gender === "male" || entry.gender === "female") return `${division}_${entry.gender}`;
+          return division;
+        }
+
+        // This grid shows division x performance-band only. Age-group and regional sub-groups
+        // share the same division+band, so without this filter they'd collide in `lookup` below
+        // and whichever one loaded last would silently overwrite the true all-ages/all-regions total.
+        const overviewDivisions = divisions.filter((d) => (d.ageGroup ?? "all") === "all" && !d.region);
+
+        const divCols = [...new Set(overviewDivisions.map(benchmarkColumnKey))]
           .sort((a, b) => DIV_ORDER.indexOf(a) - DIV_ORDER.indexOf(b));
-        const bandRows = [...new Set(divisions.map((d) => d.performanceBand ?? "overall"))]
+        const bandRows = [...new Set(overviewDivisions.map((d) => d.performanceBand ?? "overall"))]
           .sort((a, b) => {
             function key(band) {
               if (!band || band === "overall") return -Infinity;
-              const sub = band.match(/^sub-(\d+)/i);
-              if (sub) return Number(sub[1]) - 0.5;
-              const m = band.match(/^(\d+)/);
-              return m ? Number(m[0]) : Infinity;
+              const sub = band.match(/^sub_(\d+)$/i);
+              if (sub) return Number(sub[1]);
+              return Infinity;
             }
             return key(a) - key(b);
           });
 
-        const lookup = new Map(divisions.map((d) => [`${d.division}::${d.performanceBand ?? "overall"}`, d]));
+        const lookup = new Map(overviewDivisions.map((d) => [`${benchmarkColumnKey(d)}::${d.performanceBand ?? "overall"}`, d]));
 
         const colHeaders = divCols.map((div) => `<th>${esc(DIVISION_FULL[div] ?? div)}</th>`).join("");
         const bodyRows = bandRows.map((band) => {
