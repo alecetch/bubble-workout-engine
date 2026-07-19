@@ -3140,6 +3140,22 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     assert.ok(htmlBody.includes("band ahead"));
   });
 
+  it("does not claim a 'band ahead' for a high-in-band sub-60 athlete, since sub-60 is the fastest band", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: { achievedBand: "sub_60", analysisFrame: { frame: "sub60_internal", comparisonBand: "sub_60", stretchBand: null, gapToBandMedianSeconds: -90 } },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 93, fieldPercentile: 93 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    assert.ok(htmlBody.includes("high within the sub-60 band"));
+    assert.ok(htmlBody.includes("no faster band to compare against"));
+    assert.ok(!htmlBody.includes("The next useful comparison is the band ahead"));
+  });
+
   it("omits Your standing row when percentile is absent or non-finite", () => {
     const { htmlBody } = buildEmailReport(
       mockReport(),

@@ -474,6 +474,8 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   let explanationText;
   if (isEscalated && lensCompBandLabel) {
     explanationText = `The standing above ranks you within the ${lensBandLabel} band. Because you've already beaten that band's median, the station and run gaps further down are measured against the ${lensCompBandLabel} band instead — that's the next benchmark worth chasing.`;
+  } else if (isHighInBand && currentBand === "sub_60") {
+    explanationText = "You are high within the sub-60 band — HYROX's fastest benchmark tier, so there is no faster band to compare against. This standing is against the top of the field.";
   } else if (isHighInBand) {
     explanationText = "You are high within this band. The next useful comparison is the band ahead.";
   } else {
