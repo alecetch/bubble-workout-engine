@@ -2034,7 +2034,7 @@ describe("renderSplitTable", () => {
         },
       },
     }, "analyse");
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
     const sandbagSnippet = detailHtml.slice(detailHtml.indexOf("Sandbag Lunges") - 260, detailHtml.indexOf("Sandbag Lunges") + 520);
     assert.match(sandbagSnippet, /Next refinement/);
     assert.doesNotMatch(sandbagSnippet, /Priority/);
@@ -2245,7 +2245,7 @@ describe("renderSplitTable", () => {
       },
     }, "target");
 
-    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("FULL SPLIT DETAIL"));
     assert.doesNotMatch(strengthsHtml, /STRONG[\s\S]*Sandbag Lunges/i);
     assert.doesNotMatch(strengthsHtml, /Sandbag Lunges[\s\S]*Ahead of target[\s\S]*−2:59/i);
     assert.match(strengthsHtml, /strong-looking splits are affected by unusual data/i);
@@ -2334,25 +2334,25 @@ describe("renderSplitTable", () => {
         },
       },
     }, "analyse");
-    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("FULL SPLIT DETAIL"));
     const sledStrengthSnippet = strengthsHtml.slice(strengthsHtml.indexOf("Sled Pull") - 320, strengthsHtml.indexOf("Sled Pull") + 420);
     assert.match(sledStrengthSnippet, /STRONG/);
     assert.match(sledStrengthSnippet, /Strength vs your benchmark band/);
     assert.doesNotMatch(sledStrengthSnippet, /Priority vs your benchmark band/);
 
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
     const sledDetailSnippet = detailHtml.slice(detailHtml.indexOf("Sled Pull") - 260, detailHtml.indexOf("Sled Pull") + 520);
     assert.match(sledDetailSnippet, /Strength/);
     assert.doesNotMatch(sledDetailSnippet, /Priority/);
   });
 
-  it("renders reduced split detail", () => {
-    const htmlBody = renderSplit();
-    assert.match(htmlBody, /REDUCED SPLIT DETAIL/);
-    assert.match(htmlBody, /View the full split report/);
-    assert.match(htmlBody, /\/api\/hyrox\/carousel\/22222222-2222-4222-8222-222222222222/);
-    assert.ok(!htmlBody.includes("FULL SPLIT DETAIL"));
-  });
+	  it("renders full split detail", () => {
+	    const htmlBody = renderSplit();
+	    assert.match(htmlBody, /FULL SPLIT DETAIL/);
+	    assert.match(htmlBody, /View the full split report/);
+	    assert.match(htmlBody, /\/api\/hyrox\/carousel\/22222222-2222-4222-8222-222222222222/);
+	    assert.ok(!htmlBody.includes("REDUCED SPLIT DETAIL"));
+	  });
 
   it("omits full split report link when no submission id exists", () => {
     const section = splitTableSection();
@@ -2368,13 +2368,36 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes("View the full split report"));
   });
 
-  it("renders reduced rows by opportunity size", () => {
-    const htmlBody = renderSplit();
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
-    assert.ok(detailHtml.indexOf(">SkiErg<") < detailHtml.indexOf(">Sled Push<"));
-  });
+	  it("renders full rows in race order", () => {
+	    const htmlBody = renderSplit();
+	    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+	    const labels = [
+	      "Run 1",
+	      "SkiErg",
+	      "Run 2",
+	      "Sled Push",
+	      "Run 3",
+	      "Sled Pull",
+	      "Run 4",
+	      "Burpee Broad Jump",
+	      "Run 5",
+	      "Row",
+	      "Run 6",
+	      "Farmers Carry",
+	      "Run 7",
+	      "Sandbag Lunges",
+	      "Run 8",
+	      "Wall Balls",
+	    ];
+	    let previousIndex = -1;
+	    for (const label of labels) {
+	      const index = detailHtml.indexOf(`>${label}<`);
+	      assert.ok(index > previousIndex, `${label} should appear in race order`);
+	      previousIndex = index;
+	    }
+	  });
 
-  it("does not render aggregate rows in reduced detail", () => {
+  it("does not render aggregate rows in full detail", () => {
     const htmlBody = renderSplit();
     assert.equal(htmlBody.includes(">Total Running<"), false);
     assert.equal(htmlBody.includes(">Total Stations<"), false);
@@ -2429,7 +2452,7 @@ describe("renderSplitTable", () => {
     assert.match(htmlBody, /\u22120:30/);
   });
 
-  it("renders penalties in reduced detail when present", () => {
+  it("renders penalties in full detail when present", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes(">Penalties<"));
     assert.match(htmlBody, /\+5:00/);
@@ -2461,14 +2484,14 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes("may not sum exactly to the total race gap"), "segment profile should carry the independence note");
   });
 
-  it("material penalties: penalty row appears before segment rows in reduced split table", () => {
-    const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
-    const penaltyIdx = detailHtml.indexOf(">Penalties<");
-    const firstSegmentIdx = detailHtml.indexOf(">SkiErg<");
-    assert.ok(penaltyIdx > -1, "penalty row should exist");
-    assert.ok(firstSegmentIdx > -1, "first segment row should exist");
-    assert.ok(penaltyIdx < firstSegmentIdx, "penalty row should appear before segment rows");
+	  it("material penalties: penalty row appears before segment rows in full split table", () => {
+	    const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
+	    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+	    const penaltyIdx = detailHtml.indexOf(">Penalties<");
+	    const firstSegmentIdx = detailHtml.indexOf(">Run 1<");
+	    assert.ok(penaltyIdx > -1, "penalty row should exist");
+	    assert.ok(firstSegmentIdx > -1, "first segment row should exist");
+	    assert.ok(penaltyIdx < firstSegmentIdx, "penalty row should appear before segment rows");
   });
 
   it("material penalties: penalty appears first in biggest opportunities panel", () => {
@@ -2490,35 +2513,38 @@ describe("renderSplitTable", () => {
     const panelIdx = htmlBody.indexOf("Penalty separated from split performance");
     const panelSnippet = htmlBody.slice(panelIdx, panelIdx + 3000);
     assert.ok(panelSnippet.includes("Penalties"), "penalty remains the first execution opportunity");
-    assert.ok(!panelSnippet.includes("Run 5"), "Run 5 should not rank as a top weakness after penalty adjustment");
+	    assert.ok(!panelSnippet.includes("Run 5"), "Run 5 should not rank as a top weakness after penalty adjustment");
 
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
-    assert.ok(!detailHtml.includes("Run 5"), "Run 5 should not reappear as a faster split after penalty adjustment");
-    assert.ok(detailHtml.includes("Penalty time is shown separately above, so the split table focuses on performance gaps rather than execution penalties."));
-  });
+	    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+	    assert.ok(detailHtml.includes("Run 5"), "Run 5 should still appear in the full split table");
+	    assert.ok(detailHtml.includes("penalty-adjusted from +3:48"));
+	    assert.ok(detailHtml.includes(">3:48<"), "Your time should be shown without the 5:00 penalty");
+	    assert.ok(detailHtml.includes("−1:12"), "Gap should be shown without the 5:00 penalty");
+	    assert.ok(detailHtml.includes("Penalty time is shown separately above, so the split table focuses on performance gaps rather than execution penalties."));
+	  });
 
-  it("material penalties: reduced split detail shows adjusted numbers when a penalty split remains a gap", () => {
+  it("material penalties: full split detail shows adjusted numbers when a penalty split remains a gap", () => {
     const htmlBody = renderSplit({
       penalties: [{ segmentKey: "run_5", penaltySeconds: 300 }],
       overrides: {
         run_5: { userSeconds: 680, goalBenchmarkSeconds: 300, timeGapToMedianSeconds: 400 },
       },
     });
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
     assert.ok(detailHtml.includes("Run 5"));
     assert.ok(detailHtml.includes("penalty-adjusted from +6:20"));
     assert.ok(detailHtml.includes(">6:20<"), "Your time should be shown without the 5:00 penalty");
     assert.ok(detailHtml.includes("+1:20"), "Gap should be shown without the 5:00 penalty");
   });
 
-  it("reduced split detail uses amber background for amber gaps", () => {
+  it("full split detail uses amber background for amber gaps", () => {
     const htmlBody = renderSplit({
       overrides: {
         farmers_carry: { userSeconds: 187, goalBenchmarkSeconds: 120, timeGapToMedianSeconds: 87 },
         sled_push: { userSeconds: 182, goalBenchmarkSeconds: 120, timeGapToMedianSeconds: 82 },
       },
     });
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
     const rowSnippet = (label) => {
       const labelIndex = detailHtml.indexOf(label);
       const rowStart = detailHtml.lastIndexOf("<tr", labelIndex);
@@ -2654,9 +2680,9 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes("Net of penalties"));
   });
 
-  it("material penalties: reduced table uses execution label and no avoidable wording", () => {
+	  it("material penalties: full table uses execution label and no avoidable wording", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
     assert.ok(detailHtml.includes(">execution<"));
     assert.ok(!detailHtml.includes(">avoidable<"));
   });
@@ -2679,7 +2705,7 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes("Sled pull efficiency and grip control"));
     assert.ok(htmlBody.includes("Posterior-chain strength endurance"));
     assert.ok(htmlBody.includes("Race-fatigued station practice"));
-    assert.equal((htmlBody.match(/Sandbag lunge/gi) ?? []).length, 1);
+	    assert.equal((htmlBody.match(/Sandbag lunge capacity under fatigue/g) ?? []).length, 1);
   });
 
   it("material penalties: training volume stays factual while muscle signal acknowledges penalty-first context", () => {
@@ -2714,14 +2740,14 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes("Training focus: clean station standards first"));
   });
 
-  it("still renders reduced detail when no goal group exists", () => {
+  it("still renders full detail when no goal group exists", () => {
     const htmlBody = renderSplit({
       benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
     });
-    assert.match(htmlBody, /REDUCED SPLIT DETAIL/);
+    assert.match(htmlBody, /FULL SPLIT DETAIL/);
   });
 
-  it("keeps reduced detail email-safe", () => {
+  it("keeps full detail email-safe", () => {
     const htmlBody = renderSplit({
       overrides: {
         run_1: {
@@ -2814,17 +2840,17 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes("Top 20%"), "split table should not mix in top-percent shorthand");
   });
 
-  it("reduced split table renders RUN inline pills", () => {
+  it("full split table renders RUN inline pills", () => {
     const htmlBody = renderSplit();
     assert.ok(htmlBody.includes(">RUN<"), "split table should contain RUN pill");
   });
 
-  it("reduced split table renders STN inline pills", () => {
+  it("full split table renders STN inline pills", () => {
     const htmlBody = renderSplit();
     assert.ok(htmlBody.includes(">STN<"), "split table should contain STN pill");
   });
 
-  it('target mode reduced split table uses "Gap vs target" column header', () => {
+  it('target mode full split table uses "Gap vs target" column header', () => {
     const htmlBody = renderSplit();
     assert.ok(htmlBody.includes("Gap vs target"), 'expected "Gap vs target" column header');
     assert.ok(!htmlBody.includes("Gap vs median"), 'target mode should not show "Gap vs median" column header');
@@ -2845,7 +2871,7 @@ describe("renderSplitTable", () => {
         sled_pull: { timeGapToExactTargetSeconds: 20, frameGapSeconds: 20 },
       },
     }, "target");
-    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("FULL SPLIT DETAIL"));
     assert.match(strengthsHtml, /No segments clearly ahead of target profile/i);
     assert.doesNotMatch(strengthsHtml, /ahead of benchmark/i);
   });
@@ -2857,7 +2883,7 @@ describe("renderSplitTable", () => {
         sled_pull: { timeGapToMedianSeconds: 20, frameGapSeconds: 20 },
       },
     }, "analyse");
-    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const strengthsHtml = htmlBody.slice(htmlBody.indexOf("Strengths to protect"), htmlBody.indexOf("FULL SPLIT DETAIL"));
     assert.match(strengthsHtml, /No segments clearly ahead of benchmark/i);
   });
 
@@ -2975,17 +3001,17 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes("On benchmark"), 'should not say "On benchmark" for an exceptional RoxZone');
   });
 
-  it("reduced split detail omits Type, Band, and Target column headers", () => {
+  it("full split detail omits Type, Band, and Target column headers", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithFullSplits, {}, null,
     );
-    const detailHtml = htmlBody.slice(htmlBody.indexOf("REDUCED SPLIT DETAIL"));
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
     assert.ok(!detailHtml.includes(">Type<"));
     assert.ok(!detailHtml.includes(">Band<"));
     assert.ok(!detailHtml.includes(">Target *<"));
   });
 
-  it("reduced split table renders RUN and STN inline pills", () => {
+  it("full split table renders RUN and STN inline pills", () => {
     const { htmlBody } = buildEmailReport(
       { sections: [splitSection] }, analysisWithFullSplits, {}, null,
     );
@@ -3892,3 +3918,4 @@ describe("feature-144: gapPill directional badge and route guard", () => {
     assert.doesNotMatch(prioritiesSection, /Run 7 and station efficiency/i);
   });
 });
+
