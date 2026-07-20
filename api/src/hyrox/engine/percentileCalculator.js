@@ -125,6 +125,10 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
   const primaryGroupKey = benchmarkContext?.primaryBenchmarkGroup?.key;
   const goalGroupKey = benchmarkContext?.goalBenchmarkGroup?.key;
   const demographicGroupKey = benchmarkContext?.demographicBenchmarkGroup?.key ?? null;
+  // Deliberately age-agnostic: totalPopulationBenchmark is built with ageGroup "all", so this is
+  // the athlete's true overall standing (division + gender only), independent of demographicGroupKey
+  // above, which can be age-group-scoped. Used for the email's "OVERALL STANDING" stat.
+  const totalPopulationGroupKey = benchmarkContext?.totalPopulationBenchmark?.groupKey ?? null;
   const rows = [];
 
   for (const metricKey of ORDERED_METRICS) {
@@ -154,6 +158,8 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
     const percentile = selection.suppressed && !metricFallbackReason ? null : approximatePercentile(userSeconds, stats);
     const demographicStats = demographicGroupKey ? getBenchmarkStats(demographicGroupKey, metricKey) : null;
     const fieldPercentile = (demographicStats && (!selection.suppressed || metricFallbackReason)) ? approximatePercentile(userSeconds, demographicStats) : null;
+    const totalPopulationStats = (metricKey === "total_time" && totalPopulationGroupKey) ? getBenchmarkStats(totalPopulationGroupKey, metricKey) : null;
+    const overallFieldPercentile = totalPopulationStats ? approximatePercentile(userSeconds, totalPopulationStats) : null;
     const median = stats?.medianSeconds ?? stats?.p50Seconds ?? null;
     const topQuartile = stats?.p75Seconds ?? null;
     const goal = goalStats?.medianSeconds ?? goalStats?.p50Seconds ?? null;
@@ -168,6 +174,7 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
       goalBenchmarkSeconds: goal,
       percentile,
       fieldPercentile,
+      overallFieldPercentile,
       timeGapToMedianSeconds: Number.isFinite(median) ? userSeconds - median : null,
       timeGapToGoalSeconds: Number.isFinite(goal) ? userSeconds - goal : Number.isFinite(median) ? userSeconds - median : null,
       rankWithinUserSegments: null,
