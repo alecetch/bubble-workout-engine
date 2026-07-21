@@ -78,6 +78,7 @@ function segmentSeconds(normalisedSubmission, metricKey) {
 function confidenceFor(stats, metricKey, normalisedSubmission, selection) {
   if (!stats || selection?.suppressed) return "low";
   if (metricKey.startsWith("roxzone_") && normalisedSubmission.roxzoneMode === "inferred_total") return "low";
+  if (normalisedSubmission.splitMap?.get(metricKey)?.estimated === true) return "low";
   if (selection?.confidenceGrade === "A" || selection?.confidenceGrade === "B") return "high";
   if (selection?.confidenceGrade === "C") return "medium";
   return "low";
