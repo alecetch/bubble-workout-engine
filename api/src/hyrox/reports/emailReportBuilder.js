@@ -1857,9 +1857,13 @@ function renderSplitTable(section, analysisJson) {
   }
 
   function renderSegmentHighlights() {
-    const losses = SPLIT_TABLE_RACE_ORDER
+    // RoxZone is included alongside station/run splits so a genuinely dominant transition
+    // loss (e.g. a tight elite race where every individual split is small) can surface as a
+    // biggest opportunity, mirroring the RoxZone strength candidate injected further below.
+    const losses = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
       .map((key) => {
-        const seg = segMap.get(key);
+        const rawSeg = segMap.get(key);
+        const seg = key === "roxzone_time" && rawSeg ? { ...rawSeg, label: "RoxZone" } : rawSeg;
         return {
           key,
           seg,
@@ -2534,9 +2538,12 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     const segmentPenaltySeconds = emailPenaltySecondsForSegmentKey(seg.segmentKey);
     return segmentPenaltySeconds > 0 ? rawGap - segmentPenaltySeconds : rawGap;
   }
-  const emailOpportunitySegments = SPLIT_TABLE_RACE_ORDER
+  // RoxZone is included alongside station/run splits so the hero/headline limiter can name a
+  // genuinely dominant transition loss, matching findBiggestLimiter's behavior elsewhere.
+  const emailOpportunitySegments = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
     .map((key) => {
-      const seg = emailSegMap.get(key);
+      const rawSeg = emailSegMap.get(key);
+      const seg = key === "roxzone_time" && rawSeg ? { ...rawSeg, label: "RoxZone" } : rawSeg;
       const gap = emailOpportunityGapSeconds(seg);
       if (!seg?.label || !Number.isFinite(gap)) return null;
       return {
