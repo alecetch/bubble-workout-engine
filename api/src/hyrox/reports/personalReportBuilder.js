@@ -4,6 +4,7 @@ import { buildBackgroundSection } from "./backgroundPersonaliser.js";
 import { buildTrainingVolumeAdvice } from "./trainingVolumeAdvisor.js";
 import { buildRoxzoneSection } from "./roxzoneCommentary.js";
 import { renderMuscleDiagramPair } from "../engine/muscleDiagramRenderer.js";
+import { getSegmentLabel } from "../engine/segmentNormaliser.js";
 
 function hasContext(athleteContext) {
   return athleteContext && Object.keys(athleteContext).length > 0;
@@ -345,9 +346,23 @@ function isPartialAnalysis(analysisJson = {}) {
     || (analysisJson.dataQuality?.inputCompleteness ?? 1) < 0.85;
 }
 
+function joinLabels(labels = []) {
+  if (labels.length <= 1) return labels[0] ?? "split";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+
+function warningLabel(code, analysisJson = {}) {
+  if (code !== "split_estimated_from_residual") return WARNING_LABELS[code];
+  const labels = (analysisJson.dataQuality?.estimatedSplitKeys ?? []).map(getSegmentLabel).filter(Boolean);
+  const joined = joinLabels(labels);
+  const plural = labels.length > 1;
+  return `The ${joined} split${plural ? "s were" : " was"} missing from official results. Forma estimated ${plural ? "them" : "it"} from your total race time so station and transition totals still reconcile - treat the ${joined} figure${plural ? "s" : ""} as directional.`;
+}
+
 function dataConfidenceSection(analysisJson = {}) {
   const warnings = (analysisJson.dataQuality?.warnings ?? [])
-    .map((code) => WARNING_LABELS[code])
+    .map((code) => warningLabel(code, analysisJson))
     .filter(Boolean);
   const hasIncompleteRuns = (analysisJson.dataQuality?.warnings ?? []).some((code) => code === "incomplete_running_splits" || code === "missing_run_total");
   return section("data_confidence", "What We Can and Cannot Infer", [

@@ -140,7 +140,8 @@ function dataQuality(normalised, benchmarkContext) {
   if (!benchmarkContext.available) issues.push("no_benchmark_data");
   if (!Number.isFinite(normalised.race?.finishTimeSeconds)) issues.push("missing_finish_time");
   if (normalised.roxzoneMode === "inferred_total") warnings.push("roxzone_inferred_from_unallocated_time");
-  if (supplied < expected) warnings.push("partial_split_data");
+  if (normalised.estimatedSplitKeys?.length > 0) warnings.push("split_estimated_from_residual");
+  if (normalised.unrepairableMissingSplitKeys?.length > 0) warnings.push("partial_split_data");
   if (normalised.completeness.runSplits > 0 && normalised.completeness.runSplits < 8) warnings.push("incomplete_running_splits");
   if (normalised.completeness.runSplits > 0 && !Number.isFinite(normalised.runTimeSeconds)) warnings.push("missing_run_total");
   return {
@@ -148,6 +149,8 @@ function dataQuality(normalised, benchmarkContext) {
     splitMode: normalised.roxzoneMode,
     issues,
     warnings,
+    estimatedSplitKeys: normalised.estimatedSplitKeys ?? [],
+    unrepairableMissingSplitKeys: normalised.unrepairableMissingSplitKeys ?? [],
     confidence: issues.length > 0 ? "low" : supplied >= expected ? "high" : "medium",
   };
 }

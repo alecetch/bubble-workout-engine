@@ -138,6 +138,24 @@ describe("buildPersonalReport - race_split_breakdown section", () => {
     assert.match(sections[confidenceIdx].content.join(" "), /partial split data|RoxZone/i);
   });
 
+  it("names a split estimated from residual in the data confidence warning", () => {
+    const analysis = minimalAnalysis({
+      analysisScope: "partial",
+      dataQuality: {
+        inputCompleteness: 0.94,
+        warnings: ["split_estimated_from_residual"],
+        estimatedSplitKeys: ["row"],
+      },
+      segments: makeSegments(16),
+    });
+    const { sections } = buildPersonalReport(analysis, [], {});
+    const confidence = sections.find((section) => section.sectionKey === "data_confidence");
+
+    assert.ok(confidence, "data_confidence section expected");
+    assert.match(confidence.content.join(" "), /Row split was missing/i);
+    assert.doesNotMatch(confidence.content.join(" "), /Some race splits are missing/i);
+  });
+
   it("uses target-profile language for target-mode station breakdown", () => {
     const analysis = minimalAnalysis({
       benchmarkContext: {
