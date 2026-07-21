@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
+import { MUSCLE_GROUP_MAP } from "../../config/muscleGroupMap.js";
 import { STATION_KEYS } from "../../config/segmentMap.js";
 import { setBenchmarkData } from "../benchmarkService.js";
 import { analyseSubmission } from "../hyroxAnalysisEngine.js";
+import { analyseMuscleGroups } from "../muscleGroupAnalyser.js";
 
 const DATASET = "historical_hyrox_2026_06_v1";
 const DEMOGRAPHIC_KEY = `hyrox:${DATASET}:open:male:all`;
@@ -63,6 +65,235 @@ function limiterGroupIds(analysis) {
     .filter((signal) => signal.signal === "limiter")
     .map((signal) => signal.groupId);
 }
+
+function station(segmentKey, timeGapSeconds, overrides = {}) {
+  const labels = {
+    ski_erg: "SkiErg",
+    sled_push: "Sled Push",
+    sled_pull: "Sled Pull",
+    burpee_broad_jump: "Burpee Broad Jump",
+    row: "Row",
+    farmers_carry: "Farmers Carry",
+    sandbag_lunges: "Sandbag Lunges",
+    wall_balls: "Wall Balls",
+    run_1: "Run 1",
+    roxzone_time: "RoxZone",
+  };
+  return {
+    segmentKey,
+    label: labels[segmentKey] ?? segmentKey,
+    percentile: timeGapSeconds > 0 ? 25 : timeGapSeconds < 0 ? 75 : 50,
+    fieldPercentile: timeGapSeconds > 0 ? 25 : timeGapSeconds < 0 ? 75 : 50,
+    timeGapSeconds,
+    confidence: "medium",
+    nextBandMedianSeconds: 300,
+    ...overrides,
+  };
+}
+
+function analyseStations(stations, overrides = {}) {
+  return analyseMuscleGroups({ stationBreakdown: stations, ...overrides });
+}
+
+function signal(profile, groupId) {
+  return profile.muscleGroupSignals.find((entry) => entry.groupId === groupId);
+}
+
+describe("analyseMuscleGroups unit scoring", () => {
+  it("returns unavailable with fewer than 3 qualifying stations", () => {
+    const result = analyseStations([
+      station("wall_balls", 30),
+      station("sandbag_lunges", 20),
+    ]);
+
+    assert.equal(result.available, false);
+  });
+
+  it("excludes low-confidence stations from eligibility", () => {
+    const result = analyseStations([
+      station("wall_balls", 30),
+      station("sandbag_lunges", 20),
+      station("sled_push", 10, { confidence: "low" }),
+    ]);
+
+    assert.equal(result.available, false);
+  });
+
+  it("ignores running and RoxZone segment keys for eligibility", () => {
+    const result = analyseStations([
+      station("wall_balls", 30),
+      station("sandbag_lunges", 20),
+      station("run_1", 60),
+      station("roxzone_time", 60),
+    ]);
+
+    assert.equal(result.available, false);
+  });
+
+  it("classifies positive, negative, and zero gaps as weak, strong, and neutral", () => {
+    const result = analyseStations([
+      station("wall_balls", 30),
+      station("sled_pull", -20),
+      station("ski_erg", 0),
+    ]);
+
+    const classes = Object.fromEntries(result.stationClassifications.map((entry) => [entry.segmentKey, entry.relativeClass]));
+    assert.equal(classes.wall_balls, "weak");
+    assert.equal(classes.sled_pull, "strong");
+    assert.equal(classes.ski_erg, "neutral");
+  });
+
+  it("keeps one weak and one strong vote for the same group neutral", () => {
+    const result = analyseStations([
+      station("wall_balls", 30),
+      station("sled_push", -20),
+      station("ski_erg", 0),
+    ]);
+
+    assert.equal(signal(result, "quad_dominant").weakCount, 1);
+    assert.equal(signal(result, "quad_dominant").strongCount, 1);
+    assert.equal(signal(result, "quad_dominant").signal, "neutral");
+  });
+
+  it("marks two weak and zero strong votes as a limiter", () => {
+    const result = analyseStations([
+      station("wall_balls", 30),
+      station("sandbag_lunges", 20),
+      station("ski_erg", 0),
+    ]);
+
+    assert.equal(signal(result, "quad_dominant").weakCount, 2);
+    assert.equal(signal(result, "quad_dominant").strongCount, 0);
+    assert.equal(signal(result, "quad_dominant").signal, "limiter");
+  });
+
+  it("keeps single-station evidence eligible and lets Farmers Carry produce a grip limiter", () => {
+    const result = analyseStations([
+      station("farmers_carry", 40),
+      station("ski_erg", 0),
+      station("row", 0),
+    ]);
+
+    assert.equal(signal(result, "grip_forearm").weakCount, 1);
+    assert.equal(signal(result, "grip_forearm").strongCount, 0);
+    assert.equal(signal(result, "grip_forearm").signal, "limiter");
+  });
+
+  it("marks groups with more strong than weak votes as assets", () => {
+    const result = analyseStations([
+      station("sled_pull", -40),
+      station("row", -30),
+      station("wall_balls", 0),
+    ]);
+
+    assert.equal(signal(result, "upper_back_pull").strongCount, 2);
+    assert.equal(signal(result, "upper_back_pull").weakCount, 0);
+    assert.equal(signal(result, "upper_back_pull").signal, "asset");
+  });
+
+  it("uses the explicit tie-break order for tied limiter groups", () => {
+    const result = analyseStations([
+      station("sled_pull", 40),
+      station("wall_balls", 35),
+      station("ski_erg", 0),
+    ]);
+
+    assert.deepEqual(result.primaryLimiters, ["posterior_chain", "quad_dominant"]);
+  });
+
+  it("returns only the top 2 limiters when 3 or more groups qualify", () => {
+    const result = analyseStations([
+      station("sled_pull", 40),
+      station("wall_balls", 35),
+      station("ski_erg", 0),
+    ]);
+
+    assert.equal(result.primaryLimiters.length, 2);
+    assert.ok(signal(result, "upper_back_pull").signal !== "limiter");
+    assert.ok(signal(result, "push_shoulder").signal !== "limiter");
+  });
+
+  it("returns only the top 1 asset when 2 or more groups qualify", () => {
+    const result = analyseStations([
+      station("sled_pull", -40),
+      station("wall_balls", -35),
+      station("ski_erg", 0),
+    ]);
+
+    assert.deepEqual(result.primaryAssets, ["posterior_chain"]);
+    assert.equal(signal(result, "quad_dominant").signal, "neutral");
+    assert.equal(signal(result, "upper_back_pull").signal, "neutral");
+  });
+
+  it("uses the revised primary map exposure counts for all 8 stations", () => {
+    const result = analyseStations([
+      station("ski_erg", 30),
+      station("sled_push", 30),
+      station("sled_pull", 30),
+      station("burpee_broad_jump", 30),
+      station("row", 30),
+      station("farmers_carry", 30),
+      station("sandbag_lunges", 30),
+      station("wall_balls", 30),
+    ]);
+
+    assert.equal(signal(result, "posterior_chain").weakCount, 4);
+    assert.equal(signal(result, "quad_dominant").weakCount, 4);
+    assert.equal(signal(result, "upper_back_pull").weakCount, 3);
+    assert.equal(signal(result, "push_shoulder").weakCount, 2);
+    assert.equal(signal(result, "core_stability").weakCount, 2);
+    assert.equal(signal(result, "grip_forearm").weakCount, 1);
+  });
+
+  it("does not count secondary group membership in weak or strong counters", () => {
+    const skiErgMap = MUSCLE_GROUP_MAP.find((entry) => entry.segmentKey === "ski_erg");
+    assert.ok(skiErgMap.secondary.includes("push_shoulder"));
+    assert.ok(skiErgMap.secondary.includes("posterior_chain"));
+
+    const result = analyseStations([
+      station("ski_erg", 30),
+      station("row", 0),
+      station("wall_balls", 0),
+    ]);
+
+    assert.equal(signal(result, "upper_back_pull").weakCount, 1);
+    assert.equal(signal(result, "core_stability").weakCount, 1);
+    assert.equal(signal(result, "push_shoulder").weakCount, 0);
+    assert.equal(signal(result, "posterior_chain").weakCount, 0);
+  });
+
+  it("softens single-station limiter narrative and preserves common-thread wording for repeated evidence", () => {
+    const single = analyseStations([
+      station("farmers_carry", 40),
+      station("ski_erg", 0),
+      station("row", 0),
+    ]);
+    assert.match(single.conclusion.headline, /biggest individual station gap/i);
+    assert.match(single.conclusion.body, /single-station signal/i);
+    assert.doesNotMatch(single.conclusion.headline, /common thread/i);
+    assert.doesNotMatch(single.conclusion.body, /cross-station pattern/i);
+
+    const repeated = analyseStations([
+      station("wall_balls", 40),
+      station("sandbag_lunges", 35),
+      station("ski_erg", 0),
+    ]);
+    assert.match(repeated.conclusion.headline, /common thread across your weakest stations/i);
+    assert.match(repeated.conclusion.body, /highest-leverage cross-station investment/i);
+  });
+
+  it("softens single-station asset narrative", () => {
+    const result = analyseStations([
+      station("farmers_carry", -40),
+      station("ski_erg", 0),
+      station("row", 0),
+    ]);
+
+    assert.match(result.conclusion.headline, /clearest individual station strength/i);
+    assert.match(result.conclusion.body, /clearest individual station strength/i);
+    assert.doesNotMatch(result.conclusion.headline, /consistently your strongest/i);
+  });
+});
 
 describe("analyseMuscleGroups engine wiring", () => {
   beforeEach(() => {
