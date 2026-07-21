@@ -1609,7 +1609,7 @@ function renderSplitTable(section, analysisJson) {
 
     const cards = [
       { key: "total_time", label: "Race time", note: totalGapNote },
-      { key: "work_time", label: "Stations", note: cardNote("work_time", stationGapForCard) },
+      { key: "work_time", label: "Stations", note: segMap.has("work_time") ? cardNote("work_time", stationGapForCard) : "Unavailable" },
       { key: "run_time", label: "Running", note: segMap.has("run_time") ? cardNote("run_time", runGapForCard) : "Unavailable" },
       { key: "roxzone_time", label: "RoxZone", note: cardNote("roxzone_time", roxGapForCard) },
     ];
@@ -1661,7 +1661,7 @@ function renderSplitTable(section, analysisJson) {
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Adjusted", adjustedTime, adjustedGapSeconds, "Without penalties", penaltyPill(adjustedGapSeconds))}</td>
             </tr>
             <tr>
-              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Stations", timeFor(stationSeg), stationGap, cardNote("work_time", stationGap))}</td>
+              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Stations", timeFor(stationSeg), stationGap, stationSeg ? cardNote("work_time", stationGap) : "Unavailable")}</td>
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Penalties", formatTime(totalPenaltySeconds), totalPenaltySeconds, "Fastest win", penaltyPill(totalPenaltySeconds))}</td>
             </tr>
             <tr>

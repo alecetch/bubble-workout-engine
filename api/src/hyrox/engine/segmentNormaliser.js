@@ -1,6 +1,7 @@
 import { RUN_KEYS, ROXZONE_KEYS, SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 
 const SEGMENT_BY_KEY = new Map(SEGMENT_MAP.map((segment) => [segment.segmentKey, segment]));
+const RACE_KEYS = Object.freeze([...RUN_KEYS, ...STATION_KEYS]);
 const STATION_TO_REPLAY_INDEX = Object.freeze({ ski_erg: 1, sled_push: 2, sled_pull: 3, burpee_broad_jump: 4, row: 5, farmers_carry: 6, sandbag_lunges: 7, wall_balls: 8 });
 
 function finiteOrNull(value) {
@@ -67,26 +68,14 @@ export function normaliseSubmission(input = {}) {
         .filter((penalty) => penalty.runKey && (RUN_KEYS.includes(penalty.runKey) || STATION_KEYS.includes(penalty.runKey)) && penalty.penaltySeconds !== null)
     : [];
   const splitMap = new Map(suppliedSplits.map((split) => [split.segmentKey, split]));
-  const penaltyAdjustedSplitMap = new Map(splitMap);
-  for (const { runKey, penaltySeconds } of penalties) {
-    const original = splitMap.get(runKey);
-    if (original && Number.isFinite(original.timeSeconds)) {
-      penaltyAdjustedSplitMap.set(runKey, { ...original, timeSeconds: Math.max(0, original.timeSeconds - penaltySeconds) });
-    }
-  }
   const finishTimeSeconds = finiteOrNull(input.race?.finishTimeSeconds);
   const runSplitCount = RUN_KEYS.filter((key) => splitMap.has(key)).length;
   const stationSplitCount = STATION_KEYS.filter((key) => splitMap.has(key)).length;
   const explicitRunTime = explicitAggregate(splitMap, "run_time");
   const explicitWorkTime = explicitAggregate(splitMap, "work_time");
   const explicitRoxzoneAggregate = explicitAggregate(splitMap, "roxzone_time");
-  const runTime = explicitRunTime ?? sumByKeys(splitMap, RUN_KEYS, { requireAll: true });
-  const workTime = explicitWorkTime ?? sumByKeys(splitMap, STATION_KEYS);
   const explicitRoxzoneTime = explicitRoxzoneAggregate ?? sumByKeys(splitMap, ROXZONE_KEYS);
   const explicitRoxzoneCount = ROXZONE_KEYS.filter((key) => splitMap.has(key)).length;
-  const unallocatedTime = finishTimeSeconds !== null && Number.isFinite(runTime) && Number.isFinite(workTime)
-    ? finishTimeSeconds - runTime - workTime
-    : null;
 
   let roxzoneMode = input.roxzoneMode ?? "none";
   let roxzoneTime = null;
@@ -103,11 +92,54 @@ export function normaliseSubmission(input = {}) {
       aggregate: explicitRoxzoneCount >= 8 ? "high" : "medium",
       segment: explicitRoxzoneCount >= 8 ? "high" : "medium",
     };
-  } else if ((roxzoneMode === "inferred_total" || roxzoneMode === "none") && Number.isFinite(unallocatedTime) && unallocatedTime >= 0) {
+  }
+
+  const estimatedSplitKeys = [];
+  const unrepairableMissingSplitKeys = [];
+  const missingRaceKeys = RACE_KEYS.filter((key) => !splitMap.has(key));
+
+  if (missingRaceKeys.length === 1 && Number.isFinite(finishTimeSeconds) && Number.isFinite(roxzoneTime) && roxzoneMode !== "inferred_total") {
+    const missingKey = missingRaceKeys[0];
+    const knownSum = RACE_KEYS
+      .filter((key) => key !== missingKey)
+      .reduce((sum, key) => sum + (splitMap.get(key)?.timeSeconds ?? 0), 0);
+    const repairedSeconds = finishTimeSeconds - knownSum - roxzoneTime;
+    if (Number.isFinite(repairedSeconds) && repairedSeconds >= 0) {
+      const mapped = SEGMENT_BY_KEY.get(missingKey);
+      splitMap.set(missingKey, {
+        segmentKey: missingKey,
+        type: mapped?.type ?? (RUN_KEYS.includes(missingKey) ? "run" : "station"),
+        label: mapped?.displayName ?? missingKey,
+        timeSeconds: repairedSeconds,
+        estimated: true,
+      });
+      estimatedSplitKeys.push(missingKey);
+    } else {
+      unrepairableMissingSplitKeys.push(missingKey);
+    }
+  } else if (missingRaceKeys.length > 0) {
+    unrepairableMissingSplitKeys.push(...missingRaceKeys);
+  }
+
+  const penaltyAdjustedSplitMap = new Map(splitMap);
+  for (const { runKey, penaltySeconds } of penalties) {
+    const original = splitMap.get(runKey);
+    if (original && Number.isFinite(original.timeSeconds)) {
+      penaltyAdjustedSplitMap.set(runKey, { ...original, timeSeconds: Math.max(0, original.timeSeconds - penaltySeconds) });
+    }
+  }
+
+  const runTime = explicitRunTime ?? sumByKeys(splitMap, RUN_KEYS, { requireAll: true });
+  const workTime = explicitWorkTime ?? sumByKeys(splitMap, STATION_KEYS, { requireAll: true });
+  const unallocatedTime = finishTimeSeconds !== null && Number.isFinite(runTime) && Number.isFinite(workTime)
+    ? finishTimeSeconds - runTime - workTime
+    : null;
+
+  if (roxzoneMode !== "explicit_total" && roxzoneMode !== "explicit_splits" && (roxzoneMode === "inferred_total" || roxzoneMode === "none") && Number.isFinite(unallocatedTime) && unallocatedTime >= 0) {
     roxzoneMode = "inferred_total";
     roxzoneTime = unallocatedTime;
     roxzoneConfidence = { aggregate: "medium", segment: "low" };
-  } else {
+  } else if (roxzoneMode !== "explicit_total" && roxzoneMode !== "explicit_splits") {
     roxzoneMode = "none";
     roxzoneTime = null;
   }
@@ -130,6 +162,8 @@ export function normaliseSubmission(input = {}) {
     splitMap,
     penaltyAdjustedSplitMap,
     aggregateSegments: buildAggregateSegments({ runTime, workTime, roxzoneTime, finishTime: finishTimeSeconds }),
+    estimatedSplitKeys,
+    unrepairableMissingSplitKeys,
     runTimeSeconds: runTime,
     workTimeSeconds: workTime,
     roxzoneTimeSeconds: roxzoneTime,

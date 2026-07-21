@@ -1884,17 +1884,20 @@ describe("renderSplitTable", () => {
     };
   }
 
-  function splitTableSection({ overrides = {}, penalties = [], benchmarkContext, targetFinishTimeSeconds = null } = {}) {
+  function splitTableSection({ overrides = {}, penalties = [], benchmarkContext, targetFinishTimeSeconds = null, omitSegmentKeys = [] } = {}) {
+    const omitted = new Set(omitSegmentKeys);
     const segments = raceOrder.map(([key, label, type], index) => {
       const baseGap = index === 1 ? 120 : index === 3 ? 80 : index === 5 ? -30 : 10;
       return splitSegment(key, label, type, baseGap, overrides[key]);
-    });
-    segments.push(
+    }).filter((segment) => !omitted.has(segment.segmentKey));
+    [
       splitSegment("run_time", "Run Time", "aggregate", 60, overrides.run_time),
       splitSegment("work_time", "Work Time", "aggregate", 240, overrides.work_time),
       splitSegment("roxzone_time", "RoxZone Time", "aggregate", 45, overrides.roxzone_time),
       splitSegment("total_time", "Total Time", "aggregate", 300, overrides.total_time),
-    );
+    ].forEach((segment) => {
+      if (!omitted.has(segment.segmentKey)) segments.push(segment);
+    });
     return {
       sectionKey: "race_split_breakdown",
       title: "Race Split Breakdown",
@@ -2763,6 +2766,33 @@ describe("renderSplitTable", () => {
     assert.equal(htmlBody.includes('class="'), false);
     assert.match(htmlBody, /fonts\.googleapis\.com/);
     assert.equal(htmlBody.includes("<link"), false);
+  });
+
+  it("shows Stations as unavailable when the aggregate station segment is absent", () => {
+    const htmlBody = renderSplit({ omitSegmentKeys: ["work_time"] });
+    const stationSnippet = htmlBody.slice(htmlBody.indexOf(">Stations<") - 300, htmlBody.indexOf(">Stations<") + 700);
+
+    assert.match(stationSnippet, /Unavailable/);
+    assert.doesNotMatch(stationSnippet, /On target|On benchmark|Main opportunity/);
+  });
+
+  it("renders low-confidence split detail rows with the existing approximate styling", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        row: {
+          confidence: "low",
+          userSeconds: 420,
+          goalBenchmarkSeconds: 300,
+          timeGapToMedianSeconds: 120,
+          frameGapSeconds: 120,
+        },
+      },
+    });
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    const rowSnippet = detailHtml.slice(detailHtml.indexOf("Row") - 260, detailHtml.indexOf("Row") + 520);
+
+    assert.match(rowSnippet, /~7:00/);
+    assert.match(rowSnippet, /color:#94a3b8/);
   });
 
   it("renders segment profile and remains email-safe", () => {
