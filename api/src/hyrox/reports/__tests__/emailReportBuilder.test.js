@@ -1202,7 +1202,7 @@ describe("target mode email", () => {
     assert.ok(htmlBody.includes("Top ") && htmlBody.includes("% overall"), "email must contain Top X% overall");
   });
 
-  it("qualifies the email metric-strip standing when it uses age-group population", () => {
+  it("OVERALL STANDING always uses the plain label and the true (non-age-scoped) percentile", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_80",
@@ -1214,15 +1214,42 @@ describe("target mode email", () => {
         ],
       },
       segments: [
-        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
       ],
     });
 
     const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
 
-    assert.match(htmlBody, /OVERALL STANDING \(AGE GROUP\)/i);
-    assert.match(htmlBody, /Top 6% overall/i);
-    assert.doesNotMatch(htmlBody, /Top 14% overall/i);
+    assert.match(htmlBody, /OVERALL STANDING/i);
+    assert.doesNotMatch(htmlBody, /OVERALL STANDING \(AGE GROUP\)/i);
+    assert.match(htmlBody, /Top 25% overall/i, "should use the true overall percentile (75), not the age-scoped one (94)");
+    assert.doesNotMatch(htmlBody, /Top 6% overall/i);
+  });
+
+  it("adds an age-group callout in the hero when age-group standing differs substantially from overall", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_80", primaryBenchmarkGroup: { label: "Open Male" } },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+
+    assert.match(htmlBody, /Within your age group specifically, this ranks you in the top 6%/i);
+  });
+
+  it("omits the age-group callout when age-group and overall standing are close", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_80", primaryBenchmarkGroup: { label: "Open Male" } },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 78, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+
+    assert.doesNotMatch(htmlBody, /Within your age group specifically/i);
   });
 
   it("target mode route section does not put run splits in station-efficiency bullet", () => {
@@ -3536,6 +3563,25 @@ describe("content accuracy fixes (feature-143)", () => {
     assert.ok(section.includes("Wall Balls"), "Wall Balls should appear in target mode regardless of percentile");
   });
 
+  it("Biggest opportunities names a dominant RoxZone gap even when every individual split is small", () => {
+    // Mirrors a real tight elite-race profile: station/run gaps are all under 20s, but RoxZone
+    // (+50s) is the standout loss. RoxZone must be a candidate for this list, not excluded
+    // purely because it's an aggregate segment outside SPLIT_TABLE_RACE_ORDER.
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_60" },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 91, userSeconds: 3363 },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "Total Roxzone Time", frameGapSeconds: 50, userSeconds: 296, percentile: 20 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 19, userSeconds: 250, percentile: 60 },
+        { segmentKey: "burpee_broad_jump", type: "station", label: "Burpee Broad Jump", frameGapSeconds: 16, userSeconds: 196, percentile: 65 },
+      ],
+    });
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+    const section = extractSection(htmlBody, "Biggest opportunities", "Strengths to protect");
+    assert.ok(section.includes("RoxZone"), "RoxZone should appear in Biggest Opportunities");
+    assert.ok(!section.includes("No significant time losses detected"), "a genuine 50s RoxZone gap should not be reported as no significant loss");
+  });
+
   it("M-9: shows anomaly warning when a single station gap is more than 2.5x the implied benchmark time", () => {
     const analysis = mockAnalysis({
       segments: [
@@ -3823,6 +3869,50 @@ describe("feature-144: gapPill directional badge and route guard", () => {
     assert.equal(raceCard.biggestLimiter.name, "Wall Balls");
     assert.match(caption, /Biggest opportunity: WALL BALLS/);
     assert.doesNotMatch(caption, /Biggest opportunity: SLED PUSH/);
+  });
+
+  it("names RoxZone as the hero limiter when it is the dominant gap, not a smaller station gap", () => {
+    // RoxZone (105s) clearly dominates Wall Balls (20s) by the 2.5x ratio, mirroring the
+    // real-world case where a tight elite race's biggest single opportunity is RoxZone.
+    const analysis = mockAnalysis({
+      race: { finishTimeSeconds: 4361, targetTimeSeconds: 3600 },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+        comparisonOptions: [{ percentile: 72, topPercent: 28 }],
+        achievedBand: "sub_65",
+      },
+      headline: {
+        biggestLimiter: { label: "RoxZone", segmentKey: "roxzone_time", type: "aggregate", timeGapSeconds: 105, percentile: 20 },
+        biggestStrength: { label: "SkiErg", segmentKey: "ski_erg", type: "station", percentile: 82 },
+      },
+      timePotential: { headlineGainSeconds: 105 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", frameGapSeconds: 761, goalBenchmarkSeconds: 3600, userSeconds: 4361, percentile: 45 },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "Total Roxzone Time", frameGapSeconds: 105, userSeconds: 400, percentile: 20 },
+        { segmentKey: "ski_erg", type: "station", label: "SkiErg", frameGapSeconds: -20, userSeconds: 280, percentile: 82 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 20, userSeconds: 300, percentile: 60 },
+      ],
+    });
+    const interpretation = {
+      primaryThesis: { category: "station_capacity", confidence: "high" },
+      heroCopy: { headline: "THE ROUTE TO 1:00:00 STARTS WITH ROXZONE", subline: null, gainDisplay: null },
+      sectionOrder: [],
+      summaryBullets: [],
+      secondaryTheses: [],
+    };
+    const athleteContext = { displayName: "Alex Smith", targetFinishTimeSeconds: 3600 };
+    const email = buildEmailReport(mockReport(), analysis, athleteContext, interpretation, "target");
+    const carousel = buildTemplateA(analysis, [], athleteContext);
+    const raceCard = buildHyroxRaceCardData(analysis, athleteContext);
+    const caption = buildCaption({ slide0: carousel.slides[0], athleteContext, analysisJson: analysis });
+
+    assert.match(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH ROXZONE/i);
+    assert.doesNotMatch(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+    assert.equal(carousel.slides[0].biggest_limiter, "ROXZONE");
+    assert.equal(raceCard.biggestLimiter.name, "RoxZone");
+    assert.match(caption, /Biggest opportunity: ROXZONE/);
+    assert.doesNotMatch(caption, /Biggest opportunity: WALL BALLS/);
   });
 
   it("keeps subject, hero, opportunities table, and target priorities on the largest seconds-gap opportunity", () => {

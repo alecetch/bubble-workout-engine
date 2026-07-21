@@ -282,6 +282,10 @@ function buildFallbackHeroCopy(analysisJson = {}) {
   };
 }
 
+// Below this many percentile points, the age-group and overall standings are treated as
+// materially the same and no separate callout is shown -- avoids noise from small-sample wobble.
+const AGE_GROUP_STANDING_DIFFERENCE_THRESHOLD_POINTS = 10;
+
 function renderHero(analysisJson, greetingName, interpretation = null) {
   const fallbackCopy = buildFallbackHeroCopy(analysisJson);
   const heroCopy = interpretation?.heroCopy ?? fallbackCopy;
@@ -316,6 +320,15 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
       : "";
     return `<div style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:12px;font-style:italic;margin-top:6px;">Compared against ${sampleText}${groupLabel}.</div>`;
   })();
+  const ageGroupStandingLine = (() => {
+    const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
+    const overallPct = Number(totalSeg?.overallFieldPercentile);
+    const agePct = Number(totalSeg?.fieldPercentile);
+    if (!Number.isFinite(overallPct) || !Number.isFinite(agePct)) return "";
+    if (Math.abs(agePct - overallPct) < AGE_GROUP_STANDING_DIFFERENCE_THRESHOLD_POINTS) return "";
+    const ageTopPct = Math.max(1, Math.round(100 - agePct));
+    return `<div style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:12px;font-style:italic;margin-top:6px;">Within your age group specifically, this ranks you in the top ${ageTopPct}% -- meaningfully different from your standing across the full field.</div>`;
+  })();
 
   return `<tr>
     <td style="${inlineStyle({
@@ -338,6 +351,7 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
       ${subline}
       ${regionalLine}
       ${comparisonContextLine}
+      ${ageGroupStandingLine}
     </td>
   </tr>`;
 }
@@ -605,12 +619,11 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     : selectedTargetSeconds;
   const benchmarkTime = comparisonSeconds ? formatTime(comparisonSeconds) : "-";
   const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "-";
-  const usesAgeGroupStanding = Number.isFinite(Number(totalSeg?.fieldPercentile))
-    && analysisJson.benchmarkContext?.ageBenchmark?.available === true;
-  // Deliberately demographic-wide: fieldPercentile can differ from the band-relative Benchmark Lens standing
-  // and from the share-pack's all-ages worldwide comparison. Qualify the label when it is age-relative.
-  const rank = esc(formatOverallStanding(totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
-  const rankLabel = usesAgeGroupStanding ? "OVERALL STANDING (AGE GROUP)" : "OVERALL STANDING";
+  // Deliberately age-agnostic: overallFieldPercentile (division + gender, all ages) is the true
+  // overall standing. fieldPercentile can be age-group-scoped and is used only as a fallback here
+  // and for the age-group callout below when it differs substantially from the overall figure.
+  const rank = esc(formatOverallStanding(totalSeg?.overallFieldPercentile ?? totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
+  const rankLabel = "OVERALL STANDING";
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds;
   const targetGapSeconds = Number.isFinite(finishSeconds) && Number.isFinite(selectedTargetSeconds)
     ? finishSeconds - selectedTargetSeconds
@@ -1844,9 +1857,13 @@ function renderSplitTable(section, analysisJson) {
   }
 
   function renderSegmentHighlights() {
-    const losses = SPLIT_TABLE_RACE_ORDER
+    // RoxZone is included alongside station/run splits so a genuinely dominant transition
+    // loss (e.g. a tight elite race where every individual split is small) can surface as a
+    // biggest opportunity, mirroring the RoxZone strength candidate injected further below.
+    const losses = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
       .map((key) => {
-        const seg = segMap.get(key);
+        const rawSeg = segMap.get(key);
+        const seg = key === "roxzone_time" && rawSeg ? { ...rawSeg, label: "RoxZone" } : rawSeg;
         return {
           key,
           seg,
@@ -2521,9 +2538,12 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     const segmentPenaltySeconds = emailPenaltySecondsForSegmentKey(seg.segmentKey);
     return segmentPenaltySeconds > 0 ? rawGap - segmentPenaltySeconds : rawGap;
   }
-  const emailOpportunitySegments = SPLIT_TABLE_RACE_ORDER
+  // RoxZone is included alongside station/run splits so the hero/headline limiter can name a
+  // genuinely dominant transition loss, matching findBiggestLimiter's behavior elsewhere.
+  const emailOpportunitySegments = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
     .map((key) => {
-      const seg = emailSegMap.get(key);
+      const rawSeg = emailSegMap.get(key);
+      const seg = key === "roxzone_time" && rawSeg ? { ...rawSeg, label: "RoxZone" } : rawSeg;
       const gap = emailOpportunityGapSeconds(seg);
       if (!seg?.label || !Number.isFinite(gap)) return null;
       return {
