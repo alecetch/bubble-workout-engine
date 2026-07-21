@@ -1571,6 +1571,10 @@ function renderSplitTable(section, analysisJson) {
     const stationGapForCard = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
     const runGapForCard = splitGapSeconds(segMap.get("run_time"), hasGoalGroup);
     const totalGapNote = hasGoalGroup ? "vs target" : "vs benchmark median";
+    const cardsGapBandRef = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
+      ? `${bandDisplayLabel(gapComparisonBand)} benchmark`
+      : "benchmark";
+    const cardsFooterNote = `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : `Segment gaps are each measured against the ${cardsGapBandRef} median for that segment, so they may not sum exactly to the total race gap.`}</p>`;
 
     function segmentCardNote(gap) {
       if (!Number.isFinite(gap)) return hasGoalGroup ? "vs target" : "vs benchmark";
@@ -1669,6 +1673,7 @@ function renderSplitTable(section, analysisJson) {
               <td width="50%" valign="top" style="padding:0 0 0 4px;">${explicitCard("RoxZone", timeFor(roxSeg), roxGap, cardNote("roxzone_time", roxGap))}</td>
             </tr>
           </table>
+          ${cardsFooterNote}
         </td>
       </tr>`;
     }
@@ -1686,6 +1691,7 @@ function renderSplitTable(section, analysisJson) {
             <td width="50%" valign="top" style="padding:0 0 0 4px;">${card(cards[3])}</td>
           </tr>
         </table>
+        ${cardsFooterNote}
       </td>
 	    </tr>`;
 	  }
