@@ -32,6 +32,7 @@ describe("calculateSegmentStats", () => {
       metrics: [
         metric("total_time", Array.from({ length: 150 }, (_, index) => 4200 + index * 10)),
         metric("ski_erg", Array.from({ length: 150 }, (_, index) => 220 + index)),
+        metric("row", Array.from({ length: 150 }, (_, index) => 240 + index)),
       ],
     });
   });
@@ -56,6 +57,28 @@ describe("calculateSegmentStats", () => {
     const ski = rows.find((row) => row.segmentKey === "ski_erg");
     assert.equal(ski?.benchmarkGroupUsed, DOUBLES_MALE_KEY);
     assert.equal(typeof ski?.percentile, "number");
+  });
+
+  it("forces low confidence for a repaired split even when benchmark selection is strong", () => {
+    const rows = calculateSegmentStats({
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 4500 },
+      splitMap: new Map([
+        ["row", { segmentKey: "row", type: "station", timeSeconds: 260, estimated: true }],
+      ]),
+    }, {
+      primaryBenchmarkGroup: {
+        key: DOUBLES_MALE_KEY,
+        datasetVersion: "doubles_v1",
+        division: "doubles_male",
+        gender: "all",
+        ageGroup: "all",
+      },
+    });
+
+    const row = rows.find((segment) => segment.segmentKey === "row");
+    assert.equal(row?.confidence, "low");
+    assert.ok(["A", "B", "C"].includes(row?.confidenceGrade), `expected strong selection grade, got ${row?.confidenceGrade}`);
   });
 });
 

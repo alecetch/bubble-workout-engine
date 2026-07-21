@@ -1202,7 +1202,7 @@ describe("target mode email", () => {
     assert.ok(htmlBody.includes("Top ") && htmlBody.includes("% overall"), "email must contain Top X% overall");
   });
 
-  it("qualifies the email metric-strip standing when it uses age-group population", () => {
+  it("OVERALL STANDING always uses the plain label and the true (non-age-scoped) percentile", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_80",
@@ -1214,15 +1214,42 @@ describe("target mode email", () => {
         ],
       },
       segments: [
-        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
       ],
     });
 
     const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
 
-    assert.match(htmlBody, /OVERALL STANDING \(AGE GROUP\)/i);
-    assert.match(htmlBody, /Top 6% overall/i);
-    assert.doesNotMatch(htmlBody, /Top 14% overall/i);
+    assert.match(htmlBody, /OVERALL STANDING/i);
+    assert.doesNotMatch(htmlBody, /OVERALL STANDING \(AGE GROUP\)/i);
+    assert.match(htmlBody, /Top 25% overall/i, "should use the true overall percentile (75), not the age-scoped one (94)");
+    assert.doesNotMatch(htmlBody, /Top 6% overall/i);
+  });
+
+  it("adds an age-group callout in the hero when age-group standing differs substantially from overall", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_80", primaryBenchmarkGroup: { label: "Open Male" } },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+
+    assert.match(htmlBody, /Within your age group specifically, this ranks you in the top 6%/i);
+  });
+
+  it("omits the age-group callout when age-group and overall standing are close", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_80", primaryBenchmarkGroup: { label: "Open Male" } },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 78, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+
+    assert.doesNotMatch(htmlBody, /Within your age group specifically/i);
   });
 
   it("target mode route section does not put run splits in station-efficiency bullet", () => {
@@ -1884,17 +1911,20 @@ describe("renderSplitTable", () => {
     };
   }
 
-  function splitTableSection({ overrides = {}, penalties = [], benchmarkContext, targetFinishTimeSeconds = null } = {}) {
+  function splitTableSection({ overrides = {}, penalties = [], benchmarkContext, targetFinishTimeSeconds = null, omitSegmentKeys = [] } = {}) {
+    const omitted = new Set(omitSegmentKeys);
     const segments = raceOrder.map(([key, label, type], index) => {
       const baseGap = index === 1 ? 120 : index === 3 ? 80 : index === 5 ? -30 : 10;
       return splitSegment(key, label, type, baseGap, overrides[key]);
-    });
-    segments.push(
+    }).filter((segment) => !omitted.has(segment.segmentKey));
+    [
       splitSegment("run_time", "Run Time", "aggregate", 60, overrides.run_time),
       splitSegment("work_time", "Work Time", "aggregate", 240, overrides.work_time),
       splitSegment("roxzone_time", "RoxZone Time", "aggregate", 45, overrides.roxzone_time),
       splitSegment("total_time", "Total Time", "aggregate", 300, overrides.total_time),
-    );
+    ].forEach((segment) => {
+      if (!omitted.has(segment.segmentKey)) segments.push(segment);
+    });
     return {
       sectionKey: "race_split_breakdown",
       title: "Race Split Breakdown",
@@ -2470,6 +2500,24 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes("Net of penalties"), "running note should stay unchanged when no penalties");
   });
 
+  it("target mode: summary cards (Race time / Stations / Running / RoxZone) carry their own may-not-sum caveat", () => {
+    const htmlBody = renderSplit({}, "target");
+    const raceTimeCardIdx = htmlBody.indexOf(">Race time<");
+    assert.ok(raceTimeCardIdx > -1, "Race time summary card should exist");
+    const caveatIdx = htmlBody.indexOf("may not sum exactly to the total target gap", raceTimeCardIdx);
+    assert.ok(caveatIdx > -1, "a may-not-sum caveat should appear after the summary cards, not just earlier in SEGMENT PROFILE");
+    const nextSectionIdx = htmlBody.indexOf("TARGET PRIORITIES", raceTimeCardIdx);
+    assert.ok(nextSectionIdx === -1 || caveatIdx < nextSectionIdx, "caveat should sit within the summary cards block, before the next section");
+  });
+
+  it("analyse mode: summary cards carry their own may-not-sum caveat", () => {
+    const htmlBody = renderSplit({}, "analyse");
+    const raceTimeCardIdx = htmlBody.indexOf(">Race time<");
+    assert.ok(raceTimeCardIdx > -1, "Race time summary card should exist");
+    const caveatIdx = htmlBody.indexOf("may not sum exactly to the total race gap", raceTimeCardIdx);
+    assert.ok(caveatIdx > -1, "a may-not-sum caveat should appear after the summary cards in analyse mode too");
+  });
+
   it("material penalties: renders adjusted, penalty, and net-running summary cards", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("Without penalties"), "Adjusted card should appear");
@@ -2763,6 +2811,33 @@ describe("renderSplitTable", () => {
     assert.equal(htmlBody.includes('class="'), false);
     assert.match(htmlBody, /fonts\.googleapis\.com/);
     assert.equal(htmlBody.includes("<link"), false);
+  });
+
+  it("shows Stations as unavailable when the aggregate station segment is absent", () => {
+    const htmlBody = renderSplit({ omitSegmentKeys: ["work_time"] });
+    const stationSnippet = htmlBody.slice(htmlBody.indexOf(">Stations<") - 300, htmlBody.indexOf(">Stations<") + 700);
+
+    assert.match(stationSnippet, /Unavailable/);
+    assert.doesNotMatch(stationSnippet, /On target|On benchmark|Main opportunity/);
+  });
+
+  it("renders low-confidence split detail rows with the existing approximate styling", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        row: {
+          confidence: "low",
+          userSeconds: 420,
+          goalBenchmarkSeconds: 300,
+          timeGapToMedianSeconds: 120,
+          frameGapSeconds: 120,
+        },
+      },
+    });
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    const rowSnippet = detailHtml.slice(detailHtml.indexOf("Row") - 260, detailHtml.indexOf("Row") + 520);
+
+    assert.match(rowSnippet, /~7:00/);
+    assert.match(rowSnippet, /color:#94a3b8/);
   });
 
   it("renders segment profile and remains email-safe", () => {

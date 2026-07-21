@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runHarnessMode } from "../../../routes/adminHyroxTestHarness.js";
 import { submissionInput } from "../../hyroxController.js";
+import { RUN_KEYS, STATION_KEYS } from "../../config/segmentMap.js";
 import { setBenchmarkData } from "../benchmarkService.js";
 import { analyseSubmission } from "../hyroxAnalysisEngine.js";
 
@@ -56,6 +57,33 @@ function anirudhFelipeSplits({ includeAggregateTotals = false } = {}) {
   return splits;
 }
 
+function basicRaceSplits({ omit = [] } = {}) {
+  const omitted = new Set(omit);
+  return [
+    ...RUN_KEYS
+      .filter((segmentKey) => !omitted.has(segmentKey))
+      .map((segmentKey) => ({ segmentKey, type: "run", timeSeconds: 300 })),
+    ...STATION_KEYS
+      .filter((segmentKey) => !omitted.has(segmentKey))
+      .map((segmentKey) => ({ segmentKey, type: "station", timeSeconds: 200 })),
+  ];
+}
+
+function setBasicDoublesBenchmarks() {
+  setBenchmarkData({
+    groups: [
+      { groupKey: DOUBLES_MALE_KEY, datasetVersion: "doubles_v2", division: "doubles_male", gender: "all", ageGroup: "all", sampleSize: 500 },
+    ],
+    metrics: [
+      metric(DOUBLES_MALE_KEY, "total_time", 4520),
+      metric(DOUBLES_MALE_KEY, "run_time", 2400),
+      metric(DOUBLES_MALE_KEY, "work_time", 1600),
+      metric(DOUBLES_MALE_KEY, "roxzone_time", 300),
+      metric(DOUBLES_MALE_KEY, "row", 420),
+    ],
+  });
+}
+
 test("analyse mode doubles strength falls back from aggregate station time to individual station benchmark", () => {
   const previousSource = process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
   process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "enriched";
@@ -106,6 +134,62 @@ test("analyse mode doubles strength falls back from aggregate station time to in
     assert.equal(sledPull.frameGapSeconds, -151);
     assert.equal(analysis.headline.biggestStrength.segmentKey, "burpee_broad_jump");
     assert.notEqual(analysis.headline.biggestStrength.segmentKey, "work_time");
+  } finally {
+    if (previousSource === undefined) {
+      delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+    } else {
+      process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = previousSource;
+    }
+  }
+});
+
+test("dataQuality reports repaired split keys without inflating completeness", () => {
+  const previousSource = process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+  process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "enriched";
+  try {
+    setBasicDoublesBenchmarks();
+    const analysis = analyseSubmission(submissionInput({
+      calculatorMode: "analyse",
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 4520 },
+      splits: [
+        ...basicRaceSplits({ omit: ["row"] }),
+        { segmentKey: "roxzone_time", type: "aggregate", timeSeconds: 300 },
+      ],
+    }));
+
+    assert.ok(analysis.dataQuality.warnings.includes("split_estimated_from_residual"));
+    assert.equal(analysis.dataQuality.warnings.includes("partial_split_data"), false);
+    assert.deepEqual(analysis.dataQuality.estimatedSplitKeys, ["row"]);
+    assert.equal(analysis.dataQuality.inputCompleteness, 0.94);
+    assert.equal(analysis.dataQuality.confidence, "medium");
+  } finally {
+    if (previousSource === undefined) {
+      delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+    } else {
+      process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = previousSource;
+    }
+  }
+});
+
+test("dataQuality keeps partial_split_data for unrepairable missing splits", () => {
+  const previousSource = process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;
+  process.env.HYROX_DOUBLES_BENCHMARK_SOURCE = "enriched";
+  try {
+    setBasicDoublesBenchmarks();
+    const analysis = analyseSubmission(submissionInput({
+      calculatorMode: "analyse",
+      athlete: { division: "doubles", sex: "male" },
+      race: { division: "doubles", finishTimeSeconds: 4520 },
+      splits: [
+        ...basicRaceSplits({ omit: ["row", "farmers_carry"] }),
+        { segmentKey: "roxzone_time", type: "aggregate", timeSeconds: 300 },
+      ],
+    }));
+
+    assert.ok(analysis.dataQuality.warnings.includes("partial_split_data"));
+    assert.equal(analysis.dataQuality.warnings.includes("split_estimated_from_residual"), false);
+    assert.deepEqual(analysis.dataQuality.unrepairableMissingSplitKeys, ["row", "farmers_carry"]);
   } finally {
     if (previousSource === undefined) {
       delete process.env.HYROX_DOUBLES_BENCHMARK_SOURCE;

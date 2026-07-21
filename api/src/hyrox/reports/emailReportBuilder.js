@@ -282,6 +282,10 @@ function buildFallbackHeroCopy(analysisJson = {}) {
   };
 }
 
+// Below this many percentile points, the age-group and overall standings are treated as
+// materially the same and no separate callout is shown -- avoids noise from small-sample wobble.
+const AGE_GROUP_STANDING_DIFFERENCE_THRESHOLD_POINTS = 10;
+
 function renderHero(analysisJson, greetingName, interpretation = null) {
   const fallbackCopy = buildFallbackHeroCopy(analysisJson);
   const heroCopy = interpretation?.heroCopy ?? fallbackCopy;
@@ -316,6 +320,15 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
       : "";
     return `<div style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:12px;font-style:italic;margin-top:6px;">Compared against ${sampleText}${groupLabel}.</div>`;
   })();
+  const ageGroupStandingLine = (() => {
+    const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
+    const overallPct = Number(totalSeg?.overallFieldPercentile);
+    const agePct = Number(totalSeg?.fieldPercentile);
+    if (!Number.isFinite(overallPct) || !Number.isFinite(agePct)) return "";
+    if (Math.abs(agePct - overallPct) < AGE_GROUP_STANDING_DIFFERENCE_THRESHOLD_POINTS) return "";
+    const ageTopPct = Math.max(1, Math.round(100 - agePct));
+    return `<div style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:12px;font-style:italic;margin-top:6px;">Within your age group specifically, this ranks you in the top ${ageTopPct}% -- meaningfully different from your standing across the full field.</div>`;
+  })();
 
   return `<tr>
     <td style="${inlineStyle({
@@ -338,6 +351,7 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
       ${subline}
       ${regionalLine}
       ${comparisonContextLine}
+      ${ageGroupStandingLine}
     </td>
   </tr>`;
 }
@@ -605,12 +619,11 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     : selectedTargetSeconds;
   const benchmarkTime = comparisonSeconds ? formatTime(comparisonSeconds) : "-";
   const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "-";
-  const usesAgeGroupStanding = Number.isFinite(Number(totalSeg?.fieldPercentile))
-    && analysisJson.benchmarkContext?.ageBenchmark?.available === true;
-  // Deliberately demographic-wide: fieldPercentile can differ from the band-relative Benchmark Lens standing
-  // and from the share-pack's all-ages worldwide comparison. Qualify the label when it is age-relative.
-  const rank = esc(formatOverallStanding(totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
-  const rankLabel = usesAgeGroupStanding ? "OVERALL STANDING (AGE GROUP)" : "OVERALL STANDING";
+  // Deliberately age-agnostic: overallFieldPercentile (division + gender, all ages) is the true
+  // overall standing. fieldPercentile can be age-group-scoped and is used only as a fallback here
+  // and for the age-group callout below when it differs substantially from the overall figure.
+  const rank = esc(formatOverallStanding(totalSeg?.overallFieldPercentile ?? totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
+  const rankLabel = "OVERALL STANDING";
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds;
   const targetGapSeconds = Number.isFinite(finishSeconds) && Number.isFinite(selectedTargetSeconds)
     ? finishSeconds - selectedTargetSeconds
@@ -1571,6 +1584,10 @@ function renderSplitTable(section, analysisJson) {
     const stationGapForCard = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
     const runGapForCard = splitGapSeconds(segMap.get("run_time"), hasGoalGroup);
     const totalGapNote = hasGoalGroup ? "vs target" : "vs benchmark median";
+    const cardsGapBandRef = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
+      ? `${bandDisplayLabel(gapComparisonBand)} benchmark`
+      : "benchmark";
+    const cardsFooterNote = `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : `Segment gaps are each measured against the ${cardsGapBandRef} median for that segment, so they may not sum exactly to the total race gap.`}</p>`;
 
     function segmentCardNote(gap) {
       if (!Number.isFinite(gap)) return hasGoalGroup ? "vs target" : "vs benchmark";
@@ -1609,7 +1626,7 @@ function renderSplitTable(section, analysisJson) {
 
     const cards = [
       { key: "total_time", label: "Race time", note: totalGapNote },
-      { key: "work_time", label: "Stations", note: cardNote("work_time", stationGapForCard) },
+      { key: "work_time", label: "Stations", note: segMap.has("work_time") ? cardNote("work_time", stationGapForCard) : "Unavailable" },
       { key: "run_time", label: "Running", note: segMap.has("run_time") ? cardNote("run_time", runGapForCard) : "Unavailable" },
       { key: "roxzone_time", label: "RoxZone", note: cardNote("roxzone_time", roxGapForCard) },
     ];
@@ -1661,7 +1678,7 @@ function renderSplitTable(section, analysisJson) {
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Adjusted", adjustedTime, adjustedGapSeconds, "Without penalties", penaltyPill(adjustedGapSeconds))}</td>
             </tr>
             <tr>
-              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Stations", timeFor(stationSeg), stationGap, cardNote("work_time", stationGap))}</td>
+              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Stations", timeFor(stationSeg), stationGap, stationSeg ? cardNote("work_time", stationGap) : "Unavailable")}</td>
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Penalties", formatTime(totalPenaltySeconds), totalPenaltySeconds, "Fastest win", penaltyPill(totalPenaltySeconds))}</td>
             </tr>
             <tr>
@@ -1669,6 +1686,7 @@ function renderSplitTable(section, analysisJson) {
               <td width="50%" valign="top" style="padding:0 0 0 4px;">${explicitCard("RoxZone", timeFor(roxSeg), roxGap, cardNote("roxzone_time", roxGap))}</td>
             </tr>
           </table>
+          ${cardsFooterNote}
         </td>
       </tr>`;
     }
@@ -1686,6 +1704,7 @@ function renderSplitTable(section, analysisJson) {
             <td width="50%" valign="top" style="padding:0 0 0 4px;">${card(cards[3])}</td>
           </tr>
         </table>
+        ${cardsFooterNote}
       </td>
 	    </tr>`;
 	  }
