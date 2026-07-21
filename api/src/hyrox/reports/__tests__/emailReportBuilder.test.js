@@ -2500,6 +2500,24 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes("Net of penalties"), "running note should stay unchanged when no penalties");
   });
 
+  it("target mode: summary cards (Race time / Stations / Running / RoxZone) carry their own may-not-sum caveat", () => {
+    const htmlBody = renderSplit({}, "target");
+    const raceTimeCardIdx = htmlBody.indexOf(">Race time<");
+    assert.ok(raceTimeCardIdx > -1, "Race time summary card should exist");
+    const caveatIdx = htmlBody.indexOf("may not sum exactly to the total target gap", raceTimeCardIdx);
+    assert.ok(caveatIdx > -1, "a may-not-sum caveat should appear after the summary cards, not just earlier in SEGMENT PROFILE");
+    const nextSectionIdx = htmlBody.indexOf("TARGET PRIORITIES", raceTimeCardIdx);
+    assert.ok(nextSectionIdx === -1 || caveatIdx < nextSectionIdx, "caveat should sit within the summary cards block, before the next section");
+  });
+
+  it("analyse mode: summary cards carry their own may-not-sum caveat", () => {
+    const htmlBody = renderSplit({}, "analyse");
+    const raceTimeCardIdx = htmlBody.indexOf(">Race time<");
+    assert.ok(raceTimeCardIdx > -1, "Race time summary card should exist");
+    const caveatIdx = htmlBody.indexOf("may not sum exactly to the total race gap", raceTimeCardIdx);
+    assert.ok(caveatIdx > -1, "a may-not-sum caveat should appear after the summary cards in analyse mode too");
+  });
+
   it("material penalties: renders adjusted, penalty, and net-running summary cards", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("Without penalties"), "Adjusted card should appear");
