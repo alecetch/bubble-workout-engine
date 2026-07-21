@@ -1202,7 +1202,7 @@ describe("target mode email", () => {
     assert.ok(htmlBody.includes("Top ") && htmlBody.includes("% overall"), "email must contain Top X% overall");
   });
 
-  it("qualifies the email metric-strip standing when it uses age-group population", () => {
+  it("OVERALL STANDING always uses the plain label and the true (non-age-scoped) percentile", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_80",
@@ -1214,15 +1214,42 @@ describe("target mode email", () => {
         ],
       },
       segments: [
-        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
       ],
     });
 
     const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
 
-    assert.match(htmlBody, /OVERALL STANDING \(AGE GROUP\)/i);
-    assert.match(htmlBody, /Top 6% overall/i);
-    assert.doesNotMatch(htmlBody, /Top 14% overall/i);
+    assert.match(htmlBody, /OVERALL STANDING/i);
+    assert.doesNotMatch(htmlBody, /OVERALL STANDING \(AGE GROUP\)/i);
+    assert.match(htmlBody, /Top 25% overall/i, "should use the true overall percentile (75), not the age-scoped one (94)");
+    assert.doesNotMatch(htmlBody, /Top 6% overall/i);
+  });
+
+  it("adds an age-group callout in the hero when age-group standing differs substantially from overall", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_80", primaryBenchmarkGroup: { label: "Open Male" } },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 94, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+
+    assert.match(htmlBody, /Within your age group specifically, this ranks you in the top 6%/i);
+  });
+
+  it("omits the age-group callout when age-group and overall standing are close", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_80", primaryBenchmarkGroup: { label: "Open Male" } },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 70, fieldPercentile: 78, overallFieldPercentile: 75, userSeconds: 4500, benchmarkMedianSeconds: 4800 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
+
+    assert.doesNotMatch(htmlBody, /Within your age group specifically/i);
   });
 
   it("target mode route section does not put run splits in station-efficiency bullet", () => {
