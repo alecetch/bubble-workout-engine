@@ -2117,26 +2117,14 @@ function renderSplitTable(section, analysisJson) {
       </tr>`
     : "";
 
-	  const reducedRows = [
-	    ...rankedGaps.slice(0, 6).map((row) => row.key),
-	    ...SPLIT_TABLE_RACE_ORDER
-	      .map((key) => {
-          const segment = segMap.get(key);
-          return { key, segment, gap: splitOpportunityGap(segment) };
-        })
-	      .filter((row) => row.segment && !isPenaltyAdjustedSegment(row.segment) && Number.isFinite(row.gap) && row.gap < 0)
-      .sort((a, b) => a.gap - b.gap)
-      .slice(0, 1)
-      .map((row) => row.key),
-	  ]
-    .filter((key, index, all) => key && all.indexOf(key) === index)
+  const splitTableRows = SPLIT_TABLE_RACE_ORDER
     .map((key) => {
       const segment = segMap.get(key);
       return segment ? dataRow(segment) : "";
-	    })
-	    .join("");
+    })
+    .join("");
 
-  const reducedTableNote = penaltiesAreMaterial
+  const splitTableNote = penaltiesAreMaterial
     ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;line-height:1.45;margin:8px 0 0;">Penalty time is shown separately above, so the split table focuses on performance gaps rather than execution penalties.</p>`
     : "";
 
@@ -2204,7 +2192,7 @@ function renderSplitTable(section, analysisJson) {
   const splitReportLink = splitReportUrl
     ? `<a href="${esc(splitReportUrl)}" target="_blank" style="display:block;background-color:#e8f7fd;border:1px solid #bdeafb;border-radius:8px;padding:14px 16px;margin-top:12px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;text-decoration:none;">View the full split report &#8594;</a>`
     : "";
-  const reducedGapHeader = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
+  const splitGapHeader = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
     ? `Gap vs ${bandDisplayLabel(gapComparisonBand)}`
     : hasGoalGroup
       ? "Gap vs target"
@@ -2220,19 +2208,19 @@ function renderSplitTable(section, analysisJson) {
 	    ${renderSegmentHighlights()}
     <tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
-        <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">REDUCED SPLIT DETAIL</span>
+	        <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">FULL SPLIT DETAIL</span>
 	        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border:1px solid #e2e8f0;border-collapse:collapse;width:100%;">
           <tr style="background-color:#f1f5f9;border-bottom:2px solid #e2e8f0;">
             <th style="padding:7px 8px 7px 12px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:32%;">Segment</th>
 		            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:16%;">${hasGoalGroup ? "Target basis" : "Comparison"}</th>
 	            <th style="padding:7px 6px;text-align:left;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">${hasGoalGroup ? "Target status" : "Split status"}</th>
             <th style="padding:7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:14%;">Your split</th>
-            <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">${reducedGapHeader}</th>
+            <th style="padding:7px 12px 7px 8px;text-align:right;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:24%;">${splitGapHeader}</th>
           </tr>
           ${penaltyRowHtml}
-          ${reducedRows}
+          ${splitTableRows}
 	        </table>
-        ${reducedTableNote}
+        ${splitTableNote}
 	        ${splitReportLink}
 	      </td>
     </tr>`;
