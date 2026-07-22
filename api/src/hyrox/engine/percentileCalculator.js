@@ -182,6 +182,7 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
       isBiggestLimiter: false,
       isBiggestStrength: false,
       confidence: confidenceFor(stats, metricKey, normalisedSubmission, selection),
+      estimated: normalisedSubmission.splitMap?.get(metricKey)?.estimated === true,
       benchmarkGroupUsed: benchmarkGroupKey ?? null,
       benchmarkValueSeconds: median,
       benchmarkRequested: selection.benchmarkRequested ?? benchmarkContext?.primaryBenchmarkGroup?.benchmarkRequested ?? primaryGroupKey ?? null,

@@ -2840,6 +2840,49 @@ describe("renderSplitTable", () => {
     assert.match(rowSnippet, /color:#94a3b8/);
   });
 
+  it("still populates Comparison and Split status for a repaired (estimated) split, muted rather than dashed", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        row: {
+          confidence: "low",
+          estimated: true,
+          userSeconds: 420,
+          benchmarkMedianSeconds: 368,
+          goalBenchmarkSeconds: 300,
+          timeGapToMedianSeconds: 120,
+          frameGapSeconds: 120,
+        },
+      },
+    });
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    const rowSnippet = detailHtml.slice(detailHtml.indexOf("Row") - 260, detailHtml.indexOf("Row") + 520);
+
+    assert.match(rowSnippet, /~7:00/);
+    assert.match(rowSnippet, /5:00/);
+    assert.match(rowSnippet, /Target opportunity/);
+    assert.doesNotMatch(rowSnippet, /&ndash;<\/td><td[^>]*>&ndash;/);
+  });
+
+  it("dashes Comparison and Split status for a genuinely suppressed low-confidence split (not estimated)", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        row: {
+          confidence: "low",
+          suppressed: true,
+          userSeconds: 420,
+          goalBenchmarkSeconds: 300,
+          timeGapToMedianSeconds: 120,
+          frameGapSeconds: 120,
+        },
+      },
+    });
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    const rowSnippet = detailHtml.slice(detailHtml.indexOf("Row") - 260, detailHtml.indexOf("Row") + 520);
+
+    assert.match(rowSnippet, /~7:00/);
+    assert.match(rowSnippet, /&ndash;<\/td><td[^>]*>&ndash;/);
+  });
+
   it("renders segment profile and remains email-safe", () => {
     const htmlBody = renderSplit();
     assert.match(htmlBody, /SEGMENT PROFILE/);

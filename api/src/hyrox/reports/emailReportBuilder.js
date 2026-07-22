@@ -2050,7 +2050,11 @@ function renderSplitTable(section, analysisJson) {
 
   function pctCells(segment, isAggregate, gap = null) {
     const dash = `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;">&ndash;</td>`;
-    if (isAggregate || segment.confidence === "low") {
+    // A repaired/estimated split still has a real, non-suppressed benchmark comparison -
+    // only the athlete's own time is uncertain, so Comparison/Split status can render (muted)
+    // instead of being blanked like a genuinely suppressed (no-benchmark-data) row.
+    const isEstimatedOnly = segment.estimated === true && !segment.suppressed;
+    if (isAggregate || (segment.confidence === "low" && !isEstimatedOnly)) {
       return `${dash}${dash}`;
     }
     const targetSecs = splitTargetSeconds(segment, hasGoalGroup);
@@ -2075,7 +2079,8 @@ function renderSplitTable(section, analysisJson) {
           targetLabel = "Target opportunity";
         }
       }
-      const tColor = !targetLabel ? "#94a3b8"
+      const tColor = isEstimatedOnly ? "#94a3b8"
+        : !targetLabel ? "#94a3b8"
         : targetLabel === "Ahead of target" ? "#22c55e"
         : targetLabel === "On target" ? "#475569"
         : targetLabel === "Elite target refinement" ? "#6366f1"
@@ -2090,7 +2095,7 @@ function renderSplitTable(section, analysisJson) {
         : isEliteBenchmark && Number.isFinite(gap) && gap > 0 && gap < 90 && rawBsLabel === "Opportunity"
           ? "Refinement"
           : rawBsLabel;
-      const bsColor = ["Next refinement", "Refinement"].includes(bsLabel) ? "#d97706" : bandScoreColor(rawBsLabel);
+      const bsColor = isEstimatedOnly ? "#94a3b8" : ["Next refinement", "Refinement"].includes(bsLabel) ? "#d97706" : bandScoreColor(rawBsLabel);
       bandScoreCell = bsLabel
         ? `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${bsColor};">${splitSafe(bsLabel)}</td>`
         : dash;
