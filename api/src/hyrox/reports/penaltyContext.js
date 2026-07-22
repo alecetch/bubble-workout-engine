@@ -1,3 +1,5 @@
+import { penaltiesAreMaterial as isPenaltyMaterial, totalPenaltySeconds as sumPenaltySeconds } from "../engine/penaltyMateriality.js";
+
 function splitGapSeconds(segment, hasGoalGroup) {
   if (Number.isFinite(segment?.frameGapSeconds)) return segment.frameGapSeconds;
   if (Number.isFinite(segment?.timeGapToExactTargetSeconds)) return segment.timeGapToExactTargetSeconds;
@@ -9,12 +11,10 @@ function splitGapSeconds(segment, hasGoalGroup) {
 
 export function penaltyContext(analysisJson = {}) {
   const penalties = Array.isArray(analysisJson.penalties) ? analysisJson.penalties : [];
-  const totalPenaltySeconds = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
+  const totalPenaltySeconds = sumPenaltySeconds(penalties);
   const totalTimeSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
   const totalGapSeconds = Math.max(0, splitGapSeconds(totalTimeSeg, Boolean(analysisJson.benchmarkContext?.goalBenchmarkGroup)) ?? 0);
-  const penaltiesAreMaterial =
-    totalPenaltySeconds >= 60 ||
-    (totalGapSeconds > 0 && totalPenaltySeconds / totalGapSeconds >= 0.10);
+  const penaltiesAreMaterial = isPenaltyMaterial(totalPenaltySeconds, totalGapSeconds);
   const usePenaltyHero =
     totalPenaltySeconds >= 180 &&
     totalGapSeconds > 0 &&

@@ -103,6 +103,12 @@ function groupFromSelection(selection) {
   };
 }
 
+function isFasterPerformanceBand(candidateBand, referenceBand) {
+  const candidateIndex = PERFORMANCE_BAND_ORDER.indexOf(candidateBand);
+  const referenceIndex = PERFORMANCE_BAND_ORDER.indexOf(referenceBand);
+  return candidateIndex >= 0 && referenceIndex >= 0 && candidateIndex < referenceIndex;
+}
+
 function genderFromDoublesDivision(division) {
   if (division.endsWith("_male")) return "male";
   if (division.endsWith("_female")) return "female";
@@ -205,6 +211,8 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
       primaryBenchmarkGroup: null,
       demographicBenchmarkGroup: null,
       achievedBand: null,
+      escalationBasisBand: null,
+      escalationBasisBandGroup: null,
       nextBand: null,
       nextBandGroup: null,
       confidenceLabel: null,
@@ -321,6 +329,8 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
       primaryBenchmarkGroup: null,
       demographicBenchmarkGroup: null,
       achievedBand: null,
+      escalationBasisBand: null,
+      escalationBasisBandGroup: null,
       nextBand: null,
       nextBandGroup: null,
       confidenceLabel: null,
@@ -357,7 +367,27 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
       const bandSelection = selectBenchmark(bandRequest, "total_time", "overallPercentile", { performanceTarget: true });
 
       if (!bandSelection.suppressed) {
-        const nextBand = nextPerformanceBand(achievedBand);
+        let escalationBasisBand = achievedBand;
+        let escalationBasisSelection = bandSelection;
+        const adjustedFinishTimeSeconds = Number(options.adjustedFinishTimeSeconds);
+        const adjustedAchievedBand = Number.isFinite(adjustedFinishTimeSeconds)
+          ? performanceBandForGoal(adjustedFinishTimeSeconds, { includeOver105: true })
+          : null;
+
+        if (isFasterPerformanceBand(adjustedAchievedBand, achievedBand)) {
+          const adjustedBandSelection = selectBenchmark(
+            { datasetVersion: benchmarkDatasetVersion, division, gender: performanceGender, performanceBand: adjustedAchievedBand },
+            "total_time",
+            "overallPercentile",
+            { performanceTarget: true },
+          );
+          if (!adjustedBandSelection.suppressed) {
+            escalationBasisBand = adjustedAchievedBand;
+            escalationBasisSelection = adjustedBandSelection;
+          }
+        }
+
+        const nextBand = nextPerformanceBand(escalationBasisBand);
         const nextBandSelection = nextBand
           ? selectBenchmark({ datasetVersion: benchmarkDatasetVersion, division, gender: performanceGender, performanceBand: nextBand }, "total_time", "overallPercentile", { performanceTarget: true })
           : null;
@@ -366,6 +396,9 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
           primaryBenchmarkGroup: groupFromSelection(bandSelection),
           demographicBenchmarkGroup: groupFromSelection(selected),
           achievedBand,
+          escalationBasisBand,
+          escalationBasisBandGroup: groupFromSelection(escalationBasisSelection),
+          adjustedAchievedBand: adjustedAchievedBand ?? null,
           nextBand,
           nextBandGroup: groupFromSelection(nextBandSelection),
           confidenceLabel: confidenceLabelFromSampleSize(bandSelection.sampleSize),
@@ -411,6 +444,8 @@ export function selectBenchmarkGroups(normalisedSubmission, options = {}) {
     primaryBenchmarkGroup: selectedPrimaryGroup,
     demographicBenchmarkGroup: null,
     achievedBand: isAnalyseMode ? achievedBand : null,
+    escalationBasisBand: isAnalyseMode ? achievedBand : null,
+    escalationBasisBandGroup: isAnalyseMode ? selectedPrimaryGroup : null,
     nextBand: null,
     nextBandGroup: null,
     confidenceLabel: isAnalyseMode ? confidenceLabel : null,

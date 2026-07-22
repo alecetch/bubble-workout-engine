@@ -75,6 +75,11 @@ function segmentSeconds(normalisedSubmission, metricKey) {
   return normalisedSubmission.splitMap?.get(metricKey)?.timeSeconds ?? null;
 }
 
+function segmentSecondsNetOfPenalty(normalisedSubmission, metricKey) {
+  const adjusted = normalisedSubmission.penaltyAdjustedSplitMap?.get(metricKey)?.timeSeconds;
+  return Number.isFinite(adjusted) ? adjusted : segmentSeconds(normalisedSubmission, metricKey);
+}
+
 function confidenceFor(stats, metricKey, normalisedSubmission, selection) {
   if (!stats || selection?.suppressed) return "low";
   if (metricKey.startsWith("roxzone_") && normalisedSubmission.roxzoneMode === "inferred_total") return "low";
@@ -135,6 +140,7 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
   for (const metricKey of ORDERED_METRICS) {
     const userSeconds = segmentSeconds(normalisedSubmission, metricKey);
     if (!Number.isFinite(userSeconds)) continue;
+    const userSecondsNetOfPenalty = segmentSecondsNetOfPenalty(normalisedSubmission, metricKey);
 
     const metricType = SEGMENT_TYPE_BY_KEY.get(metricKey) ?? "aggregate";
     const isBandMode = Boolean(benchmarkContext?.primaryBenchmarkGroup?.performanceBand);
@@ -170,6 +176,7 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
       label: getSegmentLabel(metricKey),
       type: metricType,
       userSeconds,
+      userSecondsNetOfPenalty,
       benchmarkMedianSeconds: median,
       benchmarkTopQuartileSeconds: topQuartile,
       goalBenchmarkSeconds: goal,
@@ -177,6 +184,9 @@ export function calculateSegmentStats(normalisedSubmission, benchmarkContext) {
       fieldPercentile,
       overallFieldPercentile,
       timeGapToMedianSeconds: Number.isFinite(median) ? userSeconds - median : null,
+      timeGapToMedianSecondsNetOfPenalty: Number.isFinite(median) && Number.isFinite(userSecondsNetOfPenalty)
+        ? userSecondsNetOfPenalty - median
+        : null,
       timeGapToGoalSeconds: Number.isFinite(goal) ? userSeconds - goal : Number.isFinite(median) ? userSeconds - median : null,
       rankWithinUserSegments: null,
       isBiggestLimiter: false,

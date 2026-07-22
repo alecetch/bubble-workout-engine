@@ -8,13 +8,17 @@ function segment(segmentStats, key) {
   return segmentStats.find((row) => row.segmentKey === key);
 }
 
+function benchmarkGapSeconds(row) {
+  return row?.timeGapToMedianSecondsNetOfPenalty ?? row?.timeGapToMedianSeconds ?? null;
+}
+
 export function classifyArchetype(scores, normalisedSubmission, runFadeAnalysis, roxzoneAnalysis = null, limiter = null, segmentStats = []) {
   const engine = scores.engineScore;
   const strength = scores.strengthScore;
   const execution = scores.executionScore;
   const previousRaces = Number(normalisedSubmission.athleteContext?.previousHyroxRaces ?? 0);
   const wallBalls = segment(segmentStats, "wall_balls");
-  const stationGaps = segmentStats.filter((row) => row.type === "station" && Number.isFinite(row.timeGapToMedianSeconds));
+  const stationGaps = segmentStats.filter((row) => row.type === "station" && Number.isFinite(benchmarkGapSeconds(row)));
 
   if (Number.isFinite(engine) && engine >= 65 && Number.isFinite(strength) && strength < 55) {
     return result("strong_runner_station_limited", "Strong runner, station limited", "high", [`Engine score ${engine}`, `Strength score ${strength}`]);
@@ -36,15 +40,16 @@ export function classifyArchetype(scores, normalisedSubmission, runFadeAnalysis,
   }
   if (
     (scores.overallPerformanceScore ?? 0) > BENCHMARK_THRESHOLDS.eliteOverallPercentile &&
-    stationGaps.every((row) => row.timeGapToMedianSeconds < BENCHMARK_THRESHOLDS.eliteMaxStationGapSeconds)
+    stationGaps.every((row) => benchmarkGapSeconds(row) < BENCHMARK_THRESHOLDS.eliteMaxStationGapSeconds)
   ) {
     return result("elite_marginal_gains", "Advanced marginal gains", "medium", [`Overall score ${scores.overallPerformanceScore}`, "All station gaps under 30s"]);
   }
   if (Number.isFinite(engine) && Number.isFinite(strength) && Math.abs(engine - strength) < 15 && (execution ?? 100) >= 45) {
     return result("balanced_hybrid", "Balanced hybrid", "medium", [`Engine score ${engine}`, `Strength score ${strength}`]);
   }
-  if (wallBalls?.timeGapToMedianSeconds > BENCHMARK_THRESHOLDS.wallBallBottleneckGapSeconds) {
-    return result("wall_ball_bottleneck", "Wall ball bottleneck", "medium", [`Wall balls gap ${Math.round(wallBalls.timeGapToMedianSeconds)}s`]);
+  const wallBallsGap = benchmarkGapSeconds(wallBalls);
+  if (wallBallsGap > BENCHMARK_THRESHOLDS.wallBallBottleneckGapSeconds) {
+    return result("wall_ball_bottleneck", "Wall ball bottleneck", "medium", [`Wall balls gap ${Math.round(wallBallsGap)}s`]);
   }
   return result("balanced_hybrid", "Balanced hybrid", "low", ["No dominant limiter pattern"]);
 }
