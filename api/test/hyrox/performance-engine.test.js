@@ -10,13 +10,14 @@ import { isIndividualDivision } from "../../src/hyrox/confidence/fallbackRules.j
 import { setBenchmarkData } from "../../src/hyrox/engine/benchmarkService.js";
 import { analyseSubmission } from "../../src/hyrox/engine/hyroxAnalysisEngine.js";
 import { normaliseSubmission } from "../../src/hyrox/engine/segmentNormaliser.js";
-import { calculatePercentile } from "../../src/hyrox/engine/percentileCalculator.js";
+import { calculatePercentile, calculateSegmentStats } from "../../src/hyrox/engine/percentileCalculator.js";
 import { calculateScores } from "../../src/hyrox/engine/scoreCalculator.js";
 import { findBiggestLimiter, findBiggestStrength, calculateTimePotential } from "../../src/hyrox/engine/limiterService.js";
 import { analyseRunFade } from "../../src/hyrox/engine/runFadeAnalyser.js";
 import { analyseRoxzone } from "../../src/hyrox/engine/roxzoneAnalyser.js";
 import { classifyArchetype } from "../../src/hyrox/engine/archetypeClassifier.js";
 import { buildEmailReport } from "../../src/hyrox/reports/emailReportBuilder.js";
+import { buildBrowserSummary } from "../../src/hyrox/reports/browserSummaryBuilder.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +26,7 @@ const GROUP_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:30-34";
 const FALLBACK_KEY = "hyrox:historical_hyrox_2026_06_v1:open:male:all";
 const GOAL_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_70:open:male";
 const SUB_75_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_75:open:male";
+const SUB_80_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_80:open:male";
 const SUB_65_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_65:open:male";
 const SUB_60_BAND_KEY = "hyrox:historical_hyrox_2026_06_v1:band:sub_60:open:male";
 const DOUBLES_MIXED_KEY = "hyrox:historical_hyrox_2026_06_v1:doubles_mixed:mixed:30-34";
@@ -65,6 +67,28 @@ function readFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), "utf8"));
 }
 
+function completeSubmission({ splitOverrides = {}, penalties = [], calculatorMode = "target" } = {}) {
+  const splitSeconds = {
+    ...Object.fromEntries(RUN_KEYS.map((key) => [key, BASE_MEDIANS[key]])),
+    ...Object.fromEntries(STATION_KEYS.map((key) => [key, BASE_MEDIANS[key]])),
+    ...Object.fromEntries(ROXZONE_KEYS.map((key) => [key, BASE_MEDIANS[key]])),
+    ...splitOverrides,
+  };
+  const splits = [...RUN_KEYS, ...STATION_KEYS, ...ROXZONE_KEYS].map((segmentKey) => ({
+    segmentKey,
+    timeSeconds: splitSeconds[segmentKey],
+  }));
+  const finishTimeSeconds = Object.values(splitSeconds).reduce((sum, value) => sum + value, 0);
+  return {
+    athlete: { sex: "male", ageGroup: "30-34", division: "open" },
+    race: { finishTimeSeconds, division: "open" },
+    splits,
+    penalties,
+    roxzoneMode: "explicit_splits",
+    calculatorMode,
+  };
+}
+
 function metric(groupKey, metricKey, medianSeconds, sampleSize = 500) {
   return {
     groupKey,
@@ -93,6 +117,7 @@ function seedBenchmarks() {
     metrics.push(metric(FALLBACK_KEY, metricKey, median));
     metrics.push(metric(GOAL_BAND_KEY, metricKey, metricKey === "total_time" ? 4140 : median));
     metrics.push(metric(SUB_75_BAND_KEY, metricKey, metricKey === "total_time" ? 4440 : median));
+    metrics.push(metric(SUB_80_BAND_KEY, metricKey, metricKey === "total_time" ? 4680 : median + 20));
     metrics.push(metric(SUB_65_BAND_KEY, metricKey, metricKey === "total_time" ? 3900 : median - 60));
     metrics.push(metric(SUB_60_BAND_KEY, metricKey, metricKey === "total_time" ? 3420 : median - 30));
   }
@@ -100,6 +125,7 @@ function seedBenchmarks() {
   metrics.push(metric(FALLBACK_KEY, "run_fade_pct", 5));
   metrics.push(metric(GOAL_BAND_KEY, "run_fade_pct", 5));
   metrics.push(metric(SUB_75_BAND_KEY, "run_fade_pct", 5));
+  metrics.push(metric(SUB_80_BAND_KEY, "run_fade_pct", 5));
   metrics.push(metric(SUB_65_BAND_KEY, "run_fade_pct", 5));
   metrics.push(metric(SUB_60_BAND_KEY, "run_fade_pct", 5));
   setBenchmarkData({
@@ -108,6 +134,7 @@ function seedBenchmarks() {
       { groupKey: FALLBACK_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", ageGroup: null, fallbackLevel: 1, sampleSize: 600 },
       { groupKey: GOAL_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_70", sampleSize: 500 },
       { groupKey: SUB_75_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_75", sampleSize: 500 },
+      { groupKey: SUB_80_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_80", sampleSize: 500 },
       { groupKey: SUB_65_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_65", sampleSize: 500 },
       { groupKey: SUB_60_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_60", sampleSize: 500 },
     ],
@@ -302,6 +329,88 @@ test("target time attaches exact segment targets and uses exact limiter gap", ()
   );
 });
 
+test("calculateSegmentStats adds net-of-penalty fields without changing raw gaps", () => {
+  const submission = completeSubmission({
+    splitOverrides: { farmers_carry: 320, wall_balls: 370 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 300 }],
+  });
+  const stats = calculateSegmentStats(normaliseSubmission(submission), {
+    primaryBenchmarkGroup: {
+      key: GROUP_KEY,
+      datasetVersion: "historical_hyrox_2026_06_v1",
+      division: "open",
+      gender: "male",
+      ageGroup: "30-34",
+    },
+  });
+  const farmers = stats.find((segment) => segment.segmentKey === "farmers_carry");
+  const wallBalls = stats.find((segment) => segment.segmentKey === "wall_balls");
+
+  assert.equal(farmers.userSeconds, 320);
+  assert.equal(farmers.timeGapToMedianSeconds, 200);
+  assert.equal(farmers.userSecondsNetOfPenalty, 20);
+  assert.equal(farmers.timeGapToMedianSecondsNetOfPenalty, -100);
+  assert.equal(wallBalls.userSecondsNetOfPenalty, wallBalls.userSeconds);
+  assert.equal(wallBalls.timeGapToMedianSecondsNetOfPenalty, wallBalls.timeGapToMedianSeconds);
+});
+
+test("station breakdown ranks by net-of-penalty gap so a penalized strength is not a weakness", () => {
+  const analysis = analyseSubmission(completeSubmission({
+    splitOverrides: { farmers_carry: 320, wall_balls: 370 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 300 }],
+  }));
+  const farmersSegment = analysis.segments.find((segment) => segment.segmentKey === "farmers_carry");
+  const farmersBreakdown = analysis.stationBreakdown.find((station) => station.segmentKey === "farmers_carry");
+  const weakStations = analysis.stationBreakdown.filter((station) => station.timeGapSeconds > 0).map((station) => station.segmentKey);
+
+  assert.equal(farmersSegment.timeGapToMedianSeconds, 200);
+  assert.equal(farmersSegment.timeGapToMedianSecondsNetOfPenalty, -100);
+  assert.equal(farmersSegment.frameGapSeconds, 200);
+  assert.equal(farmersSegment.frameGapNetOfPenaltySeconds, -100);
+  assert.equal(farmersBreakdown.timeGapSeconds, -100);
+  assert.equal(weakStations.includes("farmers_carry"), false);
+  assert.equal(weakStations[0], "wall_balls");
+});
+
+test("biggest limiter and strength use net-of-penalty gaps", () => {
+  const segments = [
+    { segmentKey: "farmers_carry", label: "Farmers Carry", type: "station", frameGapSeconds: 200, frameGapNetOfPenaltySeconds: -100, timeGapToMedianSeconds: 200, percentile: 20, confidence: "high" },
+    { segmentKey: "wall_balls", label: "Wall Balls", type: "station", frameGapSeconds: 70, frameGapNetOfPenaltySeconds: 70, timeGapToMedianSeconds: 70, percentile: 35, confidence: "high" },
+  ];
+  const limiter = findBiggestLimiter(segments);
+  const strength = findBiggestStrength(segments);
+
+  assert.equal(limiter.segmentKey, "wall_balls");
+  assert.equal(limiter.timeGapSeconds, 70);
+  assert.equal(strength.segmentKey, "farmers_carry");
+  assert.equal(strength.timeAdvantageSeconds, 100);
+});
+
+test("browser summary hero inherits the penalty-adjusted limiter from analysis headline", () => {
+  const analysis = analyseSubmission(completeSubmission({
+    splitOverrides: { farmers_carry: 320, wall_balls: 370 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 300 }],
+  }));
+  const summary = buildBrowserSummary(analysis, [], {}, analysis.calculatorMode);
+
+  assert.equal(analysis.headline.biggestLimiter.segmentKey, "wall_balls");
+  assert.notEqual(analysis.headline.biggestLimiter.segmentKey, "farmers_carry");
+  assert.equal(summary.heroInsight.title, "Wall Balls is your biggest opportunity");
+  assert.equal(summary.biggestLimiter.label, "Wall Balls");
+});
+
+test("no penalties leave net-of-penalty fields equal to raw fields", () => {
+  const analysis = analyseSubmission(completeSubmission());
+
+  for (const segment of analysis.segments) {
+    assert.equal(segment.userSecondsNetOfPenalty, segment.userSeconds, `${segment.segmentKey} user seconds should be unchanged`);
+    assert.equal(segment.timeGapToMedianSecondsNetOfPenalty, segment.timeGapToMedianSeconds, `${segment.segmentKey} median gap should be unchanged`);
+    assert.equal(segment.frameGapNetOfPenaltySeconds, segment.frameGapSeconds, `${segment.segmentKey} frame gap should be unchanged`);
+  }
+  assert.equal(analysis.headline.biggestLimiter, null);
+  assert.equal(analysis.athleteArchetype.key, "balanced_hybrid");
+});
+
 test("analyse mode uses achieved band cohort for top-level and segment gaps", () => {
   const analysis = analyseSubmission({
     ...readFixture("elite_small_gaps.json"),
@@ -382,6 +491,88 @@ test("analyse mode switches frame gaps to next band when athlete beats achieved 
   assert.equal(total.frameGapSeconds, 147);
   assert.equal(wallBalls.nextBandMedianSeconds, 240);
   assert.equal(wallBalls.frameGapSeconds, 10);
+});
+
+test("analyse mode uses penalty-adjusted band as escalation basis when material penalties cross a bracket", () => {
+  const fixture = readFixture("elite_small_gaps.json");
+  const analysis = analyseSubmission({
+    ...fixture,
+    race: { ...fixture.race, finishTimeSeconds: 77 * 60 + 7 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 300 }],
+    calculatorMode: "analyse",
+  });
+  const total = analysis.segments.find((segment) => segment.segmentKey === "total_time");
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.primaryBenchmarkGroup.key, SUB_80_BAND_KEY);
+  assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_75");
+  assert.equal(analysis.benchmarkContext.escalationBasisBandGroup.key, SUB_75_BAND_KEY);
+  assert.equal(analysis.benchmarkContext.nextBand, "sub_70");
+  assert.equal(analysis.benchmarkContext.nextBandGroup.key, GOAL_BAND_KEY);
+  assert.equal(analysis.benchmarkContext.analysisFrame.comparisonBand, "sub_70");
+  assert.equal(analysis.benchmarkContext.analysisFrame.gapToBandMedianSeconds, -113);
+  assert.equal(total.benchmarkGroupUsed, SUB_80_BAND_KEY);
+  assert.equal(total.nextBandMedianSeconds, 4140);
+});
+
+test("material penalties do not change escalation basis when adjusted time stays in the raw band", () => {
+  const fixture = readFixture("elite_small_gaps.json");
+  const analysis = analyseSubmission({
+    ...fixture,
+    race: { ...fixture.race, finishTimeSeconds: 77 * 60 + 7 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 60 }],
+    calculatorMode: "analyse",
+  });
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.nextBand, "sub_75");
+  assert.equal(analysis.benchmarkContext.analysisFrame.comparisonBand, "sub_75");
+});
+
+test("non-material penalties do not change escalation basis", () => {
+  const fixture = readFixture("elite_small_gaps.json");
+  const analysis = analyseSubmission({
+    ...fixture,
+    race: { ...fixture.race, finishTimeSeconds: 77 * 60 + 7 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 20 }],
+    calculatorMode: "analyse",
+  });
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.nextBand, "sub_75");
+});
+
+test("suppressed penalty-adjusted escalation basis falls back to raw-band behavior", () => {
+  const metrics = [];
+  for (const [metricKey, median] of Object.entries(BASE_MEDIANS)) {
+    metrics.push(metric(GROUP_KEY, metricKey, median, 500));
+    metrics.push(metric(FALLBACK_KEY, metricKey, median, 600));
+    metrics.push(metric(SUB_80_BAND_KEY, metricKey, metricKey === "total_time" ? 4680 : median + 20, 500));
+  }
+  setBenchmarkData({
+    groups: [
+      { groupKey: GROUP_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", ageGroup: "30-34", sampleSize: 500 },
+      { groupKey: FALLBACK_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", ageGroup: null, fallbackLevel: 1, sampleSize: 600 },
+      { groupKey: SUB_80_BAND_KEY, datasetVersion: "historical_hyrox_2026_06_v1", division: "open", gender: "male", performanceBand: "sub_80", sampleSize: 500 },
+    ],
+    metrics,
+  });
+
+  const fixture = readFixture("elite_small_gaps.json");
+  const analysis = analyseSubmission({
+    ...fixture,
+    race: { ...fixture.race, finishTimeSeconds: 77 * 60 + 7 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 300 }],
+    calculatorMode: "analyse",
+  });
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.escalationBasisBandGroup.key, SUB_80_BAND_KEY);
+  assert.equal(analysis.benchmarkContext.nextBand, "sub_75");
+  assert.equal(analysis.benchmarkContext.nextBandGroup, null);
 });
 
 test("missing age group uses fallback benchmark", () => {
@@ -542,6 +733,25 @@ test("archetype classifier uses configured wall-ball segment-gap threshold", () 
   assert.equal(above.key, "wall_ball_bottleneck");
 });
 
+test("archetype classifier uses net-of-penalty wall-ball gaps", () => {
+  const threshold = BENCHMARK_THRESHOLDS.wallBallBottleneckGapSeconds;
+  const archetype = classifyArchetype(
+    { engineScore: 56, strengthScore: 72, executionScore: 50 },
+    { athleteContext: {} },
+    { available: false },
+    null,
+    null,
+    [{
+      segmentKey: "wall_balls",
+      type: "station",
+      timeGapToMedianSeconds: threshold + 100,
+      timeGapToMedianSecondsNetOfPenalty: threshold - 1,
+    }],
+  );
+
+  assert.notEqual(archetype.key, "wall_ball_bottleneck");
+});
+
 test("archetype classifier uses configured elite marginal-gains thresholds", () => {
   const scoreThreshold = BENCHMARK_THRESHOLDS.eliteOverallPercentile;
   const stationGapThreshold = BENCHMARK_THRESHOLDS.eliteMaxStationGapSeconds;
@@ -578,6 +788,25 @@ test("archetype classifier uses configured elite marginal-gains thresholds", () 
   assert.notEqual(belowScore.key, "elite_marginal_gains");
   assert.notEqual(gapAtThreshold.key, "elite_marginal_gains");
   assert.equal(aboveScoreWithGapsBelowThreshold.key, "elite_marginal_gains");
+});
+
+test("archetype classifier uses net-of-penalty station gaps for elite checks", () => {
+  const stationGapThreshold = BENCHMARK_THRESHOLDS.eliteMaxStationGapSeconds;
+  const archetype = classifyArchetype(
+    { overallPerformanceScore: BENCHMARK_THRESHOLDS.eliteOverallPercentile + 1, engineScore: 56, strengthScore: 72, executionScore: 50 },
+    { athleteContext: {} },
+    { available: false },
+    null,
+    null,
+    [{
+      segmentKey: "ski_erg",
+      type: "station",
+      timeGapToMedianSeconds: stationGapThreshold + 100,
+      timeGapToMedianSecondsNetOfPenalty: stationGapThreshold - 1,
+    }],
+  );
+
+  assert.equal(archetype.key, "elite_marginal_gains");
 });
 
 test("archetype classifier fires first_timer_execution_leak for zero races and poor roxzone", () => {

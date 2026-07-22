@@ -15,7 +15,7 @@ function confidenceAboveLow(segment) {
 // age-group median. This keeps the headline limiter consistent with what the split table shows.
 function effectiveGapSeconds(segment) {
   if (!segment) return null;
-  return segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
+  return segment.frameGapNetOfPenaltySeconds ?? segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
 }
 
 function isRoxzoneSegment(segment) {

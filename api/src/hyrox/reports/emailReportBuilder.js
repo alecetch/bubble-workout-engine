@@ -1,6 +1,6 @@
 import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatTime, regionalContextLine } from "./copyFormatter.js";
 import { buildHeroCopy } from "../interpretation/hyroxInterpretationEngine.js";
-import { PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
+import { nextPerformanceBand, PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
 import { compareLimiterSegments, findBiggestLimiter } from "../engine/limiterService.js";
 import { RUN_KEYS } from "../config/segmentMap.js";
 import { penaltyContext } from "./penaltyContext.js";
@@ -426,13 +426,32 @@ function resolvedComparisonBandInfo(analysisJson = {}, fallbackAchievedBand = nu
   const benchmarkContext = analysisJson.benchmarkContext ?? {};
   const achievedBand = benchmarkContext.achievedBand ?? fallbackAchievedBand ?? null;
   const analysisFrame = benchmarkContext.analysisFrame ?? {};
-  const frame = analysisFrame.frame;
-  const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
-  const useNextBandGaps = isNextBandFrame || analysisFrame.useNextBandGaps === true;
-  const comparisonBand = useNextBandGaps ? (analysisFrame.comparisonBand ?? achievedBand) : achievedBand;
-  const isEscalated = useNextBandGaps && Boolean(comparisonBand) && comparisonBand !== achievedBand;
-  const group = isEscalated ? benchmarkContext.nextBandGroup : benchmarkContext.primaryBenchmarkGroup;
-  return { achievedBand, comparisonBand: comparisonBand ?? achievedBand, isEscalated, group };
+  const comparisonBand = analysisFrame.comparisonBand ?? achievedBand;
+  const isEscalated = Boolean(comparisonBand) && comparisonBand !== achievedBand;
+  const escalationBasisBand = benchmarkContext.escalationBasisBand ?? achievedBand;
+  const group = comparisonBand === achievedBand
+    ? benchmarkContext.primaryBenchmarkGroup
+    : comparisonBand === escalationBasisBand
+      ? benchmarkContext.escalationBasisBandGroup
+      : benchmarkContext.nextBandGroup;
+  const plainNextBand = nextPerformanceBand(achievedBand);
+  const penaltyAdjustedReclassification = isEscalated &&
+    escalationBasisBand &&
+    escalationBasisBand !== achievedBand &&
+    comparisonBand === escalationBasisBand;
+  const penaltyAdjustedEscalation = isEscalated &&
+    escalationBasisBand &&
+    escalationBasisBand !== achievedBand &&
+    comparisonBand !== plainNextBand;
+  return {
+    achievedBand,
+    escalationBasisBand,
+    comparisonBand: comparisonBand ?? achievedBand,
+    isEscalated,
+    penaltyAdjustedReclassification,
+    penaltyAdjustedEscalation,
+    group,
+  };
 }
 
 function methodNoteComparisonGroup(analysisJson = {}, calculatorMode = "target") {
@@ -464,7 +483,7 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   const finishTime = formatTime(finishSeconds);
   if (!finishTime) return "";
 
-  const { comparisonBand, isEscalated, group } = resolvedComparisonBandInfo(analysisJson, currentBand);
+  const { comparisonBand, escalationBasisBand, isEscalated, penaltyAdjustedReclassification, penaltyAdjustedEscalation, group } = resolvedComparisonBandInfo(analysisJson, currentBand);
   const comparisonGroupLabel = benchmarkLensComparisonGroupLabel(comparisonBand, group);
   const totalSeg = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "total_time");
 
@@ -487,7 +506,12 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   const lensBandLabel = bandDisplayLabel(currentBand);
 
   let explanationText;
-  if (isEscalated && lensCompBandLabel) {
+  if (penaltyAdjustedReclassification && lensCompBandLabel) {
+    explanationText = `The standing above ranks you within the ${lensBandLabel} band. Because your penalty-adjusted time falls in the ${lensCompBandLabel} band, gaps below are measured against that band instead of your official ${lensBandLabel} classification.`;
+  } else if (penaltyAdjustedEscalation && lensCompBandLabel) {
+    const basisLabel = bandDisplayLabel(escalationBasisBand);
+    explanationText = `The standing above ranks you within the ${lensBandLabel} band. Because your penalty-adjusted time already beats the ${basisLabel} median, gaps below are measured against the ${lensCompBandLabel} band instead - that's the level your execution is really at.`;
+  } else if (isEscalated && lensCompBandLabel) {
     explanationText = `The standing above ranks you within the ${lensBandLabel} band. Because you've already beaten that band's median, the station and run gaps further down are measured against the ${lensCompBandLabel} band instead — that's the next benchmark worth chasing.`;
   } else if (isHighInBand && currentBand === "sub_60") {
     explanationText = "You are high within the sub-60 band — HYROX's fastest benchmark tier, so there is no faster band to compare against. This standing is against the top of the field.";
@@ -832,8 +856,15 @@ function renderPenaltyCallout(section, interpretation = null, analysisJson = {})
     .filter(Boolean)
     .map((item) => `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(enforceTone(String(item)))}</p>`)
     .join("");
+  const penaltySegMap = new Map((analysisJson.segments ?? []).map((segment) => [segment.segmentKey, segment]));
+  const { runPenaltySeconds, runPenaltyLabels, nonRunPenaltyLabels } = penaltyLabelBreakdown(analysisJson.penalties, penaltySegMap);
+  const penaltySummarySentence = runPenaltySeconds > 0 && nonRunPenaltyLabels.length === 0
+    ? `${esc(formatGain(totalPenaltySeconds))} of penalties were recorded on ${esc(joinWithAnd(runPenaltyLabels))}. Treat this separately from running: it is execution leakage, not aerobic capacity.`
+    : nonRunPenaltyLabels.length > 0 && runPenaltySeconds === 0
+      ? `${esc(formatGain(totalPenaltySeconds))} of penalties were recorded on ${esc(joinWithAnd(nonRunPenaltyLabels))}. Treat this as station execution leakage, not a fitness limiter.`
+      : `${esc(formatGain(totalPenaltySeconds))} of penalties were recorded. Treat this as execution leakage, not a fitness limiter.`;
   const materialParagraphs = penaltiesAreMaterial
-    ? `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${esc(formatGain(totalPenaltySeconds))} of penalties were recorded. Treat this separately from running: it is execution leakage, not aerobic capacity.</p>`
+    ? `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:0 0 10px;">${penaltySummarySentence}</p>`
     : paragraphs;
   const adjustedLine = adjustedRaceTimeSeconds != null
     ? `<p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.65;margin:10px 0 0;">Adjusted race time without penalties: <strong>${esc(formatTime(adjustedRaceTimeSeconds))}</strong>.</p>`
@@ -867,7 +898,7 @@ function renderAthleteBackground(section) {
 
 function renderRecommendations(section, analysisJson = {}) {
   const richRecs = Array.isArray(section.richRecommendations) ? section.richRecommendations : null;
-  const { penaltiesAreMaterial: hasMaterialPenalties } = penaltyContext(analysisJson);
+  const { penaltiesAreMaterial: hasMaterialPenalties, penalties: penaltyEntries } = penaltyContext(analysisJson);
   const stationLosses = (analysisJson.segments ?? [])
     .filter((segment) => segment.type === "station" && isConfidentSegment(segment))
     .map((segment) => ({
@@ -877,16 +908,28 @@ function renderRecommendations(section, analysisJson = {}) {
     .filter((row) => Number.isFinite(row.gap) && row.gap > 30)
     .sort((a, b) => b.gap - a.gap);
   const limiter = analysisJson.headline?.biggestLimiter?.label ?? stationLosses[0]?.label;
-  const priorities = hasMaterialPenalties
-    ? [
-        "Reclaim penalty time through station standards",
-        "Sandbag lunge capacity under fatigue",
-        "Sled pull efficiency and grip control",
-        "Posterior-chain strength endurance",
-        "Race-fatigued station practice",
-      ]
-    : [];
-  if (!hasMaterialPenalties) {
+  const priorities = [];
+  let topNonPenaltyOpportunityLabel = null;
+  if (hasMaterialPenalties) {
+    priorities.push("Reclaim penalty time through station standards");
+    // The penalized segment already has its own bullet above - don't also name it here as
+    // a separate "needs work" opportunity when the rest of its data may look fine or strong.
+    const penalizedKeys = new Set(
+      (penaltyEntries ?? []).map((penalty) => penalty.segmentKey ?? penalty.runKey ?? penalty.station).filter(Boolean).map(String),
+    );
+    const nonPenaltyLosses = (analysisJson.segments ?? [])
+      .filter((segment) => (segment.type === "station" || segment.type === "run") && isConfidentSegment(segment) && !penalizedKeys.has(segment.segmentKey))
+      .map((segment) => ({
+        label: segment.label,
+        gap: segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds,
+      }))
+      .filter((row) => Number.isFinite(row.gap) && row.gap > 30)
+      .sort((a, b) => b.gap - a.gap);
+    topNonPenaltyOpportunityLabel = nonPenaltyLosses[0]?.label ?? null;
+    for (const row of nonPenaltyLosses.slice(0, 2)) priorities.push(`${row.label} efficiency`);
+    priorities.push("Posterior-chain strength endurance");
+    priorities.push("Race-fatigued station practice");
+  } else {
     if (limiter) priorities.push(`${limiter} capacity and consistency`);
     priorities.push("Quad-dominant strength endurance");
     for (const row of stationLosses.slice(1, 3)) priorities.push(`${row.label} efficiency`);
@@ -905,7 +948,9 @@ function renderRecommendations(section, analysisJson = {}) {
     return stationLosses[0]?.label ?? null;
   })();
   const primaryTitle = hasMaterialPenalties
-    ? "Clean execution first, then sandbag durability."
+    ? (topNonPenaltyOpportunityLabel
+        ? `Clean execution first, then ${enforceTone(topNonPenaltyOpportunityLabel)} efficiency.`
+        : "Clean execution first, then targeted strength-endurance.")
     : headlineStationLabel
       ? `${enforceTone(headlineStationLabel)} under fatigue`
       : (richRecs?.[0]?.title
@@ -1061,6 +1106,23 @@ function joinWithAnd(items) {
   return `${list.slice(0, -1).join(", ")}, and ${list[list.length - 1]}`;
 }
 
+// Penalties can land on a run OR a station (e.g. "ROWING (120s)") - copy that assumes every
+// penalty is a run penalty is wrong whenever it isn't, so every penalty-narrative site needs
+// to know which segments a penalty actually belongs to before naming one.
+function penaltyLabelBreakdown(penalties, segMap) {
+  const list = Array.isArray(penalties) ? penalties : [];
+  const map = segMap instanceof Map ? segMap : new Map();
+  const penalizedKeys = [...new Set(
+    list.map((penalty) => penalty.segmentKey ?? penalty.runKey ?? penalty.station).filter(Boolean).map(String),
+  )];
+  const runPenaltySeconds = penalizedKeys
+    .filter((key) => RUN_KEYS.includes(key))
+    .reduce((sum, key) => sum + list.reduce((s, p) => (String(p.segmentKey ?? p.runKey ?? p.station) === key ? s + (Number(p.penaltySeconds) || 0) : s), 0), 0);
+  const runPenaltyLabels = penalizedKeys.filter((key) => RUN_KEYS.includes(key)).map((key) => map.get(key)?.label ?? key);
+  const nonRunPenaltyLabels = penalizedKeys.filter((key) => !RUN_KEYS.includes(key)).map((key) => map.get(key)?.label ?? key);
+  return { runPenaltySeconds, runPenaltyLabels, nonRunPenaltyLabels };
+}
+
 function splitRowBg(key, gap, top1, top2, top3) {
   if (!Number.isFinite(gap)) return "#ffffff";
   if (key === top1 || key === top2) return "#fff5f5";
@@ -1116,21 +1178,10 @@ function renderSplitTable(section, analysisJson) {
     totalPenaltySeconds >= 180 &&
     totalGapSeconds > 0 &&
     totalPenaltySeconds / totalGapSeconds >= 0.25;
-  // Penalties can land on a run OR a station (e.g. "ROWING (120s)") - only run-attributed
-  // penalty seconds should ever be netted out of the running gap, otherwise a station penalty
-  // gets misrepresented as inflating the athlete's running time.
-  const penalizedSegmentKeys = [...new Set(
-    penalties.map((penalty) => penalty.segmentKey ?? penalty.runKey ?? penalty.station).filter(Boolean).map(String),
-  )];
-  const runPenaltySeconds = penalizedSegmentKeys
-    .filter((key) => RUN_KEYS.includes(key))
-    .reduce((sum, key) => sum + penalties.reduce((s, p) => (String(p.segmentKey ?? p.runKey ?? p.station) === key ? s + (Number(p.penaltySeconds) || 0) : s), 0), 0);
-  const runPenaltyLabels = penalizedSegmentKeys
-    .filter((key) => RUN_KEYS.includes(key))
-    .map((key) => segMap.get(key)?.label ?? key);
-  const nonRunPenaltyLabels = penalizedSegmentKeys
-    .filter((key) => !RUN_KEYS.includes(key))
-    .map((key) => segMap.get(key)?.label ?? key);
+  // Only run-attributed penalty seconds should ever be netted out of the running gap,
+  // otherwise a station penalty (e.g. "ROWING (120s)") gets misrepresented as inflating
+  // the athlete's running time.
+  const { runPenaltySeconds, runPenaltyLabels, nonRunPenaltyLabels } = penaltyLabelBreakdown(penalties, segMap);
   const runGapNetOfPenalties = runPenaltySeconds > 0 && Number.isFinite(runGapRaw)
     ? Math.max(0, runGapRaw - runPenaltySeconds)
     : runGapRaw;
@@ -1327,8 +1378,8 @@ function renderSplitTable(section, analysisJson) {
     if (penaltiesAreMaterial) {
       const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
       const fitnessLosses = SPLIT_TABLE_RACE_ORDER
-        .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
-        .filter((row) => row.seg?.type === "station" && Number.isFinite(row.gap) && row.gap >= 60)
+        .map((key) => ({ key, seg: segMap.get(key), gap: splitOpportunityGap(segMap.get(key)) }))
+        .filter((row) => row.seg?.type === "station" && isConfidentSegment(row.seg) && Number.isFinite(row.gap) && row.gap >= 60)
         .sort(compareOpportunityRows)
         .slice(0, 3);
       const fitnessNames = fitnessLosses.map((row) => row.seg?.label ?? row.key);
@@ -2470,7 +2521,6 @@ function parseMuscleAreaSignals(items) {
 }
 
 function renderMuscleGroupSection(section, analysisJson = {}) {
-  const { penaltiesAreMaterial } = penaltyContext(analysisJson);
   const content = Array.isArray(section.content) ? section.content : [section.content];
   const textItems = content.filter((item) => typeof item === "string");
   const isElite = isEliteOrSub60Context(analysisJson);
@@ -2509,10 +2559,12 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
       </tr>`).join("")}
     </table>`
     : "";
-  const implication = penaltiesAreMaterial
-    ? "Training focus: clean station standards first, then posterior-chain strength-endurance through Romanian deadlifts, hip thrusts and sled-specific pulling."
-    : (textItems.find((item) => /^Training focus:/i.test(item))
-      ?? "Training implication: a targeted strength-endurance block is the highest-leverage cross-station investment.");
+  // Always use the data-driven trainingHint (keyed off the athlete's actual primary muscle
+  // limiter, via TRAINING_HINTS in muscleGroupMap.js) rather than a fixed penalty-branch
+  // sentence - a hardcoded "posterior-chain... sled-specific pulling" recommendation is wrong
+  // whenever the athlete's real limiter is a different muscle group (e.g. grip/forearm).
+  const implication = textItems.find((item) => /^Training focus:/i.test(item))
+    ?? "Training implication: a targeted strength-endurance block is the highest-leverage cross-station investment.";
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">

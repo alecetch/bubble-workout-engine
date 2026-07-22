@@ -2700,6 +2700,25 @@ describe("renderSplitTable", () => {
     assert.ok(calloutHtml.includes("background-color:#1f1735"), "penalty card should use dark purple background");
   });
 
+  it("material penalties on a station: PENALTY ANALYSIS names the station, not 'running'", () => {
+    const penaltySection = { sectionKey: "penalty_callout", title: "Penalty Analysis", content: [] };
+    const { htmlBody } = buildEmailReport(
+      { sections: [penaltySection] },
+      mockAnalysis({
+        race: { finishTimeSeconds: 5738 },
+        segments: [
+          { segmentKey: "total_time", type: "aggregate", percentile: 40, userSeconds: 5738, timeGapToMedianSeconds: 938 },
+          { segmentKey: "row", type: "station", label: "Row", percentile: 40, userSeconds: 310, timeGapToMedianSeconds: 20 },
+        ],
+        penalties: [{ segmentKey: "row", penaltySeconds: 120 }],
+      }),
+      mockContext(),
+      null,
+    );
+    assert.match(htmlBody, /recorded on Row\. Treat this as station execution leakage, not a fitness limiter\./);
+    assert.doesNotMatch(htmlBody, /Treat this separately from running: it is execution leakage, not aerobic capacity\./);
+  });
+
   it("material penalties: main insight distinguishes fitness, penalties, and penalty-inflated Run 5", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "run_5", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("Stations remain the largest target gap"));
@@ -2707,6 +2726,14 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes("penalties are your fastest controllable win"));
     assert.ok(htmlBody.includes("Run 5 is penalty-inflated"));
     assert.ok(!htmlBody.includes("Biggest opportunities: Run 5"));
+  });
+
+  it("material penalties: MAIN INSIGHT's fitness-opportunities sentence uses net-of-penalty gaps, not the penalized station", () => {
+    const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] }, "analyse");
+    // Wall Balls' raw gap would qualify, but its penalty-adjusted gap is well negative - it
+    // must not be named here, matching the (already-fixed) other opportunity/priority panels.
+    assert.match(htmlBody, /Biggest fitness opportunities: SkiErg and Sled Push\./);
+    assert.doesNotMatch(htmlBody, /Biggest fitness opportunities:[^.]*Wall Balls/);
   });
 
   it("material penalties: method note explains penalty separation", () => {
@@ -2759,7 +2786,7 @@ describe("renderSplitTable", () => {
     assert.ok(!detailHtml.includes(">avoidable<"));
   });
 
-  it("material penalties: training focus uses the v4 fixed priority list without repeated sandbag items", () => {
+  it("material penalties: training focus names the athlete's actual top opportunities, not a fixed station list", () => {
     const section = splitTableSection({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     const { htmlBody } = buildEmailReport(
       { sections: [section, mockReport().sections.find((row) => row.sectionKey === "recommended_focus_areas")] },
@@ -2771,13 +2798,37 @@ describe("renderSplitTable", () => {
       mockContext(),
       null,
     );
-    assert.ok(htmlBody.includes("Clean execution first, then sandbag durability."));
+    // The headline title is also dynamic now - SkiErg (this fixture's biggest non-penalized
+    // opportunity) drives it, not a fixed "sandbag durability" claim.
+    assert.ok(htmlBody.includes("Clean execution first, then SkiErg efficiency."));
+    assert.ok(!htmlBody.includes("Clean execution first, then sandbag durability."));
     assert.ok(htmlBody.includes("Reclaim penalty time through station standards"));
-    assert.ok(htmlBody.includes("Sandbag lunge capacity under fatigue"));
-    assert.ok(htmlBody.includes("Sled pull efficiency and grip control"));
+    // SkiErg (+140s gap) and Sled Push (+100s gap) are this fixture's biggest non-penalized
+    // opportunities - Sandbag Lunges and Sled Pull are not, so they must not be named here.
+    assert.ok(htmlBody.includes("SkiErg efficiency"));
+    assert.ok(htmlBody.includes("Sled Push efficiency"));
+    assert.ok(!htmlBody.includes("Sandbag lunge capacity under fatigue"));
+    assert.ok(!htmlBody.includes("Sled pull efficiency and grip control"));
     assert.ok(htmlBody.includes("Posterior-chain strength endurance"));
     assert.ok(htmlBody.includes("Race-fatigued station practice"));
-	    assert.equal((htmlBody.match(/Sandbag lunge capacity under fatigue/g) ?? []).length, 1);
+  });
+
+  it("material penalties: training focus does not re-name the penalized segment as a separate opportunity", () => {
+    const section = splitTableSection({ penalties: [{ station: "ski_erg", penaltySeconds: 300 }] });
+    const { htmlBody } = buildEmailReport(
+      { sections: [section, mockReport().sections.find((row) => row.sectionKey === "recommended_focus_areas")] },
+      mockAnalysis({
+        segments: section.tableData.segments,
+        penalties: section.tableData.penalties,
+        benchmarkContext: section.tableData.benchmarkContext,
+      }),
+      mockContext(),
+      null,
+    );
+    const focusIdx = htmlBody.indexOf("NEXT TRAINING FOCUS");
+    const focusSnippet = htmlBody.slice(focusIdx, focusIdx + 1200);
+    assert.ok(!focusSnippet.includes("SkiErg efficiency"), "the penalized station already has its own penalty bullet");
+    assert.ok(focusSnippet.includes("Sled Push efficiency"), "the next-biggest non-penalized opportunity should still appear");
   });
 
   it("material penalties: training volume stays factual while muscle signal acknowledges penalty-first context", () => {
@@ -2809,7 +2860,11 @@ describe("renderSplitTable", () => {
     );
     assert.ok(!htmlBody.includes("Run 5 loss is penalty-inflated"));
     assert.ok(!htmlBody.includes("do not treat the full raw running gap as a running-volume problem"));
-    assert.ok(htmlBody.includes("Training focus: clean station standards first"));
+    // The muscle section's own data-driven training-focus line should flow through as-is,
+    // not get replaced by a fixed posterior-chain/sled-pulling sentence that may not match
+    // this athlete's actual limiter.
+    assert.ok(htmlBody.includes("Training focus: Romanian deadlifts, hip thrusts, and Nordic curls build posterior-chain strength-endurance."));
+    assert.ok(!htmlBody.includes("Training focus: clean station standards first"));
   });
 
   it("still renders full detail when no goal group exists", () => {
@@ -3399,6 +3454,96 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     assert.ok(htmlBody.includes("10,725"), "hero 'Compared against' sample size should come from the escalated band's group");
   });
 
+  it("explains penalty-adjusted two-step band escalation while preserving official achieved-band standing copy", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          achievedBand: "sub_90",
+          escalationBasisBand: "sub_85",
+          nextBand: "sub_80",
+          analysisFrame: { frame: "next_band", comparisonBand: "sub_80", stretchBand: null, gapToBandMedianSeconds: -90 },
+          primaryBenchmarkGroup: { label: "Open Male", sampleSize: 4200 },
+          escalationBasisBandGroup: { label: "Open Male", sampleSize: 7200 },
+          nextBandGroup: { label: "Open Male", sampleSize: 10725 },
+        },
+        race: { finishTimeSeconds: 87 * 60 },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 73, fieldPercentile: 52 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    const lens = benchmarkLensSection(htmlBody);
+    assert.ok(lens.includes("The standing above ranks you within the sub-90 band"));
+    assert.ok(lens.includes("Because your penalty-adjusted time already beats the sub-85 median"));
+    assert.ok(lens.includes("gaps below are measured against the sub-80 band instead - that's the level your execution is really at."));
+    assert.ok(comparisonGroupRow(lens).includes("75:00"), "comparison group should use the final comparison band range");
+    assert.ok(comparisonGroupRow(lens).includes("79:59"), "comparison group should use the final comparison band range end");
+    assert.equal(lens.includes("that's the next benchmark worth chasing"), false);
+  });
+
+  it("explains penalty-adjusted reclassification for a catch_up frame without showing the raw-band comparison group", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          achievedBand: "sub_80",
+          escalationBasisBand: "sub_75",
+          nextBand: "sub_70",
+          analysisFrame: { frame: "catch_up", comparisonBand: "sub_75", stretchBand: null, gapToBandMedianSeconds: 65 },
+          primaryBenchmarkGroup: { label: "Open Female", sampleSize: 4200 },
+          escalationBasisBandGroup: { label: "Open Female", sampleSize: 7200 },
+          nextBandGroup: { label: "Open Female", sampleSize: 10725 },
+        },
+        race: { finishTimeSeconds: 77 * 60 },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 64, fieldPercentile: 52 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    const lens = benchmarkLensSection(htmlBody);
+    const row = comparisonGroupRow(lens);
+    assert.ok(row.includes("70:00"), "comparison group should use the penalty-adjusted sub-75 range start");
+    assert.ok(row.includes("74:59"), "comparison group should use the penalty-adjusted sub-75 range end");
+    assert.equal(row.includes("75:00"), false, "comparison group should not use the official raw sub-80 range start");
+    assert.equal(row.includes("79:59"), false, "comparison group should not use the official raw sub-80 range end");
+    assert.ok(lens.includes("The standing above ranks you within the sub-80 band"));
+    assert.ok(lens.includes("Because your penalty-adjusted time falls in the sub-75 band"));
+    assert.ok(lens.includes("gaps below are measured against that band instead of your official sub-80 classification."));
+    assert.equal(lens.includes("Your percentiles compare you with athletes at a similar race level"), false);
+    assert.equal(lens.includes("Because you've already beaten that band's median"), false);
+    assert.equal(lens.includes("penalty-adjusted time already beats"), false);
+  });
+
+  it("keeps the ordinary single-step escalation sentence when escalation is not penalty-adjusted", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          achievedBand: "sub_90",
+          escalationBasisBand: "sub_90",
+          nextBand: "sub_85",
+          analysisFrame: { frame: "next_band", comparisonBand: "sub_85", stretchBand: null, gapToBandMedianSeconds: -80 },
+          primaryBenchmarkGroup: { label: "Open Male", sampleSize: 4200 },
+          nextBandGroup: { label: "Open Male", sampleSize: 10725 },
+        },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 73, fieldPercentile: 52 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    const lens = benchmarkLensSection(htmlBody);
+    assert.ok(lens.includes("Because you've already beaten that band's median"));
+    assert.ok(lens.includes("that's the next benchmark worth chasing"));
+    assert.equal(lens.includes("penalty-adjusted time already beats"), false);
+  });
+
   it("doubles method note scopes sample size to the resolved comparison group", () => {
     const { htmlBody } = buildEmailReport(
       mockReport(),
@@ -3474,7 +3619,7 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
   for (const frame of Object.values(ANALYSIS_FRAMES)) {
     for (const useNextBandGaps of [true, false, undefined]) {
       const flagLabel = useNextBandGaps === undefined ? "undefined" : String(useNextBandGaps);
-      it(`uses the engine escalation predicate for frame=${frame}, useNextBandGaps=${flagLabel}`, () => {
+      it(`uses analysisFrame comparisonBand for frame=${frame}, useNextBandGaps=${flagLabel}`, () => {
         const analysisFrame = {
           frame,
           comparisonBand: "sub_85",
@@ -3500,31 +3645,18 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
           "analyse",
         );
         const lens = benchmarkLensSection(htmlBody);
-        const shouldEscalate =
-          frame === ANALYSIS_FRAMES.NEXT_BAND ||
-          frame === ANALYSIS_FRAMES.NEXT_BAND_STRETCH ||
-          useNextBandGaps === true;
-
         assert.ok(lens.includes("BENCHMARK LENS"), "sanity check: Benchmark Lens section rendered");
         assert.equal(
           lens.includes("that's the next benchmark worth chasing"),
-          shouldEscalate,
-          "escalation explanation should match the engine predicate",
+          true,
+          "escalation explanation should follow analysisFrame.comparisonBand when it differs from achievedBand",
         );
 
-        if (shouldEscalate) {
-          const row = comparisonGroupRow(lens);
-          assert.ok(row.includes("80:00"), "comparison group should use comparisonBand range start");
-          assert.ok(row.includes("84:59"), "comparison group should use comparisonBand range end");
-          assert.equal(row.includes("85:00"), false, "comparison group should not use achievedBand range start");
-          assert.equal(row.includes("89:59"), false, "comparison group should not use achievedBand range end");
-        } else {
-          const row = comparisonGroupRow(lens);
-          assert.ok(row.includes("85:00"), "comparison group should use achievedBand range start");
-          assert.ok(row.includes("89:59"), "comparison group should use achievedBand range end");
-          assert.equal(row.includes("80:00"), false, "comparison group should not use comparisonBand range start");
-          assert.equal(row.includes("84:59"), false, "comparison group should not use comparisonBand range end");
-        }
+        const row = comparisonGroupRow(lens);
+        assert.ok(row.includes("80:00"), "comparison group should use comparisonBand range start");
+        assert.ok(row.includes("84:59"), "comparison group should use comparisonBand range end");
+        assert.equal(row.includes("85:00"), false, "comparison group should not use achievedBand range start");
+        assert.equal(row.includes("89:59"), false, "comparison group should not use achievedBand range end");
       });
     }
   }
