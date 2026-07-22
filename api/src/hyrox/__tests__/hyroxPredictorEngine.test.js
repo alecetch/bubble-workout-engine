@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  calculateConfidenceScore,
+  computeStrengthProfile,
   estimateRunPace,
   runPredictionEngine,
 } from "../hyroxPredictorEngine.js";
@@ -8,17 +10,17 @@ import {
 function minimal(overrides = {}) {
   return {
     athlete: { email: "test@example.com", sex: "male", division: "open", ...(overrides.athlete ?? {}) },
-    benchmarks: { run5kSeconds: 1200, backSquat3RM: 120, deadlift3RM: 150, ...(overrides.benchmarks ?? {}) },
+    benchmarks: { run5kSeconds: 1200, backSquat3RM: 120, deadlift3RM: 150, bodyweightKg: 85, ...(overrides.benchmarks ?? {}) },
     context: { ...(overrides.context ?? {}) },
     race: { ...(overrides.race ?? {}) },
     marketingConsent: false,
   };
 }
 
-test("confidence score base case labels moderate", () => {
+test("confidence score base case labels good with bodyweight", () => {
   const result = runPredictionEngine(minimal());
-  assert.equal(result.confidenceScore, 0.63);
-  assert.equal(result.confidenceLabel, "moderate");
+  assert.equal(result.confidenceScore, 0.68);
+  assert.equal(result.confidenceLabel, "good");
 });
 
 test("confidence score caps at 0.90", () => {
@@ -44,6 +46,54 @@ test("confidence score caps at 0.90", () => {
 test("run pace uses endurance background and 30-45 km/week", () => {
   const pace = estimateRunPace({ run5kSeconds: 1200 }, { primaryBackground: "endurance", weeklyRunningKm: "30-45" });
   assert.equal(Math.round(pace), 282);
+});
+
+test("strength profile falls back to absolute tier without bodyweight", () => {
+  const profile = computeStrengthProfile({ backSquat3RM: 120, deadlift3RM: 150 }, "male");
+
+  assert.equal(profile.absoluteTier, 3);
+  assert.equal(profile.relativeTier, 3);
+  assert.equal(profile.blendedTier, 3);
+  assert.equal(profile.hasBodyweight, false);
+});
+
+test("bodyweight shifts the relative strength tier", () => {
+  const lighter = computeStrengthProfile({ backSquat3RM: 120, deadlift3RM: 150 }, "male", 70);
+  const heavier = computeStrengthProfile({ backSquat3RM: 120, deadlift3RM: 150 }, "male", 110);
+
+  assert.notEqual(lighter.relativeTier, heavier.relativeTier);
+  assert.ok(lighter.blendedTier >= heavier.blendedTier);
+});
+
+test("sled push favors absolute strength", () => {
+  const strongerHeavy = runPredictionEngine(minimal({ benchmarks: { backSquat3RM: 170, deadlift3RM: 210, bodyweightKg: 115 } }));
+  const weakerLight = runPredictionEngine(minimal({ benchmarks: { backSquat3RM: 120, deadlift3RM: 150, bodyweightKg: 70 } }));
+  const strongSled = strongerHeavy.segments.find((segment) => segment.segmentKey === "sled_push");
+  const lightSled = weakerLight.segments.find((segment) => segment.segmentKey === "sled_push");
+
+  assert.ok(strongSled.predictedSeconds <= lightSled.predictedSeconds);
+});
+
+test("wall balls favor relative strength", () => {
+  const lighter = runPredictionEngine(minimal({ benchmarks: { backSquat3RM: 120, deadlift3RM: 150, bodyweightKg: 70 } }));
+  const heavier = runPredictionEngine(minimal({ benchmarks: { backSquat3RM: 120, deadlift3RM: 150, bodyweightKg: 110 } }));
+  const lightWallBalls = lighter.segments.find((segment) => segment.segmentKey === "wall_balls");
+  const heavyWallBalls = heavier.segments.find((segment) => segment.segmentKey === "wall_balls");
+
+  assert.ok(lightWallBalls.predictedSeconds <= heavyWallBalls.predictedSeconds);
+});
+
+test("height has zero effect on prediction output", () => {
+  const shorter = runPredictionEngine(minimal({ benchmarks: { heightCm: 165 } }));
+  const taller = runPredictionEngine(minimal({ benchmarks: { heightCm: 195 } }));
+
+  assert.deepEqual(shorter, { ...taller, predictionId: shorter.predictionId });
+});
+
+test("confidence score bumps exactly 0.05 with bodyweight", () => {
+  const benchmarks = { run5kSeconds: 1200, backSquat3RM: 120, deadlift3RM: 150 };
+  const delta = calculateConfidenceScore({ ...benchmarks, bodyweightKg: 80 }) - calculateConfidenceScore(benchmarks);
+  assert.equal(Number(delta.toFixed(2)), 0.05);
 });
 
 test("SkiErg direct benchmark overrides estimate", () => {

@@ -172,6 +172,22 @@ test("negative split time returns 400", async () => {
   assert.equal(json.errors.some((err) => err.message.includes("negative")), true);
 });
 
+test("athleteContext bodyweight outside range returns 400", async () => {
+  const body = validBody({ athleteContext: { targetFinishTimeSeconds: 4500, bodyweightKg: 15 } });
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/analyse", { method: "POST", body: JSON.stringify(body) });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.errors.some((err) => err.field === "athleteContext.bodyweightKg"), true);
+});
+
+test("athleteContext bodyweight is not required server-side", async () => {
+  const body = validBody();
+  const { response, body: json } = await request(buildApp((_req, res) => res.json({ ok: true })), "/api/hyrox/analyse", { method: "POST", body: JSON.stringify(body) });
+
+  assert.equal(response.status, 200);
+  assert.equal(json.ok, true);
+});
+
 test("11th request from same IP within one hour returns 429", async () => {
   const app = buildApp((_req, res) => res.json({ ok: true }), [hyroxIpRateLimiter, validateHyroxSubmission]);
   const server = app.listen(0, "127.0.0.1");
@@ -223,25 +239,31 @@ test("POST /api/hyrox/analyse stores target calibration fields", async (t) => {
       run10kPbSeconds: 2820,
       backSquat3RMKg: 100,
       deadlift3RMKg: 145,
-      rowErg2kSeconds: 420,
-      targetRaceDate: "2026-11-15",
+	      rowErg2kSeconds: 420,
+	      bodyweightKg: 82.5,
+	      heightCm: 181,
+	      targetRaceDate: "2026-11-15",
     },
   });
   const { response, body: json } = await request(buildApp(), "/api/hyrox/analyse", { method: "POST", body: JSON.stringify(body) });
   try {
     assert.equal(response.status, 200);
     const submissions = await pool.query(
-      `SELECT five_km_pb_seconds, ten_km_pb_seconds, back_squat_kg, deadlift_kg, athlete_context_json
-       FROM hyrox_submissions
+	      `SELECT five_km_pb_seconds, ten_km_pb_seconds, back_squat_kg, deadlift_kg, weight_kg, height_cm, athlete_context_json
+	       FROM hyrox_submissions
        WHERE id = $1`,
       [json.submissionId],
     );
     assert.equal(submissions.rows.length, 1);
     assert.equal(submissions.rows[0].five_km_pb_seconds, 1320);
     assert.equal(submissions.rows[0].ten_km_pb_seconds, 2820);
-    assert.equal(Number(submissions.rows[0].back_squat_kg), 100);
-    assert.equal(Number(submissions.rows[0].deadlift_kg), 145);
-    assert.equal(submissions.rows[0].athlete_context_json.rowErg2kSeconds, 420);
+	    assert.equal(Number(submissions.rows[0].back_squat_kg), 100);
+	    assert.equal(Number(submissions.rows[0].deadlift_kg), 145);
+	    assert.equal(Number(submissions.rows[0].weight_kg), 82.5);
+	    assert.equal(Number(submissions.rows[0].height_cm), 181);
+	    assert.equal(submissions.rows[0].athlete_context_json.rowErg2kSeconds, 420);
+	    assert.equal(submissions.rows[0].athlete_context_json.bodyweightKg, 82.5);
+	    assert.equal(submissions.rows[0].athlete_context_json.heightCm, 181);
     assert.equal(submissions.rows[0].athlete_context_json.targetRaceDate, "2026-11-15");
   } finally {
     await cleanupEmail(body.athlete.email);

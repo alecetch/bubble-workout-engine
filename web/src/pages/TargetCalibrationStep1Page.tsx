@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormPanel } from "../components/FormPanel";
+import { HeightField } from "../components/HeightField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
+import { SegmentedControl } from "../components/SegmentedControl";
 import { Shell } from "../components/Shell";
 import { SideStepper } from "../components/SideStepper";
 import { TimeInput } from "../components/TimeInput";
+import { WeightField } from "../components/WeightField";
 import { trackEvent } from "../utils/api";
 import { getJourneyVariant, type JourneyVariant } from "../utils/journeyUtils";
 import { loadDraft, saveDraft } from "../utils/storage";
@@ -44,7 +47,18 @@ export function TargetCalibrationStep1Page() {
   const [run10k, setRun10k] = useState(timeText(ctx.run10kPbSeconds));
   const [backSquat, setBackSquat] = useState(numberText(ctx.backSquat3RMKg));
   const [deadlift, setDeadlift] = useState(numberText(ctx.deadlift3RMKg));
-  const [showSkipWarning, setShowSkipWarning] = useState(false);
+  const [weightUnit, setWeightUnit] = useState<"kg" | "lb">(draft?.weightUnit ?? "kg");
+  const [bodyweightKg, setBodyweightKg] = useState<number | undefined>(ctx.bodyweightKg);
+  const [heightUnit, setHeightUnit] = useState<"cm" | "ftin">(draft?.heightUnit ?? "cm");
+  const [heightCm, setHeightCm] = useState<number | undefined>(ctx.heightCm);
+  const [missingFieldsWarning, setMissingFieldsWarning] = useState<string[]>([]);
+
+  const bodyweightError = bodyweightKg !== undefined && (bodyweightKg < 30 || bodyweightKg > 250)
+    ? "Enter a bodyweight between 30-250 kg (66-551 lb)."
+    : undefined;
+  const heightError = heightCm !== undefined && (heightCm < 120 || heightCm > 230)
+    ? "Enter a height between 120-230 cm (3'11\"-7'6\")."
+    : undefined;
 
   useEffect(() => {
     if (variant === "analyse") {
@@ -65,17 +79,23 @@ export function TargetCalibrationStep1Page() {
       run10kPbSeconds: parseTimeToSeconds(run10k) ?? undefined,
       backSquat3RMKg: backSquat ? Number(backSquat) : undefined,
       deadlift3RMKg: deadlift ? Number(deadlift) : undefined,
+      bodyweightKg,
+      heightCm,
     };
   }
 
   function handleContinue() {
     const parsed5k = parseTimeToSeconds(run5k);
-    if (!parsed5k) {
-      setShowSkipWarning(true);
+    const missing: string[] = [];
+    if (!parsed5k) missing.push("your best 5k time");
+    if (bodyweightKg === undefined) missing.push("your bodyweight");
+    if (missing.length > 0) {
+      setMissingFieldsWarning(missing);
       return;
     }
+    if (bodyweightError || heightError) return;
     const nextContext = updatedContext();
-    saveDraft({ athleteContext: nextContext });
+    saveDraft({ athleteContext: nextContext, weightUnit, heightUnit });
     trackEvent("target_calibration_step1_completed", {
       source,
       journeyVariant: variant,
@@ -95,6 +115,8 @@ export function TargetCalibrationStep1Page() {
   function handleSkip() {
     saveDraft({
       athleteContext: updatedContext(),
+      weightUnit,
+      heightUnit,
       meta: { ...loadDraft()?.meta, calibrationSkipped: true },
     });
     trackEvent("target_calibration_step1_skipped", {
@@ -128,14 +150,14 @@ export function TargetCalibrationStep1Page() {
                 value={run5k}
                 onChange={(event) => {
                   setRun5k(event.target.value);
-                  setShowSkipWarning(false);
+                  setMissingFieldsWarning([]);
                 }}
                 onBlur={(event) => setRun5k(normalizeTimeInputValue(event.target.value))}
                 placeholder="22:30"
               />
-              {showSkipWarning && (
+              {missingFieldsWarning.length > 0 && (
                 <p className={styles.softWarning}>
-                  Your best 5k time helps us estimate your target potential. Add it for a better result.
+                  Add {missingFieldsWarning.join(" and ")} to continue, or skip this step for now.
                 </p>
               )}
               <TimeInput
@@ -150,6 +172,41 @@ export function TargetCalibrationStep1Page() {
                 <NumberField label="Back squat 3RM (kg)" hint="Optional - heaviest set of 3 reps" value={backSquat} onChange={setBackSquat} min={1} max={400} />
                 <NumberField label="Deadlift 3RM (kg)" hint="Optional - heaviest set of 3 reps" value={deadlift} onChange={setDeadlift} min={1} max={500} />
               </div>
+              <SegmentedControl
+                label="Weight unit"
+                options={[{ value: "kg", label: "kg" }, { value: "lb", label: "lb" }]}
+                value={weightUnit}
+                onChange={(value) => setWeightUnit(value as "kg" | "lb")}
+              />
+              <WeightField
+                label="Bodyweight"
+                required
+                valueKg={bodyweightKg}
+                unit={weightUnit}
+                onChangeKg={(value) => {
+                  setBodyweightKg(value);
+                  setMissingFieldsWarning([]);
+                }}
+                min={30}
+                max={250}
+                error={bodyweightError}
+              />
+              <SegmentedControl
+                label="Height unit"
+                options={[{ value: "cm", label: "cm" }, { value: "ftin", label: "ft-in" }]}
+                value={heightUnit}
+                onChange={(value) => setHeightUnit(value as "cm" | "ftin")}
+              />
+              <HeightField
+                label="Height"
+                valueCm={heightCm}
+                unit={heightUnit}
+                onChangeCm={setHeightCm}
+                min={120}
+                max={230}
+                error={heightError}
+                hint="Optional - not used in your prediction yet"
+              />
             </div>
 
             <div className={styles.actions}>

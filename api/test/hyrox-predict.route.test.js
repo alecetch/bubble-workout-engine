@@ -13,7 +13,7 @@ function buildApp() {
 function validBody(overrides = {}) {
   return {
     athlete: { email: "predict@example.com", sex: "male", division: "open", ...(overrides.athlete ?? {}) },
-    benchmarks: { run5kSeconds: 1200, backSquat3RM: 120, deadlift3RM: 150, ...(overrides.benchmarks ?? {}) },
+    benchmarks: { run5kSeconds: 1200, backSquat3RM: 120, deadlift3RM: 150, bodyweightKg: 85, ...(overrides.benchmarks ?? {}) },
     context: { primaryBackground: "endurance", weeklyRunningKm: "30-45", ...(overrides.context ?? {}) },
     race: { ...(overrides.race ?? {}) },
     marketingConsent: false,
@@ -58,6 +58,60 @@ test("POST /api/hyrox/predict missing run5kSeconds returns 400", async () => {
 
   assert.equal(response.status, 400);
   assert.equal(json.errors.some((err) => err.field === "benchmarks.run5kSeconds"), true);
+});
+
+test("POST /api/hyrox/predict missing bodyweightKg returns 400", async () => {
+  const body = validBody({ benchmarks: { bodyweightKg: undefined } });
+  delete body.benchmarks.bodyweightKg;
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.errors.some((err) => err.field === "benchmarks.bodyweightKg"), true);
+});
+
+test("POST /api/hyrox/predict invalid bodyweightKg returns 400", async () => {
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(validBody({ benchmarks: { bodyweightKg: 20 } })),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.errors.some((err) => err.field === "benchmarks.bodyweightKg"), true);
+});
+
+test("POST /api/hyrox/predict valid bodyweightKg returns 200", async () => {
+  const { response, body } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(validBody({ benchmarks: { bodyweightKg: 90 } })),
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(body.predictionId);
+});
+
+test("POST /api/hyrox/predict invalid heightCm returns 400", async () => {
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(validBody({ benchmarks: { heightCm: 90 } })),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.errors.some((err) => err.field === "benchmarks.heightCm"), true);
+});
+
+test("POST /api/hyrox/predict omitting heightCm returns 200", async () => {
+  const body = validBody({ benchmarks: { heightCm: undefined } });
+  delete body.benchmarks.heightCm;
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(json.predictionId);
 });
 
 test("POST /api/hyrox/predict missing email returns 400", async () => {

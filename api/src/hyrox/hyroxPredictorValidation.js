@@ -23,6 +23,10 @@ export function validatePredictionRequest(body) {
   if (!b.deadlift3RM || b.deadlift3RM <= 0 || b.deadlift3RM > 500) {
     errors.push({ field: "benchmarks.deadlift3RM", message: "Valid deadlift required (1-500 kg)" });
   }
+  const bodyweightKg = Number(b.bodyweightKg);
+  if (!Number.isFinite(bodyweightKg) || bodyweightKg < 30 || bodyweightKg > 250) {
+    errors.push({ field: "benchmarks.bodyweightKg", message: "Valid bodyweight required (30-250 kg)" });
+  }
 
   if (b.run10kSeconds && b.run5kSeconds && b.run10kSeconds <= b.run5kSeconds) {
     errors.push({ field: "benchmarks.run10kSeconds", message: "10k time must be slower than 5k time" });
@@ -32,6 +36,10 @@ export function validatePredictionRequest(body) {
   }
   if (b.wallBallRepsIn2Min && (b.wallBallRepsIn2Min < 1 || b.wallBallRepsIn2Min > 200)) {
     errors.push({ field: "benchmarks.wallBallRepsIn2Min", message: "Wall ball reps must be 1-200" });
+  }
+  const heightCm = Number(b.heightCm);
+  if (b.heightCm != null && (!Number.isFinite(heightCm) || heightCm < 120 || heightCm > 230)) {
+    errors.push({ field: "benchmarks.heightCm", message: "Height must be between 120 and 230 cm" });
   }
 
   return errors;

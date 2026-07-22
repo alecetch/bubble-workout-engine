@@ -10,6 +10,7 @@ import type { HyroxPredictionRequest, HyroxPredictorDraft } from "../../types";
 import { RateLimitError, submitHyroxPrediction, ValidationError } from "../../utils/api";
 import { clearPredictorDraft, loadPredictorDraft, savePredictorDraft } from "../../utils/predictorStorage";
 import { formatSeconds } from "../../utils/time";
+import { cmToFeetInches, kgToLb } from "../../utils/unitConversion";
 import styles from "./PredictorPages.module.css";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,6 +34,18 @@ function predictionMode(draft: HyroxPredictorDraft): "Minimum" | "Better" | "Bes
 
 function compact(values: Array<string | undefined | false>): string {
   return values.filter(Boolean).join(" - ") || "Not supplied";
+}
+
+function formatWeight(kg: number, unit?: "kg" | "lb"): string {
+  return unit === "lb" ? `${Math.round(kgToLb(kg))} lb` : `${Math.round(kg)} kg`;
+}
+
+function formatHeight(cm: number, unit?: "cm" | "ftin"): string {
+  if (unit === "ftin") {
+    const { feet, inches } = cmToFeetInches(cm);
+    return `${feet}'${inches}"`;
+  }
+  return `${Math.round(cm)} cm`;
 }
 
 export function PredictorReviewPage() {
@@ -103,6 +116,8 @@ export function PredictorReviewPage() {
               `5k ${formatMaybe(draft.benchmarks.run5kSeconds)}`,
               draft.benchmarks.backSquat3RM ? `Squat ${draft.benchmarks.backSquat3RM} kg` : undefined,
               draft.benchmarks.deadlift3RM ? `Deadlift ${draft.benchmarks.deadlift3RM} kg` : undefined,
+              draft.benchmarks.bodyweightKg ? `Bodyweight ${formatWeight(draft.benchmarks.bodyweightKg, draft.athlete.weightUnit)}` : undefined,
+              draft.benchmarks.heightCm ? `Height ${formatHeight(draft.benchmarks.heightCm, draft.athlete.heightUnit)}` : undefined,
               draft.benchmarks.run10kSeconds ? `10k ${formatMaybe(draft.benchmarks.run10kSeconds)}` : undefined,
             ])} onEdit={() => void navigate("/hyrox-predictor")} />
             <EditRow title="Extra benchmarks" value={compact([
