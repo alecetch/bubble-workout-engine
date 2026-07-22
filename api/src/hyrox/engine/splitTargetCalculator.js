@@ -31,12 +31,27 @@ export function computeExactTargetMap(segments, targetFinishSeconds, hasGoalGrou
     return segment?.type === type && Number.isFinite(target) ? sum + target : sum;
   }, 0);
 
-  const runTarget = sumByType("run");
-  const workTarget = sumByType("station");
+  let runTarget = sumByType("run");
+  let workTarget = sumByType("station");
   const roxzoneGoal = segMap.get("roxzone_time")?.goalBenchmarkSeconds;
-  const roxzoneFromBenchmark = Number.isFinite(roxzoneGoal) ? Math.round(roxzoneGoal * scale) : null;
-  const roxzoneResidual = Math.max(0, Math.round(targetFinishSeconds - runTarget - workTarget));
-  const roxzoneTarget = runTarget > 0 || workTarget > 0 ? roxzoneResidual : roxzoneFromBenchmark;
+  const roxzoneProportional = Number.isFinite(roxzoneGoal) ? Math.round(roxzoneGoal * scale) : null;
+  let roxzoneTarget = roxzoneProportional;
+
+  if (runTarget > 0 || workTarget > 0) {
+    if (Number.isFinite(roxzoneProportional)) {
+      const roundedTargetFinish = Math.round(targetFinishSeconds);
+      const sumOfThree = runTarget + workTarget + roxzoneProportional;
+      const residual = roundedTargetFinish - sumOfThree;
+
+      if (residual !== 0 && sumOfThree > 0) {
+        runTarget += Math.round(residual * (runTarget / sumOfThree));
+        workTarget += Math.round(residual * (workTarget / sumOfThree));
+        roxzoneTarget = Math.max(0, roundedTargetFinish - runTarget - workTarget);
+      }
+    } else {
+      roxzoneTarget = Math.max(0, Math.round(targetFinishSeconds - runTarget - workTarget));
+    }
+  }
 
   if (runTarget > 0) targets.set("run_time", runTarget);
   if (workTarget > 0) targets.set("work_time", workTarget);
