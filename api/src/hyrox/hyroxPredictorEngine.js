@@ -28,6 +28,19 @@ const RACE_ORDER = [
   ["wall_balls", "Wall Balls (100 reps)", "station"],
 ];
 
+const RELATIVE_THRESHOLDS = {
+  deadlift: [1.0, 1.5, 2.0],
+  backSquat: [0.9, 1.3, 1.7],
+};
+
+const ABSOLUTE_THRESHOLDS = {
+  deadlift: [80, 120, 160],
+  backSquat: [70, 100, 140],
+};
+
+const ABSOLUTE_WEIGHTED = new Set(["sled_push", "sled_pull"]);
+const RELATIVE_WEIGHTED = new Set(["wall_balls", "sandbag_lunge", "burpee_bj"]);
+
 export function runPredictionEngine(request) {
   const { athlete = {}, benchmarks = {}, context = {}, race = {} } = request ?? {};
   const { sex = "male", division = "open" } = athlete;
@@ -35,9 +48,9 @@ export function runPredictionEngine(request) {
   const confidenceScore = calculateConfidenceScore(benchmarks, context);
   const confidenceLabel = labelForScore(confidenceScore);
   const predictionMode = modeForScore(confidenceScore);
-  const strengthTier = calculateStrengthTier(benchmarks, sex);
-  const runPacePerKm = estimateRunPace(benchmarks, context);
-  const segments = buildSegments(benchmarks, context, sex, division, runPacePerKm, strengthTier);
+  const strengthProfile = computeStrengthProfile(benchmarks, sex, benchmarks.bodyweightKg);
+  const runPacePerKm = estimateRunPace(benchmarks, context, strengthProfile);
+  const segments = buildSegments(benchmarks, context, sex, division, runPacePerKm, strengthProfile);
   const totals = sumTotals(segments, division);
   const predictedTotal = Math.max(totals.total, 4500);
   const range = buildRange(predictedTotal, confidenceScore);
@@ -72,6 +85,7 @@ export function calculateConfidenceScore(benchmarks = {}, context = {}) {
   if (benchmarks.run10kSeconds) score += 0.08;
   if (benchmarks.backSquat3RM) score += 0.08;
   if (benchmarks.deadlift3RM) score += 0.08;
+  if (benchmarks.bodyweightKg) score += 0.05;
   if (benchmarks.rowErg2kSeconds || benchmarks.skiErg1kSeconds) score += 0.07;
   if (benchmarks.wallBallRepsIn2Min) score += 0.06;
   if (benchmarks.farmerCarryTimeSeconds) score += 0.05;
@@ -95,16 +109,46 @@ export function modeForScore(score) {
   return "best";
 }
 
-export function calculateStrengthTier(benchmarks = {}, sex = "male") {
+export function computeStrengthProfile(benchmarks = {}, sex = "male", bodyweightKg) {
   const scale = sex === "female" ? 0.75 : 1;
-  const tiers = [];
-  if (benchmarks.deadlift3RM) tiers.push(tierForLoad(benchmarks.deadlift3RM, [80, 120, 160].map((v) => v * scale)));
-  if (benchmarks.backSquat3RM) tiers.push(tierForLoad(benchmarks.backSquat3RM, [70, 100, 140].map((v) => v * scale)));
-  if (tiers.length === 0) return 2;
-  return clamp(Math.floor(tiers.reduce((sum, tier) => sum + tier, 0) / tiers.length), 1, 4);
+  const absoluteTiers = [];
+  const relativeTiers = [];
+  const hasBodyweight = Number.isFinite(bodyweightKg) && bodyweightKg > 0;
+
+  if (benchmarks.deadlift3RM) {
+    absoluteTiers.push(tierForLoad(benchmarks.deadlift3RM, ABSOLUTE_THRESHOLDS.deadlift.map((v) => v * scale)));
+    if (hasBodyweight) relativeTiers.push(tierForLoad(benchmarks.deadlift3RM / bodyweightKg, RELATIVE_THRESHOLDS.deadlift.map((v) => v * scale)));
+  }
+  if (benchmarks.backSquat3RM) {
+    absoluteTiers.push(tierForLoad(benchmarks.backSquat3RM, ABSOLUTE_THRESHOLDS.backSquat.map((v) => v * scale)));
+    if (hasBodyweight) relativeTiers.push(tierForLoad(benchmarks.backSquat3RM / bodyweightKg, RELATIVE_THRESHOLDS.backSquat.map((v) => v * scale)));
+  }
+
+  const absoluteTier = absoluteTiers.length ? clamp(Math.floor(mean(absoluteTiers)), 1, 4) : 2;
+  const relativeTier = relativeTiers.length ? clamp(Math.floor(mean(relativeTiers)), 1, 4) : absoluteTier;
+  const blendedTier = clamp(Math.round(absoluteTier * 0.4 + relativeTier * 0.6), 1, 4);
+
+  return { absoluteTier, relativeTier, blendedTier, hasBodyweight };
 }
 
-export function estimateRunPace(benchmarks = {}, context = {}) {
+function mean(values) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function tierForSegment(segmentKey, profile) {
+  if (ABSOLUTE_WEIGHTED.has(segmentKey)) {
+    return clamp(Math.round(profile.absoluteTier * 0.8 + profile.relativeTier * 0.2), 1, 4);
+  }
+  if (RELATIVE_WEIGHTED.has(segmentKey)) {
+    return clamp(Math.round(profile.absoluteTier * 0.3 + profile.relativeTier * 0.7), 1, 4);
+  }
+  if (segmentKey === "farmers_carry") {
+    return clamp(Math.round(profile.absoluteTier * 0.6 + profile.relativeTier * 0.4), 1, 4);
+  }
+  return profile.blendedTier;
+}
+
+export function estimateRunPace(benchmarks = {}, context = {}, strengthProfile) {
   const { run5kSeconds, run10kSeconds } = benchmarks;
   let openPacePerKm;
   if (run5kSeconds && run10kSeconds) {
@@ -131,14 +175,18 @@ export function estimateRunPace(benchmarks = {}, context = {}) {
     "<15": 1.07,
   }[context.weeklyRunningKm] ?? 1.02;
 
-  return openPacePerKm * backgroundMultiplier * volumeAdjustment;
+  const bodyweightAdjustment = strengthProfile?.hasBodyweight
+    ? { 1: 1.02, 2: 1.0, 3: 1.0, 4: 0.99 }[strengthProfile.relativeTier] ?? 1
+    : 1;
+
+  return openPacePerKm * backgroundMultiplier * volumeAdjustment * bodyweightAdjustment;
 }
 
-export function buildSegments(benchmarks, context, sex, division, runPacePerKm, strengthTier) {
+export function buildSegments(benchmarks, context, sex, division, runPacePerKm, strengthProfile) {
   return RACE_ORDER.map(([segmentKey, label, type]) => {
     const predictedSeconds = type === "run"
       ? Math.round(runPacePerKm)
-      : stationPrediction(segmentKey, benchmarks, sex, division, runPacePerKm, strengthTier);
+      : stationPrediction(segmentKey, benchmarks, sex, division, runPacePerKm, strengthProfile);
     return {
       segmentKey,
       label,
@@ -219,6 +267,9 @@ export function buildKeyAssumptions(benchmarks = {}, context = {}) {
   if (benchmarks.previousHyroxSeconds) {
     assumptions.push("Previous HYROX time used to calibrate running estimate");
   }
+  if (benchmarks.bodyweightKg) {
+    assumptions.push("Strength estimates blend your absolute and bodyweight-relative squat/deadlift numbers");
+  }
   if (context.primaryBackground || context.weeklyRunningKm) {
     assumptions.push("Training background and running volume used to adjust compromised running pace");
   }
@@ -238,7 +289,7 @@ export function buildTargetComparison(predictedTotal, targetSeconds) {
   };
 }
 
-function stationPrediction(segmentKey, benchmarks, sex, division, runPacePerKm, strengthTier) {
+function stationPrediction(segmentKey, benchmarks, sex, division, runPacePerKm, strengthProfile) {
   if (segmentKey === "skierg" && benchmarks.skiErg1kSeconds) return Math.round(benchmarks.skiErg1kSeconds);
   if (segmentKey === "row" && benchmarks.rowErg2kSeconds) return Math.round(benchmarks.rowErg2kSeconds * 0.58);
   if (segmentKey === "farmers_carry" && benchmarks.farmerCarryTimeSeconds) return Math.round(benchmarks.farmerCarryTimeSeconds);
@@ -250,7 +301,7 @@ function stationPrediction(segmentKey, benchmarks, sex, division, runPacePerKm, 
     const tier1 = stationLookup("skierg", sex, division, 1);
     return Math.round(clamp(runPacePerKm * 0.92, tier4, tier1));
   }
-  return stationLookup(segmentKey, sex, division, strengthTier);
+  return stationLookup(segmentKey, sex, division, tierForSegment(segmentKey, strengthProfile));
 }
 
 function stationLookup(segmentKey, sex, division, tier) {

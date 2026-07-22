@@ -93,6 +93,17 @@ export function validateHyroxSubmission(req, res, next) {
     errors.push(error("race.division", "Division must be one of open, pro, doubles, mixed_doubles, or relay."));
   }
 
+  const bodyweightKg = body.athleteContext?.bodyweightKg;
+  const bodyweightKgNumber = Number(bodyweightKg);
+  if (bodyweightKg != null && (!Number.isFinite(bodyweightKgNumber) || bodyweightKgNumber < 30 || bodyweightKgNumber > 250)) {
+    errors.push(error("athleteContext.bodyweightKg", "Bodyweight must be between 30 and 250 kg."));
+  }
+  const heightCm = body.athleteContext?.heightCm;
+  const heightCmNumber = Number(heightCm);
+  if (heightCm != null && (!Number.isFinite(heightCmNumber) || heightCmNumber < 120 || heightCmNumber > 230)) {
+    errors.push(error("athleteContext.heightCm", "Height must be between 120 and 230 cm."));
+  }
+
   const suppliedKeys = new Set();
   let splitSum = 0;
   for (const [index, split] of splits.entries()) {

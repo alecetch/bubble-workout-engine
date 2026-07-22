@@ -1,0 +1,52 @@
+.numberField {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.numberField label,
+.subLabel {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.numberField input {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-850);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.numberField input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.splitInputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.splitInput {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.error {
+  color: var(--accent-red);
+  font-size: 12px;
+  line-height: 1.35;
+}

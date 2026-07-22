@@ -19,6 +19,8 @@ export interface HyroxRaceReplaySplit {
 
 export interface HyroxCalculatorDraft {
   calculatorMode?: "target" | "analyse";
+  weightUnit?: "kg" | "lb";
+  heightUnit?: "cm" | "ftin";
   athlete: {
     name?: string;
     email?: string;
@@ -48,6 +50,8 @@ export interface HyroxCalculatorDraft {
     run10kPbSeconds?: number;
     backSquat3RMKg?: number;
     deadlift3RMKg?: number;
+    bodyweightKg?: number;
+    heightCm?: number;
     rowErg2kSeconds?: number;
     skiErg1kSeconds?: number;
     wallBallRepsIn2Min?: number;
@@ -93,6 +97,8 @@ export interface HyroxAnalysisRequest {
     run10kPbSeconds?: number;
     backSquat3RMKg?: number;
     deadlift3RMKg?: number;
+    bodyweightKg?: number;
+    heightCm?: number;
     rowErg2kSeconds?: number;
     skiErg1kSeconds?: number;
     wallBallRepsIn2Min?: number;
@@ -198,12 +204,16 @@ export interface HyroxPredictorDraft {
     sex: HyroxSex;
     ageGroup?: HyroxAgeGroup;
     division: HyroxDivision;
+    weightUnit?: "kg" | "lb";
+    heightUnit?: "cm" | "ftin";
   };
   benchmarks: {
     run5kSeconds?: number;
     run10kSeconds?: number;
     backSquat3RM?: number;
     deadlift3RM?: number;
+    bodyweightKg?: number;
+    heightCm?: number;
     rowErg2kSeconds?: number;
     skiErg1kSeconds?: number;
     wallBallRepsIn2Min?: number;

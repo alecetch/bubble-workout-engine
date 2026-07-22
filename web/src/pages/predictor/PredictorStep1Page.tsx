@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FormPanel } from "../../components/FormPanel";
+import { HeightField } from "../../components/HeightField";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { SelectInput } from "../../components/SelectInput";
@@ -8,6 +9,7 @@ import { Shell } from "../../components/Shell";
 import { SideStepper } from "../../components/SideStepper";
 import { TextInput } from "../../components/TextInput";
 import { TimeInput } from "../../components/TimeInput";
+import { WeightField } from "../../components/WeightField";
 import { PREDICTOR_STEPS } from "../../data/predictorSteps";
 import type { HyroxAgeGroup, HyroxDivision, HyroxSex } from "../../types";
 import { trackEvent } from "../../utils/api";
@@ -54,6 +56,10 @@ export function PredictorStep1Page() {
   const [run10k, setRun10k] = useState(timeText(draft.benchmarks.run10kSeconds));
   const [backSquat, setBackSquat] = useState(numberText(draft.benchmarks.backSquat3RM));
   const [deadlift, setDeadlift] = useState(numberText(draft.benchmarks.deadlift3RM));
+  const [weightUnit, setWeightUnit] = useState<"kg" | "lb">(draft.athlete.weightUnit ?? "kg");
+  const [bodyweightKg, setBodyweightKg] = useState<number | undefined>(draft.benchmarks.bodyweightKg);
+  const [heightUnit, setHeightUnit] = useState<"cm" | "ftin">(draft.athlete.heightUnit ?? "cm");
+  const [heightCm, setHeightCm] = useState<number | undefined>(draft.benchmarks.heightCm);
   const [name, setName] = useState(draft.athlete.name ?? "");
 
   const run5kSeconds = parseTimeToSeconds(run5k);
@@ -66,6 +72,12 @@ export function PredictorStep1Page() {
   if (!run5k || run5kSeconds === null || run5kSeconds >= 3600) errors.run5k = "Enter a 5k time under 60:00.";
   if (!backSquat || squatNumber === undefined || squatNumber <= 0 || squatNumber > 400) errors.backSquat = "Enter a whole number from 1 to 400 kg.";
   if (!deadlift || deadliftNumber === undefined || deadliftNumber <= 0 || deadliftNumber > 500) errors.deadlift = "Enter a whole number from 1 to 500 kg.";
+  if (!bodyweightKg || bodyweightKg < 30 || bodyweightKg > 250) {
+    errors.bodyweightKg = "Enter a bodyweight between 30-250 kg (66-551 lb).";
+  }
+  if (heightCm !== undefined && (heightCm < 120 || heightCm > 230)) {
+    errors.heightCm = "Enter a height between 120-230 cm (3'11\"-7'6\").";
+  }
   if (run10k && (run10kSeconds === null || (run5kSeconds !== null && run10kSeconds <= run5kSeconds))) {
     errors.run10k = "10k time must be slower than your 5k time.";
   }
@@ -74,19 +86,23 @@ export function PredictorStep1Page() {
   const completenessLabel = run10kSeconds ? "Better prediction" : "Minimum prediction";
 
   function handleNext() {
-    if (!isValid || !run5kSeconds || !squatNumber || !deadliftNumber) return;
+    if (!isValid || !run5kSeconds || !squatNumber || !deadliftNumber || !bodyweightKg) return;
     savePredictorDraft({
       athlete: {
         name: name.trim() || undefined,
         sex,
         ageGroup: ageGroup as HyroxAgeGroup,
         division,
+        weightUnit,
+        heightUnit,
       },
       benchmarks: {
         run5kSeconds,
         run10kSeconds: run10kSeconds ?? undefined,
         backSquat3RM: squatNumber,
         deadlift3RM: deadliftNumber,
+        bodyweightKg,
+        heightCm,
       },
     });
     void navigate("/hyrox-predictor/benchmarks");
@@ -150,6 +166,38 @@ export function PredictorStep1Page() {
                 <NumberField label="Back squat 3RM (kg)" value={backSquat} onChange={setBackSquat} min={1} max={400} error={errors.backSquat} required />
                 <NumberField label="Deadlift 3RM (kg)" value={deadlift} onChange={setDeadlift} min={1} max={500} error={errors.deadlift} required />
               </div>
+              <SegmentedControl
+                label="Weight unit"
+                options={[{ value: "kg", label: "kg" }, { value: "lb", label: "lb" }]}
+                value={weightUnit}
+                onChange={(value) => setWeightUnit(value as "kg" | "lb")}
+              />
+              <WeightField
+                label="Bodyweight"
+                required
+                valueKg={bodyweightKg}
+                unit={weightUnit}
+                onChangeKg={setBodyweightKg}
+                min={30}
+                max={250}
+                error={errors.bodyweightKg}
+              />
+              <SegmentedControl
+                label="Height unit"
+                options={[{ value: "cm", label: "cm" }, { value: "ftin", label: "ft-in" }]}
+                value={heightUnit}
+                onChange={(value) => setHeightUnit(value as "cm" | "ftin")}
+              />
+              <HeightField
+                label="Height"
+                valueCm={heightCm}
+                unit={heightUnit}
+                onChangeCm={setHeightCm}
+                min={120}
+                max={230}
+                error={errors.heightCm}
+                hint="Optional - not used in your prediction yet"
+              />
               <TextInput label="Your name" placeholder="Optional" value={name} onChange={(event) => setName(event.target.value)} />
               <div className={styles.actions}>
                 <span />

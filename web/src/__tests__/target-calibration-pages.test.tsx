@@ -101,7 +101,17 @@ describe("TargetCalibrationStep1Page", () => {
     expect(screen.getByLabelText(/best 10k time/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/back squat 3rm/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/deadlift 3rm/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/bodyweight/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/height/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /skip for now/i })).toBeInTheDocument();
+  });
+
+  test("direct target branch renders bodyweight and height fields", () => {
+    seedDirectTargetDraft();
+    renderStep1();
+
+    expect(screen.getByLabelText(/bodyweight/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/height/i)).toBeInTheDocument();
   });
 
   test("email branch keeps existing current fitness markers heading", () => {
@@ -118,7 +128,18 @@ describe("TargetCalibrationStep1Page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
 
-    expect(screen.getByText(/best 5k time helps/i)).toBeInTheDocument();
+    expect(screen.getByText(/add your best 5k time and your bodyweight/i)).toBeInTheDocument();
+  });
+
+  test("continue with bodyweight empty shows warning and does not navigate", () => {
+    seedEmailDraft();
+    renderStep1();
+
+    fireEvent.change(screen.getByLabelText(/best 5k time/i), { target: { value: "22:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
+
+    expect(screen.getByText(/add your bodyweight to continue/i)).toBeInTheDocument();
+    expect(screen.queryByText("Benchmarks route")).not.toBeInTheDocument();
   });
 
   test("skip navigates to benchmarks and fires event", () => {
@@ -137,12 +158,33 @@ describe("TargetCalibrationStep1Page", () => {
 
     fireEvent.change(screen.getByLabelText(/best 5k time/i), { target: { value: "22:00" } });
     fireEvent.change(screen.getByLabelText(/back squat 3rm/i), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText(/bodyweight/i), { target: { value: "82" } });
     fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
 
     expect(loadDraft()?.athleteContext?.run5kPbSeconds).toBe(1320);
     expect(loadDraft()?.athleteContext?.backSquat3RMKg).toBe(100);
+    expect(loadDraft()?.athleteContext?.bodyweightKg).toBe(82);
     expect(trackEvent).toHaveBeenCalledWith("target_calibration_step1_completed", expect.objectContaining({ has5kTime: true }));
     expect(screen.getByText("Benchmarks route")).toBeInTheDocument();
+  });
+
+  test("skip with bodyweight empty still navigates to benchmarks", () => {
+    seedEmailDraft();
+    renderStep1();
+
+    fireEvent.change(screen.getByLabelText(/best 5k time/i), { target: { value: "22:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /skip for now/i }));
+
+    expect(screen.getByText("Benchmarks route")).toBeInTheDocument();
+  });
+
+  test("out-of-range height shows an inline error", () => {
+    seedEmailDraft();
+    renderStep1();
+
+    fireEvent.change(screen.getByLabelText(/height/i), { target: { value: "90" } });
+
+    expect(screen.getByText(/enter a height between 120-230 cm/i)).toBeInTheDocument();
   });
 
   test("back navigates to context for direct-target variant", () => {

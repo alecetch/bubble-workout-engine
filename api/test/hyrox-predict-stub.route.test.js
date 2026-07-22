@@ -30,7 +30,7 @@ test("POST /api/hyrox/predict returns stub prediction response", async () => {
     method: "POST",
     body: JSON.stringify({
       athlete: { email: "alex@example.com", sex: "male", division: "open" },
-      benchmarks: { run5kSeconds: 1350, backSquat3RM: 120, deadlift3RM: 160 },
+      benchmarks: { run5kSeconds: 1350, backSquat3RM: 120, deadlift3RM: 160, bodyweightKg: 85 },
       context: {},
       race: {},
       marketingConsent: false,
