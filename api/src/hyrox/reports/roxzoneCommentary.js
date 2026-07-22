@@ -187,6 +187,14 @@ function onBenchmarkNote(roxSegment, rox, isTargetMode = false) {
     : "Your overall transition time was on benchmark — the detail below shows where time was distributed within that.";
 }
 
+const UNDERSTATED_ROXZONE_NOTE = "This total may also be understated: the same missing station timestamp used to estimate one of your splits can also shorten the recorded RoxZone total, so your real transition time is likely a bit higher than shown.";
+
+function withUnderstatedNote(content, understated) {
+  if (!understated) return content;
+  const lines = Array.isArray(content) ? content : [content].filter(Boolean);
+  return [...lines, UNDERSTATED_ROXZONE_NOTE];
+}
+
 export function buildRoxzoneSection(analysisJson = {}, options = {}) {
   const rox = analysisJson.roxzoneAnalysis ?? {};
   const roxSegment = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "roxzone_time") ?? null;
@@ -201,11 +209,12 @@ export function buildRoxzoneSection(analysisJson = {}, options = {}) {
   if (rox.mode === "inferred_total") {
     const content = buildInferredSection(rox, roxSegment, benchmarkNote);
     if (rox.roxzoneNarrative?.available) {
-      return content;
+      return withUnderstatedNote(content, rox.understated);
     }
     const inferredNote = "RoxZone time shown is estimated from unallocated race time and should be treated as directional.";
-    return Array.isArray(content) ? [inferredNote, ...content] : [inferredNote, content].filter(Boolean);
+    const merged = Array.isArray(content) ? [inferredNote, ...content] : [inferredNote, content].filter(Boolean);
+    return withUnderstatedNote(merged, rox.understated);
   }
 
-  return buildExplicitSection(rox, roxSegment, benchmarkNote);
+  return withUnderstatedNote(buildExplicitSection(rox, roxSegment, benchmarkNote), rox.understated);
 }

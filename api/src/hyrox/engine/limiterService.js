@@ -4,8 +4,11 @@ import { RUN_KEYS, STATION_KEYS } from "../config/segmentMap.js";
 const CONFIDENCE_RANK = Object.freeze({ low: 1, medium: 2, high: 3 });
 const ROXZONE_LIMITER_DOMINANCE_RATIO = 2.5;
 
-function confidenceAtLeastLow(segment) {
-  return (CONFIDENCE_RANK[segment.confidence] ?? 0) >= 1;
+// Excludes low-confidence segments (including repaired/estimated splits) from headline
+// ranking - a segment we can't fully stand behind shouldn't drive the biggest-opportunity
+// callout, subject line, or hero headline. It can still appear in FULL SPLIT DETAIL.
+function confidenceAboveLow(segment) {
+  return (CONFIDENCE_RANK[segment.confidence] ?? 0) >= CONFIDENCE_RANK.medium;
 }
 
 // When a goal benchmark is available, prefer the gap to the athlete's target over the gap to the
@@ -102,7 +105,7 @@ export function findBiggestLimiter(segmentStats) {
 
 export function rankLimiterSegments(segmentStats) {
   const candidates = segmentStats
-    .filter((segment) => confidenceAtLeastLow(segment))
+    .filter((segment) => confidenceAboveLow(segment))
     .filter((segment) => {
       const gap = effectiveGapSeconds(segment);
       return Number.isFinite(gap) && gap > 0;

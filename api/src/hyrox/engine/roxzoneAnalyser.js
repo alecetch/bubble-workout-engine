@@ -177,13 +177,23 @@ function buildRoxzoneNarrative({ entryExit, totalSeconds, percentile, timeGapToM
   };
 }
 
+// When a station's own split is missing from the source data (unrepairable, or repaired via
+// residual estimate), its race-replay entry/exit timestamps are frequently missing or
+// misaligned for the same underlying reason - the parser skips ahead to a later station's
+// boundary marker, producing a nonsense combined transition time. Treat that station's
+// entry/exit data as untrustworthy too rather than surfacing a corrupted number.
+function hasTrustworthyStationSplit(normalisedSubmission, stationKey) {
+  const station = normalisedSubmission.splitMap?.get(stationKey);
+  return Boolean(station) && station.estimated !== true;
+}
+
 function buildEntryExitAnalysis(normalisedSubmission) {
   const entryBreakdown = ENTRY_KEYS
     .map((key, index) => ({ stationKey: STATION_KEYS[index], stationIndex: index + 1, seconds: normalisedSubmission.splitMap?.get(key)?.timeSeconds ?? null }))
-    .filter((entry) => entry.seconds !== null);
+    .filter((entry) => entry.seconds !== null && hasTrustworthyStationSplit(normalisedSubmission, entry.stationKey));
   const exitBreakdown = EXIT_KEYS
     .map((key, index) => ({ stationKey: STATION_KEYS[index], stationIndex: index + 1, seconds: normalisedSubmission.splitMap?.get(key)?.timeSeconds ?? null }))
-    .filter((exit) => exit.seconds !== null);
+    .filter((exit) => exit.seconds !== null && hasTrustworthyStationSplit(normalisedSubmission, exit.stationKey));
   if (!entryBreakdown.length && !exitBreakdown.length) return { entryExitAvailable: false };
   const entrySlope = regressionSlope(entryBreakdown.map((entry) => ({ x: entry.stationIndex, y: entry.seconds })));
   const exitSlope = regressionSlope(exitBreakdown.map((exit) => ({ x: exit.stationIndex, y: exit.seconds })));
@@ -220,6 +230,10 @@ export function analyseRoxzone(normalisedSubmission, benchmarkContext) {
   const percentOfTotalTime = normalisedSubmission.race?.finishTimeSeconds
     ? normalisedSubmission.roxzoneTimeSeconds / normalisedSubmission.race.finishTimeSeconds
     : null;
+  // When a split was repaired via residual (finish - known splits - RoxZone), the recorded
+  // RoxZone total is frequently short by the same missing boundary timestamp that caused the
+  // split to go missing in the first place - so it's an understatement, not just imprecise.
+  const understated = (normalisedSubmission.estimatedSplitKeys?.length ?? 0) > 0;
 
   if (normalisedSubmission.roxzoneMode === "inferred_total" || normalisedSubmission.roxzoneMode === "explicit_total") {
     const roxzoneNarrative = buildRoxzoneNarrative({
@@ -238,6 +252,7 @@ export function analyseRoxzone(normalisedSubmission, benchmarkContext) {
       segmentAnalysisAvailable: false,
       segmentBreakdown: null,
       worstTransition: null,
+      understated,
       roxzoneNarrative,
       ...entryExit,
     };
@@ -266,6 +281,7 @@ export function analyseRoxzone(normalisedSubmission, benchmarkContext) {
     segmentAnalysisAvailable: true,
     segmentBreakdown: breakdown,
     worstTransition,
+    understated,
     roxzoneNarrative,
     ...entryExit,
   };

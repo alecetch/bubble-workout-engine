@@ -153,6 +153,15 @@ test("penalty parsed correctly", () => {
   assert.deepEqual(result.penalties[0], { segmentKey: "run_5", penaltySeconds: 300, rawText: "RUN 5 (300s)" });
 });
 
+test("penalty text naming a station by name (not STATION N) maps to the right segmentKey", () => {
+  const withStationNamePenalty = html().replace(
+    "RUN 5 (300s)",
+    "ROWING (120s)",
+  );
+  const result = parseHyroxResultsHtml(withStationNamePenalty);
+  assert.deepEqual(result.penalties[0], { segmentKey: "row", penaltySeconds: 120, rawText: "ROWING (120s)" });
+});
+
 test("missing race replay section returns empty replay", () => {
   const result = parseHyroxResultsHtml(html({ replay: false }));
   assert.deepEqual(result.raceReplay, []);

@@ -53,6 +53,38 @@ describe("buildRoxzoneSection", () => {
     assert.match(lines, /Ways to cut transition time/i);
   });
 
+  it("explicit_total, understated: appends the RoxZone-may-be-understated caveat when a split was repaired", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_total",
+        totalSeconds: 520,
+        percentOfTotalTime: 0.09,
+        percentile: 45,
+        timeGapToMedianSeconds: 15,
+        understated: true,
+      },
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).join("\n");
+    assert.match(lines, /may also be understated/i);
+  });
+
+  it("explicit_total, not understated: no caveat when no split was repaired", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_total",
+        totalSeconds: 520,
+        percentOfTotalTime: 0.09,
+        percentile: 45,
+        timeGapToMedianSeconds: 15,
+        understated: false,
+      },
+    };
+    const lines = asArray(buildRoxzoneSection(analysis)).join("\n");
+    assert.doesNotMatch(lines, /may also be understated/i);
+  });
+
   it("explicit_splits, efficient: positive framing, no tips", () => {
     const analysis = { roxzoneAnalysis: { available: true, mode: "explicit_splits", totalSeconds: 140, percentOfTotalTime: 0.025, percentile: 72, timeGapToMedianSeconds: -20, worstTransition: null } };
     const lines = asArray(buildRoxzoneSection(analysis)).join("\n");

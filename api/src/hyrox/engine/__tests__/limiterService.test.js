@@ -55,6 +55,25 @@ test("findBiggestLimiter falls back to timeGapToMedianSeconds when no exact targ
   assert.equal(limiter.timeGapSeconds, 37);
 });
 
+test("findBiggestLimiter skips a low-confidence (e.g. repaired/estimated) segment even when it has the largest gap", () => {
+  const limiter = findBiggestLimiter([
+    { segmentKey: "row", label: "Row", type: "station", timeGapToMedianSeconds: 131, percentile: null, confidence: "low", estimated: true },
+    { segmentKey: "burpee_broad_jump", label: "Burpee Broad Jump", type: "station", timeGapToMedianSeconds: 91, percentile: 12, confidence: "high" },
+  ]);
+
+  assert.equal(limiter.segmentKey, "burpee_broad_jump");
+  assert.equal(limiter.timeGapSeconds, 91);
+});
+
+test("findBiggestLimiter returns null when the only candidate with a positive gap is low-confidence", () => {
+  const limiter = findBiggestLimiter([
+    { segmentKey: "row", label: "Row", type: "station", timeGapToMedianSeconds: 131, percentile: null, confidence: "low", estimated: true },
+    { segmentKey: "run_1", label: "Run 1", type: "run", timeGapToMedianSeconds: -20, percentile: 60, confidence: "high" },
+  ]);
+
+  assert.equal(limiter, null);
+});
+
 test("findBiggestLimiter prefers named stations over aggregate station time", () => {
   const limiter = findBiggestLimiter([
     { segmentKey: "work_time", label: "Total Station Time", type: "aggregate", timeGapToMedianSeconds: 500, percentile: 10, confidence: "high" },
