@@ -2398,7 +2398,7 @@ describe("renderSplitTable", () => {
     assert.ok(!htmlBody.includes("View the full split report"));
   });
 
-	  it("renders full rows in race order", () => {
+  it("renders full rows in race order", () => {
 	    const htmlBody = renderSplit();
 	    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
 	    const labels = [
@@ -2426,6 +2426,37 @@ describe("renderSplitTable", () => {
 	      previousIndex = index;
 	    }
 	  });
+
+  it("full split detail uses escalation-basis medians for penalty-adjusted reclassification-only analyse frames", () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: {
+        achievedBand: "sub_80",
+        escalationBasisBand: "sub_75",
+        nextBand: "sub_70",
+        analysisFrame: { frame: "catch_up", comparisonBand: "sub_75", stretchBand: null, gapToBandMedianSeconds: 65 },
+        primaryBenchmarkGroup: { label: "Open Female", sampleSize: 4200 },
+        escalationBasisBandGroup: { label: "Open Female", sampleSize: 7200 },
+        nextBandGroup: { label: "Open Female", sampleSize: 10725 },
+      },
+      overrides: {
+        run_1: {
+          userSeconds: 290,
+          benchmarkMedianSeconds: 266,
+          nextBandMedianSeconds: 251,
+          timeGapToMedianSeconds: 24,
+          timeGapToNextBandMedianSeconds: 39,
+          frameGapSeconds: 39,
+        },
+      },
+    }, "analyse");
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    const run1Snippet = detailHtml.slice(detailHtml.indexOf("Run 1") - 260, detailHtml.indexOf("Run 1") + 620);
+
+    assert.match(detailHtml, /Gap vs sub-75/);
+    assert.match(run1Snippet, />4:11</, "Comparison should use the escalation-basis sub-75 median");
+    assert.doesNotMatch(run1Snippet, />4:26</, "Comparison should not use the raw achieved sub-80 median");
+    assert.match(run1Snippet, /\+0:39/);
+  });
 
   it("does not render aggregate rows in full detail", () => {
     const htmlBody = renderSplit();
@@ -2518,18 +2549,29 @@ describe("renderSplitTable", () => {
     assert.ok(caveatIdx > -1, "a may-not-sum caveat should appear after the summary cards in analyse mode too");
   });
 
-  it("material penalties: renders adjusted, penalty, and net-running summary cards", () => {
+  it("material penalties on a station: renders adjusted and penalty summary cards, but Running is not falsely labeled net of penalties", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("Without penalties"), "Adjusted card should appear");
     assert.ok(htmlBody.includes("Fastest win"), "Penalties card should appear");
-    assert.ok(htmlBody.includes("Net of penalties"), "Running card note should say Net of penalties");
+    assert.ok(!htmlBody.includes("Net of penalties"), "Running card should not claim net-of-penalties when the penalty is on a station");
   });
 
-  it("material penalties: segment profile includes purple penalty attribution", () => {
+  it("material penalties on a run: Running summary card correctly says Net of penalties", () => {
+    const htmlBody = renderSplit({ penalties: [{ station: "run_3", penaltySeconds: 300 }] });
+    assert.ok(htmlBody.includes("Net of penalties"), "Running card should say Net of penalties when the penalty really is on a run");
+  });
+
+  it("material penalties on a station: segment profile includes purple penalty attribution but does not falsely claim running is net of penalties", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("#8b5cf6"), "purple penalty colour should appear");
-    assert.ok(htmlBody.includes("Running is shown net of penalties"), "segment profile should explain net running");
+    assert.ok(!htmlBody.includes("Running is shown net of penalties"), "should not claim running is net of penalties when the penalty is on a station");
+    assert.ok(htmlBody.includes("Penalties are shown separately from performance gaps"), "should use the generic penalty-separation footer instead");
     assert.ok(htmlBody.includes("may not sum exactly to the total race gap"), "segment profile should carry the independence note");
+  });
+
+  it("material penalties on a run: segment profile explains running is net of penalties", () => {
+    const htmlBody = renderSplit({ penalties: [{ station: "run_3", penaltySeconds: 300 }] });
+    assert.ok(htmlBody.includes("Running is shown net of penalties"), "segment profile should explain net running when the penalty really is on a run");
   });
 
 	  it("material penalties: penalty row appears before segment rows in full split table", () => {

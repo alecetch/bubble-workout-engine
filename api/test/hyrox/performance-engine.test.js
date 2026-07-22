@@ -515,6 +515,31 @@ test("analyse mode uses penalty-adjusted band as escalation basis when material 
   assert.equal(total.nextBandMedianSeconds, 4140);
 });
 
+test("penalty-adjusted reclassification-only frames attach escalation-basis segment stats", () => {
+  const fixture = readFixture("elite_small_gaps.json");
+  const analysis = analyseSubmission({
+    ...fixture,
+    race: { ...fixture.race, finishTimeSeconds: 75 * 60 + 7 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 60 }],
+    calculatorMode: "analyse",
+  });
+  const total = analysis.segments.find((segment) => segment.segmentKey === "total_time");
+  const run1 = analysis.segments.find((segment) => segment.segmentKey === "run_1");
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.primaryBenchmarkGroup.key, SUB_80_BAND_KEY);
+  assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_75");
+  assert.equal(analysis.benchmarkContext.escalationBasisBandGroup.key, SUB_75_BAND_KEY);
+  assert.equal(analysis.benchmarkContext.analysisFrame.frame, "competitive");
+  assert.equal(analysis.benchmarkContext.analysisFrame.comparisonBand, "sub_75");
+  assert.equal(total.benchmarkMedianSeconds, 4680);
+  assert.equal(total.nextBandMedianSeconds, 4440);
+  assert.equal(total.frameGapSeconds, 67);
+  assert.equal(run1.benchmarkMedianSeconds, 320);
+  assert.equal(run1.nextBandMedianSeconds, 300);
+  assert.equal(run1.frameGapSeconds, -50);
+});
+
 test("material penalties do not change escalation basis when adjusted time stays in the raw band", () => {
   const fixture = readFixture("elite_small_gaps.json");
   const analysis = analyseSubmission({
@@ -528,13 +553,14 @@ test("material penalties do not change escalation basis when adjusted time stays
   assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_80");
   assert.equal(analysis.benchmarkContext.nextBand, "sub_75");
   assert.equal(analysis.benchmarkContext.analysisFrame.comparisonBand, "sub_75");
+  assert.equal(analysis.segments.find((segment) => segment.segmentKey === "run_1").nextBandMedianSeconds, 300);
 });
 
 test("non-material penalties do not change escalation basis", () => {
   const fixture = readFixture("elite_small_gaps.json");
   const analysis = analyseSubmission({
     ...fixture,
-    race: { ...fixture.race, finishTimeSeconds: 77 * 60 + 7 },
+    race: { ...fixture.race, finishTimeSeconds: 78 * 60 + 30 },
     penalties: [{ station: "farmers_carry", penaltySeconds: 20 }],
     calculatorMode: "analyse",
   });
@@ -542,6 +568,8 @@ test("non-material penalties do not change escalation basis", () => {
   assert.equal(analysis.benchmarkContext.achievedBand, "sub_80");
   assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_80");
   assert.equal(analysis.benchmarkContext.nextBand, "sub_75");
+  assert.equal(analysis.benchmarkContext.analysisFrame.comparisonBand, "sub_80");
+  assert.equal(analysis.segments.find((segment) => segment.segmentKey === "run_1").nextBandMedianSeconds, undefined);
 });
 
 test("suppressed penalty-adjusted escalation basis falls back to raw-band behavior", () => {

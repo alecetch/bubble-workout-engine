@@ -1633,16 +1633,25 @@ function renderSplitTable(section, analysisJson) {
 	      ? `<span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:#7c3aed;margin-right:5px;"></span>Penalties ${splitSafe(splitGapDisplay(totalPenaltySeconds))}</span>`
 	      : "";
 		    const runningLabel = Number.isFinite(runningGap)
-		      ? penaltiesAreMaterial
+		      ? runPenaltySeconds > 0
 		        ? `Running ${splitSafe(splitGapDisplay(runGapNetOfPenalties))} net of penalties`
 	        : `Running ${splitSafe(splitGapDisplay(runGapRaw))}`
 		      : "Running unavailable";
     const gapBandRef = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
       ? `${bandDisplayLabel(gapComparisonBand)} benchmark`
       : "benchmark";
-    const footerNote = penaltiesAreMaterial
-      ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Running is shown net of penalties. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : `Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the ${gapBandRef} median for that segment, so they may not sum exactly to the total race gap.`}</p>`
-      : `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${hasGoalGroup ? "Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap." : `Segment gaps are each measured against the ${gapBandRef} median for that segment, so they may not sum exactly to the total race gap.`}</p>`;
+    const footerSentence = runPenaltySeconds > 0
+      ? (hasGoalGroup
+        ? "Running is shown net of penalties. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap."
+        : `Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the ${gapBandRef} median for that segment, so they may not sum exactly to the total race gap.`)
+      : penaltiesAreMaterial
+        ? (hasGoalGroup
+          ? "Penalties are shown separately from performance gaps. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap."
+          : `Penalties are shown separately from performance gaps. Segment gaps are each measured against the ${gapBandRef} median for that segment, so they may not sum exactly to the total race gap.`)
+        : (hasGoalGroup
+          ? "Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap."
+          : `Segment gaps are each measured against the ${gapBandRef} median for that segment, so they may not sum exactly to the total race gap.`);
+    const footerNote = `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 0 0;line-height:1.5;">${footerSentence}</p>`;
 
     return `<tr>
       <td style="background-color:#ffffff;padding:0 24px 18px;">
@@ -1772,7 +1781,7 @@ function renderSplitTable(section, analysisJson) {
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Penalties", formatTime(totalPenaltySeconds), totalPenaltySeconds, "Fastest win", penaltyPill(totalPenaltySeconds))}</td>
             </tr>
             <tr>
-              <td width="50%" valign="top" style="padding:0 4px 0 0;">${explicitCard("Running", timeFor(runSeg), runGapNetOfPenalties, runSeg ? "Net of penalties" : "Unavailable")}</td>
+              <td width="50%" valign="top" style="padding:0 4px 0 0;">${explicitCard("Running", timeFor(runSeg), runGapNetOfPenalties, runSeg ? (runPenaltySeconds > 0 ? "Net of penalties" : cardNote("run_time", runGapNetOfPenalties)) : "Unavailable")}</td>
               <td width="50%" valign="top" style="padding:0 0 0 4px;">${explicitCard("RoxZone", timeFor(roxSeg), roxGap, cardNote("roxzone_time", roxGap))}</td>
             </tr>
           </table>
