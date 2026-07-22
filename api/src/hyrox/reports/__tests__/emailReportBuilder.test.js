@@ -2551,6 +2551,30 @@ describe("renderSplitTable", () => {
     assert.ok(snippet.indexOf("Penalties") < snippet.indexOf("SkiErg"), "Penalties should be the first opportunity");
   });
 
+  it("material penalties on a station: MAIN INSIGHT names the actual penalized segment, not a hardcoded run", () => {
+    const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] }, "analyse");
+    assert.doesNotMatch(htmlBody, /Run 5 is penalty-inflated/);
+    assert.doesNotMatch(htmlBody, /running gap drops/);
+    assert.match(htmlBody, /penalty is on Wall Balls, not running/);
+  });
+
+  it("material penalties on a run: MAIN INSIGHT still nets the running gap and names the actual penalized run", () => {
+    const htmlBody = renderSplit({ penalties: [{ station: "run_3", penaltySeconds: 300 }] }, "analyse");
+    assert.match(htmlBody, /running gap drops/);
+    assert.match(htmlBody, /Run 3 is penalty-inflated/);
+    assert.doesNotMatch(htmlBody, /Run 5 is penalty-inflated/);
+  });
+
+  it("material penalties on a station: TARGET PRIORITIES skip list does not falsely claim a run is penalty-inflated", () => {
+    const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] }, "target");
+    assert.doesNotMatch(htmlBody, /as pure running fitness - it is penalty-inflated/);
+  });
+
+  it("material penalties on a run: TARGET PRIORITIES skip list names the actual penalized run", () => {
+    const htmlBody = renderSplit({ penalties: [{ station: "run_3", penaltySeconds: 300 }] }, "target");
+    assert.match(htmlBody, /Run 3 as pure running fitness - it is penalty-inflated/);
+  });
+
   it("material penalties: penalty-inflated split is adjusted before opportunity ranking", () => {
     const htmlBody = renderSplit({
       penalties: [{ station: "run_5", penaltySeconds: 300 }],
@@ -2857,10 +2881,31 @@ describe("renderSplitTable", () => {
     const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
     const rowSnippet = detailHtml.slice(detailHtml.indexOf("Row") - 260, detailHtml.indexOf("Row") + 520);
 
-    assert.match(rowSnippet, /~7:00/);
+    assert.match(rowSnippet, /&lt;7:00/);
     assert.match(rowSnippet, /5:00/);
     assert.match(rowSnippet, /Target opportunity/);
     assert.doesNotMatch(rowSnippet, /&ndash;<\/td><td[^>]*>&ndash;/);
+  });
+
+  it("uses a \"<\" upper-bound prefix (not \"~\") for a repaired split, plus an explanatory caveat below the table", () => {
+    const htmlBody = renderSplit({
+      overrides: {
+        row: { confidence: "low", estimated: true, userSeconds: 420, timeGapToMedianSeconds: 120, frameGapSeconds: 120 },
+      },
+    });
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    const rowSnippet = detailHtml.slice(detailHtml.indexOf("Row") - 260, detailHtml.indexOf("Row") + 520);
+
+    assert.match(rowSnippet, /&lt;7:00/);
+    assert.doesNotMatch(rowSnippet, /~7:00/);
+    assert.match(detailHtml, /missing from official results and estimated from your total race time/);
+    assert.match(detailHtml, /your real split time is likely lower than shown/);
+  });
+
+  it("does not show the estimated-split caveat when no split is estimated", () => {
+    const htmlBody = renderSplit();
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    assert.doesNotMatch(detailHtml, /missing from official results and estimated from your total race time/);
   });
 
   it("dashes Comparison and Split status for a genuinely suppressed low-confidence split (not estimated)", () => {

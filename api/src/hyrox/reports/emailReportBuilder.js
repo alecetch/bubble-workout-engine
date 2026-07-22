@@ -2,6 +2,7 @@ import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallS
 import { buildHeroCopy } from "../interpretation/hyroxInterpretationEngine.js";
 import { PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
 import { compareLimiterSegments, findBiggestLimiter } from "../engine/limiterService.js";
+import { RUN_KEYS } from "../config/segmentMap.js";
 import { penaltyContext } from "./penaltyContext.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
@@ -868,7 +869,7 @@ function renderRecommendations(section, analysisJson = {}) {
   const richRecs = Array.isArray(section.richRecommendations) ? section.richRecommendations : null;
   const { penaltiesAreMaterial: hasMaterialPenalties } = penaltyContext(analysisJson);
   const stationLosses = (analysisJson.segments ?? [])
-    .filter((segment) => segment.type === "station")
+    .filter((segment) => segment.type === "station" && isConfidentSegment(segment))
     .map((segment) => ({
       label: segment.label,
       gap: segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds,
@@ -1045,6 +1046,21 @@ function splitGapColor(gap) {
   return "#475569";
 }
 
+// A low-confidence segment (e.g. a repaired/estimated split) can still appear in FULL SPLIT
+// DETAIL, but shouldn't drive headline-style ranking (Biggest Opportunities, MAIN INSIGHT's
+// "biggest opportunities" sentence, NEXT TRAINING FOCUS) - mirrors limiterService.js's
+// confidenceAboveLow, which gates the same thing for the subject line/hero/MAIN INSIGHT limiter.
+function isConfidentSegment(segment) {
+  return segment?.confidence !== "low";
+}
+
+function joinWithAnd(items) {
+  const list = items.filter(Boolean);
+  if (list.length <= 1) return list[0] ?? "";
+  if (list.length === 2) return `${list[0]} and ${list[1]}`;
+  return `${list.slice(0, -1).join(", ")}, and ${list[list.length - 1]}`;
+}
+
 function splitRowBg(key, gap, top1, top2, top3) {
   if (!Number.isFinite(gap)) return "#ffffff";
   if (key === top1 || key === top2) return "#fff5f5";
@@ -1100,8 +1116,23 @@ function renderSplitTable(section, analysisJson) {
     totalPenaltySeconds >= 180 &&
     totalGapSeconds > 0 &&
     totalPenaltySeconds / totalGapSeconds >= 0.25;
-  const runGapNetOfPenalties = penaltiesAreMaterial && Number.isFinite(runGapRaw)
-    ? Math.max(0, runGapRaw - totalPenaltySeconds)
+  // Penalties can land on a run OR a station (e.g. "ROWING (120s)") - only run-attributed
+  // penalty seconds should ever be netted out of the running gap, otherwise a station penalty
+  // gets misrepresented as inflating the athlete's running time.
+  const penalizedSegmentKeys = [...new Set(
+    penalties.map((penalty) => penalty.segmentKey ?? penalty.runKey ?? penalty.station).filter(Boolean).map(String),
+  )];
+  const runPenaltySeconds = penalizedSegmentKeys
+    .filter((key) => RUN_KEYS.includes(key))
+    .reduce((sum, key) => sum + penalties.reduce((s, p) => (String(p.segmentKey ?? p.runKey ?? p.station) === key ? s + (Number(p.penaltySeconds) || 0) : s), 0), 0);
+  const runPenaltyLabels = penalizedSegmentKeys
+    .filter((key) => RUN_KEYS.includes(key))
+    .map((key) => segMap.get(key)?.label ?? key);
+  const nonRunPenaltyLabels = penalizedSegmentKeys
+    .filter((key) => !RUN_KEYS.includes(key))
+    .map((key) => segMap.get(key)?.label ?? key);
+  const runGapNetOfPenalties = runPenaltySeconds > 0 && Number.isFinite(runGapRaw)
+    ? Math.max(0, runGapRaw - runPenaltySeconds)
     : runGapRaw;
   const raceTimeSeconds = tableData.raceTimeSeconds ?? analysisJson.race?.finishTimeSeconds ?? null;
   const adjustedRaceTimeSeconds = hasPenalties && Number.isFinite(raceTimeSeconds)
@@ -1318,9 +1349,14 @@ function renderSplitTable(section, analysisJson) {
         hasGoalGroup ? "Against the target profile, " : null,
       );
       const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
-      const runningPenaltySentence = Number.isFinite(runGapRaw) && Number.isFinite(runGapNetOfPenalties)
-        ? `Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. Run 5 is penalty-inflated, so do not treat the full Run 5 loss as a running fitness problem.`
-        : `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is execution leakage, but HYROX did not publish enough running data to separate it cleanly from running fitness.`;
+      const hasRunGapData = Number.isFinite(runGapRaw) && Number.isFinite(runGapNetOfPenalties);
+      const runningPenaltySentence = !hasRunGapData
+        ? `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is execution leakage, but HYROX did not publish enough running data to separate it cleanly from running fitness.`
+        : runPenaltySeconds > 0
+          ? `Once the <strong>${splitSafe(formatGain(runPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. ${splitSafe(joinWithAnd(runPenaltyLabels))} ${runPenaltyLabels.length > 1 ? "are" : "is"} penalty-inflated, so do not treat the full loss as a running fitness problem.`
+          : nonRunPenaltyLabels.length > 0
+            ? `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is on ${splitSafe(joinWithAnd(nonRunPenaltyLabels))}, not running - treat it as station execution leakage, separate from your running fitness.`
+            : `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is execution leakage, separate from running fitness.`;
       const penaltyLeadSentence = hasNarrativeDataAnomaly
         ? "One or more split values look unusual, so check the race splits before naming a main limiter. Penalties are still a controllable win."
         : `${hasGoalGroup ? "Stations remain the largest target gap" : "Stations remain the largest fitness limiter"}, but penalties are your fastest controllable win.`;
@@ -1470,7 +1506,7 @@ function renderSplitTable(section, analysisJson) {
         : ` Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
     const topLosses = SPLIT_TABLE_RACE_ORDER
       .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
-      .filter((row) => Number.isFinite(row.gap) && row.gap >= 60)
+      .filter((row) => Number.isFinite(row.gap) && row.gap >= 60 && isConfidentSegment(row.seg))
       .sort(compareOpportunityRows)
       .slice(0, 3);
     const lossNames = topLosses.map((row) => row.seg?.label ?? row.key).join(", ");
@@ -1486,6 +1522,9 @@ function renderSplitTable(section, analysisJson) {
     );
     const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
     const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
+    // Unreachable when penaltiesAreMaterial is true: the branch above (line ~1327) always
+    // returns first in that case. Kept as-is (matching pre-existing dead-code shape) rather
+    // than rewritten, since it has no observable effect either way.
     let penaltySentence = "";
     if (penaltiesAreMaterial) {
       const rawGapStr = splitSafe(splitGapDisplay(runGapRaw));
@@ -1833,7 +1872,7 @@ function renderSplitTable(section, analysisJson) {
 
     const skipItems = [];
     if (runGapRaw < -30) skipItems.push("general running volume - it is already a relative strength");
-    if (penaltiesAreMaterial) skipItems.push("Run 5 as pure running fitness - it is penalty-inflated");
+    if (runPenaltySeconds > 0) skipItems.push(`${splitSafe(joinWithAnd(runPenaltyLabels))} as pure running fitness - ${runPenaltyLabels.length > 1 ? "they are" : "it is"} penalty-inflated`);
 
     if (protectItems.length === 0 && changeItems.length === 0) return "";
 
@@ -1879,6 +1918,7 @@ function renderSplitTable(section, analysisJson) {
       })
 	      .filter((row) => {
 	        if (!row.seg?.label || !Number.isFinite(row.gap) || row.gap < 30) return false;
+	        if (!isConfidentSegment(row.seg)) return false;
 	        // In analyse mode (no goal group), exclude segments that are already near the
 	        // comparison split time. Eligibility is seconds-gap based, not percentile based.
 	        if (!hasGoalGroup && !["Opportunity", "Priority"].includes(splitBandLabel(row.seg, row.gap))) return false;
@@ -1895,7 +1935,7 @@ function renderSplitTable(section, analysisJson) {
     const topLosses = losses.slice(0, hasGoalGroup ? 3 : 5);
     const strengthCandidates = SPLIT_TABLE_RACE_ORDER
       .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
-      .filter((row) => row.seg && Number.isFinite(row.gap) && row.gap < 0)
+      .filter((row) => row.seg && Number.isFinite(row.gap) && row.gap < 0 && isConfidentSegment(row.seg))
       .sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
 
     const roxAggregateSeg = segMap.get("roxzone_time");
@@ -1904,6 +1944,7 @@ function renderSplitTable(section, analysisJson) {
       roxAggregateSeg
       && Number.isFinite(roxAggregateGap)
 	      && roxAggregateGap < -30
+      && isConfidentSegment(roxAggregateSeg)
     ) {
       strengthCandidates.push({
         key: "roxzone_time",
@@ -2109,7 +2150,10 @@ function renderSplitTable(section, analysisJson) {
     const gap = splitOpportunityGap(segment);
     const penaltyAdjusted = isPenaltyAdjustedSegment(segment);
     const isLowConfidence = segment.confidence === "low";
-    const prefix = isLowConfidence ? "~" : "";
+    // A repaired split is missing RoxZone transition time that would normally be
+    // counted separately, so the true station time is lower than the residual shown -
+    // "<" (an upper bound) is accurate here where "~" (roughly this value) is not.
+    const prefix = segment.estimated === true ? "<" : isLowConfidence ? "~" : "";
     const userT = Number.isFinite(segment.userSeconds) ? `${prefix}${formatTime(segment.userSeconds)}` : "–";
     const gapStr = splitGapDisplay(gap);
     const gapColor = isLowConfidence ? "#94a3b8" : splitGapColor(gap);
@@ -2150,6 +2194,11 @@ function renderSplitTable(section, analysisJson) {
 
   const splitTableNote = penaltiesAreMaterial
     ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;line-height:1.45;margin:8px 0 0;">Penalty time is shown separately above, so the split table focuses on performance gaps rather than execution penalties.</p>`
+    : "";
+
+  const hasEstimatedSplit = SPLIT_TABLE_RACE_ORDER.some((key) => segMap.get(key)?.estimated === true);
+  const estimatedSplitNote = hasEstimatedSplit
+    ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;line-height:1.45;margin:8px 0 0;">Splits marked "&lt;" were missing from official results and estimated from your total race time. That estimate is also missing RoxZone transition time normally counted separately, so your real split time is likely lower than shown.</p>`
     : "";
 
   function renderTotals() {
@@ -2245,6 +2294,7 @@ function renderSplitTable(section, analysisJson) {
           ${splitTableRows}
 	        </table>
         ${splitTableNote}
+        ${estimatedSplitNote}
 	        ${splitReportLink}
 	      </td>
     </tr>`;

@@ -107,6 +107,14 @@ function onlyTimeValue(value) {
   return line.replace(matches[0].value, "").trim() ? null : parseHms(matches[0].value);
 }
 
+function stationKeyFromPenaltyText(raw) {
+  const normalised = String(raw ?? "").toUpperCase();
+  for (const { station, labels } of REPLAY_STATIONS) {
+    if (labels.some((label) => normalised.includes(label.toUpperCase()))) return station;
+  }
+  return null;
+}
+
 function parsePenaltyText(raw) {
   if (!raw || /^[-–—\s]*$/.test(raw)) return null;
   const secondsMatch = raw.match(/\((\d+)\s*s\)/i);
@@ -117,6 +125,10 @@ function parsePenaltyText(raw) {
   if (run) return { segmentKey: `run_${run[1]}`, penaltySeconds, rawText: raw.trim() };
   const station = raw.match(/\bSTATION\s*(\d)\b/i);
   if (station) return { segmentKey: STATION_BY_NUMBER[Number(station[1]) - 1] ?? "unknown", penaltySeconds, rawText: raw.trim() };
+  // HYROX also publishes penalty text as the station's own name (e.g. "ROWING (120s)")
+  // rather than "STATION N" - REPLAY_STATIONS already carries the name aliases we need.
+  const byName = stationKeyFromPenaltyText(raw);
+  if (byName) return { segmentKey: byName, penaltySeconds, rawText: raw.trim() };
   return { segmentKey: "unknown", penaltySeconds, rawText: raw.trim() };
 }
 
