@@ -199,11 +199,11 @@ function gapToEscalationBasisMedian({ normalised, benchmarkContext, totalTimeSeg
   return Number.isFinite(median) && Number.isFinite(userSeconds) ? userSeconds - median : null;
 }
 
-function addFrameGaps(segments, analysisFrame, calculatorMode) {
+function addFrameGaps(segments, analysisFrame, calculatorMode, achievedBand = null) {
   const isAnalyse = calculatorMode === "analyse";
-  const frame = analysisFrame?.frame;
-  const isNextBandFrame = frame === "next_band" || frame === "next_band_stretch";
-  const useNextBandGaps = isNextBandFrame || Boolean(analysisFrame?.useNextBandGaps);
+  const useNextBandGaps = isAnalyse &&
+    Boolean(analysisFrame?.comparisonBand) &&
+    analysisFrame.comparisonBand !== achievedBand;
 
   return segments.map((segment) => {
     let frameGapSeconds;
@@ -263,11 +263,17 @@ export function analyseSubmission(input = {}) {
       adjustedFinishTimeSeconds: penaltyBandAdjustment.adjustedFinishTimeSeconds,
     }),
   });
-  const needsNextBandStats = analysisFrame.frame === "next_band" || analysisFrame.frame === "next_band_stretch" || Boolean(analysisFrame.useNextBandGaps);
-  const segmentsWithNextBand = needsNextBandStats
-    ? attachNextBandStats(baseSegments, benchmarkContext.nextBandGroup?.key ?? null)
+  const comparisonBand = analysisFrame.comparisonBand ?? null;
+  const comparisonBandGroupKey = comparisonBand === benchmarkContext.nextBand
+    ? benchmarkContext.nextBandGroup?.key ?? null
+    : comparisonBand === benchmarkContext.escalationBasisBand
+      ? benchmarkContext.escalationBasisBandGroup?.key ?? null
+      : null;
+  const needsComparisonBandStats = Boolean(comparisonBandGroupKey) && comparisonBand !== benchmarkContext.achievedBand;
+  const segmentsWithNextBand = needsComparisonBandStats
+    ? attachNextBandStats(baseSegments, comparisonBandGroupKey)
     : baseSegments;
-  const framedSegments = addFrameGaps(segmentsWithNextBand, analysisFrame, calculatorMode);
+  const framedSegments = addFrameGaps(segmentsWithNextBand, analysisFrame, calculatorMode, benchmarkContext.achievedBand ?? null);
   const runFadeAnalysis = analyseRunFade(normalised, benchmarkContext);
   const roxzoneAnalysis = analyseRoxzone(normalised, benchmarkContext);
   const scores = calculateScores(framedSegments, normalised, runFadeAnalysis);
