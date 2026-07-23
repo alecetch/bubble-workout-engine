@@ -540,6 +540,36 @@ test("penalty-adjusted reclassification-only frames attach escalation-basis segm
   assert.equal(run1.frameGapSeconds, -50);
 });
 
+test("comparison-band frame gaps remain penalty-aware for station breakdown and limiters", () => {
+  const fixture = readFixture("elite_small_gaps.json");
+  const splits = fixture.splits.map((split) => split.segmentKey === "farmers_carry"
+    ? { ...split, timeSeconds: 240 }
+    : split);
+  const analysis = analyseSubmission({
+    ...fixture,
+    splits,
+    race: { ...fixture.race, finishTimeSeconds: 75 * 60 + 7 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 180 }],
+    calculatorMode: "analyse",
+  });
+  const farmers = analysis.segments.find((segment) => segment.segmentKey === "farmers_carry");
+  const farmersBreakdown = analysis.stationBreakdown.find((station) => station.segmentKey === "farmers_carry");
+  const weakStations = analysis.stationBreakdown.filter((station) => station.timeGapSeconds > 0).map((station) => station.segmentKey);
+
+  assert.equal(analysis.benchmarkContext.achievedBand, "sub_80");
+  assert.equal(analysis.benchmarkContext.escalationBasisBand, "sub_75");
+  assert.equal(analysis.benchmarkContext.analysisFrame.comparisonBand, "sub_70");
+  assert.equal(farmers.nextBandMedianSeconds, 120);
+  assert.equal(farmers.timeGapToNextBandMedianSeconds, 120);
+  assert.equal(farmers.timeGapToNextBandMedianSecondsNetOfPenalty, -60);
+  assert.equal(farmers.frameGapSeconds, 120);
+  assert.equal(farmers.frameGapNetOfPenaltySeconds, -60);
+  assert.equal(farmersBreakdown.timeGapSeconds, -60);
+  assert.equal(weakStations.includes("farmers_carry"), false);
+  assert.notEqual(analysis.headline.biggestLimiter?.segmentKey, "farmers_carry");
+  assert.equal(analysis.headline.biggestStrength?.segmentKey, "farmers_carry");
+});
+
 test("material penalties do not change escalation basis when adjusted time stays in the raw band", () => {
   const fixture = readFixture("elite_small_gaps.json");
   const analysis = analyseSubmission({
