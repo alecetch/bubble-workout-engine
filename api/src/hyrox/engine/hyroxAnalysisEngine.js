@@ -15,6 +15,7 @@ import { analyseMuscleGroups } from "./muscleGroupAnalyser.js";
 import { selectAnalysisFrame } from "./analysisFrameSelector.js";
 import { getBenchmarkStats } from "./benchmarkService.js";
 import { penaltyAdjustment } from "./penaltyMateriality.js";
+import { resolvedFrameGapSeconds, resolvedStatGapSeconds, resolvedUserSeconds } from "./gapSelectors.js";
 
 function markSegmentRoles(segments, limiter, strength) {
   return segments.map((segment) => ({
@@ -24,16 +25,16 @@ function markSegmentRoles(segments, limiter, strength) {
   }));
 }
 
-function stationBreakdown(segments, { gapField = "frameGapNetOfPenaltySeconds" } = {}) {
+function stationBreakdown(segments, { gapSelector = resolvedFrameGapSeconds } = {}) {
   return segments
     .filter((segment) => segment.type === "station" && Number.isFinite(segment.percentile))
-    .sort((a, b) => ((b[gapField] ?? b.frameGapSeconds) ?? 0) - ((a[gapField] ?? a.frameGapSeconds) ?? 0))
+    .sort((a, b) => (gapSelector(b) ?? 0) - (gapSelector(a) ?? 0))
     .map((segment) => ({
       segmentKey: segment.segmentKey,
       label: segment.label,
       percentile: segment.percentile,
       fieldPercentile: segment.fieldPercentile ?? null,
-      timeGapSeconds: Math.round((segment[gapField] ?? segment.frameGapSeconds) ?? 0),
+      timeGapSeconds: Math.round(gapSelector(segment) ?? 0),
       confidence: segment.confidence,
       nextBandMedianSeconds: segment.nextBandMedianSeconds ?? null,
     }));
@@ -171,9 +172,7 @@ function attachNextBandStats(segments, nextBandGroupKey) {
   return segments.map((segment) => {
     const stats = getBenchmarkStats(nextBandGroupKey, segment.segmentKey);
     const median = stats?.medianSeconds ?? stats?.p50Seconds ?? null;
-    const userSecondsNetOfPenalty = Number.isFinite(segment.userSecondsNetOfPenalty)
-      ? segment.userSecondsNetOfPenalty
-      : segment.userSeconds;
+    const userSecondsNetOfPenalty = resolvedUserSeconds(segment);
     return {
       ...segment,
       nextBandMedianSeconds: median,
@@ -307,7 +306,7 @@ export function analyseSubmission(input = {}) {
   const muscleSegments = calculatorMode === "target" && muscleBenchmarkContext?.available
     ? calculateSegmentStats(normalised, muscleBenchmarkContext)
     : segments;
-  const muscleStationBreakdown = stationBreakdown(muscleSegments, { gapField: "timeGapToMedianSecondsNetOfPenalty" });
+  const muscleStationBreakdown = stationBreakdown(muscleSegments, { gapSelector: resolvedStatGapSeconds });
   const muscleGroupProfile = analyseMuscleGroups({
     stationBreakdown: muscleStationBreakdown,
     analysisScope: scope,
