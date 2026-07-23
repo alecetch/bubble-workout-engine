@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import { buildEmailReport, gapPill } from "../emailReportBuilder.js";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildTemplateA } from "../templateSlotMapper.js";
-import { bandScoreLabel, formatOverallStanding } from "../copyFormatter.js";
+import { bandScoreLabel, formatOverallStanding, formatPercentileRank } from "../copyFormatter.js";
 import { buildCaption } from "../../sharePack/captionBuilder.js";
 import { ANALYSIS_FRAMES } from "../../engine/analysisFrameSelector.js";
+import { setBenchmarkData } from "../../engine/benchmarkService.js";
+import { approximatePercentile } from "../../engine/percentileCalculator.js";
 
 function mockReport(extraSections = []) {
   return {
@@ -3561,6 +3563,81 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     assert.equal(lens.includes("penalty-adjusted time already beats"), false);
   });
 
+  it("uses the penalty-adjusted comparison band stats for Benchmark Lens standing when reclassified", () => {
+    const rawBandKey = "hyrox:test_lens:band:sub_80:open:female";
+    const comparisonBandKey = "hyrox:test_lens:band:sub_75:open:female";
+    const rawBandStats = { groupKey: rawBandKey, metricKey: "total_time", sampleSize: 400, p10Seconds: 4500, p25Seconds: 4620, p50Seconds: 4680, p75Seconds: 4740, p90Seconds: 4800 };
+    const comparisonBandStats = { groupKey: comparisonBandKey, metricKey: "total_time", sampleSize: 400, p10Seconds: 4200, p25Seconds: 4300, p50Seconds: 4380, p75Seconds: 4450, p90Seconds: 4520 };
+    const rawPercentile = approximatePercentile(4627, rawBandStats);
+    const comparisonPercentile = approximatePercentile(4447, comparisonBandStats);
+
+    try {
+      setBenchmarkData({
+        groups: [
+          { groupKey: rawBandKey, datasetVersion: "test_lens", division: "open", gender: "female", performanceBand: "sub_80", sampleSize: 400 },
+          { groupKey: comparisonBandKey, datasetVersion: "test_lens", division: "open", gender: "female", performanceBand: "sub_75", sampleSize: 400 },
+        ],
+        metrics: [rawBandStats, comparisonBandStats],
+      });
+
+      const { htmlBody } = buildEmailReport(
+        mockReport(),
+        mockAnalysis({
+          benchmarkContext: {
+            achievedBand: "sub_80",
+            escalationBasisBand: "sub_75",
+            nextBand: "sub_70",
+            analysisFrame: { frame: "catch_up", comparisonBand: "sub_75", stretchBand: null, gapToBandMedianSeconds: 65 },
+            primaryBenchmarkGroup: { key: rawBandKey, label: "Open Female", sampleSize: 400 },
+            escalationBasisBandGroup: { key: comparisonBandKey, label: "Open Female", sampleSize: 400 },
+            nextBandGroup: { label: "Open Female", sampleSize: 300 },
+          },
+          race: { finishTimeSeconds: 4627 },
+          segments: [{
+            segmentKey: "total_time",
+            type: "aggregate",
+            percentile: rawPercentile,
+            fieldPercentile: 52,
+            userSeconds: 4627,
+            userSecondsNetOfPenalty: 4447,
+          }],
+        }),
+        mockContext(),
+        null,
+        "analyse",
+      );
+
+      const lens = benchmarkLensSection(htmlBody);
+      assert.ok(lens.includes(`${formatPercentileRank(comparisonPercentile)} within this band`));
+      assert.equal(lens.includes(`${formatPercentileRank(rawPercentile)} within this band`), false);
+      assert.ok(comparisonGroupRow(lens).includes("70:00"));
+      assert.ok(comparisonGroupRow(lens).includes("74:59"));
+    } finally {
+      setBenchmarkData({ groups: [], metrics: [] });
+    }
+  });
+
+  it("keeps Benchmark Lens standing unchanged when the comparison band is not escalated", () => {
+    const { htmlBody } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        benchmarkContext: {
+          achievedBand: "sub_80",
+          escalationBasisBand: "sub_80",
+          analysisFrame: { frame: "current_band", comparisonBand: "sub_80", stretchBand: null, gapToBandMedianSeconds: 120 },
+          primaryBenchmarkGroup: { label: "Open Female", sampleSize: 4200 },
+        },
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 64, userSeconds: 4627, userSecondsNetOfPenalty: 4447 }],
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+
+    const lens = benchmarkLensSection(htmlBody);
+    assert.ok(lens.includes("64th percentile within this band"));
+  });
+
   it("keeps the ordinary single-step escalation sentence when escalation is not penalty-adjusted", () => {
     const { htmlBody } = buildEmailReport(
       mockReport(),
@@ -3916,6 +3993,65 @@ describe("content accuracy fixes (feature-143)", () => {
     assert.match(mainInsight, /Treat the limiter ranking as directional until those times are checked/i);
     assert.doesNotMatch(mainInsight, /Both running and station performance are contributing[\s\S]*station time is already ahead/i);
     assert.match(htmlBody, /unusually large gap|double-check/i);
+  });
+
+  it("M-10: station-only penalties do not get double-counted in top-level gap reconciliation", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_70" },
+      penalties: [{ station: "wall_balls", penaltySeconds: 300 }],
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4200, benchmarkMedianSeconds: 3830, frameGapSeconds: 370, confidence: "high" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, benchmarkMedianSeconds: 1980, frameGapSeconds: 220, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 1700, benchmarkMedianSeconds: 1550, frameGapSeconds: 150, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 300, benchmarkMedianSeconds: 300, frameGapSeconds: 0, confidence: "high" },
+        { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 520, benchmarkMedianSeconds: 300, frameGapSeconds: 220, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.doesNotMatch(mainInsight, /One or more split values look unusual/i);
+    assert.doesNotMatch(mainInsight, /Treat the limiter ranking as directional until those times are checked/i);
+    assert.doesNotMatch(htmlBody, /unusually large gap|double-check/i);
+    assert.doesNotMatch(htmlBody, /Net of penalties/);
+  });
+
+  it("M-10: run-attributed penalties still reconcile after the running gap is netted", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_70" },
+      penalties: [{ station: "run_3", penaltySeconds: 300 }],
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4500, benchmarkMedianSeconds: 3830, frameGapSeconds: 670, confidence: "high" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, benchmarkMedianSeconds: 1980, frameGapSeconds: 220, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 2000, benchmarkMedianSeconds: 1550, frameGapSeconds: 450, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 300, benchmarkMedianSeconds: 300, frameGapSeconds: 0, confidence: "high" },
+        { segmentKey: "run_3", label: "Run 3", type: "run", userSeconds: 720, benchmarkMedianSeconds: 300, frameGapSeconds: 420, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+
+    assert.match(htmlBody, /Net of penalties/);
+    assert.doesNotMatch(htmlBody, /unusually large gap|double-check/i);
+  });
+
+  it("M-10: no-penalty top-level gap reconciliation remains unchanged", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_70" },
+      penalties: [],
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4200, benchmarkMedianSeconds: 3830, frameGapSeconds: 370, confidence: "high" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2200, benchmarkMedianSeconds: 1980, frameGapSeconds: 220, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 1700, benchmarkMedianSeconds: 1550, frameGapSeconds: 150, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 300, benchmarkMedianSeconds: 300, frameGapSeconds: 0, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+
+    assert.doesNotMatch(htmlBody, /unusually large gap|double-check/i);
+    assert.doesNotMatch(htmlBody, /Net of penalties/);
   });
 
   it("MAIN INSIGHT station-performance framing does not name a run split", () => {
