@@ -1,7 +1,9 @@
 import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatTime, regionalContextLine } from "./copyFormatter.js";
 import { buildHeroCopy } from "../interpretation/hyroxInterpretationEngine.js";
 import { nextPerformanceBand, PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
+import { getBenchmarkStats } from "../engine/benchmarkService.js";
 import { compareLimiterSegments, findBiggestLimiter } from "../engine/limiterService.js";
+import { approximatePercentile } from "../engine/percentileCalculator.js";
 import { RUN_KEYS } from "../config/segmentMap.js";
 import { penaltyContext } from "./penaltyContext.js";
 import { readFileSync } from "fs";
@@ -496,7 +498,15 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   const bandMedianTime = bandMedianSecs ? formatTime(bandMedianSecs) : null;
 
   // Deliberately band-relative: Benchmark Lens standing compares within the selected performance band.
-  const percentileValue = Number(totalSeg?.percentile);
+  const comparisonBandStats = isEscalated && group?.key
+    ? getBenchmarkStats(group.key, "total_time")
+    : null;
+  const userSecondsForStanding = Number.isFinite(totalSeg?.userSecondsNetOfPenalty)
+    ? totalSeg.userSecondsNetOfPenalty
+    : totalSeg?.userSeconds;
+  const percentileValue = comparisonBandStats
+    ? approximatePercentile(userSecondsForStanding, comparisonBandStats)
+    : Number(totalSeg?.percentile);
   const percentileText = Number.isFinite(percentileValue)
     ? `${formatPercentileRank(percentileValue)} within this band`
     : null;
@@ -1298,7 +1308,8 @@ function renderSplitTable(section, analysisJson) {
       : runGapRaw;
     if (![totalGapSeconds, stationGap, runningGap, roxGap].every(Number.isFinite) || totalGapSeconds <= 0) return null;
 
-    const reconciledVisibleGap = stationGap + runningGap + roxGap + (penaltiesAreMaterial ? totalPenaltySeconds : 0);
+    const runNettedSeconds = Number.isFinite(runGapRaw) ? runGapRaw - runningGap : 0;
+    const reconciledVisibleGap = stationGap + runningGap + roxGap + runNettedSeconds;
     const discrepancySeconds = Math.abs(totalGapSeconds - reconciledVisibleGap);
     const toleranceSeconds = Math.max(TOP_LEVEL_GAP_RECONCILIATION_BLOCK_SECONDS, totalGapSeconds * 0.5);
     return discrepancySeconds > toleranceSeconds
