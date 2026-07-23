@@ -171,12 +171,19 @@ function attachNextBandStats(segments, nextBandGroupKey) {
   return segments.map((segment) => {
     const stats = getBenchmarkStats(nextBandGroupKey, segment.segmentKey);
     const median = stats?.medianSeconds ?? stats?.p50Seconds ?? null;
+    const userSecondsNetOfPenalty = Number.isFinite(segment.userSecondsNetOfPenalty)
+      ? segment.userSecondsNetOfPenalty
+      : segment.userSeconds;
     return {
       ...segment,
       nextBandMedianSeconds: median,
       timeGapToNextBandMedianSeconds:
         Number.isFinite(median) && Number.isFinite(segment.userSeconds)
           ? segment.userSeconds - median
+          : null,
+      timeGapToNextBandMedianSecondsNetOfPenalty:
+        Number.isFinite(median) && Number.isFinite(userSecondsNetOfPenalty)
+          ? userSecondsNetOfPenalty - median
           : null,
     };
   });
@@ -213,7 +220,7 @@ function addFrameGaps(segments, analysisFrame, calculatorMode, achievedBand = nu
       frameGapNetOfPenaltySeconds = segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSecondsNetOfPenalty ?? null;
     } else if (useNextBandGaps) {
       frameGapSeconds = segment.timeGapToNextBandMedianSeconds ?? segment.timeGapToMedianSeconds ?? null;
-      frameGapNetOfPenaltySeconds = segment.timeGapToNextBandMedianSeconds ?? segment.timeGapToMedianSecondsNetOfPenalty ?? null;
+      frameGapNetOfPenaltySeconds = segment.timeGapToNextBandMedianSecondsNetOfPenalty ?? segment.timeGapToMedianSecondsNetOfPenalty ?? null;
     } else {
       frameGapSeconds = segment.timeGapToMedianSeconds ?? null;
       frameGapNetOfPenaltySeconds = segment.timeGapToMedianSecondsNetOfPenalty ?? null;
