@@ -2565,7 +2565,10 @@ describe("renderSplitTable", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("Without penalties"), "Adjusted card should appear");
     assert.ok(htmlBody.includes("Fastest win"), "Penalties card should appear");
-    assert.ok(!htmlBody.includes("Net of penalties"), "Running card should not claim net-of-penalties when the penalty is on a station");
+    assert.ok(htmlBody.includes("Net of penalties"), "Stations card should say Net of penalties when the penalty is on a station");
+    const runningCardIdx = htmlBody.indexOf(">Running<");
+    const runningCardSnippet = htmlBody.slice(runningCardIdx, runningCardIdx + 600);
+    assert.ok(!runningCardSnippet.includes("Net of penalties"), "Running card should not claim net-of-penalties when the penalty is on a station");
   });
 
   it("material penalties on a run: Running summary card correctly says Net of penalties", () => {
@@ -2573,11 +2576,11 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes("Net of penalties"), "Running card should say Net of penalties when the penalty really is on a run");
   });
 
-  it("material penalties on a station: segment profile includes purple penalty attribution but does not falsely claim running is net of penalties", () => {
+  it("material penalties on a station: segment profile explains stations is net of penalties, not running", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
     assert.ok(htmlBody.includes("#8b5cf6"), "purple penalty colour should appear");
     assert.ok(!htmlBody.includes("Running is shown net of penalties"), "should not claim running is net of penalties when the penalty is on a station");
-    assert.ok(htmlBody.includes("Penalties are shown separately from performance gaps"), "should use the generic penalty-separation footer instead");
+    assert.ok(htmlBody.includes("Stations is shown net of penalties"), "should explain stations is net of penalties when the penalty is on a station");
     assert.ok(htmlBody.includes("may not sum exactly to the total race gap"), "segment profile should carry the independence note");
   });
 
@@ -2608,8 +2611,30 @@ describe("renderSplitTable", () => {
   it("material penalties on a station: MAIN INSIGHT names the actual penalized segment, not a hardcoded run", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] }, "analyse");
     assert.doesNotMatch(htmlBody, /Run 5 is penalty-inflated/);
-    assert.doesNotMatch(htmlBody, /running gap drops/);
-    assert.match(htmlBody, /penalty is on Wall Balls, not running/);
+    assert.doesNotMatch(htmlBody, /the running gap drops/);
+    assert.match(htmlBody, /the station gap drops from/);
+    assert.match(htmlBody, /Wall Balls is penalty-inflated/);
+  });
+
+  it("material station penalty flips the aggregate Stations gap from a raw weakness to a net strength (Kate Wagstaff regression)", () => {
+    // Mirrors the real case: raw work_time gap is a small positive (+0:44), but once the
+    // station-attributed penalty is netted out, it's actually a clear strength (negative).
+    const htmlBody = renderSplit({
+      overrides: { work_time: { timeGapToMedianSeconds: 44 } },
+      penalties: [{ station: "wall_balls", penaltySeconds: 180 }],
+      benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
+    }, "analyse");
+
+    // SEGMENT PROFILE legend shows the net figure, not the raw +0:44.
+    const profileHtml = htmlBody.slice(htmlBody.indexOf("SEGMENT PROFILE"), htmlBody.indexOf("SEGMENT PROFILE") + 2000);
+    assert.match(profileHtml, /Stations −2:16 net of penalties/);
+    assert.doesNotMatch(profileHtml, /Stations \+0:44/);
+
+    // MAIN INSIGHT states both the raw and net figures explicitly, not just the raw one.
+    assert.match(htmlBody, /the station gap drops from <strong>\+0:44<\/strong> to <strong>−2:16<\/strong>/);
+
+    // Summary cards: Stations card is net, labeled, not the raw inflated figure.
+    assert.match(htmlBody, /−2:16/);
   });
 
   it("material penalties on a run: MAIN INSIGHT still nets the running gap and names the actual penalized run", () => {
@@ -4103,7 +4128,7 @@ describe("content accuracy fixes (feature-143)", () => {
     assert.doesNotMatch(mainInsight, /One or more split values look unusual/i);
     assert.doesNotMatch(mainInsight, /Treat the limiter ranking as directional until those times are checked/i);
     assert.doesNotMatch(htmlBody, /unusually large gap|double-check/i);
-    assert.doesNotMatch(htmlBody, /Net of penalties/);
+    assert.match(htmlBody, /Net of penalties/);
   });
 
   it("M-10: run-attributed penalties still reconcile after the running gap is netted", () => {
