@@ -3,6 +3,13 @@ export function totalPenaltySeconds(penalties = []) {
     .reduce((sum, penalty) => sum + (Number(penalty?.penaltySeconds) || 0), 0);
 }
 
+export function penaltySecondsForKeys(penalties = [], keys = []) {
+  const keySet = new Set(keys);
+  return (Array.isArray(penalties) ? penalties : [])
+    .filter((penalty) => keySet.has(penalty?.runKey))
+    .reduce((sum, penalty) => sum + (Number(penalty?.penaltySeconds) || 0), 0);
+}
+
 export function penaltiesAreMaterial(totalPenaltySecondsValue, totalGapSecondsValue) {
   const penaltySeconds = Number(totalPenaltySecondsValue);
   const gapSeconds = Number(totalGapSecondsValue);

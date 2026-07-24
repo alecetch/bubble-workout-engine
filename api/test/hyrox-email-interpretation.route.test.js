@@ -33,6 +33,6 @@ test("email report uses penalty interpretation hero and callout", () => {
   assert.doesNotMatch(report.emailHtml, />0:00</);
   assert.doesNotMatch(report.emailHtml, /YOUR HYROX ANALYSIS IS READY/);
   assert.match(report.emailHtml, /PENALTY ANALYSIS/);
-  assert.ok(report.emailHtml.indexOf("PENALTY ANALYSIS") < report.emailHtml.indexOf("STATION BREAKDOWN"));
+  assert.doesNotMatch(report.emailHtml, /STATION BREAKDOWN/);
 });
 
