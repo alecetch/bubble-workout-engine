@@ -6,6 +6,7 @@ import { compareLimiterSegments, findBiggestLimiter } from "../engine/limiterSer
 import { approximatePercentile } from "../engine/percentileCalculator.js";
 import { resolvedUserSeconds } from "../engine/gapSelectors.js";
 import { RUN_KEYS } from "../config/segmentMap.js";
+import { MUSCLE_GROUP_LABELS } from "../config/muscleGroupMap.js";
 import { penaltyContext } from "./penaltyContext.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
@@ -865,6 +866,13 @@ function renderRecommendations(section, analysisJson = {}) {
     .filter((row) => Number.isFinite(row.gap) && row.gap > 30)
     .sort((a, b) => b.gap - a.gap);
   const limiter = analysisJson.headline?.biggestLimiter?.label ?? stationLosses[0]?.label;
+  // Data-driven, matching the fix already applied to MUSCLE GROUP SIGNAL's own training hint -
+  // a hardcoded muscle group here is wrong whenever the athlete's real limiter is a different
+  // group (or, worse, a group the data actually shows as a strength).
+  const primaryLimiterGroupId = analysisJson.muscleGroupProfile?.primaryLimiters?.[0] ?? null;
+  const muscleGroupPriorityItem = primaryLimiterGroupId
+    ? `${MUSCLE_GROUP_LABELS[primaryLimiterGroupId] ?? "Muscle group"} strength endurance`
+    : "Targeted strength endurance";
   const priorities = [];
   let topNonPenaltyOpportunityLabel = null;
   if (hasMaterialPenalties) {
@@ -884,11 +892,11 @@ function renderRecommendations(section, analysisJson = {}) {
       .sort((a, b) => b.gap - a.gap);
     topNonPenaltyOpportunityLabel = nonPenaltyLosses[0]?.label ?? null;
     for (const row of nonPenaltyLosses.slice(0, 2)) priorities.push(`${row.label} efficiency`);
-    priorities.push("Posterior-chain strength endurance");
+    priorities.push(muscleGroupPriorityItem);
     priorities.push("Race-fatigued station practice");
   } else {
     if (limiter) priorities.push(`${limiter} capacity and consistency`);
-    priorities.push("Quad-dominant strength endurance");
+    priorities.push(muscleGroupPriorityItem);
     for (const row of stationLosses.slice(1, 3)) priorities.push(`${row.label} efficiency`);
     priorities.push("Race-fatigued station practice");
   }
