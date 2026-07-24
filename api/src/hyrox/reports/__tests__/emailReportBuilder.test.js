@@ -1660,6 +1660,59 @@ describe("analyse mode email", () => {
     assert.match(htmlBody, /SUB-60|marginal|MARGINAL/i);
   });
 
+  it("elite (sub-60) athlete: small-but-proportional station gaps surface as Biggest Opportunities and are named in MAIN INSIGHT (Sebastien Rajkowski regression)", () => {
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: {},
+    };
+    const segments = [
+      { segmentKey: "run_1", label: "Run 1", type: "run", userSeconds: 205, benchmarkMedianSeconds: 199, timeGapToMedianSeconds: 6, percentile: 55, confidence: "high" },
+      { segmentKey: "ski_erg", label: "SkiErg", type: "station", userSeconds: 250, benchmarkMedianSeconds: 243, timeGapToMedianSeconds: 7, percentile: 52, confidence: "high" },
+      { segmentKey: "run_2", label: "Run 2", type: "run", userSeconds: 188, benchmarkMedianSeconds: 209, timeGapToMedianSeconds: -21, percentile: 80, confidence: "high" },
+      { segmentKey: "sled_push", label: "Sled Push", type: "station", userSeconds: 121, benchmarkMedianSeconds: 129, timeGapToMedianSeconds: -8, percentile: 60, confidence: "high" },
+      { segmentKey: "run_3", label: "Run 3", type: "run", userSeconds: 201, benchmarkMedianSeconds: 219, timeGapToMedianSeconds: -18, percentile: 78, confidence: "high" },
+      { segmentKey: "sled_pull", label: "Sled Pull", type: "station", userSeconds: 143, benchmarkMedianSeconds: 184, timeGapToMedianSeconds: -41, percentile: 88, confidence: "high" },
+      { segmentKey: "run_4", label: "Run 4", type: "run", userSeconds: 199, benchmarkMedianSeconds: 218, timeGapToMedianSeconds: -19, percentile: 79, confidence: "high" },
+      { segmentKey: "burpee_broad_jump", label: "Burpee Broad Jump", type: "station", userSeconds: 196, benchmarkMedianSeconds: 180, timeGapToMedianSeconds: 16, percentile: 40, confidence: "high" },
+      { segmentKey: "run_5", label: "Run 5", type: "run", userSeconds: 201, benchmarkMedianSeconds: 223, timeGapToMedianSeconds: -22, percentile: 81, confidence: "high" },
+      { segmentKey: "row", label: "Row", type: "station", userSeconds: 251, benchmarkMedianSeconds: 251, timeGapToMedianSeconds: 0, percentile: 50, confidence: "high" },
+      { segmentKey: "run_6", label: "Run 6", type: "run", userSeconds: 198, benchmarkMedianSeconds: 219, timeGapToMedianSeconds: -21, percentile: 80, confidence: "high" },
+      { segmentKey: "farmers_carry", label: "Farmers Carry", type: "station", userSeconds: 90, benchmarkMedianSeconds: 90, timeGapToMedianSeconds: 0, percentile: 50, confidence: "high" },
+      { segmentKey: "run_7", label: "Run 7", type: "run", userSeconds: 201, benchmarkMedianSeconds: 220, timeGapToMedianSeconds: -19, percentile: 79, confidence: "high" },
+      { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", type: "station", userSeconds: 200, benchmarkMedianSeconds: 184, timeGapToMedianSeconds: 16, percentile: 41, confidence: "high" },
+      { segmentKey: "run_8", label: "Run 8", type: "run", userSeconds: 181, benchmarkMedianSeconds: 240, timeGapToMedianSeconds: -59, percentile: 95, confidence: "high" },
+      { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 250, benchmarkMedianSeconds: 231, timeGapToMedianSeconds: 19, percentile: 38, confidence: "high" },
+      { segmentKey: "run_time", label: "Total Running", type: "aggregate", userSeconds: 1574, benchmarkMedianSeconds: 1747, timeGapToMedianSeconds: -173, confidence: "high" },
+      { segmentKey: "work_time", label: "Total Stations", type: "aggregate", userSeconds: 1501, benchmarkMedianSeconds: 1492, timeGapToMedianSeconds: 9, confidence: "high" },
+      { segmentKey: "roxzone_time", label: "Total RoxZone", type: "aggregate", userSeconds: 250, benchmarkMedianSeconds: 200, timeGapToMedianSeconds: 50, confidence: "high" },
+      { segmentKey: "total_time", label: "Total Race Time", type: "aggregate", userSeconds: 3363, benchmarkMedianSeconds: 3526, timeGapToMedianSeconds: -163, percentile: 92, confidence: "high" },
+    ];
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_60", primaryBenchmarkGroup: { label: "Open Male sub-60" } },
+      race: { finishTimeSeconds: 3363 },
+      segments,
+      penalties: [],
+    });
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+
+    // Biggest Opportunities panel now surfaces these small-but-proportional (ratio-based
+    // "Opportunity") station gaps, none of which reach the old flat +30s floor.
+    const opportunitiesIdx = htmlBody.indexOf("Biggest opportunities");
+    assert.ok(opportunitiesIdx > -1, "Biggest opportunities panel should exist");
+    const opportunitiesSnippet = htmlBody.slice(opportunitiesIdx, opportunitiesIdx + 5000);
+    assert.ok(opportunitiesSnippet.includes("Wall Balls"), "Wall Balls (+19s, largest gap) should appear despite a sub-30s gap");
+    assert.ok(opportunitiesSnippet.includes("Sandbag Lunges"), "Sandbag Lunges (+16s) should appear despite a sub-30s gap");
+    assert.ok(opportunitiesSnippet.includes("Burpee Broad Jump"), "Burpee Broad Jump (+16s) should appear despite a sub-30s gap");
+
+    // MAIN INSIGHT names the actual stations driving the refinement, not a generic claim.
+    const mainInsightIdx = htmlBody.indexOf("MAIN INSIGHT");
+    const mainInsightSnippet = htmlBody.slice(mainInsightIdx, mainInsightIdx + 800);
+    assert.match(mainInsightSnippet, /Your next refinement is station execution, led by Wall Balls/);
+    assert.ok(mainInsightSnippet.includes("Sandbag Lunges"));
+    assert.ok(mainInsightSnippet.includes("Burpee Broad Jump"));
+  });
+
   it("sub-105 athlete sees time range not sub-105 in athlete-facing copy", () => {
     const splitSection = {
       sectionKey: "race_split_breakdown",

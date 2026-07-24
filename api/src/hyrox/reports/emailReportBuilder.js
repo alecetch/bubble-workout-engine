@@ -1426,8 +1426,17 @@ function renderSplitTable(section, analysisJson) {
           limiterStr ? `${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the tightest remaining gap versus the target.` : ""
         }`.trim();
       } else if (isElite) {
+        // Elite athletes rarely show a +60s station-vs-running gap at all, so when this
+        // branch fires it's worth naming which stations are actually driving it (same
+        // ranked-gap order as Biggest Opportunities) rather than a generic "station
+        // execution" claim with nothing behind it.
+        const eliteStationNames = rankedGaps
+          .filter((row) => row.seg?.type === "station")
+          .slice(0, 3)
+          .map((row) => row.seg.label);
+        const eliteStationList = eliteStationNames.length > 0 ? joinWithAnd(eliteStationNames) : null;
         mainLimiter = workGap > runGap + 60
-          ? "You matched or beat your benchmark band overall. Your next refinement is station execution."
+          ? `You matched or beat your benchmark band overall. Your next refinement is station execution${eliteStationList ? `, led by ${eliteStationList}` : ""}.`
           : runGap > workGap + 60
             ? "You matched or beat your benchmark band overall. Your next refinement is run consistency."
             : "You matched or beat your benchmark band overall.";
@@ -1970,8 +1979,16 @@ function renderSplitTable(section, analysisJson) {
         };
       })
 	      .filter((row) => {
-	        if (!row.seg?.label || !Number.isFinite(row.gap) || row.gap < 30) return false;
+	        if (!row.seg?.label || !Number.isFinite(row.gap)) return false;
 	        if (!isConfidentSegment(row.seg)) return false;
+	        if (isEliteBenchmark) {
+	          // Elite (sub-60) athletes rarely show +30s gaps at all - a flat seconds floor
+	          // hides genuinely meaningful opportunities for this population. Defer entirely
+	          // to the same ratio-based classification that already drives FULL SPLIT
+	          // DETAIL's "Refinement"/"Next refinement" labels for elite athletes.
+	          return ["Opportunity", "Priority"].includes(splitBandLabel(row.seg, row.gap));
+	        }
+	        if (row.gap < 30) return false;
 	        // In analyse mode (no goal group), exclude segments that are already near the
 	        // comparison split time. Eligibility is seconds-gap based, not percentile based.
 	        if (!hasGoalGroup && !["Opportunity", "Priority"].includes(splitBandLabel(row.seg, row.gap))) return false;
