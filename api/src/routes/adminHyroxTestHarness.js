@@ -1473,6 +1473,36 @@ async function handleAdminRaceCard(req, res, pool, asAttachment) {
   }
 }
 
+async function handleAdminStoredEmail(req, res, pool, asAttachment) {
+  const { submissionId } = req.params;
+  let row;
+  try {
+    const result = await pool.query(
+      `SELECT report_json, created_at
+       FROM hyrox_analyses
+       WHERE submission_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [submissionId],
+    );
+    row = result.rows[0];
+  } catch (err) {
+    return res.status(500).json({ error: "db_error", message: err?.message });
+  }
+
+  const emailHtml = row?.report_json?.emailHtml;
+  if (!emailHtml) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  res.set("Content-Type", "text/html");
+  res.set("Cache-Control", "no-store");
+  if (asAttachment) {
+    res.set("Content-Disposition", `attachment; filename="hyrox-email-${submissionId}.html"`);
+  }
+  return res.send(emailHtml);
+}
+
 export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
   const router = express.Router();
 
@@ -1481,6 +1511,27 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
       return res.status(200).json(await harnessRunsPayload());
     } catch (error) {
       return res.status(500).json({ error: "test_harness_runs_failed", message: error.message });
+    }
+  });
+
+  router.post("/hyrox/test-harness/email-audit/purge", async (_req, res) => {
+    const retentionDays = Number(process.env.HYROX_EMAIL_AUDIT_RETENTION_DAYS);
+    if (!Number.isInteger(retentionDays) || retentionDays <= 0) {
+      return res.status(400).json({ error: "retention_not_configured" });
+    }
+
+    try {
+      const result = await pool.query(
+        `UPDATE hyrox_analyses
+         SET report_json = NULL
+         WHERE report_json IS NOT NULL
+           AND created_at < NOW() - ($1 || ' days')::interval
+         RETURNING id`,
+        [retentionDays],
+      );
+      return res.status(200).json({ clearedCount: result.rowCount });
+    } catch (error) {
+      return res.status(500).json({ error: "email_audit_purge_failed", message: error.message });
     }
   });
 
@@ -1733,6 +1784,16 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
   // Race card: generate as a downloadable attachment
   router.get("/hyrox/test-harness/race-card/:submissionId/download", async (req, res) => {
     return handleAdminRaceCard(req, res, pool, true);
+  });
+
+  // Stored production email: preview the exact email HTML persisted with the analysis.
+  router.get("/hyrox/test-harness/submission/:submissionId/email", async (req, res) => {
+    return handleAdminStoredEmail(req, res, pool, false);
+  });
+
+  // Stored production email: download the exact email HTML persisted with the analysis.
+  router.get("/hyrox/test-harness/submission/:submissionId/email/download", async (req, res) => {
+    return handleAdminStoredEmail(req, res, pool, true);
   });
 
   // Race card: generate live from a URL (for test harness UI — no DB required)
