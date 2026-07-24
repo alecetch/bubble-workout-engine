@@ -1,5 +1,8 @@
 import express from "express";
 import { ZipArchive } from "archiver";
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { pool as defaultPool } from "../db.js";
 import { buildHyroxRaceCardData } from "../hyrox/reports/raceCardDataMapper.js";
 import { generateRaceCardPng } from "../hyrox/sharePack/raceCardScreenshotter.js";
@@ -327,13 +330,14 @@ export function screen4Boxes(browserSummary = {}, calculatorMode = null) {
   return `| Box | Value |\n|-----|-------|\n${rows.join("\n")}`;
 }
 
-function localTimestampSlug(date = new Date()) {
+function localTimestampSlug(date = new Date(), { separator = "-", includeSeconds = false } = {}) {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   const hh = String(date.getHours()).padStart(2, "0");
   const mi = String(date.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}-${hh}${mi}`;
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}${separator}${hh}${mi}${includeSeconds ? ss : ""}`;
 }
 
 function nameSlug(name) {
@@ -1117,15 +1121,9 @@ function buildArtifactPackMarkdown({ artifact, entries }) {
   return rows.join("\n");
 }
 
-function emailHtmlEntriesFromHarnessEntries(entries = []) {
-  const files = [];
-  for (const [caseIndex, entry] of entries.entries()) {
-    if (!entry.result) continue;
-    const athlete = entry.result.parsed ? displayAthleteName(entry.result.parsed) : `case-${caseIndex + 1}`;
-    for (const [modeIndex, modeEntry] of entry.result.modeEntries.entries()) {
-      if (modeEntry.error) continue;
-      const subject = modeEntry.result?.emailReport?.emailSubject ?? "";
-      const html = modeEntry.result?.emailReport?.emailHtml || `<!doctype html>
+function emailHtmlForModeEntry(modeEntry, modeIndex = 0) {
+  const subject = modeEntry.result?.emailReport?.emailSubject ?? "";
+  return modeEntry.result?.emailReport?.emailHtml || `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>${escapeHtml(subject || "No email HTML generated")}</title></head>
 <body>
@@ -1135,14 +1133,203 @@ function emailHtmlEntriesFromHarnessEntries(entries = []) {
   <p>This harness mode completed, but the email renderer did not return HTML.</p>
 </body>
 </html>`;
+}
+
+export function emailHtmlEntriesFromHarnessEntries(entries = []) {
+  const files = [];
+  for (const [caseIndex, entry] of entries.entries()) {
+    if (!entry.result) continue;
+    const athlete = entry.result.parsed ? displayAthleteName(entry.result.parsed) : `case-${caseIndex + 1}`;
+    for (const [modeIndex, modeEntry] of entry.result.modeEntries.entries()) {
+      if (modeEntry.error) continue;
       const modeSlug = modeEntry.mode?.calculatorMode ?? `mode-${modeIndex + 1}`;
       files.push({
         name: `${String(caseIndex + 1).padStart(2, "0")}-${nameSlug(athlete)}-${modeSlug}.html`,
-        html,
+        html: emailHtmlForModeEntry(modeEntry, modeIndex),
       });
     }
   }
   return files;
+}
+
+function harnessRunId(date = new Date()) {
+  return `${localTimestampSlug(date, { separator: "T", includeSeconds: true })}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
+export function resolveHarnessRunsBaseDir() {
+  return process.env.HYROX_HARNESS_RUNS_DIR || path.join(process.cwd(), "docs", "test_plans", "harness-runs");
+}
+
+async function writeJson(filePath, value) {
+  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+export function canonicalJsonStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJsonStringify(entry)).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJsonStringify(value[key])}`).join(",")}}`;
+}
+
+export function contentHashForAnalysisJson(analysisJson) {
+  return crypto
+    .createHash("sha256")
+    .update(canonicalJsonStringify(analysisJson) ?? "undefined")
+    .digest("hex");
+}
+
+export async function enforceHarnessRunRetention(baseDir, maxRuns = Number(process.env.HYROX_HARNESS_RUNS_MAX_KEPT) || 50) {
+  if (!Number.isFinite(maxRuns) || maxRuns < 1) return;
+  const entries = await fs.readdir(baseDir, { withFileTypes: true });
+  const runDirs = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => b.localeCompare(a));
+  await Promise.all(
+    runDirs.slice(maxRuns).map((name) => fs.rm(path.join(baseDir, name), { recursive: true, force: true })),
+  );
+}
+
+export async function persistHarnessRun(entries = [], { isPack = false } = {}) {
+  const runId = harnessRunId();
+  const baseDir = resolveHarnessRunsBaseDir();
+  const runDir = path.join(baseDir, runId);
+  await fs.mkdir(runDir, { recursive: true });
+
+  const cases = [];
+  for (const [caseIndex, entry] of entries.entries()) {
+    const caseNumber = String(caseIndex + 1).padStart(2, "0");
+    if (!entry.result) {
+      cases.push({
+        url: entry.url,
+        label: entry.label || "",
+        athleteDisplayName: null,
+        targetFinishTimeSeconds: entry.targetFinishTimeSeconds ?? null,
+        ok: false,
+        reason: entry.reason ?? "parse_failed",
+        modes: [],
+      });
+      continue;
+    }
+
+    const modes = [];
+    for (const [modeIndex, modeEntry] of entry.result.modeEntries.entries()) {
+      if (modeEntry.error) continue;
+      const modeSlug = modeEntry.mode?.calculatorMode ?? `mode-${modeIndex + 1}`;
+      const emailFile = `${caseNumber}-${modeSlug}-email.html`;
+      const carouselFile = `${caseNumber}-${modeSlug}-carousel.json`;
+      await fs.writeFile(path.join(runDir, emailFile), emailHtmlForModeEntry(modeEntry, modeIndex), "utf8");
+      await writeJson(path.join(runDir, carouselFile), {
+        slides: modeEntry.result?.carouselReport?.slides ?? [],
+        carouselHtml: modeEntry.result?.carouselReport?.carousel ? buildCarouselPage(modeEntry.result.carouselReport.carousel) : "",
+      });
+      modes.push({
+        modeName: modeEntry.mode?.modeName ?? `Mode ${modeIndex + 1}`,
+        calculatorMode: modeEntry.mode?.calculatorMode ?? null,
+        contentHash: contentHashForAnalysisJson(modeEntry.result?.analysisJson),
+        emailFile,
+        carouselFile,
+      });
+    }
+
+    cases.push({
+      url: entry.url,
+      label: entry.label || entry.result.label || "",
+      athleteDisplayName: displayAthleteName(entry.result.parsed),
+      targetFinishTimeSeconds: entry.targetFinishTimeSeconds ?? entry.result.targetFinishTimeSeconds ?? null,
+      ok: true,
+      reason: null,
+      modes,
+    });
+  }
+
+  const qaMarkdown = isPack
+    ? buildPackMarkdown({ entries })
+    : entries[0]?.result?.markdown ?? "";
+  await writeJson(path.join(runDir, "manifest.json"), {
+    runId,
+    generatedAt: new Date().toISOString(),
+    isPack,
+    cases,
+  });
+  await fs.writeFile(path.join(runDir, "qa.md"), qaMarkdown, "utf8");
+  await enforceHarnessRunRetention(baseDir);
+  return { runId, runDir };
+}
+
+async function persistHarnessRunSafely(entries, options) {
+  try {
+    return await persistHarnessRun(entries, options);
+  } catch (error) {
+    console.warn("[hyrox-test-harness] failed to persist harness run", error);
+    return null;
+  }
+}
+
+async function readHarnessAssessments(baseDir) {
+  try {
+    const raw = await fs.readFile(path.join(baseDir, "_assessments.json"), "utf8");
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.warn("[hyrox-test-harness] failed to read harness assessments", error);
+    }
+    return {};
+  }
+}
+
+async function listHarnessRunManifests(baseDir) {
+  let entries;
+  try {
+    entries = await fs.readdir(baseDir, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+
+  const runDirs = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => b.localeCompare(a));
+  const manifests = [];
+  for (const runId of runDirs) {
+    try {
+      const manifest = JSON.parse(await fs.readFile(path.join(baseDir, runId, "manifest.json"), "utf8"));
+      manifests.push({ runId, manifest });
+    } catch (error) {
+      console.warn("[hyrox-test-harness] failed to read harness run manifest", { runId, error });
+    }
+  }
+  return manifests;
+}
+
+async function harnessRunsPayload() {
+  const baseDir = resolveHarnessRunsBaseDir();
+  const assessments = await readHarnessAssessments(baseDir);
+  const manifests = await listHarnessRunManifests(baseDir);
+  return {
+    runs: manifests.map(({ runId, manifest }) => ({
+      runId: manifest.runId ?? runId,
+      generatedAt: manifest.generatedAt ?? null,
+      cases: (manifest.cases ?? []).map((testCase) => ({
+        url: testCase.url ?? null,
+        label: testCase.label ?? "",
+        ok: Boolean(testCase.ok),
+        modes: (testCase.modes ?? []).map((mode) => {
+          const key = `${testCase.url}|${mode.calculatorMode}`;
+          const lastAssessment = assessments[key] ?? null;
+          return {
+            modeName: mode.modeName ?? null,
+            calculatorMode: mode.calculatorMode ?? null,
+            contentHash: mode.contentHash ?? null,
+            needsReview: !lastAssessment || lastAssessment.contentHash !== mode.contentHash,
+            lastAssessment,
+          };
+        }),
+      })),
+    })),
+  };
 }
 
 async function sendEmailHtmlZip(res, { filename, entries }) {
@@ -1213,12 +1400,36 @@ function previewCase(entry) {
   };
 }
 
-function previewPayload({ entries }) {
+function previewPayload({ entries, persistedRun = null }) {
+  const runId = persistedRun?.runId ?? null;
   return {
     success: entries.some((entry) => entry.result),
     generatedAt: new Date().toISOString(),
+    runId,
+    harnessRun: runId ? { runId, runDir: persistedRun.runDir ?? null } : null,
     cases: entries.map(previewCase),
   };
+}
+
+function applyHarnessRunHeaders(res, persistedRun) {
+  if (!persistedRun?.runId) return;
+  res.setHeader("X-Hyrox-Harness-Run-Id", persistedRun.runId);
+  if (persistedRun.runDir) {
+    res.setHeader("X-Hyrox-Harness-Run-Dir", persistedRun.runDir);
+  }
+}
+
+function markdownWithHarnessRun(markdown, persistedRun) {
+  if (!persistedRun?.runId) return markdown;
+  const lines = [
+    "# Harness Run",
+    "",
+    `- Run ID: ${persistedRun.runId}`,
+  ];
+  if (persistedRun.runDir) {
+    lines.push(`- Run directory: ${persistedRun.runDir}`);
+  }
+  return `${lines.join("\n")}\n\n${markdown}`;
 }
 
 async function handleAdminRaceCard(req, res, pool, asAttachment) {
@@ -1294,6 +1505,14 @@ async function handleAdminStoredEmail(req, res, pool, asAttachment) {
 
 export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
   const router = express.Router();
+
+  router.get("/hyrox/test-harness/runs", async (_req, res) => {
+    try {
+      return res.status(200).json(await harnessRunsPayload());
+    } catch (error) {
+      return res.status(500).json({ error: "test_harness_runs_failed", message: error.message });
+    }
+  });
 
   router.post("/hyrox/test-harness/email-audit/purge", async (_req, res) => {
     const retentionDays = Number(process.env.HYROX_EMAIL_AUDIT_RETENTION_DAYS);
@@ -1388,20 +1607,27 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
             label: cases[0].label,
             expectedCommentary: cases[0].expectedCommentary,
           });
-	          if (req.body?.preview === true) {
-	            return res.status(200).json(previewPayload({
-	              entries: [{ url: cases[0].url, targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds, result }],
-	            }));
-	          }
-	          if (artifact === "email_html") {
-	            return sendEmailHtmlZip(res, {
-	              filename: artifactResponseFilename(artifact, result.parsed),
-	              entries: [{ url: cases[0].url, targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds, result }],
-	            });
-	          }
-	          res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+          const entries = [{
+            url: cases[0].url,
+            targetFinishTimeSeconds: cases[0].targetFinishTimeSeconds,
+            label: cases[0].label,
+            expectedCommentary: cases[0].expectedCommentary,
+            result,
+          }];
+          const persistedRun = await persistHarnessRunSafely(entries, { isPack: false });
+          applyHarnessRunHeaders(res, persistedRun);
+          if (req.body?.preview === true) {
+            return res.status(200).json(previewPayload({ entries, persistedRun }));
+          }
+          if (artifact === "email_html") {
+            return sendEmailHtmlZip(res, {
+              filename: artifactResponseFilename(artifact, result.parsed),
+              entries,
+            });
+          }
+          res.setHeader("Content-Type", "text/markdown; charset=utf-8");
           res.setHeader("Content-Disposition", `attachment; filename="${artifact === "qa" ? responseFilename(result.parsed) : artifactResponseFilename(artifact, result.parsed)}"`);
-          return res.status(200).send(artifactMarkdown(artifact, result));
+          return res.status(200).send(markdownWithHarnessRun(artifactMarkdown(artifact, result), persistedRun));
         } catch (error) {
           if (error.reason === "all_modes_failed") {
             return res.status(500).json({ error: "all_modes_failed" });
@@ -1426,21 +1652,23 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
           entries.push({ url: testCase.url, targetFinishTimeSeconds: testCase.targetFinishTimeSeconds, label: testCase.label, expectedCommentary: testCase.expectedCommentary, reason: error.reason ?? "parse_failed" });
         }
       }
+      const persistedRun = await persistHarnessRunSafely(entries, { isPack: true });
+      applyHarnessRunHeaders(res, persistedRun);
 
-	      if (req.body?.preview === true) {
-	        return res.status(200).json(previewPayload({ entries }));
-	      }
-	      if (artifact === "email_html") {
-	        return sendEmailHtmlZip(res, {
-	          filename: artifactPackResponseFilename(artifact, cases.length),
-	          entries,
-	        });
-	      }
+      if (req.body?.preview === true) {
+        return res.status(200).json(previewPayload({ entries, persistedRun }));
+      }
+      if (artifact === "email_html") {
+        return sendEmailHtmlZip(res, {
+          filename: artifactPackResponseFilename(artifact, cases.length),
+          entries,
+        });
+      }
 
-	      const markdown = artifact === "qa" ? buildPackMarkdown({ entries }) : buildArtifactPackMarkdown({ artifact, entries });
+      const markdown = artifact === "qa" ? buildPackMarkdown({ entries }) : buildArtifactPackMarkdown({ artifact, entries });
       res.setHeader("Content-Type", "text/markdown; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${artifact === "qa" ? packResponseFilename(cases.length) : artifactPackResponseFilename(artifact, cases.length)}"`);
-      return res.status(200).send(markdown);
+      return res.status(200).send(markdownWithHarnessRun(markdown, persistedRun));
     } catch (error) {
       return res.status(500).json({ error: "test_harness_failed", message: error.message });
     }

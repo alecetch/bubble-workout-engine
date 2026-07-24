@@ -48,6 +48,8 @@
       .preview-meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
       .mode-preview { display: grid; gap: 8px; }
       .mode-preview h3 { margin: 0; font-size: 15px; }
+      .mode-title-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .run-id-badge { color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-family: Consolas, monospace; font-size: 12px; background: #f9fafb; }
       .email-subject { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; background: #f9fafb; font-weight: 600; }
       .email-frame { width: 100%; min-height: 720px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
       .carousel-frame { width: 100%; height: 860px; border: 1px solid var(--border); border-radius: 6px; background: #111; }
@@ -718,6 +720,7 @@
       function renderEmailPreview(data) {
         clearPreviewFrameUrls();
         previewTitle.textContent = "Email Preview";
+        const runBadge = data.runId ? `<span class="run-id-badge">Run ID: ${escapeHtml(data.runId)}</span>` : "";
         previewContent.innerHTML = (data.cases || []).map((testCase) => {
           if (!testCase.ok) {
             return `<article class="preview-case"><h3>${escapeHtml(testCase.url)}</h3><div class="status err">${escapeHtml(testCase.reason)}</div></article>`;
@@ -734,7 +737,10 @@
               </div>
               ${testCase.modes.map((mode) => mode.ok ? `
                 <section class="mode-preview">
-                  <h3>${escapeHtml(mode.modeName)}</h3>
+                  <div class="mode-title-row">
+                    <h3>${escapeHtml(mode.modeName)}</h3>
+                    ${runBadge}
+                  </div>
                   <div class="email-subject">${escapeHtml(mode.emailSubject || "(no subject)")}</div>
                   ${mode.emailHtml
                     ? `<iframe class="email-frame" sandbox src="${emailPreviewUrl(mode.emailHtml)}"></iframe>`
@@ -756,6 +762,7 @@
       function renderInstagramPreview(data) {
         clearPreviewFrameUrls();
         previewTitle.textContent = "Instagram Preview";
+        const runBadge = data.runId ? `<span class="run-id-badge">Run ID: ${escapeHtml(data.runId)}</span>` : "";
         previewContent.innerHTML = (data.cases || []).map((testCase) => {
           if (!testCase.ok) {
             return `<article class="preview-case"><h3>${escapeHtml(testCase.url)}</h3><div class="status err">${escapeHtml(testCase.reason)}</div></article>`;
@@ -772,7 +779,10 @@
               </div>
               ${testCase.modes.map((mode) => mode.ok ? `
                 <section class="mode-preview">
-                  <h3>${escapeHtml(mode.modeName)}</h3>
+                  <div class="mode-title-row">
+                    <h3>${escapeHtml(mode.modeName)}</h3>
+                    ${runBadge}
+                  </div>
                   ${mode.carouselHtml
                     ? `<iframe class="carousel-frame" src="${emailPreviewUrl(mode.carouselHtml)}"></iframe>`
                     : '<div class="empty-preview">No carousel HTML generated for this mode.</div>'}
