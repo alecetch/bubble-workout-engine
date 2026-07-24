@@ -1354,7 +1354,7 @@ function renderSplitTable(section, analysisJson) {
         stationGap,
         runGapRaw,
         totalGapSeconds,
-        hasGoalGroup ? null : bandDisplayLabel(achievedBand),
+        hasGoalGroup ? null : bandDisplayLabel(gapComparisonBand),
         hasGoalGroup ? "Against the target profile, " : null,
       );
       const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
