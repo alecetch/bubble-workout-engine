@@ -2902,8 +2902,27 @@ describe("renderSplitTable", () => {
     assert.ok(htmlBody.includes("Sled Push efficiency"));
     assert.ok(!htmlBody.includes("Sandbag lunge capacity under fatigue"));
     assert.ok(!htmlBody.includes("Sled pull efficiency and grip control"));
-    assert.ok(htmlBody.includes("Posterior-chain strength endurance"));
+    // No muscleGroupProfile on this fixture, so the priority list falls back to a generic
+    // (non-muscle-group-specific) item rather than naming any particular group.
+    assert.ok(htmlBody.includes("Targeted strength endurance"));
     assert.ok(htmlBody.includes("Race-fatigued station practice"));
+  });
+
+  it("material penalties: training focus names the athlete's actual muscle-group limiter, not a hardcoded one", () => {
+    const section = splitTableSection({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] });
+    const { htmlBody } = buildEmailReport(
+      { sections: [section, mockReport().sections.find((row) => row.sectionKey === "recommended_focus_areas")] },
+      mockAnalysis({
+        segments: section.tableData.segments,
+        penalties: section.tableData.penalties,
+        benchmarkContext: section.tableData.benchmarkContext,
+        muscleGroupProfile: { primaryLimiters: ["grip_forearm"], primaryAssets: ["posterior_chain"] },
+      }),
+      mockContext(),
+      null,
+    );
+    assert.ok(htmlBody.includes("Grip / forearm strength endurance"), "should name the athlete's real limiter");
+    assert.ok(!htmlBody.includes("Posterior-chain strength endurance"), "must not name a group the data shows as a strength");
   });
 
   it("material penalties: training focus does not re-name the penalized segment as a separate opportunity", () => {
