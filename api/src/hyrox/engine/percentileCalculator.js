@@ -1,6 +1,7 @@
 import { RUN_KEYS, ROXZONE_KEYS, SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { selectBenchmark } from "../confidence/benchmarkSelector.js";
 import { getBenchmarkStats } from "./benchmarkService.js";
+import { penaltySecondsForKeys, totalPenaltySeconds } from "./penaltyMateriality.js";
 import { getSegmentLabel } from "./segmentNormaliser.js";
 
 const SEGMENT_TYPE_BY_KEY = new Map(SEGMENT_MAP.map((segment) => [segment.segmentKey, segment.type]));
@@ -76,8 +77,20 @@ function segmentSeconds(normalisedSubmission, metricKey) {
 }
 
 function segmentSecondsNetOfPenalty(normalisedSubmission, metricKey) {
+  const raw = segmentSeconds(normalisedSubmission, metricKey);
+  if (!Number.isFinite(raw)) return raw;
+  const penalties = normalisedSubmission.penalties ?? [];
+  if (metricKey === "total_time") {
+    return Math.max(0, raw - totalPenaltySeconds(penalties));
+  }
+  if (metricKey === "run_time") {
+    return Math.max(0, raw - penaltySecondsForKeys(penalties, RUN_KEYS));
+  }
+  if (metricKey === "work_time") {
+    return Math.max(0, raw - penaltySecondsForKeys(penalties, STATION_KEYS));
+  }
   const adjusted = normalisedSubmission.penaltyAdjustedSplitMap?.get(metricKey)?.timeSeconds;
-  return Number.isFinite(adjusted) ? adjusted : segmentSeconds(normalisedSubmission, metricKey);
+  return Number.isFinite(adjusted) ? adjusted : raw;
 }
 
 function confidenceFor(stats, metricKey, normalisedSubmission, selection) {

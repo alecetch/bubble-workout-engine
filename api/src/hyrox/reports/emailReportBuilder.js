@@ -4,6 +4,7 @@ import { nextPerformanceBand, PERFORMANCE_BAND_ORDER, performanceBandForGoal } f
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
 import { compareLimiterSegments, findBiggestLimiter } from "../engine/limiterService.js";
 import { approximatePercentile } from "../engine/percentileCalculator.js";
+import { resolvedUserSeconds } from "../engine/gapSelectors.js";
 import { RUN_KEYS } from "../config/segmentMap.js";
 import { penaltyContext } from "./penaltyContext.js";
 import { readFileSync } from "fs";
@@ -501,9 +502,7 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   const comparisonBandStats = isEscalated && group?.key
     ? getBenchmarkStats(group.key, "total_time")
     : null;
-  const userSecondsForStanding = Number.isFinite(totalSeg?.userSecondsNetOfPenalty)
-    ? totalSeg.userSecondsNetOfPenalty
-    : totalSeg?.userSeconds;
+  const userSecondsForStanding = resolvedUserSeconds(totalSeg);
   const percentileValue = comparisonBandStats
     ? approximatePercentile(userSecondsForStanding, comparisonBandStats)
     : Number(totalSeg?.percentile);
@@ -754,58 +753,6 @@ function renderStrengthCard(section) {
   <tr>
 	    <td style="background-color:#ffffff;padding:16px 24px;border-bottom:1px solid #e2e8f0;">
       <p style="color:#0f172a;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0;">${text}</p>
-    </td>
-  </tr>`;
-}
-
-function renderStationBreakdown(section) {
-  const items = Array.isArray(section.content) ? section.content : [String(section.content ?? "")];
-  if (items.length <= 1) return renderTextCard({ ...section, title: "Station Breakdown" });
-
-  const preamble = items[0];
-  const stationItems = items.slice(1);
-  const strengthIdx = stationItems.findIndex((item) => /your strongest station/i.test(item));
-  const weakItems = strengthIdx >= 0 ? stationItems.slice(0, strengthIdx) : stationItems;
-  const strengthItem = strengthIdx >= 0 ? stationItems[strengthIdx] : null;
-
-  function stationRow(item, isLast) {
-    const raw = String(item);
-    const gapMatch = raw.match(/\(([+-]?\d+:\d+)/);
-    const isLimiter = gapMatch && !gapMatch[1].startsWith("-");
-    const gapColor = isLimiter ? "#e53e3e" : "#22d3ee";
-    const borderBottom = isLast ? "" : "border-bottom:1px solid #f1f5f9;";
-    const safe = esc(enforceTone(raw)).replace(
-      /(\(([+-]?\d+:\d+[^)]*)\))/,
-      `<span style="font-family:'Courier New',Courier,monospace;font-weight:700;color:${gapColor};">$1</span>`,
-    );
-    return `<tr>
-	      <td style="padding:10px 24px;${borderBottom}font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#0f172a;line-height:1.4;">
-        ${safe}
-      </td>
-    </tr>`;
-  }
-  const stationRows = weakItems.map((item, index) => stationRow(item, index === weakItems.length - 1 && !strengthItem)).join("");
-  const strengthRow = strengthItem
-    ? `<tr>
-	        <td style="padding:10px 24px;border-top:1px solid #e2e8f0;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#22d3ee;line-height:1.4;">
-          ${esc(enforceTone(strengthItem))}
-        </td>
-      </tr>`
-    : "";
-
-  return `
-  <tr>
-	    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;">
-      <span style="color:#475569;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">STATION BREAKDOWN</span>
-    </td>
-  </tr>
-  <tr>
-    <td style="background-color:#ffffff;padding:4px 0 0;border-bottom:1px solid #e2e8f0;">
-	      <p style="color:#94a3b8;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;margin:8px 24px 4px;">${esc(preamble)}</p>
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
-        ${stationRows}
-        ${strengthRow}
-      </table>
     </td>
   </tr>`;
 }
@@ -2600,6 +2547,7 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
     "executive_summary",
     "race_snapshot",
     "biggest_strength",
+    "biggest_limiter",
     "time_potential",
     "running_fatigue",
   ]);
@@ -2610,10 +2558,6 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
       return renderExecutiveSummary(section);
     case "biggest_strength":
       return renderStrengthCard(section);
-    case "biggest_limiter": {
-      const { penaltiesAreMaterial } = penaltyContext(analysisJson);
-      return penaltiesAreMaterial ? renderStationBreakdown(section) : "";
-    }
     case "time_potential":
       return renderTimePotential(section);
     case "athlete_background":
