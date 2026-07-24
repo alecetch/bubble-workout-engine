@@ -23,6 +23,7 @@ services:
     volumes:
       - ./api:/app
       - ./assets:/app/assets
+      - ./docs:/app/docs
       - ./migrations:/app/migrations
       - ./mobile/coverage-manifest.json:/app/coverage-manifest.json:ro
       - api_node_modules:/app/node_modules
