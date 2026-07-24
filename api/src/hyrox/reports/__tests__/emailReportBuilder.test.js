@@ -2609,6 +2609,20 @@ describe("renderSplitTable", () => {
     assert.doesNotMatch(htmlBody, /Run 5 is penalty-inflated/);
   });
 
+  it("material penalties: MAIN INSIGHT gap sentence names the resolved comparison band, not the raw achieved band", () => {
+    const htmlBody = renderSplit({
+      penalties: [{ station: "wall_balls", penaltySeconds: 300 }],
+      benchmarkContext: {
+        achievedBand: "sub_80",
+        analysisFrame: { comparisonBand: "sub_75" },
+        primaryBenchmarkGroup: { label: "Open Men 30-39" },
+      },
+    }, "analyse");
+    const insightHtml = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+    assert.match(insightHtml, /Against the sub-75 benchmark median/);
+    assert.doesNotMatch(insightHtml, /Against the sub-80 benchmark median/);
+  });
+
   it("material penalties on a station: TARGET PRIORITIES skip list does not falsely claim a run is penalty-inflated", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] }, "target");
     assert.doesNotMatch(htmlBody, /as pure running fitness - it is penalty-inflated/);
