@@ -1,5 +1,6 @@
 import { BENCHMARK_THRESHOLDS } from "../config/benchmarkThresholds.js";
 import { RUN_KEYS, STATION_KEYS } from "../config/segmentMap.js";
+import { resolvedFrameGapSeconds } from "./gapSelectors.js";
 
 const CONFIDENCE_RANK = Object.freeze({ low: 1, medium: 2, high: 3 });
 const ROXZONE_LIMITER_DOMINANCE_RATIO = 2.5;
@@ -9,13 +10,6 @@ const ROXZONE_LIMITER_DOMINANCE_RATIO = 2.5;
 // callout, subject line, or hero headline. It can still appear in FULL SPLIT DETAIL.
 function confidenceAboveLow(segment) {
   return (CONFIDENCE_RANK[segment.confidence] ?? 0) >= CONFIDENCE_RANK.medium;
-}
-
-// When a goal benchmark is available, prefer the gap to the athlete's target over the gap to the
-// age-group median. This keeps the headline limiter consistent with what the split table shows.
-function effectiveGapSeconds(segment) {
-  if (!segment) return null;
-  return segment.frameGapNetOfPenaltySeconds ?? segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
 }
 
 function isRoxzoneSegment(segment) {
@@ -38,18 +32,18 @@ function isDeprioritizedAggregateSegment(segment) {
 }
 
 function isDominantRoxzoneLimiter(segment, nonRoxzoneCandidates) {
-  const roxzoneGap = effectiveGapSeconds(segment);
+  const roxzoneGap = resolvedFrameGapSeconds(segment);
   if (!Number.isFinite(roxzoneGap) || roxzoneGap <= 0) return false;
 
   const nextLargestGap = Math.max(
     0,
-    ...nonRoxzoneCandidates.map((candidate) => effectiveGapSeconds(candidate) ?? 0),
+    ...nonRoxzoneCandidates.map((candidate) => resolvedFrameGapSeconds(candidate) ?? 0),
   );
   return nextLargestGap <= 0 || roxzoneGap >= nextLargestGap * ROXZONE_LIMITER_DOMINANCE_RATIO;
 }
 
 function strengthAdvantageSeconds(candidate) {
-  const gap = candidate?.gap ?? effectiveGapSeconds(candidate?.segment);
+  const gap = candidate?.gap ?? resolvedFrameGapSeconds(candidate?.segment);
   return Number.isFinite(gap) && gap < 0 ? Math.abs(gap) : 0;
 }
 
@@ -73,14 +67,14 @@ export function compareLimiterSegments(a, b) {
   const aIsRoxzone = isCanonicalRoxzoneSegment(a);
   const bIsRoxzone = isCanonicalRoxzoneSegment(b);
   if (aIsRoxzone || bIsRoxzone) {
-    const gapA = effectiveGapSeconds(a) ?? 0;
-    const gapB = effectiveGapSeconds(b) ?? 0;
+    const gapA = resolvedFrameGapSeconds(a) ?? 0;
+    const gapB = resolvedFrameGapSeconds(b) ?? 0;
     return gapB - gapA;
   }
   if (isDeprioritizedAggregateSegment(a) && isIndividualSplitSegment(b)) return 1;
   if (isDeprioritizedAggregateSegment(b) && isIndividualSplitSegment(a)) return -1;
-  const gapA = effectiveGapSeconds(a) ?? 0;
-  const gapB = effectiveGapSeconds(b) ?? 0;
+  const gapA = resolvedFrameGapSeconds(a) ?? 0;
+  const gapB = resolvedFrameGapSeconds(b) ?? 0;
   return gapB - gapA;
 }
 
@@ -90,7 +84,7 @@ function toLimiter(segment) {
     segmentKey: segment.segmentKey,
     label: segment.label,
     type: segment.type,
-    timeGapSeconds: Math.round(effectiveGapSeconds(segment) ?? segment.timeGapToMedianSeconds),
+    timeGapSeconds: Math.round(resolvedFrameGapSeconds(segment) ?? segment.timeGapToMedianSeconds),
     percentile: segment.percentile,
     benchmarkGroupUsed: segment.benchmarkGroupUsed,
     benchmarkValueSeconds: segment.benchmarkValueSeconds,
@@ -107,7 +101,7 @@ export function rankLimiterSegments(segmentStats) {
   const candidates = segmentStats
     .filter((segment) => confidenceAboveLow(segment))
     .filter((segment) => {
-      const gap = effectiveGapSeconds(segment);
+      const gap = resolvedFrameGapSeconds(segment);
       return Number.isFinite(gap) && gap > 0;
     })
     .filter((segment) => segment.segmentKey !== "total_time");
@@ -121,7 +115,7 @@ export function rankLimiterSegments(segmentStats) {
 
 export function findBiggestStrength(segmentStats) {
   const candidates = segmentStats
-    .map((segment) => ({ segment, gap: effectiveGapSeconds(segment) }))
+    .map((segment) => ({ segment, gap: resolvedFrameGapSeconds(segment) }))
     .filter(({ segment, gap }) => Number.isFinite(gap) && gap < -BENCHMARK_THRESHOLDS.strengthMinimumAdvantageSeconds)
     .filter(({ segment }) => !isRoxzoneSegment(segment) || segment.segmentKey === "roxzone_time");
 
@@ -175,7 +169,7 @@ export function calculateTimePotential(segmentStats, normalisedSubmission, bench
     };
   }
 
-  const effectiveGap = effectiveGapSeconds(selectedLimiter);
+  const effectiveGap = resolvedFrameGapSeconds(selectedLimiter);
   const conservativeGainSeconds = Math.max(
     0,
     Number.isFinite(effectiveGap)

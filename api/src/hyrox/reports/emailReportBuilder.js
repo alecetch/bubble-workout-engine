@@ -4,6 +4,7 @@ import { nextPerformanceBand, PERFORMANCE_BAND_ORDER, performanceBandForGoal } f
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
 import { compareLimiterSegments, findBiggestLimiter } from "../engine/limiterService.js";
 import { approximatePercentile } from "../engine/percentileCalculator.js";
+import { resolvedUserSeconds } from "../engine/gapSelectors.js";
 import { RUN_KEYS } from "../config/segmentMap.js";
 import { penaltyContext } from "./penaltyContext.js";
 import { readFileSync } from "fs";
@@ -501,9 +502,7 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
   const comparisonBandStats = isEscalated && group?.key
     ? getBenchmarkStats(group.key, "total_time")
     : null;
-  const userSecondsForStanding = Number.isFinite(totalSeg?.userSecondsNetOfPenalty)
-    ? totalSeg.userSecondsNetOfPenalty
-    : totalSeg?.userSeconds;
+  const userSecondsForStanding = resolvedUserSeconds(totalSeg);
   const percentileValue = comparisonBandStats
     ? approximatePercentile(userSecondsForStanding, comparisonBandStats)
     : Number(totalSeg?.percentile);
