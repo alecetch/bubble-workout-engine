@@ -1075,9 +1075,12 @@ function penaltyLabelBreakdown(penalties, segMap) {
   const runPenaltySeconds = penalizedKeys
     .filter((key) => RUN_KEYS.includes(key))
     .reduce((sum, key) => sum + list.reduce((s, p) => (String(p.segmentKey ?? p.runKey ?? p.station) === key ? s + (Number(p.penaltySeconds) || 0) : s), 0), 0);
+  const stationPenaltySeconds = penalizedKeys
+    .filter((key) => !RUN_KEYS.includes(key))
+    .reduce((sum, key) => sum + list.reduce((s, p) => (String(p.segmentKey ?? p.runKey ?? p.station) === key ? s + (Number(p.penaltySeconds) || 0) : s), 0), 0);
   const runPenaltyLabels = penalizedKeys.filter((key) => RUN_KEYS.includes(key)).map((key) => map.get(key)?.label ?? key);
   const nonRunPenaltyLabels = penalizedKeys.filter((key) => !RUN_KEYS.includes(key)).map((key) => map.get(key)?.label ?? key);
-  return { runPenaltySeconds, runPenaltyLabels, nonRunPenaltyLabels };
+  return { runPenaltySeconds, stationPenaltySeconds, runPenaltyLabels, nonRunPenaltyLabels };
 }
 
 function splitRowBg(key, gap, top1, top2, top3) {
@@ -1137,11 +1140,18 @@ function renderSplitTable(section, analysisJson) {
     totalPenaltySeconds / totalGapSeconds >= 0.25;
   // Only run-attributed penalty seconds should ever be netted out of the running gap,
   // otherwise a station penalty (e.g. "ROWING (120s)") gets misrepresented as inflating
-  // the athlete's running time.
-  const { runPenaltySeconds, runPenaltyLabels, nonRunPenaltyLabels } = penaltyLabelBreakdown(penalties, segMap);
+  // the athlete's running time. The mirror image applies to stations below.
+  const { runPenaltySeconds, stationPenaltySeconds, runPenaltyLabels, nonRunPenaltyLabels } = penaltyLabelBreakdown(penalties, segMap);
   const runGapNetOfPenalties = runPenaltySeconds > 0 && Number.isFinite(runGapRaw)
     ? Math.max(0, runGapRaw - runPenaltySeconds)
     : runGapRaw;
+  const workGapRaw = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
+  // Deliberately unclamped (unlike runGapNetOfPenalties above): a station penalty can be large
+  // enough that the athlete's true station performance is a strength once it's netted out, and
+  // clamping at 0 would hide exactly that - the scenario this field exists to surface correctly.
+  const stationGapNetOfPenalties = stationPenaltySeconds > 0 && Number.isFinite(workGapRaw)
+    ? workGapRaw - stationPenaltySeconds
+    : workGapRaw;
   const raceTimeSeconds = tableData.raceTimeSeconds ?? analysisJson.race?.finishTimeSeconds ?? null;
   const adjustedRaceTimeSeconds = hasPenalties && Number.isFinite(raceTimeSeconds)
     ? raceTimeSeconds - totalPenaltySeconds
@@ -1364,7 +1374,9 @@ function renderSplitTable(section, analysisJson) {
         : runPenaltySeconds > 0
           ? `Once the <strong>${splitSafe(formatGain(runPenaltySeconds))}</strong> penalty is separated, the running gap drops from <strong>${splitSafe(splitGapDisplay(runGapRaw))}</strong> to <strong>${splitSafe(splitGapDisplay(runGapNetOfPenalties))}</strong>. ${splitSafe(joinWithAnd(runPenaltyLabels))} ${runPenaltyLabels.length > 1 ? "are" : "is"} penalty-inflated, so do not treat the full loss as a running fitness problem.`
           : nonRunPenaltyLabels.length > 0
-            ? `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is on ${splitSafe(joinWithAnd(nonRunPenaltyLabels))}, not running - treat it as station execution leakage, separate from your running fitness.`
+            ? Number.isFinite(stationGap) && Number.isFinite(stationGapNetOfPenalties)
+              ? `Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the station gap drops from <strong>${splitSafe(splitGapDisplay(stationGap))}</strong> to <strong>${splitSafe(splitGapDisplay(stationGapNetOfPenalties))}</strong>. ${splitSafe(joinWithAnd(nonRunPenaltyLabels))} ${nonRunPenaltyLabels.length > 1 ? "are" : "is"} penalty-inflated, so do not treat the full station gap as a fitness problem.`
+              : `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is on ${splitSafe(joinWithAnd(nonRunPenaltyLabels))}, not running - treat it as station execution leakage, separate from your running fitness.`
             : `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is execution leakage, separate from running fitness.`;
       const penaltyLeadSentence = hasNarrativeDataAnomaly
         ? "One or more split values look unusual, so check the race splits before naming a main limiter. Penalties are still a controllable win."
@@ -1554,7 +1566,7 @@ function renderSplitTable(section, analysisJson) {
 
 	  function renderGapBreakdown() {
 	    if (totalGapSeconds <= 0) return "";
-		    const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
+		    const stationGap = (penaltiesAreMaterial ? stationGapNetOfPenalties : workGapRaw) ?? 0;
 		    const stationForBar = Math.max(0, stationGap);
 	    const penaltyForBar = penaltiesAreMaterial ? totalPenaltySeconds : 0;
 		    const runningGap = penaltiesAreMaterial ? runGapNetOfPenalties : runGapRaw;
@@ -1595,13 +1607,21 @@ function renderSplitTable(section, analysisJson) {
 		        ? `Running ${splitSafe(splitGapDisplay(runGapNetOfPenalties))} net of penalties`
 	        : `Running ${splitSafe(splitGapDisplay(runGapRaw))}`
 		      : "Running unavailable";
+    const stationsLabel = Number.isFinite(stationGap)
+      ? stationPenaltySeconds > 0
+        ? `Stations ${splitSafe(splitGapDisplay(stationGap))} net of penalties`
+        : `Stations ${splitSafe(splitGapDisplay(stationGap))}`
+      : "Stations unavailable";
     const gapBandRef = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
       ? `${bandDisplayLabel(gapComparisonBand)} benchmark`
       : "benchmark";
-    const footerSentence = runPenaltySeconds > 0
+    const nettedBucketLabels = [];
+    if (runPenaltySeconds > 0) nettedBucketLabels.push("Running");
+    if (stationPenaltySeconds > 0) nettedBucketLabels.push("Stations");
+    const footerSentence = nettedBucketLabels.length > 0
       ? (hasGoalGroup
-        ? "Running is shown net of penalties. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap."
-        : `Running is shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the ${gapBandRef} median for that segment, so they may not sum exactly to the total race gap.`)
+        ? `${joinWithAnd(nettedBucketLabels)} ${nettedBucketLabels.length > 1 ? "are" : "is"} shown net of penalties. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap.`
+        : `${joinWithAnd(nettedBucketLabels)} ${nettedBucketLabels.length > 1 ? "are" : "is"} shown net of penalties so fitness and execution are not conflated. Segment gaps are each measured against the ${gapBandRef} median for that segment, so they may not sum exactly to the total race gap.`)
       : penaltiesAreMaterial
         ? (hasGoalGroup
           ? "Penalties are shown separately from performance gaps. Segment gaps are measured against the target profile for your selected time, so they may not sum exactly to the total target gap."
@@ -1625,7 +1645,7 @@ function renderSplitTable(section, analysisJson) {
 	            </tr>
 	          </table>
 	          <p style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;color:#475569;line-height:1.7;margin:0;">
-	            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:${stationSeverityColor};margin-right:5px;"></span>Stations ${splitSafe(splitGapDisplay(stationGap))}</span>
+	            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:${stationSeverityColor};margin-right:5px;"></span>${stationsLabel}</span>
 	            ${penaltyLegendItem}
 	            <span style="white-space:nowrap;margin-right:12px;"><span style="display:inline-block;width:9px;height:9px;background-color:${runningSeverityColor};margin-right:5px;"></span>${runningLabel}</span>
 	            <span style="white-space:nowrap;"><span style="display:inline-block;width:9px;height:9px;background-color:${roxSeverityColor};margin-right:5px;"></span>RoxZone ${splitSafe(splitGapDisplay(roxGap))}</span>
@@ -1723,7 +1743,6 @@ function renderSplitTable(section, analysisJson) {
       const roxSeg = segMap.get("roxzone_time");
       const timeFor = (seg) => seg && Number.isFinite(seg.userSeconds) ? formatTime(seg.userSeconds) : "&ndash;";
       const adjustedTime = Number.isFinite(adjustedRaceTimeSeconds) ? formatTime(adjustedRaceTimeSeconds) : "&ndash;";
-      const stationGap = splitGapSeconds(stationSeg, hasGoalGroup);
       const roxGap = splitGapSeconds(roxSeg, hasGoalGroup);
 
       return `
@@ -1735,7 +1754,7 @@ function renderSplitTable(section, analysisJson) {
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Adjusted", adjustedTime, adjustedGapSeconds, "Without penalties", penaltyPill(adjustedGapSeconds))}</td>
             </tr>
             <tr>
-              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Stations", timeFor(stationSeg), stationGap, stationSeg ? cardNote("work_time", stationGap) : "Unavailable")}</td>
+              <td width="50%" valign="top" style="padding:0 4px 8px 0;">${explicitCard("Stations", timeFor(stationSeg), stationGapNetOfPenalties, stationSeg ? (stationPenaltySeconds > 0 ? "Net of penalties" : cardNote("work_time", stationGapNetOfPenalties)) : "Unavailable")}</td>
               <td width="50%" valign="top" style="padding:0 0 8px 4px;">${explicitCard("Penalties", formatTime(totalPenaltySeconds), totalPenaltySeconds, "Fastest win", penaltyPill(totalPenaltySeconds))}</td>
             </tr>
             <tr>
@@ -1772,7 +1791,7 @@ function renderSplitTable(section, analysisJson) {
     if (!targetTimeFmt) return "";
 
     const totalGapStr = formatGain(totalGapSeconds);
-    const stationGap2 = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
+    const stationGap2 = stationGapNetOfPenalties ?? 0;
     const roxGap2 = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
     const runGapForRoute = penaltiesAreMaterial ? runGapNetOfPenalties : runGapRaw;
     const stationRanked = rankedGaps.filter((r) => segMap.get(r.key)?.type === "station");
@@ -1867,7 +1886,7 @@ function renderSplitTable(section, analysisJson) {
   function renderTargetPriorities() {
     if (!hasGoalGroup) return "";
 
-    const stationGap2 = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
+    const stationGap2 = stationGapNetOfPenalties ?? 0;
     const roxGap2 = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup) ?? 0;
     const top1Label = top1 ? (segMap.get(top1)?.label ?? null) : null;
 
