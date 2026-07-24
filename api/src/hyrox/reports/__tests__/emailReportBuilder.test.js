@@ -328,6 +328,16 @@ describe("buildEmailReport visual redesign", () => {
   it("suppresses station breakdown section", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
     assert.equal(htmlBody.includes("STATION BREAKDOWN"), false);
+
+    const { htmlBody: penaltyHtml } = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        penalties: [{ runKey: "farmers_carry", station: "farmers_carry", penaltySeconds: 180 }],
+        segments: [{ segmentKey: "total_time", type: "aggregate", percentile: 34, userSeconds: 5612, timeGapToMedianSeconds: 600 }],
+      }),
+      mockContext(),
+    );
+    assert.equal(penaltyHtml.includes("STATION BREAKDOWN"), false);
   });
 
   it("suppresses time potential section", () => {
@@ -3609,6 +3619,71 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
 
       const lens = benchmarkLensSection(htmlBody);
       assert.ok(lens.includes(`${formatPercentileRank(comparisonPercentile)} within this band`));
+      assert.equal(lens.includes(`${formatPercentileRank(rawPercentile)} within this band`), false);
+      assert.ok(comparisonGroupRow(lens).includes("70:00"));
+      assert.ok(comparisonGroupRow(lens).includes("74:59"));
+    } finally {
+      setBenchmarkData({ groups: [], metrics: [] });
+    }
+  });
+
+  it("uses aggregate total_time net-of-penalty seconds for a reclassified Benchmark Lens standing", () => {
+    const rawBandKey = "hyrox:test_kate_lens:band:sub_80:open:female";
+    const comparisonBandKey = "hyrox:test_kate_lens:band:sub_75:open:female";
+    const comparisonBandStats = {
+      groupKey: comparisonBandKey,
+      metricKey: "total_time",
+      sampleSize: 400,
+      p75Seconds: 4304,
+      medianSeconds: 4382,
+      p50Seconds: 4382,
+      p90Seconds: 4447,
+      p99Seconds: 4497,
+    };
+    const adjustedPercentile = approximatePercentile(4447, comparisonBandStats);
+    const rawPercentile = approximatePercentile(4627, comparisonBandStats);
+
+    try {
+      setBenchmarkData({
+        groups: [
+          { groupKey: rawBandKey, datasetVersion: "test_kate_lens", division: "open", gender: "female", performanceBand: "sub_80", sampleSize: 400 },
+          { groupKey: comparisonBandKey, datasetVersion: "test_kate_lens", division: "open", gender: "female", performanceBand: "sub_75", sampleSize: 400 },
+        ],
+        metrics: [comparisonBandStats],
+      });
+
+      const { htmlBody } = buildEmailReport(
+        mockReport(),
+        mockAnalysis({
+          benchmarkContext: {
+            achievedBand: "sub_80",
+            escalationBasisBand: "sub_75",
+            nextBand: "sub_70",
+            analysisFrame: { frame: "catch_up", comparisonBand: "sub_75", stretchBand: null, gapToBandMedianSeconds: 65 },
+            primaryBenchmarkGroup: { key: rawBandKey, label: "Open Female", sampleSize: 400 },
+            escalationBasisBandGroup: { key: comparisonBandKey, label: "Open Female", sampleSize: 400 },
+            nextBandGroup: { label: "Open Female", sampleSize: 300 },
+          },
+          race: { finishTimeSeconds: 4627 },
+          penalties: [{ runKey: "farmers_carry", station: "farmers_carry", penaltySeconds: 180 }],
+          segments: [{
+            segmentKey: "total_time",
+            type: "aggregate",
+            percentile: rawPercentile,
+            fieldPercentile: 52,
+            userSeconds: 4627,
+            userSecondsNetOfPenalty: 4447,
+            timeGapToMedianSeconds: 245,
+            timeGapToMedianSecondsNetOfPenalty: 65,
+          }],
+        }),
+        mockContext(),
+        null,
+        "analyse",
+      );
+
+      const lens = benchmarkLensSection(htmlBody);
+      assert.ok(lens.includes(`${formatPercentileRank(adjustedPercentile)} within this band`));
       assert.equal(lens.includes(`${formatPercentileRank(rawPercentile)} within this band`), false);
       assert.ok(comparisonGroupRow(lens).includes("70:00"));
       assert.ok(comparisonGroupRow(lens).includes("74:59"));
