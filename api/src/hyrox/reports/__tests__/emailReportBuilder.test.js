@@ -572,6 +572,7 @@ describe("buildEmailReport visual redesign", () => {
         "Your quad-dominant stations are your primary training signal.",
         "Weakest stations: Wall Balls (8th percentile), Burpee Broad Jump (10th percentile)",
         "Relative strengths: Sled Pull (Top 5%)",
+        "Training focus: Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
         { __type: "muscle_diagram_pair", frontSvg: "<svg></svg>", backSvg: "<svg></svg>" },
       ],
     };
@@ -593,11 +594,30 @@ describe("buildEmailReport visual redesign", () => {
         "Quad-dominant and Push / shoulder are the common thread across your weakest stations; your Core / stability is a clear strength.",
         "Weakest stations: Wall Balls (8th percentile), Burpee Broad Jump (10th percentile), Row (13th percentile)",
         "Strongest stations: Sled Pull (59th percentile), Sled Push (53rd percentile), Farmers Carry (51st percentile)",
+        "Training focus: Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
       ],
     };
     const { htmlBody } = buildEmailReport({ sections: [muscleSection] }, mockAnalysis(), {}, null);
     assert.ok(htmlBody.includes("Core / stability"));
     assert.ok(!htmlBody.includes("weakest stations; your Core / stability"));
+  });
+
+  it("muscle group section is omitted entirely when there's no data-driven training focus (Kate Wagstaff regression)", () => {
+    // No "Training focus:" line - mirrors the real case where no station muscle group
+    // qualifies as a limiter (e.g. the athlete's only weak station is offset by strengths
+    // elsewhere). A generic "cross-station strength-endurance block" recommendation would be
+    // actively misleading here since the athlete's stations are fine and running is the real
+    // opportunity - so the whole section should be omitted, not shown with empty-content advice.
+    const muscleSection = {
+      sectionKey: "muscle_group_profile",
+      title: "Muscle Group Profile",
+      content: [
+        "Your posterior chain is showing up as your clearest individual station strength",
+      ],
+    };
+    const { htmlBody } = buildEmailReport({ sections: [muscleSection] }, mockAnalysis(), {}, null);
+    assert.doesNotMatch(htmlBody, /MUSCLE GROUP SIGNAL/);
+    assert.doesNotMatch(htmlBody, /cross-station investment/);
   });
 
   it("footer includes methodology note", () => {
@@ -612,6 +632,7 @@ describe("muscle group signal labelling", () => {
     "Quad-dominant and Core / stability are the common thread across your weakest stations",
     "Weakest stations: Wall Balls (+2:00), Sandbag Lunges (+1:10)",
     "Strongest station: Sled Pull (-0:20)",
+    "Training focus: Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
   ]) {
     return {
       sectionKey: "muscle_group_profile",
@@ -706,7 +727,10 @@ describe("muscle group signal labelling", () => {
           ],
         },
       },
-      ["your upper back / pull is a clear strength"],
+      [
+        "your upper back / pull is a clear strength",
+        "Training focus: Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
+      ],
     );
     assert.match(htmlBody, /Strength/);
     assert.match(htmlBody, /#4ade80/);
@@ -2688,6 +2712,23 @@ describe("renderSplitTable", () => {
 
     // Summary cards: Stations card is net, labeled, not the raw inflated figure.
     assert.match(htmlBody, /−2:16/);
+  });
+
+  it("material station penalty with a bigger running gap: MAIN INSIGHT names Running as the largest limiter, not Stations (Kate Wagstaff regression)", () => {
+    // Mirrors the real case: the penalty happens to be on a station, but once correctly
+    // netted, running is clearly the bigger gap - the lead sentence must not default to
+    // "Stations remain the largest fitness limiter" just because the penalty is material.
+    const htmlBody = renderSplit({
+      overrides: {
+        work_time: { timeGapToMedianSeconds: 44 },
+        run_time: { timeGapToMedianSeconds: 244 },
+      },
+      penalties: [{ station: "wall_balls", penaltySeconds: 180 }],
+      benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
+    }, "analyse");
+
+    assert.match(htmlBody, /Running remains the largest fitness limiter, but penalties are your fastest controllable win/);
+    assert.doesNotMatch(htmlBody, /Stations remain the largest fitness limiter/);
   });
 
   it("material penalties on a run: MAIN INSIGHT still nets the running gap and names the actual penalized run", () => {

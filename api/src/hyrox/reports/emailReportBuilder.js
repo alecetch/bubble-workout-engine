@@ -1386,9 +1386,17 @@ function renderSplitTable(section, analysisJson) {
               ? `Once the <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is separated, the station gap drops from <strong>${splitSafe(splitGapDisplay(stationGap))}</strong> to <strong>${splitSafe(splitGapDisplay(stationGapNetOfPenalties))}</strong>. ${splitSafe(joinWithAnd(nonRunPenaltyLabels))} ${nonRunPenaltyLabels.length > 1 ? "are" : "is"} penalty-inflated, so do not treat the full station gap as a fitness problem.`
               : `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is on ${splitSafe(joinWithAnd(nonRunPenaltyLabels))}, not running - treat it as station execution leakage, separate from your running fitness.`
             : `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is execution leakage, separate from running fitness.`;
+      // Which side is actually bigger once the penalty is correctly netted out of whichever
+      // bucket it belongs to - not a blanket "penalties are material -> stations are the
+      // story" assumption, which is wrong whenever the penalty happens to land on a station
+      // that isn't the athlete's real limiter (running can easily be the bigger gap).
+      const stationsAreLargerLimiter = Number.isFinite(stationGapNetOfPenalties) && Number.isFinite(runGapNetOfPenalties)
+        ? stationGapNetOfPenalties >= runGapNetOfPenalties
+        : true;
+      const limiterNoun = hasGoalGroup ? "target gap" : "fitness limiter";
       const penaltyLeadSentence = hasNarrativeDataAnomaly
         ? "One or more split values look unusual, so check the race splits before naming a main limiter. Penalties are still a controllable win."
-        : `${hasGoalGroup ? "Stations remain the largest target gap" : "Stations remain the largest fitness limiter"}, but penalties are your fastest controllable win.`;
+        : `${stationsAreLargerLimiter ? "Stations remain" : "Running remains"} the largest ${limiterNoun}, but penalties are your fastest controllable win.`;
       return `<tr>
         <td style="background-color:#ffffff;padding:18px 24px;">
           <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
@@ -2570,12 +2578,15 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
       </tr>`).join("")}
     </table>`
     : "";
-  // Always use the data-driven trainingHint (keyed off the athlete's actual primary muscle
-  // limiter, via TRAINING_HINTS in muscleGroupMap.js) rather than a fixed penalty-branch
-  // sentence - a hardcoded "posterior-chain... sled-specific pulling" recommendation is wrong
-  // whenever the athlete's real limiter is a different muscle group (e.g. grip/forearm).
-  const implication = textItems.find((item) => /^Training focus:/i.test(item))
-    ?? "Training implication: a targeted strength-endurance block is the highest-leverage cross-station investment.";
+  // Only render this section when there's a specific, data-driven training implication
+  // (keyed off the athlete's actual primary muscle limiter, via TRAINING_HINTS in
+  // muscleGroupMap.js). With no clear limiter pattern, there's nothing this
+  // station-muscle-group-only section can usefully say - a generic "cross-station
+  // strength-endurance block" recommendation is actively misleading when the athlete's
+  // stations are fine and the real opportunity is running, which this section never
+  // considers. Omit the whole section rather than show empty-content advice.
+  const implication = textItems.find((item) => /^Training focus:/i.test(item));
+  if (!implication) return "";
   return `
   <tr>
     <td style="background-color:#ffffff;padding:0 24px 18px;border-bottom:1px solid #e2e8f0;">
