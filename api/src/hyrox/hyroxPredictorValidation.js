@@ -20,8 +20,14 @@ export function validatePredictionRequest(body) {
   if (!b.backSquat3RM || b.backSquat3RM <= 0 || b.backSquat3RM > 400) {
     errors.push({ field: "benchmarks.backSquat3RM", message: "Valid back squat required (1-400 kg)" });
   }
+  if (b.backSquatReps != null && (!Number.isInteger(b.backSquatReps) || b.backSquatReps < 1 || b.backSquatReps > 10)) {
+    errors.push({ field: "benchmarks.backSquatReps", message: "Back squat rep count must be a whole number from 1-10" });
+  }
   if (!b.deadlift3RM || b.deadlift3RM <= 0 || b.deadlift3RM > 500) {
     errors.push({ field: "benchmarks.deadlift3RM", message: "Valid deadlift required (1-500 kg)" });
+  }
+  if (b.deadliftReps != null && (!Number.isInteger(b.deadliftReps) || b.deadliftReps < 1 || b.deadliftReps > 10)) {
+    errors.push({ field: "benchmarks.deadliftReps", message: "Deadlift rep count must be a whole number from 1-10" });
   }
   const bodyweightKg = Number(b.bodyweightKg);
   if (!Number.isFinite(bodyweightKg) || bodyweightKg < 30 || bodyweightKg > 250) {

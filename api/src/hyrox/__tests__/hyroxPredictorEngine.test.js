@@ -4,6 +4,8 @@ import {
   calculateConfidenceScore,
   computeStrengthProfile,
   estimateRunPace,
+  estimateOneRepMax,
+  estimateThreeRepMax,
   runPredictionEngine,
 } from "../hyroxPredictorEngine.js";
 
@@ -63,6 +65,44 @@ test("bodyweight shifts the relative strength tier", () => {
 
   assert.notEqual(lighter.relativeTier, heavier.relativeTier);
   assert.ok(lighter.blendedTier >= heavier.blendedTier);
+});
+
+test("estimateThreeRepMax is an identity when reps is 3 or omitted", () => {
+  assert.equal(estimateThreeRepMax(120, 3), 120);
+  assert.equal(estimateThreeRepMax(120, undefined), 120);
+});
+
+test("estimateOneRepMax treats a 1RM as itself and converts higher reps upward", () => {
+  assert.equal(estimateOneRepMax(120, 1), 120);
+  assert.ok(estimateOneRepMax(100, 8) > 100);
+});
+
+test("estimateThreeRepMax converts a lower-rep max down to a lighter 3RM-equivalent", () => {
+  // A true 1RM is heavier than what you could lift for 3, so the estimated 3RM should be
+  // less than the raw entered 1RM weight.
+  const estimated = estimateThreeRepMax(140, 1);
+  assert.ok(estimated < 140);
+  assert.ok(estimated > 120);
+});
+
+test("estimateThreeRepMax converts a higher-rep max up to a heavier 3RM-equivalent", () => {
+  // A true 8RM is lighter than what you could lift for 3, so the estimated 3RM should be
+  // more than the raw entered 8RM weight.
+  const estimated = estimateThreeRepMax(100, 8);
+  assert.ok(estimated > 100);
+});
+
+test("estimateThreeRepMax ignores an out-of-range or non-integer rep count", () => {
+  assert.equal(estimateThreeRepMax(120, 11), 120);
+  assert.equal(estimateThreeRepMax(120, 0), 120);
+  assert.equal(estimateThreeRepMax(120, 2.5), 120);
+});
+
+test("a 1RM-labeled squat produces a higher strength tier than treating the same weight as a raw 3RM", () => {
+  const treatedAsOneRepMax = computeStrengthProfile({ backSquat3RM: 140, backSquatReps: 1, deadlift3RM: 150 }, "male");
+  const treatedAsThreeRepMax = computeStrengthProfile({ backSquat3RM: 140, deadlift3RM: 150 }, "male");
+
+  assert.ok(treatedAsOneRepMax.absoluteTier <= treatedAsThreeRepMax.absoluteTier);
 });
 
 test("sled push favors absolute strength", () => {

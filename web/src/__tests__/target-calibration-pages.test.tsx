@@ -168,6 +168,41 @@ describe("TargetCalibrationStep1Page", () => {
     expect(screen.getByText("Benchmarks route")).toBeInTheDocument();
   });
 
+  test("weight unit toggle converts back squat and deadlift to kg, not just bodyweight", () => {
+    seedEmailDraft();
+    renderStep1();
+
+    fireEvent.click(screen.getByRole("button", { name: /^lb$/i }));
+    fireEvent.change(screen.getByLabelText(/best 5k time/i), { target: { value: "22:00" } });
+    fireEvent.change(screen.getByLabelText(/back squat 3rm/i), { target: { value: "220" } });
+    fireEvent.change(screen.getByLabelText(/deadlift 3rm/i), { target: { value: "330" } });
+    fireEvent.change(screen.getByLabelText(/bodyweight/i), { target: { value: "180" } });
+    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
+
+    expect(loadDraft()?.athleteContext?.backSquat3RMKg).toBeCloseTo(99.79, 1);
+    expect(loadDraft()?.athleteContext?.deadlift3RMKg).toBeCloseTo(149.69, 1);
+    expect(loadDraft()?.athleteContext?.bodyweightKg).toBeCloseTo(81.65, 1);
+  });
+
+  test("changing back squat rep count updates the field label and saves the chosen rep count", () => {
+    seedEmailDraft();
+    renderStep1();
+
+    expect(screen.getByLabelText(/back squat 3rm/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/back squat rep count/i), { target: { value: "5" } });
+
+    expect(screen.getByLabelText(/back squat 5rm/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/best 5k time/i), { target: { value: "22:00" } });
+    fireEvent.change(screen.getByLabelText(/back squat 5rm/i), { target: { value: "130" } });
+    fireEvent.change(screen.getByLabelText(/bodyweight/i), { target: { value: "82" } });
+    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
+
+    expect(loadDraft()?.athleteContext?.backSquat3RMKg).toBe(130);
+    expect(loadDraft()?.athleteContext?.backSquatReps).toBe(5);
+  });
+
   test("skip with bodyweight empty still navigates to benchmarks", () => {
     seedEmailDraft();
     renderStep1();
