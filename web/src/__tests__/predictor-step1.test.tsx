@@ -94,6 +94,26 @@ describe("PredictorStep1Page", () => {
     expect(loadPredictorDraft().benchmarks.heightCm).toBeCloseTo(180.34, 1);
   });
 
+  test("changing deadlift rep count updates the field label and saves the chosen rep count", () => {
+    renderPage();
+
+    expect(screen.getByLabelText(/deadlift 3rm/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/deadlift rep count/i), { target: { value: "8" } });
+
+    expect(screen.getByLabelText(/deadlift 8rm/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/age group/i), { target: { value: "30-34" } });
+    fireEvent.change(screen.getByLabelText(/best 5k time/i), { target: { value: "22:30" } });
+    fireEvent.change(screen.getByLabelText(/back squat 3rm/i), { target: { value: "120" } });
+    fireEvent.change(screen.getByLabelText(/deadlift 8rm/i), { target: { value: "190" } });
+    fireEvent.change(screen.getByLabelText(/bodyweight/i), { target: { value: "85" } });
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+
+    expect(loadPredictorDraft().benchmarks.deadlift3RM).toBe(190);
+    expect(loadPredictorDraft().benchmarks.deadliftReps).toBe(8);
+  });
+
   test("shows an error when 10k time is faster than 5k time", () => {
     renderPage();
 

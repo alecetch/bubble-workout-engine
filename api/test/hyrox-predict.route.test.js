@@ -114,6 +114,37 @@ test("POST /api/hyrox/predict omitting heightCm returns 200", async () => {
   assert.ok(json.predictionId);
 });
 
+test("POST /api/hyrox/predict invalid backSquatReps returns 400", async () => {
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(validBody({ benchmarks: { backSquatReps: 11 } })),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(json.errors.some((err) => err.field === "benchmarks.backSquatReps"), true);
+});
+
+test("POST /api/hyrox/predict non-3RM back squat and deadlift with valid rep counts returns 200 and shifts the strength tier", async () => {
+  const { response, body } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(validBody({ benchmarks: { backSquat3RM: 140, backSquatReps: 1, deadlift3RM: 150, deadliftReps: 8 } })),
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(body.predictionId);
+});
+
+test("POST /api/hyrox/predict omitting backSquatReps/deadliftReps returns 200 (defaults to 3RM)", async () => {
+  const body = validBody({ benchmarks: {} });
+  const { response, body: json } = await request(buildApp(), "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(json.predictionId);
+});
+
 test("POST /api/hyrox/predict missing email returns 400", async () => {
   const body = validBody({ athlete: { email: undefined } });
   delete body.athlete.email;
