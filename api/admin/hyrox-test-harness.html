@@ -206,6 +206,7 @@
 
       <section class="section">
         <p class="section-heading">Mode 1: Analyse my race &amp; Mode 3: Hit a target time — cases</p>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">Mode 3 runs also pick up back squat / deadlift / bodyweight from Mode 2's first Predict case below, if present.</p>
         <div id="test-list" class="test-list">
           <div class="empty">Paste URLs to build a test list.</div>
         </div>
@@ -219,7 +220,7 @@
             <button id="run-all-predict-btn" class="secondary" type="button">Run All</button>
           </div>
         </div>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">No HYROX URL needed. Required: 5k time, back squat 3RM, deadlift 3RM. Calls <code>/api/hyrox/predict</code> directly.</p>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">No HYROX URL needed. Required: 5k time, back squat 3RM, deadlift 3RM, bodyweight. Calls <code>/api/hyrox/predict</code> directly.</p>
         <div id="predict-list" class="test-list">
           <div class="empty">No predict cases yet.</div>
         </div>
@@ -377,6 +378,29 @@
         if (trainingFrequencySelect.value) context.weeklyStrengthSessions = trainingFrequencySelect.value;
         if (runningVolumeSelect.value) context.weeklyRunningVolume = runningVolumeSelect.value;
         if (strengthBackgroundSelect.value) context.primaryBackground = strengthBackgroundSelect.value;
+
+        // Mode 3 ("Hit a target time") accepts squat/deadlift/bodyweight as optional inputs, but
+        // there is no dedicated UI for entering them against a real-race Mode 1/3 case. Reuse
+        // whatever is entered on the first Mode 2 (Predict) case instead, so Mode 3 runs can
+        // exercise the MUSCLE GROUP SIGNAL strength commentary without duplicating input fields.
+        const predictCase = predictCases[0];
+        if (predictCase) {
+          const backSquat3RMKg = Number(predictCase.backSquat3RM);
+          const deadlift3RMKg = Number(predictCase.deadlift3RM);
+          const bodyweightKg = Number(predictCase.bodyweightKg);
+          if (Number.isFinite(backSquat3RMKg) && backSquat3RMKg > 0) {
+            context.backSquat3RMKg = backSquat3RMKg;
+            context.backSquatReps = Number(predictCase.backSquatReps) || 3;
+          }
+          if (Number.isFinite(deadlift3RMKg) && deadlift3RMKg > 0) {
+            context.deadlift3RMKg = deadlift3RMKg;
+            context.deadliftReps = Number(predictCase.deadliftReps) || 3;
+          }
+          if (Number.isFinite(bodyweightKg) && bodyweightKg > 0) {
+            context.bodyweightKg = bodyweightKg;
+          }
+        }
+
         return context;
       }
 
@@ -1158,7 +1182,10 @@
         division: "open",
         run5kTime: "22:00",
         backSquat3RM: 90,
+        backSquatReps: 3,
         deadlift3RM: 110,
+        deadliftReps: 3,
+        bodyweightKg: 82,
         targetTime: "1:15:00",
       };
 
@@ -1224,8 +1251,20 @@
                 <input class="predict-squat-input" data-predict-index="${i}" type="number" min="1" max="400" value="${escapeHtml(String(entry.backSquat3RM ?? ""))}" placeholder="90" style="font-family:Consolas,monospace;font-size:12px;" />
               </div>
               <div class="field">
+                <label>Back squat reps</label>
+                <input class="predict-squat-reps-input" data-predict-index="${i}" type="number" min="1" max="10" value="${escapeHtml(String(entry.backSquatReps ?? 3))}" placeholder="3" style="font-family:Consolas,monospace;font-size:12px;" />
+              </div>
+              <div class="field">
                 <label>Deadlift 3RM (kg)</label>
                 <input class="predict-deadlift-input" data-predict-index="${i}" type="number" min="1" max="500" value="${escapeHtml(String(entry.deadlift3RM ?? ""))}" placeholder="110" style="font-family:Consolas,monospace;font-size:12px;" />
+              </div>
+              <div class="field">
+                <label>Deadlift reps</label>
+                <input class="predict-deadlift-reps-input" data-predict-index="${i}" type="number" min="1" max="10" value="${escapeHtml(String(entry.deadliftReps ?? 3))}" placeholder="3" style="font-family:Consolas,monospace;font-size:12px;" />
+              </div>
+              <div class="field">
+                <label>Bodyweight (kg)</label>
+                <input class="predict-bodyweight-input" data-predict-index="${i}" type="number" min="30" max="250" value="${escapeHtml(String(entry.bodyweightKg ?? ""))}" placeholder="82" style="font-family:Consolas,monospace;font-size:12px;" />
               </div>
               <div class="field">
                 <label>Target time (optional)</label>
@@ -1250,7 +1289,10 @@
         if (el.classList.contains("predict-division-select")) c.division = el.value;
         if (el.classList.contains("predict-5k-input")) c.run5kTime = el.value.trim();
         if (el.classList.contains("predict-squat-input")) c.backSquat3RM = el.value ? Number(el.value) : "";
+        if (el.classList.contains("predict-squat-reps-input")) c.backSquatReps = el.value ? Number(el.value) : 3;
         if (el.classList.contains("predict-deadlift-input")) c.deadlift3RM = el.value ? Number(el.value) : "";
+        if (el.classList.contains("predict-deadlift-reps-input")) c.deadliftReps = el.value ? Number(el.value) : 3;
+        if (el.classList.contains("predict-bodyweight-input")) c.bodyweightKg = el.value ? Number(el.value) : "";
         if (el.classList.contains("predict-target-input")) c.targetTime = el.value.trim();
         savePredictCases();
       }
@@ -1270,17 +1312,26 @@
         const run5kSeconds = parseTimeToSeconds(entry.run5kTime);
         const backSquat = Number(entry.backSquat3RM);
         const deadlift = Number(entry.deadlift3RM);
+        const bodyweightKg = Number(entry.bodyweightKg);
 
         if (!run5kSeconds || run5kSeconds <= 0) { resultEl.hidden = false; resultEl.innerHTML = '<div class="status err">Enter a valid 5k time (mm:ss).</div>'; return; }
         if (!backSquat || backSquat <= 0) { resultEl.hidden = false; resultEl.innerHTML = '<div class="status err">Enter a valid back squat 3RM (kg).</div>'; return; }
         if (!deadlift || deadlift <= 0) { resultEl.hidden = false; resultEl.innerHTML = '<div class="status err">Enter a valid deadlift 3RM (kg).</div>'; return; }
+        if (!bodyweightKg || bodyweightKg <= 0) { resultEl.hidden = false; resultEl.innerHTML = '<div class="status err">Enter a valid bodyweight (kg).</div>'; return; }
 
         resultEl.hidden = false;
         resultEl.innerHTML = '<div class="status">Running prediction…</div>';
 
         const body = {
           athlete: { email: "harness@forma.internal", sex: entry.sex || "male", division: entry.division || "open" },
-          benchmarks: { run5kSeconds, backSquat3RM: backSquat, deadlift3RM: deadlift },
+          benchmarks: {
+            run5kSeconds,
+            backSquat3RM: backSquat,
+            backSquatReps: Number(entry.backSquatReps) || 3,
+            deadlift3RM: deadlift,
+            deadliftReps: Number(entry.deadliftReps) || 3,
+            bodyweightKg,
+          },
         };
         const targetSecs = parseTimeToSeconds(entry.targetTime);
         if (targetSecs) body.race = { targetFinishTimeSeconds: targetSecs };
@@ -1320,7 +1371,7 @@
       }
 
       document.getElementById("add-predict-btn").addEventListener("click", () => {
-        predictCases.push({ label: "", sex: "male", division: "open", run5kTime: "", backSquat3RM: "", deadlift3RM: "", targetTime: "" });
+        predictCases.push({ label: "", sex: "male", division: "open", run5kTime: "", backSquat3RM: "", backSquatReps: 3, deadlift3RM: "", deadliftReps: 3, bodyweightKg: "", targetTime: "" });
         savePredictCases();
         renderPredictList();
       });
