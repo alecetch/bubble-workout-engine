@@ -203,4 +203,91 @@ describe("buildPersonalReport - race_split_breakdown section", () => {
 
     assert.match(summary.content.join(" "), /fatigue resistance and pacing deserve attention/i);
   });
+
+  function muscleGroupProfile(overrides = {}) {
+    return {
+      available: true,
+      patternFound: true,
+      conclusion: {
+        headline: "Quad-dominant stations are the clearest station signal",
+        body: "Wall Balls and Sandbag Lunges share a lower-body demand.",
+        trainingHint: "Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
+      },
+      stationClassifications: [
+        { label: "Wall Balls", relativeClass: "weak", timeGapSeconds: 120 },
+        { label: "Sled Pull", relativeClass: "strong", timeGapSeconds: -40 },
+      ],
+      ...overrides,
+    };
+  }
+
+  function strengthAthleteContext(overrides = {}) {
+    return {
+      targetFinishTimeSeconds: 5000,
+      bodyweightKg: 80,
+      backSquatKg: 100,
+      backSquatReps: 3,
+      deadliftKg: 130,
+      deadliftReps: 3,
+      ...overrides,
+    };
+  }
+
+  it("training_volume section includes a Strength check item (with label) when lift inputs are available, and muscle_group_profile does not", () => {
+    const analysis = minimalAnalysis({
+      athlete: { sex: "male" },
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:open:male:all", label: "Open Male" },
+        goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "sub-85" },
+      },
+      muscleGroupProfile: muscleGroupProfile(),
+      segments: makeSegments(16),
+    });
+    const { sections } = buildPersonalReport(analysis, [], strengthAthleteContext(), null, "target");
+
+    const volumeSection = sections.find((section) => section.sectionKey === "training_volume");
+    const muscleSection = sections.find((section) => section.sectionKey === "muscle_group_profile");
+
+    assert.ok(volumeSection, "training_volume section should exist");
+    assert.ok(volumeSection.content.some((item) => typeof item === "string" && /^Your estimated back squat 1RM/.test(item)));
+    assert.deepEqual(volumeSection.contentLabels.slice(-1), ["Strength check"]);
+    assert.ok(muscleSection, "muscle_group_profile section should exist");
+    assert.equal(muscleSection.content.some((item) => typeof item === "string" && /Your estimated back squat 1RM/.test(item)), false);
+  });
+
+  it("training_volume section renders with only a Strength check item when no running/strength-frequency data is reported", () => {
+    const analysis = minimalAnalysis({
+      athlete: { sex: "male" },
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:open:male:all", label: "Open Male" },
+        goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "sub-85" },
+      },
+      segments: makeSegments(16),
+    });
+    const { sections } = buildPersonalReport(analysis, [], strengthAthleteContext(), null, "target");
+    const volumeSection = sections.find((section) => section.sectionKey === "training_volume");
+
+    assert.ok(volumeSection, "training_volume section should exist from strength data alone");
+    assert.equal(volumeSection.content.length, 1);
+    assert.deepEqual(volumeSection.contentLabels, ["Strength check"]);
+  });
+
+  it("training_volume section omits the Strength check item when strength copy is unavailable (no bodyweight, or analyse mode)", () => {
+    const analysisTarget = minimalAnalysis({
+      athlete: { sex: "male" },
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "hyrox:v1:open:male:all", label: "Open Male" },
+        goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "sub-85" },
+      },
+      segments: makeSegments(16),
+    });
+    const noBodyweightReport = buildPersonalReport(analysisTarget, [], strengthAthleteContext({ bodyweightKg: undefined }), null, "target");
+    const noBodyweightVolume = noBodyweightReport.sections.find((section) => section.sectionKey === "training_volume");
+    assert.equal(noBodyweightVolume, undefined, "no training_volume section at all when neither volume nor strength data is usable");
+
+    const analysisAnalyse = minimalAnalysis({ athlete: { sex: "male" }, segments: makeSegments(16) });
+    const analyseReport = buildPersonalReport(analysisAnalyse, [], strengthAthleteContext(), null, "analyse");
+    const analyseVolume = analyseReport.sections.find((section) => section.sectionKey === "training_volume");
+    assert.equal(analyseVolume, undefined, "no training_volume section at all in analyse mode from strength data alone");
+  });
 });

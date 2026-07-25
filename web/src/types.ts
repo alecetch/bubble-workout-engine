@@ -49,7 +49,9 @@ export interface HyroxCalculatorDraft {
     run5kPbSeconds?: number;
     run10kPbSeconds?: number;
     backSquat3RMKg?: number;
+    backSquatReps?: number;
     deadlift3RMKg?: number;
+    deadliftReps?: number;
     bodyweightKg?: number;
     heightCm?: number;
     rowErg2kSeconds?: number;
@@ -96,7 +98,9 @@ export interface HyroxAnalysisRequest {
     run5kPbSeconds?: number;
     run10kPbSeconds?: number;
     backSquat3RMKg?: number;
+    backSquatReps?: number;
     deadlift3RMKg?: number;
+    deadliftReps?: number;
     bodyweightKg?: number;
     heightCm?: number;
     rowErg2kSeconds?: number;
@@ -211,7 +215,9 @@ export interface HyroxPredictorDraft {
     run5kSeconds?: number;
     run10kSeconds?: number;
     backSquat3RM?: number;
+    backSquatReps?: number;
     deadlift3RM?: number;
+    deadliftReps?: number;
     bodyweightKg?: number;
     heightCm?: number;
     rowErg2kSeconds?: number;

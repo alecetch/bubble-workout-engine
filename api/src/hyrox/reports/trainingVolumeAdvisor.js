@@ -42,7 +42,7 @@ const STRENGTH_VERDICTS = Object.freeze({
   "6_plus": "excessive",
 });
 
-const TIER_LABELS = Object.freeze({
+export const TIER_LABELS = Object.freeze({
   T1: "sub-60 minute",
   T2: "60-75 minute",
   T3: "75-90 minute",
@@ -50,7 +50,7 @@ const TIER_LABELS = Object.freeze({
   T5: "120+ minute",
 });
 
-function finishTimeTier(seconds) {
+export function finishTimeTier(seconds) {
   if (!Number.isFinite(seconds)) return null;
   if (seconds < 3600) return "T1";
   if (seconds < 4500) return "T2";

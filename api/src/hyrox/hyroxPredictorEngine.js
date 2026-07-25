@@ -109,19 +109,43 @@ export function modeForScore(score) {
   return "best";
 }
 
+// ABSOLUTE_THRESHOLDS/RELATIVE_THRESHOLDS are calibrated for a 3-rep max. Athletes can log
+// their squat/deadlift at any rep count from 1-10, so convert to a 3RM-equivalent load first
+// (Epley 1RM estimate, then back down to 3RM) - reps defaults to 3 (identity) when omitted,
+// so callers that don't pass a rep count keep today's exact behavior.
+function epleyOneRepMax(weightKg, reps) {
+  if (!Number.isFinite(weightKg) || weightKg <= 0) return weightKg;
+  const repCount = Number.isInteger(reps) && reps >= 1 && reps <= 10 ? reps : 3;
+  if (repCount === 1) return weightKg;
+  return weightKg * (1 + repCount / 30);
+}
+
+export function estimateOneRepMax(weightKg, reps) {
+  return epleyOneRepMax(weightKg, reps);
+}
+
+export function estimateThreeRepMax(weightKg, reps) {
+  if (!Number.isFinite(weightKg) || weightKg <= 0) return weightKg;
+  const repCount = Number.isInteger(reps) && reps >= 1 && reps <= 10 ? reps : 3;
+  if (repCount === 3) return weightKg;
+  return epleyOneRepMax(weightKg, reps) / (1 + 3 / 30);
+}
+
 export function computeStrengthProfile(benchmarks = {}, sex = "male", bodyweightKg) {
   const scale = sex === "female" ? 0.75 : 1;
   const absoluteTiers = [];
   const relativeTiers = [];
   const hasBodyweight = Number.isFinite(bodyweightKg) && bodyweightKg > 0;
+  const deadlift3RM = estimateThreeRepMax(benchmarks.deadlift3RM, benchmarks.deadliftReps);
+  const backSquat3RM = estimateThreeRepMax(benchmarks.backSquat3RM, benchmarks.backSquatReps);
 
-  if (benchmarks.deadlift3RM) {
-    absoluteTiers.push(tierForLoad(benchmarks.deadlift3RM, ABSOLUTE_THRESHOLDS.deadlift.map((v) => v * scale)));
-    if (hasBodyweight) relativeTiers.push(tierForLoad(benchmarks.deadlift3RM / bodyweightKg, RELATIVE_THRESHOLDS.deadlift.map((v) => v * scale)));
+  if (deadlift3RM) {
+    absoluteTiers.push(tierForLoad(deadlift3RM, ABSOLUTE_THRESHOLDS.deadlift.map((v) => v * scale)));
+    if (hasBodyweight) relativeTiers.push(tierForLoad(deadlift3RM / bodyweightKg, RELATIVE_THRESHOLDS.deadlift.map((v) => v * scale)));
   }
-  if (benchmarks.backSquat3RM) {
-    absoluteTiers.push(tierForLoad(benchmarks.backSquat3RM, ABSOLUTE_THRESHOLDS.backSquat.map((v) => v * scale)));
-    if (hasBodyweight) relativeTiers.push(tierForLoad(benchmarks.backSquat3RM / bodyweightKg, RELATIVE_THRESHOLDS.backSquat.map((v) => v * scale)));
+  if (backSquat3RM) {
+    absoluteTiers.push(tierForLoad(backSquat3RM, ABSOLUTE_THRESHOLDS.backSquat.map((v) => v * scale)));
+    if (hasBodyweight) relativeTiers.push(tierForLoad(backSquat3RM / bodyweightKg, RELATIVE_THRESHOLDS.backSquat.map((v) => v * scale)));
   }
 
   const absoluteTier = absoluteTiers.length ? clamp(Math.floor(mean(absoluteTiers)), 1, 4) : 2;

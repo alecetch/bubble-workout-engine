@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildEmailReport, gapPill } from "../emailReportBuilder.js";
+import { buildPersonalReport } from "../personalReportBuilder.js";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildTemplateA } from "../templateSlotMapper.js";
 import { bandScoreLabel, formatOverallStanding, formatPercentileRank } from "../copyFormatter.js";
@@ -69,10 +70,18 @@ function mockAnalysis(overrides = {}) {
     headline: {
       biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 164, percentile: 34 },
     },
-    timePotential: { headlineGainSeconds: 164 },
-    segments: [
-      { segmentKey: "total_time", type: "aggregate", percentile: 34, userSeconds: 5612 },
-    ],
+      timePotential: { headlineGainSeconds: 164 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 34, userSeconds: 5612 },
+        { segmentKey: "run_1", type: "run", userSeconds: 300, timeGapSeconds: 10 },
+        { segmentKey: "ski_erg", type: "station", userSeconds: 260, timeGapSeconds: 12 },
+        { segmentKey: "run_2", type: "run", userSeconds: 310, timeGapSeconds: 8 },
+        { segmentKey: "sled_push", type: "station", userSeconds: 180, timeGapSeconds: 15 },
+        { segmentKey: "run_3", type: "run", userSeconds: 315, timeGapSeconds: 11 },
+        { segmentKey: "sled_pull", type: "station", userSeconds: 220, timeGapSeconds: -40 },
+        { segmentKey: "run_4", type: "run", userSeconds: 320, timeGapSeconds: 9 },
+        { segmentKey: "burpee_broad_jumps", type: "station", userSeconds: 280, timeGapSeconds: 18 },
+      ],
     penalties: [],
     roxzoneAnalysis: { available: false },
     ...overrides,
@@ -618,6 +627,117 @@ describe("buildEmailReport visual redesign", () => {
     const { htmlBody } = buildEmailReport({ sections: [muscleSection] }, mockAnalysis(), {}, null);
     assert.doesNotMatch(htmlBody, /MUSCLE GROUP SIGNAL/);
     assert.doesNotMatch(htmlBody, /cross-station investment/);
+  });
+
+  function muscleSignalAnalysis(overrides = {}) {
+    return mockAnalysis({
+      athlete: { sex: "male" },
+      benchmarkContext: {
+        primaryBenchmarkGroup: { label: "Open Male" },
+        goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "75-90 minute target" },
+      },
+      muscleGroupProfile: {
+        available: true,
+        patternFound: true,
+        conclusion: {
+          headline: "Quad-dominant stations are the clearest station signal",
+          body: "Wall Balls and Sandbag Lunges share a lower-body demand.",
+          trainingHint: "Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
+        },
+        muscleGroupSignals: [{ label: "Quad-dominant", signal: "limiter", weakCount: 2 }],
+        stationClassifications: [
+          { label: "Wall Balls", relativeClass: "weak", timeGapSeconds: 120 },
+          { label: "Sled Pull", relativeClass: "strong", timeGapSeconds: -40 },
+        ],
+      },
+      ...overrides,
+    });
+  }
+
+  function strengthContext(overrides = {}) {
+    return mockContext({
+      targetFinishTimeSeconds: 5000,
+      bodyweightKg: 80,
+      backSquatKg: 100,
+      backSquatReps: 3,
+      deadliftKg: 130,
+      deadliftReps: 3,
+      weeklyRunningVolume: "30_45_km",
+      weeklyStrengthSessions: "2_3_days_week",
+      ...overrides,
+    });
+  }
+
+  it("target-mode TRAINING VOLUME ASSESSMENT renders a Strength check item, separate from MUSCLE GROUP SIGNAL", () => {
+    const analysis = muscleSignalAnalysis();
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "target");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "target");
+    const volumeIndex = htmlBody.indexOf("TRAINING VOLUME ASSESSMENT");
+    const muscleIndex = htmlBody.indexOf("MUSCLE GROUP SIGNAL");
+    const strengthCheckLabelIndex = htmlBody.indexOf("Strength check");
+
+    assert.ok(htmlBody.includes("TRAINING VOLUME ASSESSMENT"));
+    assert.ok(htmlBody.includes("MUSCLE GROUP SIGNAL"));
+    assert.ok(strengthCheckLabelIndex > volumeIndex, "Strength check label should appear inside Training Volume Assessment");
+    assert.match(htmlBody, /Your estimated back squat 1RM/);
+    assert.match(htmlBody, /Your estimated deadlift 1RM/);
+
+    const muscleSectionHtml = htmlBody.slice(muscleIndex, htmlBody.indexOf("</tr>", muscleIndex));
+    assert.doesNotMatch(muscleSectionHtml, /Your estimated back squat 1RM/, "strength-check copy must not leak into MUSCLE GROUP SIGNAL");
+  });
+
+  it("MUSCLE GROUP SIGNAL is omitted when training focus is absent, but TRAINING VOLUME ASSESSMENT still shows the strength check", () => {
+    const analysis = muscleSignalAnalysis({
+      muscleGroupProfile: {
+        available: true,
+        patternFound: true,
+        conclusion: {
+          headline: "Quad-dominant stations are the clearest station signal",
+          body: "Wall Balls and Sandbag Lunges share a lower-body demand.",
+        },
+        muscleGroupSignals: [{ label: "Quad-dominant", signal: "limiter", weakCount: 2 }],
+        stationClassifications: [{ label: "Wall Balls", relativeClass: "weak", timeGapSeconds: 120 }],
+      },
+    });
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "target");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "target");
+
+    assert.doesNotMatch(htmlBody, /MUSCLE GROUP SIGNAL/, "no training-focus implication means the section should be fully omitted, as before this feature");
+    assert.ok(htmlBody.includes("TRAINING VOLUME ASSESSMENT"));
+    assert.match(htmlBody, /Your estimated back squat 1RM/);
+  });
+
+  it("analyse-mode TRAINING VOLUME ASSESSMENT does not include a strength check even with lift data", () => {
+    const analysis = muscleSignalAnalysis();
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "analyse");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "analyse");
+
+    assert.ok(htmlBody.includes("MUSCLE GROUP SIGNAL"));
+    assert.doesNotMatch(htmlBody, /Your estimated back squat 1RM/);
+  });
+
+  it("muscle group signal gate remains tied to available pattern data, independent of strength-check data", () => {
+    const analysis = muscleSignalAnalysis({
+      muscleGroupProfile: {
+        available: true,
+        patternFound: false,
+        conclusion: {
+          trainingHint: "Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
+        },
+        muscleGroupSignals: [{ label: "Quad-dominant", signal: "limiter", weakCount: 2 }],
+        stationClassifications: [{ label: "Wall Balls", relativeClass: "weak", timeGapSeconds: 120 }],
+      },
+    });
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "target");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "target");
+
+    assert.doesNotMatch(htmlBody, /MUSCLE GROUP SIGNAL/);
+    assert.ok(htmlBody.includes("TRAINING VOLUME ASSESSMENT"), "training volume assessment is unaffected by the muscle-group pattern gate");
+    assert.match(htmlBody, /Your estimated back squat 1RM/);
   });
 
   it("footer includes methodology note", () => {

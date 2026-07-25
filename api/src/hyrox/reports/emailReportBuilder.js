@@ -774,7 +774,7 @@ function renderTextCard(section, interpretation = null, analysisJson = {}) {
 	  const filteredItems = items.filter(Boolean);
 	  const paragraphs = section.sectionKey === "training_volume" && filteredItems.length >= 2
 	    ? filteredItems.map((item, index) => {
-	      const labels = ["Running volume", "Strength frequency"];
+	      const labels = section.contentLabels ?? ["Running volume", "Strength frequency"];
 	      const marginTop = index === 0 ? "margin-top:0;" : "margin-top:12px;";
 	      const text = String(item);
 	      return `<div style="${marginTop}">
@@ -2609,13 +2609,6 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
       </tr>`).join("")}
     </table>`
     : "";
-  // Only render this section when there's a specific, data-driven training implication
-  // (keyed off the athlete's actual primary muscle limiter, via TRAINING_HINTS in
-  // muscleGroupMap.js). With no clear limiter pattern, there's nothing this
-  // station-muscle-group-only section can usefully say - a generic "cross-station
-  // strength-endurance block" recommendation is actively misleading when the athlete's
-  // stations are fine and the real opportunity is running, which this section never
-  // considers. Omit the whole section rather than show empty-content advice.
   const implication = textItems.find((item) => /^Training focus:/i.test(item));
   if (!implication) return "";
   return `

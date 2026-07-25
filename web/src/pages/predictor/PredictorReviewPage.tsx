@@ -40,6 +40,10 @@ function formatWeight(kg: number, unit?: "kg" | "lb"): string {
   return unit === "lb" ? `${Math.round(kgToLb(kg))} lb` : `${Math.round(kg)} kg`;
 }
 
+function formatRepMax(kg: number, reps: number | undefined, unit?: "kg" | "lb"): string {
+  return `${formatWeight(kg, unit)} (${reps ?? 3}RM)`;
+}
+
 function formatHeight(cm: number, unit?: "cm" | "ftin"): string {
   if (unit === "ftin") {
     const { feet, inches } = cmToFeetInches(cm);
@@ -114,8 +118,8 @@ export function PredictorReviewPage() {
             <EditRow title="Athlete" value={compact([title(draft.athlete.sex), draft.athlete.ageGroup, title(draft.athlete.division)])} onEdit={() => void navigate("/hyrox-predictor")} />
             <EditRow title="Core benchmarks" value={compact([
               `5k ${formatMaybe(draft.benchmarks.run5kSeconds)}`,
-              draft.benchmarks.backSquat3RM ? `Squat ${draft.benchmarks.backSquat3RM} kg` : undefined,
-              draft.benchmarks.deadlift3RM ? `Deadlift ${draft.benchmarks.deadlift3RM} kg` : undefined,
+              draft.benchmarks.backSquat3RM ? `Squat ${formatRepMax(draft.benchmarks.backSquat3RM, draft.benchmarks.backSquatReps, draft.athlete.weightUnit)}` : undefined,
+              draft.benchmarks.deadlift3RM ? `Deadlift ${formatRepMax(draft.benchmarks.deadlift3RM, draft.benchmarks.deadliftReps, draft.athlete.weightUnit)}` : undefined,
               draft.benchmarks.bodyweightKg ? `Bodyweight ${formatWeight(draft.benchmarks.bodyweightKg, draft.athlete.weightUnit)}` : undefined,
               draft.benchmarks.heightCm ? `Height ${formatHeight(draft.benchmarks.heightCm, draft.athlete.heightUnit)}` : undefined,
               draft.benchmarks.run10kSeconds ? `10k ${formatMaybe(draft.benchmarks.run10kSeconds)}` : undefined,

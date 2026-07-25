@@ -579,6 +579,20 @@ export function runHarnessMode(mode, parsed, event, sharedContext) {
   };
 }
 
+export function sharedContextFromRequestBody(body = {}) {
+  return {
+    weeklyStrengthSessions: body?.weeklyStrengthSessions ?? undefined,
+    weeklyRunningVolume: body?.weeklyRunningVolume ?? undefined,
+    primaryBackground: body?.primaryBackground ?? undefined,
+    additionalContext: body?.additionalContext ?? undefined,
+    backSquat3RMKg: body?.backSquat3RMKg ?? undefined,
+    backSquatReps: body?.backSquatReps ?? undefined,
+    deadlift3RMKg: body?.deadlift3RMKg ?? undefined,
+    deadliftReps: body?.deadliftReps ?? undefined,
+    bodyweightKg: body?.bodyweightKg ?? undefined,
+  };
+}
+
 function maybeJson(value) {
   if (value === undefined || value === null) return "-";
   return JSON.stringify(value, null, 2);
@@ -1590,12 +1604,7 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
         });
       }
 
-      const sharedContext = {
-        weeklyStrengthSessions: req.body?.weeklyStrengthSessions ?? undefined,
-        weeklyRunningVolume: req.body?.weeklyRunningVolume ?? undefined,
-        primaryBackground: req.body?.primaryBackground ?? undefined,
-        additionalContext: req.body?.additionalContext ?? undefined,
-      };
+      const sharedContext = sharedContextFromRequestBody(req.body);
 
       if (!isPack) {
         try {

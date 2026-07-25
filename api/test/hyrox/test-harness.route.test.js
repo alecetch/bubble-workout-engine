@@ -11,6 +11,8 @@ import {
   createAdminHyroxTestHarnessRouter,
   emailHtmlEntriesFromHarnessEntries,
   normalizeSex,
+  runHarnessMode,
+  sharedContextFromRequestBody,
 } from "../../src/routes/adminHyroxTestHarness.js";
 
 const nativeFetch = globalThis.fetch;
@@ -193,6 +195,44 @@ test("canonicalJsonStringify and content hashing are stable across object insert
   assert.equal(canonicalJsonStringify(first), canonicalJsonStringify(second));
   assert.equal(contentHashForAnalysisJson(first), contentHashForAnalysisJson(second));
   assert.notEqual(contentHashForAnalysisJson(first), contentHashForAnalysisJson(different));
+});
+
+test("shared harness context forwards Mode 2 strength fields into Mode 3 athlete context", () => {
+  const sharedContext = sharedContextFromRequestBody({
+    weeklyStrengthSessions: "3",
+    backSquat3RMKg: 101,
+    backSquatReps: 5,
+    deadlift3RMKg: 141,
+    deadliftReps: 4,
+    bodyweightKg: 83,
+  });
+
+  assert.equal(sharedContext.backSquat3RMKg, 101);
+  assert.equal(sharedContext.backSquatReps, 5);
+  assert.equal(sharedContext.deadlift3RMKg, 141);
+  assert.equal(sharedContext.deadliftReps, 4);
+  assert.equal(sharedContext.bodyweightKg, 83);
+
+  const result = runHarnessMode(
+    { modeName: "Mode 3: Hit a target time", calculatorMode: "target", targetFinishTimeSeconds: 4500 },
+    {
+      athleteName: "Alex Runner",
+      sex: "male",
+      division: "open",
+      finishTimeSeconds: 6120,
+      splits: [],
+      penalties: [],
+      raceReplay: [],
+    },
+    null,
+    sharedContext,
+  );
+
+  assert.equal(result.input.athleteContext.backSquat3RMKg, 101);
+  assert.equal(result.input.athleteContext.backSquatKg, 101);
+  assert.equal(result.input.athleteContext.deadlift3RMKg, 141);
+  assert.equal(result.input.athleteContext.deadliftKg, 141);
+  assert.equal(result.input.athleteContext.bodyweightKg, 83);
 });
 
 test("requires internal token", async () => {

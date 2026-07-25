@@ -11,6 +11,7 @@ import { TextInput } from "../../components/TextInput";
 import { TimeInput } from "../../components/TimeInput";
 import { WeightField } from "../../components/WeightField";
 import { PREDICTOR_STEPS } from "../../data/predictorSteps";
+import { REP_OPTIONS } from "../../data/repOptions";
 import type { HyroxAgeGroup, HyroxDivision, HyroxSex } from "../../types";
 import { trackEvent } from "../../utils/api";
 import { loadPredictorDraft, savePredictorDraft } from "../../utils/predictorStorage";
@@ -32,18 +33,8 @@ const AGE_OPTIONS = [
   { value: "prefer-not-to-say", label: "Prefer not to say" },
 ];
 
-function numberText(value?: number): string {
-  return value ? String(value) : "";
-}
-
 function timeText(value?: number): string {
   return value ? formatSeconds(value) : "";
-}
-
-function parseIntField(value: string): number | undefined {
-  if (!value.trim()) return undefined;
-  const n = Number(value);
-  return Number.isInteger(n) ? n : undefined;
 }
 
 export function PredictorStep1Page() {
@@ -54,9 +45,11 @@ export function PredictorStep1Page() {
   const [division, setDivision] = useState<HyroxDivision>(draft.athlete.division);
   const [run5k, setRun5k] = useState(timeText(draft.benchmarks.run5kSeconds));
   const [run10k, setRun10k] = useState(timeText(draft.benchmarks.run10kSeconds));
-  const [backSquat, setBackSquat] = useState(numberText(draft.benchmarks.backSquat3RM));
-  const [deadlift, setDeadlift] = useState(numberText(draft.benchmarks.deadlift3RM));
   const [weightUnit, setWeightUnit] = useState<"kg" | "lb">(draft.athlete.weightUnit ?? "kg");
+  const [backSquatKg, setBackSquatKg] = useState<number | undefined>(draft.benchmarks.backSquat3RM);
+  const [backSquatReps, setBackSquatReps] = useState(draft.benchmarks.backSquatReps ?? 3);
+  const [deadliftKg, setDeadliftKg] = useState<number | undefined>(draft.benchmarks.deadlift3RM);
+  const [deadliftReps, setDeadliftReps] = useState(draft.benchmarks.deadliftReps ?? 3);
   const [bodyweightKg, setBodyweightKg] = useState<number | undefined>(draft.benchmarks.bodyweightKg);
   const [heightUnit, setHeightUnit] = useState<"cm" | "ftin">(draft.athlete.heightUnit ?? "cm");
   const [heightCm, setHeightCm] = useState<number | undefined>(draft.benchmarks.heightCm);
@@ -64,14 +57,12 @@ export function PredictorStep1Page() {
 
   const run5kSeconds = parseTimeToSeconds(run5k);
   const run10kSeconds = parseTimeToSeconds(run10k);
-  const squatNumber = parseIntField(backSquat);
-  const deadliftNumber = parseIntField(deadlift);
   const errors: Record<string, string> = {};
 
   if (!ageGroup) errors.ageGroup = "Select your age group.";
   if (!run5k || run5kSeconds === null || run5kSeconds >= 3600) errors.run5k = "Enter a 5k time under 60:00.";
-  if (!backSquat || squatNumber === undefined || squatNumber <= 0 || squatNumber > 400) errors.backSquat = "Enter a whole number from 1 to 400 kg.";
-  if (!deadlift || deadliftNumber === undefined || deadliftNumber <= 0 || deadliftNumber > 500) errors.deadlift = "Enter a whole number from 1 to 500 kg.";
+  if (!backSquatKg || backSquatKg <= 0 || backSquatKg > 400) errors.backSquat = "Enter a back squat between 1-400 kg (2-882 lb).";
+  if (!deadliftKg || deadliftKg <= 0 || deadliftKg > 500) errors.deadlift = "Enter a deadlift between 1-500 kg (2-1102 lb).";
   if (!bodyweightKg || bodyweightKg < 30 || bodyweightKg > 250) {
     errors.bodyweightKg = "Enter a bodyweight between 30-250 kg (66-551 lb).";
   }
@@ -86,7 +77,7 @@ export function PredictorStep1Page() {
   const completenessLabel = run10kSeconds ? "Better prediction" : "Minimum prediction";
 
   function handleNext() {
-    if (!isValid || !run5kSeconds || !squatNumber || !deadliftNumber || !bodyweightKg) return;
+    if (!isValid || !run5kSeconds || !backSquatKg || !deadliftKg || !bodyweightKg) return;
     savePredictorDraft({
       athlete: {
         name: name.trim() || undefined,
@@ -99,8 +90,10 @@ export function PredictorStep1Page() {
       benchmarks: {
         run5kSeconds,
         run10kSeconds: run10kSeconds ?? undefined,
-        backSquat3RM: squatNumber,
-        deadlift3RM: deadliftNumber,
+        backSquat3RM: backSquatKg,
+        backSquatReps,
+        deadlift3RM: deadliftKg,
+        deadliftReps,
         bodyweightKg,
         heightCm,
       },
@@ -162,16 +155,48 @@ export function PredictorStep1Page() {
                 <TimeInput label="Best 5k time" required placeholder="22:30" value={run5k} onChange={(event) => setRun5k(event.target.value)} error={errors.run5k} />
                 <TimeInput label="Best 10k time" placeholder="48:00" hint="Optional" value={run10k} onChange={(event) => setRun10k(event.target.value)} error={errors.run10k} />
               </div>
-              <div className={styles.row2}>
-                <NumberField label="Back squat 3RM (kg)" value={backSquat} onChange={setBackSquat} min={1} max={400} error={errors.backSquat} required />
-                <NumberField label="Deadlift 3RM (kg)" value={deadlift} onChange={setDeadlift} min={1} max={500} error={errors.deadlift} required />
-              </div>
               <SegmentedControl
                 label="Weight unit"
                 options={[{ value: "kg", label: "kg" }, { value: "lb", label: "lb" }]}
                 value={weightUnit}
                 onChange={(value) => setWeightUnit(value as "kg" | "lb")}
               />
+              <div className={styles.row2}>
+                <WeightField
+                  label={`Back squat ${backSquatReps}RM`}
+                  required
+                  valueKg={backSquatKg}
+                  unit={weightUnit}
+                  onChangeKg={setBackSquatKg}
+                  min={1}
+                  max={400}
+                  error={errors.backSquat}
+                />
+                <WeightField
+                  label={`Deadlift ${deadliftReps}RM`}
+                  required
+                  valueKg={deadliftKg}
+                  unit={weightUnit}
+                  onChangeKg={setDeadliftKg}
+                  min={1}
+                  max={500}
+                  error={errors.deadlift}
+                />
+              </div>
+              <div className={styles.row2}>
+                <SelectInput
+                  label="Back squat rep count"
+                  options={REP_OPTIONS}
+                  value={String(backSquatReps)}
+                  onChange={(event) => setBackSquatReps(Number(event.target.value))}
+                />
+                <SelectInput
+                  label="Deadlift rep count"
+                  options={REP_OPTIONS}
+                  value={String(deadliftReps)}
+                  onChange={(event) => setDeadliftReps(Number(event.target.value))}
+                />
+              </div>
               <WeightField
                 label="Bodyweight"
                 required
@@ -214,27 +239,5 @@ export function PredictorStep1Page() {
         </div>
       </div>
     </Shell>
-  );
-}
-
-function NumberField({ label, value, onChange, min, max, error, required }: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  min: number;
-  max: number;
-  error?: string;
-  required?: boolean;
-}) {
-  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return (
-    <div className={styles.numberField}>
-      <label htmlFor={id}>
-        {label}
-        {required ? " *" : ""}
-      </label>
-      <input id={id} type="number" min={min} max={max} value={value} onChange={(event) => onChange(event.target.value)} />
-      {error && <span className={styles.error}>{error}</span>}
-    </div>
   );
 }
