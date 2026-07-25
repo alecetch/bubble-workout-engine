@@ -774,7 +774,7 @@ function renderTextCard(section, interpretation = null, analysisJson = {}) {
 	  const filteredItems = items.filter(Boolean);
 	  const paragraphs = section.sectionKey === "training_volume" && filteredItems.length >= 2
 	    ? filteredItems.map((item, index) => {
-	      const labels = ["Running volume", "Strength frequency"];
+	      const labels = section.contentLabels ?? ["Running volume", "Strength frequency"];
 	      const marginTop = index === 0 ? "margin-top:0;" : "margin-top:12px;";
 	      const text = String(item);
 	      return `<div style="${marginTop}">
@@ -1129,12 +1129,16 @@ function renderSplitTable(section, analysisJson) {
   const achievedBand = benchmarkContext.achievedBand ?? null;
   const analysisFrame = benchmarkContext.analysisFrame ?? {};
   const gapComparisonBand = analysisFrame.comparisonBand ?? achievedBand;
-  const isEliteBenchmark = achievedBand === "sub_60";
   const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const splitReportUrl = analysisJson.submissionId ? `${baseUrl}/api/hyrox/carousel/${analysisJson.submissionId}` : null;
   const segMap = new Map(segments.map((segment) => [segment.segmentKey, segment]));
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? segMap.get("total_time")?.userSeconds ?? null;
   const isSub60Finish = Number.isFinite(finishSeconds) && finishSeconds <= 3600;
+  // benchmarkSelector.js deliberately nulls out achievedBand in target mode (it's an
+  // analyse-mode concept), so elite detection must fall back to the raw finish time here -
+  // otherwise every elite-aware refinement label/filter below silently reverts to
+  // non-elite (flat +30s floor) behavior for target-mode emails only.
+  const isEliteBenchmark = achievedBand === "sub_60" || isSub60Finish;
   const totalPenaltySeconds = penalties.reduce((sum, penalty) => sum + (Number(penalty.penaltySeconds) || 0), 0);
   const hasPenalties = totalPenaltySeconds > 0;
   const totalGapSeconds = Math.max(0, splitGapSeconds(segMap.get("total_time"), hasGoalGroup) ?? 0);
@@ -1265,7 +1269,6 @@ function renderSplitTable(section, analysisJson) {
   const runGap = Number.isFinite(runGapRaw) ? runGapRaw : 0;
 
   function topLevelGapReconciliationAnomaly() {
-    if (hasGoalGroup) return null;
     const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
     const roxGap = splitGapSeconds(segMap.get("roxzone_time"), hasGoalGroup);
     const runningGap = penaltiesAreMaterial && Number.isFinite(runGapNetOfPenalties)
@@ -1317,7 +1320,15 @@ function renderSplitTable(section, analysisJson) {
     return "";
   }
 
-  function buildGapRelationSentence(stationGap, runGapRawValue, totalGapSecondsValue, bandLabel = null, prefixOverride = null) {
+  // Shared with buildGapRelationSentence's RoxZone clause so the standalone roxNote
+  // sentence built by each caller can detect when it would just repeat that clause.
+  function gapSentenceMentionsRoxZone(stationGapValue, runGapValue, roxGapValue) {
+    return Number.isFinite(stationGapValue) && stationGapValue >= 0
+      && Number.isFinite(runGapValue) && runGapValue < 0
+      && Number.isFinite(roxGapValue) && (roxGapValue >= 30 || roxGapValue < -30);
+  }
+
+  function buildGapRelationSentence(stationGap, runGapRawValue, totalGapSecondsValue, bandLabel = null, prefixOverride = null, roxGapValue = null) {
     if (!Number.isFinite(totalGapSecondsValue) || totalGapSecondsValue <= 0) return "";
     if (!Number.isFinite(stationGap)) return "";
 
@@ -1338,7 +1349,15 @@ function renderSplitTable(section, analysisJson) {
       return ` ${prefix}${your.charAt(0).toUpperCase() + your.slice(1)} station time is already ahead of the ${ref}.`;
     }
     if (Number.isFinite(runGapRawValue) && runGapRawValue < 0) {
-      return ` ${prefix}${your} largest positive gap is stations: <strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>. Running is ahead of the ${ref} by <strong style="color:#22c55e;">${splitSafe(runStr)}</strong>, which is why the total gap ${refPhrase} is only <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong>.`;
+      // Stations, running, and RoxZone are each benchmarked independently against the
+      // target/benchmark profile, so they do not sum exactly to totalGapSecondsValue -
+      // state the total as its own fact rather than claiming it is derived from the others.
+      const roxClause = gapSentenceMentionsRoxZone(stationGap, runGapRawValue, roxGapValue)
+        ? roxGapValue >= 30
+          ? ` RoxZone transitions add another <strong style="color:#0f172a;">${splitSafe(splitGapDisplay(roxGapValue))}</strong>.`
+          : ` RoxZone transitions are also ahead of the ${ref}, offsetting it further.`
+        : "";
+      return ` ${prefix}${your} largest positive gap is stations: <strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>. Running is ahead of the ${ref} by <strong style="color:#22c55e;">${splitSafe(runStr)}</strong>, which offsets a large part of that.${roxClause} Even accounting for that offset, the total gap ${refPhrase} is <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong>.`;
     }
     if (Number.isFinite(runGapRawValue) && runGapRawValue >= 60) {
       return ` ${prefix}${both} stations (<strong style="color:#0f172a;">${splitSafe(stationStr)}</strong>) and running (<strong style="color:#0f172a;">${splitSafe(runStr)}</strong>) are contributing, for a total gap of <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong> ${refPhrase}.`;
@@ -1363,17 +1382,23 @@ function renderSplitTable(section, analysisJson) {
         ? ` Biggest fitness opportunities: ${fitnessNames.join(", ").replace(/, ([^,]*)$/, " and $1")}. Fastest controllable win: penalties.`
         : " Fastest controllable win: penalties.";
       const roxRef = hasGoalGroup ? "target profile" : "benchmark";
-      const roxNote = roxGap < -30
-        ? `Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs ${roxRef}).`
-        : roxGap < 30
-          ? "Transitions are not a meaningful drag on your result."
-          : `Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
+      // When the gap-relation sentence below already covers RoxZone's contribution (the
+      // "running is a credit" branch), don't repeat it here.
+      const roxAlreadyMentioned = gapSentenceMentionsRoxZone(stationGap, runGapRaw, roxGap);
+      const roxNote = roxAlreadyMentioned
+        ? ""
+        : roxGap < -30
+          ? `Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs ${roxRef}).`
+          : roxGap < 30
+            ? "Transitions are not a meaningful drag on your result."
+            : `Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
       const gapSentence = buildGapRelationSentence(
         stationGap,
         runGapRaw,
         totalGapSeconds,
         hasGoalGroup ? null : bandDisplayLabel(gapComparisonBand),
         hasGoalGroup ? "Against the target profile, " : null,
+        roxGap,
       );
       const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
       const hasRunGapData = Number.isFinite(runGapRaw) && Number.isFinite(runGapNetOfPenalties);
@@ -1407,7 +1432,7 @@ function renderSplitTable(section, analysisJson) {
       </tr>`;
     }
 
-    const isElite = achievedBand === "sub_60" || isSub60Finish;
+    const isElite = isEliteBenchmark;
     const isCompetitive = ["sub_65", "sub_70"].includes(achievedBand ?? "");
     const nextBandStr = analysisJson.benchmarkContext?.nextBand?.replace("sub_", "sub-") ?? null;
     const achievedStr = achievedBand?.replace("sub_", "sub-") ?? null;
@@ -1544,12 +1569,18 @@ function renderSplitTable(section, analysisJson) {
       mainLimiter = "One or more split values look unusual, so check the race splits before naming a main limiter.";
     }
 
+    const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
     const roxRef = hasGoalGroup ? "target profile" : "benchmark";
-    const roxNote = roxGap < -30
-      ? ` Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs ${roxRef}).`
-      : roxGap < 30
-        ? " Transitions are not a meaningful drag on your result."
-        : ` Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
+    // When the gap-relation sentence below already covers RoxZone's contribution (the
+    // "running is a credit" branch), don't repeat it here.
+    const roxAlreadyMentioned = gapSentenceMentionsRoxZone(stationGap, runGapRaw, roxGap);
+    const roxNote = roxAlreadyMentioned
+      ? ""
+      : roxGap < -30
+        ? ` Your RoxZone execution is a clear strength (${splitSafe(splitGapDisplay(roxGap))} vs ${roxRef}).`
+        : roxGap < 30
+          ? " Transitions are not a meaningful drag on your result."
+          : ` Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
     const topLosses = SPLIT_TABLE_RACE_ORDER
       .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
       .filter((row) => Number.isFinite(row.gap) && row.gap >= 60 && isConfidentSegment(row.seg))
@@ -1558,13 +1589,13 @@ function renderSplitTable(section, analysisJson) {
     const lossNames = topLosses.map((row) => row.seg?.label ?? row.key).join(", ");
     const biggestNote = lossNames ? ` Biggest opportunities: ${lossNames}.` : "";
 
-    const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
     const gapSentence = buildGapRelationSentence(
       stationGap,
       runGapRaw,
       totalGapSeconds,
       hasGoalGroup ? null : bandDisplayLabel(gapComparisonBand),
       hasGoalGroup ? "Against the target profile, " : null,
+      roxGap,
     );
     const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
     const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
@@ -2026,7 +2057,7 @@ function renderSplitTable(section, analysisJson) {
     const suppressedStrengthRows = strengthCandidates.filter(isAnomalousSplitRow);
     const strengths = strengthCandidates.filter((row) => !isAnomalousSplitRow(row));
     const topStrengths = strengths.slice(0, 3);
-    const isEliteAthlete = achievedBand === "sub_60";
+    const isEliteAthlete = isEliteBenchmark;
 
     const badge = (num) => `<span style="display:inline-block;min-width:20px;text-align:center;background-color:#22d3ee;color:#07101e;font-family:'Courier New',Courier,monospace;font-size:11px;font-weight:700;padding:1px 4px;border-radius:3px;">${num}</span>`;
     const strongPill = `<span style="display:inline-block;background-color:#dcfce7;color:#16a34a;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;padding:3px 6px;border-radius:4px;">STRONG</span>`;
@@ -2175,7 +2206,7 @@ function renderSplitTable(section, analysisJson) {
       : dash;
     let bandScoreCell;
     if (hasGoalGroup) {
-      const isEliteBand = achievedBand === "sub_60";
+      const isEliteBand = isEliteBenchmark;
       let targetLabel = null;
       if (Number.isFinite(gap)) {
         if (gap < -10) {
@@ -2578,13 +2609,6 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
       </tr>`).join("")}
     </table>`
     : "";
-  // Only render this section when there's a specific, data-driven training implication
-  // (keyed off the athlete's actual primary muscle limiter, via TRAINING_HINTS in
-  // muscleGroupMap.js). With no clear limiter pattern, there's nothing this
-  // station-muscle-group-only section can usefully say - a generic "cross-station
-  // strength-endurance block" recommendation is actively misleading when the athlete's
-  // stations are fine and the real opportunity is running, which this section never
-  // considers. Omit the whole section rather than show empty-content advice.
   const implication = textItems.find((item) => /^Training focus:/i.test(item));
   if (!implication) return "";
   return `

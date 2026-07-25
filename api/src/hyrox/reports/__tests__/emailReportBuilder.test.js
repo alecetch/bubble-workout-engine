@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildEmailReport, gapPill } from "../emailReportBuilder.js";
+import { buildPersonalReport } from "../personalReportBuilder.js";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildTemplateA } from "../templateSlotMapper.js";
 import { bandScoreLabel, formatOverallStanding, formatPercentileRank } from "../copyFormatter.js";
@@ -69,10 +70,18 @@ function mockAnalysis(overrides = {}) {
     headline: {
       biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 164, percentile: 34 },
     },
-    timePotential: { headlineGainSeconds: 164 },
-    segments: [
-      { segmentKey: "total_time", type: "aggregate", percentile: 34, userSeconds: 5612 },
-    ],
+      timePotential: { headlineGainSeconds: 164 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", percentile: 34, userSeconds: 5612 },
+        { segmentKey: "run_1", type: "run", userSeconds: 300, timeGapSeconds: 10 },
+        { segmentKey: "ski_erg", type: "station", userSeconds: 260, timeGapSeconds: 12 },
+        { segmentKey: "run_2", type: "run", userSeconds: 310, timeGapSeconds: 8 },
+        { segmentKey: "sled_push", type: "station", userSeconds: 180, timeGapSeconds: 15 },
+        { segmentKey: "run_3", type: "run", userSeconds: 315, timeGapSeconds: 11 },
+        { segmentKey: "sled_pull", type: "station", userSeconds: 220, timeGapSeconds: -40 },
+        { segmentKey: "run_4", type: "run", userSeconds: 320, timeGapSeconds: 9 },
+        { segmentKey: "burpee_broad_jumps", type: "station", userSeconds: 280, timeGapSeconds: 18 },
+      ],
     penalties: [],
     roxzoneAnalysis: { available: false },
     ...overrides,
@@ -618,6 +627,117 @@ describe("buildEmailReport visual redesign", () => {
     const { htmlBody } = buildEmailReport({ sections: [muscleSection] }, mockAnalysis(), {}, null);
     assert.doesNotMatch(htmlBody, /MUSCLE GROUP SIGNAL/);
     assert.doesNotMatch(htmlBody, /cross-station investment/);
+  });
+
+  function muscleSignalAnalysis(overrides = {}) {
+    return mockAnalysis({
+      athlete: { sex: "male" },
+      benchmarkContext: {
+        primaryBenchmarkGroup: { label: "Open Male" },
+        goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "75-90 minute target" },
+      },
+      muscleGroupProfile: {
+        available: true,
+        patternFound: true,
+        conclusion: {
+          headline: "Quad-dominant stations are the clearest station signal",
+          body: "Wall Balls and Sandbag Lunges share a lower-body demand.",
+          trainingHint: "Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
+        },
+        muscleGroupSignals: [{ label: "Quad-dominant", signal: "limiter", weakCount: 2 }],
+        stationClassifications: [
+          { label: "Wall Balls", relativeClass: "weak", timeGapSeconds: 120 },
+          { label: "Sled Pull", relativeClass: "strong", timeGapSeconds: -40 },
+        ],
+      },
+      ...overrides,
+    });
+  }
+
+  function strengthContext(overrides = {}) {
+    return mockContext({
+      targetFinishTimeSeconds: 5000,
+      bodyweightKg: 80,
+      backSquatKg: 100,
+      backSquatReps: 3,
+      deadliftKg: 130,
+      deadliftReps: 3,
+      weeklyRunningVolume: "30_45_km",
+      weeklyStrengthSessions: "2_3_days_week",
+      ...overrides,
+    });
+  }
+
+  it("target-mode TRAINING VOLUME ASSESSMENT renders a Strength check item, separate from MUSCLE GROUP SIGNAL", () => {
+    const analysis = muscleSignalAnalysis();
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "target");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "target");
+    const volumeIndex = htmlBody.indexOf("TRAINING VOLUME ASSESSMENT");
+    const muscleIndex = htmlBody.indexOf("MUSCLE GROUP SIGNAL");
+    const strengthCheckLabelIndex = htmlBody.indexOf("Strength check");
+
+    assert.ok(htmlBody.includes("TRAINING VOLUME ASSESSMENT"));
+    assert.ok(htmlBody.includes("MUSCLE GROUP SIGNAL"));
+    assert.ok(strengthCheckLabelIndex > volumeIndex, "Strength check label should appear inside Training Volume Assessment");
+    assert.match(htmlBody, /Your estimated back squat 1RM/);
+    assert.match(htmlBody, /Your estimated deadlift 1RM/);
+
+    const muscleSectionHtml = htmlBody.slice(muscleIndex, htmlBody.indexOf("</tr>", muscleIndex));
+    assert.doesNotMatch(muscleSectionHtml, /Your estimated back squat 1RM/, "strength-check copy must not leak into MUSCLE GROUP SIGNAL");
+  });
+
+  it("MUSCLE GROUP SIGNAL is omitted when training focus is absent, but TRAINING VOLUME ASSESSMENT still shows the strength check", () => {
+    const analysis = muscleSignalAnalysis({
+      muscleGroupProfile: {
+        available: true,
+        patternFound: true,
+        conclusion: {
+          headline: "Quad-dominant stations are the clearest station signal",
+          body: "Wall Balls and Sandbag Lunges share a lower-body demand.",
+        },
+        muscleGroupSignals: [{ label: "Quad-dominant", signal: "limiter", weakCount: 2 }],
+        stationClassifications: [{ label: "Wall Balls", relativeClass: "weak", timeGapSeconds: 120 }],
+      },
+    });
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "target");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "target");
+
+    assert.doesNotMatch(htmlBody, /MUSCLE GROUP SIGNAL/, "no training-focus implication means the section should be fully omitted, as before this feature");
+    assert.ok(htmlBody.includes("TRAINING VOLUME ASSESSMENT"));
+    assert.match(htmlBody, /Your estimated back squat 1RM/);
+  });
+
+  it("analyse-mode TRAINING VOLUME ASSESSMENT does not include a strength check even with lift data", () => {
+    const analysis = muscleSignalAnalysis();
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "analyse");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "analyse");
+
+    assert.ok(htmlBody.includes("MUSCLE GROUP SIGNAL"));
+    assert.doesNotMatch(htmlBody, /Your estimated back squat 1RM/);
+  });
+
+  it("muscle group signal gate remains tied to available pattern data, independent of strength-check data", () => {
+    const analysis = muscleSignalAnalysis({
+      muscleGroupProfile: {
+        available: true,
+        patternFound: false,
+        conclusion: {
+          trainingHint: "Front squats, step-ups, and sled-specific loading build the quad durability these stations demand.",
+        },
+        muscleGroupSignals: [{ label: "Quad-dominant", signal: "limiter", weakCount: 2 }],
+        stationClassifications: [{ label: "Wall Balls", relativeClass: "weak", timeGapSeconds: 120 }],
+      },
+    });
+    const athleteContext = strengthContext();
+    const report = buildPersonalReport(analysis, [], athleteContext, null, "target");
+    const { htmlBody } = buildEmailReport(report, analysis, athleteContext, null, "target");
+
+    assert.doesNotMatch(htmlBody, /MUSCLE GROUP SIGNAL/);
+    assert.ok(htmlBody.includes("TRAINING VOLUME ASSESSMENT"), "training volume assessment is unaffected by the muscle-group pattern gate");
+    assert.match(htmlBody, /Your estimated back squat 1RM/);
   });
 
   it("footer includes methodology note", () => {
@@ -1328,7 +1448,7 @@ describe("target mode email", () => {
       },
       timePotential: { headlineGainSeconds: 2213 },
       segments: [
-        { segmentKey: "total_time", type: "aggregate", label: "Total", frameGapSeconds: 1280, userSeconds: 4880, goalBenchmarkSeconds: 3600, exactTargetSeconds: 3600 },
+        { segmentKey: "total_time", type: "aggregate", label: "Total", frameGapSeconds: 3333, userSeconds: 6933, goalBenchmarkSeconds: 3600, exactTargetSeconds: 3600 },
         { segmentKey: "work_time", type: "aggregate", label: "Stations", frameGapSeconds: 1000, userSeconds: 2800, goalBenchmarkSeconds: 1800, exactTargetSeconds: 1800 },
         { segmentKey: "run_time", type: "aggregate", label: "Running", frameGapSeconds: 2213, userSeconds: 4013, goalBenchmarkSeconds: 1800, exactTargetSeconds: 1800 },
         { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", frameGapSeconds: 120, userSeconds: 220, goalBenchmarkSeconds: 100, exactTargetSeconds: 100 },
@@ -1711,6 +1831,63 @@ describe("analyse mode email", () => {
     assert.match(mainInsightSnippet, /Your next refinement is station execution, led by Wall Balls/);
     assert.ok(mainInsightSnippet.includes("Sandbag Lunges"));
     assert.ok(mainInsightSnippet.includes("Burpee Broad Jump"));
+  });
+
+  it("elite (sub-60) athlete in TARGET mode: same small-but-proportional station gaps surface as Biggest Opportunities as in analyse mode (Sebastien Rajkowski regression)", () => {
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: {},
+    };
+    const segments = [
+      { segmentKey: "run_1", label: "Run 1", type: "run", userSeconds: 205, benchmarkMedianSeconds: 199, timeGapToMedianSeconds: 6, percentile: 55, confidence: "high" },
+      { segmentKey: "ski_erg", label: "SkiErg", type: "station", userSeconds: 250, benchmarkMedianSeconds: 243, timeGapToMedianSeconds: 7, percentile: 52, confidence: "high" },
+      { segmentKey: "run_2", label: "Run 2", type: "run", userSeconds: 188, benchmarkMedianSeconds: 209, timeGapToMedianSeconds: -21, percentile: 80, confidence: "high" },
+      { segmentKey: "sled_push", label: "Sled Push", type: "station", userSeconds: 121, benchmarkMedianSeconds: 129, timeGapToMedianSeconds: -8, percentile: 60, confidence: "high" },
+      { segmentKey: "run_3", label: "Run 3", type: "run", userSeconds: 201, benchmarkMedianSeconds: 219, timeGapToMedianSeconds: -18, percentile: 78, confidence: "high" },
+      { segmentKey: "sled_pull", label: "Sled Pull", type: "station", userSeconds: 143, benchmarkMedianSeconds: 184, timeGapToMedianSeconds: -41, percentile: 88, confidence: "high" },
+      { segmentKey: "run_4", label: "Run 4", type: "run", userSeconds: 199, benchmarkMedianSeconds: 218, timeGapToMedianSeconds: -19, percentile: 79, confidence: "high" },
+      { segmentKey: "burpee_broad_jump", label: "Burpee Broad Jump", type: "station", userSeconds: 196, benchmarkMedianSeconds: 180, timeGapToMedianSeconds: 16, percentile: 40, confidence: "high" },
+      { segmentKey: "run_5", label: "Run 5", type: "run", userSeconds: 201, benchmarkMedianSeconds: 223, timeGapToMedianSeconds: -22, percentile: 81, confidence: "high" },
+      { segmentKey: "row", label: "Row", type: "station", userSeconds: 251, benchmarkMedianSeconds: 251, timeGapToMedianSeconds: 0, percentile: 50, confidence: "high" },
+      { segmentKey: "run_6", label: "Run 6", type: "run", userSeconds: 198, benchmarkMedianSeconds: 219, timeGapToMedianSeconds: -21, percentile: 80, confidence: "high" },
+      { segmentKey: "farmers_carry", label: "Farmers Carry", type: "station", userSeconds: 90, benchmarkMedianSeconds: 90, timeGapToMedianSeconds: 0, percentile: 50, confidence: "high" },
+      { segmentKey: "run_7", label: "Run 7", type: "run", userSeconds: 201, benchmarkMedianSeconds: 220, timeGapToMedianSeconds: -19, percentile: 79, confidence: "high" },
+      { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", type: "station", userSeconds: 200, benchmarkMedianSeconds: 184, timeGapToMedianSeconds: 16, percentile: 41, confidence: "high" },
+      { segmentKey: "run_8", label: "Run 8", type: "run", userSeconds: 181, benchmarkMedianSeconds: 240, timeGapToMedianSeconds: -59, percentile: 95, confidence: "high" },
+      { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 250, benchmarkMedianSeconds: 231, timeGapToMedianSeconds: 19, percentile: 38, confidence: "high" },
+      { segmentKey: "run_time", label: "Total Running", type: "aggregate", userSeconds: 1574, benchmarkMedianSeconds: 1747, timeGapToMedianSeconds: -173, confidence: "high" },
+      { segmentKey: "work_time", label: "Total Stations", type: "aggregate", userSeconds: 1501, benchmarkMedianSeconds: 1492, timeGapToMedianSeconds: 9, confidence: "high" },
+      { segmentKey: "roxzone_time", label: "Total RoxZone", type: "aggregate", userSeconds: 250, benchmarkMedianSeconds: 200, timeGapToMedianSeconds: 50, confidence: "high" },
+      { segmentKey: "total_time", label: "Total Race Time", type: "aggregate", userSeconds: 3363, benchmarkMedianSeconds: 3526, timeGapToMedianSeconds: -163, percentile: 92, confidence: "high" },
+    ];
+    // benchmarkSelector.js always nulls out achievedBand in target mode (it is an
+    // analyse-mode-only concept) - this fixture matches that real contract, unlike the
+    // analyse-mode version above which sets achievedBand explicitly.
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: null,
+        goalBenchmarkGroup: { targetFinishSeconds: 3363, label: "sub-60" },
+        primaryBenchmarkGroup: { label: "Open Male sub-60" },
+      },
+      race: { finishTimeSeconds: 3363 },
+      segments,
+      penalties: [],
+    });
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+
+    const opportunitiesIdx = htmlBody.indexOf("Biggest opportunities");
+    assert.ok(opportunitiesIdx > -1, "Biggest opportunities panel should exist");
+    const opportunitiesSnippet = htmlBody.slice(opportunitiesIdx, opportunitiesIdx + 5000);
+    assert.ok(opportunitiesSnippet.includes("Wall Balls"), "Wall Balls (+19s, largest gap) should appear despite a sub-30s gap, same as analyse mode");
+    // Target mode caps this panel at 3 rows (vs 5 in analyse mode), so with RoxZone and Wall
+    // Balls already taking two slots, only one of the tied +16s stations (Burpee Broad Jump /
+    // Sandbag Lunges) can win the last slot - assert at least one shows up, not both, and don't
+    // pin the tie-break order.
+    assert.ok(
+      opportunitiesSnippet.includes("Sandbag Lunges") || opportunitiesSnippet.includes("Burpee Broad Jump"),
+      "at least one sub-30s station gap should still surface via ratio-based classification, same as analyse mode",
+    );
   });
 
   it("sub-105 athlete sees time range not sub-105 in athlete-facing copy", () => {
@@ -2582,7 +2759,7 @@ describe("renderSplitTable", () => {
           timeGapToExactTargetSeconds: 353,
         },
         run_time: {
-          timeGapToExactTargetSeconds: 305,
+          timeGapToExactTargetSeconds: 250,
         },
         work_time: {
           timeGapToExactTargetSeconds: 189,
@@ -4279,6 +4456,57 @@ describe("content accuracy fixes (feature-143)", () => {
 
     assert.doesNotMatch(htmlBody, /unusually large gap|double-check/i);
     assert.doesNotMatch(htmlBody, /Net of penalties/);
+  });
+
+  it("M-10: target-mode top-level gap reconciliation is also enforced, not just analyse mode (Sebastien Rajkowski regression)", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60", key: "sub_60" },
+        primaryBenchmarkGroup: { label: "Open Men 30-39" },
+        achievedBand: "sub_95",
+      },
+      segments: [
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2100, benchmarkMedianSeconds: 2200, frameGapSeconds: -100, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 2400, benchmarkMedianSeconds: 2544, frameGapSeconds: -144, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 400, benchmarkMedianSeconds: 358, frameGapSeconds: 42, confidence: "high" },
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 5762, benchmarkMedianSeconds: 5545, frameGapSeconds: 217, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.match(mainInsight, /One or more split values look unusual/i);
+    assert.match(mainInsight, /Treat the limiter ranking as directional until those times are checked/i);
+  });
+
+  it("buildGapRelationSentence does not claim a false causal total when running is a credit, and does not repeat the separate RoxZone sentence (Sebastien Rajkowski regression)", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3300, label: "sub-55", key: "k" },
+        primaryBenchmarkGroup: { label: "Open Men 30-39" },
+        achievedBand: "sub_60",
+      },
+      segments: [
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2000, benchmarkMedianSeconds: 1911, frameGapSeconds: 89, confidence: "high" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: 1800, benchmarkMedianSeconds: 1885, frameGapSeconds: -85, confidence: "high" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 400, benchmarkMedianSeconds: 336, frameGapSeconds: 64, confidence: "high" },
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 3363, benchmarkMedianSeconds: 3300, frameGapSeconds: 63, confidence: "high" },
+        { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 250, benchmarkMedianSeconds: 216, frameGapSeconds: 34, confidence: "high" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.doesNotMatch(mainInsight, /which is why the total gap/i);
+    assert.match(mainInsight, /which offsets a large part of that/i);
+    assert.match(mainInsight, /RoxZone transitions add another/i);
+    assert.match(mainInsight, /Even accounting for that offset, the total gap/i);
+    assert.match(mainInsight, /\+1:03/);
+    // RoxZone's contribution should be stated exactly once (by the gap-relation sentence),
+    // not repeated by the separate "Transitions are also contributing" roxNote sentence.
+    assert.doesNotMatch(mainInsight, /Transitions are also contributing/i);
   });
 
   it("MAIN INSIGHT station-performance framing does not name a run split", () => {
