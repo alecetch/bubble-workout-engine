@@ -2,6 +2,7 @@ import { bandScoreLabel, formatGain, formatPercent, formatTime, label } from "./
 import { buildRecommendations, buildGapBreakdown, formatGapBreakdown } from "./recommendationBuilder.js";
 import { buildBackgroundSection } from "./backgroundPersonaliser.js";
 import { buildTrainingVolumeAdvice } from "./trainingVolumeAdvisor.js";
+import { buildStrengthSignalCopy } from "./strengthSignalAdvisor.js";
 import { buildRoxzoneSection } from "./roxzoneCommentary.js";
 import { renderMuscleDiagramPair } from "../engine/muscleDiagramRenderer.js";
 import { getSegmentLabel } from "../engine/segmentNormaliser.js";
@@ -293,7 +294,7 @@ function buildSplitTableText(analysisJson, athleteContext = {}) {
   return lines;
 }
 
-function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
+export function buildMuscleGroupSection(muscleGroupProfile, sex = "male") {
   const { conclusion = {}, stationClassifications = [] } = muscleGroupProfile;
   const content = [];
   if (conclusion.headline) content.push(`${conclusion.headline}.`);
@@ -458,13 +459,23 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     richRecommendations: recommendations,
   });
   const volumeAdvice = buildTrainingVolumeAdvice(analysisJson, athleteContext);
-  if (volumeAdvice) {
-    const content = [];
-    if (volumeAdvice.runningAdvice?.copy) content.push(volumeAdvice.runningAdvice.copy);
-    if (volumeAdvice.strengthAdvice?.copy) content.push(volumeAdvice.strengthAdvice.copy);
-    if (content.length > 0) {
-      sections.push(section("training_volume", "Training Volume Assessment", content));
-    }
+  const strengthCheckCopy = buildStrengthSignalCopy(analysisJson, athleteContext, calculatorMode);
+  const volumeContent = [];
+  const volumeLabels = [];
+  if (volumeAdvice?.runningAdvice?.copy) {
+    volumeContent.push(volumeAdvice.runningAdvice.copy);
+    volumeLabels.push("Running volume");
+  }
+  if (volumeAdvice?.strengthAdvice?.copy) {
+    volumeContent.push(volumeAdvice.strengthAdvice.copy);
+    volumeLabels.push("Strength frequency");
+  }
+  if (strengthCheckCopy) {
+    volumeContent.push(strengthCheckCopy);
+    volumeLabels.push("Strength check");
+  }
+  if (volumeContent.length > 0) {
+    sections.push({ sectionKey: "training_volume", title: "Training Volume Assessment", content: volumeContent, contentLabels: volumeLabels });
   }
   if (muscleGroupProfile?.available && muscleGroupProfile?.patternFound && !(isPartial && interpretation?.muscleGroupConfidence === "low")) {
     const sex = analysisJson.athlete?.sex ?? "male";
