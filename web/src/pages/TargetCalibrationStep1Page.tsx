@@ -5,10 +5,12 @@ import { HeightField } from "../components/HeightField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
 import { SegmentedControl } from "../components/SegmentedControl";
+import { SelectInput } from "../components/SelectInput";
 import { Shell } from "../components/Shell";
 import { SideStepper } from "../components/SideStepper";
 import { TimeInput } from "../components/TimeInput";
 import { WeightField } from "../components/WeightField";
+import { REP_OPTIONS } from "../data/repOptions";
 import { trackEvent } from "../utils/api";
 import { getJourneyVariant, type JourneyVariant } from "../utils/journeyUtils";
 import { loadDraft, saveDraft } from "../utils/storage";
@@ -22,10 +24,6 @@ const CALIBRATION_STEPS = [
   { label: "Benchmarks" },
   { label: "Review" },
 ];
-
-function numberText(value?: number): string {
-  return value ? String(value) : "";
-}
 
 function timeText(value?: number): string {
   return value ? formatSeconds(value) : "";
@@ -45,9 +43,11 @@ export function TargetCalibrationStep1Page() {
 
   const [run5k, setRun5k] = useState(timeText(ctx.run5kPbSeconds));
   const [run10k, setRun10k] = useState(timeText(ctx.run10kPbSeconds));
-  const [backSquat, setBackSquat] = useState(numberText(ctx.backSquat3RMKg));
-  const [deadlift, setDeadlift] = useState(numberText(ctx.deadlift3RMKg));
   const [weightUnit, setWeightUnit] = useState<"kg" | "lb">(draft?.weightUnit ?? "kg");
+  const [backSquatKg, setBackSquatKg] = useState<number | undefined>(ctx.backSquat3RMKg);
+  const [backSquatReps, setBackSquatReps] = useState(ctx.backSquatReps ?? 3);
+  const [deadliftKg, setDeadliftKg] = useState<number | undefined>(ctx.deadlift3RMKg);
+  const [deadliftReps, setDeadliftReps] = useState(ctx.deadliftReps ?? 3);
   const [bodyweightKg, setBodyweightKg] = useState<number | undefined>(ctx.bodyweightKg);
   const [heightUnit, setHeightUnit] = useState<"cm" | "ftin">(draft?.heightUnit ?? "cm");
   const [heightCm, setHeightCm] = useState<number | undefined>(ctx.heightCm);
@@ -77,8 +77,10 @@ export function TargetCalibrationStep1Page() {
       ...loadDraft()?.athleteContext,
       run5kPbSeconds: parseTimeToSeconds(run5k) ?? undefined,
       run10kPbSeconds: parseTimeToSeconds(run10k) ?? undefined,
-      backSquat3RMKg: backSquat ? Number(backSquat) : undefined,
-      deadlift3RMKg: deadlift ? Number(deadlift) : undefined,
+      backSquat3RMKg: backSquatKg,
+      backSquatReps,
+      deadlift3RMKg: deadliftKg,
+      deadliftReps,
       bodyweightKg,
       heightCm,
     };
@@ -168,16 +170,46 @@ export function TargetCalibrationStep1Page() {
                 onBlur={(event) => setRun10k(normalizeTimeInputValue(event.target.value))}
                 placeholder="48:00"
               />
-              <div className={styles.row2}>
-                <NumberField label="Back squat 3RM (kg)" hint="Optional - heaviest set of 3 reps" value={backSquat} onChange={setBackSquat} min={1} max={400} />
-                <NumberField label="Deadlift 3RM (kg)" hint="Optional - heaviest set of 3 reps" value={deadlift} onChange={setDeadlift} min={1} max={500} />
-              </div>
               <SegmentedControl
                 label="Weight unit"
                 options={[{ value: "kg", label: "kg" }, { value: "lb", label: "lb" }]}
                 value={weightUnit}
                 onChange={(value) => setWeightUnit(value as "kg" | "lb")}
               />
+              <div className={styles.row2}>
+                <WeightField
+                  label={`Back squat ${backSquatReps}RM`}
+                  hint={`Optional - heaviest set of ${backSquatReps} rep${backSquatReps === 1 ? "" : "s"}`}
+                  valueKg={backSquatKg}
+                  unit={weightUnit}
+                  onChangeKg={setBackSquatKg}
+                  min={1}
+                  max={400}
+                />
+                <WeightField
+                  label={`Deadlift ${deadliftReps}RM`}
+                  hint={`Optional - heaviest set of ${deadliftReps} rep${deadliftReps === 1 ? "" : "s"}`}
+                  valueKg={deadliftKg}
+                  unit={weightUnit}
+                  onChangeKg={setDeadliftKg}
+                  min={1}
+                  max={500}
+                />
+              </div>
+              <div className={styles.row2}>
+                <SelectInput
+                  label="Back squat rep count"
+                  options={REP_OPTIONS}
+                  value={String(backSquatReps)}
+                  onChange={(event) => setBackSquatReps(Number(event.target.value))}
+                />
+                <SelectInput
+                  label="Deadlift rep count"
+                  options={REP_OPTIONS}
+                  value={String(deadliftReps)}
+                  onChange={(event) => setDeadliftReps(Number(event.target.value))}
+                />
+              </div>
               <WeightField
                 label="Bodyweight"
                 required
@@ -232,30 +264,5 @@ export function TargetCalibrationStep1Page() {
         </div>
       </div>
     </Shell>
-  );
-}
-
-function NumberField({
-  label,
-  hint,
-  value,
-  onChange,
-  min,
-  max,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (value: string) => void;
-  min: number;
-  max: number;
-}) {
-  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return (
-    <div className={styles.numberField}>
-      <label htmlFor={id}>{label}</label>
-      <input id={id} type="number" min={min} max={max} value={value} onChange={(event) => onChange(event.target.value)} />
-      <span>{hint}</span>
-    </div>
   );
 }
