@@ -156,6 +156,8 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
     return [{
       key: mapRow.segmentKey,
       label: mapRow.displayName,
+      type: mapRow.type,
+      raceOrder: mapRow.raceOrder,
       userTime: formatSeconds(seg.userSeconds) ?? "-",
       delta: roundedGap === 0 ? "0:00" : formatTimeDelta(roundedGap),
       tone: roundedGap < 0 ? "positive" : roundedGap > 0 ? "negative" : "neutral",

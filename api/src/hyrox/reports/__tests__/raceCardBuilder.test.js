@@ -3,6 +3,9 @@ import { describe, it } from "node:test";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildRaceCardHtml } from "../raceCardBuilder.js";
 import { buildTemplateA } from "../templateSlotMapper.js";
+import { SEGMENT_MAP } from "../../config/segmentMap.js";
+
+const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type === "run" || segment.type === "station");
 
 function fixtureData(overrides = {}) {
   return {
@@ -31,25 +34,11 @@ function fixtureData(overrides = {}) {
 }
 
 function allRaceSplits() {
-  return [
-    "Run 1",
-    "SkiErg",
-    "Run 2",
-    "Sled Push",
-    "Run 3",
-    "Sled Pull",
-    "Run 4",
-    "Burpee Broad Jump",
-    "Run 5",
-    "Row",
-    "Run 6",
-    "Farmers Carry",
-    "Run 7",
-    "Sandbag Lunges",
-    "Run 8",
-    "Wall Balls",
-  ].map((label, index) => ({
-    label,
+  return RACE_SEGMENTS.map((segment, index) => ({
+    key: segment.segmentKey,
+    label: segment.displayName,
+    type: segment.type,
+    raceOrder: segment.raceOrder,
     userTime: `${5 + Math.floor(index / 2)}:${String(10 + index).padStart(2, "0")}`,
     delta: index % 3 === 0 ? "-0:18" : `+0:${String(12 + index).padStart(2, "0")}`,
     tone: index % 3 === 0 ? "positive" : "negative",
@@ -62,6 +51,17 @@ function sectionBetween(html, start, end) {
   const endIndex = html.indexOf(end, startIndex);
   assert.ok(endIndex > startIndex, `missing end marker ${end}`);
   return html.slice(startIndex, endIndex);
+}
+
+function splitProfileSection(html) {
+  return sectionBetween(html, "Race Split Profile", '<div class="footer">');
+}
+
+function attrValue(html, dataAttr, key, attr) {
+  const re = new RegExp(`${dataAttr}="${key}"[^>]*\\s${attr}="([^"]+)"`);
+  const match = html.match(re);
+  assert.ok(match, `missing ${dataAttr}=${key} ${attr}`);
+  return match[1];
 }
 
 function mappedRaceCardHtmlForDivision(division) {
@@ -170,12 +170,14 @@ function confidenceCaveatAnalysis(benchmarkContextOverrides = {}) {
 }
 
 describe("buildRaceCardHtml asset-backed artwork", () => {
-  it("renders the header hero as an image when the asset loads", () => {
+  it("removes the header hero image while keeping the score ring", () => {
     const html = buildRaceCardHtml(fixtureData());
 
     const header = sectionBetween(html, '<div class="header">', '<div class="hr"></div>');
-    assert.match(header, /<img src="data:image\/jpeg;base64,/);
+    assert.doesNotMatch(header, /data:image\/jpeg;base64/);
+    assert.doesNotMatch(header, /class="h-right"/);
     assert.doesNotMatch(header, /id="rgl"/);
+    assert.match(header, /aria-label="FORMA SCORE 72"/);
   });
 
   it("renders the strongest station card with a bundled image icon", () => {
@@ -200,29 +202,111 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(card, /<polygon points="40,4 72,22 72,58 40,76 8,58 8,22"/);
   });
 
-  it("renders chart images for simple-icon stations, including Run and SkiErg", () => {
+  it("renders no station icons or sequence numbers in the split profile (removed for clutter)", () => {
     const html = buildRaceCardHtml(fixtureData({
       splitRows: [
-        { label: "Sled Push", delta: "+0:51", tone: "negative" },
-        { label: "Run 3", delta: "+0:32", tone: "negative" },
-        { label: "SkiErg", delta: "-0:09", tone: "positive" },
+        { key: "run_1", label: "Run 1", type: "run", raceOrder: 1, userTime: "5:10", delta: "+0:32", tone: "negative" },
+        { key: "ski_erg", label: "SkiErg", type: "station", raceOrder: 2, userTime: "4:50", delta: "-0:09", tone: "positive" },
+        { key: "sled_push", label: "Sled Push", type: "station", raceOrder: 4, userTime: "2:12", delta: "+0:51", tone: "negative" },
       ],
     }));
+    const splitProfile = splitProfileSection(html);
 
-    assert.match(html, /<image data-station-icon="simple-sled-push\.png" href="data:image\/png;base64,/);
-    assert.match(html, /<image data-station-icon="simple-running\.png" href="data:image\/png;base64,/);
-    assert.match(html, /<image data-station-icon="simple-skierg\.png" href="data:image\/png;base64,/);
-    assert.doesNotMatch(html, /data-station-icon="hex-running\.png"/);
-    assert.doesNotMatch(html, /data-station-icon="hex-skierg\.png"/);
+    assert.doesNotMatch(splitProfile, /data-station-icon=/);
+    assert.doesNotMatch(splitProfile, /data-split-sequence=/);
   });
 
-  it("renders the full 16-event race split profile with split times", () => {
+  it("renders all 16 split label groups in race order aligned under their bars", () => {
     const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
-    const splitProfile = sectionBetween(html, "Race Split Profile", '<div class="footer">');
+    const splitProfile = splitProfileSection(html);
 
-    assert.equal((splitProfile.match(/data-station-icon=/g) ?? []).length, 16);
+    assert.equal((splitProfile.match(/data-split-label=/g) ?? []).length, 19);
     assert.match(splitProfile, />5:10</);
     assert.match(splitProfile, />12:25</);
+
+    // A rotated text-anchor="start" run renders with its visual centre offset from its
+    // SVG x/rotation-anchor by a roughly constant amount, independent of text length —
+    // confirmed by measuring real getBoundingClientRect() output in Chromium (not just
+    // the source SVG coordinates, which can't reveal this on their own). The label's x
+    // is deliberately offset from the bar's mx to compensate, so assert that exact,
+    // known-correct offset rather than x === mx, which renders visibly off-centre.
+    const compactLabelFont = 19; // n=16 -> compact branch
+    const expectedCompensation = compactLabelFont * 0.34;
+    for (const key of ["run_1", "wall_balls"]) {
+      const mx = Number(attrValue(splitProfile, "data-split-bar", key, "data-split-mx"));
+      const labelX = Number(attrValue(splitProfile, "data-split-label", key, "x"));
+      assert.ok(
+        Math.abs(labelX - mx - expectedCompensation) < 0.05,
+        `expected ${key} label x (${labelX}) to sit ${expectedCompensation} right of bar mx (${mx})`,
+      );
+    }
+  });
+
+  it("renders split delta signs and colors from tone rather than raw delta sign", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      splitRows: [
+        { key: "run_1", label: "Run 1", type: "run", raceOrder: 1, userTime: "5:10", delta: "-0:18", tone: "positive" },
+        { key: "ski_erg", label: "SkiErg", type: "station", raceOrder: 2, userTime: "4:50", delta: "+0:32", tone: "negative" },
+        { key: "run_2", label: "Run 2", type: "run", raceOrder: 3, userTime: "5:11", delta: "0:00", tone: "neutral" },
+      ],
+    }));
+    const splitProfile = splitProfileSection(html);
+
+    assert.match(splitProfile, /data-split-delta="run_1"[^>]*fill="#3b82f6"[^>]*>\+0:18<\/text>/);
+    assert.match(splitProfile, /data-split-delta="ski_erg"[^>]*fill="#ef4444"[^>]*>-0:32<\/text>/);
+    assert.match(splitProfile, /data-split-delta="run_2"[^>]*fill="#64748b"[^>]*>0:00<\/text>/);
+  });
+
+  it("uses raceOrder to keep missing middle splits from shifting labels", () => {
+    const splitRows = allRaceSplits().filter((row) => row.key !== "sled_pull");
+    const html = buildRaceCardHtml(fixtureData({ splitRows }));
+    const splitProfile = splitProfileSection(html);
+
+    const renderedKeys = [...splitProfile.matchAll(/data-split-bar="([^"]+)"/g)].map((m) => m[1]);
+    const expectedKeys = allRaceSplits().map((row) => row.key).filter((key) => key !== "sled_pull");
+
+    assert.doesNotMatch(splitProfile, /data-split-bar="sled_pull"/);
+    assert.deepEqual(renderedKeys, expectedKeys, "remaining splits must stay in raceOrder sequence, not shift to fill the gap incorrectly");
+  });
+
+  it("renders long split names in full with two rotated sub-lines", () => {
+    const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
+    const splitProfile = splitProfileSection(html);
+
+    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*>BURPEE<\/text>/);
+    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*>BROAD JUMP<\/text>/);
+    assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>SANDBAG<\/text>/);
+    assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>LUNGES<\/text>/);
+    assert.match(splitProfile, /data-split-label="farmers_carry"[^>]*>FARMERS<\/text>/);
+    assert.match(splitProfile, /data-split-label="farmers_carry"[^>]*>CARRY<\/text>/);
+    assert.doesNotMatch(splitProfile, /BROAD JMP/);
+  });
+
+  it("keeps actual split times horizontal", () => {
+    const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
+    const splitProfile = splitProfileSection(html);
+    const timeMatch = splitProfile.match(/<text data-split-time="burpee_broad_jump"[^>]*>8:17<\/text>/);
+
+    assert.ok(timeMatch);
+    assert.doesNotMatch(timeMatch[0], /transform="rotate/);
+  });
+
+  it("renders only available columns for partial split data", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      splitRows: allRaceSplits().slice(0, 4),
+    }));
+    const splitProfile = splitProfileSection(html);
+
+    assert.equal((splitProfile.match(/data-split-bar=/g) ?? []).length, 4);
+    assert.match(splitProfile, /data-split-bar="sled_push"/);
+    assert.doesNotMatch(splitProfile, /data-split-bar="run_3"/);
+  });
+
+  it("keeps the race-card canvas at the compact original height", () => {
+    const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
+
+    assert.match(html, /html, body \{ width: 1080px; min-height: 1350px;/);
+    assert.match(html, /\.root \{ width: 1080px; height: 1350px;/);
   });
 
   it("uses the Forma masthead lockup and drops the old tagline text", () => {
