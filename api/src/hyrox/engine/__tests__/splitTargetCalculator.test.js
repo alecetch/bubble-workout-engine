@@ -174,8 +174,10 @@ describe("splitTargetCalculator", () => {
     const result = attachExactTargets(segments().slice(0, 2), null);
     assert.equal(result[0].exactTargetSeconds, null);
     assert.equal(result[0].timeGapToExactTargetSeconds, null);
+    assert.equal(result[0].timeGapToExactTargetSecondsNetOfPenalty, null);
     assert.equal(result[1].exactTargetSeconds, null);
     assert.equal(result[1].timeGapToExactTargetSeconds, null);
+    assert.equal(result[1].timeGapToExactTargetSecondsNetOfPenalty, null);
   });
 
   it("attachExactTargets with valid map calculates gap", () => {
@@ -183,6 +185,28 @@ describe("splitTargetCalculator", () => {
     const result = attachExactTargets([segment("run_1", "run", 238, 305)], map);
     assert.equal(result[0].exactTargetSeconds, 257);
     assert.equal(result[0].timeGapToExactTargetSeconds, 48);
+    assert.equal(result[0].timeGapToExactTargetSecondsNetOfPenalty, 48);
+  });
+
+  it("attachExactTargets calculates penalty-adjusted exact target gap", () => {
+    const map = new Map([["farmers_carry", 175]]);
+    const input = [{
+      ...segment("farmers_carry", "station", 120, 300),
+      userSecondsNetOfPenalty: 120,
+    }];
+    const result = attachExactTargets(input, map);
+
+    assert.equal(result[0].exactTargetSeconds, 175);
+    assert.equal(result[0].timeGapToExactTargetSeconds, 125);
+    assert.equal(result[0].timeGapToExactTargetSecondsNetOfPenalty, -55);
+  });
+
+  it("attachExactTargets falls back to raw exact gap when penalty-adjusted user seconds are missing", () => {
+    const map = new Map([["farmers_carry", 175]]);
+    const result = attachExactTargets([segment("farmers_carry", "station", 120, 300)], map);
+
+    assert.equal(result[0].timeGapToExactTargetSeconds, 125);
+    assert.equal(result[0].timeGapToExactTargetSecondsNetOfPenalty, 125);
   });
 
   it("attachExactTargets does not mutate original segments", () => {
@@ -191,5 +215,6 @@ describe("splitTargetCalculator", () => {
     assert.notEqual(result[0], input[0]);
     assert.equal(Object.hasOwn(input[0], "exactTargetSeconds"), false);
     assert.equal(Object.hasOwn(input[0], "timeGapToExactTargetSeconds"), false);
+    assert.equal(Object.hasOwn(input[0], "timeGapToExactTargetSecondsNetOfPenalty"), false);
   });
 });

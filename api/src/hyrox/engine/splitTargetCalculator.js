@@ -64,10 +64,22 @@ export function computeExactTargetMap(segments, targetFinishSeconds, hasGoalGrou
 export function attachExactTargets(segments, exactTargetMap) {
   return (segments ?? []).map((segment) => {
     const exactTargetSeconds = exactTargetMap?.get(segment.segmentKey) ?? null;
+    const userSecondsNetOfPenalty = Number.isFinite(segment.userSecondsNetOfPenalty)
+      ? segment.userSecondsNetOfPenalty
+      : segment.userSeconds;
     const timeGapToExactTargetSeconds =
       Number.isFinite(exactTargetSeconds) && Number.isFinite(segment.userSeconds)
         ? segment.userSeconds - exactTargetSeconds
         : null;
-    return { ...segment, exactTargetSeconds, timeGapToExactTargetSeconds };
+    const timeGapToExactTargetSecondsNetOfPenalty =
+      Number.isFinite(exactTargetSeconds) && Number.isFinite(userSecondsNetOfPenalty)
+        ? userSecondsNetOfPenalty - exactTargetSeconds
+        : null;
+    return {
+      ...segment,
+      exactTargetSeconds,
+      timeGapToExactTargetSeconds,
+      timeGapToExactTargetSecondsNetOfPenalty,
+    };
   });
 }

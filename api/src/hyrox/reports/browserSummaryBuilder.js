@@ -24,6 +24,10 @@ function hasCompleteCoreSplits(analysisJson) {
 export function buildBrowserSummary(analysisJson = {}, insights = [], athleteContext = {}, calculatorMode = "target") {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
   const strength = analysisJson.headline?.biggestStrength ?? analysisJson.strengths?.[0] ?? null;
+  const topInsight = insights[0] ?? null;
+  const heroMetricSeconds = topInsight
+    ? topInsight.evidence?.potentialGainSeconds
+    : (analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? 0);
   const total = segment(analysisJson, "total_time");
   const noteParts = [];
   const replayRoxzoneAvailable = hasReplayRoxzoneDetail(analysisJson);
@@ -37,8 +41,8 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
 
   return {
     heroInsight: {
-      title: insights[0]?.title ?? (limiter ? `${limiter.label} is your biggest opportunity` : "Your HYROX analysis is ready"),
-      heroMetric: formatGain(analysisJson.timePotential?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? 0),
+      title: topInsight?.title ?? (limiter ? `${limiter.label} is your biggest opportunity` : "Your HYROX analysis is ready"),
+      heroMetric: formatGain(heroMetricSeconds),
     },
     overallPercentile: Number.isFinite(Number(total?.percentile)) ? total.percentile : null,
     overallPercentileLabel: formatPercentile(total?.percentile),

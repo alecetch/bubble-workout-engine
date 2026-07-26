@@ -109,6 +109,52 @@ function dominantPenaltyAnalysis() {
   };
 }
 
+function penaltyAdjustedGapAnalysis(overrides = {}) {
+  return {
+    calculatorMode: "analyse",
+    athlete: { name: "Kate Wagstaff", division: "open" },
+    race: { finishTimeSeconds: 5732 },
+    benchmarkContext: {
+      primaryBenchmarkGroup: { key: "open:female:sub_95", label: "Open Female Sub 95" },
+      comparisonOptions: [{ percentile: 68, topPercent: 32 }],
+    },
+    headline: {
+      biggestStrength: { segmentKey: "farmers_carry", label: "Farmers Carry", type: "station", percentile: 88 },
+      biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 28 },
+      headlineGainSeconds: 90,
+    },
+    strengths: [{
+      segmentKey: "farmers_carry",
+      label: "Farmers Carry",
+      type: "station",
+      userSeconds: 232,
+      percentile: 88,
+      frameGapSeconds: 120,
+      frameGapNetOfPenaltySeconds: -60,
+      timeGapToMedianSeconds: 120,
+    }],
+    limiters: [{ segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 28 }],
+    timePotential: { headlineGainSeconds: 90 },
+    penalties: [{ segmentKey: "farmers_carry", station: "farmers_carry", penaltySeconds: 180 }],
+    segments: [
+      { segmentKey: "total_time", type: "aggregate", userSeconds: 5732, frameGapSeconds: 900, percentile: 68 },
+      { segmentKey: "run_1", type: "run", label: "Run 1", userSeconds: 350, frameGapSeconds: 30, frameGapNetOfPenaltySeconds: 30, percentile: 52 },
+      {
+        segmentKey: "farmers_carry",
+        type: "station",
+        label: "Farmers Carry",
+        userSeconds: 232,
+        frameGapSeconds: 120,
+        frameGapNetOfPenaltySeconds: -60,
+        timeGapToMedianSeconds: 120,
+        percentile: 88,
+      },
+      { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, frameGapNetOfPenaltySeconds: 90, percentile: 28 },
+    ],
+    ...overrides,
+  };
+}
+
 function confidenceCaveatAnalysis(benchmarkContextOverrides = {}) {
   return {
     athlete: { name: "Alex Smith", division: "open" },
@@ -327,6 +373,88 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.equal(data.splitRows.find((row) => row.key === "run_1").delta, "-0:12");
     assert.match(html, />\+0:12</);
     assert.doesNotMatch(html, />-0:50</);
+  });
+
+  it("uses penalty-adjusted race-card split gaps before raw frame gaps", () => {
+    const data = buildHyroxRaceCardData(penaltyAdjustedGapAnalysis());
+    const farmersRow = data.splitRows.find((row) => row.key === "farmers_carry");
+
+    assert.equal(farmersRow.delta, "-1:00");
+    assert.equal(farmersRow.tone, "positive");
+    assert.notEqual(farmersRow.delta, "+2:00");
+  });
+
+  it("keeps race-card strongest station text consistent with penalty-adjusted split rows", () => {
+    const data = buildHyroxRaceCardData(penaltyAdjustedGapAnalysis());
+    const farmersRow = data.splitRows.find((row) => row.key === "farmers_carry");
+
+    assert.equal(data.strongestStation.name, "Farmers Carry");
+    assert.equal(data.strongestStation.percentile, "Ahead by 1:00");
+    assert.equal(farmersRow.delta, "-1:00");
+    assert.equal(farmersRow.tone, "positive");
+  });
+
+  it("uses penalty-adjusted carousel flow rows and callouts", () => {
+    const carousel = buildTemplateA(penaltyAdjustedGapAnalysis(), [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
+    const slide2 = carousel.slides[1];
+    const farmersRow = slide2.stations.find((row) => row.name === "FARMERS CARRY");
+
+    assert.equal(farmersRow.delta, "-1:00");
+    assert.equal(farmersRow.tone, "positive");
+    assert.equal(slide2.biggest_gain.station, "FARMERS CARRY");
+    assert.equal(slide2.biggest_gain.delta, "-1:00");
+    assert.equal(slide2.biggest_loss.station, "WALL BALLS");
+    assert.equal(slide2.biggest_loss.delta, "+1:30");
+    assert.notEqual(slide2.biggest_loss.station, "FARMERS CARRY");
+  });
+
+  it("keeps carousel strength slide consistent with penalty-adjusted flow rows", () => {
+    const carousel = buildTemplateA(penaltyAdjustedGapAnalysis(), [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
+    const farmersRow = carousel.slides[1].stations.find((row) => row.name === "FARMERS CARRY");
+    const strengthSlide = carousel.slides[2];
+
+    assert.equal(strengthSlide.station, "FARMERS CARRY");
+    assert.equal(strengthSlide.percentile, "-1:00 ahead");
+    assert.equal(strengthSlide.position_gain, "+1:00");
+    assert.equal(farmersRow.delta, "-1:00");
+  });
+
+  it("keeps non-penalty race-card and carousel gaps unchanged when net and raw fields match", () => {
+    const rawOnly = penaltyAdjustedGapAnalysis({
+      penalties: [],
+      headline: {
+        ...penaltyAdjustedGapAnalysis().headline,
+        biggestStrength: { segmentKey: "farmers_carry", label: "Farmers Carry", type: "station", percentile: 88 },
+      },
+      strengths: [{
+        segmentKey: "farmers_carry",
+        label: "Farmers Carry",
+        type: "station",
+        userSeconds: 232,
+        percentile: 88,
+        frameGapSeconds: -60,
+        timeGapToMedianSeconds: -60,
+      }],
+      segments: penaltyAdjustedGapAnalysis().segments.map((segment) => segment.segmentKey === "farmers_carry"
+        ? { ...segment, frameGapSeconds: -60, frameGapNetOfPenaltySeconds: undefined, timeGapToMedianSeconds: -60 }
+        : segment.segmentKey === "total_time"
+          ? { ...segment, frameGapSeconds: 720 }
+          : segment),
+    });
+    const matchingNet = {
+      ...rawOnly,
+      strengths: rawOnly.strengths.map((segment) => ({ ...segment, frameGapNetOfPenaltySeconds: segment.frameGapSeconds })),
+      segments: rawOnly.segments.map((segment) => ({ ...segment, frameGapNetOfPenaltySeconds: segment.frameGapSeconds })),
+    };
+
+    assert.equal(
+      buildHyroxRaceCardData(rawOnly).splitRows.find((row) => row.key === "farmers_carry").delta,
+      buildHyroxRaceCardData(matchingNet).splitRows.find((row) => row.key === "farmers_carry").delta,
+    );
+    assert.equal(
+      buildTemplateA(rawOnly, [], { displayName: "Kate Wagstaff" }).slides[1].stations.find((row) => row.name === "FARMERS CARRY").delta,
+      buildTemplateA(matchingNet, [], { displayName: "Kate Wagstaff" }).slides[1].stations.find((row) => row.name === "FARMERS CARRY").delta,
+    );
   });
 
   it("marks low-confidence race-card percentiles as directional", () => {
