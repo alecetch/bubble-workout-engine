@@ -329,6 +329,33 @@ test("target time attaches exact segment targets and uses exact limiter gap", ()
   );
 });
 
+test("target mode uses penalty-adjusted exact target gap for strength and limiter selection", () => {
+  const targetFinishTimeSeconds = 4140;
+  const submission = completeSubmission({
+    splitOverrides: { farmers_carry: 245, wall_balls: 370 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 180 }],
+    calculatorMode: "target",
+  });
+  const analysis = analyseSubmission({
+    ...submission,
+    race: {
+      ...submission.race,
+      targetTimeSeconds: targetFinishTimeSeconds,
+    },
+    athleteContext: { targetFinishTimeSeconds },
+  });
+  const farmers = analysis.segments.find((segment) => segment.segmentKey === "farmers_carry");
+
+  assert.equal(farmers.exactTargetSeconds, 120);
+  assert.equal(farmers.timeGapToExactTargetSeconds, 125);
+  assert.equal(farmers.timeGapToExactTargetSecondsNetOfPenalty, -55);
+  assert.equal(farmers.frameGapSeconds, 125);
+  assert.equal(farmers.frameGapNetOfPenaltySeconds, -55);
+  assert.equal(analysis.headline.biggestStrength?.segmentKey, "farmers_carry");
+  assert.notEqual(analysis.headline.biggestLimiter?.segmentKey, "farmers_carry");
+  assert.equal(analysis.headline.biggestLimiter?.segmentKey, "wall_balls");
+});
+
 test("calculateSegmentStats adds net-of-penalty fields without changing raw gaps", () => {
   const submission = completeSubmission({
     splitOverrides: { farmers_carry: 320, wall_balls: 370 },
@@ -370,6 +397,23 @@ test("station breakdown ranks by net-of-penalty gap so a penalized strength is n
   assert.equal(farmersBreakdown.timeGapSeconds, -100);
   assert.equal(weakStations.includes("farmers_carry"), false);
   assert.equal(weakStations[0], "wall_balls");
+});
+
+test("analyse mode keeps frame gaps on benchmark medians after exact-target penalty adjustment", () => {
+  const analysis = analyseSubmission(completeSubmission({
+    splitOverrides: { farmers_carry: 320, wall_balls: 370 },
+    penalties: [{ station: "farmers_carry", penaltySeconds: 300 }],
+    calculatorMode: "analyse",
+  }));
+  const farmers = analysis.segments.find((segment) => segment.segmentKey === "farmers_carry");
+
+  assert.equal(farmers.exactTargetSeconds, null);
+  assert.equal(farmers.timeGapToExactTargetSeconds, null);
+  assert.equal(farmers.timeGapToExactTargetSecondsNetOfPenalty, null);
+  assert.equal(farmers.frameGapSeconds, 200);
+  assert.equal(farmers.frameGapNetOfPenaltySeconds, -100);
+  assert.equal(analysis.headline.biggestStrength?.segmentKey, "farmers_carry");
+  assert.notEqual(analysis.headline.biggestLimiter?.segmentKey, "farmers_carry");
 });
 
 test("biggest limiter and strength use net-of-penalty gaps", () => {

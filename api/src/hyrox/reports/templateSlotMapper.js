@@ -127,6 +127,7 @@ function targetSeconds(row, goalAvailable) {
 }
 
 function targetGapSeconds(row, goalAvailable) {
+  if (Number.isFinite(row?.frameGapNetOfPenaltySeconds)) return row.frameGapNetOfPenaltySeconds;
   if (Number.isFinite(row?.frameGapSeconds)) return row.frameGapSeconds;
   if (Number.isFinite(row?.timeGapToExactTargetSeconds)) return row.timeGapToExactTargetSeconds;
   if (goalAvailable && Number.isFinite(row?.goalBenchmarkSeconds) && Number.isFinite(row?.userSeconds)) {

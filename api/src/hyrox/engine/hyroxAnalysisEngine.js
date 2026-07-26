@@ -216,7 +216,11 @@ function addFrameGaps(segments, analysisFrame, calculatorMode, achievedBand = nu
     let frameGapNetOfPenaltySeconds;
     if (!isAnalyse) {
       frameGapSeconds = segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds ?? null;
-      frameGapNetOfPenaltySeconds = segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSecondsNetOfPenalty ?? null;
+      frameGapNetOfPenaltySeconds =
+        segment.timeGapToExactTargetSecondsNetOfPenalty ??
+        segment.timeGapToExactTargetSeconds ??
+        segment.timeGapToMedianSecondsNetOfPenalty ??
+        null;
     } else if (useNextBandGaps) {
       frameGapSeconds = segment.timeGapToNextBandMedianSeconds ?? segment.timeGapToMedianSeconds ?? null;
       frameGapNetOfPenaltySeconds = segment.timeGapToNextBandMedianSecondsNetOfPenalty ?? segment.timeGapToMedianSecondsNetOfPenalty ?? null;

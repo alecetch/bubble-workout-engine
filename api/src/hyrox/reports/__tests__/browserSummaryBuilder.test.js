@@ -13,6 +13,52 @@ function coreSegments() {
   ];
 }
 
+function analysisWithLimiter() {
+  return {
+    segments: coreSegments(),
+    headline: {
+      biggestLimiter: { segmentKey: "run_1", label: "Run 1", type: "run", timeGapSeconds: 68 },
+    },
+    limiters: [{ segmentKey: "run_1", label: "Run 1", type: "run", timeGapSeconds: 68 }],
+    timePotential: { headlineGainSeconds: 122 },
+  };
+}
+
+describe("buildBrowserSummary hero insight metric", () => {
+  it("does not show the limiter gap when the top insight has no gain metric", () => {
+    const summary = buildBrowserSummary(analysisWithLimiter(), [
+      {
+        id: "BIGGEST_STRENGTH_EXISTS",
+        title: "Run 8 is a relative strength",
+        evidence: { segmentKey: "run_8", label: "Run 8", timeGapSeconds: -17 },
+      },
+    ]);
+
+    assert.equal(summary.heroInsight.title, "Run 8 is a relative strength");
+    assert.equal(summary.heroInsight.heroMetric, null);
+  });
+
+  it("uses the top insight's own potential gain when one is present", () => {
+    const summary = buildBrowserSummary(analysisWithLimiter(), [
+      {
+        id: "TIME_POTENTIAL_EXISTS",
+        title: "You could gain time from cleaner transitions",
+        evidence: { potentialGainSeconds: 45 },
+      },
+    ]);
+
+    assert.equal(summary.heroInsight.title, "You could gain time from cleaner transitions");
+    assert.equal(summary.heroInsight.heroMetric, "0:45");
+  });
+
+  it("keeps limiter fallback behavior when there are no scored insights", () => {
+    const summary = buildBrowserSummary(analysisWithLimiter(), []);
+
+    assert.equal(summary.heroInsight.title, "Run 1 is your biggest opportunity");
+    assert.equal(summary.heroInsight.heroMetric, "2:02");
+  });
+});
+
 describe("buildBrowserSummary data quality note", () => {
   it("does not warn about estimated or missing RoxZone when Race Replay detail is available", () => {
     const summary = buildBrowserSummary({
