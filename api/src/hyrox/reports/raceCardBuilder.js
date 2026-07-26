@@ -329,36 +329,31 @@ function headerHeroImage() {
   </div>`;
 }
 
-function chartIconImage(label, mx, y, compact = false) {
-  const artwork = stationArtwork(label);
-  if (!artwork) return "";
-  const filename = artwork.simpleFile ?? artwork.hexFile;
-  const src = loadIconB64(filename);
-  if (!src) return "";
-  const size = compact ? (artwork.simpleFile ? 48 : 50) : (artwork.simpleFile ? 44 : 46);
-  const x = (Number(mx) - size / 2).toFixed(1);
-  return `<image data-station-icon="${escapeHtml(filename)}" href="${src}" x="${x}" y="${y.toFixed(1)}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet"/>`;
+const LABEL_ROTATION_DEGREES = -90;
+
+function stationLabelParts(label) {
+  const k = String(label ?? "").toLowerCase();
+  if (k.includes("burpee")) return ["BURPEE", "BROAD JUMP"];
+  if (k.includes("farmer")) return ["FARMERS", "CARRY"];
+  if (k.includes("sandbag")) return ["SANDBAG", "LUNGES"];
+  const words = String(label ?? "").toUpperCase().split(/\s+/);
+  return [words.slice(0, 3).join(" ") || "SPLIT"];
 }
 
-// Station label for the chart x-axis
-function stationLines(label) {
-  const k = String(label ?? "").toLowerCase();
-  if (/^run\s*\d*$/.test(k) || k === "run") return ["1K", "RUN"];
-  if (k.includes("ski")) return ["1K", "SKIERG"];
-  if (k.includes("sled push")) return ["1K", "SLED", "PUSH"];
-  if (k.includes("sled pull")) return ["1K", "SLED", "PULL"];
-  if (k.includes("burpee")) return ["80M", "BURPEE", "BROAD JMP"];
-  if (k.includes("rowing") || k === "row" || k.includes("rowing")) return ["1K", "ROW"];
-  if (k.includes("farmer")) return ["200M", "FARMERS", "CARRY"];
-  if (k.includes("sandbag")) return ["100M", "SANDBAG", "LUNGES"];
-  if (k.includes("wall ball")) return ["100", "WALL", "BALLS"];
-  const words = String(label ?? "").toUpperCase().split(/\s+/);
-  return words.slice(0, 3);
+function sortedSplitRows(splitRows) {
+  return (splitRows ?? [])
+    .slice(0, 16)
+    .map((row, index) => ({ ...row, fallbackRaceOrder: index + 1 }))
+    .sort((a, b) => {
+      const ar = Number.isFinite(Number(a.raceOrder)) ? Number(a.raceOrder) : a.fallbackRaceOrder;
+      const br = Number.isFinite(Number(b.raceOrder)) ? Number(b.raceOrder) : b.fallbackRaceOrder;
+      return ar - br;
+    });
 }
 
 function buildChart(splitRows) {
   if (!splitRows || splitRows.length < 2) return "";
-  const rows = splitRows.slice(0, 16);
+  const rows = sortedSplitRows(splitRows);
   const n = rows.length;
   const compact = n > 12;
 
@@ -366,7 +361,7 @@ function buildChart(splitRows) {
   const yLW = 58;        // y-label column width
   const barW_total = W - yLW;
   const chartH = 230;    // height of bar zone
-  const labelH = compact ? 178 : 146;    // station icons + labels below
+  const labelH = compact ? 178 : 190;    // rotated split-name + time zone below
   const totalH = chartH + labelH;
   const midY = chartH / 2;  // centre line
 
@@ -376,10 +371,16 @@ function buildChart(splitRows) {
   const slotW = barW_total / n;
   const barW = Math.min(compact ? 34 : 58, Math.floor(slotW * 0.52));
   const valueFont = compact ? 12 : 13;
-  const labelFont = compact ? 9.2 : 10.5;
-  const labelStep = compact ? 13.2 : 16;
-  const labelTop = compact ? chartH + 62 : chartH + 66;
-  const timeY = compact ? chartH + 166 : chartH + 134;
+  const labelFont = compact ? 19 : 20;
+  const labelStartY = compact ? chartH + 144 : chartH + 152;
+  const labelOffset = compact ? 26 : 28;
+  // Rotated text-anchor="start" glyphs render with their visual centre offset from the
+  // rotation anchor by a roughly constant amount (measured via getBoundingClientRect()
+  // against the bar's mx on a real render: ~14.1px left of centre at font-size 19,
+  // independent of text length) — nudge the anchor right to compensate so the glyph
+  // is visually centred under the bar rather than offset.
+  const labelCenterCompensation = labelFont * 0.34;
+  const timeY = compact ? chartH + 166 : chartH + 174;
 
   const p = [];
 
@@ -410,23 +411,23 @@ function buildChart(splitRows) {
 
     if (isFast) {
       const by = (midY - hPx).toFixed(1);
-      p.push(`<rect x="${bx}" y="${by}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
-      p.push(`<text x="${mx}" y="${(midY - hPx - 8).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
+      p.push(`<rect data-split-bar="${escapeHtml(row.key ?? row.label)}" data-split-mx="${mx}" x="${bx}" y="${by}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
+      p.push(`<text data-split-delta="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${(midY - hPx - 8).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
     } else {
-      p.push(`<rect x="${bx}" y="${midY.toFixed(1)}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
-      p.push(`<text x="${mx}" y="${(midY + hPx + 17).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
+      p.push(`<rect data-split-bar="${escapeHtml(row.key ?? row.label)}" data-split-mx="${mx}" x="${bx}" y="${midY.toFixed(1)}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
+      p.push(`<text data-split-delta="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${(midY + hPx + 17).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
     }
 
-    const icon = chartIconImage(row.label, mx, compact ? chartH - 2 : chartH + 8, compact);
-    if (icon) p.push(icon);
+    p.push(`<line x1="${slotX.toFixed(1)}" y1="${chartH + 6}" x2="${slotX.toFixed(1)}" y2="${totalH - 10}" stroke="rgba(255,255,255,0.055)" stroke-width="0.8"/>`);
 
-    // Station label lines below
-    const lines = stationLines(row.label);
-    for (let li = 0; li < lines.length; li++) {
-      p.push(`<text x="${mx}" y="${(labelTop + li * labelStep).toFixed(1)}" text-anchor="middle" fill="#64748b" font-size="${labelFont}" font-family="Inter,sans-serif">${lines[li]}</text>`);
-    }
+    const labelParts = stationLabelParts(row.label);
+    const partGap = labelParts.length > 1 ? labelOffset : 0;
+    labelParts.forEach((part, li) => {
+      const labelX = Number(mx) + (li - (labelParts.length - 1) / 2) * partGap + labelCenterCompensation;
+      p.push(`<text data-split-label="${escapeHtml(row.key ?? row.label)}" x="${labelX.toFixed(1)}" y="${labelStartY.toFixed(1)}" text-anchor="start" fill="#94a3b8" font-size="${labelFont}" font-weight="800" font-family="'Inter Tight',sans-serif" letter-spacing="0.8" transform="rotate(${LABEL_ROTATION_DEGREES} ${labelX.toFixed(1)} ${labelStartY.toFixed(1)})">${escapeHtml(part)}</text>`);
+    });
     if (row.userTime) {
-      p.push(`<text x="${mx}" y="${timeY.toFixed(1)}" text-anchor="middle" fill="#94a3b8" font-size="${compact ? 10.2 : 11.2}" font-weight="700" font-family="'Inter Tight',sans-serif">${escapeHtml(row.userTime)}</text>`);
+      p.push(`<text data-split-time="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${timeY.toFixed(1)}" text-anchor="middle" fill="#f0f6ff" font-size="${compact ? 16 : 17}" font-weight="900" font-family="'Inter Tight',sans-serif">${escapeHtml(row.userTime)}</text>`);
     }
   }
 
@@ -502,12 +503,11 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .root { width: 1080px; height: 1350px; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
 
 /* ─── HEADER ─── */
-.header { display: flex; align-items: center; padding: 34px 44px 26px; flex-shrink: 0; min-height: 330px; }
-.h-left  { flex: 0 0 355px; display: flex; flex-direction: column; }
+.header { display: flex; align-items: center; padding: 20px 44px 18px; flex-shrink: 0; min-height: 286px; }
+.h-left  { flex: 0 0 430px; display: flex; flex-direction: column; }
 .h-mid   { flex: 1; display: flex; justify-content: center; align-items: center; }
-.h-right { flex: 0 0 220px; display: flex; justify-content: flex-end; align-items: flex-start; padding-top: 4px; }
 
-.logo-row { display: flex; align-items: center; gap: 11px; margin-bottom: 18px; }
+.logo-row { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
 .brand-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .brand-site { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; color: var(--muted); line-height: 1.1; }
 
@@ -520,7 +520,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   background: linear-gradient(90deg, var(--cyan) 0%, rgba(34,211,238,0.22) 35%, transparent 72%); }
 
 /* ─── ATHLETE STRIP ─── */
-.strip { display: flex; align-items: stretch; padding: 22px 44px; flex-shrink: 0; }
+.strip { display: flex; align-items: stretch; padding: 16px 44px; flex-shrink: 0; }
 .sc   { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 24px; }
 .sc:first-child { padding-left: 0; }
 .sc:last-child  { padding-right: 0; }
@@ -536,30 +536,30 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .smeta svg { flex-shrink: 0; }
 
 /* ─── INSIGHT CARDS ─── */
-.cards { display: flex; gap: 14px; padding: 16px 44px 0; flex-shrink: 0; }
+.cards { display: flex; gap: 14px; padding: 12px 44px 0; flex-shrink: 0; }
 .card { flex: 1; background: var(--card); border-radius: 10px; border: 1px solid var(--border);
-  display: flex; flex-direction: column; padding: 18px 20px 16px; }
+  display: flex; flex-direction: column; padding: 15px 18px 14px; }
 .card.cy-card { border-left: 3px solid var(--cyan); }
 .card.am-card { border-left: 3px solid var(--amber); }
-.card-hdr { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 12px; }
+.card-hdr { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 10px; }
 .card-hdr.cy { color: var(--cyan); } .card-hdr.am { color: var(--amber); }
 .card-body { display: flex; align-items: flex-start; gap: 14px; }
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 28px; line-height: 1.15; color: var(--text); }
 .card-sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-top: 4px; }
-.stat-row { display: flex; gap: 10px; margin-top: 10px; }
+.stat-row { display: flex; gap: 10px; margin-top: 8px; }
 .stat-box { flex: 1; background: rgba(0,0,0,0.28); border-radius: 6px; padding: 8px 10px; }
 .stat-lbl { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: var(--sub); text-transform: uppercase; }
 .stat-val { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 28px; line-height: 1.1; }
 .stat-val.am { color: var(--amber); }
 .stat-sub { font-size: 9px; font-weight: 600; letter-spacing: 1px; color: var(--sub); text-transform: uppercase; margin-top: 2px; }
-.card-div { height: 1px; background: var(--border); margin: 12px 0 10px; }
+.card-div { height: 1px; background: var(--border); margin: 10px 0 8px; }
 .card-cta { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; line-height: 1.55; text-transform: uppercase; }
 .card-cta.cy { color: var(--cyan); } .card-cta.am { color: var(--amber); }
 .cta-icon { display: inline-block; margin-right: 5px; vertical-align: middle; }
 
 /* ─── SPLIT PROFILE ─── */
-.splits { padding: 20px 44px 0; flex: 1; min-height: 0; overflow: hidden; }
+.splits { padding: 16px 44px 0; flex: 1; min-height: 0; overflow: hidden; }
 .sp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .sp-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 19px; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
 .sp-legend { display: flex; align-items: center; gap: 16px; }
@@ -591,7 +591,6 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
       <div class="t-rep">REPORT</div>
     </div>
     <div class="h-mid">${scoreRingSvg(formaScore)}</div>
-    <div class="h-right">${headerHeroImage()}</div>
   </div>
 
   <div class="hr"></div>
