@@ -37,7 +37,7 @@ export function buildFocusAreas({ limiter, scores, runFadeAnalysis, roxzoneAnaly
   } else if (roxzoneAnalysis?.available && (roxzoneAnalysis.percentile ?? 100) < 45) {
     areas.push({
       priority: areas.length + 1,
-      area: "Roxzone execution",
+      area: "RoxZone execution",
       reason: "Transition time is below benchmark.",
       timePotentialSeconds: Math.max(0, Math.round(roxzoneAnalysis.timeGapToMedianSeconds ?? 0)),
       timeframeGuidance,

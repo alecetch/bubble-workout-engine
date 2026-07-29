@@ -10,7 +10,7 @@ describe("buildCarouselPage", () => {
         {
           athlete_name: "Alex Smith",
           percentile: "Alex Smith is in the Top 45%",
-          regional_context: "Europe events attract a stronger-than-average field - locally, this time ranks you top 55%.",
+          regional_context: "Europe events attract a stronger-than-average field - locally, this time ranks around the 45th percentile.",
         },
       ],
     });

@@ -1,8 +1,22 @@
 import { MUSCLE_GROUP_MAP } from "../config/muscleGroupMap.js";
 import { formatGain, formatPercent, formatPercentile, formatPercentileRank, formatTime, label } from "../reports/copyFormatter.js";
+import { displaySegmentLabel, segmentSubject, segmentVerb } from "../reports/segmentDisplay.js";
 
 function pluralStation(label) {
   return /lunges|balls|jumps$/i.test(String(label ?? ""));
+}
+
+function sentenceSubject(labelValue, type = null) {
+  return segmentSubject({ label: displaySegmentLabel(null, labelValue), type });
+}
+
+function subjectVerbPhrase(labelValue, type = null, predicate = "") {
+  const subject = sentenceSubject(labelValue, type);
+  return `${subject} ${segmentVerb(subject)} ${predicate}`.trim();
+}
+
+function heroSubjectUpper(labelValue, type = null) {
+  return String(sentenceSubject(labelValue, type) || "").toUpperCase();
 }
 
 const DEFAULT_SECTION_ORDER = Object.freeze([
@@ -292,7 +306,7 @@ function thesis(category, analysisJson = {}, overrides = {}) {
     return {
       ...base,
       headline: "Transition leakage is costing time",
-      evidenceSummary: `Roxzone performance is ${formatPercentile(roxPct) ?? "below target"} with a ${formatGain(roxzoneGap(analysisJson))} gap.`,
+      evidenceSummary: `RoxZone performance is ${formatPercentile(roxPct) ?? "below target"} with a ${formatGain(roxzoneGap(analysisJson))} gap.`,
       estimatedImpactSeconds: roxzoneGap(analysisJson),
       copyAngle: "race_strategy",
       confidence: "high",
@@ -506,7 +520,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     const bandTarget = compBandLabel ?? "the next band";
     if (category === "station_capacity") {
       return {
-        headline: `${String(lLabel).toUpperCase()} IS THE KEY TO REACHING ${String(bandTarget).toUpperCase()}`,
+	        headline: `${heroSubjectUpper(lLabel, emailTopSegType)} IS THE KEY TO REACHING ${String(bandTarget).toUpperCase()}`,
         subline: stretchBandLabel
           ? `Fix this and ${stretchBandLabel} comes into view.`
           : `This is where the time is hiding in the jump to ${bandTarget}.`,
@@ -527,7 +541,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     const nextBandLabel = stretchBandLabel;
     if (category === "station_capacity" && nextBandLabel) {
       return {
-        headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
+	        headline: `${heroSubjectUpper(lLabel, emailTopSegType)} IS YOUR LEAST ALIGNED SPLIT`,
         subline: `You are competitive in your group. This is the gap that limits ${nextBandLabel}.`,
         gainDisplay: null,
       };
@@ -550,7 +564,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       aggregateClarifier = "Pacing is your biggest overall signal, but this station is your biggest single gap.";
     }
     return {
-      headline: `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`,
+	      headline: `${heroSubjectUpper(emailTopLabel, emailTopSegType)} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`,
       subline: aggregateClarifier,
       gainDisplay: null,
     };
@@ -559,7 +573,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     return { headline: "YOUR RUNNING GAP IS BIGGER THAN YOUR STATION GAP", subline: "Closing that gap unlocks your finish time.", gainDisplay: null };
   }
   if (calculatorMode === "analyse" && category === "roxzone") {
-    return { headline: "TRANSITION LEAKAGE IS COSTING YOU FREE TIME", subline: "Roxzone efficiency is your lowest-effort gain.", gainDisplay: null };
+    return { headline: "TRANSITION LEAKAGE IS COSTING YOU FREE TIME", subline: "RoxZone efficiency is your lowest-effort gain.", gainDisplay: null };
   }
   if (calculatorMode === "analyse" && category === "pacing") {
     return { headline: "YOU HAVE THE ENGINE — THE CEILING IS EXECUTION", subline: "Pacing discipline is the next unlock.", gainDisplay: null };
@@ -578,9 +592,9 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     if (category === "high_performer") {
       if (isEliteBand && targetStr) {
         return {
-          headline: `THE SUB-60 TARGET GAP STARTS WITH ${lLabel ? String(lLabel).toUpperCase() : "STATION REFINEMENT"}`,
+	          headline: `THE SUB-60 TARGET GAP STARTS WITH ${lLabel ? heroSubjectUpper(lLabel, emailTopSegType) : "STATION REFINEMENT"}`,
           subline: lLabel
-            ? `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} the first target refinement at this level.`
+            ? `${subjectVerbPhrase(lLabel, emailTopSegType, "the first target refinement at this level.")}`
             : "Protect what works. Find the smallest combination of gains.",
           gainDisplay: null,
         };
@@ -598,17 +612,17 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       if (isEliteBand && targetStr) {
         return {
           headline: lLabel
-            ? `THE SUB-60 TARGET GAP STARTS WITH ${String(lLabel).toUpperCase()}`
+	            ? `THE SUB-60 TARGET GAP STARTS WITH ${heroSubjectUpper(lLabel, emailTopSegType)}`
             : "THE TARGET IS AN ELITE STRETCH",
           subline: lLabel
-            ? `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} the biggest target gap. At this level, this is refinement, not remediation.`
+            ? `${subjectVerbPhrase(lLabel, emailTopSegType, "the biggest target gap. At this level, this is refinement, not remediation.")}`
             : "Every second is marginal territory.",
           gainDisplay: null,
         };
       }
       return {
         headline: targetStr && lLabel
-          ? `THE ROUTE TO ${targetStr} STARTS WITH ${String(lLabel).toUpperCase()}`
+	          ? `THE ROUTE TO ${targetStr} STARTS WITH ${heroSubjectUpper(lLabel, emailTopSegType)}`
           : "YOUR ENGINE IS CLOSE — STATION EFFICIENCY CLOSES THE GAP",
         subline: "Station efficiency is the main lever between now and your target.",
         gainDisplay: null,
@@ -628,10 +642,12 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     if (category === "running") {
       // When the top individual segment is a station, name it — the athlete can see the
       // biggest single-split gap in the table, and the hero should agree with it.
-      if (emailTopLabel && emailTopSegType === "station") {
+	      if (emailTopLabel && ["station", "run"].includes(emailTopSegType)) {
         const stationAggregateGap = aggregateSplitGapSeconds(analysisJson, "work_time");
         const runningAggregateGap = aggregateSplitGapSeconds(analysisJson, "run_time");
-        const subline = Number.isFinite(runningAggregateGap) && Number.isFinite(stationAggregateGap)
+	        const subline = emailTopSegType === "run"
+	          ? "Running is the wider target lever; this is the first run split to attack."
+	          : Number.isFinite(runningAggregateGap) && Number.isFinite(stationAggregateGap)
           ? runningAggregateGap > stationAggregateGap
             ? "Running is your biggest overall gap to the target — but of any single segment, this station is the biggest one."
             : stationAggregateGap > runningAggregateGap
@@ -639,9 +655,9 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
               : "Running and station work are close overall — but this station is your biggest single gap."
           : "This station is your biggest single gap.";
         return {
-          headline: targetStr
-            ? `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`
-            : `${String(emailTopLabel).toUpperCase()} IS YOUR BIGGEST INDIVIDUAL GAP`,
+	          headline: targetStr
+		            ? `THE ROUTE TO ${targetStr} STARTS WITH ${heroSubjectUpper(emailTopLabel, emailTopSegType)}`
+	            : `${heroSubjectUpper(emailTopLabel, emailTopSegType)} IS YOUR BIGGEST INDIVIDUAL GAP`,
           subline,
           gainDisplay: null,
         };
@@ -651,6 +667,18 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
           ? `YOUR RUNNING GAP IS THE MAIN LEVER TO ${targetStr}`
           : "YOUR RUNNING GAP IS THE BIGGEST TARGET LEVER",
         subline: "Running pace is the main target opportunity.",
+        gainDisplay: null,
+      };
+    }
+
+    if (["roxzone", "pacing"].includes(category) && emailTopLabel && ["station", "run"].includes(emailTopSegType)) {
+      return {
+        headline: targetStr
+	          ? `THE ROUTE TO ${targetStr} STARTS WITH ${heroSubjectUpper(emailTopLabel, emailTopSegType)}`
+	          : `${heroSubjectUpper(emailTopLabel, emailTopSegType)} IS YOUR BIGGEST INDIVIDUAL OPPORTUNITY`,
+        subline: category === "roxzone"
+          ? "RoxZone is a secondary transition leak here; this is the first split to attack."
+          : "This is the first split to attack inside the wider pacing picture.",
         gainDisplay: null,
       };
     }
@@ -671,7 +699,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
       return {
         headline: "YOU ARE SUB-60 — THE NEXT GAIN IS MARGINAL",
         subline: limiter
-          ? `At this level, we are not looking for weaknesses. ${limiter} ${pluralStation(limiter) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark.`
+          ? `At this level, we are not looking for weaknesses. ${subjectVerbPhrase(limiter, null, "where your profile is least dominant against the sub-60 benchmark.")}`
           : "The next gain is not basic fitness — it is the smallest relative advantage in your race profile.",
         gainDisplay: null,
       };
@@ -698,7 +726,7 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     if (isEliteBand) {
       return {
         headline: "YOU ARE SUB-60 — THE NEXT GAIN IS MARGINAL",
-        subline: `${lLabel} ${pluralStation(lLabel) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark. At this level, this is a refinement, not a remediation.`,
+        subline: `${subjectVerbPhrase(lLabel, emailTopSegType, "where your profile is least dominant against the sub-60 benchmark. At this level, this is a refinement, not a remediation.")}`,
         gainDisplay: null,
       };
     }
@@ -716,19 +744,19 @@ export function buildHeroCopy(primaryThesis, analysisJson = {}, calculatorMode =
     const limiterGapSecs = headlineGainSeconds(analysisJson) ?? 0;
     if (limiterGapSecs < 120) {
       return {
-        headline: `${String(lLabel).toUpperCase()} IS YOUR LEAST ALIGNED SPLIT`,
+	        headline: `${heroSubjectUpper(lLabel, emailTopSegType)} IS YOUR LEAST ALIGNED SPLIT`,
         subline: "Not a weakness versus the field — the smallest relative advantage in your overall race profile.",
         gainDisplay: null,
       };
     }
     return {
-      headline: `${String(lLabel).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`,
+	      headline: `${heroSubjectUpper(lLabel, emailTopSegType)} IS YOUR BIGGEST OPPORTUNITY`,
       subline: gainDisplay ? "estimated opportunity against your benchmark band." : "Address this to unlock your next finish time.",
       gainDisplay,
     };
   }
   return {
-    headline: `${String(lLabel).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`,
+	    headline: `${heroSubjectUpper(lLabel, emailTopSegType)} IS YOUR BIGGEST OPPORTUNITY`,
     subline: gainDisplay ? "estimated opportunity against your benchmark band." : null,
     gainDisplay,
   };
@@ -793,7 +821,7 @@ export function buildSummaryBullets(primaryThesis, secondaryTheses = [], analysi
 
     if (isElite) {
       const _ll = limiterLabel(analysisJson);
-      bullets.push(`At this level, we are not looking for limiters. We are looking for the smallest advantage. ${_ll} ${pluralStation(_ll) ? "are" : "is"} where your profile is least dominant against the sub-60 benchmark.`);
+      bullets.push(`At this level, we are not looking for limiters. We are looking for the smallest advantage. ${subjectVerbPhrase(_ll, null, "where your profile is least dominant against the sub-60 benchmark.")}`);
     } else if (isCompetitive && nextBandLabel && calculatorMode === "analyse") {
       bullets.push(`You are already competitive in ${achievedBandLabel}. ${limiterLabel(analysisJson)} shows the biggest gap versus ${nextBandLabel} athletes - closing this is the route to the next band.`);
     } else if (calculatorMode !== "analyse") {

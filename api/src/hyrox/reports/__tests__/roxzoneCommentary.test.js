@@ -231,6 +231,30 @@ describe("buildRoxzoneSection", () => {
     assert.match(lines, /Separately, your biggest combined entry\+exit overhead was at Sled Pull/);
   });
 
+  it("suppresses station-level detail when entry/exit totals exceed total RoxZone time", () => {
+    const analysis = {
+      roxzoneAnalysis: {
+        available: true,
+        mode: "inferred_total",
+        totalSeconds: 615,
+        percentOfTotalTime: 0.08,
+        entryExitAvailable: true,
+        worstEntry: { stationKey: "farmers_carry", stationIndex: 6, seconds: 637 },
+        worstExit: { stationKey: "farmers_carry", stationIndex: 6, seconds: 909 },
+        stationOverhead: [
+          { stationKey: "farmers_carry", entrySeconds: 637, exitSeconds: 909, totalSeconds: 1546 },
+        ],
+      },
+    };
+
+    const lines = asArray(buildRoxzoneSection(analysis)).filter((item) => typeof item === "string").join("\n");
+
+    assert.match(lines, /RoxZone detail is partial or internally inconsistent/i);
+    assert.doesNotMatch(lines, /25:46 combined/);
+    assert.doesNotMatch(lines, /10:37 in/);
+    assert.doesNotMatch(lines, /15:09 out/);
+  });
+
   it("prepends on-benchmark note when frameGapSeconds is within threshold and narrative fires", () => {
     const analysis = {
       roxzoneAnalysis: {

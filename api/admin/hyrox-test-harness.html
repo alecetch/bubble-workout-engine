@@ -190,11 +190,19 @@
           </div>
         </form>
         <div id="main-status" class="status"></div>
+        <div class="download-panel">
+          <button id="download-btn" class="secondary" type="button" hidden>Download Generated File</button>
+          <span id="filename" class="filename"></span>
+        </div>
       </section>
 
       <section class="section">
         <p class="section-heading">Fetch cache (browser bookmarklet)</p>
         <div class="fetch-cache-bar">
+          <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;">
+            <input id="use-cache-only-checkbox" type="checkbox" style="width:auto;" />
+            Use cached data only (skip live hyrox.com fetch)
+          </label>
           <span>HYROX pages are blocked from the server — use this bookmarklet to pre-load pages from your browser:</span>
           <a id="hyrox-bookmarklet" class="bookmarklet-link" href="#" title="Drag this to your bookmarks bar">📎 Cache HYROX Page</a>
           <button id="refresh-cache-btn" class="secondary" type="button" style="min-height:28px;padding:3px 8px;font-size:12px;">Refresh status</button>
@@ -226,13 +234,6 @@
         </div>
       </section>
 
-      <section class="section">
-        <div class="download-panel">
-          <button id="download-btn" class="secondary" type="button" hidden>Download Generated File</button>
-          <span id="filename" class="filename"></span>
-        </div>
-      </section>
-
       <section id="preview-section" class="section" hidden>
         <div class="preview-panel">
           <div class="preview-toolbar">
@@ -249,6 +250,7 @@
       const METADATA_STORAGE_KEY = "hyrox_test_harness_case_metadata_v1";
       const CASES_STORAGE_KEY = "hyrox_test_harness_cases_v1";
       const CASES_BACKUP_STORAGE_KEY = "hyrox_test_harness_cases_backup_v1";
+      const USE_CACHE_ONLY_STORAGE_KEY = "hyrox_test_harness_use_cache_only";
 
       const form = document.getElementById("harness-form");
       const tokenInput = document.getElementById("token-input");
@@ -274,6 +276,7 @@
       const mergeCasesFile = document.getElementById("merge-cases-file");
       const restoreBackupBtn = document.getElementById("restore-backup-btn");
       const storageSummary = document.getElementById("storage-summary");
+      const useCacheOnlyCheckbox = document.getElementById("use-cache-only-checkbox");
       const hyroxBookmarklet = document.getElementById("hyrox-bookmarklet");
       const refreshCacheBtn = document.getElementById("refresh-cache-btn");
       const clearCacheBtn = document.getElementById("clear-cache-btn");
@@ -297,6 +300,14 @@
 
       const savedToken = sessionStorage.getItem(STORAGE_KEY);
       if (savedToken) tokenInput.value = savedToken;
+
+      useCacheOnlyCheckbox.checked = localStorage.getItem(USE_CACHE_ONLY_STORAGE_KEY) === "1";
+      useCacheOnlyCheckbox.addEventListener("change", () => {
+        localStorage.setItem(USE_CACHE_ONLY_STORAGE_KEY, useCacheOnlyCheckbox.checked ? "1" : "0");
+      });
+      function useCachedDataOnly() {
+        return useCacheOnlyCheckbox.checked;
+      }
 
       function loadJson(key, fallback) {
         try {
@@ -408,11 +419,13 @@
         const seen = new Set();
         return cases
           .map((entry) => ({
-            url: String(entry.url ?? "").trim(),
-            targetTime: String(entry.targetTime ?? "").trim(),
-            label: String(entry.label ?? "").trim(),
-            expectedCommentary: String(entry.expectedCommentary ?? ""),
-          }))
+	            url: String(entry.url ?? "").trim(),
+	            targetTime: String(entry.targetTime ?? "").trim(),
+		            label: String(entry.label ?? "").trim(),
+		            expectedCommentary: String(entry.expectedCommentary ?? ""),
+		            canonical: entry.canonical === true || entry.expectations?.canonical === true,
+		            expectations: entry.expectations && typeof entry.expectations === "object" ? entry.expectations : null,
+		          }))
           .filter((entry) => {
             if (!entry.url) return true;
             if (seen.has(entry.url)) return false;
@@ -424,11 +437,13 @@
       function runnableCases(selected = cases) {
         return selected
           .map((entry) => ({
-            url: String(entry.url ?? "").trim(),
-            targetTime: String(entry.targetTime ?? "").trim(),
-            label: String(entry.label ?? "").trim(),
-            expectedCommentary: String(entry.expectedCommentary ?? ""),
-          }))
+	            url: String(entry.url ?? "").trim(),
+	            targetTime: String(entry.targetTime ?? "").trim(),
+		            label: String(entry.label ?? "").trim(),
+		            expectedCommentary: String(entry.expectedCommentary ?? ""),
+		            canonical: entry.canonical === true || entry.expectations?.canonical === true,
+		            expectations: entry.expectations && typeof entry.expectations === "object" ? entry.expectations : null,
+		          }))
           .filter((entry) => entry.url || entry.targetTime);
       }
 
@@ -453,9 +468,13 @@
         return `${m}:${String(s).padStart(2, "0")}`;
       }
 
-      function targetLabel(targetTime) {
-        return formatSeconds(parseTargetSeconds(targetTime));
-      }
+	      function targetLabel(targetTime) {
+	        return formatSeconds(parseTargetSeconds(targetTime));
+	      }
+
+	      function expectationsText(expectations) {
+	        return expectations && typeof expectations === "object" ? JSON.stringify(expectations, null, 2) : "";
+	      }
 
       function persistCases() {
         const previousCases = loadJson(CASES_STORAGE_KEY, []);
@@ -491,11 +510,13 @@
         if (!Array.isArray(importedCases)) throw new Error("Import file does not contain a cases array.");
         backupCases(cases);
         cases = importedCases.map((entry) => ({
-          url: String(entry?.url ?? "").trim(),
-          targetTime: String(entry?.targetTime ?? "").trim(),
-          label: String(entry?.label ?? "").trim(),
-          expectedCommentary: String(entry?.expectedCommentary ?? ""),
-        })).filter((entry) => entry.url || entry.targetTime);
+	          url: String(entry?.url ?? "").trim(),
+	          targetTime: String(entry?.targetTime ?? "").trim(),
+		          label: String(entry?.label ?? "").trim(),
+		          expectedCommentary: String(entry?.expectedCommentary ?? ""),
+		          canonical: entry?.canonical === true || entry?.expectations?.canonical === true,
+		          expectations: entry?.expectations && typeof entry.expectations === "object" ? entry.expectations : null,
+		        })).filter((entry) => entry.url || entry.targetTime);
         if (payload?.metadata && typeof payload.metadata === "object") {
           metadataCache = { ...metadataCache, ...payload.metadata };
           saveJson(METADATA_STORAGE_KEY, metadataCache);
@@ -511,11 +532,13 @@
         const existing = new Set(cases.map((c) => c.url));
         const toAdd = importedCases
           .map((entry) => ({
-            url: String(entry?.url ?? "").trim(),
-            targetTime: String(entry?.targetTime ?? "").trim(),
-            label: String(entry?.label ?? "").trim(),
-            expectedCommentary: String(entry?.expectedCommentary ?? ""),
-          }))
+	            url: String(entry?.url ?? "").trim(),
+	            targetTime: String(entry?.targetTime ?? "").trim(),
+		            label: String(entry?.label ?? "").trim(),
+		            expectedCommentary: String(entry?.expectedCommentary ?? ""),
+		            canonical: entry?.canonical === true || entry?.expectations?.canonical === true,
+		            expectations: entry?.expectations && typeof entry.expectations === "object" ? entry.expectations : null,
+		          }))
           .filter((entry) => (entry.url || entry.targetTime) && !existing.has(entry.url));
         cases.push(...toAdd);
         if (payload?.metadata && typeof payload.metadata === "object") {
@@ -548,7 +571,7 @@
         }
         const existing = new Set(cases.map((entry) => entry.url).filter(Boolean));
         for (const url of urls) {
-          if (!existing.has(url)) cases.push({ url, targetTime: "", label: "", expectedCommentary: "" });
+	          if (!existing.has(url)) cases.push({ url, targetTime: "", label: "", expectedCommentary: "", canonical: false, expectations: null });
           existing.add(url);
         }
         pasteInput.value = "";
@@ -604,12 +627,20 @@
                   <label for="case-label-${index}">Label</label>
                   <input id="case-label-${index}" class="case-label-input" data-index="${index}" type="text" value="${escapeHtml(entry.label ?? "")}" placeholder="e.g. RoxZone main limiter" />
                 </div>
-                <div class="field">
-                  <label for="case-commentary-${index}">Expected Commentary</label>
-                  <textarea id="case-commentary-${index}" class="case-commentary-input" data-index="${index}" placeholder="What should the engine say for this case?">${escapeHtml(entry.expectedCommentary ?? "")}</textarea>
-                </div>
-              </div>
-            </div>
+	                <div class="field">
+	                  <label for="case-commentary-${index}">Expected Commentary</label>
+	                  <textarea id="case-commentary-${index}" class="case-commentary-input" data-index="${index}" placeholder="What should the engine say for this case?">${escapeHtml(entry.expectedCommentary ?? "")}</textarea>
+	                </div>
+		                <div class="field">
+		                  <label for="case-expectations-${index}">Structured Expectations JSON</label>
+		                  <textarea id="case-expectations-${index}" class="case-expectations-input" data-index="${index}" placeholder='{"headlineMode":"penalty_first","expectedTone":"behind"}'>${escapeHtml(expectationsText(entry.expectations))}</textarea>
+		                </div>
+		                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;">
+		                  <input class="case-canonical-input" data-index="${index}" type="checkbox" ${entry.canonical ? "checked" : ""} />
+		                  Canonical regression case
+		                </label>
+		              </div>
+	            </div>
           `;
         }).join("");
       }
@@ -619,10 +650,28 @@
         if (!Number.isInteger(index) || !cases[index]) return;
         if (input.classList.contains("case-url-input")) cases[index].url = input.value.trim();
         if (input.classList.contains("case-target-input")) cases[index].targetTime = input.value.trim();
-        if (input.classList.contains("case-label-input")) cases[index].label = input.value.trim();
-        if (input.classList.contains("case-commentary-input")) cases[index].expectedCommentary = input.value;
-        persistCases();
-      }
+	        if (input.classList.contains("case-label-input")) cases[index].label = input.value.trim();
+		        if (input.classList.contains("case-commentary-input")) cases[index].expectedCommentary = input.value;
+		        if (input.classList.contains("case-canonical-input")) cases[index].canonical = input.checked;
+		        if (input.classList.contains("case-expectations-input")) {
+	          const raw = input.value.trim();
+	          if (!raw) {
+	            cases[index].expectations = null;
+	            input.style.borderColor = "";
+	          } else {
+	            try {
+	              const parsed = JSON.parse(raw);
+	              if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Expectations must be a JSON object.");
+	              cases[index].expectations = parsed;
+	              input.style.borderColor = "";
+	            } catch {
+	              input.style.borderColor = "#dc2626";
+	              return;
+	            }
+	          }
+	        }
+	        persistCases();
+	      }
 
       function filenameFromDisposition(value) {
         const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(value || "");
@@ -714,8 +763,8 @@
               "x-internal-token": token,
             },
             body: JSON.stringify(selected.length > 1
-              ? { cases: selected, artifact, ...sharedAthleteContext() }
-              : { ...selected[0], artifact, ...sharedAthleteContext() }),
+              ? { cases: selected, artifact, useCachedData: useCachedDataOnly(), ...sharedAthleteContext() }
+              : { ...selected[0], artifact, useCachedData: useCachedDataOnly(), ...sharedAthleteContext() }),
           });
 
           if (!response.ok) throw new Error(await readError(response));
@@ -843,8 +892,8 @@
               "x-internal-token": token,
             },
             body: JSON.stringify(selected.length > 1
-              ? { cases: selected, preview: true, ...sharedAthleteContext() }
-              : { ...selected[0], preview: true, ...sharedAthleteContext() }),
+              ? { cases: selected, preview: true, useCachedData: useCachedDataOnly(), ...sharedAthleteContext() }
+              : { ...selected[0], preview: true, useCachedData: useCachedDataOnly(), ...sharedAthleteContext() }),
           });
 
           if (!response.ok) throw new Error(await readError(response));
@@ -876,7 +925,9 @@
               "Content-Type": "application/json",
               "x-internal-token": token,
             },
-            body: JSON.stringify(selected.length > 1 ? { cases: selected } : { url: selected[0].url }),
+            body: JSON.stringify(selected.length > 1
+              ? { cases: selected, useCachedData: useCachedDataOnly() }
+              : { url: selected[0].url, useCachedData: useCachedDataOnly() }),
           });
 
           if (!response.ok) throw new Error(await readError(response));
@@ -923,7 +974,7 @@
           const response = await fetch("/api/admin/hyrox/test-harness/suggest", {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-internal-token": token },
-            body: JSON.stringify({ url: entry.url, targetTime: entry.targetTime }),
+            body: JSON.stringify({ url: entry.url, targetTime: entry.targetTime, useCachedData: useCachedDataOnly() }),
           });
 
           if (!response.ok) throw new Error(await readError(response));
@@ -1048,7 +1099,7 @@
           const resp = await fetch("/api/admin/hyrox/test-harness/race-card-url", {
             method: "POST",
             headers: { "Content-Type": "application/json", ...(token ? { "x-internal-token": token } : {}) },
-            body: JSON.stringify({ cases: [body] }),
+            body: JSON.stringify({ cases: [body], useCachedData: useCachedDataOnly() }),
           });
           if (!resp.ok) {
             const errText = await resp.text().catch(() => "");
@@ -1081,7 +1132,7 @@
             const resp = await fetch("/api/admin/hyrox/test-harness/race-card-url", {
               method: "POST",
               headers: { "Content-Type": "application/json", ...(token ? { "x-internal-token": token } : {}) },
-              body: JSON.stringify({ cases: [body] }),
+              body: JSON.stringify({ cases: [body], useCachedData: useCachedDataOnly() }),
             });
             if (resp.ok) {
               const blob = await resp.blob();

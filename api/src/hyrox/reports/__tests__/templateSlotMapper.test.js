@@ -155,6 +155,162 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[1].biggest_loss.delta, "+1:00");
   });
 
+  it("does not report a positive biggest_gain when every carousel split is slower than comparison", () => {
+    const carousel = buildTemplateA(analysis({
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 2, userSeconds: 7061 }),
+        segment("run_1", {
+          userSeconds: 400,
+          benchmarkMedianSeconds: 360,
+          goalBenchmarkSeconds: 330,
+          exactTargetSeconds: 315,
+          timeGapToExactTargetSeconds: 85,
+        }),
+        segment("ski_erg", {
+          userSeconds: 360,
+          benchmarkMedianSeconds: 300,
+          goalBenchmarkSeconds: 270,
+          exactTargetSeconds: 330,
+          timeGapToMedianSeconds: 60,
+        }),
+        segment("wall_balls", {
+          userSeconds: 420,
+          benchmarkMedianSeconds: 360,
+          goalBenchmarkSeconds: 330,
+          exactTargetSeconds: 300,
+          timeGapToExactTargetSeconds: 120,
+          percentile: 10,
+        }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+
+    assert.equal(carousel.slides[1].biggest_gain.station, "NO SPLIT AHEAD");
+    assert.equal(carousel.slides[1].biggest_gain.delta, "0");
+    assert.equal(carousel.slides[1].no_split_ahead, true);
+    assert.ok(carousel.slides[1].closest_split.station);
+    assert.match(carousel.slides[1].closest_split.delta, /^\+/);
+    assert.equal(carousel.slides[1].biggest_loss.delta, "+2:00");
+  });
+
+  it("uses bottom/ordinal percentile language for slow global results across race card and carousel", () => {
+    const slowAnalysis = worldwideComparisonAnalysis({
+      comparisonOptions: [
+        { id: "global", label: "Global", groupKey: "open_male", percentile: 2, topPercent: 98, sampleSize: 5000 },
+      ],
+      confidenceLabel: "insufficient",
+    });
+
+    const carousel = buildTemplateA(slowAnalysis, [], { displayName: "Marcus Fernandes" });
+    const raceCard = buildHyroxRaceCardData(slowAnalysis, { displayName: "Marcus Fernandes" });
+
+    assert.equal(raceCard.percentileText, "BOTTOM 2% WORLDWIDE");
+    assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the BOTTOM 2% WORLDWIDE (directional)");
+    assert.doesNotMatch(raceCard.percentileText, /TOP 98/i);
+    assert.doesNotMatch(carousel.slides[0].percentile, /TOP 98/i);
+  });
+
+  it("suppresses race-card and carousel percentile claims when benchmark data is unavailable", () => {
+    const noBenchmarkAnalysis = worldwideComparisonAnalysis({
+      primaryBenchmarkGroup: null,
+      goalBenchmarkGroup: null,
+      comparisonOptions: [
+        { id: "stale", label: "Stale", groupKey: "open_male", percentile: 99, topPercent: 1, sampleSize: 5000 },
+      ],
+      available: false,
+    });
+    noBenchmarkAnalysis.analysisScope = "no_benchmark_data";
+
+    const carousel = buildTemplateA(noBenchmarkAnalysis, [], { displayName: "Marcus Fernandes", overallPercentile: 99 });
+    const raceCard = buildHyroxRaceCardData(noBenchmarkAnalysis, { displayName: "Marcus Fernandes", overallPercentile: 99 });
+
+    assert.equal(raceCard.percentileText, null);
+    assert.equal(raceCard.formaScore, null);
+    assert.equal(carousel.slides[0].percentile, "Benchmark data is not available for this race format");
+    assert.doesNotMatch(carousel.slides[0].percentile, /TOP 1% WORLDWIDE/);
+    assert.ok(!carousel.slides[5].features.includes("Percentile Ranking"));
+    assert.ok(!carousel.slides[5].features.includes("Strongest Station"));
+  });
+
+  it("uses the race-card comparison profile label for analyse-mode carousel benchmark copy", () => {
+    const medianAnalysis = analysis({
+      calculatorMode: "analyse",
+      benchmarkContext: {
+        analysisFrame: { frame: "current_band", comparisonBand: "sub_65" },
+        primaryBenchmarkGroup: { key: "open:male:sub_65", label: "Open Male Sub 65" },
+        goalBenchmarkGroup: null,
+      },
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 70, userSeconds: 3900 }),
+        segment("run_1", {
+          userSeconds: 300,
+          benchmarkMedianSeconds: 330,
+          timeGapToMedianSeconds: -30,
+          exactTargetSeconds: null,
+        }),
+        segment("wall_balls", {
+          userSeconds: 360,
+          benchmarkMedianSeconds: 330,
+          timeGapToMedianSeconds: 30,
+          exactTargetSeconds: null,
+          percentile: 45,
+        }),
+      ],
+    });
+
+    const carousel = buildTemplateA(medianAnalysis, [], { displayName: "Marcus Fernandes" });
+    const slide2 = carousel.slides[1];
+
+    assert.equal(slide2.comparison_basis, "SUB 60-65 MEDIAN");
+    assert.equal(slide2.legend_text, "BLUE = FASTER THAN SUB 60-65 MEDIAN    RED = SLOWER THAN SUB 60-65 MEDIAN");
+    assert.ok(slide2.stations.length > 0);
+    assert.ok(slide2.stations.every((row) => row.comparison_basis === "SUB 60-65 MEDIAN"));
+    assert.equal(carousel.slides[2].position_gain_label, "TIME AHEAD OF SUB 60-65 MEDIAN");
+  });
+
+  it("uses 120+ MEDIAN for open-ended slow analyse bands in carousel copy", () => {
+    const carousel = buildTemplateA(analysis({
+      calculatorMode: "analyse",
+      benchmarkContext: {
+        analysisFrame: { frame: "current_band", comparisonBand: "over_120" },
+        goalBenchmarkGroup: null,
+      },
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 20, userSeconds: 7500 }),
+        segment("wall_balls", { userSeconds: 480, benchmarkMedianSeconds: 420, timeGapToMedianSeconds: 60, exactTargetSeconds: null }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+
+    assert.equal(carousel.slides[1].comparison_basis, "120+ MEDIAN");
+    assert.equal(carousel.slides[1].legend_text, "BLUE = FASTER THAN 120+ MEDIAN    RED = SLOWER THAN 120+ MEDIAN");
+    assert.ok(carousel.slides[1].stations.every((row) => row.comparison_basis === "120+ MEDIAN"));
+  });
+
+  it("keeps target-mode carousel comparison copy as TARGET", () => {
+    const carousel = buildTemplateA(analysis(), [], { displayName: "Marcus Fernandes" });
+
+    assert.equal(carousel.slides[1].comparison_basis, "TARGET");
+    assert.equal(carousel.slides[1].legend_text, "BLUE = FASTER THAN TARGET    RED = SLOWER THAN TARGET");
+    assert.ok(carousel.slides[1].stations.every((row) => row.comparison_basis === "TARGET"));
+  });
+
+  it("falls back to MEDIAN for unknown analyse bands without leaking undefined copy", () => {
+    const carousel = buildTemplateA(analysis({
+      calculatorMode: "analyse",
+      benchmarkContext: {
+        analysisFrame: { frame: "current_band", comparisonBand: "mystery_band" },
+        goalBenchmarkGroup: null,
+      },
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 55, userSeconds: 4500 }),
+        segment("wall_balls", { userSeconds: 360, benchmarkMedianSeconds: 330, timeGapToMedianSeconds: 30, exactTargetSeconds: null }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+
+    assert.equal(carousel.slides[1].comparison_basis, "MEDIAN");
+    assert.equal(carousel.slides[1].legend_text, "BLUE = FASTER THAN MEDIAN    RED = SLOWER THAN MEDIAN");
+    assert.doesNotMatch(JSON.stringify(carousel), /undefined MEDIAN|undefined|null MEDIAN/);
+  });
+
   it("uses frame-adjusted gaps before goal-derived gaps in carousel rows", () => {
     const carousel = buildTemplateA(analysis({
       calculatorMode: "analyse",
@@ -286,6 +442,14 @@ describe("buildTemplateA", () => {
         biggestLimiter: { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 200, percentile: 18 },
       },
       limiters: [{ segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 200, percentile: 18 }],
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 420,
+        percentile: 18,
+        timeGapToMedianSeconds: 200,
+        entryExitAvailable: true,
+      },
       segments: [
         segment("total_time", { type: "aggregate", percentile: 45, userSeconds: 4200 }),
         segment("roxzone_time", {
@@ -312,8 +476,48 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[0].limiter_word, "ROXZONE");
     assert.equal(carousel.slides[3].station, "ROXZONE");
     assert.equal(carousel.slides[3].potential_gain, "3:20");
+    assert.equal(carousel.slides[3].action_text, "TIGHTEN ENTRY/EXIT FLOW");
+    assert.match(carousel.slides[3].confidence_note, /specific entry\/exit flow/i);
+    assert.deepEqual(carousel.slides[0].roxzone_action, {
+      label: "TIGHTEN ENTRY/EXIT FLOW",
+      claim_confidence: "firm",
+      action_evidence_level: "race_replay_detail",
+      detail: "Race Replay detail is available, so focus on the specific entry/exit flow.",
+    });
     assert.equal(carousel.slides[4].loss_station, "roxzone");
     assert.notEqual(carousel.slides[0].biggest_limiter, "SLED PULL");
+  });
+
+  it("marks inferred RoxZone carousel opportunities as partial and route-focused", () => {
+    const carousel = buildTemplateA(analysis({
+      timePotential: { headlineGainSeconds: 65 },
+      headline: {
+        biggestLimiter: { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 65, percentile: 28 },
+      },
+      roxzoneAnalysis: {
+        available: true,
+        mode: "inferred_total",
+        totalSeconds: 420,
+        percentile: 28,
+        timeGapToMedianSeconds: 65,
+      },
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 45, userSeconds: 4200 }),
+        segment("roxzone_time", {
+          type: "aggregate",
+          label: "RoxZone",
+          userSeconds: 420,
+          frameGapSeconds: 65,
+          timeGapToMedianSeconds: 65,
+          percentile: 28,
+        }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+
+    assert.equal(carousel.slides[0].roxzone_action.label, "ROXZONE DETAIL PARTIAL - REHEARSE ROUTES");
+    assert.equal(carousel.slides[0].roxzone_action.action_evidence_level, "estimated_only");
+    assert.match(carousel.slides[0].roxzone_action.detail, /directional transition signal/i);
+    assert.equal(carousel.slides[3].action_text, "ROXZONE DETAIL PARTIAL - REHEARSE ROUTES");
   });
 
   it("uses penalties as the carousel headline opportunity when penalties dominate the total gap", () => {
@@ -335,12 +539,86 @@ describe("buildTemplateA", () => {
     }), [], { displayName: "Alex Smith" });
 
     assert.equal(carousel.slides[0].biggest_limiter, "PENALTIES");
+    assert.equal(carousel.slides[0].biggest_limiter_label, "FASTEST CONTROLLABLE WIN");
+    assert.deepEqual(carousel.slides[0].fastest_controllable_win, {
+      station: "PENALTIES",
+      potential_gain: "3:20",
+      label: "FASTEST CONTROLLABLE WIN",
+    });
+    assert.deepEqual(carousel.slides[0].largest_fitness_limiter, {
+      station: "WALL BALLS",
+      time_gap: "1:30",
+      label: "LARGEST FITNESS LIMITER",
+    });
     assert.equal(carousel.slides[0].limiter_word, "PENALTIES");
     assert.equal(carousel.slides[3].station, "PENALTIES");
     assert.equal(carousel.slides[3].label, "Fastest Win");
     assert.equal(carousel.slides[3].potential_gain, "3:20");
     assert.equal(carousel.slides[4].loss_station, "penalties");
     assert.notEqual(carousel.slides[0].biggest_limiter, "WALL BALLS");
+    assert.equal(carousel.slides[5].headline, "FIX THE FASTEST WIN");
+  });
+
+  it("shows material non-dominant penalties as a secondary fastest-win track in the carousel", () => {
+    const carousel = buildTemplateA(analysis({
+      race: { finishTimeSeconds: 5732 },
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:female:sub_95", label: "Open Female Sub 95" },
+        goalBenchmarkGroup: null,
+      },
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 },
+      },
+      limiters: [{ segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 }],
+      timePotential: { headlineGainSeconds: 90 },
+      penalties: [{ segmentKey: "farmers_carry", station: "farmers_carry", penaltySeconds: 180 }],
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 5732, frameGapSeconds: 900, percentile: 45 }),
+        segment("wall_balls", { label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35 }),
+        segment("farmers_carry", { label: "Farmers Carry", userSeconds: 232, frameGapSeconds: 120, frameGapNetOfPenaltySeconds: -60, timeGapToMedianSeconds: 120, percentile: 88 }),
+      ],
+    }), [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
+
+    assert.equal(carousel.slides[0].biggest_limiter, "WALL BALLS");
+    assert.equal(carousel.slides[0].biggest_limiter_label, "BIGGEST LIMITER");
+    assert.deepEqual(carousel.slides[0].fastest_controllable_win, {
+      station: "PENALTIES",
+      potential_gain: "3:00",
+      label: "FASTEST CONTROLLABLE WIN",
+    });
+    assert.deepEqual(carousel.slides[0].largest_fitness_limiter, {
+      station: "WALL BALLS",
+      time_gap: "1:30",
+      label: "LARGEST FITNESS LIMITER",
+    });
+    assert.equal(carousel.slides[0].artifact_headline_mode, "fitness_first_with_penalty_win");
+    assert.equal(carousel.slides[3].station, "WALL BALLS");
+    assert.equal(carousel.slides[3].label, "Opportunity");
+  });
+
+  it("uses context-aware carousel CTA headlines", () => {
+    const roxCarousel = buildTemplateA(analysis({
+      timePotential: { headlineGainSeconds: 200 },
+      headline: { biggestLimiter: { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 200 } },
+      roxzoneAnalysis: { available: true, mode: "explicit_splits", totalSeconds: 420, timeGapToMedianSeconds: 200, entryExitAvailable: true },
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 45, userSeconds: 4200 }),
+        segment("roxzone_time", { type: "aggregate", label: "RoxZone", userSeconds: 420, frameGapSeconds: 200, timeGapToMedianSeconds: 200 }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+    const eliteCarousel = buildTemplateA(analysis({
+      race: { finishTimeSeconds: 3560 },
+      benchmarkContext: { achievedBand: "sub_60", goalBenchmarkGroup: null },
+      headline: { biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 20 } },
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 92, userSeconds: 3560 }),
+        segment("wall_balls", { label: "Wall Balls", frameGapSeconds: 20, timeGapToMedianSeconds: 20 }),
+      ],
+    }), [], { displayName: "Elite Athlete" });
+
+    assert.equal(roxCarousel.slides[5].headline, "TIGHTEN YOUR RACE FLOW");
+    assert.equal(eliteCarousel.slides[5].headline, "FIND YOUR NEXT MARGINAL GAIN");
+    assert.notEqual(eliteCarousel.slides[5].headline, "FIND YOUR BOTTLENECK");
   });
 
   it("keeps a slide 1 hero image for target-mode athletes who beat all station medians (stationBreakdown fallback)", () => {
@@ -407,8 +685,8 @@ describe("buildTemplateA", () => {
       ],
     }), [], { displayName: "Marcus Fernandes", sex: "male", calculatorMode: "analyse" });
 
-    assert.match(carousel.slides[0].regional_context, /Europe events attract/);
-    assert.match(carousel.slides[0].regional_context, /top 55%/);
+	assert.match(carousel.slides[0].regional_context, /Europe events attract/);
+	assert.match(carousel.slides[0].regional_context, /around the 45th percentile/);
   });
 
   it("includes age_group_context in A1_ATHLETE_HOOK when fieldPercentile is available", () => {

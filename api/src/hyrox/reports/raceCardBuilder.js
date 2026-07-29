@@ -102,23 +102,22 @@ const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
 const FORMA_BRAND_BLUE = "#00a3f5";
 
 function formaLogoFallback(size) {
+  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
   const iconWidth = size;
   const barHeight = Math.round(size * 0.24);
   const barGap = Math.round(size * 0.06);
-  const textSize = Math.round(size * 0.6);
-  return `<svg viewBox="0 0 ${iconWidth + 4} ${size}" xmlns="http://www.w3.org/2000/svg" width="${iconWidth + 4}" height="${size}" style="flex-shrink:0;">
+  const textSize = Math.max(21, Math.round(size * 0.6));
+  const textX = iconWidth + 12;
+  return `<svg viewBox="0 0 ${width} ${size}" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${size}" aria-label="Forma" style="display:block;width:${width}px;height:${size}px;flex-shrink:0;">
   <polygon points="2,0 ${iconWidth},0 ${iconWidth - barHeight * 0.6},${barHeight} 2,${barHeight}" fill="#ffffff"/>
   <polygon points="2,${barHeight + barGap} ${iconWidth - barHeight * 0.35},${barHeight + barGap} ${iconWidth - barHeight * 0.95},${barHeight * 2 + barGap} 2,${barHeight * 2 + barGap}" fill="${FORMA_BRAND_BLUE}"/>
   <polygon points="2,${barHeight * 2 + barGap * 2} ${iconWidth - barHeight * 1.3},${barHeight * 2 + barGap * 2} ${iconWidth - barHeight * 1.9},${size},2,${size}" fill="#ffffff"/>
-  <text x="${iconWidth + 12}" y="${Math.round(size * 0.68)}" font-family="'Inter Tight',Arial,sans-serif" font-size="${textSize}" font-weight="800" fill="#f8fafc">FORMA</text>
+  <text x="${textX}" y="${Math.round(size * 0.72)}" font-family="'Inter Tight',Arial,sans-serif" font-size="${textSize}" font-weight="800" fill="#f8fafc">FORMA</text>
 </svg>`;
 }
 
 function formaLogoMark(size = 38) {
-  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
-  const src = loadIconB64("forma-logo.png");
-  if (!src) return formaLogoFallback(size);
-  return `<img src="${src}" alt="Forma — Measure. Understand. Improve." width="${width}" height="${size}" style="display:block;width:${width}px;height:${size}px;object-fit:contain;flex-shrink:0;" />`;
+  return formaLogoFallback(size);
 }
 
 const STATION_ARTWORK = Object.freeze({
@@ -220,10 +219,10 @@ function scoreRingSvg(formaScore) {
   ${has ? `<circle cx="124" cy="124" r="${r}" fill="none" stroke="#22d3ee" stroke-width="16"
     stroke-dasharray="${filled.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="round"
     transform="rotate(-90 124 124)" filter="url(#ringglow)"/>` : ""}
-  <text x="124" y="84"  text-anchor="middle" fill="#64748b" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="13" letter-spacing="2.5">FORMA</text>
-  <text x="124" y="100" text-anchor="middle" fill="#64748b" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="13" letter-spacing="2.5">SCORE</text>
+  <text x="124" y="74"  text-anchor="middle" fill="#94a3b8" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="21" letter-spacing="2">FORMA</text>
+  <text x="124" y="98" text-anchor="middle" fill="#94a3b8" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="21" letter-spacing="2">SCORE</text>
   <text x="124" y="${numY.toFixed(0)}" text-anchor="middle" fill="#f0f6ff" font-family="'Inter Tight',Arial,sans-serif" font-weight="900" font-size="${numSize}">${num}</text>
-  ${has ? `<text x="124" y="${(numY + 24).toFixed(0)}" text-anchor="middle" fill="#475569" font-family="Inter,Arial,sans-serif" font-weight="600" font-size="17">/100</text>` : ""}
+  ${has ? `<text x="124" y="${(numY + 28).toFixed(0)}" text-anchor="middle" fill="#94a3b8" font-family="Inter,Arial,sans-serif" font-weight="700" font-size="21">/100</text>` : ""}
 </svg>`;
 }
 
@@ -331,13 +330,21 @@ function headerHeroImage() {
 
 const LABEL_ROTATION_DEGREES = -90;
 
-function stationLabelParts(label) {
-  const k = String(label ?? "").toLowerCase();
-  if (k.includes("burpee")) return ["BURPEE", "BROAD JUMP"];
-  if (k.includes("farmer")) return ["FARMERS", "CARRY"];
-  if (k.includes("sandbag")) return ["SANDBAG", "LUNGES"];
+// Presentation-only abbreviations for split names that don't comfortably fit the
+// chart's rotated single-line label slot at the card-wide 21px floor. Keyed by the
+// stable segmentKey (not the label string) since every split row carries `key`.
+// Does not touch SEGMENT_MAP, segmentKey values, or any analytics/benchmark logic.
+const RACE_CARD_SPLIT_LABELS = Object.freeze({
+  burpee_broad_jump: "BBJ",
+  sandbag_lunges: "S'BAG LUNGE",
+  farmers_carry: "F. CARRY",
+});
+
+function stationLabelText(key, label) {
+  const mapped = key ? RACE_CARD_SPLIT_LABELS[key] : null;
+  if (mapped) return mapped;
   const words = String(label ?? "").toUpperCase().split(/\s+/);
-  return [words.slice(0, 3).join(" ") || "SPLIT"];
+  return words.slice(0, 3).join(" ") || "SPLIT";
 }
 
 function sortedSplitRows(splitRows) {
@@ -361,26 +368,22 @@ function buildChart(splitRows) {
   const yLW = 58;        // y-label column width
   const barW_total = W - yLW;
   const chartH = 230;    // height of bar zone
-  const labelH = compact ? 178 : 190;    // rotated split-name + time zone below
+  const labelH = 205;    // rotated split-name + time zone below (fixed — do not grow, see labelStartY note)
   const totalH = chartH + labelH;
   const midY = chartH / 2;  // centre line
+  // Value-label clamp bounds: never let a variance label render within this many px of the
+  // chart's own top/bottom edge, independent of the (already height-capped) bar height.
+  const valueLabelEdgeClearance = 16;
 
   const maxSec = 75;
   const pxPerSec = midY / maxSec;
 
   const slotW = barW_total / n;
   const barW = Math.min(compact ? 34 : 58, Math.floor(slotW * 0.52));
-  const valueFont = compact ? 12 : 13;
-  const labelFont = compact ? 19 : 20;
-  const labelStartY = compact ? chartH + 144 : chartH + 152;
-  const labelOffset = compact ? 26 : 28;
-  // Rotated text-anchor="start" glyphs render with their visual centre offset from the
-  // rotation anchor by a roughly constant amount (measured via getBoundingClientRect()
-  // against the bar's mx on a real render: ~14.1px left of centre at font-size 19,
-  // independent of text length) — nudge the anchor right to compensate so the glyph
-  // is visually centred under the bar rather than offset.
-  const labelCenterCompensation = labelFont * 0.34;
-  const timeY = compact ? chartH + 166 : chartH + 174;
+  const valueFont = 21;
+  const labelFont = 21;
+  const labelStartY = chartH + 112;
+  const timeY = chartH + 195;
 
   const p = [];
 
@@ -392,7 +395,7 @@ function buildChart(splitRows) {
     const y = (midY - s * pxPerSec).toFixed(1);
     const isZero = s === 0;
     p.push(`<line x1="${yLW}" y1="${y}" x2="${W}" y2="${y}" stroke="${isZero ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.09)"}" stroke-width="${isZero ? 1.5 : 0.9}"/>`);
-    p.push(`<text x="${yLW - 8}" y="${(+y + 4.5).toFixed(1)}" text-anchor="end" fill="${isZero ? "#94a3b8" : "#475569"}" font-size="12" font-family="Inter,sans-serif" font-weight="600">${lbl}</text>`);
+    p.push(`<text x="${yLW - 8}" y="${(+y + 7.2).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="21" font-family="Inter,sans-serif" font-weight="700">${lbl}</text>`);
   }
 
   for (let i = 0; i < rows.length; i++) {
@@ -411,23 +414,37 @@ function buildChart(splitRows) {
 
     if (isFast) {
       const by = (midY - hPx).toFixed(1);
+      // Clamp: an extreme (near-cap) gap would otherwise push this label off the top of the
+      // SVG canvas (negative y), into the ~12px gap below the .sp-head title/legend row.
+      const rawDeltaY = midY - hPx - 14;
+      const deltaY = Math.max(rawDeltaY, valueLabelEdgeClearance);
+      // At the chart's height cap, the bar's own top edge sits only ~4px below the canvas top —
+      // there's no on-canvas position left above it, so a clamped label ends up sitting over the
+      // top of its own (same-color) bar. A background-color halo keeps the digits legible either way.
+      const clamped = deltaY !== rawDeltaY;
+      const haloAttrs = clamped ? ` stroke="#06101e" stroke-width="4" stroke-linejoin="round" paint-order="stroke"` : "";
       p.push(`<rect data-split-bar="${escapeHtml(row.key ?? row.label)}" data-split-mx="${mx}" x="${bx}" y="${by}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
-      p.push(`<text data-split-delta="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${(midY - hPx - 8).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
+      p.push(`<text data-split-delta="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${deltaY.toFixed(1)}" text-anchor="middle" fill="${color}"${haloAttrs} font-size="${valueFont}" font-weight="800" font-family="'Inter Tight',sans-serif">${disp}</text>`);
     } else {
+      // Symmetric floor/ceiling for the bottom edge — not currently reachable at the bar's own
+      // capped height, but keeps the label on-canvas independent of any future height change.
+      const rawDeltaY = midY + hPx + 26;
+      const deltaY = Math.min(rawDeltaY, totalH - valueLabelEdgeClearance);
+      const haloAttrs = deltaY !== rawDeltaY ? ` stroke="#06101e" stroke-width="4" stroke-linejoin="round" paint-order="stroke"` : "";
       p.push(`<rect data-split-bar="${escapeHtml(row.key ?? row.label)}" data-split-mx="${mx}" x="${bx}" y="${midY.toFixed(1)}" width="${barW}" height="${hPx.toFixed(1)}" fill="${color}" rx="4"/>`);
-      p.push(`<text data-split-delta="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${(midY + hPx + 17).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="${valueFont}" font-weight="700" font-family="'Inter Tight',sans-serif">${disp}</text>`);
+      p.push(`<text data-split-delta="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${deltaY.toFixed(1)}" text-anchor="middle" fill="${color}"${haloAttrs} font-size="${valueFont}" font-weight="800" font-family="'Inter Tight',sans-serif">${disp}</text>`);
     }
 
     p.push(`<line x1="${slotX.toFixed(1)}" y1="${chartH + 6}" x2="${slotX.toFixed(1)}" y2="${totalH - 10}" stroke="rgba(255,255,255,0.055)" stroke-width="0.8"/>`);
 
-    const labelParts = stationLabelParts(row.label);
-    const partGap = labelParts.length > 1 ? labelOffset : 0;
-    labelParts.forEach((part, li) => {
-      const labelX = Number(mx) + (li - (labelParts.length - 1) / 2) * partGap + labelCenterCompensation;
-      p.push(`<text data-split-label="${escapeHtml(row.key ?? row.label)}" x="${labelX.toFixed(1)}" y="${labelStartY.toFixed(1)}" text-anchor="start" fill="#94a3b8" font-size="${labelFont}" font-weight="800" font-family="'Inter Tight',sans-serif" letter-spacing="0.8" transform="rotate(${LABEL_ROTATION_DEGREES} ${labelX.toFixed(1)} ${labelStartY.toFixed(1)})">${escapeHtml(part)}</text>`);
-    });
+    const labelText = stationLabelText(row.key, row.label);
+    const labelCenterCompensation = labelFont * 0.34;
+    const labelX = Number(mx) + labelCenterCompensation;
+    p.push(`<text data-split-label="${escapeHtml(row.key ?? row.label)}" data-split-full-label="${escapeHtml(row.label ?? "")}" x="${labelX.toFixed(1)}" y="${labelStartY.toFixed(1)}" text-anchor="start" fill="#94a3b8" font-size="${labelFont}" font-weight="800" font-family="'Inter Tight',sans-serif" letter-spacing="0.4" transform="rotate(${LABEL_ROTATION_DEGREES} ${labelX.toFixed(1)} ${labelStartY.toFixed(1)})">${escapeHtml(labelText)}</text>`);
     if (row.userTime) {
-      p.push(`<text data-split-time="${escapeHtml(row.key ?? row.label)}" x="${mx}" y="${timeY.toFixed(1)}" text-anchor="middle" fill="#f0f6ff" font-size="${compact ? 16 : 17}" font-weight="900" font-family="'Inter Tight',sans-serif">${escapeHtml(row.userTime)}</text>`);
+      const timeX = Number(mx) + (compact ? 7.5 : 8.2);
+      const timeText = row.isPenaltyAdjusted ? `${row.userTime}*` : row.userTime;
+      p.push(`<text data-split-time="${escapeHtml(row.key ?? row.label)}" data-split-raw-time="${escapeHtml(row.rawUserTime ?? "")}" x="${timeX.toFixed(1)}" y="${timeY.toFixed(1)}" text-anchor="start" fill="#f0f6ff" font-size="24" font-weight="900" font-family="'Inter Tight',sans-serif" style="font-variant-numeric: tabular-nums;" transform="rotate(${LABEL_ROTATION_DEGREES} ${timeX.toFixed(1)} ${timeY.toFixed(1)})">${escapeHtml(timeText)}</text>`);
     }
   }
 
@@ -442,15 +459,21 @@ function buildChart(splitRows) {
 export function buildRaceCardHtml(data) {
   const {
     athleteName = "HYROX Athlete",
-    finishTime   = "--:--",
-    targetTime   = null,
-    percentileText = null,
+	    finishTime   = "--:--",
+	    targetTime   = null,
+    targetGapFormatted = null,
+    targetGapSigned = null,
+    targetGapTone = null,
+	    percentileText = null,
     confidenceQualifier = null,
     formaScore   = null,
     mode         = "analyse",
     comparisonBasis = mode === "target" ? "TARGET" : "MEDIAN",
+    comparisonProfileLabel = null,
     strongestStation = null,
     biggestLimiter   = null,
+    fastestControllableWin = null,
+    largestFitnessLimiter = null,
     penaltySummary = null,
     splitRows    = [],
     isDoubles    = false,
@@ -459,21 +482,38 @@ export function buildRaceCardHtml(data) {
   const athleteNameLines = nameLines(athleteName, isDoubles);
   const nfs = nameFontSize(athleteName, isDoubles, athleteNameLines);
   const chart = splitRows.length >= 2 ? buildChart(splitRows) : "";
+  const hasPenaltyAdjustedSplitRows = splitRows.some((row) => row?.isPenaltyAdjusted);
   const hasCards = strongestStation || biggestLimiter;
   const basisLabel = escapeHtml(comparisonBasis || (mode === "target" ? "TARGET" : "MEDIAN"));
+  const splitProfileBasisLabel = escapeHtml(comparisonProfileLabel || comparisonBasis || (mode === "target" ? "TARGET" : "MEDIAN"));
   const modeTitle = mode === "target" ? "TARGET" : "ANALYSE";
-  const modeSubtitle = comparisonBasis === "TARGET BENCHMARK"
+	  const modeSubtitle = comparisonBasis === "TARGET BENCHMARK"
     ? "TARGET BENCHMARK"
     : comparisonBasis === "TARGET"
     ? "TARGET COMPARISON"
     : "BENCHMARK MEDIAN";
-  const percentileDisplay = percentileText && confidenceQualifier
-    ? `${percentileText} (${confidenceQualifier})`
-    : percentileText;
+	  const percentileDisplay = percentileText && confidenceQualifier
+	    ? `${percentileText} (${confidenceQualifier})`
+	    : percentileText;
+  const targetGapMeta = targetGapFormatted
+    ? targetGapTone === "positive"
+      ? `AHEAD BY ${targetGapFormatted}`
+      : targetGapTone === "neutral"
+        ? "ON TARGET"
+        : `${targetGapSigned ?? targetGapFormatted} TO TARGET`
+    : "YOU'VE GOT MORE IN THE TANK.";
 
   // Seconds-gap label for the limiter stat box.
   const limiterGapText = biggestLimiter?.rankText
     ? escapeHtml(biggestLimiter.rankText.toUpperCase())
+    : null;
+  const secondaryPenaltyLine = fastestControllableWin
+    && !biggestLimiter?.isPenalty
+    && fastestControllableWin.name
+    ? `FASTEST WIN: ${escapeHtml(fastestControllableWin.name.toUpperCase())}${fastestControllableWin.potentialGain ? ` ${escapeHtml(fastestControllableWin.potentialGain)}` : ""}`
+    : null;
+  const secondaryFitnessLine = biggestLimiter?.isPenalty && largestFitnessLimiter?.name
+    ? `FITNESS LIMITER: ${escapeHtml(largestFitnessLimiter.name.toUpperCase())}${largestFitnessLimiter.rankText ? ` ${escapeHtml(largestFitnessLimiter.rankText.toUpperCase())}` : ""}`
     : null;
 
   return `<!DOCTYPE html>
@@ -508,8 +548,6 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .h-mid   { flex: 1; display: flex; justify-content: center; align-items: center; }
 
 .logo-row { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
-.brand-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.brand-site { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; color: var(--muted); line-height: 1.1; }
 
 .t-hyrox { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 68px; line-height: 1; color: var(--text); letter-spacing: -1px; }
 .t-perf  { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 40px; line-height: 1.1; color: var(--cyan); letter-spacing: -0.5px; }
@@ -526,12 +564,12 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .sc:last-child  { padding-right: 0; }
 .sdiv { width: 1px; background: var(--border); flex-shrink: 0; align-self: stretch; margin: 4px 0; }
 
-.slbl { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; color: var(--sub); text-transform: uppercase; margin-bottom: 3px; }
+.slbl { font-size: 21px; font-weight: 700; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
 .sname { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: ${nfs}px; line-height: 1.06; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .name-wh { color: var(--text); }
 .name-cy { color: var(--cyan); }
 .stime { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 54px; line-height: 1.02; color: var(--text); letter-spacing: -0.5px; }
-.smeta { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--cyan); letter-spacing: 0.2px; }
+.smeta { display: flex; align-items: center; gap: 7px; margin-top: 6px; font-size: 21px; font-weight: 700; color: var(--cyan); letter-spacing: 0.1px; line-height: 1.12; }
 .smeta.am { color: var(--amber); }
 .smeta svg { flex-shrink: 0; }
 
@@ -541,37 +579,36 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   display: flex; flex-direction: column; padding: 15px 18px 14px; }
 .card.cy-card { border-left: 3px solid var(--cyan); }
 .card.am-card { border-left: 3px solid var(--amber); }
-.card-hdr { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 10px; }
+.card-hdr { font-size: 21px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
 .card-hdr.cy { color: var(--cyan); } .card-hdr.am { color: var(--amber); }
 .card-body { display: flex; align-items: flex-start; gap: 14px; }
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 28px; line-height: 1.15; color: var(--text); }
-.card-sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-top: 4px; }
+.card-sub { font-size: 21px; font-weight: 500; color: var(--muted); margin-top: 3px; line-height: 1.12; }
 .stat-row { display: flex; gap: 10px; margin-top: 8px; }
 .stat-box { flex: 1; background: rgba(0,0,0,0.28); border-radius: 6px; padding: 8px 10px; }
-.stat-lbl { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: var(--sub); text-transform: uppercase; }
+.stat-lbl { font-size: 21px; font-weight: 700; letter-spacing: 0.2px; color: var(--muted); text-transform: uppercase; line-height: 1.02; }
 .stat-val { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 28px; line-height: 1.1; }
 .stat-val.am { color: var(--amber); }
-.stat-sub { font-size: 9px; font-weight: 600; letter-spacing: 1px; color: var(--sub); text-transform: uppercase; margin-top: 2px; }
 .card-div { height: 1px; background: var(--border); margin: 10px 0 8px; }
-.card-cta { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; line-height: 1.55; text-transform: uppercase; }
+.card-cta { font-size: 21px; font-weight: 700; letter-spacing: 0.1px; line-height: 1.18; text-transform: uppercase; }
 .card-cta.cy { color: var(--cyan); } .card-cta.am { color: var(--amber); }
 .cta-icon { display: inline-block; margin-right: 5px; vertical-align: middle; }
 
 /* ─── SPLIT PROFILE ─── */
 .splits { padding: 16px 44px 0; flex: 1; min-height: 0; overflow: hidden; }
-.sp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.sp-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 19px; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
+.sp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.sp-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 21px; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
 .sp-legend { display: flex; align-items: center; gap: 16px; }
-.leg { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.3px; }
+.leg { display: flex; align-items: center; gap: 7px; font-size: 21px; font-weight: 800; color: var(--muted); letter-spacing: 0.2px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .dot.bl { background: var(--blue); } .dot.rd { background: var(--neg); }
 
 /* ─── FOOTER ─── */
-.footer { padding: 16px 44px 26px; display: flex; align-items: center; justify-content: space-between;
+.footer { padding: 16px 44px; display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0; border-top: 1px solid var(--border); margin-top: auto; }
 .f-left { display: flex; align-items: center; gap: 10px; }
-.f-right { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; color: var(--muted); }
+.f-right { font-size: 21px; font-weight: 700; letter-spacing: 0.2px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -582,9 +619,6 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
     <div class="h-left">
       <div class="logo-row">
         ${formaLogoMark(38)}
-        <div class="brand-copy">
-          <span class="brand-site">www.getforma.fit</span>
-        </div>
       </div>
       <div class="t-hyrox">HYROX</div>
       <div class="t-perf">PERFORMANCE</div>
@@ -612,17 +646,18 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 	      ${penaltySummary ? `<div class="smeta am">
 	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
 	        PENALTIES: ${escapeHtml(penaltySummary.value)}
-	      </div>` : ""}
-	    </div>
+	          </div>` : ""}
+	          ${secondaryPenaltyLine || secondaryFitnessLine ? `<div class="card-sub">${secondaryPenaltyLine ?? secondaryFitnessLine}</div>` : ""}
+	        </div>
     <div class="sdiv"></div>
     <div class="sc">
       ${targetTime ? `
-      <div class="slbl">Target Time</div>
-      <div class="stime">${escapeHtml(targetTime)}</div>
-      <div class="smeta am">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-        YOU'VE GOT MORE IN THE TANK.
-      </div>` : `
+	      <div class="slbl">Target Time</div>
+	      <div class="stime">${escapeHtml(targetTime)}</div>
+	      <div class="smeta ${targetGapTone === "positive" ? "" : "am"}">
+	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+	        ${escapeHtml(targetGapMeta)}
+	      </div>` : `
       <div class="slbl">Mode</div>
       <div class="stime" style="font-size:32px;color:var(--cyan);margin-top:4px;">${modeTitle}</div>
       <div class="smeta" style="margin-top:6px;">${escapeHtml(modeSubtitle)}</div>`}
@@ -633,34 +668,32 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   ${hasCards ? `<div class="cards">
 
     ${strongestStation ? `<div class="card cy-card">
-      <div class="card-hdr cy">Strongest Station</div>
+	      <div class="card-hdr cy">${escapeHtml(strongestStation.cardHeader ?? "Strongest Station")}</div>
       <div class="card-body">
         <div>${hexIcon(strongestStation.name, "#22d3ee")}</div>
         <div class="card-info">
           <div class="card-title">${escapeHtml(strongestStation.name)}</div>
-          ${strongestStation.percentile ? `<div class="card-sub">${escapeHtml(strongestStation.name)} — ${escapeHtml(strongestStation.percentile)}</div>` : ""}
+          ${strongestStation.percentile ? `<div class="card-sub">${escapeHtml(strongestStation.percentile)}</div>` : ""}
         </div>
       </div>
       <div class="card-div"></div>
-      <div class="card-cta cy">YOU POWERED THROUGH HERE.<br/>KEEP LEVERAGING THIS STRENGTH.</div>
+	      <div class="card-cta cy">${escapeHtml(strongestStation.policyStatus === "fastest_ahead_split_only" ? "PROTECT THIS RELATIVE EDGE." : "KEEP LEVERAGING THIS STRENGTH.")}</div>
     </div>` : ""}
 
     ${biggestLimiter ? `<div class="card am-card">
-	      <div class="card-hdr am">${biggestLimiter.isPenalty ? "Biggest Opportunity" : "Biggest Limiter"}</div>
+	      <div class="card-hdr am">${escapeHtml(biggestLimiter.cardHeader ?? (biggestLimiter.isPenalty ? "Biggest Opportunity" : "Biggest Limiter"))}</div>
       <div class="card-body">
         <div>${hexIcon(biggestLimiter.name, "#fbbf24")}</div>
         <div class="card-info">
           <div class="card-title">${escapeHtml(biggestLimiter.name)}</div>
 	          ${(limiterGapText || biggestLimiter.potentialGain) ? `<div class="stat-row">
 	            ${limiterGapText ? `<div class="stat-box">
-	              <div class="stat-lbl">Split Gap</div>
+	              <div class="stat-lbl">Time Gap</div>
 	              <div class="stat-val am">${limiterGapText}</div>
-	              <div class="stat-sub">Seconds</div>
 	            </div>` : ""}
 	            ${biggestLimiter.potentialGain ? `<div class="stat-box">
 	              <div class="stat-lbl">${biggestLimiter.isPenalty ? "Fastest Win" : "Potential Gain"}</div>
-	              <div class="stat-val am">${escapeHtml(biggestLimiter.potentialGain)}</div>
-	              <div class="stat-sub">${biggestLimiter.isPenalty ? "Execution Time" : "In This Station"}</div>
+	              <div class="stat-val am">Up to ${escapeHtml(biggestLimiter.potentialGain)}</div>
 	            </div>` : ""}
           </div>` : ""}
         </div>
@@ -668,7 +701,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
       <div class="card-div"></div>
       <div class="card-cta am">
         <svg class="cta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-	        ${biggestLimiter.isPenalty ? "CLEAN THIS UP FIRST.<br/>RECLAIM TIME BEFORE CHASING FITNESS." : "THIS IS WHAT HELD YOU BACK.<br/>FOCUS HERE, UNLOCK BIG TIME."}
+		        ${biggestLimiter.isPenalty ? "RECLAIM THIS TIME FIRST." : biggestLimiter.actionText ? escapeHtml(biggestLimiter.actionText) : "FOCUS HERE TO UNLOCK BIG TIME."}
 	      </div>
     </div>` : ""}
 
@@ -677,13 +710,14 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <!-- ── SPLIT PROFILE ── -->
   ${chart ? `<div class="splits">
     <div class="sp-head">
-      <div class="sp-title">Race Split Profile</div>
+      <div class="sp-title">Race Split Profile &mdash; VS ${splitProfileBasisLabel}</div>
       <div class="sp-legend">
-        <div class="leg"><div class="dot bl"></div>FASTER THAN ${basisLabel}</div>
-        <div class="leg"><div class="dot rd"></div>SLOWER THAN ${basisLabel}</div>
+        <div class="leg"><div class="dot bl"></div>FASTER</div>
+        <div class="leg"><div class="dot rd"></div>SLOWER</div>
       </div>
     </div>
     ${chart}
+    ${hasPenaltyAdjustedSplitRows ? `<div style="font-size:21px;font-weight:700;color:#8b5cf6;margin-top:4px;">* Penalty-adjusted performance time shown; raw split time includes recorded penalty.</div>` : ""}
   </div>` : ""}
 
   <!-- ── FOOTER ── -->

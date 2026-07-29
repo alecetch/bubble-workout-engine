@@ -7,12 +7,16 @@ import path from "node:path";
 import { requireInternalToken } from "../../src/middleware/auth.js";
 import {
   canonicalJsonStringify,
+  artifactPrimaryConsistency,
+  contractSlotAudit,
   contentHashForAnalysisJson,
   createAdminHyroxTestHarnessRouter,
   emailHtmlEntriesFromHarnessEntries,
+  normalizeHarnessMarkdownText,
   normalizeSex,
   runHarnessMode,
   sharedContextFromRequestBody,
+  structuredExpectationConsistency,
 } from "../../src/routes/adminHyroxTestHarness.js";
 
 const nativeFetch = globalThis.fetch;
@@ -197,6 +201,637 @@ test("canonicalJsonStringify and content hashing are stable across object insert
   assert.notEqual(contentHashForAnalysisJson(first), contentHashForAnalysisJson(different));
 });
 
+test("artifactPrimaryConsistency fails unqualified cross-artifact primary mismatches", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your route to 55:00: start with Wall Balls",
+        emailHtml: "<p>The Wall Balls station is the biggest target opportunity. Biggest opportunities: RoxZone.</p>",
+      },
+      webReport: { browserSummary: { heroInsight: { title: "The Wall Balls station is your biggest opportunity" }, biggestLimiter: { label: "Wall Balls" } } },
+      raceCardData: { biggestLimiter: { name: "Wall Balls" } },
+      carouselReport: { slides: [{ biggest_limiter: "WALL BALLS" }] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /emailMain=RoxZone/);
+  assert.match(audit.detail, /expected Wall Balls/);
+});
+
+test("artifactPrimaryConsistency audits artifacts against narrative primary when present", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      narrative: {
+        headlineMode: "single_track",
+        primaryOpportunity: { normalizedLabel: "Wall Balls", displayLabel: "Wall Balls" },
+        rankDisplays: { allowed: true },
+      },
+      emailReport: {
+        emailSubject: "Your route to 55:00: start with Wall Balls",
+        emailHtml: "<p>The Wall Balls station is the biggest target opportunity.</p>",
+      },
+      webReport: { browserSummary: { heroInsight: { title: "The Wall Balls station is your biggest opportunity" }, biggestLimiter: { label: "Wall Balls" } } },
+      raceCardData: { biggestLimiter: { name: "RoxZone" } },
+      carouselReport: { slides: [{ biggest_limiter: "WALL BALLS" }] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.equal(audit.primary, "Wall Balls");
+  assert.match(audit.detail, /expected Wall Balls/);
+  assert.match(audit.detail, /raceCard=RoxZone/);
+});
+
+test("artifactPrimaryConsistency passes secondary RoxZone wording when primary agrees", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your route to 55:00: start with Wall Balls",
+        emailHtml: "<p>The Wall Balls station is the biggest target opportunity. Biggest opportunity: Wall Balls. Secondary opportunities: RoxZone.</p>",
+      },
+      webReport: { browserSummary: { heroInsight: { title: "The Wall Balls station is your biggest opportunity" }, biggestLimiter: { label: "Wall Balls" } } },
+      raceCardData: { biggestLimiter: { name: "Wall Balls" } },
+      carouselReport: { slides: [{ biggest_limiter: "WALL BALLS" }] },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.equal(audit.primary, "Wall Balls");
+});
+
+test("artifactPrimaryConsistency ignores email header and footer domains when extracting primary", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your route to 55:00: start with Wall Balls",
+        emailHtml: `
+          <span>www.getforma.fit</span>
+          <span>MAIN INSIGHT</span>
+          <p>The Wall Balls station is the biggest target opportunity. Biggest opportunity: Wall Balls.</p>
+          <footer>www.getforma.fit</footer>
+        `,
+      },
+      webReport: { browserSummary: { biggestLimiter: { label: "Wall Balls" } } },
+      raceCardData: { biggestLimiter: { name: "Wall Balls" } },
+      carouselReport: { slides: [{ biggest_limiter: "WALL BALLS" }] },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.equal(audit.fields.emailMain, "Wall Balls");
+});
+
+test("artifactPrimaryConsistency still fails true email-main mismatches after chrome stripping", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your route to 1:00:00: start with Burpee Broad Jump",
+        emailHtml: `
+          <span>www.getforma.fit</span>
+          <span>MAIN INSIGHT</span>
+          <p>RoxZone is costing about 1:26. Biggest opportunity: RoxZone.</p>
+          <footer>www.getforma.fit</footer>
+        `,
+      },
+      webReport: { browserSummary: { heroInsight: { title: "The Burpee Broad Jump station is your biggest opportunity" }, biggestLimiter: { label: "Burpee Broad Jump" } } },
+      raceCardData: { biggestLimiter: { name: "Burpee Broad Jump" } },
+      carouselReport: { slides: [{ biggest_limiter: "BURPEE BROAD JUMP" }] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /emailMain=RoxZone/);
+  assert.match(audit.detail, /expected Burpee Broad Jump/);
+});
+
+test("artifactPrimaryConsistency treats penalties as secondary in fitness-first two-track reports", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your route to 1:00:00: start with Burpee Broad Jump",
+        emailHtml: "<p>Burpee Broad Jump is the main directional fitness opportunity. Stations are the largest fitness category gap. Fastest controllable win: penalties.</p>",
+      },
+      webReport: {
+        browserSummary: {
+          heroInsight: { title: "The Burpee Broad Jump station is your biggest opportunity" },
+          fastestControllableWin: { label: "Penalties" },
+          largestFitnessLimiter: { label: "Burpee Broad Jump" },
+          biggestLimiter: { label: "Burpee Broad Jump" },
+        },
+      },
+      raceCardData: {
+        artifactHeadlineMode: "fitness_first_with_penalty_win",
+        biggestLimiter: { name: "Burpee Broad Jump" },
+      },
+      carouselReport: {
+        slides: [{ biggest_limiter: "BURPEE BROAD JUMP", artifact_headline_mode: "fitness_first_with_penalty_win" }],
+      },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.equal(audit.fields.emailMain, "Burpee Broad Jump");
+  assert.equal(audit.fields.browserLimiter, "Burpee Broad Jump");
+});
+
+test("artifactPrimaryConsistency extracts contract-first run primary email openers", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your route to 1:30:00: start with Run 2",
+        emailHtml: "<span>MAIN INSIGHT</span><p>Run 2 is the main target limiter. Running is the largest target category gap. Biggest station opportunities: Sled Pull. Fastest controllable win: penalties.</p>",
+      },
+      webReport: {
+        browserSummary: {
+          heroInsight: { title: "Run 2 is your biggest opportunity" },
+          fastestControllableWin: { label: "Penalties" },
+          largestFitnessLimiter: { label: "Run 2" },
+          biggestLimiter: { label: "Run 2" },
+        },
+      },
+      raceCardData: {
+        artifactHeadlineMode: "fitness_first_with_penalty_win",
+        biggestLimiter: { name: "Run 2" },
+      },
+      carouselReport: {
+        slides: [{ biggest_limiter: "RUN 2", artifact_headline_mode: "fitness_first_with_penalty_win" }],
+      },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.equal(audit.fields.emailMain, "Run 2");
+});
+
+test("artifactPrimaryConsistency allows penalties as primary in penalty-first reports", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your fastest win is penalties",
+        emailHtml: "<p>Penalties are your fastest controllable win and the primary opportunity.</p>",
+      },
+      webReport: {
+        browserSummary: {
+          fastestControllableWin: { label: "Penalties" },
+          largestFitnessLimiter: { label: "Run 2" },
+          biggestLimiter: { label: "Penalties" },
+        },
+      },
+      raceCardData: {
+        artifactHeadlineMode: "penalty_first",
+        biggestLimiter: { name: "Penalties" },
+      },
+      carouselReport: {
+        slides: [{ biggest_limiter: "PENALTIES", artifact_headline_mode: "penalty_first" }],
+      },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.equal(audit.fields.browserLimiter, "Penalties");
+});
+
+test("artifactPrimaryConsistency still fails true two-track primary mismatches", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      emailReport: {
+        emailSubject: "Your route to 1:00:00: start with Burpee Broad Jump",
+        emailHtml: "<p>Burpee Broad Jump is the biggest target opportunity. Fastest controllable win: penalties.</p>",
+      },
+      webReport: {
+        browserSummary: {
+          fastestControllableWin: { label: "Penalties" },
+          largestFitnessLimiter: { label: "Burpee Broad Jump" },
+        },
+      },
+      raceCardData: {
+        artifactHeadlineMode: "fitness_first_with_penalty_win",
+        biggestLimiter: { name: "Run 2" },
+      },
+      carouselReport: {
+        slides: [{ biggest_limiter: "RUN 2", artifact_headline_mode: "fitness_first_with_penalty_win" }],
+      },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /raceCard=Run 2/);
+  assert.match(audit.detail, /carousel=Run 2/);
+});
+
+test("artifactPrimaryConsistency fails category-first email main insight policy violations", () => {
+  const audit = artifactPrimaryConsistency({
+    result: {
+      narrative: {
+        headlineMode: "single_track",
+        primaryClaim: { label: "Run 1", normalizedLabel: "Run 1", type: "run", segmentKey: "run_1" },
+        primaryOpportunity: { normalizedLabel: "Run 1", displayLabel: "Run 1" },
+      },
+      emailReport: {
+        emailSubject: "Your route to 1:00:00: start with Run 1",
+        emailHtml: "<span>MAIN INSIGHT</span><p>The main limiter is station performance. Biggest opportunity: Run 1.</p>",
+      },
+      webReport: { browserSummary: { biggestLimiter: { label: "Run 1" } } },
+      raceCardData: { mode: "analyse", biggestLimiter: { name: "Run 1" } },
+      carouselReport: { slides: [{ biggest_limiter: "RUN 1" }] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /category-first/i);
+});
+
+test("artifactPrimaryConsistency fails target race cards missing exact target gap", () => {
+  const audit = artifactPrimaryConsistency({
+    mode: { calculatorMode: "target", targetFinishTimeSeconds: 4200 },
+    result: {
+      input: { calculatorMode: "target", targetFinishTimeSeconds: 4200 },
+      narrative: {
+        headlineMode: "single_track",
+        primaryClaim: { label: "Wall Balls", normalizedLabel: "Wall Balls", type: "station", segmentKey: "wall_balls" },
+        primaryOpportunity: { normalizedLabel: "Wall Balls", displayLabel: "Wall Balls" },
+      },
+      emailReport: {
+        emailSubject: "Your route to 1:10:00: start with Wall Balls",
+        emailHtml: "<span>MAIN INSIGHT</span><p>The Wall Balls station is the main target opportunity. Station performance is the largest category gap.</p>",
+      },
+      webReport: { browserSummary: { biggestLimiter: { label: "Wall Balls" } } },
+      raceCardData: { mode: "target", targetTime: "1:10:00", biggestLimiter: { name: "Wall Balls" } },
+      carouselReport: { slides: [{ biggest_limiter: "WALL BALLS" }] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /missing exact target gap/i);
+});
+
+test("artifactPrimaryConsistency passes contract-first target email with race-card target gap", () => {
+  const audit = artifactPrimaryConsistency({
+    mode: { calculatorMode: "target", targetFinishTimeSeconds: 4200 },
+    result: {
+      input: { calculatorMode: "target", targetFinishTimeSeconds: 4200 },
+      narrative: {
+        headlineMode: "single_track",
+        primaryClaim: { label: "Run 1", normalizedLabel: "Run 1", type: "run", segmentKey: "run_1" },
+        primaryOpportunity: { normalizedLabel: "Run 1", displayLabel: "Run 1" },
+      },
+      emailReport: {
+        emailSubject: "Your route to 1:10:00: start with Run 1",
+        emailHtml: "<span>MAIN INSIGHT</span><p>Run 1 is the main target opportunity. Treat that as sustainable opening pace control, not a cue to sprint the first kilometre.</p>",
+      },
+      webReport: { browserSummary: { biggestLimiter: { label: "Run 1" } } },
+      raceCardData: { mode: "target", targetTime: "1:10:00", targetGapFormatted: "7:07", biggestLimiter: { name: "Run 1" } },
+      carouselReport: { slides: [{ biggest_limiter: "RUN 1" }] },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.equal(audit.fields.emailMain, "Run 1");
+});
+
+test("structuredExpectationConsistency fails stale case expectations before artifact comparison", () => {
+  const audit = structuredExpectationConsistency({
+    mode: { calculatorMode: "target" },
+    expectations: {
+      calculatorMode: "target",
+      targetFinishTimeSeconds: 5100,
+      analysisScope: "no_benchmark_data",
+      headlineMode: "penalty_first",
+      expectedTone: "ahead",
+      primaryLabel: "Penalties",
+      rankAllowed: false,
+    },
+    result: {
+      narrative: {
+        inputFacts: { calculatorMode: "target", targetTimeSeconds: 4500, analysisScope: "full", benchmarkAvailable: true },
+        primaryTrack: { headlineMode: "fitness_first_with_penalty_win", primary: { label: "Wall Balls" } },
+        primaryClaim: { label: "Wall Balls" },
+        targetAssessment: { status: "behind" },
+        rankPolicy: { allowed: true },
+      },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /targetFinishTimeSeconds expected 5100/i);
+  assert.match(audit.detail, /analysisScope expected no_benchmark_data/i);
+  assert.match(audit.detail, /headlineMode expected penalty_first/i);
+});
+
+test("structuredExpectationConsistency allows labelled ad hoc cases with missing expectations", () => {
+  const audit = structuredExpectationConsistency({
+    label: "Penalty-heavy - penalty-first thesis",
+    mode: { calculatorMode: "target" },
+    result: {
+      narrative: {
+        inputFacts: { calculatorMode: "target", targetTimeSeconds: 5400, analysisScope: "full", benchmarkAvailable: true },
+      },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.match(audit.detail, /ad hoc/i);
+  assert.equal(audit.rows[0].expected, "optional");
+});
+
+test("structuredExpectationConsistency fails explicit canonical cases with missing expectations", () => {
+  const audit = structuredExpectationConsistency({
+    canonical: true,
+    mode: { calculatorMode: "target" },
+    result: {
+      narrative: {
+        inputFacts: { calculatorMode: "target", targetTimeSeconds: 5400, analysisScope: "full", benchmarkAvailable: true },
+      },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /missing structured expectations/i);
+  assert.equal(audit.rows[0].expected, "required");
+});
+
+test("structuredExpectationConsistency fails canonical expectations missing required fields", () => {
+  const audit = structuredExpectationConsistency({
+    mode: { calculatorMode: "target" },
+    expectations: { canonical: true, headlineMode: "penalty_first" },
+    result: {
+      narrative: {
+        inputFacts: { calculatorMode: "target", targetTimeSeconds: 5400, analysisScope: "full", benchmarkAvailable: true },
+        primaryTrack: { headlineMode: "penalty_first" },
+        targetAssessment: { status: "behind" },
+      },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /canonical expectation missing targetFinishTimeSeconds/i);
+  assert.match(audit.detail, /canonical expectation missing analysisScope/i);
+  assert.ok(audit.rows.some((row) => row.expectation === "targetFinishTimeSeconds" && row.pass === false));
+});
+
+test("structuredExpectationConsistency allows unlabelled ad hoc cases without expectations", () => {
+  const audit = structuredExpectationConsistency({
+    mode: { calculatorMode: "target" },
+    result: {
+      narrative: {
+        inputFacts: { calculatorMode: "target", targetTimeSeconds: 5400, analysisScope: "full", benchmarkAvailable: true },
+      },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+  assert.match(audit.detail, /ad hoc/i);
+});
+
+test("contractSlotAudit fails artifacts that agree with each other but disagree with contract slots", () => {
+  const audit = contractSlotAudit({
+    mode: { calculatorMode: "target" },
+    result: {
+      narrative: {
+        artifactSlots: {
+          email: { subjectPrimary: "Wall Balls", mainInsightOpening: "Wall Balls is the main target opportunity." },
+          raceCard: { heroPrimary: "Wall Balls", targetGap: "6:29", strengthLabel: "Farmers Carry" },
+          carousel: { slide1Primary: "WALL BALLS", ctaHeadline: "FIND YOUR TARGET ROUTE", strengthLabel: "FARMERS CARRY", slide2Gain: { station: "FARMERS CARRY" } },
+        },
+        targetAssessment: { displayGap: "6:29", ctaHeadline: "FIND YOUR TARGET ROUTE" },
+        gapReconciliation: { requiresOffsetWording: false },
+        roxzonePolicy: { copyPrecision: "exact" },
+      },
+      emailReport: {
+        emailSubject: "Your route to 1:15:00: start with Wall Balls",
+        emailHtml: "<span>MAIN INSIGHT</span><p>Wall Balls is the main target opportunity.</p>",
+      },
+      raceCardData: { mode: "target", targetGapFormatted: "6:28", biggestLimiter: { name: "Wall Balls" }, strongestStation: { name: "SkiErg" } },
+      carouselReport: { slides: [
+        { biggest_limiter: "WALL BALLS" },
+        { biggest_gain: { station: "SKIERG" } },
+        { station: "SKIERG" },
+        {},
+        {},
+        { headline: "FIND YOUR NEXT MARGINAL GAIN" },
+      ] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /race-card target gap 6:28 != 6:29/);
+  assert.match(audit.detail, /carousel CTA FIND YOUR NEXT MARGINAL GAIN != FIND YOUR TARGET ROUTE/);
+  assert.match(audit.detail, /carousel strength SKIERG != FARMERS CARRY/);
+});
+
+test("contractSlotAudit passes when artifacts render resolved contract slots", () => {
+  const audit = contractSlotAudit({
+    mode: { calculatorMode: "target" },
+    result: {
+      narrative: {
+        artifactSlots: {
+          email: { subjectPrimary: "Run 1", mainInsightOpening: "Run 1 is the main target opportunity." },
+          raceCard: { heroPrimary: "Run 1", targetGap: "7:07", strengthLabel: "NO RELIABLE STRENGTH" },
+          carousel: { slide1Primary: "RUN 1", ctaHeadline: "FIND YOUR TARGET ROUTE", strengthLabel: "NO RELIABLE STRENGTH", slide2Gain: { station: "NO SPLIT AHEAD" } },
+        },
+        targetAssessment: { displayGap: "7:07", ctaHeadline: "FIND YOUR TARGET ROUTE" },
+        gapReconciliation: { requiresOffsetWording: false },
+        roxzonePolicy: { copyPrecision: "exact" },
+      },
+      emailReport: {
+        emailSubject: "Your route to 1:10:00: start with Run 1",
+        emailHtml: "<span>MAIN INSIGHT</span><p>Run 1 is the main target opportunity.</p>",
+      },
+      raceCardData: { mode: "target", targetGapFormatted: "7:07", biggestLimiter: { name: "Run 1" } },
+      carouselReport: { slides: [
+        { biggest_limiter: "RUN 1" },
+        { biggest_gain: { station: "NO SPLIT AHEAD" } },
+        { station: "NO RELIABLE STRENGTH" },
+        {},
+        {},
+        { headline: "FIND YOUR TARGET ROUTE" },
+      ] },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+});
+
+test("contractSlotAudit fails a generic Mode 1 subject even when body and visual artifacts agree", () => {
+  const audit = contractSlotAudit({
+    mode: { calculatorMode: "analyse" },
+    result: {
+      narrative: {
+        artifactSlots: {
+          email: { subjectPrimary: "RoxZone", mainInsightOpening: "RoxZone is the main opportunity." },
+          raceCard: { heroPrimary: "RoxZone", strengthLabel: "Run 8" },
+          carousel: { slide1Primary: "ROXZONE", ctaHeadline: "TIGHTEN YOUR RACE FLOW", strengthLabel: "RUN 8", slide2Gain: { station: "RUN 8" } },
+        },
+        targetAssessment: { ctaHeadline: "TIGHTEN YOUR RACE FLOW" },
+        gapReconciliation: { requiresOffsetWording: false },
+        roxzonePolicy: { copyPrecision: "exact" },
+      },
+      emailReport: {
+        emailSubject: "You're in the top 9% of sub-60 finishers. Here's the next refinement.",
+        emailHtml: "<span>MAIN INSIGHT</span><p>RoxZone is the main opportunity.</p>",
+      },
+      raceCardData: { biggestLimiter: { name: "RoxZone" }, strongestStation: { name: "Run 8" } },
+      carouselReport: { slides: [
+        { biggest_limiter: "ROXZONE" },
+        { biggest_gain: { station: "RUN 8" } },
+        { station: "RUN 8" },
+        {},
+        {},
+        { headline: "TIGHTEN YOUR RACE FLOW" },
+      ] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /email subject missing RoxZone/);
+});
+
+test("contractSlotAudit fails raw reconciliation rendered before the contract reconciliation", () => {
+  const contractReconciliation = "Station performance is the largest category gap at +3:30. Running is ahead of the comparison, which offsets a large part of that. Even accounting for that offset, the total gap is +1:37.";
+  const audit = contractSlotAudit({
+    mode: { calculatorMode: "analyse" },
+    result: {
+      narrative: {
+        artifactSlots: {
+          email: { subjectPrimary: "Burpee Broad Jump", reconciliation: contractReconciliation, mainInsightOpening: `The Burpee Broad Jump station is the main opportunity. ${contractReconciliation}` },
+          raceCard: { heroPrimary: "Burpee Broad Jump", strengthLabel: "Run 8" },
+          carousel: { slide1Primary: "BURPEE BROAD JUMP", ctaHeadline: "FIND YOUR BOTTLENECK", strengthLabel: "RUN 8", slide2Gain: { station: "RUN 8" }, reconciliation: contractReconciliation },
+        },
+        targetAssessment: { ctaHeadline: "FIND YOUR BOTTLENECK" },
+        gapReconciliation: { requiresOffsetWording: true },
+        roxzonePolicy: { copyPrecision: "exact" },
+      },
+      emailReport: {
+        emailSubject: "Burpee Broad Jump: You're in the sub-100 band. Here's the route to sub-95.",
+        emailHtml: `<span>MAIN INSIGHT</span><p>Against the sub-95 benchmark median, your largest positive gap is stations: +5:30. ${contractReconciliation}</p>`,
+      },
+      raceCardData: { biggestLimiter: { name: "Burpee Broad Jump" }, strongestStation: { name: "Run 8" } },
+      carouselReport: { slides: [
+        { biggest_limiter: "BURPEE BROAD JUMP" },
+        { biggest_gain: { station: "RUN 8" } },
+        { station: "RUN 8" },
+        {},
+        {},
+        { headline: "FIND YOUR BOTTLENECK" },
+      ] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /local reconciliation before contract reconciliation/);
+});
+
+test("contractSlotAudit fails fastest-ahead run splits labelled as strongest station", () => {
+  const audit = contractSlotAudit({
+    mode: { calculatorMode: "analyse" },
+    result: {
+      narrative: {
+        artifactSlots: {
+          email: { subjectPrimary: "Run 7", mainInsightOpening: "Run 7 is the main opportunity." },
+          raceCard: { heroPrimary: "Run 7", strengthLabel: "Run 8" },
+          carousel: { slide1Primary: "RUN 7", ctaHeadline: "FIND YOUR BOTTLENECK", strengthLabel: "RUN 8", slide2Gain: { station: "RUN 8" } },
+        },
+        targetAssessment: { ctaHeadline: "FIND YOUR BOTTLENECK" },
+        gapReconciliation: { requiresOffsetWording: false },
+        strengthPolicy: { status: "fastest_ahead_split_only", displayLabel: "Run 8" },
+        roxzonePolicy: { copyPrecision: "exact" },
+      },
+      emailReport: {
+        emailSubject: "Run 7: You're in the 120:00+ band. Here's the route to 105:00-119:59.",
+        emailHtml: "<span>MAIN INSIGHT</span><p>Run 7 is the main opportunity.</p>",
+      },
+      raceCardData: { biggestLimiter: { name: "Run 7" }, strongestStation: { name: "Run 8", cardHeader: "Strongest Station", markdownLabel: "Strongest station" } },
+      carouselReport: { slides: [
+        { biggest_limiter: "RUN 7" },
+        { biggest_gain: { station: "RUN 8" } },
+        { station: "RUN 8" },
+        {},
+        {},
+        { headline: "FIND YOUR BOTTLENECK" },
+      ] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /fastest-ahead split rendered as strongest station/);
+});
+
+test("contractSlotAudit fails fastest-ahead split feature lists labelled as strongest station", () => {
+  const audit = contractSlotAudit({
+    mode: { calculatorMode: "analyse" },
+    result: {
+      narrative: {
+        artifactSlots: {
+          email: { subjectPrimary: "Run 7", mainInsightOpening: "Run 7 is the main opportunity." },
+          raceCard: { heroPrimary: "Run 7", strengthLabel: "Run 8" },
+          carousel: {
+            slide1Primary: "RUN 7",
+            ctaHeadline: "FIND YOUR BOTTLENECK",
+            strengthLabel: "RUN 8",
+            slide2Gain: { station: "RUN 8" },
+            features: ["Biggest Limiter", "Time Potential", "Best Relative Split", "Percentile Ranking", "Race Efficiency Score"],
+          },
+        },
+        targetAssessment: { ctaHeadline: "FIND YOUR BOTTLENECK" },
+        gapReconciliation: { requiresOffsetWording: false },
+        strengthPolicy: { status: "fastest_ahead_split_only", displayLabel: "Run 8" },
+        roxzonePolicy: { copyPrecision: "exact" },
+      },
+      emailReport: {
+        emailSubject: "Run 7 is your main HYROX opportunity",
+        emailHtml: "<span>MAIN INSIGHT</span><p>Run 7 is the main opportunity.</p>",
+      },
+      raceCardData: { biggestLimiter: { name: "Run 7" }, strongestStation: { name: "Run 8", cardHeader: "Best Relative Split", markdownLabel: "Best relative split" } },
+      carouselReport: { slides: [
+        { biggest_limiter: "RUN 7" },
+        { biggest_gain: { station: "RUN 8" } },
+        { station: "RUN 8" },
+        {},
+        {},
+        { headline: "FIND YOUR BOTTLENECK", features: ["Biggest Limiter", "Time Potential", "Strongest Station", "Percentile Ranking", "Race Efficiency Score"] },
+      ] },
+    },
+  });
+
+  assert.equal(audit.pass, false);
+  assert.match(audit.detail, /carousel feature list labels fastest-ahead split as strongest station/i);
+});
+
+test("contractSlotAudit accepts contract reconciliation with HTML value wrappers", () => {
+  const contractReconciliation = "Station performance is the largest category gap at +3:30. Running is ahead of the comparison, which offsets a large part of that. Even accounting for that offset, the total gap is +1:37.";
+  const audit = contractSlotAudit({
+    mode: { calculatorMode: "analyse" },
+    result: {
+      narrative: {
+        artifactSlots: {
+          email: { subjectPrimary: "Burpee Broad Jump", reconciliation: contractReconciliation, mainInsightOpening: `The Burpee Broad Jump station is the main opportunity. ${contractReconciliation}` },
+          raceCard: { heroPrimary: "Burpee Broad Jump", strengthLabel: "Run 8" },
+          carousel: { slide1Primary: "BURPEE BROAD JUMP", ctaHeadline: "FIND YOUR BOTTLENECK", strengthLabel: "RUN 8", slide2Gain: { station: "RUN 8" }, reconciliation: contractReconciliation },
+        },
+        targetAssessment: { ctaHeadline: "FIND YOUR BOTTLENECK" },
+        gapReconciliation: { requiresOffsetWording: true },
+        roxzonePolicy: { copyPrecision: "exact" },
+      },
+      emailReport: {
+        emailSubject: "Burpee Broad Jump is your main HYROX opportunity",
+        emailHtml: "<span>MAIN INSIGHT</span><p>The Burpee Broad Jump station is the main opportunity. Station performance is the largest category gap at <strong>+3:30</strong>. Running is ahead of the comparison, which offsets a large part of that. Even accounting for that offset, the total gap is <strong>+1:37</strong>.</p>",
+      },
+      raceCardData: { biggestLimiter: { name: "Burpee Broad Jump" }, strongestStation: { name: "Run 8" } },
+      carouselReport: { slides: [
+        { biggest_limiter: "BURPEE BROAD JUMP" },
+        { biggest_gain: { station: "RUN 8" } },
+        { station: "RUN 8" },
+        {},
+        {},
+        { headline: "FIND YOUR BOTTLENECK" },
+      ] },
+    },
+  });
+
+  assert.equal(audit.pass, true);
+});
+
 test("shared harness context forwards Mode 2 strength fields into Mode 3 athlete context", () => {
   const sharedContext = sharedContextFromRequestBody({
     weeklyStrengthSessions: "3",
@@ -297,16 +932,19 @@ test("generates markdown for both harness modes", async () => {
   stubSuccessfulHyroxFetch();
   const baseDir = makeTempDir();
   process.env.HYROX_HARNESS_RUNS_DIR = baseDir;
+  const mojibakeDash = "\u00e2\u20ac\u201d";
 
   const { response, body } = await request({
     url: "https://results.hyrox.com/season-8/?x=1",
     targetTime: "1:15:00",
+    label: `Single case ${mojibakeDash} download`,
   });
 
   assert.equal(response.status, 200);
   const runId = response.headers.get("x-hyrox-harness-run-id");
   assert.match(runId ?? "", /^\d{4}-\d{2}-\d{2}T\d{6}-[0-9a-f]{8}$/);
   assert.match(response.headers.get("content-type") ?? "", /text\/markdown/);
+  assert.match(response.headers.get("content-type") ?? "", /charset=utf-8/i);
   assert.match(response.headers.get("content-disposition") ?? "", /hyrox-harness-/);
   assert.match(response.headers.get("x-hyrox-harness-run-dir") ?? "", new RegExp(runId));
   assert.match(body, new RegExp(`Run ID: ${runId}`));
@@ -317,6 +955,8 @@ test("generates markdown for both harness modes", async () => {
   assert.match(body, /```html/);
   assert.match(body, /## Comparison Notes/);
   assert.match(body, /## QA Flags/);
+  assert.match(body, /Single case - download/);
+  assert.doesNotMatch(body, /\u00e2\u20ac\u201d|\u00e2\u02c6\u2019|\u00c2/);
   assert.match(body, /target_email_does_not_show_zero_target_time/);
   assert.match(body, /Target-mode carousel text/);
   assert.match(body, /Analyse-mode carousel text/);
@@ -330,6 +970,15 @@ test("persists a successful single-case harness run to disk", async () => {
   const { response, body } = await request({
     url: "https://results.hyrox.com/season-8/?x=1",
     targetTime: "1:15:00",
+    canonical: true,
+    expectations: {
+      canonical: true,
+      targetFinishTimeSeconds: 4500,
+      analysisScope: "full",
+      benchmarkAvailable: true,
+      headlineMode: "single_track",
+      expectedTone: "behind",
+    },
   });
 
   assert.equal(response.status, 200);
@@ -344,6 +993,8 @@ test("persists a successful single-case harness run to disk", async () => {
   assert.equal(manifest.cases[0].ok, true);
   assert.equal(manifest.cases[0].athleteDisplayName, "Alex Runner");
   assert.equal(manifest.cases[0].targetFinishTimeSeconds, 4500);
+  assert.equal(manifest.cases[0].canonical, true);
+  assert.equal(manifest.cases[0].expectations.targetFinishTimeSeconds, 4500);
   assert.equal(manifest.cases[0].modes.length, 2);
   assert.match(manifest.cases[0].modes[0].contentHash, /^[0-9a-f]{64}$/);
   assert.ok(fs.readFileSync(path.join(runDir, "qa.md"), "utf8").includes("# HYROX QA Test Harness"));
@@ -483,11 +1134,13 @@ test("generates downloadable email HTML zip artifact", async () => {
 
 test("generates a multi-case Instagram artifact pack", async () => {
   stubSuccessfulHyroxFetch();
+  const mojibakeDash = "\u00e2\u20ac\u201d";
+  const doubleMojibakeDash = "\u00c3\u00a2\u00e2\u201a\u00ac\u00e2\u20ac\u009d";
 
   const { response, body } = await request({
     cases: [
-      { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" },
-      { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:20:00" },
+      { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00", label: `Open female ${mojibakeDash} benchmark` },
+      { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:20:00", label: `Penalty-heavy ${doubleMojibakeDash} target` },
     ],
     artifact: "instagram",
   });
@@ -498,8 +1151,13 @@ test("generates a multi-case Instagram artifact pack", async () => {
   assert.match(body, /- URL count: 2/);
   assert.match(body, /# Test Case 1 of 2/);
   assert.match(body, /# Test Case 2 of 2/);
+  assert.doesNotMatch(body, /^# Test Case \d+ of \d+$/m);
   assert.match(body, /Target-mode carousel text/);
   assert.match(body, /Analyse-mode carousel text/);
+  assert.match(body, /Open female - benchmark/);
+  assert.match(body, /Penalty-heavy - target/);
+  assert.doesNotMatch(body, /\u00e2\u20ac\u201d|\u00e2\u02c6\u2019|\u00c2/);
+  assert.doesNotMatch(body, /\u00c3\u00a2\u00e2\u201a\u00ac\u00e2\u20ac\u009d|\u00c3\u00a2\u00cb\u2020\u00e2\u20ac\u2122|\u00c3\u201a/);
 });
 
 test("returns structured preview data for rendered harness output", async () => {
@@ -543,28 +1201,34 @@ test("generates a combined markdown test pack for multiple URLs", async () => {
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-disposition") ?? "", /hyrox-harness-pack-2-/);
+  assert.match(response.headers.get("content-type") ?? "", /charset=utf-8/);
   assert.match(body, /# HYROX QA Test Pack/);
   assert.match(body, /- URL count: 2/);
   assert.match(body, /# Test Case 1 of 2/);
   assert.match(body, /# Test Case 2 of 2/);
+  assert.doesNotMatch(body, /^# Test Case \d+ of \d+$/m);
   assert.match(body, /## Mode 1: Analyse my race/);
+  assert.doesNotMatch(body, /\u00e2\u20ac\u201d|\u00e2\u02c6\u2019|\u00c2/);
+  assert.doesNotMatch(body, /â€”|âˆ’|Â/);
 });
 
 test("generates a combined markdown test pack with per-case target times", async () => {
   stubSuccessfulHyroxFetch();
+  const doubleMojibakeDash = "\u00c3\u00a2\u00e2\u201a\u00ac\u00e2\u20ac\u009d";
 
   const { response, body } = await request({
     cases: [
-      { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" },
-      { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:20:00" },
+      { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00", label: `Open female ${doubleMojibakeDash} standing` },
+      { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:20:00", label: "Clean label" },
     ],
   });
 
   assert.equal(response.status, 200);
-  assert.match(body, /- 1\. https:\/\/results\.hyrox\.com\/season-8\/\?x=1 - target 1:15:00 - ok/);
-  assert.match(body, /- 2\. https:\/\/results\.hyrox\.com\/season-8\/\?x=2 - target 1:20:00 - ok/);
+  assert.match(body, /- 1\. \[Open female - standing\] https:\/\/results\.hyrox\.com\/season-8\/\?x=1 - target 1:15:00 - ok/);
+  assert.match(body, /- 2\. \[Clean label\] https:\/\/results\.hyrox\.com\/season-8\/\?x=2 - target 1:20:00 - ok/);
   assert.match(body, /- Target time: 1:15:00/);
   assert.match(body, /- Target time: 1:20:00/);
+  assert.doesNotMatch(body, /\u00c3\u00a2\u00e2\u201a\u00ac\u00e2\u20ac\u009d|\u00c3\u201a/);
 });
 
 test("keeps pack generation useful when one URL fails import", async () => {
@@ -715,6 +1379,13 @@ test("metadata import keeps per-case failures in the response", async () => {
   assert.equal(body.cases[0].ok, true);
   assert.equal(body.cases[1].ok, false);
   assert.equal(body.cases[1].reason, "fetch_failed_503");
+});
+
+test("harness markdown normalizer repairs UTF-8 names decoded as Windows-1252", () => {
+  const text = normalizeHarnessMarkdownText("Athlete: åœ‹æ˜Ÿ é‚± & å®¸éš å“");
+
+  assert.equal(text, "Athlete: 國星 邱 & 宸靚 卓");
+  assert.doesNotMatch(text, /åœ|æ˜|é‚/);
 });
 
 // --- Sex normalization regression tests ---

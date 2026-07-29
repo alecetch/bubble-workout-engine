@@ -430,7 +430,7 @@ test("biggest limiter and strength use net-of-penalty gaps", () => {
   assert.equal(strength.timeAdvantageSeconds, 100);
 });
 
-test("browser summary hero inherits the penalty-adjusted limiter from analysis headline", () => {
+test("browser summary separates penalty fastest win from the penalty-adjusted fitness limiter", () => {
   const analysis = analyseSubmission(completeSubmission({
     splitOverrides: { farmers_carry: 320, wall_balls: 370 },
     penalties: [{ station: "farmers_carry", penaltySeconds: 300 }],
@@ -439,7 +439,10 @@ test("browser summary hero inherits the penalty-adjusted limiter from analysis h
 
   assert.equal(analysis.headline.biggestLimiter.segmentKey, "wall_balls");
   assert.notEqual(analysis.headline.biggestLimiter.segmentKey, "farmers_carry");
-  assert.equal(summary.heroInsight.title, "Wall Balls is your biggest opportunity");
+  assert.equal(summary.heroInsight.title, "Penalties are your fastest controllable win");
+  assert.equal(summary.fastestControllableWin.label, "Penalties");
+  assert.equal(summary.fastestControllableWin.timeGapFormatted, "5:00");
+  assert.equal(summary.largestFitnessLimiter.label, "Wall Balls");
   assert.equal(summary.biggestLimiter.label, "Wall Balls");
 });
 

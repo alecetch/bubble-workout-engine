@@ -298,7 +298,7 @@ test("competitive athlete hero headline uses em dash not plain hyphen", () => {
   assert.ok(result.heroCopy.headline.includes(" — "), `headline should contain em dash, got: ${result.heroCopy.headline}`);
 });
 
-test("sub-60 athlete with Sandbag Lunges limiter uses plural verb", () => {
+test("sub-60 athlete with Sandbag Lunges limiter uses station subject grammar", () => {
   const result = buildInterpretation(makeAnalysis({
     stationBreakdown: [
       { segmentKey: "sandbag_lunges", label: "Sandbag Lunges", timeGapSeconds: 55, percentile: 18, confidence: "high" },
@@ -314,7 +314,7 @@ test("sub-60 athlete with Sandbag Lunges limiter uses plural verb", () => {
 
   const allCopy = [result.heroCopy.headline, result.heroCopy.subline, ...result.summaryBullets].join(" ");
   assert.ok(!allCopy.includes("Sandbag Lunges is"), `should not contain "Sandbag Lunges is", got: ${allCopy}`);
-  assert.ok(allCopy.includes("Sandbag Lunges are"), `should contain "Sandbag Lunges are", got: ${allCopy}`);
+  assert.ok(allCopy.includes("The Sandbag Lunges station is"), `should contain station-subject grammar, got: ${allCopy}`);
 });
 
 test("target mode penalty hero says FIRST TARGET WIN not FASTEST WIN", () => {

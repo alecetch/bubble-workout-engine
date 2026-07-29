@@ -204,7 +204,7 @@ const triggerHandlers = {
     return {
       ...benchmarkEvidence(analysisJson),
       segmentKey: "roxzone_time",
-      segmentLabel: "Roxzone",
+      segmentLabel: "RoxZone",
       primaryMetric: "roxzone_time_gap_to_median",
       primaryValue: Math.max(0, gap),
       potentialGainSeconds: Math.max(0, gap),
@@ -222,7 +222,7 @@ const triggerHandlers = {
     return {
       ...benchmarkEvidence(analysisJson),
       segmentKey: "roxzone_time",
-      segmentLabel: "Roxzone",
+      segmentLabel: "RoxZone",
       primaryMetric: "roxzone_percentile",
       primaryValue: percentile,
       percentile,

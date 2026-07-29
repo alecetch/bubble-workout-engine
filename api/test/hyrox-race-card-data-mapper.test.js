@@ -85,16 +85,16 @@ test("golden path — all fields populated", () => {
 
   assert.ok(data.biggestLimiter, "biggestLimiter should be present");
   assert.equal(data.biggestLimiter.name, "Sandbag Lunges");
-  assert.equal(data.biggestLimiter.potentialGain, "+1:21");
-  assert.equal(data.biggestLimiter.rankText, "+1:21 gap");
+  assert.equal(data.biggestLimiter.potentialGain, "1:21");
+  assert.equal(data.biggestLimiter.rankText, "1:21 slower");
 });
 
 // ── formaScore fallback ──────────────────────────────────────────────────────
 
-test("null formaScore when no comparison options and no overallPerformanceScore", () => {
+test("formaScore uses contract rank display when no comparison options and no overallPerformanceScore", () => {
   const aj = makeAnalysisJson({ scores: {}, benchmarkContext: { comparisonOptions: null } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.formaScore, null);
+  assert.equal(data.formaScore, 99);
 });
 
 test("formaScore uses comparisonOptions[0].percentile when available", () => {
@@ -104,10 +104,10 @@ test("formaScore uses comparisonOptions[0].percentile when available", () => {
   assert.equal(data.formaScore, 99); // picks compOpts[0].percentile, not 40
 });
 
-test("formaScore falls back to overallPerformanceScore when comparisonOptions is empty", () => {
+test("formaScore prefers contract rank display when comparisonOptions is empty", () => {
   const aj = makeAnalysisJson({ benchmarkContext: { comparisonOptions: { defaultId: "global", options: [] } } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.formaScore, 91); // falls back to scores.overallPerformanceScore
+  assert.equal(data.formaScore, 99);
 });
 
 test("percentileText falls back to demographic percentile when comparisonOptions is empty", () => {
@@ -134,16 +134,18 @@ test("mode is analyse when targetTimeSeconds is null", () => {
 
 // ── Missing limiter / strength ───────────────────────────────────────────────
 
-test("biggestLimiter is null when headline.biggestLimiter is null", () => {
+test("biggestLimiter falls back to contract selection when headline.biggestLimiter is null", () => {
   const aj = makeAnalysisJson({ headline: { ...makeAnalysisJson().headline, biggestLimiter: null } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.biggestLimiter, null);
+  assert.equal(data.biggestLimiter?.name, "Sandbag Lunges");
+  assert.equal(data.biggestLimiter?.potentialGain, "1:21");
 });
 
-test("strongestStation is null when headline.biggestStrength is null", () => {
+test("strongestStation falls back to contract strength policy when headline.biggestStrength is null", () => {
   const aj = makeAnalysisJson({ headline: { ...makeAnalysisJson().headline, biggestStrength: null } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.strongestStation, null);
+  assert.equal(data.strongestStation?.name, "Run 8");
+  assert.equal(data.strongestStation?.cardHeader, "Best Relative Split");
 });
 
 // ── Split rows ───────────────────────────────────────────────────────────────
@@ -228,9 +230,9 @@ test("finishTime formats 3548 seconds as 59:08", () => {
   assert.equal(data.finishTime, "59:08");
 });
 
-test("potentialGain formats 81 seconds as +1:21", () => {
+test("potentialGain formats 81 seconds as 1:21", () => {
   const data = buildHyroxRaceCardData(makeAnalysisJson());
-  assert.equal(data.biggestLimiter?.potentialGain, "+1:21");
+  assert.equal(data.biggestLimiter?.potentialGain, "1:21");
 });
 
 // ── Doubles flag ─────────────────────────────────────────────────────────────
