@@ -1,8 +1,10 @@
-import { SEGMENT_MAP } from "../config/segmentMap.js";
 import { isDoublesAnalysisDivision } from "../config/divisionGroups.js";
 import { comparisonLabel, hasGoalGroup } from "./comparisonBasis.js";
-import { benchmarkConfidenceQualifier, comparisonOptionsArray, percentileTextWithFallback } from "./comparisonOptions.js";
-import { penaltyContext } from "./penaltyContext.js";
+import { comparisonProfileLabel as buildComparisonProfileLabel } from "./comparisonProfileLabel.js";
+import { comparisonOptionsArray } from "./comparisonOptions.js";
+import { ensureHyroxReportContract } from "./reportContractBuilder.js";
+import { displaySegmentLabel } from "./segmentDisplay.js";
+import { buildSplitDisplayRows } from "./splitRowDisplayContract.js";
 
 function formatSeconds(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return null;
@@ -23,7 +25,14 @@ function formatTimeDelta(seconds) {
   return seconds >= 0 ? `+${formatted}` : `-${formatted}`;
 }
 
-const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type === "run" || segment.type === "station");
+// Sign-worded gap copy for the race-card limiter panel (e.g. "1:02 slower") — reads more
+// directly than a bare signed number needing separate interpretation. Formats the same
+// timeGapSeconds value as formatTimeDelta, just wrapped in words instead of a +/- sign.
+function formatGapWords(seconds) {
+  const magnitude = formatSeconds(Math.abs(seconds));
+  if (!magnitude) return null;
+  return `${magnitude} ${seconds >= 0 ? "slower" : "faster"}`;
+}
 
 function segment(analysisJson, key) {
   return analysisJson.segments?.find((row) => row.segmentKey === key) ?? null;
@@ -39,16 +48,6 @@ function targetGapSeconds(row, goalAvailable) {
   return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
 }
 
-function strengthGapText(strength) {
-  const seconds = Number.isFinite(strength?.timeAdvantageSeconds)
-    ? -Math.abs(strength.timeAdvantageSeconds)
-    : targetGapSeconds(strength, false);
-  if (!Number.isFinite(seconds)) return null;
-  if (seconds < 0) return `Ahead by ${formatSeconds(Math.abs(seconds))}`;
-  if (seconds > 0) return `+${formatSeconds(seconds)} gap`;
-  return "On comparison";
-}
-
 /**
  * Maps analysisJson + optional athleteContext to the HyroxRaceCardData shape
  * consumed by raceCardBuilder.
@@ -57,7 +56,7 @@ function strengthGapText(strength) {
  * @param {object} [athleteContext]  Supplemental athlete/submission context
  * @returns {HyroxRaceCardData}
  */
-export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
+export function buildHyroxRaceCardData(analysisJson, athleteContext = {}, contract = null) {
   const aj = analysisJson ?? {};
   const scores = aj.scores ?? {};
   const headline = aj.headline ?? {};
@@ -65,8 +64,11 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   const athlete = aj.athlete ?? {};
   const benchmarkContext = aj.benchmarkContext ?? {};
   const timePotential = aj.timePotential ?? {};
-  const penalty = penaltyContext(aj);
+  const narrative = ensureHyroxReportContract({ analysisJson: aj, athleteContext, calculatorMode: aj.calculatorMode, contract });
+  const opportunity = narrative.sourceOpportunity;
+  const penalty = narrative.penalty;
   const comparisonBasis = comparisonLabel(aj);
+  const comparisonProfileLabel = buildComparisonProfileLabel(aj);
 
   // Athlete name — prefer context displayName, then athlete.name
   const athleteName =
@@ -79,8 +81,34 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   const finishTime = formatSeconds(race.finishTimeSeconds);
 
   // Target time (nullable)
-  const targetTimeSeconds = race.targetTimeSeconds ?? null;
-  const targetTime = targetTimeSeconds != null ? formatSeconds(targetTimeSeconds) : null;
+  const targetTimeSeconds = narrative.inputFacts?.targetTimeSeconds
+    ?? race.targetTimeSeconds
+    ?? race.targetFinishTimeSeconds
+    ?? athleteContext.targetFinishTimeSeconds
+    ?? athleteContext.targetTimeSeconds
+    ?? null;
+  const targetTime = narrative.inputFacts?.targetTimeDisplay ?? (targetTimeSeconds != null ? formatSeconds(targetTimeSeconds) : null);
+  const exactTargetGapSeconds = narrative.targetAssessment?.exactGapSeconds
+    ?? (Number.isFinite(race.finishTimeSeconds) && Number.isFinite(targetTimeSeconds)
+      ? Math.round(race.finishTimeSeconds - targetTimeSeconds)
+      : null);
+  const targetGapFormatted = narrative.targetAssessment?.displayGap
+    ?? (Number.isFinite(exactTargetGapSeconds)
+      ? formatSeconds(Math.abs(exactTargetGapSeconds))
+      : null);
+  const targetGapSigned = narrative.targetAssessment?.signedDisplayGap
+    ?? (Number.isFinite(exactTargetGapSeconds)
+      ? formatTimeDelta(exactTargetGapSeconds)
+      : null);
+  const targetGapTone = narrative.targetAssessment?.status === "ahead"
+    ? "positive"
+    : narrative.targetAssessment?.status === "behind"
+      ? "negative"
+      : narrative.targetAssessment?.status === "on_target"
+        ? "neutral"
+        : Number.isFinite(exactTargetGapSeconds)
+          ? exactTargetGapSeconds < 0 ? "positive" : exactTargetGapSeconds > 0 ? "negative" : "neutral"
+          : null;
 
   // Analysis mode — prefer the analysis engine's own calculatorMode (authoritative) when present;
   // fall back to inferring from the comparison basis for callers/fixtures that predate that field.
@@ -91,51 +119,68 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
   // Percentile text from first available comparison option.
   const compOpts = comparisonOptionsArray(benchmarkContext);
   const overall = segment(aj, "total_time");
-  const percentileText = percentileTextWithFallback(benchmarkContext, overall, athleteContext.overallPercentile);
-  const confidenceQualifier = benchmarkConfidenceQualifier(benchmarkContext);
+  const benchmarkPercentilesAvailable = narrative.rankPolicy.allowed;
+  const percentileText = narrative.rankPolicy.displays[0]?.label ?? null;
+  const confidenceQualifier = benchmarkPercentilesAvailable
+    ? benchmarkContext?.confidenceLabel === "insufficient" || benchmarkContext?.doublesBenchmarkedAsSingles === true ? "directional" : null
+    : null;
 
   // Forma Score — use the total-population percentile from comparisonOptions (same source as
   // "TOP N% WORLDWIDE" label) so both figures are always consistent. overallPerformanceScore is
   // benchmarked against the athlete's performance-band peer group in analyse mode, which produces
   // a misleadingly low number (e.g. 40) for a globally top-1% athlete.
-  const formaScore = compOpts[0]?.percentile ?? scores.overallPerformanceScore ?? null;
-
-  // Strongest station
-  const biggestStrength = headline.biggestStrength ?? null;
-  const biggestStrengthSegment = biggestStrength?.segmentKey ? segment(aj, biggestStrength.segmentKey) : null;
-  const strongestStationData = biggestStrength
-    ? { ...(biggestStrengthSegment ?? {}), ...biggestStrength }
+  const formaScore = benchmarkPercentilesAvailable
+    ? narrative.rankPolicy.displays[0]?.percentile ?? compOpts[0]?.percentile ?? scores.overallPerformanceScore ?? null
     : null;
+
+  // Strongest station / relative split is resolved by the report contract.
+  const strengthPolicy = narrative.strengthPolicy ?? {};
+  const biggestStrength = strengthPolicy.strength ?? (strengthPolicy.status === "fastest_ahead_split_only" ? strengthPolicy.fastestAheadSplit : null);
   const strongestStation = biggestStrength
-    ? {
-        name: biggestStrength.label,
-        percentile: strengthGapText(strongestStationData),
-        caption: null,
+	    ? {
+	        name: strengthPolicy.displayLabel ?? biggestStrength.label,
+        cardHeader: strengthPolicy.status === "fastest_ahead_split_only" ? "Best Relative Split" : "Strongest Station",
+	        markdownLabel: strengthPolicy.status === "fastest_ahead_split_only" ? "Best relative split" : "Strongest station",
+		        percentile: strengthPolicy.status === "fastest_ahead_split_only"
+          ? null
+          : biggestStrength.summaryText ?? (strengthPolicy.displayGap ? `Ahead by ${String(strengthPolicy.displayGap).replace(/^-/, "")}` : null),
+        caption: strengthPolicy.explanation ?? biggestStrength.dataQualityNote,
+        policyStatus: strengthPolicy.status,
       }
     : null;
 
   // Biggest limiter
-  const biggestLimiterData = headline.biggestLimiter ?? null;
+  const biggestLimiterData = opportunity.largestFitnessLimiter
+    ? { ...opportunity.largestFitnessLimiter, label: displaySegmentLabel(opportunity.largestFitnessLimiter, opportunity.largestFitnessLimiter.label) }
+    : null;
+  const roxzoneAction = narrative.roxzonePolicy?.action ?? null;
   const headlineGainSeconds =
     timePotential.headlineGainSeconds ?? headline.headlineGainSeconds ?? null;
-  const biggestLimiter = penalty.usePenaltyHero
+  const primary = narrative.primaryClaim;
+  const primaryIsPenalty = primary?.isPenalty;
+  const biggestLimiter = primaryIsPenalty && opportunity.fastestControllableWin
     ? {
-        name: "Penalties",
+        name: opportunity.fastestControllableWin.label,
         potentialGain: formatSeconds(penalty.totalPenaltySeconds),
         rankText: null,
-        caption: "Fastest controllable win",
+        caption: opportunity.fastestControllableWin.caption,
         isPenalty: true,
       }
-    : biggestLimiterData
+    : primary
     ? {
-        name: biggestLimiterData.label,
+        name: primary.label,
         potentialGain:
-          headlineGainSeconds != null ? formatTimeDelta(headlineGainSeconds) : null,
+          headlineGainSeconds != null ? formatSeconds(Math.abs(headlineGainSeconds)) : Number.isFinite(primary.gainSeconds) ? formatSeconds(Math.abs(primary.gainSeconds)) : null,
         rankText:
-          Number.isFinite(biggestLimiterData.timeGapSeconds)
-            ? `${formatTimeDelta(biggestLimiterData.timeGapSeconds)} gap`
+          Number.isFinite(primary.gainSeconds)
+            ? formatGapWords(primary.gainSeconds)
             : null,
-        caption: null,
+        caption: roxzoneAction?.confidenceText ?? narrative.roxzonePolicy?.requiredCaveat ?? narrative.dataQualityPolicy?.longCaveat ?? null,
+        actionText: roxzoneAction?.raceCardCta ?? null,
+        actionEvidenceLevel: roxzoneAction?.actionEvidenceLevel ?? null,
+        isRoxzone: Boolean(roxzoneAction),
+        cardHeader: primary.compactLabel,
+        claimStrength: primary.claimStrength,
       }
     : null;
   const penaltySummary = penalty.totalPenaltySeconds >= 60
@@ -143,26 +188,14 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
         label: "Penalties",
         value: formatSeconds(penalty.totalPenaltySeconds),
         isDominant: penalty.usePenaltyHero,
+        caption: opportunity.fastestControllableWin?.caption ?? null,
       }
     : null;
 
-  // Race split profile: mirror the carousel "How the race unfolded" flow order.
-  const goalAvailable = hasGoalGroup(aj);
-  const splitRows = RACE_SEGMENTS.flatMap((mapRow) => {
-    const seg = segment(aj, mapRow.segmentKey);
-    if (!seg || !Number.isFinite(seg.userSeconds)) return [];
-    const gapSeconds = targetGapSeconds(seg, goalAvailable);
-    const roundedGap = Number.isFinite(gapSeconds) ? Math.round(gapSeconds) : 0;
-    return [{
-      key: mapRow.segmentKey,
-      label: mapRow.displayName,
-      type: mapRow.type,
-      raceOrder: mapRow.raceOrder,
-      userTime: formatSeconds(seg.userSeconds) ?? "-",
-      delta: roundedGap === 0 ? "0:00" : formatTimeDelta(roundedGap),
-      tone: roundedGap < 0 ? "positive" : roundedGap > 0 ? "negative" : "neutral",
-    }];
-  });
+  // Race split profile: use the canonical rows resolved by the report contract.
+  const splitRows = Array.isArray(narrative.splitProfile?.rows) && narrative.splitProfile.rows.length
+    ? narrative.splitProfile.rows
+    : buildSplitDisplayRows(aj);
 
   // Doubles flag
   const division = athlete.division ?? athleteContext.division ?? "";
@@ -170,15 +203,37 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}) {
 
   return {
     athleteName,
-    finishTime,
-    targetTime,
-    percentileText,
+	    finishTime,
+	    targetTime,
+    targetGapSeconds: exactTargetGapSeconds,
+    targetGapFormatted,
+    targetGapSigned,
+    targetGapTone,
+	    percentileText,
     confidenceQualifier,
     formaScore,
     mode,
     comparisonBasis,
+    comparisonProfileLabel,
     strongestStation,
     biggestLimiter,
+    fastestControllableWin: opportunity.fastestControllableWin
+      ? {
+          name: opportunity.fastestControllableWin.label,
+          potentialGain: formatSeconds(opportunity.fastestControllableWin.timeGapSeconds),
+          caption: opportunity.fastestControllableWin.caption,
+          isPrimary: opportunity.hasPenaltyDominantOpportunity,
+        }
+      : null,
+    largestFitnessLimiter: biggestLimiterData
+      ? {
+          name: biggestLimiterData.label,
+          potentialGain: Number.isFinite(biggestLimiterData.timeGapSeconds) ? formatSeconds(Math.abs(biggestLimiterData.timeGapSeconds)) : null,
+          rankText: Number.isFinite(biggestLimiterData.timeGapSeconds) ? `${formatTimeDelta(biggestLimiterData.timeGapSeconds)} gap` : null,
+        }
+      : null,
+    artifactHeadlineMode: narrative.headlineMode,
+    narrative,
     penaltySummary,
     splitRows,
     isDoubles,

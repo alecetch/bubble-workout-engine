@@ -7,6 +7,7 @@ import { buildPersonalReport } from "./personalReportBuilder.js";
 import { buildBrowserSummary } from "./browserSummaryBuilder.js";
 import { buildEmailReport } from "./emailReportBuilder.js";
 import { deepEnforceTone } from "./copyFormatter.js";
+import { buildHyroxReportContract } from "./reportContractBuilder.js";
 import { buildInterpretation } from "../interpretation/hyroxInterpretationEngine.js";
 
 function athlete(raceResult = {}, athleteContext = {}, analysisJson = {}) {
@@ -75,16 +76,18 @@ export function assembleReport(request = {}) {
   const ranked = rankInsightsForOutput(insights, outputType);
   const resolved = resolveConflicts(ranked, outputType);
   const report = baseReport({ raceResult, analysisJson, athleteContext, outputType }, resolved);
+  report.contract = buildHyroxReportContract({ analysisJson, athleteContext, calculatorMode, insights: resolved });
+  report.narrative = report.contract;
 
   if (analysisJson.analysisScope === "no_benchmark_data") {
     report.templateId = outputType === "email_report" ? "PERSONAL_REPORT" : "BROWSER_SUMMARY";
-    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext, calculatorMode);
+    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext, calculatorMode, report.contract);
     return deepEnforceTone(report);
   }
 
   if (outputType === "carousel_a") {
     report.templateId = "A_ATHLETE_ANALYSIS";
-    report.carousel = buildTemplateA(analysisJson, resolved, { ...athleteContext, calculatorMode });
+    report.carousel = buildTemplateA(analysisJson, resolved, { ...athleteContext, calculatorMode }, report.contract);
     report.slides = report.carousel.slides;
   } else if (outputType === "carousel_b") {
     report.templateId = "B_POPULATION_RESEARCH";
@@ -100,8 +103,8 @@ export function assembleReport(request = {}) {
   } else if (outputType === "email_report") {
     report.templateId = "PERSONAL_REPORT";
     const interpretation = buildInterpretation(analysisJson, athleteContext, calculatorMode);
-    const personal = buildPersonalReport(analysisJson, resolved, athleteContext, interpretation, calculatorMode);
-    const email = buildEmailReport(personal, analysisJson, athleteContext, interpretation, calculatorMode);
+    const personal = buildPersonalReport(analysisJson, resolved, athleteContext, interpretation, calculatorMode, report.contract);
+    const email = buildEmailReport(personal, analysisJson, athleteContext, interpretation, calculatorMode, report.contract);
     report.sections = personal.sections;
     report.recommendations = personal.recommendations;
     report.emailSubject = email.subject;
@@ -109,7 +112,7 @@ export function assembleReport(request = {}) {
     report.emailText = email.textBody;
   } else if (outputType === "web_report") {
     report.templateId = "BROWSER_SUMMARY";
-    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext, calculatorMode);
+    report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext, calculatorMode, report.contract);
   } else if (/^[C-H]$/.test(outputType)) {
     report.templateId = `${outputType}_STUB`;
     report.carousel = buildTemplateStub(outputType);

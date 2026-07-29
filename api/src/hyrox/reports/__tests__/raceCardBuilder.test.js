@@ -16,7 +16,7 @@ function fixtureData(overrides = {}) {
     formaScore: 72,
     mode: "target",
     strongestStation: { name: "Sled Pull", percentile: "Ahead by 0:18" },
-    biggestLimiter: { name: "Wall Balls", rankText: "+1:06 gap", potentialGain: "2:44" },
+    biggestLimiter: { name: "Wall Balls", rankText: "1:06 slower", potentialGain: "2:44" },
     splitRows: [
       { label: "Run 3", delta: "+0:32", tone: "negative" },
       { label: "Sled Push", delta: "+0:51", tone: "negative" },
@@ -62,6 +62,11 @@ function attrValue(html, dataAttr, key, attr) {
   const match = html.match(re);
   assert.ok(match, `missing ${dataAttr}=${key} ${attr}`);
   return match[1];
+}
+
+function attrValues(html, dataAttr, key, attr) {
+  const re = new RegExp(`${dataAttr}="${key}"[^>]*\\s${attr}="([^"]+)"`, "g");
+  return [...html.matchAll(re)].map((match) => match[1]);
 }
 
 function mappedRaceCardHtmlForDivision(division) {
@@ -177,26 +182,27 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.doesNotMatch(header, /data:image\/jpeg;base64/);
     assert.doesNotMatch(header, /class="h-right"/);
     assert.doesNotMatch(header, /id="rgl"/);
+    assert.doesNotMatch(header, /brand-site|www\.getforma\.fit/);
     assert.match(header, /aria-label="FORMA SCORE 72"/);
   });
 
   it("renders the strongest station card with a bundled image icon", () => {
     const html = buildRaceCardHtml(fixtureData({ strongestStation: { name: "Sled Pull", percentile: "Ahead by 0:18" } }));
-    const card = sectionBetween(html, "Strongest Station", "YOU POWERED THROUGH HERE");
+    const card = sectionBetween(html, "Strongest Station", "KEEP LEVERAGING THIS STRENGTH");
 
     assert.match(card, /<img src="data:image\/png;base64,/);
   });
 
   it("renders the biggest limiter card with a bundled image icon", () => {
-    const html = buildRaceCardHtml(fixtureData({ biggestLimiter: { name: "Wall Balls", rankText: "+1:06 gap" } }));
-    const card = sectionBetween(html, "Biggest Limiter", "THIS IS WHAT HELD YOU BACK");
+    const html = buildRaceCardHtml(fixtureData({ biggestLimiter: { name: "Wall Balls", rankText: "1:06 slower" } }));
+    const card = sectionBetween(html, "Biggest Limiter", "FOCUS HERE TO UNLOCK BIG TIME");
 
     assert.match(card, /<img src="data:image\/png;base64,/);
   });
 
   it("falls back to the hand-drawn SVG icon when no station icon can resolve", () => {
     const html = buildRaceCardHtml(fixtureData({ strongestStation: { name: "", percentile: "Ahead by 0:18" } }));
-    const card = sectionBetween(html, "Strongest Station", "YOU POWERED THROUGH HERE");
+    const card = sectionBetween(html, "Strongest Station", "KEEP LEVERAGING THIS STRENGTH");
 
     assert.match(card, /<svg viewBox="0 0 80 80"/);
     assert.match(card, /<polygon points="40,4 72,22 72,58 40,76 8,58 8,22"/);
@@ -220,7 +226,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
     const splitProfile = splitProfileSection(html);
 
-    assert.equal((splitProfile.match(/data-split-label=/g) ?? []).length, 19);
+    assert.equal((splitProfile.match(/data-split-label="/g) ?? []).length, 16);
     assert.match(splitProfile, />5:10</);
     assert.match(splitProfile, />12:25</);
 
@@ -230,7 +236,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     // the source SVG coordinates, which can't reveal this on their own). The label's x
     // is deliberately offset from the bar's mx to compensate, so assert that exact,
     // known-correct offset rather than x === mx, which renders visibly off-centre.
-    const compactLabelFont = 19; // n=16 -> compact branch
+    const compactLabelFont = 21; // minimum split-label tier
     const expectedCompensation = compactLabelFont * 0.34;
     for (const key of ["run_1", "wall_balls"]) {
       const mx = Number(attrValue(splitProfile, "data-split-bar", key, "data-split-mx"));
@@ -255,6 +261,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(splitProfile, /data-split-delta="run_1"[^>]*fill="#3b82f6"[^>]*>\+0:18<\/text>/);
     assert.match(splitProfile, /data-split-delta="ski_erg"[^>]*fill="#ef4444"[^>]*>-0:32<\/text>/);
     assert.match(splitProfile, /data-split-delta="run_2"[^>]*fill="#64748b"[^>]*>0:00<\/text>/);
+    assert.match(splitProfile, /data-split-delta="run_1"[^>]*font-size="21"[^>]*font-weight="800"/);
   });
 
   it("uses raceOrder to keep missing middle splits from shifting labels", () => {
@@ -269,26 +276,90 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.deepEqual(renderedKeys, expectedKeys, "remaining splits must stay in raceOrder sequence, not shift to fill the gap incorrectly");
   });
 
-  it("renders long split names in full with two rotated sub-lines", () => {
+  it("abbreviates long split names to a single rotated label line via RACE_CARD_SPLIT_LABELS", () => {
     const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
     const splitProfile = splitProfileSection(html);
 
-    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*>BURPEE<\/text>/);
-    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*>BROAD JUMP<\/text>/);
-    assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>SANDBAG<\/text>/);
-    assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>LUNGES<\/text>/);
-    assert.match(splitProfile, /data-split-label="farmers_carry"[^>]*>FARMERS<\/text>/);
-    assert.match(splitProfile, /data-split-label="farmers_carry"[^>]*>CARRY<\/text>/);
-    assert.doesNotMatch(splitProfile, /BROAD JMP/);
+    // Each abbreviated split renders as exactly one data-split-label element (no more
+    // two-part side-by-side rendering).
+    for (const key of ["burpee_broad_jump", "sandbag_lunges", "farmers_carry"]) {
+      const xs = attrValues(splitProfile, "data-split-label", key, "x").map(Number);
+      assert.equal(xs.length, 1, `expected exactly one label line for ${key}`);
+    }
+
+    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*>BBJ<\/text>/);
+    assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>S'BAG LUNGE<\/text>/);
+    assert.match(splitProfile, /data-split-label="farmers_carry"[^>]*>F\. CARRY<\/text>/);
+    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*font-size="21"[^>]*letter-spacing="0\.4"[^>]*>BBJ<\/text>/);
+    assert.doesNotMatch(splitProfile, /BURPEE<\/text>|BROAD JUMP<\/text>|SANDBAG<\/text>|LUNGES<\/text>|FARMERS<\/text>|>CARRY<\/text>/);
   });
 
-  it("keeps actual split times horizontal", () => {
+  it("carries the full SEGMENT_MAP display name via data-split-full-label for abbreviated stations", () => {
     const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
     const splitProfile = splitProfileSection(html);
-    const timeMatch = splitProfile.match(/<text data-split-time="burpee_broad_jump"[^>]*>8:17<\/text>/);
 
-    assert.ok(timeMatch);
-    assert.doesNotMatch(timeMatch[0], /transform="rotate/);
+    assert.equal(attrValue(splitProfile, "data-split-label", "burpee_broad_jump", "data-split-full-label"), "Burpee Broad Jump");
+    assert.equal(attrValue(splitProfile, "data-split-label", "sandbag_lunges", "data-split-full-label"), "Sandbag Lunges");
+    assert.equal(attrValue(splitProfile, "data-split-label", "farmers_carry", "data-split-full-label"), "Farmers Carry");
+  });
+
+  it("still uses the generic fallback for a segmentKey not in RACE_CARD_SPLIT_LABELS", () => {
+    const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
+    const splitProfile = splitProfileSection(html);
+
+    assert.match(splitProfile, /data-split-label="wall_balls"[^>]*>WALL BALLS<\/text>/);
+    const xs = attrValues(splitProfile, "data-split-label", "wall_balls", "x").map(Number);
+    assert.equal(xs.length, 1);
+  });
+
+  it("clamps the variance-label y-position on-canvas for gaps at or beyond the ~66s collision threshold", () => {
+    // Reproduces the confirmed collision: at the chart's maxSec=75 cap, an unclamped fast-bar
+    // value label would render at y<0 (off the top of the SVG canvas, into the legend row).
+    const html = buildRaceCardHtml(fixtureData({
+      splitRows: [
+        { key: "run_1", label: "Run 1", type: "run", raceOrder: 1, userTime: "5:10", delta: "-1:10", tone: "positive" },
+        { key: "wall_balls", label: "Wall Balls", type: "station", raceOrder: 2, userTime: "6:00", delta: "-2:58", tone: "positive" },
+      ],
+    }));
+    const splitProfile = splitProfileSection(html);
+
+    const runY = Number(attrValue(splitProfile, "data-split-delta", "run_1", "y"));
+    const wallY = Number(attrValue(splitProfile, "data-split-delta", "wall_balls", "y"));
+
+    assert.ok(runY >= 16, `expected run_1 (70s gap) variance label y (${runY}) to stay clear of the chart's top edge`);
+    assert.ok(wallY >= 16, `expected wall_balls (178s gap, at the bar-height cap) variance label y (${wallY}) to stay clear of the chart's top edge`);
+    assert.equal(runY, 16);
+    assert.equal(wallY, 16);
+  });
+
+  it("keeps all actual split times vertical on a consistent baseline", () => {
+    const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
+    const splitProfile = splitProfileSection(html);
+    const timeMatches = [...splitProfile.matchAll(/<text data-split-time="[^"]+"[^>]*>/g)].map((match) => match[0]);
+    const timeYs = timeMatches.map((tag) => tag.match(/\sy="([^"]+)"/)?.[1]);
+
+    assert.equal(timeMatches.length, 16);
+    assert.equal(new Set(timeYs).size, 1);
+    assert.equal(timeYs[0], "425.0");
+    assert.ok(timeMatches.every((tag) => tag.includes('font-size="24"')));
+    assert.ok(timeMatches.every((tag) => tag.includes("font-variant-numeric: tabular-nums")));
+    assert.ok(timeMatches.every((tag) => tag.includes('text-anchor="start"')));
+    assert.ok(timeMatches.every((tag) => tag.includes('transform="rotate(-90')));
+  });
+
+  it("keeps zero and missing split values graceful", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      splitRows: [
+        { key: "run_1", label: "Run 1", type: "run", raceOrder: 1, userTime: "5:10", delta: "0:00", tone: "neutral" },
+        { key: "ski_erg", label: "SkiErg", type: "station", raceOrder: 2, delta: null, tone: "neutral" },
+      ],
+    }));
+    const splitProfile = splitProfileSection(html);
+
+    assert.match(splitProfile, /data-split-delta="run_1"[^>]*fill="#64748b"[^>]*>0:00<\/text>/);
+    assert.match(splitProfile, /data-split-delta="ski_erg"[^>]*fill="#64748b"[^>]*>0:00<\/text>/);
+    assert.doesNotMatch(splitProfile, /data-split-time="ski_erg"/);
+    assert.doesNotMatch(splitProfile, />undefined</);
   });
 
   it("renders only available columns for partial split data", () => {
@@ -309,15 +380,77 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(html, /\.root \{ width: 1080px; height: 1350px;/);
   });
 
+  it("uses readable supporting typography colors and simplified split legend copy", () => {
+    const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits(), comparisonBasis: "TARGET" }));
+    const splitProfile = splitProfileSection(html);
+
+    assert.match(html, /\.slbl \{[^}]*font-size: 21px;[^}]*color: var\(--muted\)/);
+    assert.match(html, /\.smeta \{[^}]*font-size: 21px;/);
+    assert.match(html, /\.stat-lbl \{[^}]*font-size: 21px;[^}]*color: var\(--muted\)/);
+    assert.doesNotMatch(html, /\.stat-sub \{/);
+    assert.match(html, /\.card-hdr \{[^}]*font-size: 21px;/);
+    assert.match(html, /\.card-sub \{[^}]*font-size: 21px;/);
+    assert.match(html, /\.card-cta \{[^}]*font-size: 21px;/);
+    assert.match(html, /\.leg \{[^}]*font-size: 21px;[^}]*font-weight: 800;/);
+    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>\+1:00<\/text>/);
+    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>-1:00<\/text>/);
+    assert.doesNotMatch(splitProfile, /fill="#475569" font-size="21"[^>]*>[+-]1:00<\/text>/);
+    assert.match(html, /Race Split Profile &mdash; VS TARGET/);
+    assert.match(html, /<div class="leg"><div class="dot bl"><\/div>FASTER<\/div>/);
+    assert.match(html, /<div class="leg"><div class="dot rd"><\/div>SLOWER<\/div>/);
+    assert.doesNotMatch(html, /FASTER THAN TARGET|SLOWER THAN TARGET/);
+    assert.match(html, /\.sp-head \{[^}]*margin-bottom: 8px;/);
+    assert.match(html, /\.footer \{ padding: 16px 44px;/);
+  });
+
+  it("simplifies the biggest-limiter panel copy (no redundant sub-labels, sign-worded gap, one-line CTA)", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      biggestLimiter: { name: "Wall Balls", rankText: "1:06 slower", potentialGain: "2:44" },
+    }));
+    const card = sectionBetween(html, "Biggest Limiter", "FOCUS HERE TO UNLOCK BIG TIME");
+
+    assert.match(card, /<div class="stat-lbl">Time Gap<\/div>/);
+    assert.match(card, /<div class="stat-val am">1:06 SLOWER<\/div>/);
+    assert.match(card, /<div class="stat-lbl">Potential Gain<\/div>/);
+    assert.match(card, /<div class="stat-val am">Up to 2:44<\/div>/);
+    assert.doesNotMatch(card, /class="stat-sub"/);
+    assert.doesNotMatch(card, /Split Gap|Seconds|In This Station/);
+    assert.match(html, /FOCUS HERE TO UNLOCK BIG TIME\./);
+    assert.doesNotMatch(html, /THIS IS WHAT HELD YOU BACK/);
+  });
+
+  it("simplifies strongest station supporting copy", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      strongestStation: { name: "Farmers Carry", percentile: "Ahead by 1:00" },
+    }));
+    const card = sectionBetween(html, "Strongest Station", "KEEP LEVERAGING THIS STRENGTH");
+
+    assert.match(card, /<div class="card-title">Farmers Carry<\/div>/);
+    assert.match(card, /<div class="card-sub">Ahead by 1:00<\/div>/);
+    assert.doesNotMatch(card, /Farmers Carry .* Ahead by 1:00/);
+  });
+
+  it("uses the detailed comparison profile label in the split heading when provided", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      splitRows: allRaceSplits(),
+      comparisonBasis: "MEDIAN",
+      comparisonProfileLabel: "SUB 60-65 MEDIAN",
+    }));
+
+    assert.match(html, /Race Split Profile &mdash; VS SUB 60-65 MEDIAN/);
+    assert.doesNotMatch(html, /Race Split Profile &mdash; VS MEDIAN/);
+  });
+
   it("uses the Forma masthead lockup and drops the old tagline text", () => {
     const html = buildRaceCardHtml(fixtureData());
 
-    assert.match(html, /alt="Forma — Measure\. Understand\. Improve\."/);
-    assert.equal((html.match(/alt="Forma — Measure\. Understand\. Improve\."/g) ?? []).length, 2, "expected the masthead image in both header and footer");
+    assert.equal((html.match(/aria-label="Forma"/g) ?? []).length, 2, "expected the generated Forma SVG wordmark in both header and footer");
+    assert.ok((html.match(/font-size="2[1-9]"[^>]*>FORMA<\/text>/g) ?? []).length >= 2);
     assert.equal(html.includes("PERFORMANCE ENGINEER"), false);
     assert.equal(html.includes("YOUR RACE"), false);
     assert.equal(html.includes("DECODED"), false);
     assert.match(html, /www\.getforma\.fit/);
+    assert.doesNotMatch(html, /Measure\. Understand\. Improve\./);
     assert.doesNotMatch(html, /Data\. Insight\. Performance\./);
   });
 
@@ -362,17 +495,69 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.doesNotMatch(html, /<div class="card-title">Wall Balls<\/div>/);
   });
 
+  it("exposes exact target gap in target-mode race-card data and header", () => {
+    const data = buildHyroxRaceCardData({
+      calculatorMode: "target",
+      athlete: { name: "Kate Wagstaff", division: "open" },
+      race: { finishTimeSeconds: 4627, targetTimeSeconds: 4200 },
+      benchmarkContext: {},
+      headline: { biggestLimiter: { segmentKey: "run_1", label: "Run 1", type: "run", timeGapSeconds: 90 } },
+      timePotential: { headlineGainSeconds: 90 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", userSeconds: 4627, frameGapSeconds: 427 },
+        { segmentKey: "run_1", type: "run", label: "Run 1", userSeconds: 320, frameGapSeconds: 90 },
+      ],
+    });
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.targetGapSeconds, 427);
+    assert.equal(data.targetGapFormatted, "7:07");
+    assert.equal(data.targetGapSigned, "+7:07");
+    assert.equal(data.targetGapTone, "negative");
+    assert.match(html, /\+7:07 TO TARGET/);
+  });
+
+  it("exposes faster-than-target exact gap with ahead semantics", () => {
+    const data = buildHyroxRaceCardData({
+      calculatorMode: "target",
+      athlete: { name: "Alex Smith", division: "open" },
+      race: { finishTimeSeconds: 4889, targetTimeSeconds: 5100 },
+      benchmarkContext: {},
+      headline: { biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 20 } },
+      timePotential: { headlineGainSeconds: 20 },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", userSeconds: 4889, frameGapSeconds: -211 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 300, frameGapSeconds: 20 },
+      ],
+    });
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.targetGapSeconds, -211);
+    assert.equal(data.targetGapFormatted, "3:31");
+    assert.equal(data.targetGapSigned, "-3:31");
+    assert.equal(data.targetGapTone, "positive");
+    assert.match(html, /AHEAD BY 3:31/);
+  });
+
   it("renders a canonical RoxZone limiter from headline data", () => {
     const data = buildHyroxRaceCardData({
       athlete: { name: "Alex Smith", division: "open" },
       race: { finishTimeSeconds: 5738 },
       benchmarkContext: {
+        analysisFrame: { frame: "current_band", comparisonBand: "sub_65" },
         comparisonOptions: [{ percentile: 72, topPercent: 28 }],
       },
       headline: {
         biggestLimiter: { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 200, percentile: 18 },
       },
       timePotential: { headlineGainSeconds: 200 },
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_total",
+        totalSeconds: 420,
+        percentile: 18,
+        timeGapToMedianSeconds: 200,
+      },
       segments: [
         { segmentKey: "total_time", type: "aggregate", userSeconds: 5738, percentile: 72 },
         { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 420, frameGapSeconds: 200, timeGapToMedianSeconds: 200, percentile: 18 },
@@ -382,9 +567,13 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     const html = buildRaceCardHtml(data);
 
     assert.equal(data.biggestLimiter.name, "RoxZone");
-    assert.equal(data.biggestLimiter.rankText, "+3:20 gap");
-    assert.equal(data.biggestLimiter.potentialGain, "+3:20");
+    assert.equal(data.biggestLimiter.rankText, "3:20 slower");
+    assert.equal(data.biggestLimiter.potentialGain, "3:20");
+    assert.equal(data.biggestLimiter.isRoxzone, true);
+    assert.match(data.biggestLimiter.caption, /aggregate RoxZone total/i);
+    assert.equal(data.biggestLimiter.actionText, "TIGHTEN ENTRY AND EXIT FLOW.");
     assert.match(html, /<div class="card-title">RoxZone<\/div>/);
+    assert.match(html, /TIGHTEN ENTRY AND EXIT FLOW\./);
     assert.doesNotMatch(html, /<div class="card-title">Sled Pull<\/div>/);
   });
 
@@ -393,6 +582,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
       athlete: { name: "Alex Smith", division: "open" },
       race: { finishTimeSeconds: 5738 },
       benchmarkContext: {
+        analysisFrame: { frame: "current_band", comparisonBand: "sub_65" },
         comparisonOptions: [{ percentile: 72, topPercent: 28 }],
       },
       headline: {
@@ -412,10 +602,14 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     const carousel = buildTemplateA(medianBasedAnalysis, [], { displayName: "Alex Smith", calculatorMode: "analyse" });
     const html = buildRaceCardHtml(raceCard);
 
-    assert.equal(raceCard.comparisonBasis, carousel.slides[1].comparison_basis);
     assert.equal(raceCard.comparisonBasis, "MEDIAN");
-    assert.match(html, /FASTER THAN MEDIAN/);
-    assert.match(html, /SLOWER THAN MEDIAN/);
+    assert.equal(raceCard.comparisonProfileLabel, "SUB 60-65 MEDIAN");
+    assert.equal(carousel.slides[1].comparison_basis, raceCard.comparisonProfileLabel);
+    assert.equal(carousel.slides[1].legend_text, "BLUE = FASTER THAN SUB 60-65 MEDIAN    RED = SLOWER THAN SUB 60-65 MEDIAN");
+    assert.ok(carousel.slides[1].stations.every((row) => row.comparison_basis === raceCard.comparisonProfileLabel));
+    assert.match(html, /Race Split Profile &mdash; VS SUB 60-65 MEDIAN/);
+    assert.match(html, />FASTER<\/div>/);
+    assert.match(html, />SLOWER<\/div>/);
     assert.doesNotMatch(html, /YOUR AVERAGE/);
   });
 
@@ -468,14 +662,39 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.notEqual(farmersRow.delta, "+2:00");
   });
 
-  it("keeps race-card strongest station text consistent with penalty-adjusted split rows", () => {
+  it("uses best-relative-split fallback after suppressing a penalty-inflated strongest station", () => {
     const data = buildHyroxRaceCardData(penaltyAdjustedGapAnalysis());
     const farmersRow = data.splitRows.find((row) => row.key === "farmers_carry");
 
     assert.equal(data.strongestStation.name, "Farmers Carry");
-    assert.equal(data.strongestStation.percentile, "Ahead by 1:00");
+    assert.equal(data.strongestStation.policyStatus, "fastest_ahead_split_only");
     assert.equal(farmersRow.delta, "-1:00");
     assert.equal(farmersRow.tone, "positive");
+  });
+
+  it("matches penalty raw text and uses best-relative-split fallback after suppressing a strongest station", () => {
+    const analysis = penaltyAdjustedGapAnalysis({
+      penalties: [{ rawText: "FARMERS CARRY (180s)", penaltySeconds: 180 }],
+    });
+    const data = buildHyroxRaceCardData(analysis);
+    const carousel = buildTemplateA(analysis, [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
+
+    assert.equal(data.strongestStation.name, "Farmers Carry");
+    assert.equal(data.strongestStation.policyStatus, "fastest_ahead_split_only");
+    assert.equal(carousel.slides[0].best_station, "FARMERS CARRY");
+    assert.equal(carousel.slides[2].station, "FARMERS CARRY");
+    assert.match(carousel.slides[2].caption, /no protectable strength/i);
+  });
+
+  it("renders a secondary fastest-win line when penalties are material but not primary", () => {
+    const data = buildHyroxRaceCardData(penaltyAdjustedGapAnalysis());
+    const html = buildRaceCardHtml(data);
+
+    assert.equal(data.artifactHeadlineMode, "fitness_first_with_penalty_win");
+    assert.equal(data.biggestLimiter.name, "Wall Balls");
+    assert.equal(data.fastestControllableWin.name, "Penalties");
+    assert.match(html, /FASTEST WIN: PENALTIES 3:00/);
+    assert.doesNotMatch(html, /<div class="card-title">Penalties<\/div>/);
   });
 
   it("uses penalty-adjusted carousel flow rows and callouts", () => {
@@ -492,14 +711,15 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.notEqual(slide2.biggest_loss.station, "FARMERS CARRY");
   });
 
-  it("keeps carousel strength slide consistent with penalty-adjusted flow rows", () => {
+  it("shows best-relative-split fallback on the carousel strength slide", () => {
     const carousel = buildTemplateA(penaltyAdjustedGapAnalysis(), [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
     const farmersRow = carousel.slides[1].stations.find((row) => row.name === "FARMERS CARRY");
     const strengthSlide = carousel.slides[2];
 
     assert.equal(strengthSlide.station, "FARMERS CARRY");
-    assert.equal(strengthSlide.percentile, "-1:00 ahead");
+    assert.equal(strengthSlide.percentile, "Best relative split");
     assert.equal(strengthSlide.position_gain, "+1:00");
+    assert.match(strengthSlide.caption, /no protectable strength/i);
     assert.equal(farmersRow.delta, "-1:00");
   });
 

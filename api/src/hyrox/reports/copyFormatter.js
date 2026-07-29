@@ -1,6 +1,8 @@
 import { formatSecondsToTime } from "../ingestion/timeParser.js";
 
 const FORBIDDEN_REPLACEMENTS = Object.freeze([
+  [/\bTotal Roxzone Time\b/gi, "RoxZone"],
+  [/\bRoxzone\b/gi, "RoxZone"],
   [/\bweakness\b/g, "limiter"],
   [/\bfailure\b/gi, "setback"],
   [/\bguaranteed\b/gi, "estimated"],
@@ -36,36 +38,45 @@ function ordinalSuffix(n) {
 }
 
 export function formatOrdinal(n) {
-  const abs = Math.abs(Math.round(Number(n)));
-  if (!Number.isFinite(abs)) return null;
-  const teens = abs % 100;
-  if (teens >= 11 && teens <= 13) return `${abs}th`;
-  const remainder = abs % 10;
-  const suffix = remainder === 1 ? "st" : remainder === 2 ? "nd" : remainder === 3 ? "rd" : "th";
-  return `${abs}${suffix}`;
+  if (n === null || n === undefined || n === "") return null;
+  const value = Number(n);
+  if (!Number.isFinite(value)) return null;
+  const abs = Math.abs(Math.round(value));
+  return `${abs}${ordinalSuffix(abs)}`;
 }
 
 export function formatPercentile(p) {
-  const n = Number(p);
-  if (!Number.isFinite(n)) return null;
-  if (n >= 50) return `Top ${Math.max(1, Math.round(100 - n))}%`;
-  const rounded = Math.round(n);
-  return `${rounded}${ordinalSuffix(rounded)} percentile`;
+  return formatPerformancePercentile(p);
 }
 
 export function formatPercentileRank(p) {
   const n = Number(p);
   if (!Number.isFinite(n)) return null;
   const rounded = Math.round(n);
-  return `${rounded}${ordinalSuffix(rounded)} percentile`;
+  return `${formatOrdinal(rounded)} percentile`;
 }
 
 export function formatOverallStanding(p) {
+  return formatPerformancePercentile(p, { scope: "overall" });
+}
+
+export function formatPerformancePercentile(p, { scope = "", uppercase = false } = {}) {
   if (p == null) return null;
   const n = Number(p);
   if (!Number.isFinite(n)) return null;
-  const topPct = Math.max(1, Math.round(100 - n));
-  return `Top ${topPct}% overall`;
+  const rounded = Math.max(1, Math.min(99, Math.round(n)));
+  let text;
+  if (n >= 60) {
+    text = `Top ${Math.max(1, Math.round(100 - n))}%`;
+  } else if (n <= 10) {
+    text = `Bottom ${rounded}%`;
+  } else if (n >= 40) {
+    text = `around the ${formatOrdinal(rounded)} percentile`;
+  } else {
+    text = `${formatOrdinal(rounded)} percentile`;
+  }
+  if (scope) text = `${text} ${scope}`;
+  return uppercase ? text.toUpperCase() : text;
 }
 
 export function bandScoreLabel(gapSeconds, comparisonSeconds = null) {
@@ -145,13 +156,14 @@ export function regionalContextLine(analysisJson) {
   if (gap < 5) return null;
 
   const regionLabel = String(regional.regionLabel ?? regional.region ?? "").trim();
-  const topPercent = (pct) => Math.max(1, Math.round(100 - pct));
+  const regionalLabel = formatPerformancePercentile(regionalPct);
+  const globalLabel = formatPerformancePercentile(globalPct);
 
   if (regionalPct < globalPct) {
-    return `${regionLabel} events attract a stronger-than-average field - locally, this time ranks you top ${topPercent(regionalPct)}%.`;
+    return `${regionLabel} events attract a stronger-than-average field - locally, this time ranks ${regionalLabel}.`;
   }
 
-  return `Globally, where fields include more established athletes, you'd rank top ${topPercent(globalPct)}%.`;
+  return `Globally, where fields include more established athletes, you'd rank ${globalLabel}.`;
 }
 
 export function ageGroupContextLine(analysisJson) {
@@ -159,8 +171,7 @@ export function ageGroupContextLine(analysisJson) {
   if (!age?.available || age.fieldPercentile == null) return null;
   const fieldPercentile = Number(age.fieldPercentile);
   if (!Number.isFinite(fieldPercentile)) return null;
-  const topPct = Math.max(1, Math.round(100 - fieldPercentile));
   const group = String(age.ageGroup ?? "").trim();
   if (!group) return null;
-  return `Top ${topPct}% in your ${group} age group`;
+  return formatPerformancePercentile(fieldPercentile, { scope: `in your ${group} age group` });
 }

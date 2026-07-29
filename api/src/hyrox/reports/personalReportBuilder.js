@@ -3,6 +3,7 @@ import { buildRecommendations, buildGapBreakdown, formatGapBreakdown } from "./r
 import { buildBackgroundSection } from "./backgroundPersonaliser.js";
 import { buildTrainingVolumeAdvice } from "./trainingVolumeAdvisor.js";
 import { buildStrengthSignalCopy } from "./strengthSignalAdvisor.js";
+import { resolveReportStrength } from "./reportSelections.js";
 import { buildRoxzoneSection } from "./roxzoneCommentary.js";
 import { renderMuscleDiagramPair } from "../engine/muscleDiagramRenderer.js";
 import { getSegmentLabel } from "../engine/segmentNormaliser.js";
@@ -388,9 +389,9 @@ function ctaCopy(calculatorMode = "target", primaryCategory = null) {
   return "Use Forma to build a training plan targeting your bottleneck.";
 }
 
-export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null, calculatorMode = "target") {
+export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null) {
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
-  const strength = analysisJson.strengths?.[0] ?? analysisJson.headline?.biggestStrength ?? null;
+  const strength = resolveReportStrength(analysisJson);
   const total = segment(analysisJson, "total_time");
   const recommendations = buildRecommendations(
     analysisJson,
@@ -499,7 +500,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   if (backgroundCopy) {
     sections.push(section("athlete_background", "Your Background in Context", backgroundCopy));
   }
-  sections.push(section("roxzone_execution", "Roxzone and Execution Profile", buildRoxzoneSection(analysisJson, { calculatorMode })));
+  sections.push(section("roxzone_execution", "RoxZone and Execution Profile", buildRoxzoneSection(analysisJson, { calculatorMode })));
 
   if (ctxCopy) {
     sections.push(section("training_context", "Training Context Interpretation", ctxCopy));

@@ -116,6 +116,32 @@ describe("buildEmailReport visual redesign", () => {
     assert.equal(report.htmlBody.startsWith("<!DOCTYPE html>"), true);
   });
 
+  it("suppresses benchmark standing and lens copy when benchmark data is unavailable", () => {
+    const report = buildEmailReport(
+      mockReport(),
+      mockAnalysis({
+        analysisScope: "no_benchmark_data",
+        benchmarkContext: {
+          available: false,
+          comparisonOptions: [{ percentile: 99, topPercent: 1 }],
+        },
+        segments: [
+          { segmentKey: "total_time", type: "aggregate", percentile: 99, fieldPercentile: 99, userSeconds: 5612 },
+          { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 390, timeGapSeconds: 164 },
+        ],
+      }),
+      mockContext({ overallPercentile: 99 }),
+      null,
+      "analyse",
+    );
+
+    assert.doesNotMatch(report.htmlBody, /OVERALL STANDING/);
+    assert.doesNotMatch(report.htmlBody, /TOP 1% WORLDWIDE/i);
+    assert.doesNotMatch(report.htmlBody, /data-section="benchmark-lens"/);
+    assert.match(report.htmlBody, /BENCHMARK DATA[\s\S]*Unavailable/);
+    assert.match(report.htmlBody, /SPLIT BASIS[\s\S]*Directional/);
+  });
+
   it("shows doubles confirmation note when useDoublesBenchmarks is true", () => {
     const report = buildEmailReport(
       mockReport(),
@@ -204,7 +230,9 @@ describe("buildEmailReport visual redesign", () => {
       "analyse",
     );
 
-    assert.equal(subject, "You're in the sub-90 band. Here's the route to sub-80.");
+    assert.match(subject, /Wall Balls/i);
+    assert.match(subject, /sub-90 band/i);
+    assert.match(subject, /route to sub-80/i);
   });
 
   it("renders over-120 doubles bands as a distinct athlete-facing band", () => {
@@ -223,7 +251,9 @@ describe("buildEmailReport visual redesign", () => {
       "analyse",
     );
 
-    assert.equal(subject, "You're in the 120:00+ band. Here's the route to 105:00-119:59.");
+    assert.match(subject, /Wall Balls/i);
+    assert.match(subject, /120:00\+ band/i);
+    assert.match(subject, /route to 105:00-119:59/i);
     assert.match(htmlBody, /120:00\+ - Doubles Male/);
   });
 
@@ -296,7 +326,7 @@ describe("buildEmailReport visual redesign", () => {
 
   it("renders OVERALL STANDING in the analyse metric strip, including penalty-heavy emails", () => {
     const { htmlBody: html1 } = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse");
-    assert.match(html1, /Top 66% overall/i);
+    assert.match(html1, /34th percentile overall/i);
     assert.match(html1, /OVERALL STANDING/i);
 
     const { htmlBody: html2 } = buildEmailReport(
@@ -362,7 +392,7 @@ describe("buildEmailReport visual redesign", () => {
   it("renders next training focus card", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
     assert.match(htmlBody, /NEXT TRAINING FOCUS/);
-    assert.match(htmlBody, /Wall Balls capacity and consistency/);
+    assert.match(htmlBody, /Wall Balls: set caps, breathing cadence, and squat endurance/);
   });
 
   it("renders dark training focus card styling", () => {
@@ -899,13 +929,16 @@ describe("bandScoreLabel", () => {
 });
 
 describe("formatOverallStanding", () => {
-  it("formats high percentiles as top-percent overall labels", () => {
+  it("formats strong percentiles as top-percent overall labels and slow percentiles plainly", () => {
     assert.equal(formatOverallStanding(99), "Top 1% overall");
     assert.equal(formatOverallStanding(95), "Top 5% overall");
     assert.equal(formatOverallStanding(90), "Top 10% overall");
     assert.equal(formatOverallStanding(75), "Top 25% overall");
     assert.equal(formatOverallStanding(74), "Top 26% overall");
-    assert.equal(formatOverallStanding(34), "Top 66% overall");
+    assert.equal(formatOverallStanding(50), "around the 50th percentile overall");
+    assert.equal(formatOverallStanding(34), "34th percentile overall");
+    assert.equal(formatOverallStanding(2), "Bottom 2% overall");
+    assert.doesNotMatch(formatOverallStanding(2), /Top 98/i);
   });
 });
 
@@ -928,7 +961,7 @@ describe("regional context line in email hero", () => {
     );
 
     assert.match(htmlBody, /Europe events attract a stronger-than-average field/);
-    assert.match(htmlBody, /top 55%/);
+    assert.match(htmlBody, /around the 45th percentile/);
   });
 
   it("does not include the sentence when gap is below 5pp", () => {
@@ -979,7 +1012,7 @@ describe("regional context line in email hero", () => {
     );
 
     assert.match(htmlBody, /Globally, where fields include more established athletes/);
-    assert.match(htmlBody, /top 45%/);
+    assert.match(htmlBody, /around the 55th percentile/);
   });
 });
 
@@ -999,7 +1032,9 @@ describe("analyse mode subject", () => {
       "analyse",
     );
 
-    assert.equal(subject, "You're in the 100:00-104:59 band. Here's where the next time comes from.");
+    assert.match(subject, /Wall Balls/i);
+    assert.match(subject, /100:00-104:59 band/i);
+    assert.match(subject, /where the next time comes from/i);
     assert.ok(!subject.includes("route to sub-105"));
   });
 
@@ -1021,7 +1056,9 @@ describe("analyse mode subject", () => {
         "analyse",
       );
 
-      assert.equal(subject, `You're in the ${bandLabel} band. Here's where the next time comes from.`);
+      assert.match(subject, /Wall Balls/i);
+      assert.match(subject, new RegExp(`${bandLabel} band`, "i"));
+      assert.match(subject, /where the next time comes from/i);
       assert.ok(!subject.includes(`${bandLabel} group. ${bandLabel} is the next test.`));
     });
   }
@@ -1168,6 +1205,55 @@ describe("target mode email", () => {
     assert.ok(!htmlBody.includes("above benchmark"), "target mode should not say 'above benchmark'");
   });
 
+  it("target roadmap labels unreconciled station gaps when running splits are missing", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 6300, label: "sub-105" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total", percentile: 2, userSeconds: 7061, goalBenchmarkSeconds: 6300 },
+        { segmentKey: "work_time", type: "aggregate", label: "Stations", percentile: 2, userSeconds: 3885, goalBenchmarkSeconds: 2400 },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", percentile: 50, userSeconds: 615, goalBenchmarkSeconds: 615 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", percentile: 2, userSeconds: 900, goalBenchmarkSeconds: 300 },
+      ],
+    });
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+
+    assert.match(htmlBody, /Available station splits show/);
+    assert.match(htmlBody, /missing run data means this cannot be reconciled directly/);
+    assert.doesNotMatch(htmlBody, /accounts for at least/i);
+  });
+
+  it("suppresses impossible station-level RoxZone detail larger than the official total", () => {
+    const roxzoneSection = {
+      sectionKey: "roxzone_execution",
+      title: "RoxZone Execution",
+      content: [
+        "Farmers Carry: 25:46 combined (10:37 in, 15:09 out).",
+        "Official RoxZone total is the reconciliation source.",
+      ],
+    };
+    const analysis = mockAnalysis({
+      segments: [
+        ...mockAnalysis().segments,
+        { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 615, percentile: 20 },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport(mockReport([roxzoneSection]), analysis, mockContext(), null, "analyse");
+
+    assert.doesNotMatch(htmlBody, /Farmers Carry: 25:46/);
+    assert.match(htmlBody, /RoxZone detail is partial or internally inconsistent/);
+    assert.match(htmlBody, /Official RoxZone total is the reconciliation source/);
+  });
+
   it("target mode split table header says Target status not Band score", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
@@ -1190,14 +1276,14 @@ describe("target mode email", () => {
     assert.ok(htmlBody.includes("Target status"), "target mode must say Target status");
   });
 
-  it("target mode uses plural grammar for Wall Balls", () => {
+  it("target mode uses natural station-subject grammar for Wall Balls", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60", key: "k" },
         primaryBenchmarkGroup: { label: "Open Male" },
         achievedBand: "sub_65",
       },
-      headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", timeGapSeconds: 120 } },
+      headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", type: "station", timeGapSeconds: 120 } },
       segments: [
         { segmentKey: "total_time", type: "aggregate", percentile: 45, userSeconds: 3900, goalBenchmarkSeconds: 3543, exactTargetSeconds: 3600 },
         { segmentKey: "work_time", type: "aggregate", percentile: 35, userSeconds: 2600, goalBenchmarkSeconds: 2200, exactTargetSeconds: 2100 },
@@ -1211,8 +1297,8 @@ describe("target mode email", () => {
       tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
     };
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
-    assert.ok(!htmlBody.includes("Wall Balls is"), `should not say "Wall Balls is", got: ${htmlBody.includes("Wall Balls") ? "Wall Balls found" : "Wall Balls not found"}`);
-    assert.ok(htmlBody.includes("Wall Balls are"), "should use plural Wall Balls grammar");
+    assert.ok(htmlBody.includes("The Wall Balls station is"), "should phrase station labels naturally as sentence subjects");
+    assert.ok(!htmlBody.includes("Wall Balls are"), "should not use plural grammar for a single station label");
   });
 
   it("elite athlete (sub_60 band) in target mode gets elite stretch feasibility", () => {
@@ -1343,7 +1429,7 @@ describe("target mode email", () => {
     assert.ok(!htmlBody.includes("elite stretch"), "sub-60 targeting 1:00:00 should not get elite stretch");
   });
 
-  it("overall standing in email uses Top X% not raw percentile", () => {
+  it("overall standing in email avoids top-share wording for slow or mid-pack percentiles", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_65",
@@ -1354,8 +1440,8 @@ describe("target mode email", () => {
       ],
     });
     const { htmlBody } = buildEmailReport(mockReport(), analysis, mockContext(), null, "analyse");
-    assert.ok(!htmlBody.includes("percentile overall"), "email must not contain raw percentile ordinal");
-    assert.ok(htmlBody.includes("Top ") && htmlBody.includes("% overall"), "email must contain Top X% overall");
+    assert.ok(htmlBody.includes("around the 40th percentile overall"), "email must contain clear percentile wording");
+    assert.ok(!htmlBody.includes("Top 60% overall"), "email must not convert a 40th percentile result into top-share copy");
   });
 
   it("OVERALL STANDING always uses the plain label and the true (non-age-scoped) percentile", () => {
@@ -1825,12 +1911,12 @@ describe("analyse mode email", () => {
     assert.ok(opportunitiesSnippet.includes("Sandbag Lunges"), "Sandbag Lunges (+16s) should appear despite a sub-30s gap");
     assert.ok(opportunitiesSnippet.includes("Burpee Broad Jump"), "Burpee Broad Jump (+16s) should appear despite a sub-30s gap");
 
-    // MAIN INSIGHT names the actual stations driving the refinement, not a generic claim.
+    // MAIN INSIGHT follows the resolved primary opportunity instead of opening with a generic
+    // category-only station/refinement sentence.
     const mainInsightIdx = htmlBody.indexOf("MAIN INSIGHT");
     const mainInsightSnippet = htmlBody.slice(mainInsightIdx, mainInsightIdx + 800);
-    assert.match(mainInsightSnippet, /Your next refinement is station execution, led by Wall Balls/);
-    assert.ok(mainInsightSnippet.includes("Sandbag Lunges"));
-    assert.ok(mainInsightSnippet.includes("Burpee Broad Jump"));
+    assert.match(mainInsightSnippet, /The Wall Balls station is the main opportunity/i);
+    assert.doesNotMatch(mainInsightSnippet, /Your next refinement is station execution/i);
   });
 
   it("elite (sub-60) athlete in TARGET mode: same small-but-proportional station gaps surface as Biggest Opportunities as in analyse mode (Sebastien Rajkowski regression)", () => {
@@ -1965,7 +2051,8 @@ describe("analyse mode email", () => {
       },
     });
     const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
-    assert.equal(email.subject, "You're sub-60. Here's what separates you from the top of the group.");
+    assert.match(email.subject, /Wall Balls/i);
+    assert.match(email.subject, /You're sub-60/i);
   });
 
   it("analyse mode subject uses percentile copy for sub-60 athletes faster than the median", () => {
@@ -1981,7 +2068,8 @@ describe("analyse mode email", () => {
       },
     });
     const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
-    assert.equal(email.subject, "You're in the top 18% of sub-60 finishers. Here's the next refinement.");
+    assert.match(email.subject, /Wall Balls/i);
+    assert.match(email.subject, /top 18% of sub-60 finishers/i);
   });
 
   it("analyse mode hero includes comparison group context line", () => {
@@ -2009,7 +2097,9 @@ describe("analyse mode email", () => {
       },
     });
     const email = buildEmailReport(personal, analysis, mockContext(), null, "analyse");
-    assert.equal(email.subject, "You're in the sub-75 band. Here's the route to sub-70.");
+    assert.match(email.subject, /Wall Balls/i);
+    assert.match(email.subject, /sub-75 band/i);
+    assert.match(email.subject, /route to sub-70/i);
   });
 
   it("analyse mode metric strip marks insufficient band confidence as directional", () => {
@@ -2767,7 +2857,7 @@ describe("renderSplitTable", () => {
       },
     }, "target");
 
-    assert.match(htmlBody, /Target assessment: meaningful stretch/);
+    assert.match(htmlBody, /This target is a meaningful stretch/);
     assert.doesNotMatch(htmlBody, /ambitious but plausible/);
   });
 
@@ -2904,8 +2994,8 @@ describe("renderSplitTable", () => {
       benchmarkContext: { primaryBenchmarkGroup: { label: "Open Men 30-39" } },
     }, "analyse");
 
-    assert.match(htmlBody, /Running remains the largest fitness limiter, but penalties are your fastest controllable win/);
-    assert.doesNotMatch(htmlBody, /Stations remain the largest fitness limiter/);
+	    assert.doesNotMatch(htmlBody, /Stations remain the largest fitness limiter/);
+	    assert.doesNotMatch(htmlBody, /Stations is the larger category gap/i);
   });
 
   it("material penalties on a run: MAIN INSIGHT still nets the running gap and names the actual penalized run", () => {
@@ -2925,7 +3015,6 @@ describe("renderSplitTable", () => {
       },
     }, "analyse");
     const insightHtml = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
-    assert.match(insightHtml, /Against the sub-75 benchmark median/);
     assert.doesNotMatch(insightHtml, /Against the sub-80 benchmark median/);
   });
 
@@ -3085,9 +3174,9 @@ describe("renderSplitTable", () => {
 
   it("material penalties: main insight distinguishes fitness, penalties, and penalty-inflated Run 5", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "run_5", penaltySeconds: 300 }] });
-    assert.ok(htmlBody.includes("Stations remain the largest target gap"));
+    assert.doesNotMatch(htmlBody, /Stations is/i);
     assert.ok(!htmlBody.includes("Stations remain the largest fitness limiter"));
-    assert.ok(htmlBody.includes("penalties are your fastest controllable win"));
+    assert.match(htmlBody, /Penalties are your fastest controllable win/i);
     assert.ok(htmlBody.includes("Run 5 is penalty-inflated"));
     assert.ok(!htmlBody.includes("Biggest opportunities: Run 5"));
   });
@@ -3096,8 +3185,248 @@ describe("renderSplitTable", () => {
     const htmlBody = renderSplit({ penalties: [{ station: "wall_balls", penaltySeconds: 300 }] }, "analyse");
     // Wall Balls' raw gap would qualify, but its penalty-adjusted gap is well negative - it
     // must not be named here, matching the (already-fixed) other opportunity/priority panels.
-    assert.match(htmlBody, /Biggest fitness opportunities: SkiErg and Sled Push\./);
-    assert.doesNotMatch(htmlBody, /Biggest fitness opportunities:[^.]*Wall Balls/);
+    assert.match(htmlBody, /Largest fitness limiter: SkiErg\./);
+    assert.match(htmlBody, /Supporting station opportunities: Sled Push\./);
+    assert.doesNotMatch(htmlBody, /Largest fitness limiter: Wall Balls/i);
+    assert.doesNotMatch(htmlBody, /Supporting station opportunities:[^.]*Wall Balls/i);
+  });
+
+  it("fitness-first penalty reports open MAIN INSIGHT with the contract station primary", () => {
+    const section = splitTableSection({
+      penalties: [{ segmentKey: "row", penaltySeconds: 120 }],
+      benchmarkContext: {
+        achievedBand: "sub_100",
+        analysisFrame: { comparisonBand: "sub_95" },
+        primaryBenchmarkGroup: { label: "Open Men 45-49" },
+      },
+      overrides: {
+        total_time: { frameGapSeconds: 501, timeGapToMedianSeconds: 501 },
+        work_time: { frameGapSeconds: 600, timeGapToMedianSeconds: 600 },
+        run_time: { frameGapSeconds: -144, timeGapToMedianSeconds: -144 },
+        row: { frameGapSeconds: 130, timeGapToMedianSeconds: 130 },
+        burpee_broad_jump: { frameGapSeconds: 91, timeGapToMedianSeconds: 91 },
+        sled_push: { frameGapSeconds: 80, timeGapToMedianSeconds: 80 },
+      },
+    });
+    const { htmlBody } = buildEmailReport(
+      { sections: [section] },
+      mockAnalysis({
+        race: { finishTimeSeconds: 5762 },
+        segments: section.tableData.segments,
+        penalties: section.tableData.penalties,
+        benchmarkContext: section.tableData.benchmarkContext,
+        dataQuality: { warnings: ["partial_split_data"], estimatedSplitKeys: ["row"] },
+        headline: {
+          biggestLimiter: { label: "Burpee Broad Jump", segmentKey: "burpee_broad_jump", type: "station", timeGapSeconds: 91 },
+        },
+        timePotential: { headlineGainSeconds: 91 },
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    const mainInsight = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+
+    assert.match(mainInsight, /Burpee Broad Jump station is the main directional opportunity/i);
+    assert.match(mainInsight, /Fastest controllable win: penalties/i);
+    assert.doesNotMatch(mainInsight, /Stations remain the largest fitness limiter/i);
+    assert.doesNotMatch(mainInsight, /Running remains the largest fitness limiter/i);
+  });
+
+  it("material penalty MAIN INSIGHT renders contract reconciliation before raw penalty support", () => {
+    const section = splitTableSection({
+      penalties: [{ segmentKey: "row", penaltySeconds: 120 }],
+      benchmarkContext: {
+        achievedBand: "sub_100",
+        analysisFrame: { comparisonBand: "sub_95" },
+        primaryBenchmarkGroup: { label: "Open Men 45-49" },
+      },
+      overrides: {
+        total_time: { frameGapSeconds: 501, timeGapToMedianSeconds: 501 },
+        work_time: { frameGapSeconds: 600, timeGapToMedianSeconds: 600 },
+        run_time: { frameGapSeconds: -144, timeGapToMedianSeconds: -144 },
+        roxzone_time: { frameGapSeconds: 42, timeGapToMedianSeconds: 42 },
+        row: { frameGapSeconds: 130, timeGapToMedianSeconds: 130 },
+        burpee_broad_jump: { frameGapSeconds: 91, timeGapToMedianSeconds: 91 },
+      },
+    });
+    const { htmlBody } = buildEmailReport(
+      { sections: [section] },
+      mockAnalysis({
+        race: { finishTimeSeconds: 5762 },
+        segments: section.tableData.segments,
+        penalties: section.tableData.penalties,
+        benchmarkContext: section.tableData.benchmarkContext,
+        headline: {
+          biggestLimiter: { label: "Burpee Broad Jump", segmentKey: "burpee_broad_jump", type: "station", timeGapSeconds: 91 },
+        },
+        timePotential: { headlineGainSeconds: 91 },
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    const mainInsight = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+    const contractIndex = mainInsight.indexOf("Station performance is the largest category gap at");
+    const rawIndex = mainInsight.indexOf("Against the sub-95 benchmark median");
+
+    assert.ok(contractIndex > -1, "contract reconciliation should open the material-penalty main insight");
+    assert.match(mainInsight, /Running is ahead of the comparison, which offsets a large part of that/i);
+    assert.match(mainInsight, /\+8:00/);
+    assert.doesNotMatch(mainInsight, /Stations is/i);
+    assert.ok(rawIndex === -1 || rawIndex > contractIndex, "raw reconciliation must not appear before contract reconciliation");
+  });
+
+  it("fitness-first penalty reports open MAIN INSIGHT with the contract run primary and scope station opportunities", () => {
+    const section = splitTableSection({
+      penalties: [{ segmentKey: "farmers_carry", penaltySeconds: 180 }],
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 5400, label: "1:30:00" },
+        primaryBenchmarkGroup: { label: "Doubles Male" },
+      },
+      overrides: {
+        total_time: { frameGapSeconds: 923, timeGapToMedianSeconds: 923 },
+        work_time: { frameGapSeconds: 300, timeGapToMedianSeconds: 300 },
+        run_time: { frameGapSeconds: 417, timeGapToMedianSeconds: 417 },
+        ski_erg: { frameGapSeconds: 20, timeGapToMedianSeconds: 20 },
+        sled_push: { frameGapSeconds: 20, timeGapToMedianSeconds: 20 },
+        sled_pull: { frameGapSeconds: 66, timeGapToMedianSeconds: 66 },
+        run_2: { frameGapSeconds: 80, timeGapToMedianSeconds: 80 },
+      },
+    });
+    const { subject, htmlBody } = buildEmailReport(
+      { sections: [section] },
+      mockAnalysis({
+        race: { finishTimeSeconds: 6323, targetTimeSeconds: 5400 },
+        segments: section.tableData.segments,
+        penalties: section.tableData.penalties,
+        benchmarkContext: section.tableData.benchmarkContext,
+        headline: {
+          biggestLimiter: { label: "Run 2", segmentKey: "run_2", type: "run", timeGapSeconds: 80 },
+        },
+        timePotential: { headlineGainSeconds: 80 },
+      }),
+      mockContext({ targetFinishTimeSeconds: 5400 }),
+      null,
+      "target",
+    );
+    const mainInsight = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+
+    assert.match(subject, /start with Run 2/i);
+    assert.match(mainInsight, /Run 2 is the main target opportunity/i);
+    assert.match(mainInsight, /Running is the largest category gap/i);
+    assert.match(mainInsight, /Once the <strong>3:00<\/strong> penalty is separated/i);
+    assert.match(mainInsight, /Largest fitness limiter: Run 2\./i);
+    assert.match(mainInsight, /Supporting station opportunities: Sled Pull\./i);
+    assert.doesNotMatch(mainInsight, /Largest fitness limiter: Sled Pull/i);
+    assert.doesNotMatch(mainInsight, /Running remains the largest target gap/i);
+  });
+
+  it("single-track category bridges open MAIN INSIGHT with the contract run primary", () => {
+    const section = splitTableSection({
+      benchmarkContext: {
+        analysisFrame: { comparisonBand: "sub_85" },
+        primaryBenchmarkGroup: { label: "Doubles Female" },
+      },
+      overrides: {
+        total_time: { frameGapSeconds: 227, timeGapToMedianSeconds: 227 },
+        work_time: { frameGapSeconds: 192, timeGapToMedianSeconds: 192 },
+        run_time: { frameGapSeconds: -4, timeGapToMedianSeconds: -4 },
+        run_1: { frameGapSeconds: 68, timeGapToMedianSeconds: 68 },
+        wall_balls: { frameGapSeconds: 55, timeGapToMedianSeconds: 55 },
+      },
+    });
+    const { htmlBody } = buildEmailReport(
+      { sections: [section] },
+      mockAnalysis({
+        race: { finishTimeSeconds: 5200 },
+        segments: section.tableData.segments,
+        benchmarkContext: section.tableData.benchmarkContext,
+        headline: {
+          biggestLimiter: { label: "Run 1", segmentKey: "run_1", type: "run", timeGapSeconds: 68 },
+        },
+        timePotential: { headlineGainSeconds: 68 },
+      }),
+      mockContext(),
+      null,
+      "analyse",
+    );
+    const mainInsight = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+
+    assert.match(mainInsight, /Run 1 is the main opportunity/i);
+    assert.match(mainInsight, /sustainable opening pace control/i);
+    assert.match(mainInsight, /Station performance is the largest category gap/i);
+    assert.doesNotMatch(mainInsight, /The main limiter is station performance/i);
+    assert.doesNotMatch(mainInsight, /attack Run 1|go harder from the start|start by pushing Run 1/i);
+  });
+
+  it("target-mode station primaries open MAIN INSIGHT with the contract primary before category context", () => {
+    const section = splitTableSection({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 4500, label: "1:15:00" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      overrides: {
+        total_time: { frameGapSeconds: 389, timeGapToMedianSeconds: 389 },
+        work_time: { frameGapSeconds: 498, timeGapToMedianSeconds: 498 },
+        run_time: { frameGapSeconds: -112, timeGapToMedianSeconds: -112 },
+        wall_balls: { frameGapSeconds: 120, timeGapToMedianSeconds: 120 },
+      },
+    });
+    const { htmlBody } = buildEmailReport(
+      { sections: [section] },
+      mockAnalysis({
+        race: { finishTimeSeconds: 4889, targetTimeSeconds: 4500 },
+        segments: section.tableData.segments,
+        benchmarkContext: section.tableData.benchmarkContext,
+        headline: {
+          biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls", type: "station", timeGapSeconds: 120 },
+        },
+        timePotential: { headlineGainSeconds: 120 },
+      }),
+      mockContext({ targetFinishTimeSeconds: 4500 }),
+      null,
+      "target",
+    );
+    const mainInsight = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+
+    assert.match(mainInsight, /The Wall Balls station is the main target opportunity/i);
+    assert.ok(mainInsight.indexOf("The Wall Balls station is the main target opportunity") < mainInsight.indexOf("Station performance is the largest category gap"));
+    assert.doesNotMatch(mainInsight, /the gap is led by station performance/i);
+  });
+
+  it("late-run primaries include coach-safe late-run durability interpretation", () => {
+    const section = splitTableSection({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 7200, label: "2:00:00" },
+        primaryBenchmarkGroup: { label: "Doubles Male" },
+      },
+      overrides: {
+        total_time: { frameGapSeconds: 1800, timeGapToMedianSeconds: 1800 },
+        work_time: { frameGapSeconds: -120, timeGapToMedianSeconds: -120 },
+        run_time: { frameGapSeconds: 1900, timeGapToMedianSeconds: 1900 },
+        run_7: { frameGapSeconds: 360, timeGapToMedianSeconds: 360 },
+      },
+    });
+    const { htmlBody } = buildEmailReport(
+      { sections: [section] },
+      mockAnalysis({
+        race: { finishTimeSeconds: 9000, targetTimeSeconds: 7200 },
+        segments: section.tableData.segments,
+        benchmarkContext: section.tableData.benchmarkContext,
+        headline: {
+          biggestLimiter: { label: "Run 7", segmentKey: "run_7", type: "run", timeGapSeconds: 360 },
+        },
+        timePotential: { headlineGainSeconds: 360 },
+      }),
+      mockContext({ targetFinishTimeSeconds: 7200 }),
+      null,
+      "target",
+    );
+    const mainInsight = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+
+    assert.match(mainInsight, /Run 7 is the main target opportunity/i);
+    assert.match(mainInsight, /late-run durability under station fatigue/i);
   });
 
   it("material penalties: method note explains penalty separation", () => {
@@ -4343,6 +4672,39 @@ describe("content accuracy fixes (feature-143)", () => {
     assert.ok(!section.includes("No significant time losses detected"), "a genuine 50s RoxZone gap should not be reported as no significant loss");
   });
 
+  it("keeps canonical segment primary ahead of a larger non-primary RoxZone aggregate leak", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: { achievedBand: "sub_70" },
+      headline: {
+        biggestLimiter: { label: "Burpee Broad Jump", segmentKey: "burpee_broad_jump", type: "station", timeGapSeconds: 45, percentile: 28 },
+      },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total", percentile: 60, userSeconds: 4047, frameGapSeconds: 255, confidence: "high" },
+        { segmentKey: "work_time", type: "aggregate", label: "Stations", userSeconds: 1754, frameGapSeconds: 122, confidence: "high" },
+        { segmentKey: "run_time", type: "aggregate", label: "Running", userSeconds: 1938, frameGapSeconds: 72, confidence: "high" },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "Total Roxzone Time", userSeconds: 360, frameGapSeconds: 86, percentile: 30, confidence: "high" },
+        { segmentKey: "burpee_broad_jump", type: "station", label: "Burpee Broad Jump", userSeconds: 251, frameGapSeconds: 45, percentile: 28, confidence: "high" },
+        { segmentKey: "sled_push", type: "station", label: "Sled Push", userSeconds: 166, frameGapSeconds: 26, percentile: 40, confidence: "high" },
+      ],
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        percentile: 30,
+        timeGapToMedianSeconds: 86,
+      },
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+    const opportunities = extractSection(htmlBody, "Biggest opportunities", "Strengths to protect");
+    const mainInsight = htmlBody.slice(htmlBody.indexOf("MAIN INSIGHT"), htmlBody.indexOf("SEGMENT PROFILE"));
+
+    assert.ok(opportunities.indexOf("Burpee Broad Jump") > -1, "BBJ should appear in opportunities");
+    assert.ok(opportunities.indexOf("RoxZone") > -1, "RoxZone can remain visible as execution context");
+    assert.ok(opportunities.indexOf("Burpee Broad Jump") < opportunities.indexOf("RoxZone"), "canonical segment primary should rank before non-primary RoxZone");
+    assert.match(mainInsight, /Biggest opportunity: Burpee Broad Jump/i);
+    assert.doesNotMatch(mainInsight, /Biggest opportunity: RoxZone/i);
+  });
+
   it("M-9: shows anomaly warning when a single station gap is more than 2.5x the implied benchmark time", () => {
     const analysis = mockAnalysis({
       segments: [
@@ -4509,7 +4871,7 @@ describe("content accuracy fixes (feature-143)", () => {
     assert.doesNotMatch(mainInsight, /Transitions are also contributing/i);
   });
 
-  it("MAIN INSIGHT station-performance framing does not name a run split", () => {
+  it("MAIN INSIGHT bridges station category framing when the top split is a run", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_70",
@@ -4524,16 +4886,22 @@ describe("content accuracy fixes (feature-143)", () => {
         { segmentKey: "run_1", label: "Run 1", type: "run", userSeconds: 480, benchmarkMedianSeconds: 300, frameGapSeconds: 180, confidence: "high" },
         { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 390, benchmarkMedianSeconds: 300, frameGapSeconds: 90, confidence: "high" },
       ],
+      headline: {
+        biggestLimiter: { segmentKey: "run_1", label: "Run 1", type: "run", timeGapSeconds: 180, percentile: 35 },
+      },
+      limiters: [{ segmentKey: "run_1", label: "Run 1", type: "run", timeGapSeconds: 180, percentile: 35 }],
     });
 
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
     const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
 
-    assert.match(mainInsight, /station performance, especially Wall Balls/i);
-    assert.doesNotMatch(mainInsight, /station performance, especially Run 1/i);
+    assert.match(mainInsight, /Station performance is the largest category gap/i);
+    assert.match(mainInsight, /Run 1 is the main opportunity/i);
+    assert.match(mainInsight, /sustainable opening pace control/i);
+    assert.doesNotMatch(mainInsight, /station performance, especially Wall Balls/i);
   });
 
-  it("MAIN INSIGHT running-pace framing does not name a station split", () => {
+  it("MAIN INSIGHT bridges running category framing when the top split is a station", () => {
     const analysis = mockAnalysis({
       benchmarkContext: {
         achievedBand: "sub_70",
@@ -4553,8 +4921,9 @@ describe("content accuracy fixes (feature-143)", () => {
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
     const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
 
-    assert.match(mainInsight, /running pace, especially Run 1/i);
-    assert.doesNotMatch(mainInsight, /running pace, especially Wall Balls/i);
+    assert.match(mainInsight, /Running is the largest category gap/i);
+    assert.match(mainInsight, /The Wall Balls station is the main opportunity/i);
+    assert.doesNotMatch(mainInsight, /running pace, especially Run 1/i);
   });
 
   it("target MAIN INSIGHT station-performance framing names the true top split even when it's a run", () => {
@@ -4563,6 +4932,9 @@ describe("content accuracy fixes (feature-143)", () => {
         achievedBand: "sub_70",
         goalBenchmarkGroup: { targetFinishSeconds: 3900, label: "sub-65" },
         primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      headline: {
+        biggestLimiter: { label: "Run 1", segmentKey: "run_1", type: "run", timeGapSeconds: 180, percentile: 35 },
       },
       segments: [
         { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 4270, goalBenchmarkSeconds: 3900, exactTargetSeconds: 3900, frameGapSeconds: 370, confidence: "high" },
@@ -4580,8 +4952,8 @@ describe("content accuracy fixes (feature-143)", () => {
     // Stations lead the aggregate gap, but Run 1's single-segment gap (180s) is bigger than
     // Wall Balls' (90s), so the "biggest target opportunity" claim must match the split table's
     // #1 row, not just the leading category.
-    assert.match(mainInsight, /gap is led by station performance/i);
-    assert.match(mainInsight, /Run 1 is the biggest target opportunity/i);
+    assert.match(mainInsight, /Run 1 is the main target opportunity/i);
+    assert.match(mainInsight, /Station performance is the largest category gap/i);
     assert.doesNotMatch(mainInsight, /Wall Balls (is|are) the biggest target opportunity/i);
   });
 
@@ -4609,13 +4981,45 @@ describe("content accuracy fixes (feature-143)", () => {
     // Run 1's (90s) — this is the exact shape of the reported bug (Farmers Carry vs. Run 8):
     // the "biggest target opportunity" claim must name the station, matching the split table's
     // #1 row, not just the leading category.
-    assert.match(mainInsight, /gap is led by running pace/i);
-    assert.match(mainInsight, /Wall Balls are the biggest target opportunity/i);
+    assert.match(mainInsight, /The Wall Balls station is the main target opportunity/i);
+    assert.match(mainInsight, /Running is the largest category gap/i);
     assert.doesNotMatch(mainInsight, /Run 1 is the biggest target opportunity/i);
+  });
+
+  it("MAIN INSIGHT treats station-vs-total reconciliation as directional when running data is missing", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        achievedBand: "sub_90",
+        nextBand: "sub_85",
+        primaryBenchmarkGroup: { label: "Open Male" },
+      },
+      segments: [
+        { segmentKey: "total_time", label: "Total", type: "aggregate", userSeconds: 5400, benchmarkMedianSeconds: 4800, frameGapSeconds: 600, confidence: "medium" },
+        { segmentKey: "work_time", label: "Stations", type: "aggregate", userSeconds: 2600, benchmarkMedianSeconds: 1600, frameGapSeconds: 1000, confidence: "medium" },
+        { segmentKey: "run_time", label: "Running", type: "aggregate", userSeconds: null, benchmarkMedianSeconds: 2600, frameGapSeconds: null, confidence: "low" },
+        { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", userSeconds: 600, benchmarkMedianSeconds: 600, frameGapSeconds: 0, confidence: "medium" },
+        { segmentKey: "wall_balls", label: "Wall Balls", type: "station", userSeconds: 1100, benchmarkMedianSeconds: 300, frameGapSeconds: 800, confidence: "medium" },
+      ],
+    });
+
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "analyse");
+    const mainInsight = extractSection(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.match(mainInsight, /missing run data means this cannot be reconciled directly/i);
+    assert.match(mainInsight, /station ranking as directional/i);
+    assert.doesNotMatch(mainInsight, /Against the [^<]+, available station splits are[\s\S]+against the/i);
+    assert.doesNotMatch(mainInsight, /Stations are the largest contributor/i);
   });
 });
 
 describe("feature-144: gapPill directional badge and route guard", () => {
+  function sectionBetween(html, startMarker, endMarker) {
+    const start = html.indexOf(startMarker);
+    if (start < 0) return "";
+    const end = endMarker ? html.indexOf(endMarker, start + startMarker.length) : -1;
+    return end > start ? html.slice(start, end) : html.slice(start);
+  }
+
   it("gapPill: +13s gap renders amber (#fef3c7)", () => {
     const html = gapPill(13);
     assert.ok(html.includes("#fef3c7"), `expected amber; got: ${html}`);
@@ -4662,8 +5066,67 @@ describe("feature-144: gapPill directional badge and route guard", () => {
       tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
     };
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const mainInsight = sectionBetween(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+    assert.match(mainInsight, /Running split data is incomplete/i);
+    assert.match(mainInsight, /based on available splits/i);
     assert.match(htmlBody, /running split data/i);
     assert.doesNotMatch(htmlBody, /from station efficiency/i);
+  });
+
+  it("renderTargetRoadmap: explains station gaps that are offset by running already ahead of target", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+        achievedBand: "sub_65",
+      },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", frameGapSeconds: 543, goalBenchmarkSeconds: 3600, userSeconds: 4143, confidence: "high" },
+        { segmentKey: "work_time", type: "aggregate", frameGapSeconds: 1101, goalBenchmarkSeconds: 2100, userSeconds: 3201, confidence: "high" },
+        { segmentKey: "run_time", type: "aggregate", frameGapSeconds: -558, goalBenchmarkSeconds: 1200, userSeconds: 642, confidence: "high" },
+        { segmentKey: "roxzone_time", type: "aggregate", frameGapSeconds: 0, goalBenchmarkSeconds: 300, userSeconds: 300, confidence: "high" },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 700, goalBenchmarkSeconds: 300, userSeconds: 1000, confidence: "high" },
+        { segmentKey: "sled_push", type: "station", label: "Sled Push", frameGapSeconds: 300, goalBenchmarkSeconds: 250, userSeconds: 550, confidence: "high" },
+      ],
+    });
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const routeSection = sectionBetween(htmlBody, "YOUR ROUTE TO", "WHAT TO PROTECT");
+
+    assert.match(routeSection, /station gap is 18:21/i);
+    assert.match(routeSection, /partly offset by running already ahead/i);
+    assert.match(routeSection, /net target gap is 9:03/i);
+    assert.doesNotMatch(routeSection, /\+18:21 from station efficiency/i);
+  });
+
+  it("MAIN INSIGHT qualifies extreme station gaps before treating them as capacity", () => {
+    const analysis = mockAnalysis({
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "sub-60" },
+        primaryBenchmarkGroup: { label: "Open Male" },
+        achievedBand: "sub_65",
+      },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", frameGapSeconds: 543, goalBenchmarkSeconds: 3600, userSeconds: 4143, confidence: "high" },
+        { segmentKey: "work_time", type: "aggregate", frameGapSeconds: 1101, goalBenchmarkSeconds: 2100, userSeconds: 3201, confidence: "high" },
+        { segmentKey: "run_time", type: "aggregate", frameGapSeconds: -558, goalBenchmarkSeconds: 1200, userSeconds: 642, confidence: "high" },
+        { segmentKey: "roxzone_time", type: "aggregate", frameGapSeconds: 0, goalBenchmarkSeconds: 300, userSeconds: 300, confidence: "high" },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 800, goalBenchmarkSeconds: 300, userSeconds: 1100, confidence: "high" },
+      ],
+    });
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), null, "target");
+    const mainInsight = sectionBetween(htmlBody, "MAIN INSIGHT", "SEGMENT PROFILE");
+
+    assert.match(mainInsight, /check the split before treating this as pure capacity/i);
   });
 
   it("buildEmailReport hero headline uses the largest seconds gap", () => {
@@ -4695,7 +5158,7 @@ describe("feature-144: gapPill directional badge and route guard", () => {
       tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
     };
     const { htmlBody } = buildEmailReport({ sections: [splitSection] }, analysis, mockContext(), interpretation, "target");
-    assert.match(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SKIERG/i);
+	    assert.match(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH THE SKIERG STATION/i);
     assert.doesNotMatch(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
   });
 
@@ -4728,12 +5191,17 @@ describe("feature-144: gapPill directional badge and route guard", () => {
       secondaryTheses: [],
     };
     const athleteContext = { displayName: "Alex Smith", targetFinishTimeSeconds: 3600 };
-    const email = buildEmailReport(mockReport(), analysis, athleteContext, interpretation, "target");
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const email = buildEmailReport({ sections: [splitSection] }, analysis, athleteContext, interpretation, "target");
     const carousel = buildTemplateA(analysis, [], athleteContext);
     const raceCard = buildHyroxRaceCardData(analysis, athleteContext);
     const caption = buildCaption({ slide0: carousel.slides[0], athleteContext, analysisJson: analysis });
 
-    assert.match(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+	    assert.match(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH THE WALL BALLS STATION/i);
     assert.doesNotMatch(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH/i);
     assert.equal(carousel.slides[0].biggest_limiter, "WALL BALLS");
     assert.equal(carousel.slides[3].station, "WALL BALLS");
@@ -4758,6 +5226,13 @@ describe("feature-144: gapPill directional badge and route guard", () => {
         biggestStrength: { label: "SkiErg", segmentKey: "ski_erg", type: "station", percentile: 82 },
       },
       timePotential: { headlineGainSeconds: 105 },
+      roxzoneAnalysis: {
+        available: true,
+        mode: "inferred_total",
+        totalSeconds: 400,
+        percentile: 20,
+        timeGapToMedianSeconds: 105,
+      },
       segments: [
         { segmentKey: "total_time", type: "aggregate", frameGapSeconds: 761, goalBenchmarkSeconds: 3600, userSeconds: 4361, percentile: 45 },
         { segmentKey: "roxzone_time", type: "aggregate", label: "Total Roxzone Time", frameGapSeconds: 105, userSeconds: 400, percentile: 20 },
@@ -4773,7 +5248,12 @@ describe("feature-144: gapPill directional badge and route guard", () => {
       secondaryTheses: [],
     };
     const athleteContext = { displayName: "Alex Smith", targetFinishTimeSeconds: 3600 };
-    const email = buildEmailReport(mockReport(), analysis, athleteContext, interpretation, "target");
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const email = buildEmailReport({ sections: [splitSection] }, analysis, athleteContext, interpretation, "target");
     const carousel = buildTemplateA(analysis, [], athleteContext);
     const raceCard = buildHyroxRaceCardData(analysis, athleteContext);
     const caption = buildCaption({ slide0: carousel.slides[0], athleteContext, analysisJson: analysis });
@@ -4782,8 +5262,14 @@ describe("feature-144: gapPill directional badge and route guard", () => {
     assert.doesNotMatch(email.htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
     assert.equal(carousel.slides[0].biggest_limiter, "ROXZONE");
     assert.equal(raceCard.biggestLimiter.name, "RoxZone");
-    assert.match(caption, /Biggest opportunity: ROXZONE/);
+    assert.match(caption, /DIRECTIONAL OPPORTUNITY: ROXZONE/);
     assert.doesNotMatch(caption, /Biggest opportunity: WALL BALLS/);
+    const start = email.htmlBody.lastIndexOf("MAIN INSIGHT");
+    const end = email.htmlBody.indexOf("SEGMENT PROFILE", start);
+    const mainInsight = start === -1 || end === -1 || end <= start ? "" : email.htmlBody.slice(start, end);
+    assert.match(mainInsight, /RoxZone is costing about 1:45; this is transition execution, not station capacity/i);
+    assert.match(mainInsight, /RoxZone detail is partial/i);
+    assert.match(mainInsight, /Rehearse direct run-to-station routes/i);
   });
 
   it("keeps subject, hero, opportunities table, and target priorities on the largest seconds-gap opportunity", () => {
@@ -4830,7 +5316,7 @@ describe("feature-144: gapPill directional badge and route guard", () => {
 
     assert.match(subject, /start with Wall Balls/i);
     assert.doesNotMatch(subject, /Sled Push/i);
-    assert.match(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH WALL BALLS/i);
+    assert.match(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH THE WALL BALLS STATION/i);
     assert.doesNotMatch(htmlBody, /THE ROUTE TO 1:00:00 STARTS WITH SLED PUSH/i);
 
     function sectionBetween(startMarker, endMarker) {

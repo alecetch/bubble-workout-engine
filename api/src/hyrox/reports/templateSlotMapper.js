@@ -1,13 +1,19 @@
 import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
-import { benchmarkConfidenceQualifier, percentileTextWithFallback } from "./comparisonOptions.js";
-import { comparisonLabel, hasGoalGroup } from "./comparisonBasis.js";
+import { hasBenchmarkPercentileData } from "./comparisonOptions.js";
+import { hasGoalGroup } from "./comparisonBasis.js";
+import { comparisonProfileLabel } from "./comparisonProfileLabel.js";
 import { ageGroupContextLine, formatGain, formatPercent, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
 import { resolveHeroImage } from "./heroImageResolver.js";
-import { penaltyContext } from "./penaltyContext.js";
+import { ensureHyroxReportContract } from "./reportContractBuilder.js";
+import { dataQualityNote, reportStrengthGapSeconds, resolveReportStrength } from "./reportSelections.js";
+import { roxzoneActionability } from "./roxzoneActionability.js";
+import { displaySegmentLabel } from "./segmentDisplay.js";
+import { buildSplitDisplayRows } from "./splitRowDisplayContract.js";
 
 const RACE_SEGMENTS = SEGMENT_MAP.filter((segment) => segment.type !== "roxzone");
-const FEATURES = Object.freeze(["Biggest Limiter", "Time Potential", "Strongest Station", "Percentile Ranking", "Race Efficiency Score"]);
+const DEFAULT_FEATURES = Object.freeze(["Biggest Limiter", "Time Potential", "Relative Split Signal", "Percentile Ranking", "Race Efficiency Score"]);
+const DEFAULT_NO_PERCENTILE_FEATURES = Object.freeze(DEFAULT_FEATURES.filter((feature) => feature !== "Percentile Ranking"));
 
 function segment(analysisJson, key) {
   return analysisJson.segments?.find((row) => row.segmentKey === key) ?? null;
@@ -18,16 +24,7 @@ function stationSegments(analysisJson) {
 }
 
 function bestStation(analysisJson) {
-  // strengths[0] is the full framed segment (timeGapToMedianSeconds, frameGapSeconds present).
-  // headline.biggestStrength is the same station but stripped of frame-adjusted gap detail —
-  // no time gaps, so it can't populate position_gain. Always prefer strengths[0] for complete data.
-  if (analysisJson.strengths?.[0]?.segmentKey) return analysisJson.strengths[0];
-  if (analysisJson.headline?.biggestStrength?.segmentKey) return analysisJson.headline.biggestStrength;
-  return [...stationSegments(analysisJson)]
-    .map((row) => ({ row, gap: strengthGapSeconds(row, analysisJson) }))
-    .filter(({ gap }) => Number.isFinite(gap) && gap < 0)
-    .sort((a, b) => a.gap - b.gap)[0]?.row
-    ?? null;
+  return resolveReportStrength(analysisJson);
 }
 
 function opportunityStation(analysisJson) {
@@ -98,24 +95,29 @@ function firstName(athleteContext = {}) {
   return firstNameFromOneAthlete(raw) ?? "This athlete";
 }
 
-function rankLanguage(analysisJson, athleteContext) {
+function rankLanguage(analysisJson, athleteContext, narrative = null) {
   const worldRank = athleteContext.worldRank ? `#${athleteContext.worldRank}` : null;
   if (worldRank) return { percentile: "TOP RANK WORLDWIDE", worldRank };
 
-  const qualifier = benchmarkConfidenceQualifier(analysisJson.benchmarkContext);
-  const qualifierSuffix = qualifier ? ` (${qualifier})` : "";
+  if (narrative && !narrative.rankDisplays.allowed) {
+    return { percentile: "Benchmark data unavailable", worldRank: "" };
+  }
+  if (narrative?.rankDisplays.primary?.label) {
+    const qualifier = narrative.rankDisplays.primary.qualifier;
+    return { percentile: `${narrative.rankDisplays.primary.label}${qualifier ? ` (${qualifier})` : ""}`, worldRank: "" };
+  }
+
   const overall = segment(analysisJson, "total_time");
-  const percentileLabel = percentileTextWithFallback(
-    analysisJson.benchmarkContext,
-    overall,
-    athleteContext.overallPercentile,
-  ) ?? "BENCHMARKED RESULT";
-  return { percentile: `${percentileLabel}${qualifierSuffix}`, worldRank: "" };
+  if (!hasBenchmarkPercentileData(analysisJson, overall, athleteContext.overallPercentile)) {
+    return { percentile: "Benchmark data unavailable", worldRank: "" };
+  }
+  return { percentile: "BENCHMARKED RESULT", worldRank: "" };
 }
 
 function athleteRankLine(rank, athleteContext) {
   const name = athleteName(athleteContext);
   if (!rank?.percentile || rank.percentile.startsWith("BENCHMARKED RESULT")) return rank?.percentile ?? "BENCHMARKED RESULT";
+  if (rank.percentile === "Benchmark data unavailable") return "Benchmark data is not available for this race format";
   if (rank.percentile === "TOP RANK WORLDWIDE") return `${name} has a top rank worldwide`;
   return `${name} is in the ${rank.percentile}`;
 }
@@ -135,34 +137,56 @@ function targetGapSeconds(row, goalAvailable) {
   }
   return Number.isFinite(row?.timeGapToMedianSeconds) ? row.timeGapToMedianSeconds : null;
 }
-
 function flowRows(analysisJson) {
-  const goalAvailable = hasGoalGroup(analysisJson);
-  return RACE_SEGMENTS.flatMap((mapRow) => {
-    const row = segment(analysisJson, mapRow.segmentKey);
-    // Skip segments with no recorded time — avoids showing blank entry/exit rows
-    // and prevents the table from overflowing the legend on slide 2.
-    if (!row || !Number.isFinite(row.userSeconds)) return [];
-    const deltaSeconds = targetGapSeconds(row, goalAvailable);
-    const roundedDelta = Number.isFinite(deltaSeconds) ? Math.round(deltaSeconds) : 0;
-    return [{
-      name: upper(mapRow.displayName),
-      time: formatTime(row.userSeconds) ?? "-",
-      benchmark_time: formatTime(targetSeconds(row, goalAvailable)) ?? null,
-      target_time: formatTime(targetSeconds(row, goalAvailable)) ?? null,
-      delta: formatTimeDiff(roundedDelta) ?? "0",
-      delta_seconds: roundedDelta,
-      tone: roundedDelta < 0 ? "positive" : roundedDelta > 0 ? "negative" : "neutral",
-    }];
-  });
+  return buildSplitDisplayRows(analysisJson).map((row) => ({
+    ...row,
+    name: upper(row.label),
+    time: row.displayTimeFormatted ?? "-",
+    raw_time: row.rawTimeFormatted,
+    benchmark_time: row.comparisonTimeFormatted,
+    target_time: row.comparisonTimeFormatted,
+    delta: row.displayGapFormatted ?? "0",
+    raw_delta: row.rawGapFormatted,
+    delta_seconds: row.displayGapSeconds,
+    tone: row.displayGapTone,
+    penalty_adjusted: row.isPenaltyAdjusted,
+    penalty_adjustment: row.penaltyAdjustmentFormatted,
+    penalty_adjustment_label: row.penaltyAdjustmentLabel,
+  }));
+}
+
+function flowRowsFromContract(contract = {}, analysisJson = {}) {
+  const rows = Array.isArray(contract.splitProfile?.rows) && contract.splitProfile.rows.length
+    ? contract.splitProfile.rows
+    : buildSplitDisplayRows(analysisJson);
+  return rows.map((row) => ({
+    ...row,
+    name: upper(row.label),
+    time: row.displayTimeFormatted ?? "-",
+    raw_time: row.rawTimeFormatted,
+    benchmark_time: row.comparisonTimeFormatted,
+    target_time: row.comparisonTimeFormatted,
+    delta: row.displayGapFormatted ?? row.displayGap ?? "0",
+    raw_delta: row.rawGapFormatted,
+    delta_seconds: row.displayGapSeconds,
+    tone: row.displayGapTone ?? row.tone,
+    penalty_adjusted: row.isPenaltyAdjusted,
+    penalty_adjustment: row.penaltyAdjustmentFormatted,
+    penalty_adjustment_label: row.penaltyAdjustmentLabel,
+  }));
 }
 
 function callouts(rows) {
   const withDeltas = rows.filter((row) => Number.isFinite(row.delta_seconds));
-  const gain = [...withDeltas].sort((a, b) => a.delta_seconds - b.delta_seconds)[0];
+  const gain = [...withDeltas].filter((row) => row.delta_seconds < 0).sort((a, b) => a.delta_seconds - b.delta_seconds)[0];
+  const closest = [...withDeltas].sort((a, b) => Math.abs(a.delta_seconds) - Math.abs(b.delta_seconds))[0];
   const loss = [...withDeltas].sort((a, b) => b.delta_seconds - a.delta_seconds)[0];
   return {
-    biggest_gain: { station: gain?.name ?? "N/A", delta: gain ? formatTimeDiff(gain.delta_seconds) : "0" },
+    biggest_gain: gain
+      ? { station: gain.name, delta: formatTimeDiff(gain.delta_seconds) }
+      : { station: "NO SPLIT AHEAD", delta: "0" },
+    no_split_ahead: !gain,
+    closest_split: closest ? { station: closest.name, delta: formatTimeDiff(closest.delta_seconds) ?? "0" } : null,
     biggest_loss: { station: loss?.name ?? "N/A", delta: loss ? formatTimeDiff(loss.delta_seconds) : "0" },
   };
 }
@@ -182,10 +206,11 @@ function opportunityGap(row, analysisJson) {
 }
 
 function strengthGapSeconds(row, analysisJson) {
-  const gap = targetGapSeconds(row, hasGoalGroup(analysisJson));
+  const gap = reportStrengthGapSeconds(row);
   if (Number.isFinite(gap)) return gap;
-  if (Number.isFinite(row?.timeAdvantageSeconds)) return -Math.abs(row.timeAdvantageSeconds);
-  return Number.isFinite(row?.timeGapSeconds) ? row.timeGapSeconds : 0;
+  const targetGap = targetGapSeconds(row, hasGoalGroup(analysisJson));
+  if (Number.isFinite(targetGap)) return targetGap;
+  return Number.isFinite(row?.timeGapSeconds) ? row.timeGapSeconds : null;
 }
 
 function splitGapSummary(row, analysisJson, fallback = "BENCHMARKED") {
@@ -196,21 +221,78 @@ function splitGapSummary(row, analysisJson, fallback = "BENCHMARKED") {
   return "On comparison";
 }
 
-export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athleteContext = {}) {
-  const penalty = penaltyContext(analysisJson);
-  const limiter = penalty.usePenaltyHero
-    ? { segmentKey: "penalties", label: "Penalties", type: "penalty", timeGapSeconds: penalty.totalPenaltySeconds, percentile: null }
-    : opportunityStation(analysisJson);
-  const strength = bestStation(analysisJson);
-  const gain = penalty.usePenaltyHero
+function stationSubject(segment = null) {
+  const labelText = displaySegmentLabel(segment, segment?.label ?? label(segment?.segmentKey)) ?? "This station";
+  return segment?.type === "station" ? `The ${labelText} station` : labelText;
+}
+
+function isEliteOrHighPerformer(analysisJson = {}) {
+  const finish = Number(analysisJson.race?.finishTimeSeconds);
+  const achievedBand = String(analysisJson.benchmarkContext?.achievedBand ?? analysisJson.benchmarkContext?.analysisFrame?.comparisonBand ?? "");
+  const total = segment(analysisJson, "total_time");
+  return (Number.isFinite(finish) && finish <= 3600)
+    || achievedBand === "sub_60"
+    || Number(total?.percentile) >= 90
+    || analysisJson.athleteArchetype?.key === "high_performer";
+}
+
+function carouselCtaHeadline(analysisJson = {}, opportunity = {}) {
+  if (opportunity.hasPenaltyDominantOpportunity) return "FIX THE FASTEST WIN";
+  const primary = opportunity.primaryOpportunity ?? {};
+  if (primary.segmentKey === "roxzone_time" || /\broxzone\b/i.test(String(primary.label ?? ""))) {
+    return "TIGHTEN YOUR RACE FLOW";
+  }
+  if (isEliteOrHighPerformer(analysisJson)) return "FIND YOUR NEXT MARGINAL GAIN";
+  return "FIND YOUR BOTTLENECK";
+}
+
+export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athleteContext = {}, contract = null) {
+  const narrative = ensureHyroxReportContract({ analysisJson, athleteContext, calculatorMode: athleteContext.calculatorMode ?? analysisJson.calculatorMode, insights: resolvedInsights, contract });
+  const opportunity = narrative.sourceOpportunity;
+  const penalty = narrative.penalty;
+  const rawFitnessLimiter = opportunity.largestFitnessLimiter ?? opportunityStation(analysisJson);
+  const fitnessLimiter = rawFitnessLimiter
+    ? { ...rawFitnessLimiter, label: displaySegmentLabel(rawFitnessLimiter, rawFitnessLimiter.label ?? label(rawFitnessLimiter.segmentKey)) }
+    : null;
+  const roxzoneAction = roxzoneActionability(analysisJson, fitnessLimiter);
+  const primaryIsPenalty = narrative.primaryClaim?.isPenalty;
+  const limiter = primaryIsPenalty && opportunity.fastestControllableWin
+    ? { ...opportunity.fastestControllableWin, segmentKey: "penalties", percentile: null }
+    : narrative.primaryClaim
+      ? {
+          ...narrative.primaryClaim,
+          label: narrative.primaryClaim.label,
+          timeGapSeconds: narrative.primaryClaim.gainSeconds,
+          timeGapToMedianSeconds: narrative.primaryClaim.gainSeconds,
+        }
+      : fitnessLimiter;
+  const strengthPolicy = narrative.strengthPolicy ?? {};
+  const strength = strengthPolicy.strength ?? (strengthPolicy.status === "fastest_ahead_split_only" ? strengthPolicy.fastestAheadSplit : null) ?? bestStation(analysisJson);
+  const strengthDataQualityNote = strengthPolicy.dataQualityNote ?? dataQualityNote(analysisJson);
+  const strengthGap = Number.isFinite(strengthPolicy.displayGap)
+    ? null
+    : strengthGapSeconds(strength, analysisJson);
+  const gain = primaryIsPenalty && opportunity.fastestControllableWin
     ? penalty.totalPenaltySeconds
     : analysisJson.timePotential?.headlineGainSeconds ?? analysisJson.headline?.headlineGainSeconds ?? limiter?.timeGapSeconds ?? limiter?.timeGapToMedianSeconds ?? 0;
-  const rank = rankLanguage(analysisJson, athleteContext);
-  const rows = flowRows(analysisJson);
-  const rowCallouts = callouts(rows);
-  const basis = comparisonLabel(analysisJson);
+  const rank = rankLanguage(analysisJson, athleteContext, narrative);
+  const rows = flowRowsFromContract(narrative, analysisJson);
+  const fallbackCallouts = callouts(rows);
+  const rowCallouts = {
+    ...fallbackCallouts,
+    biggest_gain: narrative.artifactSlots?.carousel?.slide2Gain ?? fallbackCallouts.biggest_gain,
+    biggest_loss: narrative.artifactSlots?.carousel?.slide2Loss ?? fallbackCallouts.biggest_loss,
+    no_split_ahead: narrative.splitProfile?.biggestGain ? false : fallbackCallouts.no_split_ahead,
+  };
+  const basis = comparisonProfileLabel(analysisJson);
+  const displayRows = rows.map((row) => ({ ...row, comparison_basis: basis }));
   const targetSecs = athleteContext.targetFinishTimeSeconds ?? athleteContext.targetTimeSeconds ?? null;
   const hasTarget = Number.isFinite(targetSecs) && targetSecs > 0;
+  const featureList = Array.isArray(narrative.artifactSlots?.carousel?.features)
+    ? narrative.artifactSlots.carousel.features
+    : narrative.rankPolicy.allowed
+      ? DEFAULT_FEATURES
+      : DEFAULT_NO_PERCENTILE_FEATURES;
 
   return {
     template_id: "A",
@@ -227,14 +309,42 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         athlete_name: athleteName(athleteContext),
         athlete_image: athleteContext.athleteImage || resolveHeroImage(analysisJson, athleteContext),
         percentile: athleteRankLine(rank, athleteContext),
-        limiter_word: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "OPPORTUNITY"),
+        limiter_word: upper(displaySegmentLabel(limiter, limiter?.label ?? label(limiter?.segmentKey)) ?? "OPPORTUNITY"),
         headline_suffix: gain >= 60 ? "COST TIME" : "SETS THE STORY",
         hero_number: formatGain(gain) ?? "0:00",
         overall_time: formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "-",
         metric2_label: hasTarget ? "TARGET" : "WORLD RANK",
         world_rank: hasTarget ? (formatTime(targetSecs) ?? "-") : rank.worldRank,
-        best_station: upper(strength?.label ?? label(strength?.segmentKey) ?? "N/A"),
-        biggest_limiter: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "N/A"),
+        best_station: narrative.artifactSlots?.carousel?.strengthLabel ?? (strength ? upper(strength.label ?? label(strength.segmentKey)) : "NO RELIABLE STRENGTH"),
+        biggest_limiter: upper(displaySegmentLabel(limiter, limiter?.label ?? label(limiter?.segmentKey)) ?? "N/A"),
+        biggest_limiter_label: primaryIsPenalty
+          ? "FASTEST CONTROLLABLE WIN"
+          : upper(narrative.primaryClaim?.compactLabel ?? "BIGGEST LIMITER"),
+        fastest_controllable_win: opportunity.fastestControllableWin
+          ? {
+              station: upper(opportunity.fastestControllableWin.label),
+              potential_gain: formatGain(opportunity.fastestControllableWin.timeGapSeconds) ?? "0:00",
+              label: "FASTEST CONTROLLABLE WIN",
+            }
+          : null,
+        largest_fitness_limiter: fitnessLimiter
+          ? {
+              station: upper(displaySegmentLabel(fitnessLimiter, fitnessLimiter.label ?? label(fitnessLimiter.segmentKey)) ?? "N/A"),
+              time_gap: formatGain(fitnessLimiter.timeGapSeconds) ?? null,
+              label: "LARGEST FITNESS LIMITER",
+            }
+          : null,
+        artifact_headline_mode: narrative.headlineMode,
+        narrative_primary: narrative.primaryClaim?.normalizedLabel ?? null,
+        data_quality_note: narrative.dataQualityPolicy?.compactCaveat ?? null,
+        roxzone_action: roxzoneAction
+          ? {
+              label: roxzoneAction.carouselAction,
+              claim_confidence: narrative.primaryClaim?.claimStrength ?? narrative.dataQualityPolicy?.confidence ?? null,
+              action_evidence_level: roxzoneAction.actionEvidenceLevel,
+              detail: roxzoneAction.confidenceText,
+            }
+          : null,
         swipe_prompt: "Swipe to see where time was gained and lost.",
         regional_context: regionalContextLine(analysisJson) ?? null,
         age_group_context: ageGroupContextLine(analysisJson) ?? null,
@@ -245,42 +355,55 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         comparison_basis: basis,
         legend_text: `BLUE = FASTER THAN ${basis}    RED = SLOWER THAN ${basis}`,
         ...rowCallouts,
-        stations: rows,
+        stations: displayRows,
       },
       {
-	        slide_id: "A3_BIGGEST_STRENGTH",
-	        station: upper(strength?.label ?? label(strength?.segmentKey) ?? "N/A"),
-	        percentile: splitGapSummary(strength, analysisJson),
-	        position_gain: formatTimeDiff(Math.abs(strengthGapSeconds(strength, analysisJson))) ?? "+0:00",
+        slide_id: "A3_BIGGEST_STRENGTH",
+        station: narrative.artifactSlots?.carousel?.strengthLabel ?? (strength ? upper(strength.label ?? label(strength.segmentKey)) : "NO RELIABLE STRENGTH"),
+        percentile: strengthPolicy.status === "fastest_ahead_split_only"
+          ? "Best relative split"
+          : strength ? splitGapSummary(strength, analysisJson) : "Limited split data",
+        position_gain: strengthPolicy.displayGap
+          ? String(strengthPolicy.displayGap).replace(/^-/, "+")
+          : strength && Number.isFinite(strengthGap) ? (formatTimeDiff(Math.abs(strengthGap)) ?? "+0:00") : "N/A",
         position_gain_label: `TIME AHEAD OF ${basis}`,
-        caption: `${strength?.label ?? "This station"} is the strongest benchmarked area in this result.`,
+        caption: strengthPolicy.explanation ?? (strength
+          ? `${stationSubject(strength)} is the strongest benchmarked area in this result.`
+          : "No reliable strongest station could be identified from the available split data."),
+        data_quality_note: strengthDataQualityNote,
       },
       {
         slide_id: "A4_BIGGEST_OPPORTUNITY",
-        station: upper(limiter?.label ?? label(limiter?.segmentKey) ?? "N/A"),
-	        label: penalty.usePenaltyHero ? "Fastest Win" : "Opportunity",
-	        potential_gain: formatGain(gain) ?? "0:00",
-	        potential_gain_text: wordsForSeconds(gain),
-	        current_station_rank: penalty.usePenaltyHero ? "EXECUTION" : splitGapSummary(limiter, analysisJson),
+        station: upper(displaySegmentLabel(limiter, limiter?.label ?? label(limiter?.segmentKey)) ?? "N/A"),
+        label: primaryIsPenalty
+          ? "Fastest Win"
+          : narrative.primaryClaim?.claimStrength === "firm"
+            ? "Opportunity"
+            : (narrative.primaryClaim?.compactLabel ?? "Opportunity"),
+        potential_gain: formatGain(gain) ?? "0:00",
+        potential_gain_text: wordsForSeconds(gain),
+        current_station_rank: primaryIsPenalty ? "EXECUTION" : splitGapSummary(limiter, analysisJson),
+        action_text: roxzoneAction?.carouselAction ?? null,
+        confidence_note: roxzoneAction?.confidenceText ?? narrative.dataQualityPolicy?.compactCaveat ?? null,
       },
       {
         slide_id: "A5_KEY_INSIGHT",
         athlete_first_name: firstName(athleteContext),
-	        gain_text: `${splitGapSummary(strength, analysisJson, "a stronger benchmark")} performance`,
-        gain_station: String(strength?.label ?? "the strongest station").toLowerCase(),
+        gain_text: strength ? `${splitGapSummary(strength, analysisJson, "a stronger benchmark")} performance` : "no clear strength signal",
+        gain_station: String(strength?.label ?? "available split data").toLowerCase(),
         loss_text: `${formatGain(gain) ?? "time"} potential gain`,
-        loss_station: String(limiter?.label ?? "the limiter").toLowerCase(),
+        loss_station: String(displaySegmentLabel(limiter, limiter?.label) ?? "the limiter").toLowerCase(),
         outcome_text: athleteContext.targetLabel ?? "YOUR NEXT PB",
         insight: `Closing this gap could move ${firstName(athleteContext)} closer to ${athleteContext.targetLabel ?? "the next target"}.`,
       },
       {
         slide_id: "A6_CTA",
-        headline: "FIND YOUR BOTTLENECK",
+        headline: narrative.artifactSlots?.carousel?.ctaHeadline ?? narrative.targetAssessment?.ctaHeadline ?? carouselCtaHeadline(analysisJson, opportunity),
         body: "Analyse your HYROX result. Free.",
         ctaLabel: "Analyse my result",
         ctaType: "calculator_link",
         button: "ANALYSE MY HYROX RESULT",
-        features: [...FEATURES],
+        features: [...featureList],
       },
     ],
     selected_insights: resolvedInsights.map((insight) => insight.id),
@@ -366,7 +489,7 @@ export function buildTemplateB(benchmarkGroupKey, targetBand = "sub-75") {
     },
     cta: {
       title: "Discover your HYROX bottleneck",
-      bullets: [...FEATURES],
+      bullets: [...DEFAULT_FEATURES],
       button: "Analyse my HYROX result",
       brandLine: "Measure. Understand. Improve.",
     },

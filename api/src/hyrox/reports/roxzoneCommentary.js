@@ -41,6 +41,30 @@ function secondaryCombinedLine(combined, namedStationKey) {
   return `Separately, your biggest combined entry+exit overhead was at ${stationLabel(combined.stationKey)}: ${formatTime(combined.totalSeconds)} total (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`;
 }
 
+function isPlausibleRoxzoneDetail(detail, totalSeconds) {
+  if (!detail) return false;
+  const detailSeconds = [
+    finiteNumber(detail.totalSeconds),
+    finiteNumber(detail.entrySeconds),
+    finiteNumber(detail.exitSeconds),
+  ];
+  if (!detailSeconds.every(Number.isFinite)) return false;
+
+  const total = finiteNumber(totalSeconds);
+  if (!Number.isFinite(total) || total <= 0) return true;
+  return detailSeconds.every((seconds) => seconds <= total + 5);
+}
+
+function isPlausibleTransition(transition, totalSeconds) {
+  if (!transition) return false;
+  const seconds = finiteNumber(transition.seconds);
+  if (!Number.isFinite(seconds)) return false;
+
+  const total = finiteNumber(totalSeconds);
+  if (!Number.isFinite(total) || total <= 0) return true;
+  return seconds <= total + 5;
+}
+
 function entryExitLines(rox) {
   if (!rox.entryExitAvailable) return [];
   const lines = [];
@@ -48,23 +72,30 @@ function entryExitLines(rox) {
   const scenarioTags = rox.roxzoneNarrative?.scenarioTags ?? [];
   const worstEntry = rox.worstEntry ?? null;
   const worstExit = rox.worstExit ?? null;
+  const validCombined = isPlausibleRoxzoneDetail(combined, rox.totalSeconds) ? combined : null;
+  const validWorstEntry = isPlausibleTransition(worstEntry, rox.totalSeconds) ? worstEntry : null;
+  const validWorstExit = isPlausibleTransition(worstExit, rox.totalSeconds) ? worstExit : null;
+
+  if ((combined && !validCombined) || (worstEntry && !validWorstEntry) || (worstExit && !validWorstExit)) {
+    lines.push("RoxZone detail is partial or internally inconsistent in the source data, so station-level entry/exit detail has been suppressed. Use the official or estimated total RoxZone time for this section.");
+  }
 
   // The interpretation copy names a specific station (worst single exit/entry) when
   // exit_led or entry_led fires — the illustrative number here must match that same
   // station, not silently default to the worst *combined* station, which can differ.
-  if (scenarioTags.includes("exit_led") && worstExit) {
-    lines.push(`${stationLabel(worstExit.stationKey)} exit: ${formatTime(worstExit.seconds)} — the slowest single exit of the race.`);
-    const secondary = secondaryCombinedLine(combined, worstExit.stationKey);
+  if (scenarioTags.includes("exit_led") && validWorstExit) {
+    lines.push(`${stationLabel(validWorstExit.stationKey)} exit: ${formatTime(validWorstExit.seconds)} — the slowest single exit of the race.`);
+    const secondary = secondaryCombinedLine(validCombined, validWorstExit.stationKey);
     if (secondary) lines.push(secondary);
-  } else if (scenarioTags.includes("entry_led") && worstEntry) {
-    lines.push(`${stationLabel(worstEntry.stationKey)} entry: ${formatTime(worstEntry.seconds)} — the slowest single entry of the race.`);
-    const secondary = secondaryCombinedLine(combined, worstEntry.stationKey);
+  } else if (scenarioTags.includes("entry_led") && validWorstEntry) {
+    lines.push(`${stationLabel(validWorstEntry.stationKey)} entry: ${formatTime(validWorstEntry.seconds)} — the slowest single entry of the race.`);
+    const secondary = secondaryCombinedLine(validCombined, validWorstEntry.stationKey);
     if (secondary) lines.push(secondary);
-  } else if (combined) {
-    lines.push(`${stationLabel(combined.stationKey)}: ${formatTime(combined.totalSeconds)} combined (${formatTime(combined.entrySeconds)} in, ${formatTime(combined.exitSeconds)} out).`);
+  } else if (validCombined) {
+    lines.push(`${stationLabel(validCombined.stationKey)}: ${formatTime(validCombined.totalSeconds)} combined (${formatTime(validCombined.entrySeconds)} in, ${formatTime(validCombined.exitSeconds)} out).`);
   } else {
-    if (worstEntry) lines.push(`Race replay detail: your slowest station entry was ${stationLabel(worstEntry.stationKey)} at ${formatTime(worstEntry.seconds)}.`);
-    if (worstExit) lines.push(`Race replay detail: your slowest station exit was ${stationLabel(worstExit.stationKey)} at ${formatTime(worstExit.seconds)}.`);
+    if (validWorstEntry) lines.push(`Race replay detail: your slowest station entry was ${stationLabel(validWorstEntry.stationKey)} at ${formatTime(validWorstEntry.seconds)}.`);
+    if (validWorstExit) lines.push(`Race replay detail: your slowest station exit was ${stationLabel(validWorstExit.stationKey)} at ${formatTime(validWorstExit.seconds)}.`);
   }
 
   if (rox.entryTrend === "rising") {

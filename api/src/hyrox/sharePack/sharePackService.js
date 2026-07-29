@@ -7,6 +7,7 @@ import { buildCaption } from "./captionBuilder.js";
 import { screenshotSlides } from "./slideScreenshotter.js";
 import { generateRaceCardPng } from "./raceCardScreenshotter.js";
 import { buildHyroxRaceCardData } from "../reports/raceCardDataMapper.js";
+import { buildHyroxReportContract } from "../reports/reportContractBuilder.js";
 import { buildZip } from "./zipBuilder.js";
 import { SLIDE_FILENAMES } from "./slideAssets.js";
 import { putObject, getPresignedUrl } from "../../services/s3Service.js";
@@ -36,12 +37,12 @@ function athleteContext(row = {}, storedCarousel = null) {
   };
 }
 
-function resolveShareCarousel(row = {}) {
+function resolveShareCarousel(row = {}, contract = null) {
   const analysisJson = objectOrNull(row.analysis_json);
   if (analysisJson && analysisJson.analysisScope !== "no_benchmark_data") {
     const raw = Array.isArray(row.selected_insights_json) ? row.selected_insights_json : [];
     const insights = resolveConflicts(rankInsightsForOutput(raw, "carousel_a"), "carousel_a");
-    return buildTemplateA(analysisJson, insights, athleteContext(row, row.carousel_a_json));
+    return buildTemplateA(analysisJson, insights, athleteContext(row, row.carousel_a_json), contract);
   }
   return resolveCarouselData(row.carousel_a_json);
 }
@@ -74,13 +75,20 @@ export async function getOrCreateSharePack(submissionId, db = pool) {
   const row = dataRow.rows[0];
   if (!row) throw Object.assign(new Error("Submission not found"), { status: 404 });
 
-  const carouselData = resolveShareCarousel(row);
+  const rawAnalysisJson = objectOrNull(row.analysis_json);
+  const analysisJson = rawAnalysisJson ?? {};
+  const ctx = athleteContext(row, row.carousel_a_json);
+  const rawInsights = Array.isArray(row.selected_insights_json) ? row.selected_insights_json : [];
+  const insights = resolveConflicts(rankInsightsForOutput(rawInsights, "carousel_a"), "carousel_a");
+  const contract = buildHyroxReportContract({ analysisJson, athleteContext: ctx, calculatorMode: row.calculator_mode, insights });
+  const carouselData = resolveShareCarousel(row, contract);
   if (!carouselData) throw Object.assign(new Error("Carousel data unavailable"), { status: 404 });
 
   const caption = buildCaption({
     slide0: carouselData.slides?.[0] ?? {},
-    athleteContext: athleteContext(row, row.carousel_a_json),
-    analysisJson: objectOrNull(row.analysis_json) ?? {},
+    athleteContext: ctx,
+    analysisJson,
+    contract,
   });
 
   const html = buildCarouselPage(carouselData);
@@ -97,10 +105,8 @@ export async function getOrCreateSharePack(submissionId, db = pool) {
   // Generate race card PNG; failure must not block the ZIP delivery
   let raceCardBuffer = null;
   try {
-    const analysisJson = objectOrNull(row.analysis_json);
-    if (analysisJson) {
-      const ctx = athleteContext(row, row.carousel_a_json);
-      const raceCardData = buildHyroxRaceCardData(analysisJson, ctx);
+    if (rawAnalysisJson) {
+      const raceCardData = buildHyroxRaceCardData(analysisJson, ctx, contract);
       raceCardBuffer = await generateRaceCardPng(raceCardData);
       await putObject(`${slidePrefix}race-card.png`, raceCardBuffer, "image/png");
     }

@@ -2,6 +2,7 @@ import { SEGMENT_MAP } from "../config/segmentMap.js";
 import { getCopyPrefix } from "../confidence/confidenceLabels.js";
 import { shouldSoftenInsight } from "../confidence/suppressionRules.js";
 import { formatSecondsToTime } from "../ingestion/timeParser.js";
+import { displaySegmentLabel, segmentSubject, segmentVerb } from "../reports/segmentDisplay.js";
 
 const SAFE_FALLBACK = "your benchmark group";
 const SEGMENT_LABELS = Object.freeze(Object.fromEntries(SEGMENT_MAP.map((segment) => [segment.segmentKey, segment.displayName])));
@@ -30,8 +31,16 @@ export function buildCopyVariables(analysisJson = {}, evidenceValues = {}, athle
   const potentialGain = seconds(evidenceValues.potentialGainSeconds ?? analysisJson.timePotential?.headlineGainSeconds ?? analysisJson.headline?.headlineGainSeconds);
   const projectedTime = seconds(evidenceValues.projectedTimeSeconds ?? analysisJson.timePotential?.newProjectedTimeSeconds ?? analysisJson.headline?.projectedTimeSeconds);
 
+  const segmentLabel = displaySegmentLabel(
+    { segmentKey, label: evidenceValues.segmentLabel ?? SEGMENT_LABELS[segmentKey] },
+    "This area",
+  );
+
   return {
-    segment_label: evidenceValues.segmentLabel ?? SEGMENT_LABELS[segmentKey] ?? "This area",
+    segment_label: segmentLabel,
+    segment_verb: segmentVerb(segmentLabel),
+    segment_subject: segmentSubject({ segmentKey, label: segmentLabel }),
+    segment_subject_verb: segmentVerb(segmentSubject({ segmentKey, label: segmentLabel })),
     hero_metric: heroSeconds === null ? SAFE_FALLBACK : formatSecondsToTime(heroSeconds),
     percentile: formatPercent(evidenceValues.percentile),
     benchmark_group_label: evidenceValues.benchmarkGroup ?? group.label ?? group.key ?? SAFE_FALLBACK,

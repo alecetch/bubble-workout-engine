@@ -340,7 +340,7 @@ export function buildRecommendations(analysisJson = {}, insights = [], athleteCo
 
   if (analysisJson.roxzoneAnalysis?.available && (analysisJson.roxzoneAnalysis.percentile ?? 100) < 45) {
     safePush(items, {
-      title: "Roxzone execution",
+      title: "RoxZone execution",
       actionId: "roxzone_rehearsal",
       rationale: (() => {
         const rox = analysisJson.roxzoneAnalysis;

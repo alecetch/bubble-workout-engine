@@ -8,6 +8,12 @@ import { resolvedUserSeconds } from "../engine/gapSelectors.js";
 import { RUN_KEYS } from "../config/segmentMap.js";
 import { MUSCLE_GROUP_LABELS } from "../config/muscleGroupMap.js";
 import { penaltyContext } from "./penaltyContext.js";
+import { hasBenchmarkPercentileData } from "./comparisonOptions.js";
+import { opportunityFraming } from "./opportunityFraming.js";
+import { ensureHyroxReportContract } from "./reportContractBuilder.js";
+import { roxzoneActionability } from "./roxzoneActionability.js";
+import { resolveReportStrength } from "./reportSelections.js";
+import { displaySegmentLabel, segmentSubject, segmentVerb } from "./segmentDisplay.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -64,8 +70,90 @@ function selectedTargetSecondsForEmail(analysisJson = {}, athleteContext = {}) {
   );
 }
 
-function pluralStation(label) {
-  return /lunges|balls|jumps$/i.test(String(label ?? ""));
+function targetOpportunitySubject(label, type = null) {
+  const safeLabel = displaySegmentLabel(null, String(label ?? "").trim());
+  if (!safeLabel) return "This split";
+  if (type === "station") return `The ${safeLabel} station`;
+  return safeLabel;
+}
+
+function lowerInitial(value) {
+  const text = String(value ?? "");
+  return text ? `${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
+}
+
+function cleanGeneratedReportCopy(value) {
+  return String(value ?? "")
+    .replace(/\b(but|while|although)\s+The\b/g, "$1 the")
+    .replace(/\b(against [^,.]+,\s*)Running pace\b/gi, (_, prefix) => `${prefix}running pace`);
+}
+
+function cleanCategoryAgreement(value) {
+  return cleanGeneratedReportCopy(value)
+    .replace(/\bStations is\b/g, "Station performance is")
+    .replace(/\bstations is\b/g, "station performance is");
+}
+
+function normalizedCopy(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/&mdash;|—/g, " ")
+    .replace(/[^\p{L}\p{N}:+\-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function copyIncludesNormalized(haystack, needle) {
+  const normalizedNeedle = normalizedCopy(needle);
+  return !normalizedNeedle || normalizedCopy(haystack).includes(normalizedNeedle);
+}
+
+function targetOpportunitySentence(label, type, predicate) {
+  const subject = targetOpportunitySubject(label, type);
+  return `${subject} ${segmentVerb(subject)} ${predicate}`;
+}
+
+function runSplitCoachingInterpretation(segmentOrClaim = {}) {
+  const key = String(segmentOrClaim?.segmentKey ?? "").toLowerCase();
+  const label = String(segmentOrClaim?.label ?? "").trim();
+  const runMatch = key.match(/^run_([1-8])$/) ?? label.match(/^run\s*([1-8])$/i);
+  if (!runMatch) return "";
+  const runIndex = Number(runMatch[1]);
+  if (runIndex === 1) {
+    return " Treat that as sustainable opening pace control, not a cue to sprint the first kilometre.";
+  }
+  if (runIndex >= 6) {
+    return " This points to late-run durability under station fatigue.";
+  }
+  return " This points to mid-race aerobic durability and run-station-run rhythm.";
+}
+
+function splitSpecificPrescription(segment = {}, { compact = false } = {}) {
+  const key = String(segment?.segmentKey ?? "").toLowerCase();
+  const label = String(segment?.label ?? "").toLowerCase();
+  const is = (needle) => key === needle || label.includes(needle.replace(/_/g, " "));
+
+  if (is("wall_balls")) {
+    return compact
+      ? "Use repeatable Wall Balls set caps, fixed breathing between sets, and squat-endurance work before chasing bigger unbroken chunks."
+      : "Wall Balls: set caps, breathing cadence, and squat endurance";
+  }
+  if (is("sled_push")) return "Sled Push: low body angle, short drive steps, and compromised heavy-leg tolerance";
+  if (is("sled_pull")) return "Sled Pull: rope rhythm, braced feet, and no long dead pauses";
+  if (is("burpee_broad_jump")) return "Burpee Broad Jump: sustainable cadence, step-up strategy, and hip-extension rhythm";
+  if (is("sandbag_lunges")) return "Sandbag Lunges: no-stop lunge rhythm and bracing under fatigue";
+  if (is("farmers_carry")) return "Farmers Carry: grip endurance, fast turns, and disciplined pick-ups";
+  if (is("row")) return "Row: controlled stroke rate and posture after compromised running";
+  if (is("ski_erg") || /skierg/i.test(label)) return "SkiErg: steady stroke rate, posture, and no early spike";
+  if (/^run_[1-2]$/.test(key)) return "Opening run control: settle into target pace before the first stations";
+  if (/^run_[6-8]$/.test(key)) {
+    return compact
+      ? "Build controlled run-station-run repeats so late kilometres stay close to early-race pace."
+      : "Late-run durability: compromised run-station-run repeats and cadence retention";
+  }
+  if (/^run_[3-5]$/.test(key) || segment?.type === "run") return "Mid-race running: controlled threshold pace after station exits";
+  if (key === "roxzone_time" || /roxzone/i.test(label)) return "RoxZone: rehearse entry/exit flow and no-walk station exits";
+  return null;
 }
 
 function esc(value) {
@@ -261,8 +349,20 @@ function renderHeader() {
   </tr>`;
 }
 
-function stationHeroHeadline(limiterLabel) {
-  return `THE ${String(limiterLabel ?? "").toUpperCase()} STATION IS YOUR BIGGEST OPPORTUNITY`;
+function stationHeroHeadline(limiter) {
+  return `${segmentSubject(limiter).toUpperCase()} IS YOUR BIGGEST OPPORTUNITY`;
+}
+
+function normalizeHeroHeadlineGrammar(headline) {
+  let text = String(headline ?? "");
+  for (const label of ["Wall Balls", "Burpee Broad Jump", "Sandbag Lunges", "Sled Pull", "Sled Push", "Farmers Carry", "SkiErg", "Row"]) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const upper = label.toUpperCase();
+    text = text
+      .replace(new RegExp(`\\b${escaped}\\s+IS\\b`, "gi"), `THE ${upper} STATION IS`)
+      .replace(new RegExp(`\\bSTARTS WITH\\s+${escaped}\\b`, "gi"), `STARTS WITH THE ${upper} STATION`);
+  }
+  return text;
 }
 
 function buildFallbackHeroCopy(analysisJson = {}) {
@@ -281,7 +381,7 @@ function buildFallbackHeroCopy(analysisJson = {}) {
   }
 
   return {
-    headline: limiter ? stationHeroHeadline(limiter.label) : "YOUR HYROX ANALYSIS IS READY",
+    headline: limiter ? stationHeroHeadline(limiter) : "YOUR HYROX ANALYSIS IS READY",
     subline: gainDisplay ? "Largest single-station gap against your target benchmark." : null,
     gainDisplay,
   };
@@ -294,7 +394,7 @@ const AGE_GROUP_STANDING_DIFFERENCE_THRESHOLD_POINTS = 10;
 function renderHero(analysisJson, greetingName, interpretation = null) {
   const fallbackCopy = buildFallbackHeroCopy(analysisJson);
   const heroCopy = interpretation?.heroCopy ?? fallbackCopy;
-  const headlineText = esc(heroCopy.headline ?? "YOUR HYROX ANALYSIS IS READY");
+  const headlineText = esc(normalizeHeroHeadlineGrammar(heroCopy.headline ?? "YOUR HYROX ANALYSIS IS READY"));
   const showGain = heroCopy.gainDisplay != null;
   const heroNumber = showGain
     ? `<div style="${inlineStyle({
@@ -332,6 +432,7 @@ function renderHero(analysisJson, greetingName, interpretation = null) {
     if (!Number.isFinite(overallPct) || !Number.isFinite(agePct)) return "";
     if (Math.abs(agePct - overallPct) < AGE_GROUP_STANDING_DIFFERENCE_THRESHOLD_POINTS) return "";
     const ageTopPct = Math.max(1, Math.round(100 - agePct));
+    if (ageTopPct >= 100) return "";
     return `<div style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:12px;font-style:italic;margin-top:6px;">Within your age group specifically, this ranks you in the top ${ageTopPct}% -- meaningfully different from your standing across the full field.</div>`;
   })();
 
@@ -479,6 +580,7 @@ function renderLensDataRow({ label, value, valueColor, valueSize = "13px", value
 }
 
 function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
+  if (analysisJson.analysisScope === "no_benchmark_data") return "";
   const currentBand = currentFinishBand(analysisJson, athleteContext);
   const currentIndex = PERFORMANCE_BAND_ORDER.indexOf(currentBand);
   if (currentIndex < 0) return "";
@@ -657,7 +759,10 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
   // Deliberately age-agnostic: overallFieldPercentile (division + gender, all ages) is the true
   // overall standing. fieldPercentile can be age-group-scoped and is used only as a fallback here
   // and for the age-group callout below when it differs substantially from the overall figure.
-  const rank = esc(formatOverallStanding(totalSeg?.overallFieldPercentile ?? totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-");
+  const benchmarkPercentilesAvailable = hasBenchmarkPercentileData(analysisJson, totalSeg, athleteContext.overallPercentile);
+  const rank = esc(benchmarkPercentilesAvailable
+    ? formatOverallStanding(totalSeg?.overallFieldPercentile ?? totalSeg?.fieldPercentile ?? totalSeg?.percentile) ?? "-"
+    : "-");
   const rankLabel = "OVERALL STANDING";
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds;
   const targetGapSeconds = Number.isFinite(finishSeconds) && Number.isFinite(selectedTargetSeconds)
@@ -697,7 +802,7 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
     : "";
   const secondCell = showAdjusted
     ? metricCell("ADJUSTED", esc(adjustedTime), "#f8fafc", true)
-    : calculatorMode === "analyse"
+    : calculatorMode === "analyse" && benchmarkPercentilesAvailable
       ? metricCell(
           "BENCHMARK BAND",
           esc(analyseBenchmarkCellLabel(analysisJson)),
@@ -705,9 +810,11 @@ function renderMetricStrip(analysisJson, athleteContext, calculatorMode = "targe
           true,
           "Inter,Arial,Helvetica,sans-serif",
         )
-		      : metricCell("TARGET TIME", esc(benchmarkTime), "#f8fafc", true);
-  const thirdCell = calculatorMode === "analyse"
+			      : metricCell(calculatorMode === "analyse" ? "BENCHMARK DATA" : "TARGET TIME", esc(calculatorMode === "analyse" ? "Unavailable" : benchmarkTime), "#f8fafc", true);
+  const thirdCell = calculatorMode === "analyse" && benchmarkPercentilesAvailable
     ? metricCell(rankLabel, rank, "#f8fafc", hasPenalties, "Inter,Arial,Helvetica,sans-serif")
+    : calculatorMode === "analyse"
+      ? metricCell("SPLIT BASIS", "Directional", "#f8fafc", hasPenalties, "Inter,Arial,Helvetica,sans-serif")
     : metricCell(
         "TARGET GAP",
         esc(targetGap),
@@ -798,13 +905,41 @@ function renderTextCard(section, interpretation = null, analysisJson = {}) {
   </tr>`;
 }
 
-function renderRoxzoneExecution(section, interpretation = null) {
+function roxzoneTotalFromAnalysis(analysisJson = {}) {
+  const aggregate = (analysisJson.segments ?? []).find((segment) => segment.segmentKey === "roxzone_time");
+  const total = Number(
+    aggregate?.userSeconds ??
+    analysisJson.roxzoneAnalysis?.totalSeconds ??
+    analysisJson.roxzoneAnalysis?.officialSeconds,
+  );
+  return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+function hasImpossibleRoxzoneDetail(text, totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return false;
+  const pattern = /\b(\d{1,2}):(\d{2})\s+combined\s+\((\d{1,2}):(\d{2})\s+in,\s+(\d{1,2}):(\d{2})\s+out\)/gi;
+  let match;
+  while ((match = pattern.exec(String(text ?? ""))) !== null) {
+    const combined = Number(match[1]) * 60 + Number(match[2]);
+    const entry = Number(match[3]) * 60 + Number(match[4]);
+    const exit = Number(match[5]) * 60 + Number(match[6]);
+    if ([combined, entry, exit].some((seconds) => seconds > totalSeconds + 5)) return true;
+  }
+  return false;
+}
+
+function renderRoxzoneExecution(section, interpretation = null, analysisJson = {}) {
   const content = Array.isArray(section.content) ? section.content : [section.content];
-  const stringContent = content.filter((item) => typeof item === "string");
+  const rawStringContent = content.filter((item) => typeof item === "string");
+  const totalSeconds = roxzoneTotalFromAnalysis(analysisJson);
+  const stringContent = rawStringContent.filter((item) => !hasImpossibleRoxzoneDetail(item, totalSeconds));
+  if (stringContent.length < rawStringContent.length) {
+    stringContent.push("RoxZone detail is partial or internally inconsistent in the source data, so station-level entry/exit detail has been suppressed. Use the official total RoxZone time for reconciliation.");
+  }
   if (stringContent.length === 0) return "";
   // Use a fixed heading so test 35's "ROXZONE EXECUTION" mock title doesn't bleed through,
-  // and so the real pipeline's "Roxzone and Execution Profile" title also resolves correctly.
-  return renderTextCard({ ...section, title: "Roxzone and Execution Profile", content: stringContent }, interpretation);
+  // and so the real pipeline's RoxZone execution title resolves consistently.
+  return renderTextCard({ ...section, title: "RoxZone and Execution Profile", content: stringContent }, interpretation);
 }
 
 function renderPenaltyCallout(section, interpretation = null, analysisJson = {}) {
@@ -857,15 +992,25 @@ function renderAthleteBackground(section) {
 function renderRecommendations(section, analysisJson = {}) {
   const richRecs = Array.isArray(section.richRecommendations) ? section.richRecommendations : null;
   const { penaltiesAreMaterial: hasMaterialPenalties, penalties: penaltyEntries } = penaltyContext(analysisJson);
+  const opportunity = opportunityFraming(analysisJson);
+  const primaryOpportunity = opportunity.primaryOpportunity
+    ? {
+        ...opportunity.primaryOpportunity,
+        label: displaySegmentLabel(opportunity.primaryOpportunity, opportunity.primaryOpportunity.label),
+      }
+    : null;
+  const primaryIsRoxzone = primaryOpportunity?.segmentKey === "roxzone_time";
+  const primaryIsRun = primaryOpportunity?.type === "run" || /^run_\d$/i.test(String(primaryOpportunity?.segmentKey ?? ""));
+  const primaryPrescription = primaryOpportunity ? splitSpecificPrescription(primaryOpportunity) : null;
   const stationLosses = (analysisJson.segments ?? [])
     .filter((segment) => segment.type === "station" && isConfidentSegment(segment))
     .map((segment) => ({
-      label: segment.label,
+      label: displaySegmentLabel(segment, segment.label),
       gap: segment.frameGapSeconds ?? segment.timeGapToExactTargetSeconds ?? segment.timeGapToMedianSeconds,
     }))
     .filter((row) => Number.isFinite(row.gap) && row.gap > 30)
     .sort((a, b) => b.gap - a.gap);
-  const limiter = analysisJson.headline?.biggestLimiter?.label ?? stationLosses[0]?.label;
+  const limiter = primaryOpportunity?.label ?? stationLosses[0]?.label;
   // Data-driven, matching the fix already applied to MUSCLE GROUP SIGNAL's own training hint -
   // a hardcoded muscle group here is wrong whenever the athlete's real limiter is a different
   // group (or, worse, a group the data actually shows as a strength).
@@ -895,7 +1040,17 @@ function renderRecommendations(section, analysisJson = {}) {
     priorities.push(muscleGroupPriorityItem);
     priorities.push("Race-fatigued station practice");
   } else {
-    if (limiter) priorities.push(`${limiter} capacity and consistency`);
+    if (primaryIsRoxzone) {
+      priorities.push("Tighten RoxZone entry and exit flow");
+      priorities.push("Practise no-walk exits after compromised runs");
+      priorities.push("Use a fixed breathing reset before each station");
+    } else if (primaryPrescription) {
+      priorities.push(primaryPrescription);
+    } else if (primaryIsRun && limiter) {
+      priorities.push(`${limiter} pacing under fatigue`);
+    } else if (limiter) {
+      priorities.push(`${limiter} capacity and consistency`);
+    }
     priorities.push(muscleGroupPriorityItem);
     for (const row of stationLosses.slice(1, 3)) priorities.push(`${row.label} efficiency`);
     priorities.push("Race-fatigued station practice");
@@ -907,21 +1062,25 @@ function renderRecommendations(section, analysisJson = {}) {
   // This prevents percentile tie-breaking from promoting a lower-gap station to the headline
   // when a different station has a clearly larger opportunity in the split table.
   const headlineStationLabel = (() => {
-    if (hasMaterialPenalties || !richRecs?.[0]?.title) return null;
+    if (hasMaterialPenalties || primaryIsRoxzone || primaryIsRun || !richRecs?.[0]?.title) return null;
     const isRunRec = /^running/i.test(richRecs[0].title);
     if (isRunRec) return null;
-    return stationLosses[0]?.label ?? null;
+    return primaryOpportunity?.type === "station" ? primaryOpportunity.label : stationLosses[0]?.label ?? null;
   })();
   const primaryTitle = hasMaterialPenalties
     ? (topNonPenaltyOpportunityLabel
         ? `Clean execution first, then ${enforceTone(topNonPenaltyOpportunityLabel)} efficiency.`
         : "Clean execution first, then targeted strength-endurance.")
+    : primaryIsRoxzone
+      ? "RoxZone execution"
+      : primaryIsRun && limiter
+        ? `${enforceTone(limiter)} under fatigue`
     : headlineStationLabel
       ? `${enforceTone(headlineStationLabel)} under fatigue`
       : (richRecs?.[0]?.title
           ? `${enforceTone(richRecs[0].title).replace(/\s+focus$/i, "")} under fatigue`
           : "Build station-specific strength endurance under fatigue");
-  const primaryCategory = hasMaterialPenalties ? "Execution" : (richRecs?.[0]?.category ?? "Fitness");
+  const primaryCategory = hasMaterialPenalties || primaryIsRoxzone ? "Execution" : (richRecs?.[0]?.category ?? "Fitness");
   const categoryChip = (category) => {
     const styles = {
       Fitness: { bg: "#0a2030", color: "#22d3ee", border: "rgba(34,211,238,0.32)" },
@@ -1117,7 +1276,7 @@ export function gapPill(gap) {
   return `<span style="display:inline-block;background-color:${bg};color:${color};font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:3px;">${splitSafe(text)}</span>`;
 }
 
-function renderSplitTable(section, analysisJson) {
+function renderSplitTable(section, analysisJson, contract = null) {
   const tableData = section.tableData ?? {};
   const segments = tableData.segments ?? analysisJson.segments ?? [];
   const penalties = tableData.penalties ?? analysisJson.penalties ?? [];
@@ -1132,6 +1291,10 @@ function renderSplitTable(section, analysisJson) {
   const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
   const splitReportUrl = analysisJson.submissionId ? `${baseUrl}/api/hyrox/carousel/${analysisJson.submissionId}` : null;
   const segMap = new Map(segments.map((segment) => [segment.segmentKey, segment]));
+  const contractAnalysisJson = { ...analysisJson, segments, penalties, benchmarkContext };
+  const narrative = ensureHyroxReportContract({ analysisJson: contractAnalysisJson, contract });
+  const reportOpportunity = narrative.sourceOpportunity ?? opportunityFraming(contractAnalysisJson);
+  const canonicalPrimaryOpportunity = narrative.primaryClaim;
   const finishSeconds = analysisJson.race?.finishTimeSeconds ?? segMap.get("total_time")?.userSeconds ?? null;
   const isSub60Finish = Number.isFinite(finishSeconds) && finishSeconds <= 3600;
   // benchmarkSelector.js deliberately nulls out achievedBand in target mode (it's an
@@ -1267,6 +1430,11 @@ function renderSplitTable(section, analysisJson) {
 
   const workGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup) ?? 0;
   const runGap = Number.isFinite(runGapRaw) ? runGapRaw : 0;
+  const stationSplitRows = SPLIT_TABLE_RACE_ORDER
+    .map((key) => segMap.get(key))
+    .filter((row) => row?.type === "station");
+  const hasPartialStationData = stationSplitRows.length > 0
+    && stationSplitRows.some((row) => !Number.isFinite(row?.userSeconds));
 
   function topLevelGapReconciliationAnomaly() {
     const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
@@ -1293,19 +1461,45 @@ function renderSplitTable(section, analysisJson) {
   const hasDataAnomaly = anomalousSplitRows.length > 0 || Boolean(unreconciledTotalAnomaly);
   const hasNarrativeDataAnomaly = anomalousSplitRows.some(isNarrativeBlockingSplitRow) || Boolean(unreconciledTotalAnomaly);
   const dataAnomalySentence = hasNarrativeDataAnomaly
-    ? " Treat the limiter ranking as directional until those times are checked."
+    ? " One or more split values look unusual, so check the race splits before treating this as a firm limiter ranking. Treat the limiter ranking as directional until those times are checked."
+    : "";
+  const directionalDataAnomalySentence = hasDataAnomaly && !hasNarrativeDataAnomaly
+    ? " One or more split gaps look unusually large, so check the split before treating this as pure capacity."
+    : "";
+  const missingRunningDataSentence = !Number.isFinite(runGapRaw)
+    ? " Running split data is incomplete. Missing run data means this cannot be reconciled directly against running; the station-vs-running read is based on available splits, so treat the station ranking as directional until complete running splits are available."
     : "";
 
-  const rankedGaps = SPLIT_TABLE_RACE_ORDER
+	  const rankedGaps = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
     .map((key) => {
-      const seg = segMap.get(key);
+      const rawSeg = segMap.get(key);
+      const seg = rawSeg ? { ...rawSeg, label: displaySegmentLabel(rawSeg, rawSeg.label) } : rawSeg;
       return { key, seg, gap: splitOpportunityGap(seg) };
     })
-    .filter((row) => row.seg?.label && Number.isFinite(row.gap) && row.gap > 0)
-    .sort(compareOpportunityRows);
-  const top1 = rankedGaps[0]?.key ?? null;
-  const top2 = rankedGaps[1]?.key ?? null;
-  const top3 = rankedGaps[2]?.key ?? null;
+	    .filter((row) => row.seg?.label && Number.isFinite(row.gap) && row.gap > 0 && isConfidentSegment(row.seg))
+	    .sort(compareOpportunityRows);
+	  const canonicalRankedGap = canonicalPrimaryOpportunity?.segmentKey
+	    ? rankedGaps.find((row) => row.key === canonicalPrimaryOpportunity.segmentKey) ?? null
+	    : null;
+		  const canonicalPrimaryIsActionable = Boolean(
+		    canonicalRankedGap
+		      && (
+		        hasGoalGroup
+		          ? (
+		            canonicalRankedGap.gap >= 30
+		            || (isEliteBenchmark && ["Opportunity", "Priority"].includes(splitBandLabel(canonicalRankedGap.seg, canonicalRankedGap.gap)))
+		          )
+		          : (
+		            canonicalRankedGap.gap >= 30
+		            && ["Opportunity", "Priority"].includes(splitBandLabel(canonicalRankedGap.seg, canonicalRankedGap.gap))
+		          )
+		      ),
+		  );
+	  const top1 = canonicalPrimaryIsActionable
+	    ? canonicalPrimaryOpportunity.segmentKey
+	    : rankedGaps[0]?.key ?? null;
+  const top2 = rankedGaps.find((row) => row.key !== top1)?.key ?? null;
+  const top3 = rankedGaps.find((row) => row.key !== top1 && row.key !== top2)?.key ?? null;
 
   function splitRowBgNew(gap) {
     if (!Number.isFinite(gap)) return "#ffffff";
@@ -1341,10 +1535,16 @@ function renderSplitTable(section, analysisJson) {
     const stationStr = splitGapDisplay(stationGap);
     const runStr = splitGapDisplay(runGapRawValue);
     const totalStr = splitGapDisplay(totalGapSecondsValue);
+    const benchmarkReference = bandLabel ? `the ${bandLabel} benchmark median` : `the ${ref}`;
+    const netGapLabel = hasGoalGroup ? "target gap" : "race gap";
+
+    if (!Number.isFinite(runGapRawValue) && stationGap > totalGapSecondsValue + 60) {
+      return ` Available station splits are <strong style="color:#0f172a;">${splitSafe(stationStr)}</strong> versus ${benchmarkReference}, but missing run data means this cannot be reconciled directly to the net <strong style="color:#0f172a;">${splitSafe(totalStr)}</strong> ${netGapLabel}. Treat the ${hasGoalGroup ? "route allocation" : "station ranking"} as directional until complete running splits are available.`;
+    }
 
     if (stationGap < 0) {
       if (Number.isFinite(runGapRawValue) && runGapRawValue >= 60) {
-        return ` ${prefix}Running pace is the main gap at <strong style="color:#0f172a;">${splitSafe(runStr)}</strong>. ${your.charAt(0).toUpperCase() + your.slice(1)} station time is already ahead of the ${ref}.`;
+        return ` ${prefix}${prefix ? "running" : "Running"} pace is the main gap at <strong style="color:#0f172a;">${splitSafe(runStr)}</strong>. ${your.charAt(0).toUpperCase() + your.slice(1)} station time is already ahead of the ${ref}.`;
       }
       return ` ${prefix}${your.charAt(0).toUpperCase() + your.slice(1)} station time is already ahead of the ${ref}.`;
     }
@@ -1378,9 +1578,19 @@ function renderSplitTable(section, analysisJson) {
         .sort(compareOpportunityRows)
         .slice(0, 3);
       const fitnessNames = fitnessLosses.map((row) => row.seg?.label ?? row.key);
-      const fitnessSentence = fitnessNames.length
-        ? ` Biggest fitness opportunities: ${fitnessNames.join(", ").replace(/, ([^,]*)$/, " and $1")}. Fastest controllable win: penalties.`
-        : " Fastest controllable win: penalties.";
+      const fitnessListLabel = canonicalPrimaryOpportunity?.type === "run"
+        ? "Biggest station opportunities"
+        : "Biggest fitness opportunities";
+      const contractFitnessLabel = displaySegmentLabel(reportOpportunity.largestFitnessLimiter, reportOpportunity.largestFitnessLimiter?.label);
+      const supportingFitnessNames = fitnessNames.filter((name) => name !== contractFitnessLabel);
+      const supportingFitnessSentence = supportingFitnessNames.length
+        ? ` Supporting station opportunities: ${supportingFitnessNames.join(", ").replace(/, ([^,]*)$/, " and $1")}.`
+        : "";
+      const fitnessSentence = contractFitnessLabel
+        ? ` Largest fitness limiter: ${contractFitnessLabel}.${supportingFitnessSentence} Fastest controllable win: penalties.`
+        : fitnessNames.length
+          ? ` ${fitnessListLabel}: ${fitnessNames.join(", ").replace(/, ([^,]*)$/, " and $1")}. Fastest controllable win: penalties.`
+          : " Fastest controllable win: penalties.";
       const roxRef = hasGoalGroup ? "target profile" : "benchmark";
       // When the gap-relation sentence below already covers RoxZone's contribution (the
       // "running is a credit" branch), don't repeat it here.
@@ -1400,7 +1610,13 @@ function renderSplitTable(section, analysisJson) {
         hasGoalGroup ? "Against the target profile, " : null,
         roxGap,
       );
-      const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
+      const contractOpening = narrative.artifactSlots?.email?.mainInsightOpening ?? "";
+      const contractReconciliation = narrative.artifactSlots?.email?.reconciliation
+        ?? narrative.gapReconciliation?.artifactText?.email
+        ?? narrative.gapReconciliation?.summarySentence
+        ?? "";
+      const contractOwnsReconciliation = Boolean(contractOpening || contractReconciliation);
+      const safeGapSentence = hasNarrativeDataAnomaly || contractOwnsReconciliation ? "" : gapSentence;
       const hasRunGapData = Number.isFinite(runGapRaw) && Number.isFinite(runGapNetOfPenalties);
       const runningPenaltySentence = !hasRunGapData
         ? `The <strong>${splitSafe(formatGain(totalPenaltySeconds))}</strong> penalty is execution leakage, but HYROX did not publish enough running data to separate it cleanly from running fitness.`
@@ -1419,14 +1635,47 @@ function renderSplitTable(section, analysisJson) {
         ? stationGapNetOfPenalties >= runGapNetOfPenalties
         : true;
       const limiterNoun = hasGoalGroup ? "target gap" : "fitness limiter";
+      const primaryFitnessLabel = canonicalPrimaryOpportunity?.type !== "penalty"
+        ? displaySegmentLabel(canonicalPrimaryOpportunity, canonicalPrimaryOpportunity?.label)
+        : displaySegmentLabel(reportOpportunity.largestFitnessLimiter, reportOpportunity.largestFitnessLimiter?.label);
+      const primaryFitnessSubject = primaryFitnessLabel && canonicalPrimaryOpportunity?.type !== "penalty"
+        ? targetOpportunitySubject(primaryFitnessLabel, canonicalPrimaryOpportunity?.type)
+        : primaryFitnessLabel;
+      const primaryFitnessLeadSubject = primaryFitnessLabel ?? primaryFitnessSubject;
+      const primaryFitnessLeadNoun = (() => {
+        if (canonicalPrimaryOpportunity?.claimStrength && canonicalPrimaryOpportunity.claimStrength !== "firm") {
+          return hasGoalGroup ? "main directional target opportunity" : "main directional fitness opportunity";
+        }
+        return hasGoalGroup ? "main target limiter" : "main fitness opportunity";
+      })();
+      const primaryFitnessCategorySentence = (() => {
+        const categorySubject = stationsAreLargerLimiter ? "Stations are" : "Running is";
+        const categoryNoun = hasGoalGroup ? "largest target category gap" : "largest fitness category gap";
+        if (!primaryFitnessLeadSubject) return `${categorySubject} the ${categoryNoun}.`;
+        return `${categorySubject} the ${categoryNoun}; ${lowerInitial(primaryFitnessSubject)} is the segment to attack first.`;
+      })();
       const penaltyLeadSentence = hasNarrativeDataAnomaly
         ? "One or more split values look unusual, so check the race splits before naming a main limiter. Penalties are still a controllable win."
-        : `${stationsAreLargerLimiter ? "Stations remain" : "Running remains"} the largest ${limiterNoun}, but penalties are your fastest controllable win.`;
+        : narrative.headlineMode === "fitness_first_with_penalty_win"
+          ? primaryFitnessLeadSubject
+            ? `${primaryFitnessLeadSubject} is the ${primaryFitnessLeadNoun}. ${primaryFitnessCategorySentence} Penalties are a separate ${formatGain(totalPenaltySeconds)} execution win.`
+            : `${stationsAreLargerLimiter ? "Stations remain" : "Running remains"} the largest ${limiterNoun}. Penalties are a separate ${formatGain(totalPenaltySeconds)} execution win.`
+		          : narrative.headlineMode === "penalty_first"
+		            ? `Penalties are your fastest controllable win. After that, ${narrative.secondaryCoaching?.routeSummarySentence ?? `${stationsAreLargerLimiter ? "Stations are" : "Running is"} the largest ${limiterNoun}${primaryFitnessSubject ? `; the training route starts with ${lowerInitial(primaryFitnessSubject)}` : ""}.`}`
+            : `${stationsAreLargerLimiter ? "Stations remain" : "Running remains"} the largest ${limiterNoun}, but penalties are your fastest controllable win.`;
+      const runCoaching = runSplitCoachingInterpretation(canonicalPrimaryOpportunity);
+      const firstParagraphBase = contractOpening
+        ? `${contractOpening}${runCoaching}`
+        : penaltyLeadSentence;
+      const contractReconciliationSentence = contractReconciliation && !copyIncludesNormalized(firstParagraphBase, contractReconciliation)
+        ? ` ${contractReconciliation}`
+        : "";
+      const firstParagraph = enforceTone(cleanCategoryAgreement(`${firstParagraphBase}${dataAnomalySentence}${directionalDataAnomalySentence}${missingRunningDataSentence}${contractReconciliationSentence}`));
       return `<tr>
         <td style="background-color:#ffffff;padding:18px 24px;">
           <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
             <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-            <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(penaltyLeadSentence)}${splitSafe(dataAnomalySentence)}${safeGapSentence}<br><br>${runningPenaltySentence}<br><br>${splitSafe(`${roxNote}${fitnessSentence}`)}</p>
+            <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(firstParagraph)}${safeGapSentence}<br><br>${runningPenaltySentence}<br><br>${splitSafe(cleanCategoryAgreement(`${roxNote}${fitnessSentence}`))}</p>
           </div>
         </td>
       </tr>`;
@@ -1437,18 +1686,56 @@ function renderSplitTable(section, analysisJson) {
     const nextBandStr = analysisJson.benchmarkContext?.nextBand?.replace("sub_", "sub-") ?? null;
     const achievedStr = achievedBand?.replace("sub_", "sub-") ?? null;
     // Use the email's own ranked-gap order so Main Insight and Biggest Opportunities always agree.
-    const limiterStr = rankedGaps[0] ? (segMap.get(rankedGaps[0].key)?.label ?? analysisJson.headline?.biggestLimiter?.label ?? null) : (analysisJson.headline?.biggestLimiter?.label ?? null);
+    const canonicalRankedGap = canonicalPrimaryOpportunity?.segmentKey
+      ? rankedGaps.find((row) => row.key === canonicalPrimaryOpportunity.segmentKey) ?? null
+      : null;
+    const primaryRankedGap = canonicalPrimaryOpportunity
+      ? {
+          key: canonicalPrimaryOpportunity.segmentKey,
+          seg: canonicalRankedGap?.seg ?? canonicalPrimaryOpportunity,
+          gap: canonicalRankedGap?.gap ?? canonicalPrimaryOpportunity.timeGapSeconds,
+        }
+      : rankedGaps[0] ?? null;
+    const limiterStr = primaryRankedGap
+      ? displaySegmentLabel(primaryRankedGap.seg, primaryRankedGap.seg?.label)
+      : displaySegmentLabel(analysisJson.headline?.biggestLimiter, analysisJson.headline?.biggestLimiter?.label);
+    const roxzoneAction = roxzoneActionability(analysisJson, primaryRankedGap?.seg ?? analysisJson.headline?.biggestLimiter ?? null);
+    const limiterType = primaryRankedGap?.seg?.type ?? analysisJson.headline?.biggestLimiter?.type ?? null;
+    const largestNonRoxzoneRankedGap = rankedGaps
+      .filter((row) => row.key !== "roxzone_time")
+      .reduce((max, row) => Math.max(max, Number(row.gap) || 0), 0);
+    const roxzoneIsLargestRemainingRefinement = !hasGoalGroup
+      && isElite
+      && Number.isFinite(roxGap)
+      && roxGap >= 30
+      && roxGap >= largestNonRoxzoneRankedGap;
+    const limiterIsRoxzone = primaryRankedGap?.key === "roxzone_time"
+      || primaryRankedGap?.seg?.segmentKey === "roxzone_time"
+      || canonicalPrimaryOpportunity?.segmentKey === "roxzone_time"
+      || /\broxzone\b/i.test(String(canonicalPrimaryOpportunity?.label ?? ""))
+      || roxzoneIsLargestRemainingRefinement;
     const stationLimiterStr = rankedGaps.find((row) => row.seg?.type === "station")?.seg?.label ?? null;
     const runLimiterStr = rankedGaps.find((row) => row.seg?.type === "run")?.seg?.label ?? null;
     const runIsStrength = runGapRaw < -30;
+    const categorySegmentBridge = (category, labelValue = limiterStr, typeValue = limiterType) => {
+      if (!labelValue) return "";
+      if (category === "station" && typeValue && typeValue !== "station") {
+        return ` Station time is the larger category gap, but ${lowerInitial(targetOpportunitySubject(labelValue, typeValue))} is the single biggest segment to attack first.`;
+      }
+      if (category === "run" && typeValue && typeValue !== "run") {
+        return ` Running is the larger category gap, but ${lowerInitial(targetOpportunitySubject(labelValue, typeValue))} is the single biggest segment to attack first.`;
+      }
+      return "";
+    };
     const targetTimeFmt2 = hasGoalGroup
       ? formatTime(goalGroup?.targetFinishSeconds ?? segMap.get("total_time")?.goalBenchmarkSeconds)
       : null;
     let mainLimiter;
+    let feasibilitySentence = "";
     if (totalGapSeconds <= 0) {
       if (hasGoalGroup) {
         mainLimiter = `You are at or ahead of the ${targetTimeFmt2 ?? "target"} profile. ${
-          limiterStr ? `${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the tightest remaining gap versus the target.` : ""
+          limiterStr ? `${targetOpportunitySentence(limiterStr, limiterType, "the tightest remaining gap versus the target.")}` : ""
         }`.trim();
       } else if (isElite) {
         // Elite athletes rarely show a +60s station-vs-running gap at all, so when this
@@ -1484,42 +1771,47 @@ function renderSplitTable(section, analysisJson) {
       }
     } else if (workGap > runGap + 60) {
       if (hasGoalGroup) {
-        mainLimiter = targetTimeFmt2
-          ? `To hit ${targetTimeFmt2}, the gap is led by station performance.${limiterStr ? ` ${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}`
+          mainLimiter = targetTimeFmt2
+            ? `To hit ${targetTimeFmt2}, the gap is led by station performance.${limiterStr ? ` ${targetOpportunitySentence(limiterStr, limiterType, "the biggest target opportunity.")}${limiterType && limiterType !== "station" ? ` Station time is the larger category gap, but ${lowerInitial(targetOpportunitySubject(limiterStr, limiterType))} is the single biggest segment to attack first.` : ""}` : ""}`
           : `The main target gap is station performance.${stationLimiterStr ? ` ${stationLimiterStr} leads.` : ""}`;
       } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in station performance.";
       } else if (isCompetitive && achievedStr && nextBandStr) {
-        mainLimiter = `You are competitive in the ${achievedStr} benchmark band. ${
-          stationLimiterStr
-            ? `Your clearest gap toward ${nextBandStr} is station performance, especially ${stationLimiterStr}.`
-            : `Your clearest gap toward ${nextBandStr} is station performance.`
-        }`;
+        mainLimiter = limiterType && limiterType !== "station"
+          ? `You are competitive in the ${achievedStr} benchmark band. ${categorySegmentBridge("station").trim()}`
+          : `You are competitive in the ${achievedStr} benchmark band. ${
+              stationLimiterStr
+                ? `Your clearest gap toward ${nextBandStr} is station performance, especially ${stationLimiterStr}.`
+                : `Your clearest gap toward ${nextBandStr} is station performance.`
+            }`;
       } else {
         mainLimiter = "The main limiter is station performance.";
       }
     } else if (runGap > workGap + 60) {
       if (hasGoalGroup) {
-        mainLimiter = targetTimeFmt2
-          ? `To hit ${targetTimeFmt2}, the gap is led by running pace.${limiterStr ? ` ${limiterStr} ${pluralStation(limiterStr) ? "are" : "is"} the biggest target opportunity.` : ""}${runIsStrength ? " Running is strong against your current benchmark, but still needs time against the target profile." : ""}`
+          mainLimiter = targetTimeFmt2
+            ? `To hit ${targetTimeFmt2}, the gap is led by running pace.${limiterStr ? ` ${targetOpportunitySentence(limiterStr, limiterType, "the biggest target opportunity.")}${limiterType && limiterType !== "run" ? ` Running is the larger category gap, but ${lowerInitial(targetOpportunitySubject(limiterStr, limiterType))} is the single biggest segment to attack first.` : ""}` : ""}${runIsStrength ? " Running is strong against your current benchmark, but still needs time against the target profile." : ""}`
           : `The main target gap is running pace.${runLimiterStr ? ` ${runLimiterStr} leads.` : ""}`;
       } else if (isElite) {
         mainLimiter = "Your smallest relative advantage sits in running pace.";
       } else if (isCompetitive && achievedStr && nextBandStr) {
-        mainLimiter = `You are competitive in the ${achievedStr} benchmark band. ${
-          runLimiterStr
-            ? `Your clearest gap toward ${nextBandStr} is running pace, especially ${runLimiterStr}.`
-            : `Running pace shows the clearest gap versus ${nextBandStr} athletes.`
-        }`;
+        mainLimiter = limiterType && limiterType !== "run"
+          ? `You are competitive in the ${achievedStr} benchmark band. ${categorySegmentBridge("run").trim()}`
+          : `You are competitive in the ${achievedStr} benchmark band. ${
+              runLimiterStr
+                ? `Your clearest gap toward ${nextBandStr} is running pace, especially ${runLimiterStr}.`
+                : `Running pace shows the clearest gap versus ${nextBandStr} athletes.`
+            }`;
       } else {
         mainLimiter = "The main limiter is running pace.";
       }
     } else {
       if (hasGoalGroup) {
         if (workGap <= 0 && runGap > 0) {
+          const stationScope = hasPartialStationData ? "Based on available station splits, your station time" : "Your station time";
           mainLimiter = targetTimeFmt2
-            ? `Your station time is already at or ahead of the target profile. To hit ${targetTimeFmt2}, the remaining gap comes from running pace.`
-            : "Your station time is already ahead of the target profile.";
+            ? `${stationScope} is already at or ahead of the target profile. To hit ${targetTimeFmt2}, the remaining gap comes from ${Number.isFinite(roxGap) && roxGap > 30 ? "running pace and RoxZone execution" : "running pace"}.${limiterIsRoxzone ? " The biggest single controllable block is RoxZone." : ""}`
+            : `${stationScope} is already ahead of the target profile.`;
         } else if (runGap <= 0 && workGap > 0) {
           mainLimiter = targetTimeFmt2
             ? `Your running is already ahead of the target profile. To hit ${targetTimeFmt2}, the remaining gap is in station performance.`
@@ -1546,6 +1838,16 @@ function renderSplitTable(section, analysisJson) {
       }
     }
 
+    if (limiterIsRoxzone && !hasNarrativeDataAnomaly) {
+      mainLimiter = hasGoalGroup
+        ? targetTimeFmt2
+          ? `To hit ${targetTimeFmt2}, the biggest single controllable block is RoxZone execution.`
+          : "The biggest single controllable block is RoxZone execution."
+        : isElite
+          ? "You matched or beat your benchmark band overall. Your next refinement is RoxZone execution."
+          : "RoxZone execution is the main area for further improvement.";
+    }
+
     if (hasGoalGroup && totalGapSeconds > 0) {
       let feasibility;
       const isEliteTarget = isElite
@@ -1558,15 +1860,48 @@ function renderSplitTable(section, analysisJson) {
       else if (totalGapSeconds <= 180) feasibility = "Target assessment: realistic with focused execution.";
       else if (totalGapSeconds <= 360) feasibility = "Target assessment: meaningful stretch.";
       else if (totalGapSeconds <= 600) feasibility = "Target assessment: aggressive stretch.";
-      else feasibility = "Target assessment: very aggressive target.";
+      else feasibility = "Target assessment: very aggressive target. This needs a major fitness shift, not just execution cleanup.";
 
       if (penaltiesDominate) {
         feasibility = "Target assessment: aggressive stretch. The first win is execution — removing penalties changes the size of the problem immediately.";
       }
-      mainLimiter = `${feasibility} ${mainLimiter}`;
+      feasibilitySentence = feasibility;
     }
     if (hasNarrativeDataAnomaly) {
       mainLimiter = "One or more split values look unusual, so check the race splits before naming a main limiter.";
+    }
+
+    const contractPrimaryIsConcreteSegment = canonicalPrimaryOpportunity
+      && canonicalPrimaryOpportunity.type !== "penalty"
+      && canonicalPrimaryOpportunity.segmentKey !== "penalties"
+      && displaySegmentLabel(canonicalPrimaryOpportunity, canonicalPrimaryOpportunity.label);
+    if (contractPrimaryIsConcreteSegment && !hasNarrativeDataAnomaly) {
+      const primaryLabel = displaySegmentLabel(canonicalPrimaryOpportunity, canonicalPrimaryOpportunity.label);
+      const primaryType = canonicalPrimaryOpportunity.type ?? segMap.get(canonicalPrimaryOpportunity.segmentKey)?.type ?? null;
+      const primarySubject = targetOpportunitySubject(primaryLabel, primaryType);
+      const primaryNoun = canonicalPrimaryOpportunity.claimStrength && canonicalPrimaryOpportunity.claimStrength !== "firm"
+        ? hasGoalGroup ? "main directional target opportunity" : "main directional opportunity"
+        : hasGoalGroup ? "main target opportunity" : "main opportunity";
+      const categoryContext = (() => {
+        const stationLarger = workGap > runGap + 60;
+        const runLarger = runGap > workGap + 60;
+        if (stationLarger && primaryType === "station") return "Station performance is the largest category gap.";
+        if (runLarger && primaryType === "run") return "Running is the largest category gap.";
+        if (stationLarger) return `Station time is the larger category gap, but ${lowerInitial(primarySubject)} is the single biggest segment to attack first.`;
+        if (runLarger) return `Running is the larger category gap, but ${lowerInitial(primarySubject)} is the single biggest segment to attack first.`;
+        if (limiterIsRoxzone) return "RoxZone is the biggest single controllable block.";
+        if (primaryType === "run") return "Running and station performance are both contributing; this run split is the clearest measured starting point.";
+        if (primaryType === "station") return "Running and station performance are both contributing; this station is the clearest measured starting point.";
+        return mainLimiter;
+      })();
+      const runCoaching = runSplitCoachingInterpretation(canonicalPrimaryOpportunity);
+      mainLimiter = `${primarySubject} ${segmentVerb(primarySubject)} the ${primaryNoun}.${runCoaching} ${feasibilitySentence} ${categoryContext}`.replace(/\s+/g, " ").trim();
+    } else if (feasibilitySentence && !mainLimiter.startsWith("Target assessment:")) {
+      mainLimiter = `${feasibilitySentence} ${mainLimiter}`;
+    }
+    if (narrative.artifactSlots?.email?.mainInsightOpening) {
+      const runCoaching = runSplitCoachingInterpretation(canonicalPrimaryOpportunity);
+      mainLimiter = `${narrative.artifactSlots.email.mainInsightOpening}${runCoaching}`.replace(/\s+/g, " ").trim();
     }
 
     const stationGap = splitGapSeconds(segMap.get("work_time"), hasGoalGroup);
@@ -1581,13 +1916,45 @@ function renderSplitTable(section, analysisJson) {
         : roxGap < 30
           ? " Transitions are not a meaningful drag on your result."
           : ` Transitions are also contributing (~${splitSafe(formatGain(roxGap))} above ${roxRef}).`;
-    const topLosses = SPLIT_TABLE_RACE_ORDER
-      .map((key) => ({ key, seg: segMap.get(key), gap: splitGapSeconds(segMap.get(key), hasGoalGroup) }))
-      .filter((row) => Number.isFinite(row.gap) && row.gap >= 60 && isConfidentSegment(row.seg))
-      .sort(compareOpportunityRows)
-      .slice(0, 3);
-    const lossNames = topLosses.map((row) => row.seg?.label ?? row.key).join(", ");
-    const biggestNote = lossNames ? ` Biggest opportunities: ${lossNames}.` : "";
+	    let topLosses = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
+	      .map((key) => {
+	        const rawSeg = segMap.get(key);
+	        const seg = rawSeg ? { ...rawSeg, label: displaySegmentLabel(rawSeg, rawSeg.label) } : rawSeg;
+	        return { key, seg, gap: splitOpportunityGap(seg) };
+	      })
+	      .filter((row) => Number.isFinite(row.gap) && row.gap >= 60 && isConfidentSegment(row.seg))
+	      .sort(compareOpportunityRows)
+	      .slice(0, 3);
+	    if (canonicalPrimaryIsActionable && canonicalPrimaryOpportunity?.segmentKey) {
+	      const primaryRow = topLosses.find((row) => row.key === canonicalPrimaryOpportunity.segmentKey)
+	        ?? rankedGaps.find((row) => row.key === canonicalPrimaryOpportunity.segmentKey)
+	        ?? {
+	          key: canonicalPrimaryOpportunity.segmentKey,
+	          seg: canonicalPrimaryOpportunity,
+	          gap: canonicalPrimaryOpportunity.timeGapSeconds,
+	        };
+	      topLosses = [
+	        primaryRow,
+	        ...topLosses.filter((row) => row.key !== canonicalPrimaryOpportunity.segmentKey),
+	      ].slice(0, 3);
+	    }
+	    const primaryLossName = topLosses[0]?.seg?.label ?? null;
+	    const secondaryLossNames = topLosses.slice(1).map((row) => row.seg?.label ?? row.key).filter(Boolean).join(", ");
+	    const primaryLossGap = Number(topLosses[0]?.gap);
+	    const primaryLossKey = String(topLosses[0]?.key ?? topLosses[0]?.seg?.segmentKey ?? "");
+	    const coachingNote = (() => {
+	      if (!Number.isFinite(primaryLossGap) || primaryLossGap < 180) return "";
+	      if (primaryLossKey === "wall_balls") {
+	        return " For Wall Balls, prioritise repeatable set caps, breathing cadence between sets, and squat endurance before chasing larger unbroken chunks.";
+	      }
+	      if (/^run_[678]$/.test(primaryLossKey)) {
+	        return " For the late-run fade, build controlled run-station-run repeats so the final kilometres stay close to early-race pace instead of turning into survival running.";
+	      }
+	      return "";
+	    })();
+	    const biggestNote = primaryLossName
+	      ? ` Biggest opportunity: ${primaryLossName}.${secondaryLossNames ? ` Secondary opportunities: ${secondaryLossNames}.` : ""}${coachingNote}`
+	      : "";
 
     const gapSentence = buildGapRelationSentence(
       stationGap,
@@ -1597,8 +1964,14 @@ function renderSplitTable(section, analysisJson) {
       hasGoalGroup ? "Against the target profile, " : null,
       roxGap,
     );
-    const safeGapSentence = hasNarrativeDataAnomaly ? "" : gapSentence;
-    const secondParagraph = splitSafe(enforceTone(`${roxNote.trim()}${biggestNote}`));
+    const contractReconciliation = narrative.artifactSlots?.email?.reconciliation ?? "";
+    const contractOwnsReconciliation = Boolean(contractReconciliation);
+    const safeGapSentence = hasNarrativeDataAnomaly || contractOwnsReconciliation ? "" : gapSentence;
+    const contractReconciliationSentence = contractOwnsReconciliation && !copyIncludesNormalized(mainLimiter, contractReconciliation)
+      ? ` ${contractReconciliation}`
+      : "";
+    const roxzoneActionLead = roxzoneAction ? `${roxzoneAction.emailLead} ` : "";
+    const secondParagraph = splitSafe(enforceTone(`${roxzoneActionLead}${roxNote.trim()}${biggestNote}`));
     // Unreachable when penaltiesAreMaterial is true: the branch above (line ~1327) always
     // returns first in that case. Kept as-is (matching pre-existing dead-code shape) rather
     // than rewritten, since it has no observable effect either way.
@@ -1614,7 +1987,7 @@ function renderSplitTable(section, analysisJson) {
       <td style="background-color:#ffffff;padding:18px 24px;">
         <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 24px;">
           <span style="display:block;color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">MAIN INSIGHT</span>
-          <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(enforceTone(mainLimiter))}${splitSafe(dataAnomalySentence)}${safeGapSentence}${penaltySentence}<br><br>${secondParagraph}</p>
+	          <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;margin:0;">${splitSafe(enforceTone(cleanGeneratedReportCopy(mainLimiter)))}${splitSafe(dataAnomalySentence)}${splitSafe(directionalDataAnomalySentence)}${splitSafe(missingRunningDataSentence)}${splitSafe(enforceTone(cleanGeneratedReportCopy(contractReconciliationSentence)))}${safeGapSentence}${penaltySentence}<br><br>${secondParagraph}</p>
         </div>
       </td>
     </tr>`;
@@ -1859,22 +2232,25 @@ function renderSplitTable(section, analysisJson) {
     // When a component is already ahead of target, its advantage offsets what running needs to cover.
     const stationCredit = Math.max(0, -stationGap2);
     const roxCredit = Math.max(0, -roxGap2);
+    const runningCredit = Number.isFinite(runGapForRoute) ? Math.max(0, -runGapForRoute) : 0;
     const effectiveRunRequirement = Number.isFinite(runGapForRoute)
       ? Math.max(0, runGapForRoute)
       : 0;
     const hasStationCredit = stationCredit > 60;
     const hasRoxCredit = roxCredit > 60;
+    const hasRunningCredit = runningCredit > 60;
 
     const runningUnavailable = !Number.isFinite(runGapForRoute);
     if (runningUnavailable && stationGap2 > totalGapSeconds + 60) {
       const stationGapStr = splitSafe(formatGain(Math.round(stationGap2)));
       const totalGapStr2 = splitSafe(formatGain(totalGapSeconds));
       const targetTimeFmtSafe = splitSafe(targetTimeFmt);
+      const routeUnavailableCopy = `A full route breakdown requires running split data, which was not available for this result. Available station splits show ${stationGapStr} versus the target profile, but missing run data means this cannot be reconciled directly to the net ${totalGapStr2} target gap. Treat the route allocation as directional until complete running splits are available.`;
       return `<tr>
         <td style="background-color:#ffffff;padding:0 24px 18px;">
           <div style="background-color:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:18px 24px;">
             <span style="display:block;color:#0369a1;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">YOUR ROUTE TO ${targetTimeFmtSafe}</span>
-            <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0;">A full route breakdown requires running split data, which was not available for this result. Station performance accounts for at least ${stationGapStr} of the ${totalGapStr2} gap — the route allocation will be shown once running splits are available.</p>
+            <p style="color:#475569;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;margin:0;">${routeUnavailableCopy}</p>
           </div>
         </td>
       </tr>`;
@@ -1887,9 +2263,12 @@ function renderSplitTable(section, analysisJson) {
     }
 
     if (stationGap2 > 30) {
-      const stationBullet = topStationLabel
-        ? `${splitSafe(formatGain(Math.round(stationGap2)))} from station efficiency, led by ${splitSafe(topStationLabel)}${top2StationLabel ? ` and ${splitSafe(top2StationLabel)}` : ""}`
-        : `${splitSafe(formatGain(Math.round(stationGap2)))} from station efficiency`;
+      const stationLead = topStationLabel
+        ? `, led by ${splitSafe(topStationLabel)}${top2StationLabel ? ` and ${splitSafe(top2StationLabel)}` : ""}`
+        : "";
+      const stationBullet = hasRunningCredit && stationGap2 > totalGapSeconds + 60
+        ? `station gap is ${splitSafe(formatGain(Math.round(stationGap2)))}${stationLead}, partly offset by running already ahead; net target gap is ${splitSafe(totalGapStr)}`
+        : `${splitSafe(formatGain(Math.round(stationGap2)))} from station efficiency${stationLead}`;
       routeItems.push(stationBullet);
     }
 
@@ -1919,8 +2298,8 @@ function renderSplitTable(section, analysisJson) {
       `<li style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#475569;line-height:1.6;margin-bottom:4px;">${item}</li>`
     ).join("");
 
-    const offsetNote = (hasStationCredit || hasRoxCredit)
-      ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:10px 0 0;font-style:italic;">${hasStationCredit ? "Your station time is already ahead of the target profile" : "Your RoxZone time is already ahead of the target profile"} — this offsets some of the running gap needed.</p>`
+    const offsetNote = (hasStationCredit || hasRoxCredit || hasRunningCredit)
+      ? `<p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;margin:10px 0 0;font-style:italic;">${hasRunningCredit ? "Your running is already ahead of the target profile" : hasStationCredit ? "Your station time is already ahead of the target profile" : "Your RoxZone time is already ahead of the target profile"} - this offsets part of the remaining target gap.</p>`
       : "";
 
     const headingText = `YOUR ROUTE TO ${splitSafe(targetTimeFmt)}`;
@@ -1998,7 +2377,7 @@ function renderSplitTable(section, analysisJson) {
     // RoxZone is included alongside station/run splits so a genuinely dominant transition
     // loss (e.g. a tight elite race where every individual split is small) can surface as a
     // biggest opportunity, mirroring the RoxZone strength candidate injected further below.
-    const losses = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
+	    let losses = [...SPLIT_TABLE_RACE_ORDER, "roxzone_time"]
       .map((key) => {
         const rawSeg = segMap.get(key);
         const seg = key === "roxzone_time" && rawSeg ? { ...rawSeg, label: "RoxZone" } : rawSeg;
@@ -2025,7 +2404,17 @@ function renderSplitTable(section, analysisJson) {
 	        if (!hasGoalGroup && !["Opportunity", "Priority"].includes(splitBandLabel(row.seg, row.gap))) return false;
 	        return true;
 	      })
-      .sort(compareOpportunityRows);
+	      .sort(compareOpportunityRows);
+	    if (canonicalPrimaryIsActionable && !penaltiesAreMaterial && canonicalPrimaryOpportunity?.segmentKey) {
+	      const primaryLoss = losses.find((row) => row.key === canonicalPrimaryOpportunity.segmentKey)
+	        ?? rankedGaps.find((row) => row.key === canonicalPrimaryOpportunity.segmentKey);
+	      if (primaryLoss) {
+	        losses = [
+	          primaryLoss,
+	          ...losses.filter((row) => row.key !== canonicalPrimaryOpportunity.segmentKey),
+	        ];
+	      }
+	    }
     if (penaltiesAreMaterial) {
       losses.unshift({
         key: "__penalty__",
@@ -2054,9 +2443,17 @@ function renderSplitTable(section, analysisJson) {
       });
       strengthCandidates.sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0));
     }
+    const reportStrength = resolveReportStrength(analysisJson);
+    const reportStrengthGap = reportStrength ? splitGapSeconds(segMap.get(reportStrength.segmentKey) ?? reportStrength, hasGoalGroup) : null;
     const suppressedStrengthRows = strengthCandidates.filter(isAnomalousSplitRow);
     const strengths = strengthCandidates.filter((row) => !isAnomalousSplitRow(row));
-    const topStrengths = strengths.slice(0, 3);
+    const topStrengths = reportStrength
+      ? [{
+          key: reportStrength.segmentKey,
+          seg: { ...(segMap.get(reportStrength.segmentKey) ?? reportStrength), label: reportStrength.label },
+          gap: Number.isFinite(reportStrengthGap) ? reportStrengthGap : -1,
+        }, ...strengths.filter((row) => row.key !== reportStrength.segmentKey)].slice(0, 3)
+      : strengths.slice(0, 3);
     const isEliteAthlete = isEliteBenchmark;
 
     const badge = (num) => `<span style="display:inline-block;min-width:20px;text-align:center;background-color:#22d3ee;color:#07101e;font-family:'Courier New',Courier,monospace;font-size:11px;font-weight:700;padding:1px 4px;border-radius:3px;">${num}</span>`;
@@ -2621,7 +3018,7 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
   </tr>`;
 }
 
-function renderSection(section, analysisJson, interpretation = null, calculatorMode = "target") {
+function renderSection(section, analysisJson, interpretation = null, calculatorMode = "target", contract = null) {
   const SUPPRESSED_IN_EMAIL = new Set([
     "executive_summary",
     "race_snapshot",
@@ -2650,17 +3047,20 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
     case "penalty_callout":
       return renderPenaltyCallout(section, interpretation, analysisJson);
     case "race_split_breakdown":
-      return renderSplitTable(section, analysisJson);
+      return renderSplitTable(section, analysisJson, contract);
     case "muscle_group_profile":
       return renderMuscleGroupSection(section, analysisJson);
     case "roxzone_execution":
-      return renderRoxzoneExecution(section, interpretation);
+      return renderRoxzoneExecution(section, interpretation, analysisJson);
     default:
       return renderTextCard(section, interpretation, analysisJson);
   }
 }
 
-export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target") {
+export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null) {
+  const narrative = ensureHyroxReportContract({ analysisJson, athleteContext, calculatorMode, contract });
+  const reportOpportunity = narrative.sourceOpportunity ?? opportunityFraming(analysisJson);
+  const canonicalPrimaryOpportunity = narrative.primaryClaim;
   const {
     penalties: emailPenalties,
     totalPenaltySeconds: emailPenaltySeconds,
@@ -2713,14 +3113,22 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     .filter(Boolean);
   const emailTopLimiter = findBiggestLimiter(emailOpportunitySegments);
   const emailTopSeg = emailTopLimiter?.segmentKey ? emailSegMap.get(emailTopLimiter.segmentKey) : null;
-  const emailTopLabel = emailTopLimiter?.label ?? legacyLimiter;
-  const emailTopSegType = emailTopLimiter?.type ?? emailTopSeg?.type ?? null;
+  const emailTopLabel = canonicalPrimaryOpportunity?.label
+    ?? displaySegmentLabel(emailTopLimiter, emailTopLimiter?.label)
+    ?? legacyLimiter;
+  const emailTopSegType = canonicalPrimaryOpportunity?.type ?? emailTopLimiter?.type ?? emailTopSeg?.type ?? null;
   const heroOverrideCopy = interpretation?.primaryThesis
     ? buildHeroCopy(interpretation.primaryThesis, analysisJson, calculatorMode, emailTopLabel, emailTopSegType)
     : null;
 
-  const subject = (() => {
-    if (usePenaltyHero) return `Your HYROX fastest win is ${formatGain(emailPenaltySeconds)} of penalties`;
+	  const legacySubject = (() => {
+	    if (narrative.headlineMode === "penalty_first") return `Your HYROX fastest win is ${formatGain(emailPenaltySeconds)} of penalties`;
+	    if (narrative.headlineMode === "data_anomaly_directional") {
+	      return "Your HYROX analysis needs a split check first";
+	    }
+	    if (narrative.headlineMode === "no_benchmark_directional" && canonicalPrimaryOpportunity?.displayLabel) {
+	      return `Your HYROX analysis: start with ${canonicalPrimaryOpportunity.displayLabel}`;
+	    }
     if (calculatorMode === "analyse") {
 	      const analysisFrame = analysisJson.benchmarkContext?.analysisFrame;
 	      const frame = analysisFrame?.frame;
@@ -2777,7 +3185,18 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
 	      return `Your route to ${goalTargetFmt}: ${emailTopLabel ? `start with ${emailTopLabel}` : "the target roadmap"}`;
 	    }
 	    return "Your HYROX target time analysis";
-	  })();
+		  })();
+  const subject = (() => {
+    const subjectPrimary = narrative.artifactSlots?.email?.subjectPrimary;
+    const contractSubject = narrative.artifactSlots?.email?.subject;
+    if (calculatorMode === "target" && !selectedTargetSecondsForEmail(analysisJson, athleteContext)) {
+      return legacySubject;
+    }
+    if (calculatorMode === "analyse" && subjectPrimary && !copyIncludesNormalized(legacySubject, subjectPrimary)) {
+      return `${subjectPrimary}: ${legacySubject}`;
+    }
+    return contractSubject ?? legacySubject;
+  })();
   const greetingName = resolveGreetingName(athleteContext.firstName ?? athleteContext.displayName ?? null);
   const greeting = `Hi ${greetingName},`;
   const sections = Array.isArray(personalReport.sections) ? personalReport.sections : [];
@@ -2785,7 +3204,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     .map((section) => `${section.title}\n${contentText(section.content)}`)
     .join("\n\n");
   const textBody = enforceTone(`${greeting}\n\n${textSections}`);
-  const sectionRows = sections.map((section) => renderSection(section, analysisJson, interpretation, calculatorMode)).join("");
+  const sectionRows = sections.map((section) => renderSection(section, analysisJson, interpretation, calculatorMode, narrative)).join("");
   const outerTableStyle = inlineStyle({
     width: "100%",
     "border-collapse": "collapse",
