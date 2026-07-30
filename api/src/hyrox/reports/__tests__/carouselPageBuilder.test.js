@@ -58,6 +58,22 @@ describe("buildCarouselPage", () => {
     assert.equal(backgroundImageMatches.length, 1, "watermark background-image should be declared once in CSS, not per slide");
   });
 
+  it("raises watermark opacity on the cover and CTA slides, keeps it subtle on data/table slides", () => {
+    const html = buildCarouselPage({
+      brand: { site: "www.getforma.fit" },
+      slides: [{ athlete_name: "Alex Smith", percentile: "Alex Smith is in the Top 45%" }],
+    });
+
+    const baseOpacityMatch = html.match(/\.watermark\s*\{[^}]*opacity:\s*([0-9.]+)/);
+    const strongOpacityMatch = html.match(/\.slide-hook \.watermark,\s*\.slide-cta \.watermark\s*\{\s*opacity:\s*([0-9.]+)/);
+    assert.ok(baseOpacityMatch, "expected a base .watermark opacity rule");
+    assert.ok(strongOpacityMatch, "expected a stronger opacity override for .slide-hook and .slide-cta");
+    assert.ok(
+      Number(strongOpacityMatch[1]) > Number(baseOpacityMatch[1]),
+      "cover/CTA watermark opacity should be higher than the base (data/table) opacity",
+    );
+  });
+
   it("watermark image data is non-empty when the asset file is present", () => {
     const html = buildCarouselPage({
       brand: { site: "www.getforma.fit" },

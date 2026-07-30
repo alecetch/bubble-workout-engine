@@ -100,6 +100,10 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
   opacity: 0.16;
   pointer-events: none;
 }
+/* Cover (A1) and CTA (A6) slides carry little/no dense text, so the watermark can read
+   more strongly there. Data/table slides (A2's station table, and the stat/insight
+   slides in between) keep the subtle base opacity so numbers stay easy to scan. */
+.slide-hook .watermark, .slide-cta .watermark { opacity: 0.28; }
 .slide-title { font-weight: 300; text-transform: uppercase; font-size: 41px; line-height: 1.1; letter-spacing: 0.02em; text-align: center; margin: 0; }
 .slide-flow .slide-title { position: absolute; top: 136px; left: 0; right: 0; }
 .flow-summary { position: absolute; top: 185px; left: 80px; right: 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; }
