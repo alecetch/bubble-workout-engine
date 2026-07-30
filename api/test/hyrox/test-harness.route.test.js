@@ -224,6 +224,14 @@ test("firstPrimaryFromText keeps existing target and penalty subject extraction"
   assert.equal(firstPrimaryFromText("Analysis: you're ahead of your benchmark"), null);
 });
 
+test("firstPrimaryFromText extracts the primary from doubles team-aware main-insight openers", () => {
+  // Regression: doubles email copy inserts "team" into the opener ("is the main team
+  // opportunity" / "is the main team target opportunity"), which must not defeat the
+  // existing singles "main [directional] opportunity/limiter" extraction pattern.
+  assert.equal(firstPrimaryFromText("Run 2 is the main team target opportunity. This target is an aggressive stretch."), "Run 2");
+  assert.equal(firstPrimaryFromText("Run 1 is the main team opportunity. Station performance is the largest category gap."), "Run 1");
+});
+
 test("primaryFromHeroTitle falls back to canonical browser limiter for generic hero titles", () => {
   assert.equal(
     primaryFromHeroTitle("Based on available data... Your engine is not the main limiter", "Wall Balls"),
@@ -236,6 +244,14 @@ test("primaryFromHeroTitle keeps existing title-text extraction before fallback"
   assert.equal(primaryFromHeroTitle("RoxZone time is costing you", "Wall Balls"), "RoxZone");
   assert.equal(primaryFromHeroTitle("YOUR ROUTE STARTS WITH RUN 7", "Wall Balls"), "Run 7");
   assert.equal(primaryFromHeroTitle("Wall Balls IS YOUR BIGGEST opportunity", "Run 1"), "Wall Balls");
+});
+
+test("primaryFromHeroTitle recognizes the penalty-first fastest-controllable-win title before falling back to the fitness limiter", () => {
+  // Regression: in penalty_first mode, biggestLimiter is deliberately the largest FITNESS
+  // limiter (not Penalties), so the fallback must never win when the title is unambiguously
+  // about penalties.
+  assert.equal(primaryFromHeroTitle("Penalties are your fastest controllable win", "Run 8"), "Penalties");
+  assert.equal(primaryFromHeroTitle("Penalties are your team's fastest controllable win", "Run 2"), "Penalties");
 });
 
 test("artifactPrimaryConsistency fails unqualified cross-artifact primary mismatches", () => {
