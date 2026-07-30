@@ -79,7 +79,7 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
   const topInsightHasConcreteClaim = Boolean(
     topInsight
       && (
-        topInsightSegmentKey
+        (topInsightSegmentKey && topInsightSegmentKey !== "total_time")
         || Number.isFinite(Number(topInsight.evidence?.potentialGainSeconds))
         || Number.isFinite(Number(topInsight.evidence?.timeGapSeconds))
       ),
