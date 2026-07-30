@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolvedFrameGapSeconds, resolvedStatGapSeconds, resolvedUserSeconds } from "../gapSelectors.js";
+import { resolvedFrameGapSeconds, resolvedRoxzoneGapSeconds, resolvedStatGapSeconds, resolvedUserSeconds } from "../gapSelectors.js";
 
 describe("gapSelectors", () => {
   it("resolvedUserSeconds prefers finite net-of-penalty seconds", () => {
@@ -30,5 +30,44 @@ describe("gapSelectors", () => {
     assert.equal(resolvedFrameGapSeconds({ timeGapToExactTargetSeconds: 80, timeGapToMedianSeconds: 40 }), 80);
     assert.equal(resolvedFrameGapSeconds({ timeGapToMedianSeconds: 40 }), 40);
     assert.equal(resolvedFrameGapSeconds(null), null);
+  });
+
+  it("resolvedRoxzoneGapSeconds preserves the RoxZone actionability gap precedence", () => {
+    assert.equal(resolvedRoxzoneGapSeconds({
+      segments: [{
+        segmentKey: "roxzone_time",
+        frameGapNetOfPenaltySeconds: 180,
+        frameGapSeconds: 198,
+        timeGapToExactTargetSeconds: 315,
+        timeGapToMedianSeconds: 222,
+      }],
+      roxzoneAnalysis: { timeGapToMedianSeconds: 240 },
+    }), 180);
+    assert.equal(resolvedRoxzoneGapSeconds({
+      segments: [{
+        segmentKey: "roxzone_time",
+        frameGapSeconds: 198,
+        timeGapToExactTargetSeconds: 315,
+        timeGapToMedianSeconds: 222,
+      }],
+      roxzoneAnalysis: { timeGapToMedianSeconds: 240 },
+    }), 198);
+    assert.equal(resolvedRoxzoneGapSeconds({
+      segments: [{
+        segmentKey: "roxzone_time",
+        timeGapToExactTargetSeconds: 315,
+        timeGapToMedianSeconds: 376,
+      }],
+      roxzoneAnalysis: { timeGapToMedianSeconds: 240 },
+    }), 315);
+    assert.equal(resolvedRoxzoneGapSeconds({
+      segments: [{ segmentKey: "roxzone_time", timeGapToMedianSeconds: 222 }],
+      roxzoneAnalysis: { timeGapToMedianSeconds: 240 },
+    }), 222);
+    assert.equal(resolvedRoxzoneGapSeconds({
+      segments: [],
+      roxzoneAnalysis: { timeGapToMedianSeconds: 240 },
+    }), 240);
+    assert.equal(resolvedRoxzoneGapSeconds({ segments: [] }), null);
   });
 });

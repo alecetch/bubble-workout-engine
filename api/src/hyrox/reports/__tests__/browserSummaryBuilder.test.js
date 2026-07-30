@@ -124,6 +124,53 @@ describe("buildBrowserSummary hero insight metric", () => {
     assert.equal(summary.heroInsight.heroMetric, "0:45");
   });
 
+  it("does not let a generic descriptive insight replace the primary-opportunity hero", () => {
+    const summary = buildBrowserSummary(analysisWithLimiter(), [
+      {
+        id: "INSIGHT_004",
+        category: "benchmark",
+        title: "Your overall percentile is 99%",
+        evidence: {
+          primaryMetric: "overall_percentile",
+          primaryValue: 99,
+          percentile: 99,
+          confidenceGrade: "D",
+          coreClaim: "overall_percentile",
+        },
+      },
+    ]);
+
+    assert.equal(summary.heroInsight.title, "Run 1 is your biggest opportunity");
+    assert.equal(summary.heroInsight.heroMetric, "2:02");
+  });
+
+  it("does not let OVERALL_PERCENTILE_VALID's total_time segmentKey count as a concrete claim", () => {
+    // Regression: baseSegmentEvidence() attaches segmentKey: "total_time" to every insight
+    // built from the total_time segment (including purely descriptive ones), so checking
+    // "does this insight have any segmentKey" is not enough to detect a concrete, actionable
+    // claim -- total_time is the aggregate, not a limiter. Reproduces the exact evidence shape
+    // OVERALL_PERCENTILE_VALID produces in production via baseSegmentEvidence().
+    const summary = buildBrowserSummary(analysisWithLimiter(), [
+      {
+        id: "INSIGHT_004",
+        category: "benchmark",
+        title: "Your overall percentile is 99%",
+        evidence: {
+          segmentKey: "total_time",
+          segmentLabel: "Total Time",
+          primaryMetric: "overall_percentile",
+          primaryValue: 99,
+          percentile: 99,
+          confidenceGrade: "D",
+          coreClaim: "overall_percentile",
+        },
+      },
+    ]);
+
+    assert.equal(summary.heroInsight.title, "Run 1 is your biggest opportunity");
+    assert.equal(summary.heroInsight.heroMetric, "2:02");
+  });
+
   it("does not let a secondary RoxZone insight override a station primary hero", () => {
     const summary = buildBrowserSummary({
       segments: [
@@ -159,6 +206,37 @@ describe("buildBrowserSummary hero insight metric", () => {
 
     assert.equal(summary.heroInsight.title, "RoxZone time is costing you");
     assert.equal(summary.heroInsight.heroMetric, "1:20");
+  });
+
+  it("uses the canonical limiter gap when a same-segment hero insight has stale evidence", () => {
+    const summary = buildBrowserSummary(roxzoneLimiterAnalysis({
+      segments: [
+        ...coreSegments(),
+        { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 420, frameGapSeconds: 198, timeGapToMedianSeconds: 222 },
+      ],
+      headline: {
+        biggestLimiter: { segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 198 },
+      },
+      limiters: [{ segmentKey: "roxzone_time", label: "RoxZone", type: "aggregate", timeGapSeconds: 198 }],
+      timePotential: { headlineGainSeconds: 198 },
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_total",
+        totalSeconds: 420,
+        percentile: 28,
+        timeGapToMedianSeconds: 222,
+      },
+    }), [
+      {
+        id: "INSIGHT_009",
+        title: "RoxZone time is costing you",
+        evidence: { segmentKey: "roxzone_time", coreClaim: "roxzone_efficiency", potentialGainSeconds: 222 },
+      },
+    ]);
+
+    assert.equal(summary.heroInsight.title, "RoxZone time is costing you");
+    assert.equal(summary.heroInsight.heroMetric, "3:18");
+    assert.equal(summary.biggestLimiter.timeGapFormatted, "3:18");
   });
 
   it("keeps limiter fallback behavior when there are no scored insights", () => {

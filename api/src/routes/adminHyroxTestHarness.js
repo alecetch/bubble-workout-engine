@@ -893,10 +893,31 @@ function normalizePrimaryLabel(value) {
   return displaySegmentLabel(null, cleaned) ?? cleaned;
 }
 
-function firstPrimaryFromText(text) {
+function isKnownPrimaryLabel(label) {
+  if (!label) return false;
+  return [
+    "Wall Balls",
+    "Burpee Broad Jump",
+    "Farmers Carry",
+    "Sandbag Lunges",
+    "Sled Push",
+    "Sled Pull",
+    "SkiErg",
+    "Row",
+    "RoxZone",
+    "Penalties",
+  ].includes(label) || /^Run\s+[1-8]$/i.test(label);
+}
+
+export function firstPrimaryFromText(text) {
   const value = removeEmailChromeText(text);
   if (/\bfastest win\b[\s\S]{0,80}\bpenalt/i.test(value) || /\bpenalt(?:y|ies)\b[\s\S]{0,80}\bfastest controllable win\b/i.test(value)) {
     return "Penalties";
+  }
+  const colonSubjectMatch = value.match(/^([A-Za-z0-9 ]{2,30}):\s+/);
+  if (colonSubjectMatch) {
+    const label = normalizePrimaryLabel(colonSubjectMatch[1]);
+    if (isKnownPrimaryLabel(label)) return label;
   }
   const subjectMatch = value.match(/\bstart with\s+([A-Za-z0-9 ]+?)(?:[.!?<\n\r]|$|\s{2,})/i);
   if (subjectMatch) return normalizePrimaryLabel(subjectMatch[1]);
@@ -904,7 +925,7 @@ function firstPrimaryFromText(text) {
   if (biggestMatch) return normalizePrimaryLabel(biggestMatch[1].split(/,|\band\b/i)[0]);
   const targetMatch = value.match(/\b(The\s+)?([A-Za-z0-9 ]+?)(?:\s+station)?\s+is\s+the\s+biggest target opportunity/i);
   if (targetMatch) return normalizePrimaryLabel(targetMatch[2]);
-  const mainClaimMatch = value.match(/\b(The\s+)?([A-Za-z0-9 ]+?)(?:\s+station)?\s+is\s+the\s+main\s+(?:directional\s+)?(?:target\s+limiter|target\s+opportunity|fitness\s+opportunity|fitness\s+limiter|opportunity)/i);
+  const mainClaimMatch = value.match(/\b(The\s+)?([A-Za-z0-9 ]+?)(?:\s+station)?\s+is\s+the\s+main\s+(?:directional\s+|team\s+)?(?:target\s+limiter|target\s+opportunity|fitness\s+opportunity|fitness\s+limiter|opportunity)/i);
   if (mainClaimMatch) return normalizePrimaryLabel(mainClaimMatch[2]);
   return null;
 }
@@ -978,7 +999,7 @@ function artifactPolicyViolations(modeEntry = {}, fields = {}) {
   return violations;
 }
 
-function primaryFromHeroTitle(title) {
+export function primaryFromHeroTitle(title, fallbackLabel = null) {
   const value = String(title ?? "");
   if (!value) return null;
   if (/\bRoxZone\b|\bRoxzone\b/i.test(value)) return "RoxZone";
@@ -986,7 +1007,9 @@ function primaryFromHeroTitle(title) {
   if (routeMatch) return normalizePrimaryLabel(routeMatch[1]);
   const biggestMatch = value.match(/^(.+?)\s+IS YOUR BIGGEST/i);
   if (biggestMatch) return normalizePrimaryLabel(biggestMatch[1]);
-  return null;
+  const fastestWinMatch = value.match(/^(.+?)\s+(?:are|is)\s+your(?:\s+team's)?\s+fastest controllable win/i);
+  if (fastestWinMatch) return normalizePrimaryLabel(fastestWinMatch[1]);
+  return normalizePrimaryLabel(fallbackLabel);
 }
 
 function browserPrimaryFromSummary(browserSummary = {}, raceCardData = {}, carouselSlides = []) {
@@ -1021,7 +1044,10 @@ export function artifactPrimaryConsistency(modeEntry = {}) {
     narrative: expected,
     subject: firstPrimaryFromText(result.emailReport?.emailSubject),
     emailMain: firstPrimaryFromEmailHtml(result.emailReport?.emailHtml ?? ""),
-    browserHero: primaryFromHeroTitle(browserSummary.heroInsight?.title),
+    browserHero: primaryFromHeroTitle(
+      browserSummary.heroInsight?.title,
+      browserSummary.biggestLimiter?.label ?? browserSummary.largestFitnessLimiter?.label,
+    ),
     browserLimiter: browserPrimaryFromSummary(browserSummary, result.raceCardData, carouselSlides),
     raceCard: normalizePrimaryLabel(result.raceCardData?.biggestLimiter?.name),
     carousel: normalizePrimaryLabel(carouselSlides[0]?.biggest_limiter ?? carouselSlides[3]?.station),

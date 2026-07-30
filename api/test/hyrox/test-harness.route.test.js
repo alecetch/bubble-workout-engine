@@ -12,8 +12,10 @@ import {
   contentHashForAnalysisJson,
   createAdminHyroxTestHarnessRouter,
   emailHtmlEntriesFromHarnessEntries,
+  firstPrimaryFromText,
   normalizeHarnessMarkdownText,
   normalizeSex,
+  primaryFromHeroTitle,
   runHarnessMode,
   sharedContextFromRequestBody,
   structuredExpectationConsistency,
@@ -199,6 +201,57 @@ test("canonicalJsonStringify and content hashing are stable across object insert
   assert.equal(canonicalJsonStringify(first), canonicalJsonStringify(second));
   assert.equal(contentHashForAnalysisJson(first), contentHashForAnalysisJson(second));
   assert.notEqual(contentHashForAnalysisJson(first), contentHashForAnalysisJson(different));
+});
+
+test("firstPrimaryFromText extracts analyse-mode colon-prefixed subject primaries", () => {
+  assert.equal(
+    firstPrimaryFromText("RoxZone: You're in the top 9% of sub-60 finishers. Here's the next refinement."),
+    "RoxZone",
+  );
+  assert.equal(
+    firstPrimaryFromText("Wall Balls: You're ahead of your sub-85 group. sub-80 is the next test."),
+    "Wall Balls",
+  );
+  assert.equal(
+    firstPrimaryFromText("Run 7: You're in the 120:00+ band. Here's the route to 105:00-119:59."),
+    "Run 7",
+  );
+});
+
+test("firstPrimaryFromText keeps existing target and penalty subject extraction", () => {
+  assert.equal(firstPrimaryFromText("Your route to 55:00: start with Wall Balls"), "Wall Balls");
+  assert.equal(firstPrimaryFromText("Your fastest win is penalties"), "Penalties");
+  assert.equal(firstPrimaryFromText("Analysis: you're ahead of your benchmark"), null);
+});
+
+test("firstPrimaryFromText extracts the primary from doubles team-aware main-insight openers", () => {
+  // Regression: doubles email copy inserts "team" into the opener ("is the main team
+  // opportunity" / "is the main team target opportunity"), which must not defeat the
+  // existing singles "main [directional] opportunity/limiter" extraction pattern.
+  assert.equal(firstPrimaryFromText("Run 2 is the main team target opportunity. This target is an aggressive stretch."), "Run 2");
+  assert.equal(firstPrimaryFromText("Run 1 is the main team opportunity. Station performance is the largest category gap."), "Run 1");
+});
+
+test("primaryFromHeroTitle falls back to canonical browser limiter for generic hero titles", () => {
+  assert.equal(
+    primaryFromHeroTitle("Based on available data... Your engine is not the main limiter", "Wall Balls"),
+    "Wall Balls",
+  );
+  assert.equal(primaryFromHeroTitle("Your overall percentile is 99%", "Run 1"), "Run 1");
+});
+
+test("primaryFromHeroTitle keeps existing title-text extraction before fallback", () => {
+  assert.equal(primaryFromHeroTitle("RoxZone time is costing you", "Wall Balls"), "RoxZone");
+  assert.equal(primaryFromHeroTitle("YOUR ROUTE STARTS WITH RUN 7", "Wall Balls"), "Run 7");
+  assert.equal(primaryFromHeroTitle("Wall Balls IS YOUR BIGGEST opportunity", "Run 1"), "Wall Balls");
+});
+
+test("primaryFromHeroTitle recognizes the penalty-first fastest-controllable-win title before falling back to the fitness limiter", () => {
+  // Regression: in penalty_first mode, biggestLimiter is deliberately the largest FITNESS
+  // limiter (not Penalties), so the fallback must never win when the title is unambiguously
+  // about penalties.
+  assert.equal(primaryFromHeroTitle("Penalties are your fastest controllable win", "Run 8"), "Penalties");
+  assert.equal(primaryFromHeroTitle("Penalties are your team's fastest controllable win", "Run 2"), "Penalties");
 });
 
 test("artifactPrimaryConsistency fails unqualified cross-artifact primary mismatches", () => {

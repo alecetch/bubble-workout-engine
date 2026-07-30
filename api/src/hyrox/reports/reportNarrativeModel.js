@@ -4,6 +4,7 @@ import { comparisonProfileLabel } from "./comparisonProfileLabel.js";
 import { opportunityFraming } from "./opportunityFraming.js";
 import { dataQualityNote } from "./reportSelections.js";
 import { displaySegmentLabel, segmentSubject, segmentVerb } from "./segmentDisplay.js";
+import { isDoublesAnalysisDivision } from "../config/divisionGroups.js";
 
 const VERSION = 1;
 
@@ -151,18 +152,36 @@ function bridgeFor(category = null, segmentOpportunity = null) {
   };
 }
 
+function doublesContext(analysisJson = {}, athleteContext = {}) {
+  const isDoubles = [
+    analysisJson.athlete?.division,
+    analysisJson.race?.division,
+    analysisJson.division,
+    athleteContext.division,
+    analysisJson.benchmarkContext?.division,
+    analysisJson.benchmarkContext?.primaryBenchmarkGroup?.division,
+    analysisJson.benchmarkContext?.goalBenchmarkGroup?.division,
+  ].some(isDoublesAnalysisDivision);
+  return {
+    isDoubles,
+    combinedTimeCaveat: isDoubles ? "This is your combined team time; official HYROX data does not split individual partner contribution." : null,
+    opportunityOwner: isDoubles ? "your team's" : "your",
+  };
+}
+
 function heroFor(narrative) {
   const primary = narrative.primaryOpportunity;
+  const owner = narrative.teamContext?.opportunityOwner ?? "your";
   if (!primary) return { title: "Your HYROX analysis is ready", metricSeconds: null, metricLabel: null };
   if (narrative.headlineMode === "penalty_first") {
     return {
-      title: `${primary.displayLabel} ${segmentVerb(primary.displayLabel)} your fastest controllable win`,
+      title: `${primary.displayLabel} ${segmentVerb(primary.displayLabel)} ${owner} fastest controllable win`,
       metricSeconds: primary.timeGapSeconds,
       metricLabel: "Fastest controllable win",
     };
   }
   return {
-    title: `${segmentSubject(primary)} ${segmentVerb(primary)} your biggest opportunity`,
+    title: `${segmentSubject(primary)} ${segmentVerb(primary)} ${owner} biggest opportunity`,
     metricSeconds: primary.timeGapSeconds,
     metricLabel: narrative.dataQuality?.artifactLabelPolicy?.primaryLabel ?? "Biggest opportunity",
   };
@@ -171,24 +190,26 @@ function heroFor(narrative) {
 function mainInsightFor(narrative) {
   const primary = narrative.primaryOpportunity;
   const secondaryFitness = narrative.largestFitnessLimiter;
+  const owner = narrative.teamContext?.opportunityOwner ?? "your";
+  const caveat = narrative.teamContext?.combinedTimeCaveat ? ` ${narrative.teamContext.combinedTimeCaveat}` : "";
   if (!primary) return { opener: "Your HYROX analysis is ready." };
   if (narrative.headlineMode === "penalty_first") {
     const follow = secondaryFitness?.normalizedLabel
       ? ` After that, ${secondaryFitness.normalizedLabel} is the main fitness limiter.`
       : "";
-    return { opener: `${primary.displayLabel} are the fastest controllable win.${follow}` };
+    return { opener: `${primary.displayLabel} are ${owner} fastest controllable win.${follow}${caveat}` };
   }
   if (narrative.headlineMode === "fitness_first_with_penalty_win") {
     const penalty = narrative.fastestControllableWin;
     const follow = penalty?.timeGapSeconds
       ? ` Penalties are a separate ${formatGain(penalty.timeGapSeconds)} execution win to clean up.`
       : "";
-    return { opener: `${segmentSubject(primary)} ${segmentVerb(primary)} the training route.${follow}` };
+    return { opener: `${segmentSubject(primary)} ${segmentVerb(primary)} ${owner} training route.${follow}${caveat}` };
   }
   if (narrative.headlineMode === "no_benchmark_directional" || narrative.headlineMode === "data_anomaly_directional") {
-    return { opener: `${segmentSubject(primary)} looks like the main directional opportunity, but treat this as lower confidence.` };
+    return { opener: `${segmentSubject(primary)} looks like ${owner} main directional opportunity, but treat this as lower confidence.${caveat}` };
   }
-  return { opener: `${segmentSubject(primary)} ${segmentVerb(primary)} your biggest opportunity.` };
+  return { opener: `${segmentSubject(primary)} ${segmentVerb(primary)} ${owner} biggest opportunity.${caveat}` };
 }
 
 export function buildHyroxReportNarrative({
@@ -206,6 +227,7 @@ export function buildHyroxReportNarrative({
   const largestSegmentGap = normalizedOpportunity(opportunity.largestSegmentGap);
   const primaryOpportunity = normalizedOpportunity(opportunity.primaryOpportunity);
   const dataQuality = qualityFlags(analysisJson, benchmarkAvailable);
+  const teamContext = doublesContext(analysisJson, athleteContext);
   const baseMode = opportunity.artifactHeadlineMode;
   const headlineMode = dataQuality.anomaly
     ? "data_anomaly_directional"
@@ -231,6 +253,7 @@ export function buildHyroxReportNarrative({
       rankClaimsAllowed: dataQuality.rankClaimsAllowed,
     },
     rankDisplays: buildRankDisplays(analysisJson, athleteContext, benchmarkAvailable),
+    teamContext,
     dataQuality,
     penalty: opportunity.penalty,
     insights,
