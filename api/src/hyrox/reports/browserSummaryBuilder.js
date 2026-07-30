@@ -33,7 +33,7 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
     : narrative.largestFitnessLimiter
     ? { ...narrative.largestFitnessLimiter, label: displaySegmentLabel(narrative.largestFitnessLimiter, narrative.largestFitnessLimiter.label) }
     : null;
-  const roxzoneAction = roxzoneActionability(analysisJson, limiter);
+  const roxzoneAction = roxzoneActionability(analysisJson, limiter, { isDoubles: narrative.inputFacts?.isDoubles ?? narrative.teamContext?.isDoubles });
   const strength = resolveReportStrength(analysisJson);
   const canonicalPrimary = narrative.primaryOpportunity;
   const topInsightCandidate = insights[0] ?? null;
@@ -76,14 +76,25 @@ export function buildBrowserSummary(analysisJson = {}, insights = [], athleteCon
         || (topInsightIsRoxzone && canonicalPrimary.segmentKey === "roxzone_time")
       ),
   );
+  const topInsightHasConcreteClaim = Boolean(
+    topInsight
+      && (
+        topInsightSegmentKey
+        || Number.isFinite(Number(topInsight.evidence?.potentialGainSeconds))
+        || Number.isFinite(Number(topInsight.evidence?.timeGapSeconds))
+      ),
+  );
   const topInsightHeroEligible = Boolean(
     topInsight
+      && topInsightHasConcreteClaim
       && (!topInsightClaimsPrimary || topInsightMatchesPrimary)
       && !topInsightClaimsStrength
       && (narrative.headlineMode === "single_track" || topInsightMatchesPrimary),
   );
   const heroMetricSeconds = topInsightHeroEligible
-    ? topInsight.evidence?.potentialGainSeconds
+    ? topInsightMatchesPrimary && Number.isFinite(Number(limiter?.timeGapSeconds))
+      ? limiter.timeGapSeconds
+      : topInsight.evidence?.potentialGainSeconds
     : narrative.headlineMode === "penalty_first"
       ? narrative.hero.metricSeconds ?? 0
       : analysisJson.timePotential?.headlineGainSeconds ?? narrative.hero.metricSeconds ?? limiter?.timeGapSeconds ?? 0;

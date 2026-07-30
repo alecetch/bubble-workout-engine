@@ -254,7 +254,7 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
   const fitnessLimiter = rawFitnessLimiter
     ? { ...rawFitnessLimiter, label: displaySegmentLabel(rawFitnessLimiter, rawFitnessLimiter.label ?? label(rawFitnessLimiter.segmentKey)) }
     : null;
-  const roxzoneAction = roxzoneActionability(analysisJson, fitnessLimiter);
+  const roxzoneAction = roxzoneActionability(analysisJson, fitnessLimiter, { isDoubles: narrative.inputFacts?.isDoubles ?? narrative.teamContext?.isDoubles });
   const primaryIsPenalty = narrative.primaryClaim?.isPenalty;
   const limiter = primaryIsPenalty && opportunity.fastestControllableWin
     ? { ...opportunity.fastestControllableWin, segmentKey: "penalties", percentile: null }

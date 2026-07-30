@@ -893,10 +893,31 @@ function normalizePrimaryLabel(value) {
   return displaySegmentLabel(null, cleaned) ?? cleaned;
 }
 
-function firstPrimaryFromText(text) {
+function isKnownPrimaryLabel(label) {
+  if (!label) return false;
+  return [
+    "Wall Balls",
+    "Burpee Broad Jump",
+    "Farmers Carry",
+    "Sandbag Lunges",
+    "Sled Push",
+    "Sled Pull",
+    "SkiErg",
+    "Row",
+    "RoxZone",
+    "Penalties",
+  ].includes(label) || /^Run\s+[1-8]$/i.test(label);
+}
+
+export function firstPrimaryFromText(text) {
   const value = removeEmailChromeText(text);
   if (/\bfastest win\b[\s\S]{0,80}\bpenalt/i.test(value) || /\bpenalt(?:y|ies)\b[\s\S]{0,80}\bfastest controllable win\b/i.test(value)) {
     return "Penalties";
+  }
+  const colonSubjectMatch = value.match(/^([A-Za-z0-9 ]{2,30}):\s+/);
+  if (colonSubjectMatch) {
+    const label = normalizePrimaryLabel(colonSubjectMatch[1]);
+    if (isKnownPrimaryLabel(label)) return label;
   }
   const subjectMatch = value.match(/\bstart with\s+([A-Za-z0-9 ]+?)(?:[.!?<\n\r]|$|\s{2,})/i);
   if (subjectMatch) return normalizePrimaryLabel(subjectMatch[1]);
@@ -978,7 +999,7 @@ function artifactPolicyViolations(modeEntry = {}, fields = {}) {
   return violations;
 }
 
-function primaryFromHeroTitle(title) {
+export function primaryFromHeroTitle(title, fallbackLabel = null) {
   const value = String(title ?? "");
   if (!value) return null;
   if (/\bRoxZone\b|\bRoxzone\b/i.test(value)) return "RoxZone";
@@ -986,7 +1007,7 @@ function primaryFromHeroTitle(title) {
   if (routeMatch) return normalizePrimaryLabel(routeMatch[1]);
   const biggestMatch = value.match(/^(.+?)\s+IS YOUR BIGGEST/i);
   if (biggestMatch) return normalizePrimaryLabel(biggestMatch[1]);
-  return null;
+  return normalizePrimaryLabel(fallbackLabel);
 }
 
 function browserPrimaryFromSummary(browserSummary = {}, raceCardData = {}, carouselSlides = []) {
@@ -1021,7 +1042,10 @@ export function artifactPrimaryConsistency(modeEntry = {}) {
     narrative: expected,
     subject: firstPrimaryFromText(result.emailReport?.emailSubject),
     emailMain: firstPrimaryFromEmailHtml(result.emailReport?.emailHtml ?? ""),
-    browserHero: primaryFromHeroTitle(browserSummary.heroInsight?.title),
+    browserHero: primaryFromHeroTitle(
+      browserSummary.heroInsight?.title,
+      browserSummary.biggestLimiter?.label ?? browserSummary.largestFitnessLimiter?.label,
+    ),
     browserLimiter: browserPrimaryFromSummary(browserSummary, result.raceCardData, carouselSlides),
     raceCard: normalizePrimaryLabel(result.raceCardData?.biggestLimiter?.name),
     carousel: normalizePrimaryLabel(carouselSlides[0]?.biggest_limiter ?? carouselSlides[3]?.station),

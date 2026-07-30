@@ -14,3 +14,24 @@ export function resolvedFrameGapSeconds(segment) {
     ?? segment?.timeGapToMedianSeconds
     ?? null;
 }
+
+function segmentByKey(analysisJson = {}, key) {
+  return (analysisJson.segments ?? []).find((row) => row?.segmentKey === key) ?? null;
+}
+
+export function resolvedRoxzoneGapSeconds(analysisJson = {}) {
+  const row = segmentByKey(analysisJson, "roxzone_time");
+  const rox = analysisJson.roxzoneAnalysis ?? {};
+  const values = [
+    row?.frameGapNetOfPenaltySeconds,
+    row?.frameGapSeconds,
+    row?.timeGapToExactTargetSeconds,
+    row?.timeGapToMedianSeconds,
+    rox.timeGapToMedianSeconds,
+  ];
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
