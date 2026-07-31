@@ -14,21 +14,14 @@ for (const rel of ["./assets/forma-logo.png", "../../../../web/src/assets/forma-
   }
 }
 
-// The assets directory lives at the repo root. In Docker the api source tree is at /app and
-// the assets bind-mount lands at /app/assets (3 levels up from this file). On the host the
-// repo root is 4 levels up from api/src/hyrox/reports/. Try both.
-function loadAssetB64(serverRelativePath) {
-  if (!serverRelativePath || !serverRelativePath.startsWith("/assets/")) return null;
-  const rel = serverRelativePath.slice("/assets/".length);
-  for (const base of ["../../../assets", "../../../../assets"]) {
-    try {
-      const data = readFileSync(resolve(__dirname_carousel, base, rel));
-      return `data:image/png;base64,${data.toString("base64")}`;
-    } catch {
-      // try next
-    }
-  }
-  return null;
+// Pre-sized to 1080x1080 (the slide's rendered dimensions) and re-encoded as JPEG so the
+// data URI embedded once in <style> stays small — it's shared by all 6 slides via one CSS
+// rule, not repeated per-slide the way an <img> per slide would be.
+let WATERMARK_B64 = "";
+try {
+  WATERMARK_B64 = `data:image/jpeg;base64,${readFileSync(resolve(__dirname_carousel, "./assets/instagram-watermark.jpg")).toString("base64")}`;
+} catch {
+  // missing file — CSS background-image simply won't render
 }
 
 const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
@@ -97,22 +90,20 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .metric-label { color: var(--muted-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 9px; }
 .metric-value { font-family: var(--font-mono); font-size: 20px; font-weight: 800; text-transform: uppercase; }
 .swipe-prompt { position: absolute; left: 70px; top: 594px; font-size: 18px; font-weight: 700; color: var(--text); z-index: 2; }
-.athlete-image { position: absolute; right: 0; bottom: 0; width: 340px; max-height: 560px; object-fit: contain; opacity: 0.88; filter: contrast(1.12); mix-blend-mode: lighten; z-index: 1; }
-.athlete-image:not([src]), .athlete-image[src=""] { display: none; }
-.slide-hook::after {
-  content: "";
+.watermark {
   position: absolute;
-  right: 58px;
-  bottom: 70px;
-  width: 235px;
-  height: 390px;
-  opacity: 0.18;
-  background: radial-gradient(ellipse at 50% 10%, #fff 0 8%, transparent 9%),
-              linear-gradient(90deg, transparent 0 37%, rgba(255,255,255,0.5) 38% 62%, transparent 63%),
-              radial-gradient(ellipse at 50% 45%, rgba(255,255,255,0.4) 0 36%, transparent 37%);
-  filter: blur(0.2px);
+  inset: 0;
+  z-index: 0;
+  background-image: url("${WATERMARK_B64}");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.16;
+  pointer-events: none;
 }
-.slide-hook:has(.athlete-image[src]:not([src=""]))::after { display: none; }
+/* Cover (A1) and CTA (A6) slides carry little/no dense text, so the watermark can read
+   more strongly there. Data/table slides (A2's station table, and the stat/insight
+   slides in between) keep the subtle base opacity so numbers stay easy to scan. */
+.slide-hook .watermark, .slide-cta .watermark { opacity: 0.28; }
 .slide-title { font-weight: 300; text-transform: uppercase; font-size: 41px; line-height: 1.1; letter-spacing: 0.02em; text-align: center; margin: 0; }
 .slide-flow .slide-title { position: absolute; top: 136px; left: 0; right: 0; }
 .flow-summary { position: absolute; top: 185px; left: 80px; right: 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; }
@@ -215,14 +206,7 @@ export function buildCarouselPage(carouselData = {}) {
   const athleteName = carouselData.slides?.[0]?.athlete_name ?? "Athlete";
   const dataJson = JSON.stringify(carouselData).replace(/<\/script>/gi, "<\\/script>");
   const brandHeader = formaBrandHeader();
-
-  // Load the hero image as base64 so it renders correctly inside the blob URL iframe,
-  // where server-relative paths (/assets/...) may not resolve as expected in all browsers.
-  const athleteImagePath = carouselData.slides?.[0]?.athlete_image ?? "";
-  const athleteImageSrc = loadAssetB64(athleteImagePath) ?? athleteImagePath;
-  const athleteImageTag = athleteImageSrc
-    ? `<img class="athlete-image" alt="" src="${htmlEsc(athleteImageSrc)}" />`
-    : `<img class="athlete-image" alt="" />`;
+  const watermark = `<div class="watermark"></div>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -239,6 +223,7 @@ export function buildCarouselPage(carouselData = {}) {
   </div>
   <main id="carousel" class="carousel" aria-label="Forma athlete analysis carousel">
     <section class="slide slide-hook" data-slide="A1_ATHLETE_HOOK">
+      ${watermark}
       ${brandHeader}
       <div class="hook-copy">
         <div class="small-kicker" data-field="slides.0.percentile">BENCHMARKED RESULT</div>
@@ -268,11 +253,11 @@ export function buildCarouselPage(carouselData = {}) {
         </div>
       </div>
       <div class="swipe-prompt"><span class="blue">&#8594;</span> <span data-field="slides.0.swipe_prompt">Swipe to see where time was gained and lost.</span></div>
-      ${athleteImageTag}
       <div class="site" data-field="brand.site">www.getforma.fit</div>
     </section>
 
     <section class="slide slide-flow" data-slide="A2_POSITION_FLOW">
+      ${watermark}
       ${brandHeader}
       <h2 class="slide-title">HOW THE RACE UNFOLDED</h2>
       <div class="flow-summary">
@@ -292,6 +277,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-stat" data-slide="A3_BIGGEST_STRENGTH">
+      ${watermark}
       ${brandHeader}
       <div class="center-stack">
         <div class="kicker">BIGGEST STRENGTH</div>
@@ -306,6 +292,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-stat" data-slide="A4_BIGGEST_OPPORTUNITY">
+      ${watermark}
       ${brandHeader}
       <div class="center-stack opportunity-stack">
         <div class="kicker">BIGGEST OPPORTUNITY</div>
@@ -320,6 +307,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-insight" data-slide="A5_KEY_INSIGHT">
+      ${watermark}
       ${brandHeader}
       <div class="insight-wrap">
         <h2 class="slide-title two-line">WHAT THE<br>DATA SHOWS</h2>
@@ -334,6 +322,7 @@ export function buildCarouselPage(carouselData = {}) {
     </section>
 
     <section class="slide slide-cta" data-slide="A6_CTA">
+      ${watermark}
       ${brandHeader}
       <div class="cta-wrap">
         <h2 class="slide-title two-line">DISCOVER YOUR<br>HYROX BOTTLENECK</h2>
