@@ -1,4 +1,5 @@
 import { STATION_KEYS } from "../config/segmentMap.js";
+import { resolvedRoxzoneGapSeconds } from "../engine/gapSelectors.js";
 
 function number(value, fallback = null) {
   const n = Number(value);
@@ -201,13 +202,15 @@ const triggerHandlers = {
     const percentile = number(rox.percentile);
     const gap = number(rox.timeGapToMedianSeconds, 0);
     if (!((Number.isFinite(percentile) && percentile < 40) || gap >= 30)) return null;
+    const frameAwareGap = resolvedRoxzoneGapSeconds(analysisJson);
+    const potentialGainSeconds = Math.max(0, Number.isFinite(frameAwareGap) ? frameAwareGap : gap);
     return {
       ...benchmarkEvidence(analysisJson),
       segmentKey: "roxzone_time",
       segmentLabel: "RoxZone",
       primaryMetric: "roxzone_time_gap_to_median",
       primaryValue: Math.max(0, gap),
-      potentialGainSeconds: Math.max(0, gap),
+      potentialGainSeconds,
       percentile,
       evidenceType: rox.mode === "inferred_total" ? "context_inference" : "derived",
       confidenceGrade: rox.confidenceGrade ?? "C",

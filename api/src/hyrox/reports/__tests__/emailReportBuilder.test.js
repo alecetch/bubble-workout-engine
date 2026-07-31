@@ -2430,6 +2430,35 @@ describe("renderSplitTable", () => {
     assert.doesNotMatch(profileHtml, /background-color:#ef4444/);
   });
 
+  it("target mode full split detail treats small sub-60 target gaps as elite refinements", () => {
+    const htmlBody = renderSplit({
+      benchmarkContext: {
+        achievedBand: "sub_60",
+        goalBenchmarkGroup: { label: "Target 55:00", targetFinishSeconds: 3300 },
+        primaryBenchmarkGroup: { label: "Open Men 30-39" },
+      },
+      overrides: {
+        sandbag_lunges: {
+          userSeconds: 136,
+          goalBenchmarkSeconds: 120,
+          timeGapToExactTargetSeconds: 16,
+          frameGapSeconds: 16,
+          percentile: 15,
+          fieldPercentile: 15,
+        },
+      },
+    }, "target");
+
+    const detailHtml = htmlBody.slice(htmlBody.indexOf("FULL SPLIT DETAIL"));
+    const sandbagRowStart = detailHtml.lastIndexOf("<tr", detailHtml.indexOf("Sandbag Lunges"));
+    const sandbagRowEnd = detailHtml.indexOf("</tr>", detailHtml.indexOf("Sandbag Lunges"));
+    const sandbagSnippet = detailHtml.slice(sandbagRowStart, sandbagRowEnd);
+    assert.match(sandbagSnippet, /Elite target refinement/);
+    assert.doesNotMatch(sandbagSnippet, /On target/);
+    assert.match(sandbagSnippet, /background-color:#(?:fffdf7|2c1e07)/);
+    assert.match(sandbagSnippet, /color:#(?:d97706|f59e0b)[^>]*>\+0:16/);
+  });
+
   it("segment profile colors use gap sign for sub-70 analyse gaps", () => {
     const htmlBody = renderSplit({
       benchmarkContext: {
@@ -5270,6 +5299,59 @@ describe("feature-144: gapPill directional badge and route guard", () => {
     assert.match(mainInsight, /RoxZone is costing about 1:45; this is transition execution, not station capacity/i);
     assert.match(mainInsight, /RoxZone detail is partial/i);
     assert.match(mainInsight, /Rehearse direct run-to-station routes/i);
+  });
+
+  it("uses team-aware RoxZone coaching across email, race card, and carousel for doubles", () => {
+    const analysis = mockAnalysis({
+      athlete: { division: "doubles_male" },
+      race: { finishTimeSeconds: 4361, targetTimeSeconds: 3600, division: "doubles_male" },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 3600, label: "Doubles sub-60", division: "doubles_male" },
+        primaryBenchmarkGroup: { label: "Doubles Male", division: "doubles_male" },
+        comparisonOptions: [{ percentile: 72, topPercent: 28 }],
+        achievedBand: "sub_65",
+      },
+      headline: {
+        biggestLimiter: { label: "RoxZone", segmentKey: "roxzone_time", type: "aggregate", timeGapSeconds: 105, percentile: 20 },
+        biggestStrength: { label: "SkiErg", segmentKey: "ski_erg", type: "station", percentile: 82 },
+      },
+      timePotential: { headlineGainSeconds: 105 },
+      roxzoneAnalysis: {
+        available: true,
+        mode: "explicit_splits",
+        totalSeconds: 400,
+        percentile: 20,
+        timeGapToMedianSeconds: 105,
+        entryExitAvailable: true,
+      },
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", frameGapSeconds: 761, goalBenchmarkSeconds: 3600, userSeconds: 4361, percentile: 45 },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "Total Roxzone Time", frameGapSeconds: 105, userSeconds: 400, percentile: 20 },
+        { segmentKey: "ski_erg", type: "station", label: "SkiErg", frameGapSeconds: -20, userSeconds: 280, percentile: 82 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", frameGapSeconds: 20, userSeconds: 300, percentile: 60 },
+      ],
+    });
+    const athleteContext = { displayName: "Alex Smith & Sam Jones", division: "doubles_male", targetFinishTimeSeconds: 3600 };
+    const splitSection = {
+      sectionKey: "race_split_breakdown",
+      title: "Race Split Breakdown",
+      tableData: { segments: analysis.segments, benchmarkContext: analysis.benchmarkContext },
+    };
+    const email = buildEmailReport({ sections: [splitSection] }, analysis, athleteContext, null, "target");
+    const carousel = buildTemplateA(analysis, [], athleteContext);
+    const raceCard = buildHyroxRaceCardData(analysis, athleteContext);
+
+    assert.match(email.htmlBody, /RoxZone is costing the team about 1:45/i);
+    assert.match(email.htmlBody, /combined team time/i);
+    assert.match(email.htmlBody, /hand-off/i);
+    assert.equal(raceCard.biggestLimiter.name, "RoxZone");
+    assert.equal(raceCard.biggestLimiter.actionText, "TIGHTEN TEAM HAND-OFFS.");
+    assert.match(raceCard.biggestLimiter.caption, /combined team time/i);
+    assert.equal(carousel.slides[3].station, "ROXZONE");
+    assert.equal(carousel.slides[3].action_text, "TIGHTEN TEAM HAND-OFFS");
+    assert.match(carousel.slides[3].confidence_note, /combined team time/i);
+    assert.equal(carousel.slides[0].roxzone_action.label, "TIGHTEN TEAM HAND-OFFS");
+    assert.match(carousel.slides[0].roxzone_action.detail, /combined team time/i);
   });
 
   it("keeps subject, hero, opportunities table, and target priorities on the largest seconds-gap opportunity", () => {

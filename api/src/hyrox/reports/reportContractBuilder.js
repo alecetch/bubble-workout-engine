@@ -1,5 +1,5 @@
 import { formatGain, formatPerformancePercentile, formatTime } from "./copyFormatter.js";
-import { comparisonProfileLabel } from "./comparisonProfileLabel.js";
+import { comparisonProfileLabel, performanceBandLabel } from "./comparisonProfileLabel.js";
 import { benchmarkConfidenceQualifier, comparisonOptionsArray } from "./comparisonOptions.js";
 import { buildHyroxReportNarrative } from "./reportNarrativeModel.js";
 import { hasGoalGroup } from "./comparisonBasis.js";
@@ -7,6 +7,7 @@ import { resolveReportStrength, reportStrengthGapSeconds } from "./reportSelecti
 import { roxzoneActionability } from "./roxzoneActionability.js";
 import { displaySegmentLabel, segmentSubject, segmentVerb } from "./segmentDisplay.js";
 import { buildSplitDisplayRows, formatSplitDelta, formatSplitSeconds } from "./splitRowDisplayContract.js";
+import { isDoublesAnalysisDivision } from "../config/divisionGroups.js";
 
 const VERSION = 1;
 
@@ -309,6 +310,15 @@ function inputFacts(analysisJson = {}, athleteContext = {}, calculatorMode = "ta
     : null;
   const benchmarkAvailable = analysisJson.analysisScope !== "no_benchmark_data"
     && Boolean(analysisJson.benchmarkContext?.primaryBenchmarkGroup || analysisJson.benchmarkContext?.goalBenchmarkGroup);
+  const isDoubles = [
+    analysisJson.athlete?.division,
+    analysisJson.race?.division,
+    analysisJson.division,
+    athleteContext.division,
+    analysisJson.benchmarkContext?.division,
+    analysisJson.benchmarkContext?.primaryBenchmarkGroup?.division,
+    analysisJson.benchmarkContext?.goalBenchmarkGroup?.division,
+  ].some(isDoublesAnalysisDivision);
 
   return {
     calculatorMode,
@@ -322,6 +332,12 @@ function inputFacts(analysisJson = {}, athleteContext = {}, calculatorMode = "ta
     exactTargetGapSigned: Number.isFinite(exactTargetGapSeconds) ? displayDelta(exactTargetGapSeconds) : null,
     analysisScope: analysisJson.analysisScope ?? null,
     benchmarkAvailable,
+    isDoubles,
+    teamContext: {
+      isDoubles,
+      combinedTimeCaveat: isDoubles ? "This is your combined team time; official HYROX data does not split individual partner contribution." : null,
+      opportunityOwner: isDoubles ? "your team's" : "your",
+    },
     benchmarkGroupLabel: analysisJson.benchmarkContext?.primaryBenchmarkGroup?.label ?? null,
     goalBenchmarkGroupLabel: analysisJson.benchmarkContext?.goalBenchmarkGroup?.label ?? null,
   };
@@ -424,6 +440,48 @@ function categoryName(key) {
   return key;
 }
 
+function comparisonRangeLabel(label) {
+  const raw = String(label ?? "").trim().toUpperCase();
+  const rangeMatch = raw.match(/^SUB\s+(\d+)-(\d+)\s+MEDIAN$/);
+  if (rangeMatch) {
+    const lower = Number(rangeMatch[1]);
+    const upper = Number(rangeMatch[2]);
+    if (Number.isFinite(lower) && Number.isFinite(upper)) {
+      return `${lower}:00–${upper - 1}:59`;
+    }
+  }
+  const subMatch = raw.match(/^SUB\s+(\d+)\s+MEDIAN$/);
+  if (subMatch) return `under ${Number(subMatch[1])}:00`;
+  return null;
+}
+
+function bandFromGroup(group) {
+  if (!group) return null;
+  if (group.performanceBand) return group.performanceBand;
+  const keyMatch = String(group.key ?? "").match(/(?:^|:)band:([^:]+)/);
+  return keyMatch?.[1] ?? null;
+}
+
+function comparisonMedianRange(analysisJson = {}) {
+  const benchmarkContext = analysisJson.benchmarkContext ?? {};
+  const band = benchmarkContext.analysisFrame?.comparisonBand
+    ?? bandFromGroup(benchmarkContext.escalationBasisBandGroup)
+    ?? bandFromGroup(benchmarkContext.primaryBenchmarkGroup);
+  const bandLabel = performanceBandLabel(band);
+  const bandRange = bandLabel ? comparisonRangeLabel(`${bandLabel} MEDIAN`) : null;
+  return bandRange ?? comparisonRangeLabel(comparisonProfileLabel(analysisJson));
+}
+
+function totalGapLensSuffix(analysisJson = {}) {
+  const mode = analysisJson.calculatorMode;
+  if (mode === "target") {
+    return " lower than your target finish time";
+  }
+  const range = comparisonMedianRange(analysisJson);
+  if (range) return ` lower than the median for ${range} finishers`;
+  return " lower than the comparison median";
+}
+
 function buildGapReconciliation(analysisJson = {}, primaryClaim = null) {
   const totalGapSeconds = categoryGap(analysisJson, "total_time");
   const runningGapSeconds = categoryGap(analysisJson, "run_time");
@@ -449,6 +507,7 @@ function buildGapReconciliation(analysisJson = {}, primaryClaim = null) {
   const largestCategory = largest ? { key: largest[0], label: categoryName(largest[0]), gapSeconds: Number(largest[1]), displayGap: displayDelta(largest[1]) } : null;
   const primaryLabel = primaryClaim?.label ?? primaryClaim?.normalizedLabel ?? null;
   const totalDisplay = Number.isFinite(totalGapSeconds) ? displayDelta(totalGapSeconds) : null;
+  const lensSuffix = totalGapLensSuffix(analysisJson);
   const summarySentence = (() => {
     if (!largestCategory || !totalDisplay || !Number.isFinite(totalGapSeconds) || Number(totalGapSeconds) <= 0) return null;
     const verb = largestCategory.label === "Running" || largestCategory.label === "RoxZone" ? "is" : "are";
@@ -461,10 +520,10 @@ function buildGapReconciliation(analysisJson = {}, primaryClaim = null) {
         ? ` RoxZone transitions add another ${displayDelta(roxzoneGapSeconds)}.`
         : "";
       if (largestCategory.key === "work_time" && offsets.some((item) => item.key === "run_time")) {
-        return `Station performance is the largest category gap at ${largestCategory.displayGap}. Running is ahead of the comparison, which offsets a large part of that.${roxClause} Even accounting for that offset, the total gap is ${totalDisplay}.`;
+        return `Station performance is the largest category gap at ${largestCategory.displayGap}. Running is ahead of the comparison, which offsets a large part of that.${roxClause} Even accounting for that offset, the total gap is ${totalDisplay}${lensSuffix}.`;
       }
       if (largestCategory.key === "run_time" && offsets.some((item) => item.key === "work_time")) {
-        return `Running is the largest positive gap at ${largestCategory.displayGap}. Station time is already ahead of the comparison, which offsets a large part of that.${roxClause} Even accounting for that offset, the total gap is ${totalDisplay}.`;
+        return `Running is the largest positive gap at ${largestCategory.displayGap}. Station time is already ahead of the comparison, which offsets a large part of that.${roxClause} Even accounting for that offset, the total gap is ${totalDisplay}${lensSuffix}.`;
       }
       return `${largestCategory.label} ${verb} the largest positive gap at ${largestCategory.displayGap}, but ${offsetText} ${offsetVerb} the total race gap to ${totalDisplay}.`;
     }
@@ -617,8 +676,8 @@ function buildStrengthPolicy(analysisJson = {}, splitProfile, policy) {
   };
 }
 
-function buildRoxzonePolicy(analysisJson = {}, primaryClaim = null, policy) {
-  const action = roxzoneActionability(analysisJson, primaryClaim);
+function buildRoxzonePolicy(analysisJson = {}, primaryClaim = null, policy, facts = {}) {
+  const action = roxzoneActionability(analysisJson, primaryClaim, { isDoubles: facts.isDoubles });
   const copyPrecision = policy.inferredRoxzone || policy.partialSplitData || policy.estimatedSplit || policy.missingRunData || policy.missingStationData
     ? "directional"
     : "exact";
@@ -633,10 +692,12 @@ function buildRoxzonePolicy(analysisJson = {}, primaryClaim = null, policy) {
   };
 }
 
-function primaryOpening(primaryClaim = null, targetAssessment = {}, gapReconciliation = {}) {
+function primaryOpening(primaryClaim = null, targetAssessment = {}, gapReconciliation = {}, facts = {}) {
   if (!primaryClaim?.label) return "Your HYROX analysis is ready.";
   const reconciliationSentence = gapReconciliation?.summarySentence ? ` ${gapReconciliation.summarySentence}` : "";
-  if (primaryClaim.isPenalty) return `${primaryClaim.label} are your fastest controllable win.${reconciliationSentence}`;
+  const owner = facts.teamContext?.opportunityOwner ?? "your";
+  const teamCaveat = facts.teamContext?.combinedTimeCaveat ? ` ${facts.teamContext.combinedTimeCaveat}` : "";
+  if (primaryClaim.isPenalty) return `${primaryClaim.label} are ${owner} fastest controllable win.${reconciliationSentence}${teamCaveat}`;
   const subject = segmentSubject(primaryClaim);
   const noun = primaryClaim.claimStrength !== "firm"
     ? targetAssessment.hasExactTarget ? "main directional target opportunity" : "main directional opportunity"
@@ -645,7 +706,10 @@ function primaryOpening(primaryClaim = null, targetAssessment = {}, gapReconcili
   const feasibilitySentence = targetAssessment.status === "behind" && targetAssessment.feasibilityLabel
     ? ` This target is ${feasibilityArticle} ${targetAssessment.feasibilityLabel}.`
     : "";
-  return `${subject} ${segmentVerb(subject)} the ${noun}.${feasibilitySentence}${reconciliationSentence}`;
+  const teamNoun = facts.isDoubles && primaryClaim.claimStrength === "firm"
+    ? targetAssessment.hasExactTarget ? "main team target opportunity" : "main team opportunity"
+    : noun;
+  return `${subject} ${segmentVerb(subject)} the ${teamNoun}.${feasibilitySentence}${reconciliationSentence}${teamCaveat}`;
 }
 
 function buildEmailSubject({ primaryClaim, targetAssessment, inputFacts }) {
@@ -693,7 +757,7 @@ function buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation,
     email: {
       subject: buildEmailSubject({ primaryClaim, targetAssessment, inputFacts }),
       subjectPrimary,
-      mainInsightOpening: primaryOpening(primaryClaim, targetAssessment, gapReconciliation),
+      mainInsightOpening: primaryOpening(primaryClaim, targetAssessment, gapReconciliation, inputFacts),
       reconciliation: gapReconciliation.summarySentence,
     },
     raceCard: {
@@ -750,7 +814,7 @@ export function buildHyroxReportContract({
   const splitProfile = buildSplitProfile(analysisJson, policy);
   const strengthPolicy = buildStrengthPolicy(analysisJson, splitProfile, policy);
   splitProfile.strongestProtectableSplit = strengthPolicy.strength ?? null;
-  const roxzonePolicy = buildRoxzonePolicy(analysisJson, primaryClaim, policy);
+  const roxzonePolicy = buildRoxzonePolicy(analysisJson, primaryClaim, policy, facts);
   const primaryTrack = {
     headlineMode: narrative.headlineMode,
     primary: primaryClaim,
@@ -772,6 +836,7 @@ export function buildHyroxReportContract({
     analysisScope: analysisJson.analysisScope ?? null,
     headlineMode: narrative.headlineMode,
     inputFacts: facts,
+    teamContext: facts.teamContext,
     comparisonFrame,
     primaryTrack,
     targetAssessment,

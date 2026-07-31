@@ -45,6 +45,21 @@ describe("buildHyroxReportContract", () => {
     assert.equal(contract.rankPolicy.displays[0].basisLabel, "Global Open Male");
   });
 
+  it("exposes doubles team context and team-aware email main insight slots", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({
+        athlete: { division: "doubles_mixed" },
+        race: { finishTimeSeconds: 4500, targetTimeSeconds: 4200, division: "doubles_mixed" },
+      }),
+      athleteContext: { displayName: "Alex Smith & Sam Jones", division: "doubles_mixed" },
+    });
+
+    assert.equal(contract.inputFacts.isDoubles, true);
+    assert.equal(contract.teamContext.opportunityOwner, "your team's");
+    assert.match(contract.artifactSlots.email.mainInsightOpening, /main team target opportunity/i);
+    assert.match(contract.artifactSlots.email.mainInsightOpening, /combined team time/i);
+  });
+
   it("makes penalties primary only in penalty-first mode", () => {
     const contract = buildHyroxReportContract({
       analysisJson: baseAnalysis({
@@ -175,6 +190,44 @@ describe("buildHyroxReportContract", () => {
 
     assert.equal(contract.gapReconciliation.requiresOffsetWording, true);
     assert.match(contract.gapReconciliation.summarySentence, /offset/i);
+  });
+
+  it("adds the benchmark-band median lens to analyse-mode offset reconciliation", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({
+        calculatorMode: "analyse",
+        benchmarkContext: {
+          ...baseAnalysis().benchmarkContext,
+          analysisFrame: { comparisonBand: "sub_75" },
+        },
+        segments: [
+          { segmentKey: "total_time", type: "aggregate", label: "Total Time", userSeconds: 4500, frameGapSeconds: 63, percentile: 72 },
+          { segmentKey: "work_time", type: "aggregate", label: "Stations", userSeconds: 1900, frameGapSeconds: 89, percentile: 30 },
+          { segmentKey: "run_time", type: "aggregate", label: "Running", userSeconds: 2200, frameGapSeconds: -90, percentile: 90 },
+          { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 300, frameGapSeconds: 64, percentile: 45 },
+          { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, percentile: 35 },
+        ],
+      }),
+    });
+
+    assert.match(contract.artifactSlots.email.mainInsightOpening, /total gap is \+1:03 lower than the median for 70:00–74:59 finishers/i);
+  });
+
+  it("adds the selected target lens to target-mode offset reconciliation", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({
+        calculatorMode: "target",
+        segments: [
+          { segmentKey: "total_time", type: "aggregate", label: "Total Time", userSeconds: 4500, frameGapSeconds: 63, percentile: 72 },
+          { segmentKey: "work_time", type: "aggregate", label: "Stations", userSeconds: 1900, frameGapSeconds: 89, percentile: 30 },
+          { segmentKey: "run_time", type: "aggregate", label: "Running", userSeconds: 2200, frameGapSeconds: -90, percentile: 90 },
+          { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 300, frameGapSeconds: 64, percentile: 45 },
+          { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, percentile: 35 },
+        ],
+      }),
+    });
+
+    assert.match(contract.artifactSlots.email.mainInsightOpening, /total gap is \+1:03 lower than your target finish time/i);
   });
 
   it("distinguishes fastest-ahead split from reliable protectable strength", () => {

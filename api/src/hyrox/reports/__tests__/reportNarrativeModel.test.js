@@ -42,6 +42,20 @@ describe("buildHyroxReportNarrative", () => {
     assert.equal(narrative.benchmark.available, true);
   });
 
+  it("uses team-aware hero and main insight wording for doubles", () => {
+    const narrative = buildHyroxReportNarrative({
+      analysisJson: baseAnalysis({
+        athlete: { division: "doubles_male" },
+        race: { finishTimeSeconds: 4360, targetTimeSeconds: 3900, division: "doubles_male" },
+      }),
+    });
+
+    assert.equal(narrative.teamContext.isDoubles, true);
+    assert.equal(narrative.hero.title, "The Wall Balls station is your team's biggest opportunity");
+    assert.match(narrative.mainInsight.opener, /your team's biggest opportunity/i);
+    assert.match(narrative.mainInsight.opener, /combined team time/i);
+  });
+
   it("makes dominant penalties the primary opportunity", () => {
     const narrative = buildHyroxReportNarrative({
       analysisJson: baseAnalysis({

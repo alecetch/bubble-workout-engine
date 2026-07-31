@@ -1504,7 +1504,7 @@ function renderSplitTable(section, analysisJson, contract = null) {
   function splitRowBgNew(gap) {
     if (!Number.isFinite(gap)) return "#ffffff";
     if (gap < 0) return "#f0fdf4";
-    if (isEliteBenchmark && !hasGoalGroup && gap < 90) return "#fffdf7";
+    if (isEliteBenchmark && gap > 0 && gap < 90) return "#fffdf7";
     if (gap >= 90) return "#fff4f4";
     if (gap >= 20) return "#fffdf7";
     return "#ffffff";
@@ -1699,7 +1699,7 @@ function renderSplitTable(section, analysisJson, contract = null) {
     const limiterStr = primaryRankedGap
       ? displaySegmentLabel(primaryRankedGap.seg, primaryRankedGap.seg?.label)
       : displaySegmentLabel(analysisJson.headline?.biggestLimiter, analysisJson.headline?.biggestLimiter?.label);
-    const roxzoneAction = roxzoneActionability(analysisJson, primaryRankedGap?.seg ?? analysisJson.headline?.biggestLimiter ?? null);
+    const roxzoneAction = roxzoneActionability(analysisJson, primaryRankedGap?.seg ?? analysisJson.headline?.biggestLimiter ?? null, { isDoubles: narrative.inputFacts?.isDoubles ?? narrative.teamContext?.isDoubles });
     const limiterType = primaryRankedGap?.seg?.type ?? analysisJson.headline?.biggestLimiter?.type ?? null;
     const largestNonRoxzoneRankedGap = rankedGaps
       .filter((row) => row.key !== "roxzone_time")
@@ -2608,10 +2608,10 @@ function renderSplitTable(section, analysisJson, contract = null) {
       if (Number.isFinite(gap)) {
         if (gap < -10) {
           targetLabel = "Ahead of target";
+        } else if (isEliteBand && gap > 0 && gap < 90) {
+          targetLabel = "Elite target refinement";
         } else if (gap <= 30) {
           targetLabel = "On target";
-        } else if (isEliteBand) {
-          targetLabel = "Elite target refinement";
         } else if (segment.segmentKey === top1) {
           targetLabel = "Main target opportunity";
         } else {
@@ -2622,7 +2622,7 @@ function renderSplitTable(section, analysisJson, contract = null) {
         : !targetLabel ? "#94a3b8"
         : targetLabel === "Ahead of target" ? "#22c55e"
         : targetLabel === "On target" ? "#475569"
-        : targetLabel === "Elite target refinement" ? "#6366f1"
+        : targetLabel === "Elite target refinement" ? "#d97706"
         : "#d97706";
       bandScoreCell = targetLabel
         ? `<td style="padding:7px 6px;text-align:left;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;font-style:italic;color:${tColor};">${splitSafe(targetLabel)}</td>`
@@ -2654,7 +2654,7 @@ function renderSplitTable(section, analysisJson, contract = null) {
     const prefix = segment.estimated === true ? "<" : isLowConfidence ? "~" : "";
     const userT = Number.isFinite(segment.userSeconds) ? `${prefix}${formatTime(segment.userSeconds)}` : "–";
     const gapStr = splitGapDisplay(gap);
-    const gapColor = isLowConfidence ? "#94a3b8" : splitGapColor(gap);
+    const gapColor = isLowConfidence ? "#94a3b8" : isEliteBenchmark && hasGoalGroup && Number.isFinite(gap) && gap > 0 && gap < 90 ? "#d97706" : splitGapColor(gap);
     const gapBold = !isLowConfidence && Number.isFinite(gap) && gap > 90 ? "font-weight:700;" : "";
     const userColor = isLowConfidence ? "#94a3b8" : "#0f172a";
     const bg = `background-color:${splitRowBgNew(gap)};`;
