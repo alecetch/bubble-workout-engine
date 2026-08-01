@@ -119,8 +119,8 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .race-row { display: grid; grid-template-columns: 1.8fr 0.8fr 0.35fr; align-items: center; height: 40px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 20px; }
 .race-row .name { text-transform: uppercase; color: var(--text); }
 .race-row .time { color: var(--muted); text-align: center; font-family: var(--font-mono); }
-.race-row .delta { text-align: right; font-family: var(--font-mono); }
-.legend { position: absolute; bottom: 58px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 12px; }
+.race-row .delta { text-align: right; font-family: var(--font-mono); font-weight: 700; }
+.legend { position: absolute; bottom: 58px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 14px; }
 .center-stack { position: absolute; left: 120px; right: 120px; top: 210px; text-align: center; }
 .kicker { color: var(--muted); font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 24px; }
 .kicker.secondary { margin-top: 36px; margin-bottom: 18px; }
