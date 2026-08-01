@@ -119,6 +119,28 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 4% WORLDWIDE (directional)");
   });
 
+  it("uses contract-owned Forma Score for analyse-mode slide 1 metric without repeating standing copy", () => {
+    const carousel = buildTemplateA(analysis({
+      calculatorMode: "analyse",
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:35-39", label: "Open Male 35-39" },
+        goalBenchmarkGroup: null,
+        comparisonOptions: {
+          options: [{ id: "global", label: "Global Open Male", percentile: 82, topPercent: 18 }],
+        },
+      },
+    }), [], { displayName: "Marcus Fernandes", calculatorMode: "analyse" });
+
+    assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 18% WORLDWIDE");
+    assert.equal(carousel.slides[0].metric2_label, "FORMA SCORE");
+    assert.equal(carousel.slides[0].metric2_value, "82/100");
+    assert.equal(carousel.slides[0].world_rank, "82/100");
+    assert.notEqual(carousel.slides[0].metric2_label, "WORLD RANK");
+    assert.notEqual(carousel.slides[0].metric2_label, "OVERALL STANDING");
+    assert.notEqual(carousel.slides[0].metric2_value, "TOP 18% WORLDWIDE");
+    assert.doesNotMatch(String(carousel.slides[0].world_rank), /^(?:|-|null|undefined)$/i);
+  });
+
   it("does not mark high-confidence carousel percentiles as directional", () => {
     const carousel = buildTemplateA(
       worldwideComparisonAnalysis({ confidenceLabel: "strong", doublesBenchmarkedAsSingles: false }),
@@ -226,6 +248,9 @@ describe("buildTemplateA", () => {
     assert.equal(raceCard.percentileText, null);
     assert.equal(raceCard.formaScore, null);
     assert.equal(carousel.slides[0].percentile, "Benchmark data is not available for this race format");
+    assert.equal(carousel.slides[0].metric2_label, "BENCHMARK");
+    assert.equal(carousel.slides[0].metric2_value, "UNAVAILABLE");
+    assert.equal(carousel.slides[0].world_rank, "UNAVAILABLE");
     assert.doesNotMatch(carousel.slides[0].percentile, /TOP 1% WORLDWIDE/);
     assert.ok(!carousel.slides[5].features.includes("Percentile Ranking"));
     assert.ok(!carousel.slides[5].features.includes("Strongest Station"));
@@ -286,8 +311,11 @@ describe("buildTemplateA", () => {
   });
 
   it("keeps target-mode carousel comparison copy as TARGET", () => {
-    const carousel = buildTemplateA(analysis(), [], { displayName: "Marcus Fernandes" });
+    const carousel = buildTemplateA(analysis(), [], { displayName: "Marcus Fernandes", targetFinishTimeSeconds: 3300 });
 
+    assert.equal(carousel.slides[0].metric2_label, "TARGET");
+    assert.equal(carousel.slides[0].metric2_value, "55:00");
+    assert.equal(carousel.slides[0].world_rank, "55:00");
     assert.equal(carousel.slides[1].comparison_basis, "TARGET");
     assert.equal(carousel.slides[1].legend_text, "BLUE = FASTER THAN TARGET    RED = SLOWER THAN TARGET");
     assert.ok(carousel.slides[1].stations.every((row) => row.comparison_basis === "TARGET"));
@@ -557,6 +585,41 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[4].loss_station, "penalties");
     assert.notEqual(carousel.slides[0].biggest_limiter, "WALL BALLS");
     assert.equal(carousel.slides[5].headline, "FIX THE FASTEST WIN");
+  });
+
+  it("pins a PENALTIES row to the top of the slide 2 station table, mirroring the email's split table", () => {
+    const carousel = buildTemplateA(analysis({
+      race: { finishTimeSeconds: 5600, targetTimeSeconds: 5000 },
+      benchmarkContext: {
+        goalBenchmarkGroup: { targetFinishSeconds: 5000, label: "Target" },
+        primaryBenchmarkGroup: { key: "open:male", label: "Open Male" },
+      },
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 },
+      },
+      timePotential: { headlineGainSeconds: 90 },
+      penalties: [{ station: "run_5", penaltySeconds: 200 }],
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 5600, frameGapSeconds: 600, percentile: 45 }),
+        segment("wall_balls", { label: "Wall Balls", userSeconds: 380, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35 }),
+      ],
+    }), [], { displayName: "Alex Smith" });
+
+    const stations = carousel.slides[1].stations;
+    assert.equal(stations[0].name, "PENALTIES");
+    assert.equal(stations[0].time, "3:20");
+    assert.equal(stations[0].delta, "+3:20");
+    assert.equal(stations[0].tone, "penalty");
+    assert.equal(stations.filter((row) => row.name === "PENALTIES").length, 1, "penalty row should appear exactly once");
+  });
+
+  it("does not add a PENALTIES row to the slide 2 table when there are no penalties", () => {
+    const carousel = buildTemplateA(analysis({
+      penalties: [],
+    }), [], { displayName: "Alex Smith" });
+
+    const stations = carousel.slides[1].stations;
+    assert.equal(stations.some((row) => row.name === "PENALTIES"), false);
   });
 
   it("shows material non-dominant penalties as a secondary fastest-win track in the carousel", () => {
