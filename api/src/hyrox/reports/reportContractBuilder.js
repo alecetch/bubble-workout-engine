@@ -730,7 +730,37 @@ function buildEmailSubject({ primaryClaim, targetAssessment, inputFacts }) {
   return `Start with ${subjectPrimary} in your HYROX analysis`;
 }
 
-function buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts }) {
+function buildCarouselSlide1Metric({ inputFacts = {}, rankPolicy = {} } = {}) {
+  if (inputFacts.calculatorMode === "target" && inputFacts.targetTimeDisplay) {
+    return {
+      label: "TARGET",
+      value: inputFacts.targetTimeDisplay,
+      source: "target_finish_time",
+      fallbackReason: null,
+    };
+  }
+
+  const primaryRank = rankPolicy.displays?.[0] ?? null;
+  const primaryPercentile = Number(primaryRank?.percentile);
+  if (rankPolicy.allowed && Number.isFinite(primaryPercentile)) {
+    const score = Math.max(0, Math.min(100, Math.round(primaryPercentile)));
+    return {
+      label: "FORMA SCORE",
+      value: `${score}/100`,
+      source: "rank_policy_primary_percentile",
+      fallbackReason: null,
+    };
+  }
+
+  return {
+    label: "BENCHMARK",
+    value: "UNAVAILABLE",
+    source: "rank_policy_unavailable",
+    fallbackReason: rankPolicy.reason ?? "rank_unavailable",
+  };
+}
+
+function buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts, rankPolicy }) {
   const subjectPrimary = primaryClaim?.label ?? primaryClaim?.normalizedLabel ?? null;
   const limiterLabel = subjectPrimary;
   const biggestGain = splitProfile.biggestGain
@@ -770,6 +800,7 @@ function buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation,
     },
     carousel: {
       slide1Primary: limiterLabel ? limiterLabel.toUpperCase() : null,
+      slide1Metric2: buildCarouselSlide1Metric({ inputFacts, rankPolicy }),
       slide2Gain: biggestGain,
       slide2Loss: biggestLoss,
       strengthLabel: strengthPolicy.displayLabel.toUpperCase(),
@@ -828,7 +859,7 @@ export function buildHyroxReportContract({
     longLabel: primaryClaim?.longLabel ?? null,
     claimStrength: primaryClaim?.claimStrength ?? null,
   };
-  const artifactSlots = buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts: facts });
+  const artifactSlots = buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts: facts, rankPolicy });
 
   const contract = {
     version: VERSION,

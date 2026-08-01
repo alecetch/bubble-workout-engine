@@ -158,6 +158,54 @@ describe("buildHyroxReportContract", () => {
     assert.equal(contract.artifactSlots.carousel.ctaHeadline, contract.targetAssessment.ctaHeadline);
   });
 
+  it("owns analyse-mode carousel slide 1 Forma Score metric without duplicating standing copy", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({ calculatorMode: "analyse" }),
+      calculatorMode: "analyse",
+    });
+
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "FORMA SCORE");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.value, "72/100");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.source, "rank_policy_primary_percentile");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.fallbackReason, null);
+    assert.notEqual(contract.artifactSlots.carousel.slide1Metric2.value, contract.rankPolicy.displays[0].label);
+  });
+
+  it("owns analyse-mode carousel slide 1 unavailable benchmark fallback", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({
+        analysisScope: "no_benchmark_data",
+        calculatorMode: "analyse",
+        benchmarkContext: { available: false, primaryBenchmarkGroup: null, goalBenchmarkGroup: null, comparisonOptions: { options: [] } },
+        dataQuality: { warnings: [], issues: ["no_benchmark_data"], inputCompleteness: 1 },
+      }),
+      calculatorMode: "analyse",
+      athleteContext: { overallPercentile: 99 },
+    });
+
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "BENCHMARK");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.value, "UNAVAILABLE");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.source, "rank_policy_unavailable");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.fallbackReason, "no_benchmark_data");
+  });
+
+  it("owns target-mode carousel slide 1 target metric", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({
+        benchmarkContext: {
+          ...baseAnalysis().benchmarkContext,
+          goalBenchmarkGroup: { label: "sub-55", targetFinishSeconds: 3300 },
+        },
+      }),
+      calculatorMode: "target",
+    });
+
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "TARGET");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.value, "55:00");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.source, "target_finish_time");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.fallbackReason, null);
+  });
+
   it("uses exact target gap magnitude to suppress marginal-gain CTA", () => {
     const contract = buildHyroxReportContract({
       analysisJson: baseAnalysis({
