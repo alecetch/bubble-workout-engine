@@ -87,7 +87,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .metric-strip-4 { grid-template-columns: repeat(4, 1fr); }
 .metric-item { min-height: 58px; padding: 0 14px; border-left: 1px solid var(--line); }
 .metric-item:first-child { border-left: none; padding-left: 0; }
-.metric-label { color: var(--muted-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 9px; }
+.metric-label { color: var(--muted-2); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 9px; }
 .metric-value { font-family: var(--font-mono); font-size: 20px; font-weight: 800; text-transform: uppercase; }
 .swipe-prompt { position: absolute; left: 70px; top: 594px; font-size: 18px; font-weight: 700; color: var(--text); z-index: 2; }
 .watermark {
@@ -114,7 +114,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .table-head { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; }
 .pos-head { position: absolute; top: 274px; right: 90px; }
 .race-table { position: absolute; top: 300px; left: 80px; right: 80px; }
-.race-row { display: grid; grid-template-columns: 1.8fr 0.8fr 0.35fr; align-items: center; height: 43px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 17px; }
+.race-row { display: grid; grid-template-columns: 1.8fr 0.8fr 0.35fr; align-items: center; height: 43px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 20px; }
 .race-row .name { text-transform: uppercase; color: var(--text); }
 .race-row .time { color: var(--muted); text-align: center; font-family: var(--font-mono); }
 .race-row .delta { text-align: right; font-family: var(--font-mono); }
@@ -130,7 +130,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .giant { font-family: var(--font-display); font-weight: 300; font-size: 190px; line-height: 0.9; letter-spacing: -0.04em; }
 .subhero { font-family: var(--font-mono); font-size: 24px; text-transform: uppercase; margin-top: 18px; }
 .subhero.small { font-size: 19px; line-height: 1.35; margin-top: 38px; }
-.caption { color: var(--muted); font-size: 17px; line-height: 1.55; margin-top: 34px; }
+.caption { color: var(--muted); font-size: 20px; line-height: 1.5; margin-top: 34px; }
 .insight-wrap { position: absolute; inset: 170px 90px 90px; text-align: center; }
 .two-line { font-size: 58px; line-height: 1.18; }
 .short-rule { width: 198px; height: 2px; background: var(--blue); margin: 34px auto 50px; }
@@ -142,7 +142,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .feature-list { list-style: none; margin: 0 auto 58px; padding: 0; width: 360px; text-align: left; }
 .feature-list li { font-size: 24px; margin: 24px 0; }
 .feature-list li::before { content: "\\2713"; color: var(--blue); display: inline-block; width: 46px; }
-.cta-button { width: 480px; height: 62px; border: none; border-radius: 5px; background: var(--blue); color: #07101e; font-family: var(--font-mono); font-size: 18px; text-transform: uppercase; letter-spacing: 0.01em; }
+.cta-button { width: 480px; height: 62px; border: none; border-radius: 5px; background: var(--blue); color: #07101e; font-family: var(--font-mono); font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; }
 .lower { margin: 50px auto 36px; background: var(--line); height: 1px; }
 .cta-logo-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
 .cta-brand { font-size: 34px; letter-spacing: 0.04em; }
