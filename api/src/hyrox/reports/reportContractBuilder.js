@@ -655,7 +655,7 @@ function buildStrengthPolicy(analysisJson = {}, splitProfile, policy) {
     // data artifact) keep the original, more generic wording since there's no single number to point to.
     const penaltySeconds = Number(fastestAhead.penaltyAdjustmentSeconds) || 0;
     const explanation = penaltySeconds > 0
-      ? `${fastestAhead.label} is the best relative split, but that gap comes from a ${fastestAhead.penaltyAdjustmentFormatted} penalty adjustment rather than raw execution, so no protectable strength was identified.`
+      ? `${fastestAhead.label} is the best relative split, but that gap comes from a ${fastestAhead.penaltyAdjustmentFormatted} penalty adjustment, so execution needs attention.`
       : `${fastestAhead.label} is the best relative split, but no protectable strength was identified with enough evidence.`;
     return {
       status: "fastest_ahead_split_only",

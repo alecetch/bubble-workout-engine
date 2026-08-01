@@ -309,7 +309,7 @@ describe("buildHyroxReportContract", () => {
 
     assert.equal(contract.strengthPolicy.status, "fastest_ahead_split_only");
     assert.equal(contract.strengthPolicy.displayLabel, "Farmers Carry");
-    assert.match(contract.strengthPolicy.explanation, /2:54 penalty adjustment/i);
+    assert.match(contract.strengthPolicy.explanation, /2:54 penalty adjustment, so execution needs attention\./i);
     assert.doesNotMatch(contract.strengthPolicy.explanation, /no protectable strength was identified with enough evidence\./i);
     assert.equal(contract.strengthPolicy.fallbackReason, "penalty_inflated_split");
   });
