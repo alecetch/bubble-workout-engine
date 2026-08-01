@@ -621,7 +621,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <div class="header">
     <div class="h-left">
       <div class="logo-row">
-        ${formaLogoMark(38)}
+        ${formaLogoMark(57)}
       </div>
       <div class="t-hyrox">HYROX</div>
       <div class="t-perf">PERFORMANCE</div>
