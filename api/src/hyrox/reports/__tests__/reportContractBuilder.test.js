@@ -290,6 +290,30 @@ describe("buildHyroxReportContract", () => {
     assert.match(contract.strengthPolicy.explanation, /no protectable strength/i);
   });
 
+  it("names the penalty when a fastest-ahead split is disqualified because it's penalty-inflated", () => {
+    // Farmers Carry's raw time is *slower* than benchmark (frameGapSeconds: +114); it only looks
+    // like the best relative split once a 180s penalty nets it down to frameGapNetOfPenaltySeconds:
+    // -60. isPlainStrengthEligible (reportSelections.js) disqualifies any candidate with >= 60s of
+    // its own penalty when penalties are material overall, so this must NOT become a reliable_strength.
+    const analysisJson = baseAnalysis({
+      penalties: [{ segmentKey: "farmers_carry", station: "farmers_carry", penaltySeconds: 180 }],
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total Time", userSeconds: 4680, frameGapSeconds: 480, percentile: 72, fieldPercentile: 72 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, timeGapSeconds: 90, percentile: 35, confidence: "high" },
+        { segmentKey: "farmers_carry", type: "station", label: "Farmers Carry", userSeconds: 58, frameGapSeconds: 114, frameGapNetOfPenaltySeconds: -60, percentile: 92, confidence: "high" },
+        { segmentKey: "run_8", type: "run", label: "Run 8", userSeconds: 330, frameGapSeconds: 80, timeGapSeconds: 80, percentile: 40, confidence: "high" },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 300, frameGapSeconds: 30, timeGapSeconds: 30, percentile: 45, confidence: "high" },
+      ],
+    });
+    const contract = buildHyroxReportContract({ analysisJson });
+
+    assert.equal(contract.strengthPolicy.status, "fastest_ahead_split_only");
+    assert.equal(contract.strengthPolicy.displayLabel, "Farmers Carry");
+    assert.match(contract.strengthPolicy.explanation, /2:54 penalty adjustment/i);
+    assert.doesNotMatch(contract.strengthPolicy.explanation, /no protectable strength was identified with enough evidence\./i);
+    assert.equal(contract.strengthPolicy.fallbackReason, "penalty_inflated_split");
+  });
+
   it("sets directional RoxZone copy precision for inferred transition data", () => {
     const contract = buildHyroxReportContract({
       analysisJson: baseAnalysis({

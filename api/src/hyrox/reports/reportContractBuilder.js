@@ -649,6 +649,14 @@ function buildStrengthPolicy(analysisJson = {}, splitProfile, policy) {
     };
   }
   if (fastestAhead) {
+    // When the split's own gap is penalty-adjusted, name the penalty explicitly -- otherwise
+    // "best relative split, but no protectable strength" reads as a contradiction with no
+    // visible cause. Non-penalty fallbacks (no strength candidate at all, an implausibly-fast
+    // data artifact) keep the original, more generic wording since there's no single number to point to.
+    const penaltySeconds = Number(fastestAhead.penaltyAdjustmentSeconds) || 0;
+    const explanation = penaltySeconds > 0
+      ? `${fastestAhead.label} is the best relative split, but that gap comes from a ${fastestAhead.penaltyAdjustmentFormatted} penalty adjustment rather than raw execution, so no protectable strength was identified.`
+      : `${fastestAhead.label} is the best relative split, but no protectable strength was identified with enough evidence.`;
     return {
       status: "fastest_ahead_split_only",
       displayLabel: fastestAhead.label,
@@ -656,8 +664,8 @@ function buildStrengthPolicy(analysisJson = {}, splitProfile, policy) {
       strength: null,
       fastestAheadSplit: fastestAhead,
       displayGap: fastestAhead.displayGap,
-      explanation: `${fastestAhead.label} is the best relative split, but no protectable strength was identified with enough evidence.`,
-      fallbackReason: "no_protectable_strength",
+      explanation,
+      fallbackReason: penaltySeconds > 0 ? "penalty_inflated_split" : "no_protectable_strength",
       maySayStrongestStation: false,
       dataQualityNote: policy.compactCaveat ?? null,
     };
