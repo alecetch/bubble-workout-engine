@@ -546,9 +546,11 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .root { width: 1080px; height: 1350px; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
 
 /* ─── HEADER ─── */
-.header { display: flex; align-items: center; padding: 20px 44px 18px; flex-shrink: 0; min-height: 286px; }
-.h-left  { flex: 0 0 430px; display: flex; flex-direction: column; }
-.h-mid   { flex: 1; display: flex; justify-content: center; align-items: center; }
+.header  { display: flex; align-items: center; padding: 20px 44px 18px; flex-shrink: 0; min-height: 286px; }
+.h-left  { flex: 0 0 400px; display: flex; flex-direction: column; }
+.h-finish{ flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;
+  padding: 0 26px; margin: 0 4px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+.h-score { flex: 0 0 260px; display: flex; justify-content: center; align-items: center; }
 
 .logo-row { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
 
@@ -561,7 +563,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   background: linear-gradient(90deg, var(--cyan) 0%, rgba(34,211,238,0.22) 35%, transparent 72%); }
 
 /* ─── ATHLETE STRIP ─── */
-.strip { display: flex; align-items: stretch; padding: 16px 44px; flex-shrink: 0; }
+.strip { display: flex; align-items: stretch; padding: 14px 44px; flex-shrink: 0; }
 .sc   { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 24px; }
 .sc:first-child { padding-left: 0; }
 .sc:last-child  { padding-right: 0; }
@@ -572,9 +574,11 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 .name-wh { color: var(--text); }
 .name-cy { color: var(--cyan); }
 .stime { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 900; font-size: 54px; line-height: 1.02; color: var(--text); letter-spacing: -0.5px; }
+.h-stime { font-size: 46px; }
 .smeta { display: flex; align-items: center; gap: 7px; margin-top: 6px; font-size: 21px; font-weight: 700; color: var(--cyan); letter-spacing: 0.1px; line-height: 1.12; }
 .smeta.am { color: var(--amber); }
 .smeta svg { flex-shrink: 0; }
+.h-sub { margin-top: 4px; }
 
 /* ─── INSIGHT CARDS ─── */
 .cards { display: flex; gap: 14px; padding: 12px 44px 0; flex-shrink: 0; }
@@ -627,7 +631,20 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
       <div class="t-perf">PERFORMANCE</div>
       <div class="t-rep">REPORT</div>
     </div>
-    <div class="h-mid">${scoreRingSvg(formaScore)}</div>
+    <div class="h-finish">
+      <div class="slbl">Finish Time</div>
+      <div class="stime h-stime">${escapeHtml(finishTime ?? "--:--")}</div>
+	      ${percentileDisplay ? `<div class="smeta">
+	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+	        ${escapeHtml(percentileDisplay)}
+	      </div>` : ""}
+	      ${penaltySummary ? `<div class="smeta am">
+	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+	        PENALTIES: ${escapeHtml(penaltySummary.value)}
+	          </div>` : ""}
+	          ${secondaryPenaltyLine || secondaryFitnessLine ? `<div class="card-sub h-sub">${secondaryPenaltyLine ?? secondaryFitnessLine}</div>` : ""}
+    </div>
+    <div class="h-score">${scoreRingSvg(formaScore)}</div>
   </div>
 
   <div class="hr"></div>
@@ -638,20 +655,6 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 	      <div class="slbl">Athlete</div>
 	      ${athleteNameLines.map(renderNameLine).join("")}
 	    </div>
-    <div class="sdiv"></div>
-    <div class="sc">
-      <div class="slbl">Finish Time</div>
-      <div class="stime">${escapeHtml(finishTime ?? "--:--")}</div>
-	      ${percentileDisplay ? `<div class="smeta">
-	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-	        ${escapeHtml(percentileDisplay)}
-	      </div>` : ""}
-	      ${penaltySummary ? `<div class="smeta am">
-	        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
-	        PENALTIES: ${escapeHtml(penaltySummary.value)}
-	          </div>` : ""}
-	          ${secondaryPenaltyLine || secondaryFitnessLine ? `<div class="card-sub">${secondaryPenaltyLine ?? secondaryFitnessLine}</div>` : ""}
-	        </div>
     <div class="sdiv"></div>
     <div class="sc">
       ${targetTime ? `
