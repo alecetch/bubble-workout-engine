@@ -14,6 +14,14 @@ function mockAnalysis({ limiterSegmentKey = null, limiterType = null } = {}) {
   };
 }
 
+function mockContract(largestCategoryKey) {
+  return {
+    gapReconciliation: {
+      largestCategory: largestCategoryKey ? { key: largestCategoryKey } : null,
+    },
+  };
+}
+
 const LIMITER_COPY_EXPECTATIONS = [
   {
     background: "new_to_strength",
@@ -128,5 +136,35 @@ test("unknown background returns null", () => {
 
 test("running background with no limiter returns aligned copy", () => {
   const copy = buildBackgroundSection(mockAnalysis(), { primaryBackground: "running" });
+  assert.match(copy, /aerobic durability/);
+});
+
+test("contract category overrides a disagreeing run segment limiter", () => {
+  const copy = buildBackgroundSection(
+    mockAnalysis({ limiterSegmentKey: "run_6", limiterType: "run" }),
+    { primaryBackground: "crossfit_hybrid" },
+    mockContract("work_time"),
+  );
+
+  assert.match(copy, /sustain station output/);
+});
+
+test("contract category overrides a disagreeing station segment limiter", () => {
+  const copy = buildBackgroundSection(
+    mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }),
+    { primaryBackground: "crossfit_hybrid" },
+    mockContract("run_time"),
+  );
+
+  assert.match(copy, /gap is in the running/);
+});
+
+test("non-run and non-station contract categories behave like no clear limiter", () => {
+  const copy = buildBackgroundSection(
+    mockAnalysis({ limiterSegmentKey: "run_6", limiterType: "run" }),
+    { primaryBackground: "running" },
+    mockContract("penalties"),
+  );
+
   assert.match(copy, /aerobic durability/);
 });

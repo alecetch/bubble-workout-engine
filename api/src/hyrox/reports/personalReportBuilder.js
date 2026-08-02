@@ -496,7 +496,7 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     ? ` (${formatGain(limiterGap)} to benchmark median; ${formatGain(headlineGain)} to your target finish time)`
     : "";
   sections.push(section("time_potential", "Time Potential", `Estimated opportunity: ${formatGain(headlineGain)} potential gain.${clarification} This is an estimate, not a guarantee.`));
-  const backgroundCopy = buildBackgroundSection(analysisJson, athleteContext);
+  const backgroundCopy = buildBackgroundSection(analysisJson, athleteContext, contract);
   if (backgroundCopy) {
     sections.push(section("athlete_background", "Your Background in Context", backgroundCopy));
   }
