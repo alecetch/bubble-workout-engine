@@ -11,14 +11,17 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
-# Chromium + runtime libs for Puppeteer (carousel slide generation)
+# Chromium + runtime libs for Puppeteer (carousel slide generation).
+# font-noto-cjk covers Chinese/Japanese/Korean athlete names — ttf-freefont alone
+# has no CJK glyphs, so those names rendered blank/tofu without it.
 RUN apk add --no-cache \
     chromium \
     nss \
     freetype \
     harfbuzz \
     ca-certificates \
-    ttf-freefont
+    ttf-freefont \
+    font-noto-cjk
 
 # Point Puppeteer at the system Chromium instead of downloading its own
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
