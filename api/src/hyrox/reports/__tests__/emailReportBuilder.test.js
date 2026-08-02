@@ -4,7 +4,7 @@ import { buildEmailReport, gapPill } from "../emailReportBuilder.js";
 import { buildPersonalReport } from "../personalReportBuilder.js";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
 import { buildTemplateA } from "../templateSlotMapper.js";
-import { bandScoreLabel, formatOverallStanding, formatPercentileRank } from "../copyFormatter.js";
+import { bandScoreLabel, formatOverallStanding, formatPercentileRank, formatPerformancePercentile } from "../copyFormatter.js";
 import { buildCaption } from "../../sharePack/captionBuilder.js";
 import { ANALYSIS_FRAMES } from "../../engine/analysisFrameSelector.js";
 import { setBenchmarkData } from "../../engine/benchmarkService.js";
@@ -4305,8 +4305,8 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
       );
 
       const lens = benchmarkLensSection(htmlBody);
-      assert.ok(lens.includes(`${formatPercentileRank(comparisonPercentile)} within this band`));
-      assert.equal(lens.includes(`${formatPercentileRank(rawPercentile)} within this band`), false);
+      assert.ok(lens.includes(`${formatPerformancePercentile(comparisonPercentile)} within this band`));
+      assert.equal(lens.includes(`${formatPerformancePercentile(rawPercentile)} within this band`), false);
       assert.ok(comparisonGroupRow(lens).includes("70:00"));
       assert.ok(comparisonGroupRow(lens).includes("74:59"));
     } finally {
@@ -4370,8 +4370,8 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
       );
 
       const lens = benchmarkLensSection(htmlBody);
-      assert.ok(lens.includes(`${formatPercentileRank(adjustedPercentile)} within this band`));
-      assert.equal(lens.includes(`${formatPercentileRank(rawPercentile)} within this band`), false);
+      assert.ok(lens.includes(`${formatPerformancePercentile(adjustedPercentile)} within this band`));
+      assert.equal(lens.includes(`${formatPerformancePercentile(rawPercentile)} within this band`), false);
       assert.ok(comparisonGroupRow(lens).includes("70:00"));
       assert.ok(comparisonGroupRow(lens).includes("74:59"));
     } finally {
@@ -4397,7 +4397,7 @@ describe("renderBenchmarkLensCard (analyse mode)", () => {
     );
 
     const lens = benchmarkLensSection(htmlBody);
-    assert.ok(lens.includes("64th percentile within this band"));
+    assert.ok(lens.includes("Top 36% within this band"));
   });
 
   it("keeps the ordinary single-step escalation sentence when escalation is not penalty-adjusted", () => {
