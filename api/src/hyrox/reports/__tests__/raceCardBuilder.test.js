@@ -717,7 +717,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.equal(data.strongestStation.policyStatus, "fastest_ahead_split_only");
     assert.equal(carousel.slides[0].best_station, "FARMERS CARRY");
     assert.equal(carousel.slides[2].station, "FARMERS CARRY");
-    assert.match(carousel.slides[2].caption, /no protectable strength/i);
+    assert.match(carousel.slides[2].caption, /penalty adjustment, so execution needs attention/i);
   });
 
   it("renders a secondary fastest-win line when penalties are material but not primary", () => {
@@ -753,7 +753,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.equal(strengthSlide.station, "FARMERS CARRY");
     assert.equal(strengthSlide.percentile, "Best relative split");
     assert.equal(strengthSlide.position_gain, "+1:00");
-    assert.match(strengthSlide.caption, /no protectable strength/i);
+    assert.match(strengthSlide.caption, /penalty adjustment, so execution needs attention/i);
     assert.equal(farmersRow.delta, "-1:00");
   });
 

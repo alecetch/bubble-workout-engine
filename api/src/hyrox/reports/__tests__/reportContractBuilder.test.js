@@ -158,6 +158,54 @@ describe("buildHyroxReportContract", () => {
     assert.equal(contract.artifactSlots.carousel.ctaHeadline, contract.targetAssessment.ctaHeadline);
   });
 
+  it("owns analyse-mode carousel slide 1 Forma Score metric without duplicating standing copy", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({ calculatorMode: "analyse" }),
+      calculatorMode: "analyse",
+    });
+
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "FORMA SCORE");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.value, "72/100");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.source, "rank_policy_primary_percentile");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.fallbackReason, null);
+    assert.notEqual(contract.artifactSlots.carousel.slide1Metric2.value, contract.rankPolicy.displays[0].label);
+  });
+
+  it("owns analyse-mode carousel slide 1 unavailable benchmark fallback", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({
+        analysisScope: "no_benchmark_data",
+        calculatorMode: "analyse",
+        benchmarkContext: { available: false, primaryBenchmarkGroup: null, goalBenchmarkGroup: null, comparisonOptions: { options: [] } },
+        dataQuality: { warnings: [], issues: ["no_benchmark_data"], inputCompleteness: 1 },
+      }),
+      calculatorMode: "analyse",
+      athleteContext: { overallPercentile: 99 },
+    });
+
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "BENCHMARK");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.value, "UNAVAILABLE");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.source, "rank_policy_unavailable");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.fallbackReason, "no_benchmark_data");
+  });
+
+  it("owns target-mode carousel slide 1 target metric", () => {
+    const contract = buildHyroxReportContract({
+      analysisJson: baseAnalysis({
+        benchmarkContext: {
+          ...baseAnalysis().benchmarkContext,
+          goalBenchmarkGroup: { label: "sub-55", targetFinishSeconds: 3300 },
+        },
+      }),
+      calculatorMode: "target",
+    });
+
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "TARGET");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.value, "55:00");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.source, "target_finish_time");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.fallbackReason, null);
+  });
+
   it("uses exact target gap magnitude to suppress marginal-gain CTA", () => {
     const contract = buildHyroxReportContract({
       analysisJson: baseAnalysis({
@@ -240,6 +288,30 @@ describe("buildHyroxReportContract", () => {
     assert.equal(contract.strengthPolicy.status, "fastest_ahead_split_only");
     assert.equal(contract.strengthPolicy.displayLabel, "Farmers Carry");
     assert.match(contract.strengthPolicy.explanation, /no protectable strength/i);
+  });
+
+  it("names the penalty when a fastest-ahead split is disqualified because it's penalty-inflated", () => {
+    // Farmers Carry's raw time is *slower* than benchmark (frameGapSeconds: +114); it only looks
+    // like the best relative split once a 180s penalty nets it down to frameGapNetOfPenaltySeconds:
+    // -60. isPlainStrengthEligible (reportSelections.js) disqualifies any candidate with >= 60s of
+    // its own penalty when penalties are material overall, so this must NOT become a reliable_strength.
+    const analysisJson = baseAnalysis({
+      penalties: [{ segmentKey: "farmers_carry", station: "farmers_carry", penaltySeconds: 180 }],
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total Time", userSeconds: 4680, frameGapSeconds: 480, percentile: 72, fieldPercentile: 72 },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, timeGapSeconds: 90, percentile: 35, confidence: "high" },
+        { segmentKey: "farmers_carry", type: "station", label: "Farmers Carry", userSeconds: 58, frameGapSeconds: 114, frameGapNetOfPenaltySeconds: -60, percentile: 92, confidence: "high" },
+        { segmentKey: "run_8", type: "run", label: "Run 8", userSeconds: 330, frameGapSeconds: 80, timeGapSeconds: 80, percentile: 40, confidence: "high" },
+        { segmentKey: "roxzone_time", type: "aggregate", label: "RoxZone", userSeconds: 300, frameGapSeconds: 30, timeGapSeconds: 30, percentile: 45, confidence: "high" },
+      ],
+    });
+    const contract = buildHyroxReportContract({ analysisJson });
+
+    assert.equal(contract.strengthPolicy.status, "fastest_ahead_split_only");
+    assert.equal(contract.strengthPolicy.displayLabel, "Farmers Carry");
+    assert.match(contract.strengthPolicy.explanation, /2:54 penalty adjustment, so execution needs attention\./i);
+    assert.doesNotMatch(contract.strengthPolicy.explanation, /no protectable strength was identified with enough evidence\./i);
+    assert.equal(contract.strengthPolicy.fallbackReason, "penalty_inflated_split");
   });
 
   it("sets directional RoxZone copy precision for inferred transition data", () => {

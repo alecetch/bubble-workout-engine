@@ -80,6 +80,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .footer { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; color: var(--muted-2); font-size: 12px; letter-spacing: 0.03em; }
 .blue { color: var(--blue); }
 .danger { color: var(--red); }
+.purple { color: #a78bfa; }
 .hook-copy { position: absolute; left: 70px; top: 141px; z-index: 2; }
 .small-kicker { color: var(--muted); font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 18px; }
 .hook-title { font-family: var(--font-mono); font-weight: 900; font-size: 41px; line-height: 1.13; text-transform: uppercase; margin: 0 0 38px 0; letter-spacing: -0.04em; }
@@ -111,15 +112,15 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .summary-box { height: 70px; border: 1px solid; border-radius: 6px; display: grid; place-items: center; text-align: center; text-transform: uppercase; font-family: var(--font-mono); font-size: 22px; font-weight: 800; }
 .summary-box.positive { border-color: var(--blue); background: var(--blue-dim); color: var(--blue); }
 .summary-box.negative { border-color: var(--red); background: var(--red-dim); color: var(--red); }
-.summary-label { font-family: var(--font-body); color: var(--muted-2); font-size: 10px; font-weight: 500; margin-bottom: -8px; }
+.summary-label { font-family: var(--font-body); color: var(--muted-2); font-size: 13px; font-weight: 500; margin-bottom: -6px; }
 .table-head { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; }
 .pos-head { position: absolute; top: 274px; right: 90px; }
 .race-table { position: absolute; top: 300px; left: 80px; right: 80px; }
-.race-row { display: grid; grid-template-columns: 1.8fr 0.8fr 0.35fr; align-items: center; height: 43px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 20px; }
+.race-row { display: grid; grid-template-columns: 1.8fr 0.8fr 0.35fr; align-items: center; height: 40px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 20px; }
 .race-row .name { text-transform: uppercase; color: var(--text); }
 .race-row .time { color: var(--muted); text-align: center; font-family: var(--font-mono); }
-.race-row .delta { text-align: right; font-family: var(--font-mono); }
-.legend { position: absolute; bottom: 58px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 12px; }
+.race-row .delta { text-align: right; font-family: var(--font-mono); font-weight: 700; }
+.legend { position: absolute; bottom: 58px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 14px; }
 .center-stack { position: absolute; left: 120px; right: 120px; top: 210px; text-align: center; }
 .kicker { color: var(--muted); font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 24px; }
 .kicker.secondary { margin-top: 36px; margin-bottom: 18px; }
@@ -176,7 +177,7 @@ const RENDERER_JS = `
     const rows = get('slides.1.stations') || [];
     rows.forEach(row => {
       const delta = String(row.delta ?? '');
-      const deltaClass = row.tone === 'positive' ? 'blue' : row.tone === 'negative' ? 'danger' : '';
+      const deltaClass = row.tone === 'positive' ? 'blue' : row.tone === 'negative' ? 'danger' : row.tone === 'penalty' ? 'purple' : '';
       const item = document.createElement('div');
       item.className = 'race-row';
       item.innerHTML = '<div class="name">' + (row.name ?? '') + '</div><div class="time">' + (row.time ?? '') + '</div><div class="delta ' + deltaClass + '">' + delta + '</div>';
@@ -263,11 +264,11 @@ export function buildCarouselPage(carouselData = {}) {
       <h2 class="slide-title">HOW THE RACE UNFOLDED</h2>
       <div class="flow-summary">
         <div class="summary-box positive">
-          <div class="summary-label">FASTEST GAP</div>
+          <div class="summary-label">FASTEST SPLIT</div>
           <div><span data-field="slides.1.biggest_gain.station">-</span> <span data-field="slides.1.biggest_gain.delta">-</span></div>
         </div>
         <div class="summary-box negative">
-          <div class="summary-label">BIGGEST GAP</div>
+          <div class="summary-label">SLOWEST SPLIT</div>
           <div><span data-field="slides.1.biggest_loss.station">-</span> <span data-field="slides.1.biggest_loss.delta">-</span></div>
         </div>
       </div>

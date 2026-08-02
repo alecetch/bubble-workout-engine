@@ -649,6 +649,14 @@ function buildStrengthPolicy(analysisJson = {}, splitProfile, policy) {
     };
   }
   if (fastestAhead) {
+    // When the split's own gap is penalty-adjusted, name the penalty explicitly -- otherwise
+    // "best relative split, but no protectable strength" reads as a contradiction with no
+    // visible cause. Non-penalty fallbacks (no strength candidate at all, an implausibly-fast
+    // data artifact) keep the original, more generic wording since there's no single number to point to.
+    const penaltySeconds = Number(fastestAhead.penaltyAdjustmentSeconds) || 0;
+    const explanation = penaltySeconds > 0
+      ? `${fastestAhead.label} is the best relative split, but that gap comes from a ${fastestAhead.penaltyAdjustmentFormatted} penalty adjustment, so execution needs attention.`
+      : `${fastestAhead.label} is the best relative split, but no protectable strength was identified with enough evidence.`;
     return {
       status: "fastest_ahead_split_only",
       displayLabel: fastestAhead.label,
@@ -656,8 +664,8 @@ function buildStrengthPolicy(analysisJson = {}, splitProfile, policy) {
       strength: null,
       fastestAheadSplit: fastestAhead,
       displayGap: fastestAhead.displayGap,
-      explanation: `${fastestAhead.label} is the best relative split, but no protectable strength was identified with enough evidence.`,
-      fallbackReason: "no_protectable_strength",
+      explanation,
+      fallbackReason: penaltySeconds > 0 ? "penalty_inflated_split" : "no_protectable_strength",
       maySayStrongestStation: false,
       dataQualityNote: policy.compactCaveat ?? null,
     };
@@ -730,7 +738,37 @@ function buildEmailSubject({ primaryClaim, targetAssessment, inputFacts }) {
   return `Start with ${subjectPrimary} in your HYROX analysis`;
 }
 
-function buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts }) {
+function buildCarouselSlide1Metric({ inputFacts = {}, rankPolicy = {} } = {}) {
+  if (inputFacts.calculatorMode === "target" && inputFacts.targetTimeDisplay) {
+    return {
+      label: "TARGET",
+      value: inputFacts.targetTimeDisplay,
+      source: "target_finish_time",
+      fallbackReason: null,
+    };
+  }
+
+  const primaryRank = rankPolicy.displays?.[0] ?? null;
+  const primaryPercentile = Number(primaryRank?.percentile);
+  if (rankPolicy.allowed && Number.isFinite(primaryPercentile)) {
+    const score = Math.max(0, Math.min(100, Math.round(primaryPercentile)));
+    return {
+      label: "FORMA SCORE",
+      value: `${score}/100`,
+      source: "rank_policy_primary_percentile",
+      fallbackReason: null,
+    };
+  }
+
+  return {
+    label: "BENCHMARK",
+    value: "UNAVAILABLE",
+    source: "rank_policy_unavailable",
+    fallbackReason: rankPolicy.reason ?? "rank_unavailable",
+  };
+}
+
+function buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts, rankPolicy }) {
   const subjectPrimary = primaryClaim?.label ?? primaryClaim?.normalizedLabel ?? null;
   const limiterLabel = subjectPrimary;
   const biggestGain = splitProfile.biggestGain
@@ -770,6 +808,7 @@ function buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation,
     },
     carousel: {
       slide1Primary: limiterLabel ? limiterLabel.toUpperCase() : null,
+      slide1Metric2: buildCarouselSlide1Metric({ inputFacts, rankPolicy }),
       slide2Gain: biggestGain,
       slide2Loss: biggestLoss,
       strengthLabel: strengthPolicy.displayLabel.toUpperCase(),
@@ -828,7 +867,7 @@ export function buildHyroxReportContract({
     longLabel: primaryClaim?.longLabel ?? null,
     claimStrength: primaryClaim?.claimStrength ?? null,
   };
-  const artifactSlots = buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts: facts });
+  const artifactSlots = buildArtifactSlots({ primaryClaim, targetAssessment, gapReconciliation, splitProfile, strengthPolicy, inputFacts: facts, rankPolicy });
 
   const contract = {
     version: VERSION,

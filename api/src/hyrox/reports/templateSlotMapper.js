@@ -286,6 +286,19 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
   };
   const basis = comparisonProfileLabel(analysisJson);
   const displayRows = rows.map((row) => ({ ...row, comparison_basis: basis }));
+  // Mirrors the penalty row pinned to the top of the email's FULL SPLIT DETAIL table
+  // (emailReportBuilder.js's penaltyRowHtml) -- same condition, same source of truth.
+  const totalPenaltySeconds = penalty?.totalPenaltySeconds ?? 0;
+  const penaltyRow = totalPenaltySeconds > 0
+    ? {
+        name: "PENALTIES",
+        time: formatTime(totalPenaltySeconds) ?? "-",
+        delta: formatTimeDiff(totalPenaltySeconds) ?? "+0:00",
+        tone: "penalty",
+        comparison_basis: basis,
+      }
+    : null;
+  const stationRows = penaltyRow ? [penaltyRow, ...displayRows] : displayRows;
   const targetSecs = athleteContext.targetFinishTimeSeconds ?? athleteContext.targetTimeSeconds ?? null;
   const hasTarget = Number.isFinite(targetSecs) && targetSecs > 0;
   const featureList = Array.isArray(narrative.artifactSlots?.carousel?.features)
@@ -293,6 +306,10 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
     : narrative.rankPolicy.allowed
       ? DEFAULT_FEATURES
       : DEFAULT_NO_PERCENTILE_FEATURES;
+  const slide1Metric2 = narrative.artifactSlots?.carousel?.slide1Metric2 ?? {
+    label: hasTarget ? "TARGET" : "BENCHMARK",
+    value: hasTarget ? (formatTime(targetSecs) ?? "UNAVAILABLE") : "UNAVAILABLE",
+  };
 
   return {
     template_id: "A",
@@ -313,8 +330,9 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         headline_suffix: gain >= 60 ? "COST TIME" : "SETS THE STORY",
         hero_number: formatGain(gain) ?? "0:00",
         overall_time: formatTime(analysisJson.race?.finishTimeSeconds ?? athleteContext.finishTimeSeconds) ?? "-",
-        metric2_label: hasTarget ? "TARGET" : "WORLD RANK",
-        world_rank: hasTarget ? (formatTime(targetSecs) ?? "-") : rank.worldRank,
+        metric2_label: slide1Metric2.label,
+        metric2_value: slide1Metric2.value,
+        world_rank: slide1Metric2.value,
         best_station: narrative.artifactSlots?.carousel?.strengthLabel ?? (strength ? upper(strength.label ?? label(strength.segmentKey)) : "NO RELIABLE STRENGTH"),
         biggest_limiter: upper(displaySegmentLabel(limiter, limiter?.label ?? label(limiter?.segmentKey)) ?? "N/A"),
         biggest_limiter_label: primaryIsPenalty
@@ -355,7 +373,7 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         comparison_basis: basis,
         legend_text: `BLUE = FASTER THAN ${basis}    RED = SLOWER THAN ${basis}`,
         ...rowCallouts,
-        stations: displayRows,
+        stations: stationRows,
       },
       {
         slide_id: "A3_BIGGEST_STRENGTH",
