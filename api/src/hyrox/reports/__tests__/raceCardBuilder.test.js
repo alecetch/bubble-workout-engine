@@ -288,11 +288,10 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     }
 
     assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*>BBJ<\/text>/);
-    assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>SB LUNGE<\/text>/);
+    assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>S'BAG LUNGE<\/text>/);
     assert.match(splitProfile, /data-split-label="farmers_carry"[^>]*>F\. CARRY<\/text>/);
-    assert.match(splitProfile, /data-split-label="wall_balls"[^>]*>W BALLS<\/text>/);
     assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*font-size="21"[^>]*letter-spacing="0\.4"[^>]*>BBJ<\/text>/);
-    assert.doesNotMatch(splitProfile, /BURPEE<\/text>|BROAD JUMP<\/text>|SANDBAG<\/text>|LUNGES<\/text>|FARMERS<\/text>|>CARRY<\/text>|>WALL BALLS<\/text>/);
+    assert.doesNotMatch(splitProfile, /BURPEE<\/text>|BROAD JUMP<\/text>|SANDBAG<\/text>|LUNGES<\/text>|FARMERS<\/text>|>CARRY<\/text>/);
   });
 
   it("carries the full SEGMENT_MAP display name via data-split-full-label for abbreviated stations", () => {
@@ -308,15 +307,14 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     const html = buildRaceCardHtml(fixtureData({ splitRows: allRaceSplits() }));
     const splitProfile = splitProfileSection(html);
 
-    assert.match(splitProfile, /data-split-label="sled_push"[^>]*>SLED PUSH<\/text>/);
-    const xs = attrValues(splitProfile, "data-split-label", "sled_push", "x").map(Number);
+    assert.match(splitProfile, /data-split-label="wall_balls"[^>]*>WALL BALLS<\/text>/);
+    const xs = attrValues(splitProfile, "data-split-label", "wall_balls", "x").map(Number);
     assert.equal(xs.length, 1);
   });
 
-  it("clamps the variance-label y-position on-canvas for a gap that still dominates the auto-scaled axis", () => {
-    // The axis now auto-scales to the largest gap (178s -> a 180s ceiling), so a proportionally
-    // dominant bar (wall_balls) still needs its label clamped clear of the canvas top, while a
-    // smaller gap (run_1) that used to hit the old fixed 75s cap now has plenty of headroom.
+  it("clamps the variance-label y-position on-canvas for gaps at or beyond the ~66s collision threshold", () => {
+    // Reproduces the confirmed collision: at the chart's maxSec=75 cap, an unclamped fast-bar
+    // value label would render at y<0 (off the top of the SVG canvas, into the legend row).
     const html = buildRaceCardHtml(fixtureData({
       splitRows: [
         { key: "run_1", label: "Run 1", type: "run", raceOrder: 1, userTime: "5:10", delta: "-1:10", tone: "positive" },
@@ -329,39 +327,9 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     const wallY = Number(attrValue(splitProfile, "data-split-delta", "wall_balls", "y"));
 
     assert.ok(runY >= 16, `expected run_1 (70s gap) variance label y (${runY}) to stay clear of the chart's top edge`);
-    assert.ok(wallY >= 16, `expected wall_balls (178s gap) variance label y (${wallY}) to stay clear of the chart's top edge`);
-    assert.equal(wallY, 16, "the dominant bar should still hit the edge-clearance clamp");
-    assert.ok(runY > 16, "the smaller gap should no longer be needlessly clamped now the axis scales to fit the data");
-  });
-
-  it("auto-scales the split-profile axis in 30s steps to fit the largest gap", () => {
-    const html = buildRaceCardHtml(fixtureData({
-      splitRows: [
-        { key: "run_1", label: "Run 1", type: "run", raceOrder: 1, userTime: "5:10", delta: "+0:10", tone: "negative" },
-        { key: "run_8", label: "Run 8", type: "run", raceOrder: 2, userTime: "6:38", delta: "-1:46", tone: "positive" },
-      ],
-    }));
-    const splitProfile = splitProfileSection(html);
-    const axisLabels = [...splitProfile.matchAll(/text-anchor="end" fill="#94a3b8"[^>]*>([^<]+)<\/text>/g)].map((m) => m[1]);
-
-    // 106s rounds up to the next 30s step -> a +/-2:00 axis (not the old fixed +/-1:00), so the
-    // -1:46 bar renders fully inside the chart instead of overflowing into the labels below it.
-    assert.deepEqual(axisLabels, ["+2:00", "+1:00", "0:00", "-1:00", "-2:00"]);
-  });
-
-  it("shrinks the split-profile axis to +/-0:30 when every gap is small", () => {
-    const html = buildRaceCardHtml(fixtureData({
-      splitRows: [
-        { key: "run_1", label: "Run 1", type: "run", raceOrder: 1, userTime: "5:00", delta: "+0:05", tone: "negative" },
-        { key: "run_2", label: "Run 2", type: "run", raceOrder: 2, userTime: "4:55", delta: "-0:10", tone: "positive" },
-      ],
-    }));
-    const splitProfile = splitProfileSection(html);
-    const axisLabels = [...splitProfile.matchAll(/text-anchor="end" fill="#94a3b8"[^>]*>([^<]+)<\/text>/g)].map((m) => m[1]);
-
-    // No gap exceeds the 30s floor, so the axis stays at its tightest step instead of always
-    // reserving room for a +/-1:00 (or larger) range nobody needs.
-    assert.deepEqual(axisLabels, ["+0:30", "+0:15", "0:00", "-0:15", "-0:30"]);
+    assert.ok(wallY >= 16, `expected wall_balls (178s gap, at the bar-height cap) variance label y (${wallY}) to stay clear of the chart's top edge`);
+    assert.equal(runY, 16);
+    assert.equal(wallY, 16);
   });
 
   it("keeps all actual split times vertical on a consistent baseline", () => {
@@ -424,9 +392,9 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(html, /\.card-sub \{[^}]*font-size: 21px;/);
     assert.match(html, /\.card-cta \{[^}]*font-size: 21px;/);
     assert.match(html, /\.leg \{[^}]*font-size: 21px;[^}]*font-weight: 800;/);
-    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>\+0:30<\/text>/);
-    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>-0:30<\/text>/);
-    assert.doesNotMatch(splitProfile, /fill="#475569" font-size="21"[^>]*>[+-]0:30<\/text>/);
+    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>\+1:00<\/text>/);
+    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>-1:00<\/text>/);
+    assert.doesNotMatch(splitProfile, /fill="#475569" font-size="21"[^>]*>[+-]1:00<\/text>/);
     assert.match(html, /Race Split Profile &mdash; VS TARGET/);
     assert.match(html, /<div class="leg"><div class="dot bl"><\/div>FASTER<\/div>/);
     assert.match(html, /<div class="leg"><div class="dot rd"><\/div>SLOWER<\/div>/);
