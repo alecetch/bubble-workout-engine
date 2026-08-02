@@ -129,9 +129,15 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}, contra
   // "TOP N% WORLDWIDE" label) so both figures are always consistent. overallPerformanceScore is
   // benchmarked against the athlete's performance-band peer group in analyse mode, which produces
   // a misleadingly low number (e.g. 40) for a globally top-1% athlete.
+  const percentileScore = narrative.rankPolicy.displays[0]?.percentile ?? compOpts[0]?.percentile ?? null;
   const formaScore = benchmarkPercentilesAvailable
-    ? narrative.rankPolicy.displays[0]?.percentile ?? compOpts[0]?.percentile ?? scores.overallPerformanceScore ?? null
+    ? percentileScore ?? scores.overallPerformanceScore ?? null
     : null;
+  const formaScoreBasis = !benchmarkPercentilesAvailable
+    ? null
+    : percentileScore != null
+      ? "percentile"
+      : (scores.overallPerformanceScore != null ? "composite" : null);
 
   // Strongest station / relative split is resolved by the report contract.
   const strengthPolicy = narrative.strengthPolicy ?? {};
@@ -212,6 +218,7 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}, contra
 	    percentileText,
     confidenceQualifier,
     formaScore,
+    formaScoreBasis,
     mode,
     comparisonBasis,
     comparisonProfileLabel,

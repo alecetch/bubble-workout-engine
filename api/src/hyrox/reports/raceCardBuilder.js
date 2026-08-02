@@ -486,6 +486,7 @@ export function buildRaceCardHtml(data) {
 	    percentileText = null,
     confidenceQualifier = null,
     formaScore   = null,
+    formaScoreBasis = null,
     mode         = "analyse",
     comparisonBasis = mode === "target" ? "TARGET" : "MEDIAN",
     comparisonProfileLabel = null,
@@ -659,7 +660,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
       <div class="stime h-stime" style="font-size:32px;color:var(--cyan);margin-top:4px;">${modeTitle}</div>
       <div class="smeta" style="margin-top:6px;">${escapeHtml(modeSubtitle)}</div>`}
     </div>
-    <div class="h-score">${scoreRingSvg(formaScore)}</div>
+    <div class="h-score">${scoreRingSvg(formaScore)}${formaScoreBasis === "composite" ? `<div class="smeta" style="text-align:center;margin-top:2px;">Composite training score</div>` : ""}</div>
   </div>
 
   <div class="hr"></div>

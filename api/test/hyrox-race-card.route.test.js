@@ -6,43 +6,15 @@ import { createHyroxRaceCardHandler } from "../src/hyrox/hyroxRaceCardController
 const SUBMISSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
-// Minimal analysisJson that satisfies buildHyroxRaceCardData
-const ANALYSIS_JSON = {
-  athlete: { name: "TEST RUNNER", division: "open" },
-  race: { finishTimeSeconds: 3548, targetTimeSeconds: null },
-  scores: { overallPerformanceScore: 72 },
-  headline: { biggestStrength: null, biggestLimiter: null, headlineGainSeconds: null },
-  timePotential: {},
-  benchmarkContext: { comparisonOptions: [] },
-  segments: [
-    { segmentKey: "ski_erg", label: "SkiErg", type: "station", userSeconds: 240, frameGapSeconds: -10, percentile: 70 },
-  ],
-};
-
 const FAKE_PNG = Buffer.from("FAKEPNG");
 
-function buildApp({ rows = null } = {}) {
-  const defaultRow = {
-    analysis_json: ANALYSIS_JSON,
-    display_name: "Test Runner",
-    division: "open",
-    calculator_mode: "analyse",
-    athlete_context_json: null,
-    performance_context_json: null,
-  };
-
-  const db = {
-    async query(_sql, [submissionId]) {
-      if (submissionId === SUBMISSION_ID) {
-        return { rows: rows !== null ? rows : [defaultRow] };
-      }
-      return { rows: [] };
-    },
-  };
-
-  const generatePng = async () => FAKE_PNG;
-
-  const handler = createHyroxRaceCardHandler(db, { generatePng });
+function buildApp({ getOrCreateRaceCardImpl, getObjectImpl } = {}) {
+  const getOrCreateRaceCard = getOrCreateRaceCardImpl ?? (async (submissionId) => {
+    if (submissionId !== SUBMISSION_ID) throw Object.assign(new Error("Submission not found"), { status: 404 });
+    return { raceCardKey: "hyrox-share-packs/test/race-card.png", buffer: FAKE_PNG };
+  });
+  const getObject = getObjectImpl ?? (async () => FAKE_PNG);
+  const handler = createHyroxRaceCardHandler(null, { getOrCreateRaceCard, getObject });
   const app = express();
   app.get("/api/hyrox/race-card/:submissionId", handler);
   return app;
@@ -74,9 +46,11 @@ test("GET /api/hyrox/race-card/:submissionId returns 404 for non-existent submis
   assert.equal(res.status, 404);
 });
 
-test("GET /api/hyrox/race-card/:submissionId returns 404 when analysis_json is null", async () => {
-  const app = buildApp({ rows: [{ ...ANALYSIS_JSON, analysis_json: null, display_name: null, division: null, calculator_mode: null, athlete_context_json: null, performance_context_json: null }] });
-  const res = await request(app, `/api/hyrox/race-card/${SUBMISSION_ID}`);
+test("GET /api/hyrox/race-card/:submissionId returns 404 when analysis is unavailable", async () => {
+  const getOrCreateRaceCardImpl = async () => {
+    throw Object.assign(new Error("Race card not available for this submission"), { status: 404 });
+  };
+  const res = await request(buildApp({ getOrCreateRaceCardImpl }), `/api/hyrox/race-card/${SUBMISSION_ID}`);
   assert.equal(res.status, 404);
 });
 
@@ -89,31 +63,23 @@ test("GET /api/hyrox/race-card/:submissionId?download=1 sends attachment header"
 });
 
 test("GET /api/hyrox/race-card/:submissionId returns 500 when PNG generation throws", async () => {
-  const db = {
-    async query() {
-      return {
-        rows: [{
-          analysis_json: ANALYSIS_JSON,
-          display_name: null,
-          division: null,
-          calculator_mode: null,
-          athlete_context_json: null,
-          performance_context_json: null,
-        }],
-      };
-    },
+  const getOrCreateRaceCardImpl = async () => {
+    throw new Error("Puppeteer crash");
   };
-  const generatePng = async () => { throw new Error("Puppeteer crash"); };
-  const handler = createHyroxRaceCardHandler(db, { generatePng });
-  const app = express();
-  app.get("/api/hyrox/race-card/:submissionId", handler);
+  const res = await request(buildApp({ getOrCreateRaceCardImpl }), `/api/hyrox/race-card/${SUBMISSION_ID}`);
+  assert.equal(res.status, 500);
+});
 
-  const server = app.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
-  try {
-    const res = await fetch(`http://127.0.0.1:${server.address().port}/api/hyrox/race-card/${SUBMISSION_ID}`);
-    assert.equal(res.status, 500);
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-  }
+test("fetches bytes via getObject when getOrCreateRaceCard returns a cached key with no buffer", async () => {
+  let requestedKey = null;
+  const getOrCreateRaceCardImpl = async () => ({ raceCardKey: "cached-key", buffer: null });
+  const getObjectImpl = async (key) => {
+    requestedKey = key;
+    return FAKE_PNG;
+  };
+  const res = await request(buildApp({ getOrCreateRaceCardImpl, getObjectImpl }), `/api/hyrox/race-card/${SUBMISSION_ID}`);
+  assert.equal(res.status, 200);
+  assert.equal(requestedKey, "cached-key");
+  const buf = Buffer.from(await res.arrayBuffer());
+  assert.deepEqual(buf, FAKE_PNG);
 });
