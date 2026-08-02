@@ -522,10 +522,6 @@ export function buildRaceCardHtml(data) {
         : `${targetGapSigned ?? targetGapFormatted} TO TARGET`
     : "YOU'VE GOT MORE IN THE TANK.";
 
-  // Seconds-gap label for the limiter stat box.
-  const limiterGapText = biggestLimiter?.rankText
-    ? escapeHtml(biggestLimiter.rankText.toUpperCase())
-    : null;
   const secondaryPenaltyLine = fastestControllableWin
     && !biggestLimiter?.isPenalty
     && fastestControllableWin.name
@@ -707,15 +703,11 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
         <div>${hexIcon(biggestLimiter.name, "#fbbf24")}</div>
         <div class="card-info">
           <div class="card-title">${escapeHtml(biggestLimiter.name)}</div>
-	          ${(limiterGapText || biggestLimiter.potentialGain) ? `<div class="stat-row">
-	            ${limiterGapText ? `<div class="stat-box">
-	              <div class="stat-lbl">Time Gap</div>
-	              <div class="stat-val am">${limiterGapText}</div>
-	            </div>` : ""}
-	            ${biggestLimiter.potentialGain ? `<div class="stat-box">
+	          ${biggestLimiter.potentialGain ? `<div class="stat-row">
+	            <div class="stat-box">
 	              <div class="stat-lbl">${biggestLimiter.isPenalty ? "Fastest Win" : "Potential Gain"}</div>
 	              <div class="stat-val am">Up to ${escapeHtml(biggestLimiter.potentialGain)}</div>
-	            </div>` : ""}
+	            </div>
           </div>` : ""}
         </div>
       </div>

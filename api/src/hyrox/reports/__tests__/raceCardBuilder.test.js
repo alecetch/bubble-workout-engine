@@ -435,14 +435,14 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(html, /\.footer \{ padding: 16px 44px;/);
   });
 
-  it("simplifies the biggest-limiter panel copy (no redundant sub-labels, sign-worded gap, one-line CTA)", () => {
+  it("simplifies the biggest-limiter panel copy (single potential-gain stat, no redundant time-gap box, one-line CTA)", () => {
     const html = buildRaceCardHtml(fixtureData({
       biggestLimiter: { name: "Wall Balls", rankText: "1:06 slower", potentialGain: "2:44" },
     }));
     const card = sectionBetween(html, "Biggest Limiter", "FOCUS HERE TO UNLOCK BIG TIME");
 
-    assert.match(card, /<div class="stat-lbl">Time Gap<\/div>/);
-    assert.match(card, /<div class="stat-val am">1:06 SLOWER<\/div>/);
+    assert.doesNotMatch(card, /<div class="stat-lbl">Time Gap<\/div>/);
+    assert.doesNotMatch(card, /1:06 SLOWER/);
     assert.match(card, /<div class="stat-lbl">Potential Gain<\/div>/);
     assert.match(card, /<div class="stat-val am">Up to 2:44<\/div>/);
     assert.doesNotMatch(card, /class="stat-sub"/);
