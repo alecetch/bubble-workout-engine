@@ -210,6 +210,38 @@ describe("HYROX artifact limiter consistency", () => {
     }));
   });
 
+  it("omits the Best Relative Split card entirely when every split is slower than the comparison (no ahead split at all)", () => {
+    // Every station gap below is positive (slower) - there is no negative-gap split anywhere
+    // for either resolveReportStrength() or the fastestAheadSplit fallback to pick up, so
+    // buildStrengthPolicy should fall all the way through to "no_reliable_strength".
+    const analysisJson = strengthConsistencyAnalysis({
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 },
+        biggestStrength: null,
+      },
+      strengths: [],
+      segments: [
+        { segmentKey: "total_time", type: "aggregate", label: "Total Time", userSeconds: 4361, frameGapSeconds: 761, percentile: 45 },
+        { segmentKey: "farmers_carry", type: "station", label: "Farmers Carry", userSeconds: 300, frameGapSeconds: 20, timeGapToMedianSeconds: 20, percentile: 40, confidence: "high" },
+        { segmentKey: "ski_erg", type: "station", label: "SkiErg", userSeconds: 330, frameGapSeconds: 30, timeGapToMedianSeconds: 30, percentile: 38, confidence: "high" },
+        { segmentKey: "wall_balls", type: "station", label: "Wall Balls", userSeconds: 430, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35, confidence: "high" },
+      ],
+    });
+    const athleteContext = { displayName: "Alex Smith", targetFinishTimeSeconds: 3600 };
+
+    const raceCard = buildHyroxRaceCardData(analysisJson, athleteContext);
+    const html = buildRaceCardHtml(raceCard);
+
+    assert.equal(raceCard.strongestStation, null, "no split is ahead of the comparison, so there is no best-relative-split fallback either");
+    assert.ok(raceCard.biggestLimiter, "the biggest limiter card should still be present");
+    assert.doesNotMatch(html, /Best Relative Split/i);
+    assert.doesNotMatch(html, /Strongest Station/i);
+    assert.match(html, /Biggest Limiter|Directional Opportunity/i, "the limiter card should still render on its own");
+    // A single flex card with flex:1 stretches to fill the row - confirm there is exactly
+    // one insight card in the row rather than an empty placeholder alongside it.
+    assert.equal((html.match(/class="card (cy-card|am-card)"/g) ?? []).length, 1);
+  });
+
   it("does not use a missing headline strength row and falls back to the contract best relative split", () => {
     const analysisJson = strengthConsistencyAnalysis({
       headline: {
