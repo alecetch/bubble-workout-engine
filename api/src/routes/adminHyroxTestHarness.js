@@ -1303,6 +1303,12 @@ export function contractSlotAudit(modeEntry = {}) {
     add(/\bbest relative split\b/i.test(strengthSurface), "fastest-ahead split missing best-relative label");
   }
   add(normalizePrimaryLabel(carouselSlides[0]?.biggest_limiter) === normalizePrimaryLabel(slots.carousel?.slide1Primary), `carousel primary ${carouselSlides[0]?.biggest_limiter ?? "-"} != ${slots.carousel?.slide1Primary ?? "-"}`);
+  if (slots.carousel?.slide1Metric2) {
+    const metricValue = carouselSlides[0]?.metric2_value ?? carouselSlides[0]?.world_rank;
+    add(carouselSlides[0]?.metric2_label === slots.carousel.slide1Metric2.label, `carousel slide 1 metric label ${carouselSlides[0]?.metric2_label ?? "-"} != ${slots.carousel.slide1Metric2.label}`);
+    add(metricValue === slots.carousel.slide1Metric2.value, `carousel slide 1 metric value ${metricValue ?? "-"} != ${slots.carousel.slide1Metric2.value}`);
+    add(!/^(?:|-|null|undefined)$/i.test(String(metricValue ?? "")), "carousel slide 1 metric value is blank");
+  }
   add(carouselSlides[5]?.headline === slots.carousel?.ctaHeadline, `carousel CTA ${carouselSlides[5]?.headline ?? "-"} != ${slots.carousel?.ctaHeadline ?? "-"}`);
   if (slots.carousel?.strengthLabel) {
     add(normalizePrimaryLabel(carouselSlides[2]?.station) === normalizePrimaryLabel(slots.carousel.strengthLabel), `carousel strength ${carouselSlides[2]?.station ?? "-"} != ${slots.carousel.strengthLabel}`);

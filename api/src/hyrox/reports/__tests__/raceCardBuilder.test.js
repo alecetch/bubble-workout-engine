@@ -441,11 +441,13 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.doesNotMatch(html, /Race Split Profile &mdash; VS MEDIAN/);
   });
 
-  it("uses the Forma masthead lockup and drops the old tagline text", () => {
+  it("uses the real Forma logo image once (header only) and drops the old tagline text", () => {
     const html = buildRaceCardHtml(fixtureData());
 
-    assert.equal((html.match(/aria-label="Forma"/g) ?? []).length, 2, "expected the generated Forma SVG wordmark in both header and footer");
-    assert.ok((html.match(/font-size="2[1-9]"[^>]*>FORMA<\/text>/g) ?? []).length >= 2);
+    // The real forma-logo.png asset, not the hand-drawn SVG approximation (which had visible
+    // seams between its three polygon bars and colour-fringed text) -- and only in the header;
+    // the footer previously repeated it for no reason.
+    assert.equal((html.match(/<img src="data:image\/png;base64,[^"]+" alt="Forma"/g) ?? []).length, 1, "expected exactly one real Forma logo image (header only)");
     assert.equal(html.includes("PERFORMANCE ENGINEER"), false);
     assert.equal(html.includes("YOUR RACE"), false);
     assert.equal(html.includes("DECODED"), false);
