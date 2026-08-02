@@ -117,7 +117,10 @@ function formaLogoFallback(size) {
 }
 
 function formaLogoMark(size = 38) {
-  return formaLogoFallback(size);
+  const logoB64 = loadIconB64("forma-logo.png");
+  if (!logoB64) return formaLogoFallback(size);
+  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
+  return `<img src="${logoB64}" alt="Forma" width="${width}" height="${size}" style="display:block;width:${width}px;height:${size}px;flex-shrink:0;" />`;
 }
 
 const STATION_ARTWORK = Object.freeze({
@@ -618,7 +621,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <div class="header">
     <div class="h-left">
       <div class="logo-row">
-        ${formaLogoMark(38)}
+        ${formaLogoMark(57)}
       </div>
       <div class="t-hyrox">HYROX</div>
       <div class="t-perf">PERFORMANCE</div>
@@ -722,9 +725,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 
   <!-- ── FOOTER ── -->
   <div class="footer">
-	    <div class="f-left">
-	      ${formaLogoMark(34)}
-	    </div>
+	    <div class="f-left"></div>
 	    <div class="f-right">www.getforma.fit</div>
 	  </div>
 
