@@ -82,4 +82,23 @@ describe("buildCarouselPage", () => {
 
     assert.match(html, /background-image:\s*url\("data:image\/jpeg;base64,[A-Za-z0-9+/]{100,}={0,2}"\)/);
   });
+
+  it("shows the site URL on the CTA slide and in the A2/A5 footers, not just slide A1", () => {
+    // brand.site is substituted client-side by RENDERER_JS from window.templateAData, so
+    // buildCarouselPage()'s static HTML always carries the placeholder text -- this asserts
+    // the [data-field="brand.site"] wiring exists in the right places, not literal substitution
+    // (the actual substituted render was verified visually via the Puppeteer screenshot pipeline).
+    const html = buildCarouselPage({
+      brand: { site: "www.getforma.fit" },
+      slides: [{ athlete_name: "Alex Smith", percentile: "Alex Smith is in the Top 45%" }],
+    });
+
+    const ctaStart = html.indexOf('data-slide="A6_CTA"');
+    const ctaSection = html.slice(ctaStart, html.indexOf("</section>", ctaStart));
+    assert.match(ctaSection, /class="cta-url" data-field="brand\.site">/);
+
+    const siteFieldMatches = html.match(/data-field="brand\.site"/g) ?? [];
+    // A1 (.site), A6 (.cta-url), and the A2/A5 footers -- 4 total data-bound occurrences.
+    assert.equal(siteFieldMatches.length, 4, "expected the site URL wired on slides A1, A2, A5, and A6");
+  });
 });
