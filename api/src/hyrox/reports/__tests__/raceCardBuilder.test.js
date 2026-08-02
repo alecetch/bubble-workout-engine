@@ -473,6 +473,29 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.doesNotMatch(html, /Race Split Profile &mdash; VS MEDIAN/);
   });
 
+  it("names the specific benchmark band in the header mode subtitle instead of a bare 'BENCHMARK MEDIAN'", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      mode: "analyse",
+      targetTime: null,
+      comparisonBasis: "MEDIAN",
+      comparisonProfileLabel: "SUB 60-65 MEDIAN",
+    }));
+
+    assert.match(html, /<div class="smeta"[^>]*>60-65 BENCHMARK MEDIAN<\/div>/);
+    assert.doesNotMatch(html, />BENCHMARK MEDIAN<\/div>/, "should not fall back to the bare, bandless subtitle when a band is available");
+  });
+
+  it("falls back to a bare 'BENCHMARK MEDIAN' subtitle when no band can be resolved", () => {
+    const html = buildRaceCardHtml(fixtureData({
+      mode: "analyse",
+      targetTime: null,
+      comparisonBasis: "MEDIAN",
+      comparisonProfileLabel: null,
+    }));
+
+    assert.match(html, /<div class="smeta"[^>]*>BENCHMARK MEDIAN<\/div>/);
+  });
+
   it("uses the real Forma logo image once (header only) and drops the old tagline text", () => {
     const html = buildRaceCardHtml(fixtureData());
 

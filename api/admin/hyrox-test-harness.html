@@ -1123,28 +1123,52 @@
         if (!valid.length) { setStatus("No valid cases.", "err"); return; }
         setBusy(true);
         setStatus(`Generating race cards for ${valid.length} case(s)…`);
-        let ok = 0; let fail = 0;
-        for (const entry of valid) {
-          try {
-            const token = tokenInput.value.trim();
+        try {
+          const token = tokenInput.value.trim();
+          const bodies = valid.map((entry) => {
             const body = { url: entry.url };
             if (entry.targetTime) body.targetTime = entry.targetTime;
-            const resp = await fetch("/api/admin/hyrox/test-harness/race-card-url", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", ...(token ? { "x-internal-token": token } : {}) },
-              body: JSON.stringify({ cases: [body], useCachedData: useCachedDataOnly() }),
-            });
-            if (resp.ok) {
-              const blob = await resp.blob();
-              const blobUrl = URL.createObjectURL(blob);
-              window.open(blobUrl, "_blank");
-              setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-              ok++;
-            } else { fail++; }
-          } catch { fail++; }
+            return body;
+          });
+          // One request generates every card server-side and returns a single zip —
+          // looping fetch+window.open per case gets silently popup-blocked after the
+          // first tab, since only that first call is close enough to the click to
+          // count as user-gesture-triggered.
+          const resp = await fetch("/api/admin/hyrox/test-harness/race-card-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...(token ? { "x-internal-token": token } : {}) },
+            body: JSON.stringify({ cases: bodies, useCachedData: useCachedDataOnly() }),
+          });
+          if (!resp.ok) {
+            const errText = await readError(resp);
+            setStatus(`Race cards failed: ${errText}`, "err");
+            return;
+          }
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const filename = filenameFromDisposition(resp.headers.get("Content-Disposition"));
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename || "hyrox-race-cards.zip";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+          const failedHeader = resp.headers.get("X-Race-Cards-Failed");
+          const failed = failedHeader ? JSON.parse(decodeURIComponent(failedHeader)) : [];
+          const okCount = valid.length - failed.length;
+          setStatus(
+            failed.length
+              ? `Race cards: ${okCount} zipped, ${failed.length} failed.`
+              : `Race cards: ${okCount} zipped.`,
+            failed.length ? "err" : "ok",
+          );
+        } catch (err) {
+          setStatus(`Race cards error: ${err.message}`, "err");
+        } finally {
+          setBusy(false);
         }
-        setBusy(false);
-        setStatus(`Race cards: ${ok} opened, ${fail} failed.`, fail ? "err" : "ok");
       }
 
       importMetadataBtn.addEventListener("click", importMetadata);
