@@ -339,8 +339,9 @@ const LABEL_ROTATION_DEGREES = -90;
 // Does not touch SEGMENT_MAP, segmentKey values, or any analytics/benchmark logic.
 const RACE_CARD_SPLIT_LABELS = Object.freeze({
   burpee_broad_jump: "BBJ",
-  sandbag_lunges: "S'BAG LUNGE",
+  sandbag_lunges: "SB LUNGE",
   farmers_carry: "F. CARRY",
+  wall_balls: "W BALLS",
 });
 
 function stationLabelText(key, label) {
@@ -348,6 +349,16 @@ function stationLabelText(key, label) {
   if (mapped) return mapped;
   const words = String(label ?? "").toUpperCase().split(/\s+/);
   return words.slice(0, 3).join(" ") || "SPLIT";
+}
+
+// Formats a signed seconds value as an axis-gridline label, e.g. 90 -> "+1:30", -30 -> "-0:30", 0 -> "0:00".
+function formatAxisLabel(sec) {
+  if (sec === 0) return "0:00";
+  const sign = sec > 0 ? "+" : "-";
+  const abs = Math.abs(sec);
+  const m = Math.floor(abs / 60);
+  const s = abs % 60;
+  return `${sign}${m}:${String(s).padStart(2, "0")}`;
 }
 
 function sortedSplitRows(splitRows) {
@@ -378,7 +389,13 @@ function buildChart(splitRows) {
   // chart's own top/bottom edge, independent of the (already height-capped) bar height.
   const valueLabelEdgeClearance = 16;
 
-  const maxSec = 75;
+  // Auto-scale the axis to the actual data, snapped to 30s steps, instead of a fixed
+  // ±1:00 range — a fixed range either wastes vertical room on small gaps or clips/collides
+  // with the rotated split labels below when a gap exceeds it (e.g. a 100s+ limiter).
+  const maxAbsSec = rows.reduce((acc, row) => Math.max(acc, Math.abs(deltaToSeconds(row.delta))), 0);
+  const SCALE_STEP_SEC = 30;
+  const scaleMax = Math.max(SCALE_STEP_SEC, Math.ceil(maxAbsSec / SCALE_STEP_SEC) * SCALE_STEP_SEC);
+  const maxSec = scaleMax * 1.25; // headroom so the tallest bar and its top gridline don't touch the canvas edge
   const pxPerSec = midY / maxSec;
 
   const slotW = barW_total / n;
@@ -390,11 +407,10 @@ function buildChart(splitRows) {
 
   const p = [];
 
-  // Gridlines + y-axis labels
-  for (const { s, lbl } of [
-    { s: 60, lbl: "+1:00" }, { s: 30, lbl: "+0:30" }, { s: 0, lbl: "0:00" },
-    { s: -30, lbl: "-0:30" }, { s: -60, lbl: "-1:00" },
-  ]) {
+  // Gridlines + y-axis labels — always 5 lines (max, half, 0, -half, -max) so the axis
+  // never gets crowded, with the max snapped to the auto-scaled value above.
+  for (const s of [scaleMax, scaleMax / 2, 0, -scaleMax / 2, -scaleMax]) {
+    const lbl = formatAxisLabel(Math.round(s));
     const y = (midY - s * pxPerSec).toFixed(1);
     const isZero = s === 0;
     p.push(`<line x1="${yLW}" y1="${y}" x2="${W}" y2="${y}" stroke="${isZero ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.09)"}" stroke-width="${isZero ? 1.5 : 0.9}"/>`);
