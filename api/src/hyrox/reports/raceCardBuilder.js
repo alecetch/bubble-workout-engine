@@ -506,10 +506,15 @@ export function buildRaceCardHtml(data) {
   const basisLabel = escapeHtml(comparisonBasis || (mode === "target" ? "TARGET" : "MEDIAN"));
   const splitProfileBasisLabel = escapeHtml(comparisonProfileLabel || comparisonBasis || (mode === "target" ? "TARGET" : "MEDIAN"));
   const modeTitle = mode === "target" ? "TARGET" : "ANALYSE";
+  // Reuse the same band range already resolved for the split-profile heading ("SUB 60-65 MEDIAN")
+  // instead of a bare "BENCHMARK MEDIAN" - names which band you're being measured against.
+  const benchmarkBandRange = /^(?:SUB )?(.+?) MEDIAN$/i.exec(comparisonProfileLabel ?? "")?.[1] ?? null;
 	  const modeSubtitle = comparisonBasis === "TARGET BENCHMARK"
     ? "TARGET BENCHMARK"
     : comparisonBasis === "TARGET"
     ? "TARGET COMPARISON"
+    : benchmarkBandRange
+    ? `${benchmarkBandRange} BENCHMARK MEDIAN`
     : "BENCHMARK MEDIAN";
 	  const percentileDisplay = percentileText && confidenceQualifier
 	    ? `${percentileText} (${confidenceQualifier})`
@@ -522,10 +527,6 @@ export function buildRaceCardHtml(data) {
         : `${targetGapSigned ?? targetGapFormatted} TO TARGET`
     : "YOU'VE GOT MORE IN THE TANK.";
 
-  // Seconds-gap label for the limiter stat box.
-  const limiterGapText = biggestLimiter?.rankText
-    ? escapeHtml(biggestLimiter.rankText.toUpperCase())
-    : null;
   const secondaryPenaltyLine = fastestControllableWin
     && !biggestLimiter?.isPenalty
     && fastestControllableWin.name
@@ -707,15 +708,11 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
         <div>${hexIcon(biggestLimiter.name, "#fbbf24")}</div>
         <div class="card-info">
           <div class="card-title">${escapeHtml(biggestLimiter.name)}</div>
-	          ${(limiterGapText || biggestLimiter.potentialGain) ? `<div class="stat-row">
-	            ${limiterGapText ? `<div class="stat-box">
-	              <div class="stat-lbl">Time Gap</div>
-	              <div class="stat-val am">${limiterGapText}</div>
-	            </div>` : ""}
-	            ${biggestLimiter.potentialGain ? `<div class="stat-box">
+	          ${biggestLimiter.potentialGain ? `<div class="stat-row">
+	            <div class="stat-box">
 	              <div class="stat-lbl">${biggestLimiter.isPenalty ? "Fastest Win" : "Potential Gain"}</div>
 	              <div class="stat-val am">Up to ${escapeHtml(biggestLimiter.potentialGain)}</div>
-	            </div>` : ""}
+	            </div>
           </div>` : ""}
         </div>
       </div>
