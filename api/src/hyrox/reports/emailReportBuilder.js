@@ -1,4 +1,4 @@
-import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatTime, regionalContextLine } from "./copyFormatter.js";
+import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatPerformancePercentile, formatTime, regionalContextLine } from "./copyFormatter.js";
 import { buildHeroCopy } from "../interpretation/hyroxInterpretationEngine.js";
 import { nextPerformanceBand, PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
@@ -610,7 +610,7 @@ function renderBenchmarkLensCard(analysisJson = {}, athleteContext = {}) {
     ? approximatePercentile(userSecondsForStanding, comparisonBandStats)
     : Number(totalSeg?.percentile);
   const percentileText = Number.isFinite(percentileValue)
-    ? `${formatPercentileRank(percentileValue)} within this band`
+    ? `${formatPerformancePercentile(percentileValue)} within this band`
     : null;
   const isHighInBand = Number.isFinite(percentileValue) && percentileValue >= 80;
   const isLowSample = analysisJson.benchmarkContext?.confidenceLabel === "insufficient";
