@@ -1509,3 +1509,83 @@ test("target mode preview includes target_has_goal_benchmark_group QA flag", asy
   const goalFlag = targetMode.qaFlags.find((f) => f.name === "target_has_goal_benchmark_group");
   assert.ok(goalFlag, "target_has_goal_benchmark_group QA flag must be present to catch benchmark key mismatches");
 });
+
+test("race-card-url returns a single PNG for one case", async () => {
+  stubSuccessfulHyroxFetch();
+
+  const { response, body } = await requestBinary(
+    { cases: [{ url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" }] },
+    { path: "/api/admin/hyrox/test-harness/race-card-url" },
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /image\/png/);
+  assert.match(response.headers.get("content-disposition") ?? "", /race-card-.*\.png/);
+  assert.equal(body.subarray(1, 4).toString("ascii"), "PNG");
+});
+
+test("race-card-url returns a zip of every card when multiple cases are requested", async () => {
+  stubSuccessfulHyroxFetch();
+
+  const { response, body } = await requestBinary(
+    {
+      cases: [
+        { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" },
+        { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:20:00" },
+      ],
+    },
+    { path: "/api/admin/hyrox/test-harness/race-card-url" },
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/zip/);
+  assert.match(response.headers.get("content-disposition") ?? "", /hyrox-race-cards-pack-2-/);
+  assert.equal(body.subarray(0, 2).toString("utf8"), "PK");
+  assert.equal(response.headers.get("x-race-cards-failed"), null);
+});
+
+test("race-card-url zips the cards that succeed and reports the rest via a header when some cases fail", async () => {
+  stubMixedHyroxFetch();
+
+  const { response, body } = await requestBinary(
+    {
+      cases: [
+        { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" },
+        { url: "https://results.hyrox.com/season-8/?fail=1", targetTime: "1:15:00" },
+      ],
+    },
+    { path: "/api/admin/hyrox/test-harness/race-card-url" },
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/zip/);
+  assert.match(response.headers.get("content-disposition") ?? "", /hyrox-race-cards-pack-1-/);
+  assert.equal(body.subarray(0, 2).toString("utf8"), "PK");
+  const failedHeader = response.headers.get("x-race-cards-failed");
+  assert.ok(failedHeader, "expected a failure header when one of several cases fails");
+  const failed = JSON.parse(decodeURIComponent(failedHeader));
+  assert.equal(failed.length, 1);
+  assert.match(failed[0].url, /fail=1/);
+});
+
+test("race-card-url returns 422 when every case fails", async () => {
+  globalThis.fetch = async (url, options) => {
+    if (String(url).startsWith("http://127.0.0.1")) return nativeFetch(url, options);
+    return { ok: false, status: 503, text: async () => "unavailable" };
+  };
+
+  const { response, body } = await request(
+    {
+      cases: [
+        { url: "https://results.hyrox.com/season-8/?x=1", targetTime: "1:15:00" },
+        { url: "https://results.hyrox.com/season-8/?x=2", targetTime: "1:15:00" },
+      ],
+    },
+    { path: "/api/admin/hyrox/test-harness/race-card-url" },
+  );
+
+  assert.equal(response.status, 422);
+  assert.equal(body.error, "race_card_failed");
+  assert.equal(body.reason, "all_cases_failed");
+  assert.equal(body.failed.length, 2);
+});

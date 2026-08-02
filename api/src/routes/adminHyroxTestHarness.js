@@ -2253,6 +2253,30 @@ async function sendEmailHtmlZip(res, { filename, entries }) {
   });
 }
 
+async function generateRaceCardPngForCase(testCase, pool, cacheOnly) {
+  const hasTargetTime = hasTargetTimeInput(testCase.targetTime);
+  const targetValidation = hasTargetTime ? validateTargetTimeInput(testCase.targetTime, "targetTime") : { ok: true, seconds: null };
+  if (!targetValidation.ok) {
+    const err = new Error(targetValidation.message);
+    err.reason = "invalid_target_time";
+    throw err;
+  }
+
+  const importResult = await fetchAndParseHyroxUrl(testCase.url, pool, { cacheOnly });
+  const targetTime = targetValidation.seconds;
+  const mode = { modeName: "Race Card", calculatorMode: targetTime ? "target" : "analyse", targetFinishTimeSeconds: targetTime ?? null };
+  const modeResult = runHarnessMode(mode, importResult.parsed, importResult.event, {});
+  const athleteCtx = {
+    displayName: displayAthleteName(importResult.parsed),
+    division: importResult.parsed?.division ?? null,
+    calculatorMode: mode.calculatorMode,
+    ...(targetTime ? { targetTimeSeconds: targetTime, targetFinishTimeSeconds: targetTime } : {}),
+  };
+  const raceCardData = buildHyroxRaceCardData(modeResult.analysisJson, athleteCtx);
+  const pngBuffer = await generateRaceCardPng(raceCardData);
+  return { pngBuffer, parsed: importResult.parsed };
+}
+
 function previewMode(entry) {
   if (entry.error) {
     return {
@@ -2704,36 +2728,61 @@ export function createAdminHyroxTestHarnessRouter(pool = defaultPool) {
 
   // Race card: generate live from a URL (for test harness UI — no DB required)
   router.post("/hyrox/test-harness/race-card-url", async (req, res) => {
-    const urls = parseRequestedUrls(req.body);
-    if (!urls.length || !isValidHyroxResultsUrl(urls[0])) {
+    const cases = parseRequestedCases(req.body);
+    if (!cases.length || !cases.every((testCase) => isValidHyroxResultsUrl(testCase.url))) {
       return res.status(400).json({ error: "invalid_url" });
     }
-    try {
-      const rawTargetTime = req.body?.targetTime;
-      const hasTargetTime = hasTargetTimeInput(rawTargetTime);
-      const targetValidation = hasTargetTime ? validateTargetTimeInput(rawTargetTime, "targetTime") : { ok: true, seconds: null };
-      if (!targetValidation.ok) {
-        return res.status(400).json({ error: "invalid_target_time", message: targetValidation.message });
-      }
+    const cacheOnly = req.body?.useCachedData === true;
 
-      const importResult = await fetchAndParseHyroxUrl(urls[0], pool, { cacheOnly: req.body?.useCachedData === true });
-      const targetTime = targetValidation.seconds;
-      const mode = { modeName: "Race Card", calculatorMode: targetTime ? "target" : "analyse", targetFinishTimeSeconds: targetTime ?? null };
-      const modeResult = runHarnessMode(mode, importResult.parsed, importResult.event, {});
-      const athleteCtx = {
-        displayName: displayAthleteName(importResult.parsed),
-        division: importResult.parsed?.division ?? null,
-        calculatorMode: mode.calculatorMode,
-        ...(targetTime ? { targetTimeSeconds: targetTime, targetFinishTimeSeconds: targetTime } : {}),
-      };
-      const raceCardData = buildHyroxRaceCardData(modeResult.analysisJson, athleteCtx);
-      const pngBuffer = await generateRaceCardPng(raceCardData);
-      res.set("Content-Type", "image/png");
-      res.set("Cache-Control", "no-store");
-      return res.send(pngBuffer);
-    } catch (error) {
-      return res.status(422).json({ error: "race_card_failed", reason: error.reason ?? error.message ?? "unknown" });
+    if (cases.length === 1) {
+      try {
+        const { pngBuffer, parsed } = await generateRaceCardPngForCase(cases[0], pool, cacheOnly);
+        res.set("Content-Type", "image/png");
+        res.set("Cache-Control", "no-store");
+        res.set("Content-Disposition", `attachment; filename="race-card-${nameSlug(displayAthleteName(parsed))}.png"`);
+        return res.send(pngBuffer);
+      } catch (error) {
+        return res.status(422).json({ error: "race_card_failed", reason: error.reason ?? error.message ?? "unknown" });
+      }
     }
+
+    // Multiple cases: generate every card server-side and return one zip download —
+    // looping window.open() per case in the browser gets silently popup-blocked after
+    // the first tab, since only the click-adjacent call counts as user-gesture-triggered.
+    const succeeded = [];
+    const failed = [];
+    for (const testCase of cases) {
+      try {
+        const { pngBuffer, parsed } = await generateRaceCardPngForCase(testCase, pool, cacheOnly);
+        succeeded.push({ pngBuffer, parsed });
+      } catch (error) {
+        failed.push({ url: testCase.url, reason: error.reason ?? error.message ?? "unknown" });
+      }
+    }
+
+    if (!succeeded.length) {
+      return res.status(422).json({ error: "race_card_failed", reason: "all_cases_failed", failed });
+    }
+
+    const filename = `hyrox-race-cards-pack-${succeeded.length}-${localTimestampSlug()}.zip`;
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "no-store");
+    if (failed.length) {
+      res.setHeader("X-Race-Cards-Failed", encodeURIComponent(JSON.stringify(failed)));
+    }
+
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    archive.pipe(res);
+    succeeded.forEach((entry, index) => {
+      const name = `race-card-${String(index + 1).padStart(2, "0")}-${nameSlug(displayAthleteName(entry.parsed))}.png`;
+      archive.append(entry.pngBuffer, { name });
+    });
+    await new Promise((resolve, reject) => {
+      archive.on("error", reject);
+      res.on("close", resolve);
+      archive.finalize().catch(reject);
+    });
   });
 
   return router;
