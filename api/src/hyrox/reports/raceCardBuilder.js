@@ -506,10 +506,15 @@ export function buildRaceCardHtml(data) {
   const basisLabel = escapeHtml(comparisonBasis || (mode === "target" ? "TARGET" : "MEDIAN"));
   const splitProfileBasisLabel = escapeHtml(comparisonProfileLabel || comparisonBasis || (mode === "target" ? "TARGET" : "MEDIAN"));
   const modeTitle = mode === "target" ? "TARGET" : "ANALYSE";
+  // Reuse the same band range already resolved for the split-profile heading ("SUB 60-65 MEDIAN")
+  // instead of a bare "BENCHMARK MEDIAN" - names which band you're being measured against.
+  const benchmarkBandRange = /^(?:SUB )?(.+?) MEDIAN$/i.exec(comparisonProfileLabel ?? "")?.[1] ?? null;
 	  const modeSubtitle = comparisonBasis === "TARGET BENCHMARK"
     ? "TARGET BENCHMARK"
     : comparisonBasis === "TARGET"
     ? "TARGET COMPARISON"
+    : benchmarkBandRange
+    ? `${benchmarkBandRange} BENCHMARK MEDIAN`
     : "BENCHMARK MEDIAN";
 	  const percentileDisplay = percentileText && confidenceQualifier
 	    ? `${percentileText} (${confidenceQualifier})`
