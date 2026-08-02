@@ -15,6 +15,7 @@ RUN apt-get update \
     libxfixes3 \
     libxkbcommon0 \
     libxrandr2 \
+    fonts-noto-cjk \
   && rm -rf /var/lib/apt/lists/*
 
 # Download Puppeteer's own Chrome for Linux at image build time.
