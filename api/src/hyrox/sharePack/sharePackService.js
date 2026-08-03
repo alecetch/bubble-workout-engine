@@ -10,7 +10,7 @@ import { buildHyroxRaceCardData } from "../reports/raceCardDataMapper.js";
 import { buildHyroxReportContract } from "../reports/reportContractBuilder.js";
 import { buildZip } from "./zipBuilder.js";
 import { SLIDE_FILENAMES } from "./slideAssets.js";
-import { putObject, getPresignedUrl } from "../../services/s3Service.js";
+import { putObject, getPresignedUrl, getObject } from "../../services/s3Service.js";
 
 export const SHARE_PACK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -37,6 +37,23 @@ function athleteContext(row = {}, storedCarousel = null) {
   };
 }
 
+export async function screenshotSlidesWithRetry(html, { attempts = 2, render = screenshotSlides } = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await render(html);
+    } catch (err) {
+      lastErr = err;
+      // eslint-disable-next-line no-console
+      console.error(`[sharePackService] Slide screenshot attempt ${attempt}/${attempts} failed:`, err?.message);
+    }
+  }
+  throw Object.assign(
+    new Error(`Slide rendering failed after ${attempts} attempt(s): ${lastErr?.message}`),
+    { status: 502, cause: lastErr },
+  );
+}
+
 function resolveShareCarousel(row = {}, contract = null) {
   const analysisJson = objectOrNull(row.analysis_json);
   if (analysisJson && analysisJson.analysisScope !== "no_benchmark_data") {
@@ -47,16 +64,7 @@ function resolveShareCarousel(row = {}, contract = null) {
   return resolveCarouselData(row.carousel_a_json);
 }
 
-export async function getOrCreateSharePack(submissionId, db = pool) {
-  const existing = await db.query(
-    `SELECT * FROM hyrox_share_packs
-     WHERE submission_id = $1
-       AND (expires_at IS NULL OR expires_at > NOW())
-     ORDER BY created_at DESC LIMIT 1`,
-    [submissionId],
-  );
-  if (existing.rows[0]) return existing.rows[0];
-
+async function fetchSubmissionAnalysisRow(submissionId, db) {
   const dataRow = await db.query(
     `SELECT a.carousel_a_json,
             a.analysis_json,
@@ -72,7 +80,79 @@ export async function getOrCreateSharePack(submissionId, db = pool) {
      WHERE a.submission_id = $1 LIMIT 1`,
     [submissionId],
   );
-  const row = dataRow.rows[0];
+  return dataRow.rows[0] ?? null;
+}
+
+// Contract-aware race-card renderer shared by the full share-pack build and the standalone
+// race-card cache, so both endpoints render an identical card for the same submission.
+async function renderRaceCardBuffer(row) {
+  const rawAnalysisJson = objectOrNull(row.analysis_json);
+  if (!rawAnalysisJson) return null;
+  const ctx = athleteContext(row, row.carousel_a_json);
+  const rawInsights = Array.isArray(row.selected_insights_json) ? row.selected_insights_json : [];
+  const insights = resolveConflicts(rankInsightsForOutput(rawInsights, "carousel_a"), "carousel_a");
+  const contract = buildHyroxReportContract({ analysisJson: rawAnalysisJson, athleteContext: ctx, calculatorMode: row.calculator_mode, insights });
+  const raceCardData = buildHyroxRaceCardData(rawAnalysisJson, ctx, contract);
+  return generateRaceCardPng(raceCardData);
+}
+
+async function findCachedRaceCardKey(submissionId, db) {
+  const cached = await db.query(
+    `SELECT race_card_key FROM hyrox_share_packs
+     WHERE submission_id = $1 AND race_card_key IS NOT NULL
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY created_at DESC LIMIT 1`,
+    [submissionId],
+  );
+  return cached.rows[0]?.race_card_key ?? null;
+}
+
+// Caches just the race card (no ZIP/slides) so the standalone race-card endpoint doesn't have to
+// launch Puppeteer on every request. Reuses the same S3 key convention and hyrox_share_packs TTL
+// row shape as getOrCreateSharePack, so a later full-pack request can reuse whichever was built first.
+// `deps` overrides are injection points for unit tests only — real callers use the module defaults.
+export async function getOrCreateRaceCard(submissionId, db = pool, deps = {}) {
+  const putObjectFn = deps.putObject ?? putObject;
+  const renderRaceCard = deps.renderRaceCardBuffer ?? renderRaceCardBuffer;
+
+  const cachedKey = await findCachedRaceCardKey(submissionId, db);
+  if (cachedKey) return { raceCardKey: cachedKey, buffer: null };
+
+  const row = await fetchSubmissionAnalysisRow(submissionId, db);
+  if (!row) throw Object.assign(new Error("Submission not found"), { status: 404 });
+
+  const buffer = await renderRaceCard(row);
+  if (!buffer) throw Object.assign(new Error("Race card not available for this submission"), { status: 404 });
+
+  const raceCardKey = `hyrox-share-packs/${submissionId}/race-card.png`;
+  await putObjectFn(raceCardKey, buffer, "image/png");
+
+  const expiresAt = new Date(Date.now() + SHARE_PACK_TTL_SECONDS * 1000).toISOString();
+  await db.query(
+    `INSERT INTO hyrox_share_packs (submission_id, race_card_key, expires_at)
+     VALUES ($1, $2, $3)`,
+    [submissionId, raceCardKey, expiresAt],
+  );
+
+  return { raceCardKey, buffer };
+}
+
+export async function getOrCreateSharePack(submissionId, db = pool, deps = {}) {
+  const putObjectFn = deps.putObject ?? putObject;
+  const getObjectFn = deps.getObject ?? getObject;
+  const renderSlides = deps.screenshotSlides ?? screenshotSlides;
+  const renderRaceCard = deps.renderRaceCardBuffer ?? renderRaceCardBuffer;
+
+  const existing = await db.query(
+    `SELECT * FROM hyrox_share_packs
+     WHERE submission_id = $1 AND zip_key IS NOT NULL
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY created_at DESC LIMIT 1`,
+    [submissionId],
+  );
+  if (existing.rows[0]) return existing.rows[0];
+
+  const row = await fetchSubmissionAnalysisRow(submissionId, db);
   if (!row) throw Object.assign(new Error("Submission not found"), { status: 404 });
 
   const rawAnalysisJson = objectOrNull(row.analysis_json);
@@ -92,23 +172,32 @@ export async function getOrCreateSharePack(submissionId, db = pool) {
   });
 
   const html = buildCarouselPage(carouselData);
-  const slideBuffers = await screenshotSlides(html);
+  const slideBuffers = await screenshotSlidesWithRetry(html, { render: renderSlides });
   if (slideBuffers.length !== SLIDE_FILENAMES.length) {
     throw new Error(`Expected ${SLIDE_FILENAMES.length} slides, received ${slideBuffers.length}`);
   }
 
   const slidePrefix = `hyrox-share-packs/${submissionId}/`;
   await Promise.all(
-    slideBuffers.map((buf, index) => putObject(`${slidePrefix}${SLIDE_FILENAMES[index]}`, buf, "image/png")),
+    slideBuffers.map((buf, index) => putObjectFn(`${slidePrefix}${SLIDE_FILENAMES[index]}`, buf, "image/png")),
   );
 
-  // Generate race card PNG; failure must not block the ZIP delivery
+  // Generate race card PNG; failure must not block the ZIP delivery. Reuse an already-cached
+  // race card (e.g. from a prior standalone preview request) instead of re-rendering when one exists.
   let raceCardBuffer = null;
+  let raceCardKey = null;
   try {
-    if (rawAnalysisJson) {
-      const raceCardData = buildHyroxRaceCardData(analysisJson, ctx, contract);
-      raceCardBuffer = await generateRaceCardPng(raceCardData);
-      await putObject(`${slidePrefix}race-card.png`, raceCardBuffer, "image/png");
+    raceCardKey = await findCachedRaceCardKey(submissionId, db);
+    if (raceCardKey) {
+      // Fetch the already-rendered bytes instead of relaunching Puppeteer — the ZIP still needs
+      // the actual buffer, just not a fresh render.
+      raceCardBuffer = await getObjectFn(raceCardKey);
+    } else if (rawAnalysisJson) {
+      raceCardBuffer = await renderRaceCard(row);
+      if (raceCardBuffer) {
+        raceCardKey = `${slidePrefix}race-card.png`;
+        await putObjectFn(raceCardKey, raceCardBuffer, "image/png");
+      }
     }
   } catch (raceCardErr) {
     // eslint-disable-next-line no-console
@@ -120,14 +209,14 @@ export async function getOrCreateSharePack(submissionId, db = pool) {
   const eventSlug = toSlug(row.race_name);
   const zipFilename = `forma-hyrox-${athleteSlug}-${eventSlug}.zip`;
   const zipKey = `${slidePrefix}${zipFilename}`;
-  await putObject(zipKey, zipBuffer, "application/zip");
+  await putObjectFn(zipKey, zipBuffer, "application/zip");
 
   const expiresAt = new Date(Date.now() + SHARE_PACK_TTL_SECONDS * 1000).toISOString();
   const inserted = await db.query(
-    `INSERT INTO hyrox_share_packs (submission_id, zip_key, caption, expires_at)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO hyrox_share_packs (submission_id, zip_key, race_card_key, caption, expires_at)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [submissionId, zipKey, caption, expiresAt],
+    [submissionId, zipKey, raceCardKey, caption, expiresAt],
   );
   return inserted.rows[0];
 }
