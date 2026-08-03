@@ -8,7 +8,7 @@ import { SecondaryButton } from "../../components/SecondaryButton";
 import { Shell } from "../../components/Shell";
 import type { HyroxPredictionResponse, PredictedSegment } from "../../types";
 import { trackEvent } from "../../utils/api";
-import { clearPredictorDraft } from "../../utils/predictorStorage";
+import { clearLastPrediction, clearPredictorDraft, loadLastPrediction } from "../../utils/predictorStorage";
 import { formatSeconds } from "../../utils/time";
 import styles from "./PredictorPages.module.css";
 
@@ -19,7 +19,8 @@ function capitalise(value: string): string {
 export function PredictorResultPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const prediction = (location.state as { prediction?: HyroxPredictionResponse } | null)?.prediction;
+  const statePrediction = (location.state as { prediction?: HyroxPredictionResponse } | null)?.prediction;
+  const prediction = statePrediction ?? loadLastPrediction();
 
   if (!prediction) {
     return <Navigate to="/hyrox-predictor" replace />;
@@ -31,6 +32,7 @@ export function PredictorResultPage() {
 
   function handleNewPrediction() {
     clearPredictorDraft();
+    clearLastPrediction();
     void navigate("/hyrox-predictor");
   }
 

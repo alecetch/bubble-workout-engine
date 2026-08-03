@@ -1,8 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PredictorResultPage } from "../pages/predictor/PredictorResultPage";
 import type { HyroxPredictionResponse } from "../types";
+import { saveLastPrediction } from "../utils/predictorStorage";
 
 const prediction: HyroxPredictionResponse = {
   predictionId: "pred-1",
@@ -48,6 +49,10 @@ function renderResult(state?: unknown) {
 }
 
 describe("PredictorResultPage", () => {
+  afterEach(() => {
+    sessionStorage.clear();
+  });
+
   test("renders the predicted time, range, confidence, limiters, and target comparison", () => {
     renderResult({ prediction });
 
@@ -72,5 +77,14 @@ describe("PredictorResultPage", () => {
     renderResult();
 
     expect(screen.getByText("Predictor start")).toBeInTheDocument();
+  });
+
+  test("falls back to a cached prediction in sessionStorage when route state is missing", () => {
+    saveLastPrediction(prediction);
+
+    renderResult();
+
+    expect(screen.getAllByText("1:30:00").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Predictor start")).not.toBeInTheDocument();
   });
 });

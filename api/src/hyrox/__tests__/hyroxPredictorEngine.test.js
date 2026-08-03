@@ -19,10 +19,10 @@ function minimal(overrides = {}) {
   };
 }
 
-test("confidence score base case labels good with bodyweight", () => {
+test("confidence score caps at 0.64 without race history, even with bodyweight", () => {
   const result = runPredictionEngine(minimal());
-  assert.equal(result.confidenceScore, 0.68);
-  assert.equal(result.confidenceLabel, "good");
+  assert.equal(result.confidenceScore, 0.64);
+  assert.equal(result.confidenceLabel, "moderate");
 });
 
 test("confidence score caps at 0.90", () => {
@@ -43,6 +43,36 @@ test("confidence score caps at 0.90", () => {
   }));
   assert.equal(result.confidenceScore, 0.9);
   assert.equal(result.confidenceLabel, "high");
+});
+
+test("a well-instrumented first-timer caps below good/high without race history", () => {
+  const result = runPredictionEngine(minimal({
+    benchmarks: {
+      run10kSeconds: 2520,
+      rowErg2kSeconds: 430,
+      skiErg1kSeconds: 250,
+      wallBallRepsIn2Min: 55,
+      farmerCarryTimeSeconds: 140,
+    },
+    context: {
+      trainingFrequency: "6+",
+      primaryBackground: "endurance",
+      weeklyRunningKm: "45+",
+    },
+  }));
+
+  assert.equal(result.confidenceScore, 0.64);
+  assert.equal(result.confidenceLabel, "moderate");
+  assert.equal(result.predictionMode, "better");
+});
+
+test("race history can exceed the first-timer confidence ceiling", () => {
+  assert.ok(calculateConfidenceScore({
+    previousHyroxSeconds: 5400,
+    run5kSeconds: 1200,
+    backSquat3RM: 120,
+    deadlift3RM: 150,
+  }) > 0.64);
 });
 
 test("run pace uses endurance background and 30-45 km/week", () => {
@@ -131,7 +161,7 @@ test("height has zero effect on prediction output", () => {
 });
 
 test("confidence score bumps exactly 0.05 with bodyweight", () => {
-  const benchmarks = { run5kSeconds: 1200, backSquat3RM: 120, deadlift3RM: 150 };
+  const benchmarks = { run5kSeconds: 1200, backSquat3RM: 120, deadlift3RM: 150, previousHyroxSeconds: 5400 };
   const delta = calculateConfidenceScore({ ...benchmarks, bodyweightKg: 80 }) - calculateConfidenceScore(benchmarks);
   assert.equal(Number(delta.toFixed(2)), 0.05);
 });
