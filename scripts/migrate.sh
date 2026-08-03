@@ -75,4 +75,8 @@ docker run "${FLYWAY_COMMON_ARGS[@]}" repair
 # causing the migrate container to get an EOF on connect. A short pause lets it settle.
 sleep 3
 
-docker run "${FLYWAY_COMMON_ARGS[@]}" migrate
+# outOfOrder=true: multiple PRs/migrations are often in flight in parallel here, so a
+# later-merged PR's migration can reach production before an earlier-merged PR's lower-
+# numbered one (e.g. a deploy blocked on an unrelated CI gate). Without this, Flyway
+# refuses to apply the lower-numbered migration once a higher one is already recorded.
+docker run "${FLYWAY_COMMON_ARGS[@]}" -outOfOrder=true migrate
