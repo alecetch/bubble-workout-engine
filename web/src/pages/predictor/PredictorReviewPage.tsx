@@ -58,6 +58,7 @@ export function PredictorReviewPage() {
   const honeypotRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState(draft.athlete.email ?? "");
   const [marketingConsent, setMarketingConsent] = useState(draft.marketingConsent);
+  const [researchConsent, setResearchConsent] = useState(draft.researchConsent);
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -87,11 +88,12 @@ export function PredictorReviewPage() {
       context: draft.context,
       race: draft.race,
       marketingConsent,
+      researchConsent,
       website: "",
     };
 
     try {
-      savePredictorDraft({ athlete: { ...draft.athlete, email: email.trim() }, marketingConsent });
+      savePredictorDraft({ athlete: { ...draft.athlete, email: email.trim() }, marketingConsent, researchConsent });
       const response = await submitHyroxPrediction(payload);
       clearPredictorDraft();
       void navigate("/hyrox-predictor/result", { state: { prediction: response } });
@@ -153,7 +155,11 @@ export function PredictorReviewPage() {
                 <input type="checkbox" checked={marketingConsent} onChange={(event) => setMarketingConsent(event.target.checked)} />
                 <span>Send me HYROX training updates and related Forma emails.</span>
               </label>
-              <PrivacyNotice text="Your inputs are used to generate this prediction. You can unsubscribe from emails at any time." />
+              <label className={`${styles.checkRow} ${styles.checkbox}`}>
+                <input type="checkbox" checked={researchConsent} onChange={(event) => setResearchConsent(event.target.checked)} />
+                <span>Help improve future HYROX predictions by keeping my answers.</span>
+              </label>
+              <PrivacyNotice text="Your inputs are used to generate this prediction, and we'll email you your result. You can unsubscribe from emails at any time." />
               <PrimaryButton type="button" fullWidth loading={loading} disabled={!emailIsValid || loading} onClick={() => void handleSubmit()}>
                 Get prediction
               </PrimaryButton>

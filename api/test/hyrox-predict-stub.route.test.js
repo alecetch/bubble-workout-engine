@@ -6,6 +6,16 @@ import { predict } from "../src/hyrox/hyroxPredictController.js";
 function buildApp() {
   const app = express();
   app.use(express.json());
+  app.locals.hyroxPredictorPool = {
+    async query(sql, params = []) {
+      if (/INSERT INTO hyrox_predictor_submissions/i.test(sql)) return { rows: [{ id: "sub-1", email: params[0] }], rowCount: 1 };
+      if (/INSERT INTO hyrox_predictions/i.test(sql)) return { rows: [{ id: "pred-1", predictor_submission_id: params[0] }], rowCount: 1 };
+      if (/INSERT INTO hyrox_predictor_email_log/i.test(sql)) return { rows: [{ id: "log-1" }], rowCount: 1 };
+      if (/UPDATE hyrox_predictor_email_log/i.test(sql)) return { rows: [], rowCount: 1 };
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+  app.locals.hyroxPredictorEmailSender = async () => undefined;
   app.post("/api/hyrox/predict", predict);
   return app;
 }
