@@ -186,6 +186,16 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(header, /aria-label="FORMA SCORE 72"/);
   });
 
+  it("does not show a composite-score caption when formaScoreBasis is percentile or omitted", () => {
+    const html = buildRaceCardHtml(fixtureData());
+    assert.doesNotMatch(html, /Composite training score/);
+  });
+
+  it("shows a composite-score caption when formaScoreBasis is composite", () => {
+    const html = buildRaceCardHtml(fixtureData({ formaScoreBasis: "composite" }));
+    assert.match(html, /Composite training score/);
+  });
+
   it("renders the strongest station card with a bundled image icon", () => {
     const html = buildRaceCardHtml(fixtureData({ strongestStation: { name: "Sled Pull", percentile: "Ahead by 0:18" } }));
     const card = sectionBetween(html, "Strongest Station", "KEEP LEVERAGING THIS STRENGTH");

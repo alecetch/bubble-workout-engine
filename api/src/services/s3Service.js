@@ -56,6 +56,15 @@ export async function putObject(key, buffer, contentType, bucket = DEFAULT_BUCKE
   return key;
 }
 
+export async function getObject(key, bucket = DEFAULT_BUCKET) {
+  const result = await getClient().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const chunks = [];
+  for await (const chunk of result.Body) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 export async function deleteObject(key, bucket = DEFAULT_BUCKET) {
   await getClient().send(
     new DeleteObjectCommand({ Bucket: bucket, Key: key }),

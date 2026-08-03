@@ -91,6 +91,14 @@ test("POST /api/hyrox/share-pack/:submissionId returns 404 for unknown submissio
   assert.equal(response.status, 404);
 });
 
+test("POST /api/hyrox/share-pack/:submissionId returns 502 when slide rendering exhausts retries", async () => {
+  const createPack = async () => {
+    throw Object.assign(new Error("Slide rendering failed after 2 attempt(s): boom"), { status: 502 });
+  };
+  const { response } = await request(buildApp({ createPack }), `/api/hyrox/share-pack/${SUBMISSION_ID}`, { method: "POST" });
+  assert.equal(response.status, 502);
+});
+
 test("POST /api/hyrox/share-pack/:submissionId/email sends email", async () => {
   const { response, body } = await request(buildApp(), `/api/hyrox/share-pack/${SUBMISSION_ID}/email`, {
     method: "POST",

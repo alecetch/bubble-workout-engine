@@ -1,66 +1,24 @@
 import { pool } from "../db.js";
-import { buildHyroxRaceCardData } from "./reports/raceCardDataMapper.js";
-import { generateRaceCardPng } from "./sharePack/raceCardScreenshotter.js";
-
-const DB_QUERY = `
-  SELECT
-    a.analysis_json,
-    s.display_name,
-    s.division,
-    s.calculator_mode,
-    s.athlete_context_json,
-    s.performance_context_json
-  FROM hyrox_analyses a
-  LEFT JOIN hyrox_submissions s ON s.id = a.submission_id
-  WHERE a.submission_id = $1
-  LIMIT 1
-`;
-
-function buildAthleteContext(row) {
-  const ctx = Object.assign(
-    {},
-    row.athlete_context_json && typeof row.athlete_context_json === "object"
-      ? row.athlete_context_json
-      : {},
-    row.performance_context_json && typeof row.performance_context_json === "object"
-      ? row.performance_context_json
-      : {},
-  );
-  if (row.display_name) ctx.displayName = row.display_name;
-  if (row.division) ctx.division = row.division;
-  return ctx;
-}
+import { getOrCreateRaceCard as getOrCreateRaceCardDefault } from "./sharePack/sharePackService.js";
+import { getObject as getObjectDefault } from "../services/s3Service.js";
 
 export function createHyroxRaceCardHandler(db = pool, deps = {}) {
-  const { generatePng = generateRaceCardPng } = deps;
+  const getOrCreateRaceCard = deps.getOrCreateRaceCard ?? getOrCreateRaceCardDefault;
+  const getObject = deps.getObject ?? getObjectDefault;
 
   return async function hyroxRaceCardHandler(req, res) {
     const { submissionId } = req.params;
     const { download } = req.query;
 
-    let row;
+    let raceCardKey;
+    let buffer;
     try {
-      const result = await db.query(DB_QUERY, [submissionId]);
-      row = result.rows[0];
-    } catch (err) {
-      req.log?.error?.({ event: "hyrox.race_card_db_failed", err: err?.message });
-      return res.status(500).send("Database error.");
-    }
-
-    if (!row || !row.analysis_json) {
-      return res.status(404).send("Race card not found.");
-    }
-
-    let pngBuffer;
-    try {
-      const raceCardData = buildHyroxRaceCardData(
-        row.analysis_json,
-        buildAthleteContext(row),
-      );
-      pngBuffer = await generatePng(raceCardData);
+      ({ raceCardKey, buffer } = await getOrCreateRaceCard(submissionId, db));
+      if (!buffer) buffer = await getObject(raceCardKey);
     } catch (err) {
       req.log?.error?.({ event: "hyrox.race_card_generation_failed", err: err?.message });
-      return res.status(500).send("Race card generation failed.");
+      const status = err.status ?? 500;
+      return res.status(status).send(status === 404 ? "Race card not found." : "Race card generation failed.");
     }
 
     res.set("Content-Type", "image/png");
@@ -68,7 +26,7 @@ export function createHyroxRaceCardHandler(db = pool, deps = {}) {
     if (download === "1") {
       res.set("Content-Disposition", 'attachment; filename="race-card.png"');
     }
-    return res.send(pngBuffer);
+    return res.send(buffer);
   };
 }
 
