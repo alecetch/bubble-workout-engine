@@ -92,8 +92,14 @@ export function calculateConfidenceScore(benchmarks = {}, context = {}) {
   if (context.trainingFrequency) score += 0.03;
   if (context.primaryBackground) score += 0.04;
   if (context.weeklyRunningKm) score += 0.04;
-  if (benchmarks.previousHyroxSeconds) score += 0.10;
-  return Math.min(0.9, Number(score.toFixed(2)));
+
+  const hasRaceHistory = Boolean(benchmarks.previousHyroxSeconds);
+  if (hasRaceHistory) score += 0.10;
+
+  // First-timer predictions should stay below the good/high confidence labels because proxy
+  // benchmarks cannot fully substitute for an actual HYROX result.
+  const ceiling = hasRaceHistory ? 0.9 : 0.64;
+  return Math.min(ceiling, Number(score.toFixed(2)));
 }
 
 export function labelForScore(score) {

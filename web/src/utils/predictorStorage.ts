@@ -1,6 +1,7 @@
-import type { HyroxPredictorDraft } from "../types";
+import type { HyroxPredictionResponse, HyroxPredictorDraft } from "../types";
 
 const DRAFT_KEY = "forma.hyroxPredictorDraft";
+const RESULT_KEY = "forma.hyroxPredictorResult";
 
 const EMPTY_DRAFT: HyroxPredictorDraft = {
   athlete: { sex: "male", division: "open" },
@@ -40,6 +41,31 @@ export function savePredictorDraft(draft: Partial<HyroxPredictorDraft>): void {
 export function clearPredictorDraft(): void {
   try {
     localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function saveLastPrediction(prediction: HyroxPredictionResponse): void {
+  try {
+    sessionStorage.setItem(RESULT_KEY, JSON.stringify(prediction));
+  } catch {
+    // storage unavailable - best-effort
+  }
+}
+
+export function loadLastPrediction(): HyroxPredictionResponse | null {
+  try {
+    const raw = sessionStorage.getItem(RESULT_KEY);
+    return raw ? (JSON.parse(raw) as HyroxPredictionResponse) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearLastPrediction(): void {
+  try {
+    sessionStorage.removeItem(RESULT_KEY);
   } catch {
     // ignore
   }

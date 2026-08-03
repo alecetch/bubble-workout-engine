@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assembleReport } from "../../src/hyrox/reports/reportAssembler.js";
+import { buildHyroxReportContract } from "../../src/hyrox/reports/reportContractBuilder.js";
+import { buildPersonalReport } from "../../src/hyrox/reports/personalReportBuilder.js";
 import { buildRecommendations } from "../../src/hyrox/reports/recommendationBuilder.js";
 import { buildTemplateB } from "../../src/hyrox/reports/templateSlotMapper.js";
 import { generateInsights } from "../../src/hyrox/insights/insightEngine.js";
@@ -185,4 +187,76 @@ test("A5 hidden insight uses time-gap language when no position delta data avail
   const a = analysis();
   const report = assembleReport({ analysisJson: a, insights: insights(a), outputType: "carousel_a", athleteContext: { displayName: "Daniel" } });
   assert.ok(report.slides[4].loss_text.includes("potential gain"));
+});
+
+test("personal report background section agrees with gap reconciliation category", () => {
+  const base = analysis();
+  const total = station({
+    segmentKey: "total_time",
+    label: "Total time",
+    type: "aggregate",
+    userSeconds: 4800,
+    benchmarkMedianSeconds: 4500,
+    frameGapSeconds: 300,
+    timeGapToMedianSeconds: 300,
+    percentile: 42,
+  });
+  const runTotal = station({
+    segmentKey: "run_time",
+    label: "Run Total",
+    type: "aggregate",
+    userSeconds: 2400,
+    benchmarkMedianSeconds: 2400,
+    frameGapSeconds: 0,
+    timeGapToMedianSeconds: 0,
+    percentile: 55,
+  });
+  const stationTotal = station({
+    segmentKey: "work_time",
+    label: "Station Total",
+    type: "aggregate",
+    userSeconds: 2100,
+    benchmarkMedianSeconds: 1860,
+    frameGapSeconds: 240,
+    timeGapToMedianSeconds: 240,
+    percentile: 28,
+  });
+  const roxzoneTotal = station({
+    segmentKey: "roxzone_time",
+    label: "RoxZone",
+    type: "aggregate",
+    userSeconds: 300,
+    benchmarkMedianSeconds: 240,
+    frameGapSeconds: 60,
+    timeGapToMedianSeconds: 60,
+    percentile: 40,
+  });
+  const a = {
+    ...base,
+    race: { ...base.race, finishTimeSeconds: 4800 },
+    headline: {
+      ...base.headline,
+      biggestLimiter: { segmentKey: "run_6", label: "Run 6", type: "run", timeGapSeconds: 90, percentile: 30 },
+      headlineGainSeconds: 90,
+    },
+    limiters: [{ segmentKey: "run_6", label: "Run 6", type: "run", timeGapSeconds: 90, percentile: 30, confidence: "high" }],
+    timePotential: { ...base.timePotential, headlineGainSeconds: 90 },
+    segments: [
+      ...base.segments.filter((row) => !["total_time", "run_time", "work_time", "roxzone_time"].includes(row.segmentKey)),
+      station({ segmentKey: "run_6", label: "Run 6", type: "run", userSeconds: 390, benchmarkMedianSeconds: 300, timeGapToMedianSeconds: 90, percentile: 30 }),
+      total,
+      runTotal,
+      stationTotal,
+      roxzoneTotal,
+    ],
+  };
+  const athleteContext = { primaryBackground: "crossfit_hybrid", division: "open" };
+  const contract = buildHyroxReportContract({ analysisJson: a, athleteContext, calculatorMode: "analyse", insights: [] });
+  const personal = buildPersonalReport(a, [], athleteContext, null, "analyse", contract);
+  const background = personal.sections.find((section) => section.sectionKey === "athlete_background");
+
+  assert.equal(contract.gapReconciliation.largestCategory.key, "work_time");
+  assert.match(contract.gapReconciliation.summarySentence, /Station performance|Stations/);
+  assert.match(background.content, /sustain station output/);
+  assert.equal(/gap is in the running/i.test(background.content), false);
 });

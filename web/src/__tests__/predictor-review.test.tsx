@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PredictorReviewPage } from "../pages/predictor/PredictorReviewPage";
 import { PredictorResultPage } from "../pages/predictor/PredictorResultPage";
-import { clearPredictorDraft, savePredictorDraft } from "../utils/predictorStorage";
+import { clearLastPrediction, clearPredictorDraft, savePredictorDraft } from "../utils/predictorStorage";
 import { submitHyroxPrediction, ValidationError } from "../utils/api";
 
 vi.mock("../utils/api", async (importOriginal) => {
@@ -28,6 +28,7 @@ function seedDraft() {
 describe("PredictorReviewPage", () => {
   beforeEach(() => {
     clearPredictorDraft();
+    clearLastPrediction();
     seedDraft();
     mockSubmit.mockReset();
   });
@@ -80,6 +81,7 @@ describe("PredictorReviewPage", () => {
       marketingConsent: false,
       website: "",
     }));
+    expect(sessionStorage.getItem("forma.hyroxPredictorResult")).not.toBeNull();
     expect(await screen.findByText("Your HYROX Prediction")).toBeInTheDocument();
   });
 

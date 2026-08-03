@@ -37,7 +37,7 @@ const BACKGROUND_COPY = Object.freeze({
 
 const RECOGNISED_BACKGROUNDS = Object.freeze(Object.keys(BACKGROUND_COPY));
 
-export function buildBackgroundSection(analysisJson = {}, athleteContext = {}) {
+export function buildBackgroundSection(analysisJson = {}, athleteContext = {}, contract = null) {
   const background = athleteContext.primaryBackground ?? null;
   if (!RECOGNISED_BACKGROUNDS.includes(background)) return null;
 
@@ -46,8 +46,13 @@ export function buildBackgroundSection(analysisJson = {}, athleteContext = {}) {
   const hasStationBreakdownData = Array.isArray(analysisJson.stationBreakdown);
   const hasStationEvidence = (analysisJson.stationBreakdown ?? [])
     .some((s) => s.confidence !== "low" && s.timeGapSeconds > 0);
-  const isRunLimiter = limiterKey?.startsWith("run") || limiterKey === "run_time";
-  const isStationLimiter = limiterType === "station" || limiterKey === "work_time";
+  const largestCategoryKey = contract?.gapReconciliation?.largestCategory?.key ?? null;
+  const isRunLimiter = largestCategoryKey
+    ? largestCategoryKey === "run_time"
+    : limiterKey?.startsWith("run") || limiterKey === "run_time";
+  const isStationLimiter = largestCategoryKey
+    ? largestCategoryKey === "work_time"
+    : limiterType === "station" || limiterKey === "work_time";
   const noLimiter = !isRunLimiter && !isStationLimiter;
 
   const aligned = background === "running" || background === "crossfit"
