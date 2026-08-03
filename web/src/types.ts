@@ -237,6 +237,7 @@ export interface HyroxPredictorDraft {
     targetFinishTimeSeconds?: number;
   };
   marketingConsent: boolean;
+  researchConsent: boolean;
 }
 
 export interface HyroxPredictionRequest {
@@ -251,6 +252,7 @@ export interface HyroxPredictionRequest {
   context: HyroxPredictorDraft["context"];
   race: HyroxPredictorDraft["race"];
   marketingConsent: boolean;
+  researchConsent: boolean;
   website?: string;
 }
 

@@ -281,7 +281,7 @@ export function ReviewPage() {
 
               <div className={styles.privacyNote}>
                 <strong>Privacy note</strong>
-                <span>No spam. Unsubscribe any time. Your result is used to generate this report.</span>
+                <span>No spam. Unsubscribe any time. Your result is used to generate this report, and may be used, in aggregate, to improve future HYROX predictions.</span>
               </div>
             </FormPanel>
 

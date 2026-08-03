@@ -1,5 +1,9 @@
+import { pool } from "../db.js";
 import { runPredictionEngine } from "./hyroxPredictorEngine.js";
+import { createPredictorEmailLogEntry, sendPredictorEmail } from "./hyroxPredictorEmailService.js";
+import { persistPredictorSubmission } from "./hyroxPredictorPersistence.js";
 import { validatePredictionRequest } from "./hyroxPredictorValidation.js";
+import { buildPredictorEmailContent } from "./reports/predictorEmailTemplate.js";
 
 export async function predict(req, res) {
   if (req.body?.website) {
@@ -27,5 +31,14 @@ export async function predict(req, res) {
     return res.status(400).json({ errors });
   }
 
-  return res.status(200).json(runPredictionEngine(req.body));
+  const predictionResult = runPredictionEngine(req.body);
+  const db = req.app?.locals?.hyroxPredictorPool ?? pool;
+  const sender = req.app?.locals?.hyroxPredictorEmailSender;
+  const { submission } = await persistPredictorSubmission(req.body, predictionResult, db);
+  const emailLogId = await createPredictorEmailLogEntry(submission.id, db).catch(() => null);
+  const emailContent = buildPredictorEmailContent(predictionResult, req.body.athlete);
+  sendPredictorEmail(submission, emailContent, db, req.log ?? console, emailLogId, sender)
+    .catch((err) => (req.log ?? console).warn?.({ event: "hyrox_predictor.email_unhandled", err: err?.message }, "HYROX predictor email dispatch failed"));
+
+  return res.status(200).json(predictionResult);
 }

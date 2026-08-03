@@ -37,8 +37,9 @@ const mockResponse: HyroxAnalysisResponse = {
   browserSummary: {},
 };
 
-function seedDraft() {
+function seedDraft(calculatorMode: "analyse" | "target" = "target") {
   saveDraft({
+    calculatorMode,
     athlete: {
       name: "Alex Smith",
       gender: "male",
@@ -95,6 +96,14 @@ describe("ReviewPage email collection", () => {
     expect(screen.getByText(/All core data complete/i)).toBeInTheDocument();
     expect(screen.getByText(/Target finish time/i)).toBeInTheDocument();
     expect(screen.getAllByText(/55:00/i).length).toBeGreaterThan(0);
+  });
+
+  test.each(["analyse", "target"] as const)("privacy note includes aggregate predictor-use disclosure in %s mode", (calculatorMode) => {
+    clearDraft();
+    seedDraft(calculatorMode);
+    renderPage();
+
+    expect(screen.getByText(/may be used, in aggregate, to improve future HYROX predictions/i)).toBeInTheDocument();
   });
 
   test("Submit blocked when email is empty", async () => {
