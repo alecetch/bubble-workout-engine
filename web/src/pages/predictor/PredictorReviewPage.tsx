@@ -8,7 +8,7 @@ import { SideStepper } from "../../components/SideStepper";
 import { PREDICTOR_STEPS } from "../../data/predictorSteps";
 import type { HyroxPredictionRequest, HyroxPredictorDraft } from "../../types";
 import { RateLimitError, submitHyroxPrediction, ValidationError } from "../../utils/api";
-import { clearPredictorDraft, loadPredictorDraft, savePredictorDraft } from "../../utils/predictorStorage";
+import { clearPredictorDraft, loadPredictorDraft, saveLastPrediction, savePredictorDraft } from "../../utils/predictorStorage";
 import { formatSeconds } from "../../utils/time";
 import { cmToFeetInches, kgToLb } from "../../utils/unitConversion";
 import styles from "./PredictorPages.module.css";
@@ -96,6 +96,7 @@ export function PredictorReviewPage() {
       savePredictorDraft({ athlete: { ...draft.athlete, email: email.trim() }, marketingConsent, researchConsent });
       const response = await submitHyroxPrediction(payload);
       clearPredictorDraft();
+      saveLastPrediction(response);
       void navigate("/hyrox-predictor/result", { state: { prediction: response } });
     } catch (err) {
       if (err instanceof ValidationError) {

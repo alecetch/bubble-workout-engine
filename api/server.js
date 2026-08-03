@@ -1,6 +1,10 @@
 import "./instrument.js";
 import * as Sentry from "@sentry/node";
 import "dotenv/config";
+import { validateProductionEnv } from "./src/config/validateProductionEnv.js";
+
+validateProductionEnv();
+
 import express from "express";
 import helmet from "helmet";
 import { fileURLToPath } from "url";
