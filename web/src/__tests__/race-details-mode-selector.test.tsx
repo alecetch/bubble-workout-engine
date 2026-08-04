@@ -209,6 +209,7 @@ describe("RaceDetailsPage progressive disclosure", () => {
   test("submissionId query restores the previous race draft and keeps target mode from email link", async () => {
     vi.mocked(fetchHyroxSubmissionDraft).mockResolvedValue({
       submissionId: "11111111-1111-4111-8111-111111111111",
+      analysisSummary: null,
       draft: {
         calculatorMode: "analyse",
         athlete: { name: "Alex Runner", email: "alex@example.com", gender: "male", ageGroup: "35-39" },
@@ -247,9 +248,10 @@ describe("RaceDetailsPage progressive disclosure", () => {
     });
   });
 
-  test("analysis_complete link restores the race draft and keeps post-analysis meta", async () => {
+  test("analysis_complete link restores the race draft, keeps post-analysis meta, and mentions the biggest opportunity", async () => {
     vi.mocked(fetchHyroxSubmissionDraft).mockResolvedValue({
       submissionId: "11111111-1111-4111-8111-111111111111",
+      analysisSummary: { limiterLabel: "Wall Balls", limiterSegmentKey: "wall_balls", potentialGainSeconds: 84 },
       draft: {
         calculatorMode: "analyse",
         athlete: { name: "Alex Runner", email: "alex@example.com", gender: "male", ageGroup: "35-39" },
@@ -277,6 +279,8 @@ describe("RaceDetailsPage progressive disclosure", () => {
       );
     });
 
+    expect(screen.getByTestId("submission-restore-message")).toHaveTextContent(/Wall Balls/);
+    expect(screen.getByTestId("submission-restore-message")).toHaveTextContent(/1:24/);
     expect(screen.getByRole("heading", { name: "Hit a target time", level: 2 })).toBeInTheDocument();
     expect(screen.getByLabelText(/athlete name/i)).toHaveValue("Alex Runner");
     expect(loadDraft()?.meta?.source).toBe("analysis_complete");
@@ -285,6 +289,38 @@ describe("RaceDetailsPage progressive disclosure", () => {
       source: "analysis_complete",
       sourceSubmissionId: "11111111-1111-4111-8111-111111111111",
       journeyVariant: "target-post-analysis",
+    });
+  });
+
+  test("analysis_complete link falls back to the generic restore message when there is no analysisSummary", async () => {
+    vi.mocked(fetchHyroxSubmissionDraft).mockResolvedValue({
+      submissionId: "11111111-1111-4111-8111-111111111111",
+      analysisSummary: null,
+      draft: {
+        calculatorMode: "analyse",
+        athlete: { name: "Alex Runner", email: "alex@example.com", gender: "male", ageGroup: "35-39" },
+        race: {
+          raceName: "HYROX Manchester",
+          raceDate: "2026-01-24",
+          division: "open",
+          finishTimeSeconds: 5400,
+        },
+        splits: [],
+        penalties: [],
+        raceReplay: [],
+        athleteContext: {},
+        marketingConsent: false,
+      },
+    });
+
+    renderPage(
+      "/hyrox-calculator/race-details?mode=target&source=analysis_complete&submissionId=11111111-1111-4111-8111-111111111111",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("submission-restore-message")).toHaveTextContent(
+        /Add your target time to continue/i,
+      );
     });
   });
 

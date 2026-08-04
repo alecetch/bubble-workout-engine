@@ -496,9 +496,9 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
     ? ` (${formatGain(limiterGap)} to benchmark median; ${formatGain(headlineGain)} to your target finish time)`
     : "";
   sections.push(section("time_potential", "Time Potential", `Estimated opportunity: ${formatGain(headlineGain)} potential gain.${clarification} This is an estimate, not a guarantee.`));
-  const backgroundCopy = buildBackgroundSection(analysisJson, athleteContext, contract);
-  if (backgroundCopy) {
-    sections.push(section("athlete_background", "Your Background in Context", backgroundCopy));
+  const backgroundResult = buildBackgroundSection(analysisJson, athleteContext, contract);
+  if (backgroundResult) {
+    sections.push(section("athlete_background", "Your Background in Context", backgroundResult.copy));
   }
   sections.push(section("roxzone_execution", "RoxZone and Execution Profile", buildRoxzoneSection(analysisJson, { calculatorMode })));
 
@@ -508,5 +508,9 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
 
   sections.push(section("cta", "Next Step", ctaCopy(calculatorMode, primaryCategory)));
 
-  return { sections: orderSections(sections, interpretation), recommendations };
+  return {
+    sections: orderSections(sections, interpretation),
+    recommendations,
+    backgroundClaimedCategory: backgroundResult?.category ?? null,
+  };
 }

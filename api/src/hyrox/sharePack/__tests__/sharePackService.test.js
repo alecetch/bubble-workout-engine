@@ -163,6 +163,7 @@ test("getOrCreateSharePack reuses an already-cached race_card_key instead of re-
   let renderRaceCardCalled = false;
   let getObjectCalledWith = null;
   const deps = {
+    launchBrowser: async () => ({ close: async () => {} }),
     screenshotSlides: async () => SLIDE_FILENAMES.map((_, i) => Buffer.from(`slide-${i}`)),
     putObject: async () => undefined,
     getObject: async (key) => {
@@ -181,4 +182,86 @@ test("getOrCreateSharePack reuses an already-cached race_card_key instead of re-
   assert.equal(getObjectCalledWith, "hyrox-share-packs/sub-1/race-card.png");
   assert.equal(pack.race_card_key, "hyrox-share-packs/sub-1/race-card.png");
   assert.ok(insertParams.length > 0);
+});
+
+// ── Puppeteer browser pooling ────────────────────────────────────────────────
+
+function sharePackDb({ cachedRaceCardKey = null } = {}) {
+  const insertParams = [];
+  const db = {
+    async query(sql, params) {
+      if (sql.includes("SELECT * FROM hyrox_share_packs")) return { rows: [] }; // no complete pack yet
+      if (sql.includes("SELECT race_card_key FROM hyrox_share_packs")) {
+        return { rows: cachedRaceCardKey ? [{ race_card_key: cachedRaceCardKey }] : [] };
+      }
+      if (sql.includes("FROM hyrox_analyses")) {
+        return {
+          rows: [{
+            carousel_a_json: { slides: [{}, {}, {}, {}, {}, {}] },
+            analysis_json: { athlete: {} },
+            selected_insights_json: [],
+            display_name: "Test Runner",
+            race_name: "HYROX Test",
+            division: "open",
+            calculator_mode: "analyse",
+            athlete_context_json: null,
+            performance_context_json: null,
+          }],
+        };
+      }
+      if (sql.trim().startsWith("INSERT INTO hyrox_share_packs")) {
+        insertParams.push(params);
+        return { rows: [{ id: "pack-1", zip_key: params[1], race_card_key: params[2] }] };
+      }
+      return { rows: [] };
+    },
+  };
+  return { db, insertParams };
+}
+
+test("getOrCreateSharePack renders the slides and the race card with the same pooled browser instance", async () => {
+  const { db } = sharePackDb();
+  const fakeBrowser = { marker: "shared-browser", close: async () => {} };
+  const slideRenderCalledWith = [];
+  const raceCardRenderCalledWith = [];
+
+  const deps = {
+    launchBrowser: async () => fakeBrowser,
+    screenshotSlides: async (html, browser) => {
+      slideRenderCalledWith.push(browser);
+      return SLIDE_FILENAMES.map((_, i) => Buffer.from(`slide-${i}`));
+    },
+    putObject: async () => undefined,
+    renderRaceCardBuffer: async (row, browser) => {
+      raceCardRenderCalledWith.push(browser);
+      return Buffer.from("race-card-bytes");
+    },
+  };
+
+  await getOrCreateSharePack("sub-1", db, deps);
+
+  assert.equal(slideRenderCalledWith.length, 1);
+  assert.equal(raceCardRenderCalledWith.length, 1);
+  assert.equal(slideRenderCalledWith[0], fakeBrowser);
+  assert.equal(raceCardRenderCalledWith[0], fakeBrowser);
+});
+
+test("getOrCreateSharePack closes the pooled browser exactly once, even when the race-card render fails", async () => {
+  const { db } = sharePackDb();
+  let closeCalls = 0;
+  const fakeBrowser = { close: async () => { closeCalls += 1; } };
+
+  const deps = {
+    launchBrowser: async () => fakeBrowser,
+    screenshotSlides: async () => SLIDE_FILENAMES.map((_, i) => Buffer.from(`slide-${i}`)),
+    putObject: async () => undefined,
+    renderRaceCardBuffer: async () => {
+      throw new Error("race card render crashed");
+    },
+  };
+
+  const pack = await getOrCreateSharePack("sub-1", db, deps);
+
+  assert.equal(closeCalls, 1);
+  assert.equal(pack.race_card_key, null); // race-card failure degrades gracefully, doesn't block the pack
 });

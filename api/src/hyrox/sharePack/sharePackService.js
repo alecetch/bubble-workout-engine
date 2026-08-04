@@ -4,7 +4,7 @@ import { buildTemplateA } from "../reports/templateSlotMapper.js";
 import { rankInsightsForOutput } from "../reports/insightRanker.js";
 import { resolveConflicts } from "../reports/conflictResolver.js";
 import { buildCaption } from "./captionBuilder.js";
-import { screenshotSlides } from "./slideScreenshotter.js";
+import { screenshotSlides, launchBrowser } from "./slideScreenshotter.js";
 import { generateRaceCardPng } from "./raceCardScreenshotter.js";
 import { buildHyroxRaceCardData } from "../reports/raceCardDataMapper.js";
 import { buildHyroxReportContract } from "../reports/reportContractBuilder.js";
@@ -85,7 +85,7 @@ async function fetchSubmissionAnalysisRow(submissionId, db) {
 
 // Contract-aware race-card renderer shared by the full share-pack build and the standalone
 // race-card cache, so both endpoints render an identical card for the same submission.
-async function renderRaceCardBuffer(row) {
+async function renderRaceCardBuffer(row, sharedBrowser = null) {
   const rawAnalysisJson = objectOrNull(row.analysis_json);
   if (!rawAnalysisJson) return null;
   const ctx = athleteContext(row, row.carousel_a_json);
@@ -93,7 +93,7 @@ async function renderRaceCardBuffer(row) {
   const insights = resolveConflicts(rankInsightsForOutput(rawInsights, "carousel_a"), "carousel_a");
   const contract = buildHyroxReportContract({ analysisJson: rawAnalysisJson, athleteContext: ctx, calculatorMode: row.calculator_mode, insights });
   const raceCardData = buildHyroxRaceCardData(rawAnalysisJson, ctx, contract);
-  return generateRaceCardPng(raceCardData);
+  return generateRaceCardPng(raceCardData, sharedBrowser);
 }
 
 async function findCachedRaceCardKey(submissionId, db) {
@@ -142,6 +142,7 @@ export async function getOrCreateSharePack(submissionId, db = pool, deps = {}) {
   const getObjectFn = deps.getObject ?? getObject;
   const renderSlides = deps.screenshotSlides ?? screenshotSlides;
   const renderRaceCard = deps.renderRaceCardBuffer ?? renderRaceCardBuffer;
+  const launch = deps.launchBrowser ?? launchBrowser;
 
   const existing = await db.query(
     `SELECT * FROM hyrox_share_packs
@@ -172,36 +173,46 @@ export async function getOrCreateSharePack(submissionId, db = pool, deps = {}) {
   });
 
   const html = buildCarouselPage(carouselData);
-  const slideBuffers = await screenshotSlidesWithRetry(html, { render: renderSlides });
-  if (slideBuffers.length !== SLIDE_FILENAMES.length) {
-    throw new Error(`Expected ${SLIDE_FILENAMES.length} slides, received ${slideBuffers.length}`);
-  }
-
   const slidePrefix = `hyrox-share-packs/${submissionId}/`;
-  await Promise.all(
-    slideBuffers.map((buf, index) => putObjectFn(`${slidePrefix}${SLIDE_FILENAMES[index]}`, buf, "image/png")),
-  );
 
-  // Generate race card PNG; failure must not block the ZIP delivery. Reuse an already-cached
-  // race card (e.g. from a prior standalone preview request) instead of re-rendering when one exists.
+  // Launch one Chrome instance and share it across the slide render and the race-card render —
+  // the spec for this feature always called for a shared browser instance; launching two
+  // separate ones (the previous behavior here) was a regression against that design.
+  const browser = await launch();
+  let slideBuffers;
   let raceCardBuffer = null;
   let raceCardKey = null;
   try {
-    raceCardKey = await findCachedRaceCardKey(submissionId, db);
-    if (raceCardKey) {
-      // Fetch the already-rendered bytes instead of relaunching Puppeteer — the ZIP still needs
-      // the actual buffer, just not a fresh render.
-      raceCardBuffer = await getObjectFn(raceCardKey);
-    } else if (rawAnalysisJson) {
-      raceCardBuffer = await renderRaceCard(row);
-      if (raceCardBuffer) {
-        raceCardKey = `${slidePrefix}race-card.png`;
-        await putObjectFn(raceCardKey, raceCardBuffer, "image/png");
-      }
+    slideBuffers = await screenshotSlidesWithRetry(html, { render: (h) => renderSlides(h, browser) });
+    if (slideBuffers.length !== SLIDE_FILENAMES.length) {
+      throw new Error(`Expected ${SLIDE_FILENAMES.length} slides, received ${slideBuffers.length}`);
     }
-  } catch (raceCardErr) {
-    // eslint-disable-next-line no-console
-    console.error("[sharePackService] Race card generation failed — continuing without it:", raceCardErr?.message);
+
+    await Promise.all(
+      slideBuffers.map((buf, index) => putObjectFn(`${slidePrefix}${SLIDE_FILENAMES[index]}`, buf, "image/png")),
+    );
+
+    // Generate race card PNG; failure must not block the ZIP delivery. Reuse an already-cached
+    // race card (e.g. from a prior standalone preview request) instead of re-rendering when one exists.
+    try {
+      raceCardKey = await findCachedRaceCardKey(submissionId, db);
+      if (raceCardKey) {
+        // Fetch the already-rendered bytes instead of relaunching Puppeteer — the ZIP still needs
+        // the actual buffer, just not a fresh render.
+        raceCardBuffer = await getObjectFn(raceCardKey);
+      } else if (rawAnalysisJson) {
+        raceCardBuffer = await renderRaceCard(row, browser);
+        if (raceCardBuffer) {
+          raceCardKey = `${slidePrefix}race-card.png`;
+          await putObjectFn(raceCardKey, raceCardBuffer, "image/png");
+        }
+      }
+    } catch (raceCardErr) {
+      // eslint-disable-next-line no-console
+      console.error("[sharePackService] Race card generation failed — continuing without it:", raceCardErr?.message);
+    }
+  } finally {
+    await browser.close();
   }
 
   const zipBuffer = await buildZip(slideBuffers, caption, { raceCardBuffer });

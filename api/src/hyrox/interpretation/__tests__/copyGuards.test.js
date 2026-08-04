@@ -5,6 +5,7 @@ import {
   assertNoOrdinalErrors,
   assertNoRawClockTimestamps,
   assertNoZeroOpportunityHero,
+  assertBackgroundAgreesWithContract,
 } from "../copyGuards.js";
 
 test("passes for correct ordinals", () => {
@@ -51,5 +52,26 @@ test("clock guard passes for elapsed time", () => {
 
 test("clock guard throws for raw HH:MM:SS", () => {
   assert.throws(() => assertNoRawClockTimestamps("Your slowest entry was at 20:18:12."));
+});
+
+function contract(largestCategoryKey) {
+  return { gapReconciliation: { largestCategory: largestCategoryKey ? { key: largestCategoryKey } : null } };
+}
+
+test("background agreement guard throws when the background section and contract disagree", () => {
+  assert.throws(() => assertBackgroundAgreesWithContract("work_time", contract("run_time")));
+  assert.throws(() => assertBackgroundAgreesWithContract("run_time", contract("work_time")));
+});
+
+test("background agreement guard passes when they agree", () => {
+  assert.doesNotThrow(() => assertBackgroundAgreesWithContract("work_time", contract("work_time")));
+  assert.doesNotThrow(() => assertBackgroundAgreesWithContract("run_time", contract("run_time")));
+});
+
+test("background agreement guard passes when either side is null, roxzone, or penalties", () => {
+  assert.doesNotThrow(() => assertBackgroundAgreesWithContract(null, contract("work_time")));
+  assert.doesNotThrow(() => assertBackgroundAgreesWithContract("run_time", contract(null)));
+  assert.doesNotThrow(() => assertBackgroundAgreesWithContract("run_time", contract("roxzone_time")));
+  assert.doesNotThrow(() => assertBackgroundAgreesWithContract("work_time", contract("penalties")));
 });
 

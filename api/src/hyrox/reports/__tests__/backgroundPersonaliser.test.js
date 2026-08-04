@@ -22,6 +22,12 @@ function mockContract(largestCategoryKey) {
   };
 }
 
+// buildBackgroundSection returns { copy, category } (or null when no section applies) — this
+// helper extracts just the copy string so most assertions below don't need to change shape.
+function copyOf(...args) {
+  return buildBackgroundSection(...args)?.copy ?? null;
+}
+
 const LIMITER_COPY_EXPECTATIONS = [
   {
     background: "new_to_strength",
@@ -67,11 +73,11 @@ const LIMITER_COPY_EXPECTATIONS = [
 
 test("background copy names the actual limiter area for every recognised background", () => {
   for (const { background, run, station } of LIMITER_COPY_EXPECTATIONS) {
-    const runCopy = buildBackgroundSection(
+    const runCopy = copyOf(
       mockAnalysis({ limiterSegmentKey: "run_3", limiterType: "run" }),
       { primaryBackground: background },
     );
-    const stationCopy = buildBackgroundSection(
+    const stationCopy = copyOf(
       mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }),
       { primaryBackground: background },
     );
@@ -82,43 +88,43 @@ test("background copy names the actual limiter area for every recognised backgro
 });
 
 test("running background with station limiter returns aligned copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }), { primaryBackground: "running" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }), { primaryBackground: "running" });
   assert.equal(typeof copy, "string");
   assert.match(copy, /aerobic durability/);
 });
 
 test("running background with run limiter returns inverted copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "run_1", limiterType: "run" }), { primaryBackground: "running" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "run_1", limiterType: "run" }), { primaryBackground: "running" });
   assert.match(copy, /pacing strategy/);
 });
 
 test("crossfit background with station limiter returns aligned copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "sled_pull", limiterType: "station" }), { primaryBackground: "crossfit" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "sled_pull", limiterType: "station" }), { primaryBackground: "crossfit" });
   assert.match(copy, /specificity/);
 });
 
 test("crossfit background with run limiter returns inverted copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "run_time", limiterType: "aggregate" }), { primaryBackground: "crossfit" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "run_time", limiterType: "aggregate" }), { primaryBackground: "crossfit" });
   assert.match(copy, /steady-state/);
 });
 
 test("strength sports background with run limiter returns aligned copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "run_2", limiterType: "run" }), { primaryBackground: "strength_sports" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "run_2", limiterType: "run" }), { primaryBackground: "strength_sports" });
   assert.match(copy, /aerobic/);
 });
 
 test("strength sports background with station limiter returns inverted copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }), { primaryBackground: "strength_sports" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }), { primaryBackground: "strength_sports" });
   assert.match(copy, /movement specificity/);
 });
 
 test("team sports background with run limiter returns aligned copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "run_time", limiterType: "aggregate" }), { primaryBackground: "team_sports" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "run_time", limiterType: "aggregate" }), { primaryBackground: "team_sports" });
   assert.match(copy, /moderate-intensity/);
 });
 
 test("team sports background with station limiter returns inverted copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis({ limiterSegmentKey: "sandbag_lunges", limiterType: "station" }), { primaryBackground: "team_sports" });
+  const copy = copyOf(mockAnalysis({ limiterSegmentKey: "sandbag_lunges", limiterType: "station" }), { primaryBackground: "team_sports" });
   assert.match(copy, /supporting the running/);
 });
 
@@ -135,12 +141,12 @@ test("unknown background returns null", () => {
 });
 
 test("running background with no limiter returns aligned copy", () => {
-  const copy = buildBackgroundSection(mockAnalysis(), { primaryBackground: "running" });
+  const copy = copyOf(mockAnalysis(), { primaryBackground: "running" });
   assert.match(copy, /aerobic durability/);
 });
 
 test("contract category overrides a disagreeing run segment limiter", () => {
-  const copy = buildBackgroundSection(
+  const copy = copyOf(
     mockAnalysis({ limiterSegmentKey: "run_6", limiterType: "run" }),
     { primaryBackground: "crossfit_hybrid" },
     mockContract("work_time"),
@@ -150,7 +156,7 @@ test("contract category overrides a disagreeing run segment limiter", () => {
 });
 
 test("contract category overrides a disagreeing station segment limiter", () => {
-  const copy = buildBackgroundSection(
+  const copy = copyOf(
     mockAnalysis({ limiterSegmentKey: "wall_balls", limiterType: "station" }),
     { primaryBackground: "crossfit_hybrid" },
     mockContract("run_time"),
@@ -160,11 +166,25 @@ test("contract category overrides a disagreeing station segment limiter", () => 
 });
 
 test("non-run and non-station contract categories behave like no clear limiter", () => {
-  const copy = buildBackgroundSection(
+  const copy = copyOf(
     mockAnalysis({ limiterSegmentKey: "run_6", limiterType: "run" }),
     { primaryBackground: "running" },
     mockContract("penalties"),
   );
 
   assert.match(copy, /aerobic durability/);
+});
+
+test("category is 'work_time' when the contract's largest category is stations, regardless of the single-segment limiter", () => {
+  const result = buildBackgroundSection(
+    mockAnalysis({ limiterSegmentKey: "run_6", limiterType: "run" }),
+    { primaryBackground: "crossfit_hybrid" },
+    mockContract("work_time"),
+  );
+  assert.equal(result.category, "work_time");
+});
+
+test("category is null when there is no clear run or station limiter", () => {
+  const result = buildBackgroundSection(mockAnalysis(), { primaryBackground: "running" });
+  assert.equal(result.category, null);
 });

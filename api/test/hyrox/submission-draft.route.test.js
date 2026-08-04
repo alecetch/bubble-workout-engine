@@ -53,6 +53,7 @@ function row(overrides = {}) {
     performance_context_json: {},
     marketing_consent: true,
     calculator_mode: "analyse",
+    analysis_json: null,
     ...overrides,
   };
 }
@@ -69,6 +70,31 @@ test("draftFromSubmissionRow maps a stored HYROX submission to calculator draft 
   assert.equal(result.draft.penalties[0].penaltySeconds, 60);
   assert.equal(result.draft.raceReplay[0].station, "ski_erg");
   assert.equal(result.draft.athleteContext.targetFinishTimeSeconds, 5100);
+  assert.equal(result.analysisSummary, null);
+});
+
+test("draftFromSubmissionRow includes analysisSummary when a linked analysis has a biggest limiter", () => {
+  const result = draftFromSubmissionRow(row({
+    analysis_json: {
+      headline: {
+        biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls" },
+        headlineGainSeconds: 84,
+      },
+    },
+  }));
+
+  assert.equal(result.analysisSummary.limiterLabel, "Wall Balls");
+  assert.equal(result.analysisSummary.limiterSegmentKey, "wall_balls");
+  assert.equal(result.analysisSummary.potentialGainSeconds, 84);
+});
+
+test("draftFromSubmissionRow's analysisSummary is null when there is no linked analysis", () => {
+  const result = draftFromSubmissionRow(row({ analysis_json: null }));
+
+  assert.equal(result.analysisSummary, null);
+  // the rest of the draft mapping is unaffected
+  assert.equal(result.draft.athlete.name, "Alex Runner");
+  assert.equal(result.draft.race.finishTimeSeconds, 5400);
 });
 
 test("GET /api/hyrox/submission-draft/:submissionId returns restored draft", async () => {
@@ -78,6 +104,21 @@ test("GET /api/hyrox/submission-draft/:submissionId returns restored draft", asy
   assert.equal(body.submissionId, SUBMISSION_ID);
   assert.equal(body.draft.athlete.name, "Alex Runner");
   assert.equal(body.draft.race.finishTimeSeconds, 5400);
+});
+
+test("GET /api/hyrox/submission-draft/:submissionId returns analysisSummary in its JSON body", async () => {
+  const { response, body } = await request(
+    buildApp([row({
+      analysis_json: {
+        headline: { biggestLimiter: { label: "Wall Balls", segmentKey: "wall_balls" }, headlineGainSeconds: 84 },
+      },
+    })]),
+    `/api/hyrox/submission-draft/${SUBMISSION_ID}`,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(body.analysisSummary.limiterLabel, "Wall Balls");
+  assert.equal(body.analysisSummary.potentialGainSeconds, 84);
 });
 
 test("GET /api/hyrox/submission-draft/:submissionId rejects invalid ids", async () => {

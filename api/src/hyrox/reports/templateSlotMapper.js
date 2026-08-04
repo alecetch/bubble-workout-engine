@@ -216,8 +216,8 @@ function strengthGapSeconds(row, analysisJson) {
 function splitGapSummary(row, analysisJson, fallback = "BENCHMARKED") {
   const gap = strengthGapSeconds(row, analysisJson);
   if (!Number.isFinite(gap)) return fallback;
-  if (gap < 0) return `${formatTimeDiff(gap)} ahead`;
-  if (gap > 0) return `${formatTimeDiff(gap)} gap`;
+  if (gap < 0) return `${formatTime(Math.abs(gap))} ahead`;
+  if (gap > 0) return `${formatTime(Math.abs(gap))} gap`;
   return "On comparison";
 }
 
