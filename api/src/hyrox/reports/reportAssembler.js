@@ -9,6 +9,32 @@ import { buildEmailReport } from "./emailReportBuilder.js";
 import { deepEnforceTone } from "./copyFormatter.js";
 import { buildHyroxReportContract } from "./reportContractBuilder.js";
 import { buildInterpretation } from "../interpretation/hyroxInterpretationEngine.js";
+import {
+  assertNoOrdinalErrors,
+  assertNoZeroOpportunityHero,
+  assertNoDuplicateSentences,
+  assertBackgroundAgreesWithContract,
+} from "../interpretation/copyGuards.js";
+
+// assertNoRawClockTimestamps is deliberately not wired in here: verified against a real
+// email_report fixture that it false-positives on ordinary duration-formatted finish times
+// (e.g. "1:15:00") — it can't distinguish those from an actual leaked wall-clock timestamp
+// (its own intended target, e.g. "20:18:12" from a RoxZone entry/exit log). Wiring it in as-is
+// would fire on nearly every real email and immediately train everyone to ignore these logs.
+// Fix its pattern to be context-aware before adding it to this list.
+export function runCopyGuards(report, backgroundClaimedCategory, log = console) {
+  try {
+    assertNoOrdinalErrors(report.emailText);
+    assertNoDuplicateSentences(report.sections);
+    assertNoZeroOpportunityHero(report.emailHtml);
+    assertBackgroundAgreesWithContract(backgroundClaimedCategory, report.contract);
+  } catch (guardErr) {
+    // eslint-disable-next-line no-console
+    log.error("[reportAssembler] copy guard failed for a generated email:", guardErr?.message, {
+      reportId: report.reportId,
+    });
+  }
+}
 
 function athlete(raceResult = {}, athleteContext = {}, analysisJson = {}) {
   return {
@@ -110,6 +136,7 @@ export function assembleReport(request = {}) {
     report.emailSubject = email.subject;
     report.emailHtml = email.htmlBody;
     report.emailText = email.textBody;
+    runCopyGuards(report, personal.backgroundClaimedCategory);
   } else if (outputType === "web_report") {
     report.templateId = "BROWSER_SUMMARY";
     report.browserSummary = buildBrowserSummary(analysisJson, resolved, athleteContext, calculatorMode, report.contract);

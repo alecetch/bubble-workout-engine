@@ -20,8 +20,18 @@ function dateString(value) {
 export function draftFromSubmissionRow(row = {}) {
   const athleteContext = objectOrEmpty(row.athlete_context_json);
   const performanceContext = objectOrEmpty(row.performance_context_json);
+  const biggestLimiter = row.analysis_json?.headline?.biggestLimiter ?? null;
   return {
     submissionId: row.submission_id ?? row.id,
+    analysisSummary: biggestLimiter
+      ? {
+          limiterLabel: biggestLimiter.label ?? null,
+          limiterSegmentKey: biggestLimiter.segmentKey ?? null,
+          potentialGainSeconds: Number.isFinite(row.analysis_json?.headline?.headlineGainSeconds)
+            ? row.analysis_json.headline.headlineGainSeconds
+            : null,
+        }
+      : null,
     draft: {
       calculatorMode: row.calculator_mode === "analyse" ? "analyse" : "target",
       athlete: {
@@ -66,26 +76,28 @@ export function createHyroxSubmissionDraftHandler(db = pool) {
     try {
       const result = await db.query(
         `SELECT
-           id AS submission_id,
-           email,
-           display_name,
-           sex,
-           age_on_race_day,
-           age_group,
-           division,
-           finish_time_seconds,
-           race_name,
-           race_date,
-           event_country,
-           splits_json,
-           penalties_json,
-           race_replay_json,
-           athlete_context_json,
-           performance_context_json,
-           marketing_consent,
-           calculator_mode
-         FROM hyrox_submissions
-         WHERE id = $1
+           s.id AS submission_id,
+           s.email,
+           s.display_name,
+           s.sex,
+           s.age_on_race_day,
+           s.age_group,
+           s.division,
+           s.finish_time_seconds,
+           s.race_name,
+           s.race_date,
+           s.event_country,
+           s.splits_json,
+           s.penalties_json,
+           s.race_replay_json,
+           s.athlete_context_json,
+           s.performance_context_json,
+           s.marketing_consent,
+           s.calculator_mode,
+           a.analysis_json
+         FROM hyrox_submissions s
+         LEFT JOIN hyrox_analyses a ON a.submission_id = s.id
+         WHERE s.id = $1
          LIMIT 1`,
         [submissionId],
       );

@@ -409,6 +409,68 @@ describe("buildTemplateA", () => {
     assert.notEqual(carousel.slides[2].position_gain, "+0:35");
   });
 
+  it("slide A3's hero number and caption never disagree on sign for the same ahead-of-benchmark fact", () => {
+    const carousel = buildTemplateA(analysis({
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:male:sub_90", label: "Open Male Sub 90" },
+        goalBenchmarkGroup: null,
+      },
+      strengths: [{
+        segmentKey: "sled_pull",
+        label: "Sled Pull",
+        type: "station",
+        userSeconds: 210,
+        percentile: 91,
+        timeAdvantageSeconds: 35,
+        timeGapToMedianSeconds: -35,
+        frameGapSeconds: -8,
+      }],
+      segments: [
+        segment("total_time", { type: "aggregate", percentile: 90, userSeconds: 3600 }),
+        segment("sled_pull", {
+          label: "Sled Pull",
+          userSeconds: 210,
+          percentile: 91,
+          timeAdvantageSeconds: 35,
+          timeGapToMedianSeconds: -35,
+          frameGapSeconds: -8,
+        }),
+        segment("wall_balls", { userSeconds: 360, timeGapToMedianSeconds: 60, frameGapSeconds: 60, percentile: 45 }),
+      ],
+    }), [], { displayName: "Marcus Fernandes" });
+
+    assert.doesNotMatch(carousel.slides[2].percentile, /^-/);
+    assert.match(carousel.slides[2].position_gain, /^\+/);
+    assert.equal(carousel.slides[2].percentile, "0:08 ahead");
+  });
+
+  it("splitGapSummary drops the redundant sign on the opportunity and key-insight slides too", () => {
+    const carousel = buildTemplateA(analysis({
+      race: { finishTimeSeconds: 5732 },
+      benchmarkContext: {
+        primaryBenchmarkGroup: { key: "open:female:sub_95", label: "Open Female Sub 95" },
+        goalBenchmarkGroup: null,
+      },
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 },
+      },
+      limiters: [{ segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90, percentile: 35 }],
+      timePotential: { headlineGainSeconds: 90 },
+      strengths: [{
+        segmentKey: "sled_pull", label: "Sled Pull", type: "station", userSeconds: 210, percentile: 91,
+        timeAdvantageSeconds: 35, timeGapToMedianSeconds: -35, frameGapSeconds: -35,
+      }],
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 5732, frameGapSeconds: 900, percentile: 45 }),
+        segment("wall_balls", { label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35 }),
+        segment("sled_pull", { label: "Sled Pull", userSeconds: 210, percentile: 91, timeAdvantageSeconds: 35, timeGapToMedianSeconds: -35, frameGapSeconds: -35 }),
+      ],
+    }), [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
+
+    assert.equal(carousel.slides[3].current_station_rank, "1:30 gap");
+    assert.equal(carousel.slides[4].gain_text, "0:35 ahead performance");
+  });
+
   it("renders doubles athlete names with both partners in carousel copy and page title", () => {
     const carousel = buildTemplateA(analysis(), [], { displayName: "SMITH, John & DOE, Jane" });
     const html = buildCarouselPage(carousel);

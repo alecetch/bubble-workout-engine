@@ -6,6 +6,26 @@ import { SLIDE_IDS } from "./slideAssets.js";
 // Resolve the project-root assets/ dir regardless of CWD
 const ASSETS_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../../assets");
 
+const LAUNCH_ARGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--disable-dev-shm-usage",
+  "--disable-gpu",
+  "--no-first-run",
+  "--no-zygote",
+  "--disable-extensions",
+  "--disable-background-networking",
+  "--disable-default-apps",
+];
+
+// Shared launcher so callers that render more than one asset per request (e.g. a full share
+// pack's 6 slides + race card) can pool a single Chrome instance instead of launching one per
+// asset — see sharePackService.js's getOrCreateSharePack for the pooled call site.
+export async function launchBrowser() {
+  const { default: puppeteer } = await import("puppeteer");
+  return puppeteer.launch({ args: LAUNCH_ARGS, headless: true });
+}
+
 // Replace /assets/... paths embedded in the carousel JSON with base64 data URIs so
 // Puppeteer's setContent() can render them without needing a live HTTP server.
 async function inlineAssetPaths(html) {
@@ -33,26 +53,15 @@ async function inlineAssetPaths(html) {
  *
  * @param {string} htmlString  Fully self-contained HTML (fonts/images already inline or loaded via network)
  * @param {{ width: number, height: number }} dims
+ * @param {import('puppeteer').Browser|null} sharedBrowser  Optional pre-launched browser to reuse
+ *   instead of launching (and closing) a new one — see launchBrowser().
  * @returns {Promise<Buffer>}
  */
-export async function screenshotHtml(htmlString, { width, height }) {
-  const { default: puppeteer } = await import("puppeteer");
-  const browser = await puppeteer.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-zygote",
-      "--disable-extensions",
-      "--disable-background-networking",
-      "--disable-default-apps",
-    ],
-    headless: true,
-  });
+export async function screenshotHtml(htmlString, { width, height }, sharedBrowser = null) {
+  const browser = sharedBrowser ?? (await launchBrowser());
+  let page;
   try {
-    const page = await browser.newPage();
+    page = await browser.newPage();
     await page.setViewport({ width, height, deviceScaleFactor: 2 });
     await page.setContent(htmlString, { waitUntil: "load", timeout: 30000 });
     await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 200)));
@@ -63,28 +72,16 @@ export async function screenshotHtml(htmlString, { width, height }) {
     });
     return Buffer.from(buf);
   } finally {
-    await browser.close();
+    await page?.close();
+    if (!sharedBrowser) await browser.close();
   }
 }
 
-export async function screenshotSlides(carouselHtml) {
-  const { default: puppeteer } = await import("puppeteer");
-  const browser = await puppeteer.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-zygote",
-      "--disable-extensions",
-      "--disable-background-networking",
-      "--disable-default-apps",
-    ],
-    headless: true,
-  });
+export async function screenshotSlides(carouselHtml, sharedBrowser = null) {
+  const browser = sharedBrowser ?? (await launchBrowser());
+  let page;
   try {
-    const page = await browser.newPage();
+    page = await browser.newPage();
     await page.setViewport({ width: 1080, height: 7000 });
     const inlinedHtml = await inlineAssetPaths(carouselHtml);
     await page.setContent(inlinedHtml, { waitUntil: "load", timeout: 30000 });
@@ -101,6 +98,7 @@ export async function screenshotSlides(carouselHtml) {
     }
     return buffers;
   } finally {
-    await browser.close();
+    await page?.close();
+    if (!sharedBrowser) await browser.close();
   }
 }

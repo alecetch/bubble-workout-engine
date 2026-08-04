@@ -54,14 +54,15 @@ export function buildBackgroundSection(analysisJson = {}, athleteContext = {}, c
     ? largestCategoryKey === "work_time"
     : limiterType === "station" || limiterKey === "work_time";
   const noLimiter = !isRunLimiter && !isStationLimiter;
+  const category = isRunLimiter ? "run_time" : isStationLimiter ? "work_time" : null;
 
   const aligned = background === "running" || background === "crossfit"
     ? isStationLimiter || noLimiter
     : isRunLimiter || noLimiter;
 
   if (hasStationBreakdownData && aligned && !hasStationEvidence && background === "running") {
-    return "Without clear station split data, the training volume picture is the clearest signal available - focus there first.";
+    return { copy: "Without clear station split data, the training volume picture is the clearest signal available - focus there first.", category };
   }
 
-  return BACKGROUND_COPY[background][aligned ? "aligned" : "inverted"];
+  return { copy: BACKGROUND_COPY[background][aligned ? "aligned" : "inverted"], category };
 }

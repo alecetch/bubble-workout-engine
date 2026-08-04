@@ -157,7 +157,7 @@ export function RaceDetailsPage() {
     let cancelled = false;
     setRestoreMessage("Restoring your HYROX result...");
     fetchHyroxSubmissionDraft(restoreSubmissionId)
-      .then(({ draft: restored }) => {
+      .then(({ draft: restored, analysisSummary }) => {
         if (cancelled) return;
         const restoredMode = queryMode ?? restored.calculatorMode ?? "target";
         saveDraft({
@@ -192,7 +192,13 @@ export function RaceDetailsPage() {
         setImportSucceeded(true);
         setRestoreMessage(
           isPostAnalysisBranch
-            ? "Your race data from this analysis has been loaded. Add your target time to continue."
+            ? analysisSummary?.limiterLabel
+              ? `Your race data from this analysis has been loaded. Your biggest opportunity was ${analysisSummary.limiterLabel}${
+                  analysisSummary.potentialGainSeconds
+                    ? ` (${formatSeconds(analysisSummary.potentialGainSeconds)} potential gain)`
+                    : ""
+                } — worth building your target time plan around this.`
+              : "Your race data from this analysis has been loaded. Add your target time to continue."
             : "Your previous HYROX result has been restored.",
         );
       })

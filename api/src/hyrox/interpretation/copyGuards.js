@@ -60,3 +60,14 @@ export function assertNoRawClockTimestamps(text) {
     }
   }
 }
+
+export function assertBackgroundAgreesWithContract(claimedCategory, contract) {
+  const actualCategory = contract?.gapReconciliation?.largestCategory?.key ?? null;
+  if (!claimedCategory || !actualCategory) return; // nothing to compare — not an error
+  const isRunOrStation = (key) => key === "run_time" || key === "work_time";
+  if (isRunOrStation(claimedCategory) && isRunOrStation(actualCategory) && claimedCategory !== actualCategory) {
+    throw new Error(
+      `Background section claims "${claimedCategory}" is the limiting category, but the contract's largest category is "${actualCategory}"`,
+    );
+  }
+}

@@ -182,6 +182,11 @@ export interface HyroxAnalysisResponse {
 export interface HyroxSubmissionDraftResponse {
   submissionId: string;
   draft: HyroxCalculatorDraft;
+  analysisSummary: {
+    limiterLabel: string | null;
+    limiterSegmentKey: string | null;
+    potentialGainSeconds: number | null;
+  } | null;
 }
 
 export interface SegmentDefinition {
