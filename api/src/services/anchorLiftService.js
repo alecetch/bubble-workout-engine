@@ -5,6 +5,7 @@ const SOURCE_PRIORITY = {
   manual_update: 4,
   fitness_test: 3,
   history_import: 2,
+  hyrox_calculator: 2,
   onboarding: 1,
   skipped: 0,
 };
