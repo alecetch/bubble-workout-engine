@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ResultPage } from "../pages/ResultPage";
 import type { HyroxAnalysisResponse } from "../types";
@@ -8,7 +8,7 @@ vi.mock("../utils/api", () => ({
   trackEvent: vi.fn(),
   trackServerEvent: vi.fn(),
 }));
-import { trackServerEvent } from "../utils/api";
+import { trackEvent, trackServerEvent } from "../utils/api";
 
 const baseResponse: HyroxAnalysisResponse = {
   submissionId: "11111111-1111-4111-8111-111111111111",
@@ -88,6 +88,60 @@ describe("ResultPage next-step panel", () => {
       "href",
       "/hyrox-calculator/race-details",
     );
+  });
+
+  test("app download card links to download page with submissionId", () => {
+    renderResult(baseResponse);
+
+    expect(screen.getByText(/Get a HYROX training plan/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /continue in the app/i })).toHaveAttribute(
+      "href",
+      `/download?submissionId=${baseResponse.submissionId}`,
+    );
+  });
+
+  test("app download card is hidden when submissionId is absent", () => {
+    renderResult({ ...baseResponse, submissionId: "" });
+
+    expect(screen.queryByText(/Get a HYROX training plan/i)).not.toBeInTheDocument();
+  });
+
+  test("app download click fires browser and server events", () => {
+    renderResult(baseResponse);
+    vi.clearAllMocks();
+
+    fireEvent.click(screen.getByRole("link", { name: /continue in the app/i }));
+
+    expect(trackEvent).toHaveBeenCalledWith("post_analysis_app_download_clicked", {
+      submissionId: baseResponse.submissionId,
+      source: "result_page",
+    });
+    expect(trackServerEvent).toHaveBeenCalledWith("app_download_clicked", {
+      submissionId: baseResponse.submissionId,
+      metadata: { touchpoint: "result_page" },
+    });
+  });
+
+  test("existing next-step card click tracking is unchanged", () => {
+    const { unmount } = renderResult(baseResponse);
+    vi.clearAllMocks();
+
+    fireEvent.click(screen.getByRole("link", { name: /hit a target time using this race/i }));
+    expect(trackEvent).toHaveBeenCalledWith("post_analysis_target_clicked", {
+      submissionId: baseResponse.submissionId,
+      source: "analysis_complete",
+      journeyVariant: "target-post-analysis",
+    });
+
+    unmount();
+    renderResult(baseResponse);
+    vi.clearAllMocks();
+    fireEvent.click(screen.getByRole("link", { name: /analyse another race/i }));
+
+    expect(trackEvent).toHaveBeenCalledWith("post_analysis_analyse_another_clicked", {
+      submissionId: baseResponse.submissionId,
+      source: "analysis_complete",
+    });
   });
 
   test("Back to calculator home link points to home", () => {

@@ -116,6 +116,29 @@ describe("buildEmailReport visual redesign", () => {
     assert.equal(report.htmlBody.startsWith("<!DOCTYPE html>"), true);
   });
 
+  it("renders app download CTA when submissionId is provided", () => {
+    const previous = process.env.APP_BASE_URL;
+    process.env.APP_BASE_URL = "https://getforma.fit";
+    try {
+      const submissionId = "11111111-1111-4111-8111-111111111111";
+      const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse", null, submissionId);
+
+      assert.ok(htmlBody.includes("Continue in the Forma app"));
+      assert.ok(htmlBody.includes(`/api/hyrox/download-redirect/${submissionId}`));
+    } finally {
+      if (previous === undefined) delete process.env.APP_BASE_URL;
+      else process.env.APP_BASE_URL = previous;
+    }
+  });
+
+  it("omits app download CTA when submissionId is absent", () => {
+    const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse", null, undefined);
+
+    assert.equal(htmlBody.includes("Continue in the Forma app"), false);
+    assert.equal(htmlBody.includes("/api/hyrox/download-redirect/"), false);
+    assert.equal(/href=["']\s*["']/.test(htmlBody), false);
+  });
+
   it("suppresses benchmark standing and lens copy when benchmark data is unavailable", () => {
     const report = buildEmailReport(
       mockReport(),
