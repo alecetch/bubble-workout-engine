@@ -61,6 +61,7 @@ export interface HyroxCalculatorDraft {
     targetRaceDate?: string;
   };
   marketingConsent: boolean;
+  appLinkConsent: boolean;
   meta?: {
     source?: "analysis_email" | "analysis_complete";
     sourceSubmissionId?: string;
@@ -110,6 +111,7 @@ export interface HyroxAnalysisRequest {
     targetRaceDate?: string;
   };
   marketingConsent: boolean;
+  appLinkConsent: boolean;
   website?: string;
 }
 
@@ -243,6 +245,7 @@ export interface HyroxPredictorDraft {
   };
   marketingConsent: boolean;
   researchConsent: boolean;
+  appLinkConsent: boolean;
 }
 
 export interface HyroxPredictionRequest {
@@ -258,6 +261,7 @@ export interface HyroxPredictionRequest {
   race: HyroxPredictorDraft["race"];
   marketingConsent: boolean;
   researchConsent: boolean;
+  appLinkConsent: boolean;
   website?: string;
 }
 

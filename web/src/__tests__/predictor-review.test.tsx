@@ -24,6 +24,7 @@ function seedDraft() {
     race: {},
     marketingConsent: false,
     researchConsent: false,
+    appLinkConsent: false,
   });
 }
 
@@ -82,6 +83,7 @@ describe("PredictorReviewPage", () => {
       context: expect.objectContaining({ trainingFrequency: "4-5" }),
       marketingConsent: false,
       researchConsent: false,
+      appLinkConsent: false,
       website: "",
     }));
     expect(sessionStorage.getItem("forma.hyroxPredictorResult")).not.toBeNull();
@@ -121,6 +123,46 @@ describe("PredictorReviewPage", () => {
     expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({
       marketingConsent: false,
       researchConsent: true,
+      appLinkConsent: false,
+    }));
+  });
+
+  test("app link consent defaults unchecked and submits checked value without changing other consents", async () => {
+    mockSubmit.mockResolvedValue({
+      predictionId: "stub-1",
+      predictedFinishSeconds: 5400,
+      predictedFinishFormatted: "1:30:00",
+      rangeLowSeconds: 4860,
+      rangeLowFormatted: "1:21:00",
+      rangeHighSeconds: 5940,
+      rangeHighFormatted: "1:39:00",
+      confidenceScore: 0.45,
+      confidenceLabel: "moderate",
+      predictionMode: "minimum",
+      segments: [],
+      topLimiters: [],
+      topOpportunities: [],
+      keyAssumptions: [],
+      predictionVersion: "stub-1.0",
+    });
+    renderPage();
+
+    const appLink = screen.getByRole("checkbox", { name: /link this result to my forma account/i });
+    const marketing = screen.getByRole("checkbox", { name: /send me hyrox training updates/i });
+    const research = screen.getByRole("checkbox", { name: /help improve future hyrox predictions/i });
+    expect(appLink).not.toBeChecked();
+    expect(marketing).not.toBeChecked();
+    expect(research).not.toBeChecked();
+
+    fireEvent.click(appLink);
+    fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: "alex@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /get prediction/i }));
+
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalled());
+    expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      marketingConsent: false,
+      researchConsent: false,
+      appLinkConsent: true,
     }));
   });
 

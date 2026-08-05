@@ -72,6 +72,7 @@ export function ReviewPage() {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [email, setEmail] = useState(draft?.athlete?.email ?? "");
+  const [appLinkConsent, setAppLinkConsent] = useState(draft?.appLinkConsent ?? false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
 
@@ -87,7 +88,7 @@ export function ReviewPage() {
     );
   }
 
-  const { athlete, race, splits = [], penalties = [], raceReplay = [], athleteContext, marketingConsent = false } = draft;
+  const { athlete, race, splits = [], penalties = [], raceReplay = [], athleteContext, marketingConsent = false, calculatorMode = "target" } = draft;
   const isTargetBranch = isRestoredTargetBranch(variant) || variant === "target-direct";
   const contextPath = isTargetBranch ? "/hyrox-calculator/target-benchmarks" : "/hyrox-calculator/context";
   const steps =
@@ -134,9 +135,10 @@ export function ReviewPage() {
     setSubmitError(null);
     setValidationErrors([]);
     setLoading(true);
-    saveDraft({ athlete: { ...athlete, email: email.trim() } });
+    saveDraft({ athlete: { ...athlete, email: email.trim() }, appLinkConsent });
 
     const payload: HyroxAnalysisRequest = {
+      calculatorMode,
       athlete: {
         name: athlete.name,
         email: email.trim(),
@@ -156,6 +158,7 @@ export function ReviewPage() {
       raceReplay,
       athleteContext,
       marketingConsent,
+      appLinkConsent,
     };
 
     try {
@@ -279,9 +282,13 @@ export function ReviewPage() {
               </PrimaryButton>
               <p className={styles.timingNote}>Takes around 10 seconds.</p>
 
+              <label className={`${styles.checkRow} ${styles.checkbox}`}>
+                <input type="checkbox" checked={appLinkConsent} onChange={(event) => setAppLinkConsent(event.target.checked)} />
+                <span>Link this result to my Forma account if I create one, so my training can use it.</span>
+              </label>
               <div className={styles.privacyNote}>
                 <strong>Privacy note</strong>
-                <span>No spam. Unsubscribe any time. Your result is used to generate this report, and may be used, in aggregate, to improve future HYROX predictions.</span>
+                <span>No spam. Unsubscribe any time. Your result is used to generate this report, and may be used, in aggregate, to improve future HYROX predictions. If you check the box above and later create a Forma app account with the same email, we'll link this result to that account to skip repeat questions and personalize your training. You can unlink it at any time from the app.</span>
               </div>
             </FormPanel>
 

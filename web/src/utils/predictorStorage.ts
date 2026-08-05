@@ -10,6 +10,7 @@ const EMPTY_DRAFT: HyroxPredictorDraft = {
   race: {},
   marketingConsent: false,
   researchConsent: false,
+  appLinkConsent: false,
 };
 
 export function loadPredictorDraft(): HyroxPredictorDraft {

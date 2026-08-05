@@ -23,6 +23,7 @@ const request = {
   race: { targetFinishTimeSeconds: 5400 },
   marketingConsent: true,
   researchConsent: true,
+  appLinkConsent: true,
   clientSessionId: "client-1",
   requestId: "request-1",
 };
@@ -59,7 +60,7 @@ test("persistPredictorSubmission maps request and prediction fields into both ta
   assert.equal(result.submission.id, "sub-1");
   assert.deepEqual(db.queries[0].params, [
     "alex@example.com", "Alex", "male", "30-34", "open", 1200, 2550, 120, 4, 160, 5, 82, 181, 430,
-    235, 42, 95, 5600, "4-5", "crossfit", 22.5, 5400, true, true, "client-1", "request-1",
+    235, 42, 95, 5600, "4-5", "crossfit", 22.5, 5400, true, true, true, "client-1", "request-1",
   ]);
   assert.equal(db.queries[1].params[0], "sub-1");
   assert.equal(db.queries[1].params[1], "v1");
@@ -72,8 +73,9 @@ test("persistPredictorSubmission maps request and prediction fields into both ta
 
 test("persistPredictorSubmission stores consent as true only when explicitly boolean true", async () => {
   const db = pool();
-  await persistPredictorSubmission({ ...request, marketingConsent: "true", researchConsent: undefined }, prediction, db);
+  await persistPredictorSubmission({ ...request, marketingConsent: "true", researchConsent: undefined, appLinkConsent: "true" }, prediction, db);
 
   assert.equal(db.queries[0].params[22], false);
   assert.equal(db.queries[0].params[23], false);
+  assert.equal(db.queries[0].params[24], false);
 });

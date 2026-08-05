@@ -59,6 +59,7 @@ export function PredictorReviewPage() {
   const [email, setEmail] = useState(draft.athlete.email ?? "");
   const [marketingConsent, setMarketingConsent] = useState(draft.marketingConsent);
   const [researchConsent, setResearchConsent] = useState(draft.researchConsent);
+  const [appLinkConsent, setAppLinkConsent] = useState(draft.appLinkConsent);
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -89,11 +90,12 @@ export function PredictorReviewPage() {
       race: draft.race,
       marketingConsent,
       researchConsent,
+      appLinkConsent,
       website: "",
     };
 
     try {
-      savePredictorDraft({ athlete: { ...draft.athlete, email: email.trim() }, marketingConsent, researchConsent });
+      savePredictorDraft({ athlete: { ...draft.athlete, email: email.trim() }, marketingConsent, researchConsent, appLinkConsent });
       const response = await submitHyroxPrediction(payload);
       clearPredictorDraft();
       saveLastPrediction(response);
@@ -160,7 +162,11 @@ export function PredictorReviewPage() {
                 <input type="checkbox" checked={researchConsent} onChange={(event) => setResearchConsent(event.target.checked)} />
                 <span>Help improve future HYROX predictions by keeping my answers.</span>
               </label>
-              <PrivacyNotice text="Your inputs are used to generate this prediction, and we'll email you your result. You can unsubscribe from emails at any time." />
+              <label className={`${styles.checkRow} ${styles.checkbox}`}>
+                <input type="checkbox" checked={appLinkConsent} onChange={(event) => setAppLinkConsent(event.target.checked)} />
+                <span>Link this result to my Forma account if I create one, so my training can use it.</span>
+              </label>
+              <PrivacyNotice text="Your inputs are used to generate this prediction, and we'll email you your result. You can unsubscribe from emails at any time. If you check the box above and later create a Forma app account with the same email, we'll link this result to that account to skip repeat questions and personalize your training. You can unlink it at any time from the app." />
               <PrimaryButton type="button" fullWidth loading={loading} disabled={!emailIsValid || loading} onClick={() => void handleSubmit()}>
                 Get prediction
               </PrimaryButton>
