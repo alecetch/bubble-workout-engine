@@ -10,6 +10,7 @@ const ALLOWED_EVENT_NAMES = new Set([
   "instagram_pack_email_sent",
   "instagram_pack_qr_opened",
   "instagram_caption_copied",
+  "app_download_clicked",
 ]);
 
 function objectOrEmpty(value) {

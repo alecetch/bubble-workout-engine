@@ -114,6 +114,11 @@ export function ResultPage() {
     trackEvent("post_analysis_home_clicked", { submissionId });
   }
 
+  function handleAppDownloadClick() {
+    trackEvent("post_analysis_app_download_clicked", { submissionId, source: "result_page" });
+    trackServerEvent("app_download_clicked", { submissionId, metadata: { touchpoint: "result_page" } });
+  }
+
   return (
     <Shell>
       <div className={styles.page}>
@@ -299,6 +304,18 @@ export function ResultPage() {
                   )}
                 </Link>
               </article>
+
+              {submissionId && (
+                <article className={styles.nextStepCard}>
+                  <div>
+                    <h3>Get a HYROX training plan</h3>
+                    <p>Continue in the Forma app and start training for your next result.</p>
+                  </div>
+                  <a href={`/download?submissionId=${encodeURIComponent(submissionId)}`} onClick={handleAppDownloadClick}>
+                    <SecondaryButton type="button">Continue in the app</SecondaryButton>
+                  </a>
+                </article>
+              )}
             </div>
 
             <Link to="/hyrox-calculator" className={styles.tertiaryLink} onClick={handleHomeClick}>

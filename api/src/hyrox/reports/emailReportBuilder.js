@@ -2821,6 +2821,30 @@ function renderFooter() {
   </tr>`;
 }
 
+function renderAppDownloadCta(submissionId) {
+  if (!submissionId) return "";
+  const baseUrl = (process.env.APP_BASE_URL ?? "https://getforma.fit").replace(/\/$/, "");
+  const href = `${baseUrl}/api/hyrox/download-redirect/${encodeURIComponent(submissionId)}`;
+  return `
+  <tr>
+    <td style="background-color:#07111f;padding:22px 32px;border-top:1px solid rgba(148,163,184,0.12);">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+        <tr>
+          <td style="padding:0 0 14px;">
+            <p style="color:#e2e8f0;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:18px;font-weight:800;line-height:1.25;margin:0 0 7px;">Build your next HYROX block in Forma</p>
+            <p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;margin:0;">Continue in the app and turn this result into your next training plan.</p>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <a href="${esc(href)}" style="display:inline-block;background-color:#22d3ee;color:#07111f;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:13px;font-weight:800;text-decoration:none;border-radius:6px;padding:11px 16px;">Continue in the Forma app</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>`;
+}
+
 function renderDoublesCaveat(analysisJson = {}) {
   if (!analysisJson.benchmarkContext?.doublesBenchmarkedAsSingles) return "";
   return `<tr>
@@ -3057,7 +3081,7 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
   }
 }
 
-export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null) {
+export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null, submissionId = null) {
   const narrative = ensureHyroxReportContract({ analysisJson, athleteContext, calculatorMode, contract });
   const reportOpportunity = narrative.sourceOpportunity ?? opportunityFraming(analysisJson);
   const canonicalPrimaryOpportunity = narrative.primaryClaim;
@@ -3244,6 +3268,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
           ${sectionRows}
           ${renderTargetModeNudge(athleteContext, calculatorMode)}
           ${renderMethodNote(emailPenaltiesMaterial, calculatorMode, analysisJson)}
+          ${renderAppDownloadCta(submissionId)}
           ${renderFooter()}
         </table>
       </td>

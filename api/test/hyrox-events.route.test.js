@@ -55,6 +55,21 @@ test("POST /api/hyrox/events inserts a valid event", async () => {
   assert.equal(db.rows[0].params[3], "asset_downloaded");
 });
 
+test("POST /api/hyrox/events accepts app_download_clicked", async () => {
+  const { app, db } = buildApp();
+  await withServer(app, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/hyrox/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "session-1", submissionId: SUBMISSION_ID, eventName: "app_download_clicked", metadata: { touchpoint: "result_page" } }),
+    });
+    assert.equal(response.status, 204);
+  });
+
+  assert.equal(db.rows[0].params[3], "app_download_clicked");
+  assert.deepEqual(JSON.parse(db.rows[0].params[7]), { touchpoint: "result_page" });
+});
+
 test("POST /api/hyrox/events rejects an event outside the allow-list", async () => {
   const { app } = buildApp();
   await withServer(app, async (baseUrl) => {
