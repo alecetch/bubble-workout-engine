@@ -89,6 +89,7 @@ import { sharePackHandlers } from "./src/hyrox/hyroxSharePackController.js";
 import { createHyroxSubmissionDraftHandler } from "./src/hyrox/hyroxSubmissionDraftController.js";
 import { createHyroxCalculatorEventsRouter } from "./src/routes/hyroxCalculatorEvents.js";
 import { createHyroxDownloadRedirectRouter } from "./src/routes/hyroxDownloadRedirect.js";
+import { createHyroxOnboardingPrefillRouter } from "./src/routes/hyroxOnboardingPrefill.js";
 import { runningIpRateLimiter, validateRunningSubmission } from "./src/hyrox/running/runningValidator.js";
 import * as runningController from "./src/hyrox/running/runningController.js";
 import { requireInternalToken } from "./src/middleware/auth.js";
@@ -776,6 +777,7 @@ const handleUsersMe = async (req, res) => {
 
 // Canonical (new)
 app.patch("/api/users/me", requireAuth, handleUsersMe);
+app.use("/api/users/me/hyrox-prefill", createHyroxOnboardingPrefillRouter(pool));
 // DEPRECATED — remove after Bubble client updates to /api/users/me
 app.patch("/users/me", requireAuth, handleUsersMe);
 

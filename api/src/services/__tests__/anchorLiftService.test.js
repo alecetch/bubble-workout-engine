@@ -131,6 +131,98 @@ test("history_import does not overwrite an existing manual anchor", async () => 
   assert.equal(insertCount, 0);
 });
 
+test("hyrox_calculator does not overwrite an existing manual anchor", async () => {
+  let insertCount = 0;
+  const db = createMockDb(async (sql) => {
+    if (sql.includes("FROM exercise_catalogue")) {
+      return { rows: [{ exercise_id: "bb_back_squat", estimation_family: "squat" }] };
+    }
+    if (sql.includes("SELECT source")) {
+      return { rows: [{ source: "manual" }] };
+    }
+    if (sql.includes("INSERT INTO client_anchor_lift")) {
+      insertCount += 1;
+      return { rows: [{}] };
+    }
+    throw new Error(`Unexpected SQL: ${sql}`);
+  });
+
+  const service = makeAnchorLiftService(db);
+  const rows = await service.upsertAnchorLifts("profile-1", [
+    {
+      estimationFamily: "squat",
+      exerciseId: "bb_back_squat",
+      loadKg: 100,
+      reps: 3,
+      source: "hyrox_calculator",
+    },
+  ]);
+
+  assert.equal(rows.length, 0);
+  assert.equal(insertCount, 0);
+});
+
+test("hyrox_calculator does not overwrite an existing fitness_test anchor", async () => {
+  let insertCount = 0;
+  const db = createMockDb(async (sql) => {
+    if (sql.includes("FROM exercise_catalogue")) {
+      return { rows: [{ exercise_id: "bb_deadlift", estimation_family: "hinge" }] };
+    }
+    if (sql.includes("SELECT source")) {
+      return { rows: [{ source: "fitness_test" }] };
+    }
+    if (sql.includes("INSERT INTO client_anchor_lift")) {
+      insertCount += 1;
+      return { rows: [{}] };
+    }
+    throw new Error(`Unexpected SQL: ${sql}`);
+  });
+
+  const service = makeAnchorLiftService(db);
+  const rows = await service.upsertAnchorLifts("profile-1", [
+    {
+      estimationFamily: "hinge",
+      exerciseId: "bb_deadlift",
+      loadKg: 140,
+      reps: 3,
+      source: "hyrox_calculator",
+    },
+  ]);
+
+  assert.equal(rows.length, 0);
+  assert.equal(insertCount, 0);
+});
+
+test("hyrox_calculator overwrites an existing onboarding anchor", async () => {
+  const db = createMockDb(async (sql, params) => {
+    if (sql.includes("FROM exercise_catalogue")) {
+      return { rows: [{ exercise_id: "bb_back_squat", estimation_family: "squat" }] };
+    }
+    if (sql.includes("SELECT source")) {
+      return { rows: [{ source: "onboarding" }] };
+    }
+    if (sql.includes("INSERT INTO client_anchor_lift")) {
+      return { rows: [{ source: params[7], source_detail_json: params[8] }] };
+    }
+    throw new Error(`Unexpected SQL: ${sql}`);
+  });
+
+  const service = makeAnchorLiftService(db);
+  const rows = await service.upsertAnchorLifts("profile-1", [
+    {
+      estimationFamily: "squat",
+      exerciseId: "bb_back_squat",
+      loadKg: 100,
+      reps: 3,
+      source: "hyrox_calculator",
+      sourceDetailJson: { submissionId: "sub-1" },
+    },
+  ]);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].source, "hyrox_calculator");
+});
+
 test("fitness_test overwrites an existing history_import anchor", async () => {
   const db = createMockDb(async (sql, params) => {
     if (sql.includes("FROM exercise_catalogue")) {
