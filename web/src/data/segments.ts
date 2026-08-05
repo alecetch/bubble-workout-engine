@@ -49,4 +49,5 @@ export const SAMPLE_FIXTURE = {
     additionalContext: "Recent shoulder irritation during high-volume wall balls.",
   },
   marketingConsent: false,
+  appLinkConsent: false,
 };

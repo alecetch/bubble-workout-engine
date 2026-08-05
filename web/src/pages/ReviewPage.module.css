@@ -260,6 +260,23 @@
   font-size: 12px;
 }
 
+.checkRow {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.checkbox {
+  align-items: flex-start;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.checkbox input {
+  margin-top: 3px;
+}
+
 .privacyNote {
   display: flex;
   flex-direction: column;

@@ -66,6 +66,7 @@ function seedDraft(calculatorMode: "analyse" | "target" = "target") {
       primaryBackground: "crossfit_hybrid",
     },
     marketingConsent: false,
+    appLinkConsent: false,
   });
 }
 
@@ -106,6 +107,15 @@ describe("ReviewPage email collection", () => {
     expect(screen.getByText(/may be used, in aggregate, to improve future HYROX predictions/i)).toBeInTheDocument();
   });
 
+  test.each(["analyse", "target"] as const)("privacy note includes app link disclosure in %s mode", (calculatorMode) => {
+    clearDraft();
+    seedDraft(calculatorMode);
+    renderPage();
+
+    expect(screen.getByText(/later create a Forma app account with the same email/i)).toBeInTheDocument();
+    expect(screen.getByText(/You can unlink it at any time from the app/i)).toBeInTheDocument();
+  });
+
   test("Submit blocked when email is empty", async () => {
     renderPage();
     await act(async () => {
@@ -139,6 +149,28 @@ describe("ReviewPage email collection", () => {
     expect(submitHyroxAnalysis).toHaveBeenCalled();
     expect(vi.mocked(submitHyroxAnalysis).mock.calls[0][0].athlete.email).toBe("test@example.com");
     expect(vi.mocked(submitHyroxAnalysis).mock.calls[0][0].athleteContext?.targetFinishTimeSeconds).toBe(3300);
+  });
+
+  test.each(["analyse", "target"] as const)("app link consent defaults unchecked and is included in the %s payload", async (calculatorMode) => {
+    clearDraft();
+    seedDraft(calculatorMode);
+    vi.mocked(submitHyroxAnalysis).mockResolvedValue(mockResponse);
+    renderPage();
+
+    const appLink = screen.getByRole("checkbox", { name: /link this result to my forma account/i });
+    expect(appLink).not.toBeChecked();
+    fireEvent.click(appLink);
+    fireEvent.change(screen.getByTestId("email-input"), { target: { value: "test@example.com" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByText("Generate My Report")[0]);
+    });
+
+    expect(vi.mocked(submitHyroxAnalysis).mock.calls[0][0]).toEqual(expect.objectContaining({
+      calculatorMode,
+      appLinkConsent: true,
+      marketingConsent: false,
+    }));
   });
 
   test("Submit button shows loading copy while report is generating", async () => {

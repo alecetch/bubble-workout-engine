@@ -22,9 +22,9 @@ export async function persistPredictorSubmission(request, predictionResult, pool
       run_5k_seconds, run_10k_seconds, back_squat_kg, back_squat_reps, deadlift_kg, deadlift_reps,
       bodyweight_kg, height_cm, row_erg_2k_seconds, ski_erg_1k_seconds, wall_ball_reps_in_2min,
       farmer_carry_seconds, previous_hyrox_seconds, training_frequency, primary_background,
-      weekly_running_km, target_finish_time_seconds, marketing_consent, research_consent,
+      weekly_running_km, target_finish_time_seconds, marketing_consent, research_consent, app_link_consent,
       client_session_id, request_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
     RETURNING *`,
     [
       athlete.email, athlete.name ?? null, athlete.sex, athlete.ageGroup ?? null, athlete.division,
@@ -35,7 +35,7 @@ export async function persistPredictorSubmission(request, predictionResult, pool
       benchmarks.farmerCarryTimeSeconds ?? null, benchmarks.previousHyroxSeconds ?? null,
       context.trainingFrequency ?? null, context.primaryBackground ?? null,
       weeklyRunningKmValue(context.weeklyRunningKm), race.targetFinishTimeSeconds ?? null,
-      request.marketingConsent === true, request.researchConsent === true,
+      request.marketingConsent === true, request.researchConsent === true, request.appLinkConsent === true,
       request.clientSessionId ?? null, request.requestId ?? null,
     ],
   );

@@ -224,6 +224,7 @@ describe("RaceDetailsPage progressive disclosure", () => {
         raceReplay: [{ station: "ski_erg", entrySeconds: 12, exitSeconds: 18 }],
         athleteContext: { targetFinishTimeSeconds: 5100 },
         marketingConsent: false,
+        appLinkConsent: false,
       },
     });
 
@@ -266,6 +267,7 @@ describe("RaceDetailsPage progressive disclosure", () => {
         raceReplay: [{ station: "ski_erg", entrySeconds: 12, exitSeconds: 18 }],
         athleteContext: {},
         marketingConsent: false,
+        appLinkConsent: false,
       },
     });
 
@@ -310,6 +312,7 @@ describe("RaceDetailsPage progressive disclosure", () => {
         raceReplay: [],
         athleteContext: {},
         marketingConsent: false,
+        appLinkConsent: false,
       },
     });
 

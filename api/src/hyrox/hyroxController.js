@@ -137,17 +137,17 @@ async function persistSubmission(body, normalised) {
     ...(athleteContext.targetRaceDate != null ? { targetRaceDate: String(athleteContext.targetRaceDate) } : {}),
   };
   const result = await pool.query(
-	    `INSERT INTO hyrox_submissions (
-	      email, display_name, sex, age_on_race_day, age_group, division, finish_time_seconds,
-	      race_name, race_date, event_country, source, splits_json, roxzone_mode, athlete_context_json,
-	      performance_context_json, marketing_consent, allow_partial, height_cm, weight_kg,
-	      five_km_pb_seconds, ten_km_pb_seconds, half_marathon_pb_seconds, back_squat_kg,
-	      deadlift_kg, front_squat_kg, max_unbroken_wall_balls, injury_constraints, equipment_access
-	      , penalties_json, race_replay_json
-	    ) VALUES (
-	      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27::jsonb,$28::jsonb
-	      ,$29::jsonb,$30::jsonb
-	    ) RETURNING *`,
+    `INSERT INTO hyrox_submissions (
+      email, display_name, sex, age_on_race_day, age_group, division, finish_time_seconds,
+      race_name, race_date, event_country, source, splits_json, roxzone_mode, athlete_context_json,
+      performance_context_json, marketing_consent, app_link_consent, allow_partial, height_cm, weight_kg,
+      five_km_pb_seconds, ten_km_pb_seconds, half_marathon_pb_seconds, back_squat_kg,
+      deadlift_kg, front_squat_kg, max_unbroken_wall_balls, injury_constraints, equipment_access
+      , penalties_json, race_replay_json
+    ) VALUES (
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb
+      ,$29::jsonb,$30::jsonb,$31::jsonb
+    ) RETURNING *`,
     [
       athlete.email,
       athlete.name ?? null,
@@ -155,16 +155,17 @@ async function persistSubmission(body, normalised) {
       athlete.ageOnRaceDay ?? null,
       normalised.athlete?.ageGroup ?? athlete.ageGroup ?? null,
       race.division ?? "open",
-	      race.finishTimeSeconds,
-	      race.raceName ?? null,
-	      race.raceDate ?? null,
-	      race.eventCountry ?? null,
-	      race.source ?? "manual",
+      race.finishTimeSeconds,
+      race.raceName ?? null,
+      race.raceDate ?? null,
+      race.eventCountry ?? null,
+      race.source ?? "manual",
       JSON.stringify(body.splits ?? []),
       normalised.roxzoneMode ?? "none",
       JSON.stringify(athleteContextJson),
       JSON.stringify(performance),
       body.marketingConsent === true,
+      body.appLinkConsent === true,
       body.allowPartial === true,
       numberOrNull(athleteContext.heightCm ?? performance.heightCm),
       numberOrNull(athleteContext.bodyweightKg ?? performance.weightKg),

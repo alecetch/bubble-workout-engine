@@ -18,6 +18,8 @@ function createPredictorPool() {
           id: `sub-${state.submissions.length + 1}`,
           email: params[0],
           research_consent: params[23],
+          app_link_consent: params[24],
+          linked_app_user_id: null,
         };
         state.submissions.push({ row, params });
         return { rows: [row], rowCount: 1 };
@@ -68,6 +70,7 @@ function validBody(overrides = {}) {
     race: { ...(overrides.race ?? {}) },
     marketingConsent: false,
     researchConsent: false,
+    appLinkConsent: false,
     ...Object.fromEntries(Object.entries(overrides).filter(([key]) => !["athlete", "benchmarks", "context", "race"].includes(key))),
   };
 }
@@ -259,6 +262,38 @@ test("POST /api/hyrox/predict stores research consent when true", async () => {
   assert.equal(response.status, 200);
   assert.equal(app.locals.hyroxPredictorState.submissions[0].params[23], true);
   assert.equal(app.locals.hyroxPredictorState.emailLogs[0].status, "sent");
+});
+
+test("POST /api/hyrox/predict stores app link consent when true and leaves linked app user null", async () => {
+  const app = buildApp();
+  const { response } = await request(app, "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(validBody({ appLinkConsent: true })),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(app.locals.hyroxPredictorState.submissions[0].params[24], true);
+  assert.equal(app.locals.hyroxPredictorState.submissions[0].row.linked_app_user_id, null);
+});
+
+test("POST /api/hyrox/predict stores app link consent false when false or omitted", async () => {
+  const app = buildApp();
+  const omitted = validBody();
+  delete omitted.appLinkConsent;
+
+  const explicit = await request(app, "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(validBody({ appLinkConsent: false })),
+  });
+  const missing = await request(app, "/api/hyrox/predict", {
+    method: "POST",
+    body: JSON.stringify(omitted),
+  });
+
+  assert.equal(explicit.response.status, 200);
+  assert.equal(missing.response.status, 200);
+  assert.equal(app.locals.hyroxPredictorState.submissions[0].params[24], false);
+  assert.equal(app.locals.hyroxPredictorState.submissions[1].params[24], false);
 });
 
 test("POST /api/hyrox/predict persists and emails when research consent is omitted", async () => {
