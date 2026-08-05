@@ -3,6 +3,7 @@ import type { HyroxParseResult } from "./hyroxResultsParser";
 import { loadDraft } from "./storage";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+const SESSION_ID_KEY = "forma.hyroxSessionId";
 
 export class ValidationError extends Error {
   constructor(
@@ -156,6 +157,36 @@ export function trackEvent(name: string, props?: Record<string, unknown>): void 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, url: window.location.href, domain: key, props }),
+    });
+  } catch {
+    // ignore analytics failures
+  }
+}
+
+export function getHyroxSessionId(): string {
+  try {
+    let id = localStorage.getItem(SESSION_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(SESSION_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return "unknown";
+  }
+}
+
+export function trackServerEvent(
+  eventName: string,
+  { submissionId, metadata }: { submissionId?: string; metadata?: Record<string, unknown> } = {},
+): void {
+  try {
+    void fetch(`${BASE_URL}/api/hyrox/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: getHyroxSessionId(), submissionId, eventName, metadata }),
+    }).catch(() => {
+      // ignore analytics failures — this must never surface to the caller or the console
     });
   } catch {
     // ignore analytics failures

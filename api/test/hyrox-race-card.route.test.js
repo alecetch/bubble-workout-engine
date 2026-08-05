@@ -70,6 +70,27 @@ test("GET /api/hyrox/race-card/:submissionId returns 500 when PNG generation thr
   assert.equal(res.status, 500);
 });
 
+test("threads sessionId from the query string into getOrCreateRaceCard", async () => {
+  const calls = [];
+  const getOrCreateRaceCardImpl = async (submissionId, db, deps) => {
+    calls.push(deps);
+    return { raceCardKey: "hyrox-share-packs/test/race-card.png", buffer: FAKE_PNG };
+  };
+  const res = await request(buildApp({ getOrCreateRaceCardImpl }), `/api/hyrox/race-card/${SUBMISSION_ID}?sessionId=session-123`);
+  assert.equal(res.status, 200);
+  assert.equal(calls[0]?.sessionId, "session-123");
+});
+
+test("sessionId defaults to null when not provided in the query string", async () => {
+  const calls = [];
+  const getOrCreateRaceCardImpl = async (submissionId, db, deps) => {
+    calls.push(deps);
+    return { raceCardKey: "hyrox-share-packs/test/race-card.png", buffer: FAKE_PNG };
+  };
+  await request(buildApp({ getOrCreateRaceCardImpl }), `/api/hyrox/race-card/${SUBMISSION_ID}`);
+  assert.equal(calls[0]?.sessionId, null);
+});
+
 test("fetches bytes via getObject when getOrCreateRaceCard returns a cached key with no buffer", async () => {
   let requestedKey = null;
   const getOrCreateRaceCardImpl = async () => ({ raceCardKey: "cached-key", buffer: null });

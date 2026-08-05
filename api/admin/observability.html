@@ -618,6 +618,24 @@
           </section>
 
           <section class="panel">
+            <h2>Share Pipeline</h2>
+            <div class="hx-stat-grid">
+              <div class="hx-stat-block">
+                <h3>Engagement</h3>
+                <div id="hx-share-pipeline-engagement"></div>
+              </div>
+              <div class="hx-stat-block">
+                <h3>Generation</h3>
+                <div id="hx-share-pipeline-generation"></div>
+              </div>
+              <div class="hx-stat-block">
+                <h3>Downloads</h3>
+                <div id="hx-share-pipeline-downloads"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
             <h2>Recent Submissions</h2>
             <div class="table-wrap">
               <table id="hx-submissions-table">
@@ -1015,11 +1033,12 @@
       async function loadHyroxTab() {
         const days = getSelectedDays();
         setStatus("Loading HYROX calculator observability...", "");
-        const [summary, health, email, sharePack, trend, submissions] = await Promise.all([
+        const [summary, health, email, sharePack, sharePipeline, trend, submissions] = await Promise.all([
           apiFetch(`/api/admin/observability/hyrox/summary?days=${encodeURIComponent(days)}`),
           apiFetch(`/api/admin/observability/hyrox/analysis-health?days=${encodeURIComponent(days)}`),
           apiFetch(`/api/admin/observability/hyrox/email?days=${encodeURIComponent(days)}`),
           apiFetch(`/api/admin/observability/hyrox/share-pack?days=${encodeURIComponent(days)}`),
+          apiFetch(`/api/admin/observability/hyrox/share-pipeline?days=${encodeURIComponent(days)}`),
           apiFetch(`/api/admin/observability/hyrox/daily-trend?days=${encodeURIComponent(days)}`),
           apiFetch(`/api/admin/observability/hyrox/submissions?days=${encodeURIComponent(days)}&limit=${HX_PAGE_SIZE}&offset=${hxOffset}`),
         ]);
@@ -1029,6 +1048,7 @@
         renderHyroxDaily(Array.isArray(trend.daily) ? trend.daily : []);
         renderHyroxEmailStats(email);
         renderHyroxShareStats(sharePack);
+        renderHyroxSharePipeline(sharePipeline);
         renderHyroxSubmissions(Array.isArray(submissions.rows) ? submissions.rows : [], Number(submissions.total || 0));
 
         anomalies.hyrox = 0;
@@ -1154,6 +1174,27 @@
           hxStatLine("Generated", sharePack.generated),
           hxStatLine("With ZIP", sharePack.withZip),
           hxStatLine("Without ZIP", sharePack.withoutZip),
+        ].join("");
+      }
+
+      function renderHyroxSharePipeline(data) {
+        document.getElementById("hx-share-pipeline-engagement").innerHTML = [
+          hxStatLine("Analyses", data.analysesCompleted),
+          hxStatLine("Race-card previews", `${formatNumber(data.racesCardPreviewed)} (${Number(data.racesCardPreviewedPct || 0).toFixed(1)}%)`),
+          hxStatLine("Pack requests", `${formatNumber(data.packsRequested)} (${Number(data.packsRequestedPct || 0).toFixed(1)}%)`),
+        ].join("");
+        document.getElementById("hx-share-pipeline-generation").innerHTML = [
+          hxStatLine("Pack completed", data.packGeneration?.completed),
+          hxStatLine("Pack failed", data.packGeneration?.failed),
+          hxStatLine("Pack cache hit", `${Number(data.packGeneration?.cacheHitPct || 0).toFixed(1)}%`),
+          hxStatLine("Pack p95", formatDurationMs(data.packGeneration?.p95DurationMs)),
+          hxStatLine("Race card completed", data.raceCardGeneration?.completed),
+          hxStatLine("Race card cache hit", `${Number(data.raceCardGeneration?.cacheHitPct || 0).toFixed(1)}%`),
+          hxStatLine("Race card p95", formatDurationMs(data.raceCardGeneration?.p95DurationMs)),
+        ].join("");
+        document.getElementById("hx-share-pipeline-downloads").innerHTML = [
+          hxStatLine("Race cards", data.assetsDownloaded?.raceCard),
+          hxStatLine("ZIP packs", data.assetsDownloaded?.zip),
         ].join("");
       }
 

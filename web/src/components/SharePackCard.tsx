@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { trackEvent } from "../utils/api";
+import { getHyroxSessionId, trackEvent, trackServerEvent } from "../utils/api";
 import styles from "./SharePackCard.module.css";
 
 interface SharePackCardProps {
@@ -32,11 +32,16 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch(`${BASE_URL}/api/hyrox/share-pack/${encodeURIComponent(submissionId)}`, { method: "POST" });
+      const res = await fetch(`${BASE_URL}/api/hyrox/share-pack/${encodeURIComponent(submissionId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: getHyroxSessionId() }),
+      });
       if (!res.ok) throw new Error("share_pack_failed");
       const body = await res.json() as SharePackResponse;
       setPack(body);
       trackEvent("instagram_pack_generated", { submissionId });
+      trackServerEvent("instagram_pack_generated", { submissionId });
     } catch {
       setError(true);
       setPack(null);
@@ -55,6 +60,7 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
     await navigator.clipboard?.writeText(pack.caption);
     setCopied(true);
     trackEvent("instagram_caption_copied", { submissionId });
+    trackServerEvent("instagram_caption_copied", { submissionId });
     window.setTimeout(() => setCopied(false), 2000);
   }
 
@@ -64,11 +70,12 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
       const res = await fetch(`${BASE_URL}/api/hyrox/share-pack/${encodeURIComponent(submissionId)}/email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, sessionId: getHyroxSessionId() }),
       });
       if (!res.ok) throw new Error("email_failed");
       setEmailStatus("sent");
       trackEvent("instagram_pack_email_sent", { submissionId });
+      trackServerEvent("instagram_pack_email_sent", { submissionId });
     } catch {
       setEmailStatus("error");
     }
@@ -81,6 +88,7 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
       if (!res.ok) throw new Error("qr_failed");
       setQrSvg(await res.text());
       trackEvent("instagram_pack_qr_opened", { submissionId });
+      trackServerEvent("instagram_pack_qr_opened", { submissionId });
     } finally {
       setQrLoading(false);
     }
@@ -120,7 +128,10 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
               className={styles.download}
               href={pack.downloadUrl}
               download
-              onClick={() => trackEvent("instagram_pack_downloaded", { submissionId })}
+              onClick={() => {
+                trackEvent("instagram_pack_downloaded", { submissionId });
+                trackServerEvent("asset_downloaded", { submissionId, metadata: { assetType: "zip" } });
+              }}
             >
               Download Instagram Pack
             </a>

@@ -17,7 +17,7 @@ function pack(overrides = {}) {
   };
 }
 
-function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "HYROX London" }], createPack } = {}) {
+function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "HYROX London" }], createPack, logCalculatorEvent } = {}) {
   const db = {
     async query(sql, params) {
       if (sql.includes("SELECT share_token FROM hyrox_share_packs")) {
@@ -40,6 +40,7 @@ function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "
     getPresignedUrl: async (key) => `https://signed.example/${key}`,
     sendEmail: async () => undefined,
     qrToString: async () => "<svg></svg>",
+    ...(logCalculatorEvent ? { logCalculatorEvent } : {}),
   });
   const app = express();
   app.use(express.json());
@@ -97,6 +98,50 @@ test("POST /api/hyrox/share-pack/:submissionId returns 502 when slide rendering 
   };
   const { response } = await request(buildApp({ createPack }), `/api/hyrox/share-pack/${SUBMISSION_ID}`, { method: "POST" });
   assert.equal(response.status, 502);
+});
+
+test("POST /api/hyrox/share-pack/:submissionId threads sessionId from the request body into pack creation and the pack_requested event", async () => {
+  const createPackCalls = [];
+  const createPack = async (submissionId, db, deps) => {
+    createPackCalls.push(deps);
+    return pack();
+  };
+  const loggedEvents = [];
+  const logCalculatorEvent = async (event) => { loggedEvents.push(event); };
+
+  const { response } = await request(buildApp({ createPack, logCalculatorEvent }), `/api/hyrox/share-pack/${SUBMISSION_ID}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: "session-abc" }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(createPackCalls[0]?.sessionId, "session-abc");
+  const requestedEvent = loggedEvents.find((event) => event.eventName === "pack_requested");
+  assert.equal(requestedEvent?.sessionId, "session-abc");
+  assert.equal(requestedEvent?.metadata?.trigger, "button");
+});
+
+test("POST /api/hyrox/share-pack/:submissionId/email threads sessionId from the request body into pack creation and the pack_requested event", async () => {
+  const createPackCalls = [];
+  const createPack = async (submissionId, db, deps) => {
+    createPackCalls.push(deps);
+    return pack();
+  };
+  const loggedEvents = [];
+  const logCalculatorEvent = async (event) => { loggedEvents.push(event); };
+
+  const { response } = await request(buildApp({ createPack, logCalculatorEvent }), `/api/hyrox/share-pack/${SUBMISSION_ID}/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "test@example.com", sessionId: "session-xyz" }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(createPackCalls[0]?.sessionId, "session-xyz");
+  const requestedEvent = loggedEvents.find((event) => event.eventName === "pack_requested");
+  assert.equal(requestedEvent?.sessionId, "session-xyz");
+  assert.equal(requestedEvent?.metadata?.trigger, "email");
 });
 
 test("POST /api/hyrox/share-pack/:submissionId/email sends email", async () => {
