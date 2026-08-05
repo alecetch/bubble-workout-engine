@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ResultPage } from "../pages/ResultPage";
@@ -6,7 +6,9 @@ import type { HyroxAnalysisResponse } from "../types";
 
 vi.mock("../utils/api", () => ({
   trackEvent: vi.fn(),
+  trackServerEvent: vi.fn(),
 }));
+import { trackServerEvent } from "../utils/api";
 
 const baseResponse: HyroxAnalysisResponse = {
   submissionId: "11111111-1111-4111-8111-111111111111",
@@ -34,6 +36,23 @@ function renderResult(response?: HyroxAnalysisResponse) {
 }
 
 describe("ResultPage next-step panel", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  test("tracks race-card preview once per submission per browser session", () => {
+    const { unmount } = renderResult(baseResponse);
+    unmount();
+    renderResult(baseResponse);
+
+    expect(trackServerEvent).toHaveBeenCalledTimes(1);
+    expect(trackServerEvent).toHaveBeenCalledWith("race_card_previewed", {
+      submissionId: baseResponse.submissionId,
+      metadata: { source: "result_page" },
+    });
+  });
+
   test("shows Hit a target time CTA when submissionId present and mode is analyse", () => {
     renderResult(baseResponse);
 

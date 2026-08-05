@@ -60,7 +60,9 @@ test("getOrCreateRaceCard returns a cached key without querying for the analysis
       if (sql.includes("SELECT race_card_key FROM hyrox_share_packs")) {
         return { rows: [{ race_card_key: "hyrox-share-packs/sub-1/race-card.png" }] };
       }
-      analysisQueried = true;
+      if (sql.includes("FROM hyrox_analyses")) {
+        analysisQueried = true;
+      }
       return { rows: [] };
     },
   };
@@ -127,6 +129,43 @@ test("getOrCreateSharePack's existing-pack lookup requires a non-null zip_key", 
   };
   await assert.rejects(() => getOrCreateSharePack("sub-1", db));
   assert.match(capturedSql, /zip_key IS NOT NULL/);
+});
+
+test("getOrCreateSharePack logs cacheHit true when returning an existing complete pack", async () => {
+  const events = [];
+  const db = {
+    async query(sql) {
+      if (sql.includes("SELECT * FROM hyrox_share_packs")) {
+        return { rows: [{ id: "pack-1", zip_key: "hyrox-share-packs/sub-1/pack.zip" }] };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  const pack = await getOrCreateSharePack("sub-1", db, { logCalculatorEvent: async (event) => events.push(event) });
+
+  assert.equal(pack.id, "pack-1");
+  assert.equal(events.length, 1);
+  assert.equal(events[0].eventName, "pack_generation_completed");
+  assert.equal(events[0].cacheHit, true);
+});
+
+test("getOrCreateSharePack logs cacheHit false when rendering a fresh pack", async () => {
+  const { db } = sharePackDb();
+  const events = [];
+
+  await getOrCreateSharePack("sub-1", db, {
+    launchBrowser: async () => ({ close: async () => {} }),
+    screenshotSlides: async () => SLIDE_FILENAMES.map((_, i) => Buffer.from(`slide-${i}`)),
+    putObject: async () => undefined,
+    renderRaceCardBuffer: async () => Buffer.from("race-card-bytes"),
+    logCalculatorEvent: async (event) => events.push(event),
+  });
+
+  const completed = events.find((event) => event.eventName === "pack_generation_completed");
+  assert.ok(completed);
+  assert.equal(completed.cacheHit, false);
+  assert.equal(Number.isFinite(completed.durationMs), true);
 });
 
 test("getOrCreateSharePack reuses an already-cached race_card_key instead of re-rendering", async () => {

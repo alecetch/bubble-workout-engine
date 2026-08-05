@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { RUN_KEYS, STATION_KEYS } from "./config/segmentMap.js";
 import { formatSecondsToTime } from "./ingestion/timeParser.js";
 
@@ -50,6 +50,23 @@ export const hyroxImportRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "too_many_requests", message: "Too many import attempts. Please try again later." },
+});
+
+export const hyroxEventsIpRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.HYROX_EVENTS_RATE_LIMIT_PER_MINUTE || 120),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests" },
+});
+
+export const hyroxEventsSessionRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.HYROX_EVENTS_SESSION_RATE_LIMIT_PER_MINUTE || 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => (req.body?.sessionId ? String(req.body.sessionId) : ipKeyGenerator(req.ip)),
+  message: { error: "too_many_requests" },
 });
 
 export function hyroxEmailRateLimiter(req, res, next) {

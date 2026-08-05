@@ -11,6 +11,7 @@ import { buildHyroxReportContract } from "../reports/reportContractBuilder.js";
 import { buildZip } from "./zipBuilder.js";
 import { SLIDE_FILENAMES } from "./slideAssets.js";
 import { putObject, getPresignedUrl, getObject } from "../../services/s3Service.js";
+import { safeLogCalculatorEvent } from "./eventLogger.js";
 
 export const SHARE_PACK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -23,6 +24,19 @@ function toSlug(str = "") {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "") || "hyrox";
+}
+
+async function emitCalculatorEvent(db, deps, event) {
+  try {
+    if (deps.logCalculatorEvent) {
+      await deps.logCalculatorEvent(event);
+    } else {
+      await safeLogCalculatorEvent(db, event);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[sharePackService] Calculator event logging failed:", err?.message);
+  }
 }
 
 function athleteContext(row = {}, storedCarousel = null) {
@@ -114,10 +128,21 @@ async function findCachedRaceCardKey(submissionId, db) {
 export async function getOrCreateRaceCard(submissionId, db = pool, deps = {}) {
   const putObjectFn = deps.putObject ?? putObject;
   const renderRaceCard = deps.renderRaceCardBuffer ?? renderRaceCardBuffer;
+  const sessionId = deps.sessionId ?? null;
 
   const cachedKey = await findCachedRaceCardKey(submissionId, db);
-  if (cachedKey) return { raceCardKey: cachedKey, buffer: null };
+  if (cachedKey) {
+    await emitCalculatorEvent(db, deps, {
+      sessionId,
+      submissionId,
+      eventName: "race_card_generation_completed",
+      cacheHit: true,
+      durationMs: 0,
+    });
+    return { raceCardKey: cachedKey, buffer: null };
+  }
 
+  const startedAt = Date.now();
   const row = await fetchSubmissionAnalysisRow(submissionId, db);
   if (!row) throw Object.assign(new Error("Submission not found"), { status: 404 });
 
@@ -134,6 +159,14 @@ export async function getOrCreateRaceCard(submissionId, db = pool, deps = {}) {
     [submissionId, raceCardKey, expiresAt],
   );
 
+  await emitCalculatorEvent(db, deps, {
+    sessionId,
+    submissionId,
+    eventName: "race_card_generation_completed",
+    cacheHit: false,
+    durationMs: Date.now() - startedAt,
+  });
+
   return { raceCardKey, buffer };
 }
 
@@ -143,6 +176,7 @@ export async function getOrCreateSharePack(submissionId, db = pool, deps = {}) {
   const renderSlides = deps.screenshotSlides ?? screenshotSlides;
   const renderRaceCard = deps.renderRaceCardBuffer ?? renderRaceCardBuffer;
   const launch = deps.launchBrowser ?? launchBrowser;
+  const sessionId = deps.sessionId ?? null;
 
   const existing = await db.query(
     `SELECT * FROM hyrox_share_packs
@@ -151,10 +185,21 @@ export async function getOrCreateSharePack(submissionId, db = pool, deps = {}) {
      ORDER BY created_at DESC LIMIT 1`,
     [submissionId],
   );
-  if (existing.rows[0]) return existing.rows[0];
+  if (existing.rows[0]) {
+    await emitCalculatorEvent(db, deps, {
+      sessionId,
+      submissionId,
+      eventName: "pack_generation_completed",
+      cacheHit: true,
+      durationMs: 0,
+    });
+    return existing.rows[0];
+  }
 
-  const row = await fetchSubmissionAnalysisRow(submissionId, db);
-  if (!row) throw Object.assign(new Error("Submission not found"), { status: 404 });
+  const startedAt = Date.now();
+  try {
+    const row = await fetchSubmissionAnalysisRow(submissionId, db);
+    if (!row) throw Object.assign(new Error("Submission not found"), { status: 404 });
 
   const rawAnalysisJson = objectOrNull(row.analysis_json);
   const analysisJson = rawAnalysisJson ?? {};
@@ -229,7 +274,25 @@ export async function getOrCreateSharePack(submissionId, db = pool, deps = {}) {
      RETURNING *`,
     [submissionId, zipKey, raceCardKey, caption, expiresAt],
   );
+  await emitCalculatorEvent(db, deps, {
+    sessionId,
+    submissionId,
+    eventName: "pack_generation_completed",
+    cacheHit: false,
+    durationMs: Date.now() - startedAt,
+  });
   return inserted.rows[0];
+  } catch (err) {
+    await emitCalculatorEvent(db, deps, {
+      sessionId,
+      submissionId,
+      eventName: "pack_generation_failed",
+      cacheHit: false,
+      durationMs: Date.now() - startedAt,
+      metadata: { errorStatus: err.status ?? 500 },
+    });
+    throw err;
+  }
 }
 
 export async function getPackDownloadUrl(pack) {

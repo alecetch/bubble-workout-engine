@@ -9,11 +9,12 @@ export function createHyroxRaceCardHandler(db = pool, deps = {}) {
   return async function hyroxRaceCardHandler(req, res) {
     const { submissionId } = req.params;
     const { download } = req.query;
+    const sessionId = typeof req.query?.sessionId === "string" ? req.query.sessionId : null;
 
     let raceCardKey;
     let buffer;
     try {
-      ({ raceCardKey, buffer } = await getOrCreateRaceCard(submissionId, db));
+      ({ raceCardKey, buffer } = await getOrCreateRaceCard(submissionId, db, { sessionId }));
       if (!buffer) buffer = await getObject(raceCardKey);
     } catch (err) {
       req.log?.error?.({ event: "hyrox.race_card_generation_failed", err: err?.message });

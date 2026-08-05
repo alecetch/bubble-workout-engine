@@ -307,6 +307,95 @@ export function createAdminHyroxObservabilityRouter(db) {
     }
   });
 
+  router.get("/share-pipeline", async (req, res) => {
+    const days = clampInt(req.query?.days, { defaultValue: 30, min: 1, max: 365 });
+
+    try {
+      const [analysesResult, eventsResult, packDurationResult, raceCardDurationResult] = await Promise.all([
+        db.query(
+          `
+          SELECT COUNT(*)::int AS completed
+          FROM hyrox_analyses ha
+          JOIN hyrox_submissions hs ON hs.id = ha.submission_id
+          WHERE hs.created_at > now() - ($1 * interval '1 day')
+          `,
+          [days],
+        ),
+        db.query(
+          `
+          SELECT
+            COUNT(*) FILTER (WHERE event_name = 'race_card_previewed')::int AS race_card_previewed,
+            COUNT(*) FILTER (WHERE event_name = 'pack_requested')::int AS packs_requested,
+            COUNT(*) FILTER (WHERE event_name = 'pack_generation_completed')::int AS pack_completed,
+            COUNT(*) FILTER (WHERE event_name = 'pack_generation_failed')::int AS pack_failed,
+            COUNT(*) FILTER (WHERE event_name = 'pack_generation_completed' AND cache_hit = true)::int AS pack_cache_hits,
+            COUNT(*) FILTER (WHERE event_name = 'pack_generation_completed' AND cache_hit IS NOT NULL)::int AS pack_cache_total,
+            COUNT(*) FILTER (WHERE event_name = 'race_card_generation_completed')::int AS race_card_completed,
+            COUNT(*) FILTER (WHERE event_name = 'race_card_generation_completed' AND cache_hit = true)::int AS race_card_cache_hits,
+            COUNT(*) FILTER (WHERE event_name = 'race_card_generation_completed' AND cache_hit IS NOT NULL)::int AS race_card_cache_total,
+            COUNT(*) FILTER (WHERE event_name = 'asset_downloaded' AND metadata_json->>'assetType' = 'race_card')::int AS race_card_downloads,
+            COUNT(*) FILTER (WHERE event_name = 'asset_downloaded' AND metadata_json->>'assetType' = 'zip')::int AS zip_downloads
+          FROM hyrox_calculator_events
+          WHERE created_at > now() - ($1 * interval '1 day')
+          `,
+          [days],
+        ),
+        db.query(
+          `
+          SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95
+          FROM hyrox_calculator_events
+          WHERE created_at > now() - ($1 * interval '1 day')
+            AND event_name = 'pack_generation_completed'
+            AND duration_ms IS NOT NULL
+          `,
+          [days],
+        ),
+        db.query(
+          `
+          SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95
+          FROM hyrox_calculator_events
+          WHERE created_at > now() - ($1 * interval '1 day')
+            AND event_name = 'race_card_generation_completed'
+            AND duration_ms IS NOT NULL
+          `,
+          [days],
+        ),
+      ]);
+
+      const analysesCompleted = Number(analysesResult.rows?.[0]?.completed ?? 0);
+      const events = eventsResult.rows?.[0] ?? {};
+      const racesCardPreviewed = Number(events.race_card_previewed ?? 0);
+      const packsRequested = Number(events.packs_requested ?? 0);
+      const packCompleted = Number(events.pack_completed ?? 0);
+      const raceCardCompleted = Number(events.race_card_completed ?? 0);
+
+      return res.json({
+        analysesCompleted,
+        racesCardPreviewed,
+        racesCardPreviewedPct: roundPct(racesCardPreviewed, analysesCompleted),
+        packsRequested,
+        packsRequestedPct: roundPct(packsRequested, analysesCompleted),
+        packGeneration: {
+          completed: packCompleted,
+          failed: Number(events.pack_failed ?? 0),
+          cacheHitPct: roundPct(Number(events.pack_cache_hits ?? 0), Number(events.pack_cache_total ?? 0)),
+          p95DurationMs: numberOrNull(packDurationResult.rows?.[0]?.p95),
+        },
+        raceCardGeneration: {
+          completed: raceCardCompleted,
+          cacheHitPct: roundPct(Number(events.race_card_cache_hits ?? 0), Number(events.race_card_cache_total ?? 0)),
+          p95DurationMs: numberOrNull(raceCardDurationResult.rows?.[0]?.p95),
+        },
+        assetsDownloaded: {
+          raceCard: Number(events.race_card_downloads ?? 0),
+          zip: Number(events.zip_downloads ?? 0),
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
   router.get("/daily-trend", async (req, res) => {
     const days = clampInt(req.query?.days, { defaultValue: 30, min: 1, max: 365 });
 

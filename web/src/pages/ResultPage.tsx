@@ -6,7 +6,8 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { SecondaryButton } from "../components/SecondaryButton";
 import { SharePackCard } from "../components/SharePackCard";
 import type { HyroxAnalysisResponse } from "../types";
-import { trackEvent } from "../utils/api";
+import { trackEvent, trackServerEvent } from "../utils/api";
+import { hasTrackedRaceCardPreview, markRaceCardPreviewTracked } from "../utils/resultPageEvents";
 import styles from "./ResultPage.module.css";
 
 interface LocationState {
@@ -51,6 +52,10 @@ export function ResultPage() {
         calculatorMode: responseMode,
         source: "post_analysis",
       });
+    }
+    if (submissionId && !hasTrackedRaceCardPreview(submissionId)) {
+      trackServerEvent("race_card_previewed", { submissionId, metadata: { source: "result_page" } });
+      markRaceCardPreviewTracked(submissionId);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

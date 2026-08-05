@@ -5,6 +5,7 @@ import { sendEmail } from "../services/emailService.js";
 import { getOrCreateSharePack, getPackDownloadUrl, SHARE_PACK_TTL_SECONDS } from "./sharePack/sharePackService.js";
 import { SLIDE_FILENAMES } from "./sharePack/slideAssets.js";
 import { buildMobileLandingPage } from "./sharePack/mobileLandingBuilder.js";
+import { safeLogCalculatorEvent } from "./sharePack/eventLogger.js";
 
 const APP_DOMAIN = process.env.APP_DOMAIN ?? "http://localhost:3000";
 
@@ -28,11 +29,23 @@ export function createSharePackHandlers(db = pool, deps = {}) {
   const getSignedUrl = deps.getPresignedUrl ?? getPresignedUrl;
   const emailSender = deps.sendEmail ?? sendEmail;
   const qrToString = deps.qrToString ?? QRCode.toString;
+  const logEvent = deps.logCalculatorEvent ?? ((event) => safeLogCalculatorEvent(db, event));
+
+  async function logRequestEvent(event) {
+    try {
+      await logEvent(event);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[hyroxSharePackController] Calculator event logging failed:", err?.message);
+    }
+  }
 
   async function generatePack(req, res) {
     try {
       const { submissionId } = req.params;
-      const pack = await createPack(submissionId, db);
+      const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : null;
+      await logRequestEvent({ submissionId, sessionId, eventName: "pack_requested", metadata: { trigger: "button" } });
+      const pack = await createPack(submissionId, db, { sessionId });
       const downloadUrl = await getDownloadUrl(pack, db);
       return res.json({
         packId: pack.id,
@@ -55,8 +68,10 @@ export function createSharePackHandlers(db = pool, deps = {}) {
       const { submissionId } = req.params;
       const email = String(req.body?.email ?? "").trim();
       if (!email) return res.status(400).json({ error: "email is required" });
+      const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : null;
 
-      const pack = await createPack(submissionId, db);
+      await logRequestEvent({ submissionId, sessionId, eventName: "pack_requested", metadata: { trigger: "email" } });
+      const pack = await createPack(submissionId, db, { sessionId });
       const downloadUrl = await getDownloadUrl(pack, db);
 
       await emailSender({
