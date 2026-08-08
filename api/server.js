@@ -9,6 +9,7 @@ import express from "express";
 import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
+import { existsSync } from "fs";
 import { readProgramRouter } from "./src/routes/readProgram.js";
 import { bonusDayRouter } from "./src/routes/bonusDay.js";
 import { programExerciseRouter } from "./src/routes/programExercise.js";
@@ -809,6 +810,7 @@ app.use("/api", physiquePhotoRouter);
 // index.html must not be cached — it references content-hashed bundle filenames that change on deploy.
 // Hashed assets (*.js, *.css) can be cached indefinitely since their content never changes.
 app.use(express.static(join(__dirname, "public/web"), {
+  index: false,
   setHeaders(res, filePath) {
     if (filePath.endsWith("index.html")) {
       res.setHeader("Cache-Control", "no-cache");
@@ -901,8 +903,16 @@ app.use(generateProgramV2Router);
 
 // Catch-all for React Router client-side routes not matched by any API or marketing route.
 app.get(/.*/, (_req, res) => {
+  const webIndexPath = join(__dirname, "public/web/index.html");
+  if (!existsSync(webIndexPath)) {
+    return res.status(404).json({
+      ok: false,
+      code: "web_shell_missing",
+      error: "React web shell is not built or mounted at public/web/index.html.",
+    });
+  }
   res.setHeader("Cache-Control", "no-cache");
-  res.sendFile(join(__dirname, "public/web/index.html"));
+  res.sendFile(webIndexPath);
 });
 
 // Sentry error handler — must come BEFORE the generic error handler and AFTER all routes.

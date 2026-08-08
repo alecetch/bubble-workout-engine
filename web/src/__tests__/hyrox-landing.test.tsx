@@ -24,6 +24,7 @@ describe("HyroxLandingPage", () => {
 
     expect(screen.getAllByText("Analyse my race").length).toBeGreaterThan(0);
     expect(screen.getByText("Predict my first HYROX")).toBeInTheDocument();
+    expect(screen.getByText("Beta")).toBeInTheDocument();
     expect(screen.getByText("Hit a target time")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^analyse my race$/i })).toHaveAttribute("href", "/hyrox-calculator/race-details");
     expect(screen.getByRole("link", { name: /predict my race time/i })).toHaveAttribute("href", "/hyrox-predictor");

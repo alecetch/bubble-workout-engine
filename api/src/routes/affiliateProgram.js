@@ -1,6 +1,6 @@
 import express from "express";
 import { escapeHtml } from "./referralLanding.js";
-import { wrapPage } from "../views/pageChrome.js";
+import { gatePage, wrapPage } from "../views/pageChrome.js";
 import { sendEmail } from "../services/emailService.js";
 import { requireInternalToken } from "../middleware/auth.js";
 import { pool } from "../db.js";
@@ -55,7 +55,7 @@ export function createAffiliateHandlers(db = pool) {
     const selected = (value) => (values.platform === value ? " selected" : "");
     const body = `<div class="container affiliate-page">
 <div class="affiliate-hero">
-  <h1>Partner with Formai</h1>
+  <h1>Partner with Forma</h1>
   <p>Are you a personal trainer, Hyrox coach, or fitness content creator? Partner with us and earn ${commission} for every user who subscribes through your link.</p>
 </div>
 
@@ -119,8 +119,8 @@ export function createAffiliateHandlers(db = pool) {
 </div>`;
 
     res.setHeader("Content-Type", "text/html; charset=utf-8").send(
-      wrapPage("Partner with Formai", body, {
-        description: "Partner with Formai as a coach or content creator and earn commission for every subscriber you refer.",
+      wrapPage("Partner with Forma", body, {
+        description: "Partner with Forma as a coach or content creator and earn commission for every subscriber you refer.",
         canonical: "/partners",
         extraCss: AFFILIATE_CSS,
       }),
@@ -161,9 +161,9 @@ export function createAffiliateHandlers(db = pool) {
 
     sendEmail({
       to: email,
-      subject: "Thanks for applying to partner with Formai",
-      text: `Hi ${name},\n\nThanks for applying to the Formai affiliate programme. We'll review your application and get back to you within 5 business days.\n\nIn the meantime, download Formai and try it yourself: ${process.env.APP_STORE_URL ?? "https://getformai.com/download"}\n\nFormai`,
-      html: `<p>Hi ${escapeHtml(name)},</p><p>Thanks for applying to the Formai affiliate programme. We'll review your application and get back to you within 5 business days.</p><p><a href="${escapeHtml(process.env.APP_STORE_URL ?? "https://getformai.com/download")}">Download Formai</a></p>`,
+      subject: "Thanks for applying to partner with Forma",
+      text: `Hi ${name},\n\nThanks for applying to the Forma affiliate programme. We'll review your application and get back to you within 5 business days.\n\nWe'll email you when Forma is ready.\n\nForma`,
+      html: `<p>Hi ${escapeHtml(name)},</p><p>Thanks for applying to the Forma affiliate programme. We'll review your application and get back to you within 5 business days.</p><p>We'll email you when Forma is ready.</p>`,
     }).catch((err) => console.error("affiliate confirmation email error", err));
 
     return res.redirect(302, "/partners/applied");
@@ -190,20 +190,19 @@ export function createAffiliateApplicationsCsvHandler(db = pool) {
 
 const { renderForm: partnersGet, postHandler: partnersPost } = createAffiliateHandlers();
 
-affiliateProgramRouter.get("/partners", (_req, res) => partnersGet(res));
+affiliateProgramRouter.get("/partners", gatePage, (_req, res) => partnersGet(res));
 affiliateProgramRouter.post("/partners", express.urlencoded({ extended: false }), partnersPost);
 
-affiliateProgramRouter.get("/partners/applied", (_req, res) => {
-  const appStoreUrl = escapeHtml(process.env.APP_STORE_URL ?? "#");
+affiliateProgramRouter.get("/partners/applied", gatePage, (_req, res) => {
   const body = `<div class="container applied-page">
     <h1>Application received.</h1>
     <p>Thanks for applying. We'll review your details and get back to you within 5 business days.</p>
-    <p style="color:#64748B;margin-bottom:32px;">In the meantime, download Formai and try it yourself.</p>
-    <a href="${appStoreUrl}" class="cta-btn">Download on App Store</a>
+    <p style="color:#64748B;margin-bottom:32px;">We'll email you when Forma is ready.</p>
+    <a href="/download" class="cta-btn">Get launch updates</a>
   </div>`;
   res.setHeader("Content-Type", "text/html; charset=utf-8").send(
     wrapPage("Application received", body, {
-      description: "Your Formai affiliate application has been received.",
+      description: "Your Forma affiliate application has been received.",
       extraCss: AFFILIATE_CSS,
     }),
   );
