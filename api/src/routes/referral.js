@@ -15,7 +15,7 @@ function resolveUserId(req) {
 }
 
 function buildShareUrl(code) {
-  const base = process.env.APP_BASE_URL ?? "https://getformai.com";
+  const base = process.env.APP_BASE_URL ?? "https://getforma.fit";
   return `${base.replace(/\/$/, "")}/ref/${code}`;
 }
 

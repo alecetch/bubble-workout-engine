@@ -11,6 +11,8 @@ function createApp() {
 
 function request(app, path) {
   return new Promise((resolve, reject) => {
+    const previousPreview = process.env.MARKETING_PREVIEW_ENABLED;
+    process.env.MARKETING_PREVIEW_ENABLED = "true";
     const server = app.listen(0, () => {
       const { port } = server.address();
       fetch(`http://127.0.0.1:${port}${path}`)
@@ -19,7 +21,14 @@ function request(app, path) {
           resolve({ res, body });
         })
         .catch(reject)
-        .finally(() => server.close());
+        .finally(() => {
+          if (previousPreview === undefined) {
+            delete process.env.MARKETING_PREVIEW_ENABLED;
+          } else {
+            process.env.MARKETING_PREVIEW_ENABLED = previousPreview;
+          }
+          server.close();
+        });
     });
   });
 }

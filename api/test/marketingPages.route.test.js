@@ -15,42 +15,54 @@ async function withServer(app, fn) {
   }
 }
 
-async function get(path) {
+async function get(path, { preview = false } = {}) {
   const app = express();
   app.use(marketingRouter);
+  const previousPreview = process.env.MARKETING_PREVIEW_ENABLED;
+  if (preview) process.env.MARKETING_PREVIEW_ENABLED = "true";
   return withServer(app, async (baseUrl) => {
-    const response = await fetch(`${baseUrl}${path}`);
-    const body = await response.text();
-    return { response, body };
+    try {
+      const response = await fetch(`${baseUrl}${path}`);
+      const body = await response.text();
+      return { response, body };
+    } finally {
+      if (previousPreview == null) delete process.env.MARKETING_PREVIEW_ENABLED;
+      else process.env.MARKETING_PREVIEW_ENABLED = previousPreview;
+    }
   });
 }
 
-test("GET / returns HTML with Formai and App Store copy", async () => {
+test("GET / returns HTML with Forma and calculator copy", async () => {
   const { response, body } = await get("/");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-  assert.match(body, /Formai/);
-  assert.match(body, /App Store/);
+  assert.match(body, /Forma/);
+  assert.match(body, /free HYROX calculator/);
+  assert.doesNotMatch(body, /Download on App Store/);
 });
 
-test("GET / includes the hero image reference", async () => {
+test("GET / includes the Forma masthead image reference", async () => {
   const { body } = await get("/");
-  assert.match(body, /formai_hero@2x\.png/);
+  assert.match(body, /forma_masthead\.png/);
 });
 
-test("GET /download includes an inline QR SVG", async () => {
+test("GET /download renders coming soon notify form", async () => {
   const { response, body } = await get("/download");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-  assert.match(body, /<svg/);
+  assert.match(body, /Forma is coming soon/);
+  assert.match(body, /action="\/download\/notify"/);
+  assert.doesNotMatch(body, /<svg/);
+  assert.doesNotMatch(body, /App Store/);
 });
 
 test("GET /download still returns 200 when APP_STORE_URL is empty", async () => {
   const previous = process.env.APP_STORE_URL;
   process.env.APP_STORE_URL = "";
   try {
-    const { response } = await get("/download");
+    const { response, body } = await get("/download");
     assert.equal(response.status, 200);
+    assert.match(body, /Notify me/);
   } finally {
     if (previous == null) delete process.env.APP_STORE_URL;
     else process.env.APP_STORE_URL = previous;
@@ -79,7 +91,7 @@ test("GET /support renders FAQs and support email", async () => {
   const previous = process.env.SUPPORT_EMAIL;
   process.env.SUPPORT_EMAIL = "help@example.com";
   try {
-    const { response, body } = await get("/support");
+  const { response, body } = await get("/support", { preview: true });
     assert.equal(response.status, 200);
     assert.match(body, /Frequently asked questions/);
     assert.match(body, /help@example\.com/);
@@ -90,7 +102,7 @@ test("GET /support renders FAQs and support email", async () => {
 });
 
 test("all marketing routes return HTML", async () => {
-  for (const path of ["/", "/download", "/privacy", "/terms", "/support"]) {
+  for (const path of ["/", "/download", "/privacy", "/terms"]) {
     const { response } = await get(path);
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
   }

@@ -1,16 +1,11 @@
 import { escapeHtml } from "../routes/referralLanding.js";
 
-const APP_STORE_URL = () => process.env.APP_STORE_URL ?? "#";
+function marketingPreviewEnabled() {
+  return process.env.MARKETING_PREVIEW_ENABLED === "true";
+}
 
 function header() {
-  return `
-  <header class="site-header">
-    <a href="/" class="logo-link">
-      <img src="/images/formai_wordmark_only@2x.png" width="110" alt="Formai" class="logo-img">
-    </a>
-    <nav class="site-nav">
-      <a href="/">Home</a>
-      <a href="/download">Download</a>
+  const previewLinks = marketingPreviewEnabled() ? `
       <a href="/pricing">Pricing</a>
       <a href="/hyrox">Hyrox</a>
       <a href="/strength">Strength</a>
@@ -21,23 +16,33 @@ function header() {
       <a href="/blog">Blog</a>
       <a href="/changelog">Changelog</a>
       <a href="/support">Support</a>
-      <a href="/signup">Updates</a>
-      <a href="${escapeHtml(APP_STORE_URL())}" class="nav-cta">Get the app</a>
+      <a href="/signup">Updates</a>` : "";
+  return `
+  <header class="site-header">
+    <a href="/" class="logo-link">
+      <img src="/images/forma_masthead.png" width="110" alt="Forma - Measure. Understand. Improve." class="logo-img">
+    </a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/download">Download</a>
+      ${previewLinks}
+      <a href="/download" class="nav-cta">Get the app</a>
     </nav>
   </header>`;
 }
 
 function footer() {
+  const previewLinks = marketingPreviewEnabled() ? '<a href="/support">Support</a>' : "";
   return `
   <footer class="site-footer">
     <div class="footer-inner">
       <div class="footer-links">
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
-        <a href="/support">Support</a>
+        ${previewLinks}
       </div>
       <p class="footer-copy">© 2026 Engle Consulting Limited. All rights reserved.</p>
-      <a href="${escapeHtml(APP_STORE_URL())}" class="app-store-badge">Download on the App Store</a>
+      <a href="/download" class="app-store-badge">Get launch updates</a>
     </div>
   </footer>`;
 }
@@ -135,8 +140,8 @@ export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
   const isOptions = extraCssOrOptions !== null && typeof extraCssOrOptions === "object";
   const extraCss = isOptions ? (extraCssOrOptions.extraCss ?? "") : extraCssOrOptions;
   const opts = isOptions ? extraCssOrOptions : {};
-  const description = opts.description ?? "Formai - personalised strength and conditioning programs that adapt to your performance.";
-  const ogImage = opts.ogImage ?? "/images/formai_hero@2x.png";
+  const description = opts.description ?? "Forma - personalised strength and conditioning programs that adapt to your performance.";
+  const ogImage = opts.ogImage ?? "/images/forma_masthead.png";
   const ogType = opts.ogType ?? "website";
   const baseUrl = process.env.BASE_URL ?? "";
   const canonicalTag = baseUrl && opts.canonical
@@ -151,17 +156,17 @@ export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)} - Formai</title>
+  <title>${escapeHtml(title)} - Forma</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta property="og:title" content="${escapeHtml(title)} - Formai">
+  <meta property="og:title" content="${escapeHtml(title)} - Forma">
   <meta property="og:description" content="${escapeHtml(description)}">
   <meta property="og:image" content="${escapeHtml(ogImage)}">
   <meta property="og:type" content="${escapeHtml(ogType)}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${escapeHtml(title)} - Formai">
+  <meta name="twitter:title" content="${escapeHtml(title)} - Forma">
   <meta name="twitter:description" content="${escapeHtml(description)}">
   <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-  <link rel="icon" type="image/svg+xml" href="/images/formai_icon.svg">
+  <link rel="icon" type="image/png" href="/images/forma_icon.png">
   ${canonicalTag}
   ${jsonLdTag}
   <style>${SHARED_CSS}${extraCss}</style>
@@ -172,4 +177,16 @@ export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
   ${footer()}
 </body>
 </html>`;
+}
+
+export function gatePage(_req, res, next) {
+  if (marketingPreviewEnabled()) {
+    return next();
+  }
+
+  const body = `<div class="container-narrow" style="padding:80px 24px;text-align:center;">
+  <h1>Page not found</h1>
+  <p style="color:#94A3B8;margin-top:12px;">This page is not live yet. <a href="/">Back home</a></p>
+</div>`;
+  return res.status(404).setHeader("Content-Type", "text/html; charset=utf-8").send(wrapPage("Page not found", body));
 }

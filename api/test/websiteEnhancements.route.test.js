@@ -35,10 +35,17 @@ async function withServer(app, fn) {
 async function get(path) {
   const app = express();
   app.use(websiteEnhancementsRouter);
+  const previousPreview = process.env.MARKETING_PREVIEW_ENABLED;
+  process.env.MARKETING_PREVIEW_ENABLED = "true";
   return withServer(app, async (baseUrl) => {
-    const response = await fetch(`${baseUrl}${path}`);
-    const body = await response.text();
-    return { response, body };
+    try {
+      const response = await fetch(`${baseUrl}${path}`);
+      const body = await response.text();
+      return { response, body };
+    } finally {
+      if (previousPreview == null) delete process.env.MARKETING_PREVIEW_ENABLED;
+      else process.env.MARKETING_PREVIEW_ENABLED = previousPreview;
+    }
   });
 }
 
@@ -73,7 +80,7 @@ test("GET /pricing renders pricing page and fallback pricing", async () => {
     const { response, body } = await get("/pricing");
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-    assert.match(body, /free trial/i);
+    assert.match(body, /Launch pricing/i);
     assert.match(body, /See App Store for pricing/);
   } finally {
     if (previous == null) delete process.env.MONTHLY_PRICE;
@@ -104,7 +111,7 @@ test("POST /signup inserts valid email and redirects", async () => {
     assert.equal(response.headers.get("location"), "/signup/confirmed");
     assert.equal(db.calls.length, 1);
     assert.match(db.calls[0].sql, /ON CONFLICT \(email\) DO NOTHING/);
-    assert.deepEqual(db.calls[0].params, ["user@example.com"]);
+    assert.deepEqual(db.calls[0].params, ["user@example.com", "website"]);
   });
 });
 
