@@ -444,6 +444,60 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[2].percentile, "0:08 ahead");
   });
 
+  it("uses Biggest Strength only for reliable strengths", () => {
+    const carousel = buildTemplateA(analysis({
+      strengths: [{
+        segmentKey: "sled_pull", label: "Sled Pull", type: "station", userSeconds: 210, percentile: 91,
+        timeAdvantageSeconds: 35, timeGapToMedianSeconds: -35, frameGapSeconds: -35,
+      }],
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 5732, frameGapSeconds: 900, percentile: 45 }),
+        segment("wall_balls", { label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35 }),
+        segment("sled_pull", { label: "Sled Pull", userSeconds: 210, percentile: 91, timeAdvantageSeconds: 35, timeGapToMedianSeconds: -35, frameGapSeconds: -35 }),
+      ],
+    }), [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
+
+    assert.equal(carousel.slides[2].strength_heading, "BIGGEST STRENGTH");
+    assert.equal(carousel.slides[2].station, "SLED PULL");
+  });
+
+  it("uses Best Relative Split for fastest-ahead-only strength fallback", () => {
+    const carousel = buildTemplateA(analysis({
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90 },
+        biggestStrength: null,
+      },
+      strengths: [],
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 5732, frameGapSeconds: 900, percentile: 45 }),
+        segment("run_8", { type: "run", label: "Run 8", userSeconds: 207, frameGapSeconds: -33, timeGapToMedianSeconds: -33 }),
+        segment("wall_balls", { label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35 }),
+      ],
+    }), [], { displayName: "Marcus Fernandes", calculatorMode: "analyse" });
+
+    assert.equal(carousel.slides[2].strength_heading, "BEST RELATIVE SPLIT");
+    assert.equal(carousel.slides[2].station, "RUN 8");
+    assert.match(carousel.slides[2].caption, /No clear protectable strength was identified with enough confidence/i);
+  });
+
+  it("uses a non-strength heading when no reliable strength or ahead split exists", () => {
+    const carousel = buildTemplateA(analysis({
+      headline: {
+        biggestLimiter: { segmentKey: "wall_balls", label: "Wall Balls", type: "station", timeGapSeconds: 90 },
+        biggestStrength: null,
+      },
+      strengths: [],
+      segments: [
+        segment("total_time", { type: "aggregate", userSeconds: 5732, frameGapSeconds: 900, percentile: 45 }),
+        segment("run_8", { type: "run", label: "Run 8", userSeconds: 260, frameGapSeconds: 20, timeGapToMedianSeconds: 20 }),
+        segment("wall_balls", { label: "Wall Balls", userSeconds: 390, frameGapSeconds: 90, timeGapToMedianSeconds: 90, percentile: 35 }),
+      ],
+    }), [], { displayName: "Marcus Fernandes", calculatorMode: "analyse" });
+
+    assert.equal(carousel.slides[2].strength_heading, "NO CLEAR STRENGTH");
+    assert.notEqual(carousel.slides[2].strength_heading, "BIGGEST STRENGTH");
+  });
+
   it("splitGapSummary drops the redundant sign on the opportunity and key-insight slides too", () => {
     const carousel = buildTemplateA(analysis({
       race: { finishTimeSeconds: 5732 },
@@ -468,6 +522,8 @@ describe("buildTemplateA", () => {
     }), [], { displayName: "Kate Wagstaff", calculatorMode: "analyse" });
 
     assert.equal(carousel.slides[3].current_station_rank, "1:30 gap");
+    assert.equal(carousel.slides[3].opportunity_word, "TO FIND");
+    assert.equal(carousel.slides[4].loss_word, "TO FIND");
     assert.equal(carousel.slides[4].gain_text, "0:35 ahead performance");
   });
 

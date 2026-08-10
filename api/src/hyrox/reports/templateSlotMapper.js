@@ -41,6 +41,13 @@ function upper(value) {
   return String(value ?? "").toUpperCase();
 }
 
+function strengthPresentationLabel(status) {
+  if (status === "reliable_strength") return "BIGGEST STRENGTH";
+  if (status === "fastest_ahead_split_only") return "BEST RELATIVE SPLIT";
+  if (status === "suppressed") return "SPLIT CONFIDENCE";
+  return "NO CLEAR STRENGTH";
+}
+
 // Parses an already-formatted signed time string ("-0:33", "+1:02:15", "0:00") back to seconds.
 // Needed because strengthPolicy's "fastest_ahead_split_only" fallback (used whenever there's no
 // fully "reliable" strength, e.g. Marcus Fernandes' case below) only carries a pre-formatted
@@ -391,6 +398,7 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
       },
       {
         slide_id: "A3_BIGGEST_STRENGTH",
+        strength_heading: strengthPresentationLabel(strengthPolicy.status),
         station: narrative.artifactSlots?.carousel?.strengthLabel ?? (strength ? upper(strength.label ?? label(strength.segmentKey)) : "NO RELIABLE STRENGTH"),
         percentile: strengthPolicy.status === "fastest_ahead_split_only"
           ? "Best relative split"
@@ -439,7 +447,7 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
           return {
             opportunity_value: parts?.value ?? (primaryIsPenalty ? "CLEAN EXECUTION" : "N/A"),
             opportunity_unit: parts?.unit ?? null,
-            opportunity_word: primaryIsPenalty ? "RECOVERABLE" : (parts ? "AVAILABLE" : null),
+            opportunity_word: primaryIsPenalty ? "RECOVERABLE" : (parts ? "TO FIND" : null),
           };
         })(),
         opportunity_sublabel: `VS ${basis}`,

@@ -121,7 +121,7 @@ ${HASHTAGS}`,
               { x: 5, y: 331, label: "R5" },
               { x: 6, y: 322, label: "R6" },
               { x: 7, y: 322, label: "R7" },
-              { x: 8, y: 381, label: "R8", valueLabel: "6:21" },
+              { x: 8, y: 381, label: "R8", valueLabel: "6:21", valueLabelDy: 104, valueLabelDx: -10, valueLabelAnchor: "end" },
             ],
           },
           {
@@ -135,10 +135,11 @@ ${HASHTAGS}`,
               { x: 5, y: 372, label: "R5" },
               { x: 6, y: 364, label: "R6" },
               { x: 7, y: 363, label: "R7" },
-              { x: 8, y: 420, label: "R8", valueLabel: "7:00" },
+              { x: 8, y: 420, label: "R8", valueLabel: "7:00", valueLabelDy: -34, valueLabelDx: -8, valueLabelAnchor: "end" },
             ],
           },
         ],
+        chartScale: { yPadTopFactor: 0.24, yPadBottomFactor: 0.18, valueLabelOffsetY: -18 },
         supportingText: "RUNS 2–7 SLOW GRADUALLY.<br>RUN 8 IS THE BIGGEST JUMP.",
         sampleSizeText: "n=140,625 (M) / n=84,009 (F) · average time per 1km leg",
         ctaType: "none",
@@ -263,9 +264,9 @@ ${HASHTAGS}`,
     slideCount: 3,
     population: "Open Male, season 8, valid + split_coverage ≥0.97",
     sampleSize: "n=140,625",
-    keyStatistic: "Sandbag lunge has the highest coefficient of variation of any segment (49.6%)",
+    keyStatistic: "Sandbag lunge has the highest coefficient of variation of any HYROX station (49.6%)",
     supportingStatistics: ["RoxZone: 43.7% · Wall balls: 41.7% · Burpee broad jumps: 35.3%"],
-    interpretation: "No part of a HYROX race varies between athletes more than the sandbag lunge.",
+    interpretation: "No HYROX station varies between athletes more than the sandbag lunge.",
     caveat: "High CV reflects spread, not difficulty — doesn't mean it's the hardest station in absolute terms, just the most differentiating one.",
     calculatorMode: "analyse",
     ctaType: "none",
@@ -278,16 +279,16 @@ ${HASHTAGS}`,
         headline: "The station that spreads the field most",
         primaryStat: "49.6%",
         primaryStatSuffix: "COEFFICIENT OF VARIATION — SANDBAG LUNGE",
-        supportingText: "No part of a HYROX race varies between athletes more than this one.",
+        supportingText: "No HYROX station varies more between athletes than this one.",
         sampleSizeText: "n=140,625 Open Male · Forma 2025–26 worldwide dataset",
         ctaType: "none",
         swipePrompt: "Swipe to see how every station ranks",
       },
       {
         component: "RankedBars",
-        kicker: "SPREAD BY SEGMENT",
+        kicker: "SPREAD BY STATION",
         headline: "Coefficient of variation, all 8 stations + RoxZone",
-        axisNote: "Higher = more spread between athletes on that segment",
+        axisNote: "Higher = more athlete-to-athlete variation",
         bars: [
           { label: "Sandbag Lunge", magnitude: 49.6, displayValue: "49.6%", tone: "negative" },
           { label: "RoxZone", magnitude: 43.7, displayValue: "43.7%", tone: "amber" },
@@ -304,7 +305,7 @@ ${HASHTAGS}`,
       },
       {
         component: "AthleteTakeaway",
-        text: "Sandbag lunge sits late in the race, loaded, unglamorous — and it's where real separation between athletes actually happens.",
+        text: "Sandbag Lunges sit late in the race, loaded and unglamorous — and show the widest athlete-to-athlete spread of any HYROX station.",
         caveat: "High spread doesn't mean hardest in absolute terms — it means most differentiating between athletes.",
         sampleSizeText: "Forma 2025–26 worldwide HYROX dataset",
         ctaType: "none",
@@ -312,11 +313,13 @@ ${HASHTAGS}`,
     ],
     caption: `The station that spreads the field most.
 
-We measured how much each HYROX segment varies between athletes, relative to its own average time — the coefficient of variation. The winner: sandbag lunge, at 49.6%. Nothing else in the race comes close.
+We measured how much each HYROX station varies between athletes relative to its own average time — the coefficient of variation. RoxZone is included as an additional comparison.
 
-RoxZone (43.7%) and wall balls (41.7%) are next. At the other end, SkiErg (8.8%) and row (11.6%) barely vary at all — everyone does roughly the same relative time on those, regardless of ability.
+Sandbag Lunges have the highest variation of the eight stations at 49.6%. RoxZone (43.7%) and Wall Balls (41.7%) are next.
 
-High spread doesn't mean "hardest" in absolute terms. It means this is where real separation between athletes happens — a station where being strong (or weak) actually shows up in the result.
+At the other end, SkiErg (8.8%) and Row (11.6%) show much less relative variation across the field.
+
+High spread doesn't mean hardest in absolute terms. It means athlete-to-athlete performance varies more on that station relative to its average time.
 
 Analysis based on 140,625 Open Male results from the Forma 2025–26 worldwide HYROX dataset.
 

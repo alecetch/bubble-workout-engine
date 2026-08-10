@@ -99,13 +99,13 @@ export function RankedBars({ kicker, headline, bars = [], axisNote, supportingTe
 // lines converging near the same point) render with enough real separation that an endpoint
 // value label doesn't sit on top of the other series' line. Prefer growing this over shrinking
 // label font size when two elements collide (mobile-readability audit, 2026-08).
-function progressionSvg(series, { width = 950, height = 440 }) {
+function progressionSvg(series, { width = 950, height = 440, yPadTopFactor = 0.18, yPadBottomFactor = 0.18, valueLabelOffsetY = -18 }) {
   const allY = series.flatMap((s) => s.points.map((p) => p.y));
   const yMin = Math.min(...allY);
   const yMax = Math.max(...allY);
-  const yPad = (yMax - yMin) * 0.18 || 1;
-  const lo = yMin - yPad;
-  const hi = yMax + yPad;
+  const yRange = yMax - yMin || 1;
+  const lo = yMin - yRange * yPadBottomFactor;
+  const hi = yMax + yRange * yPadTopFactor;
   const n = series[0]?.points.length ?? 1;
   const chartH = height - 70;
   const stepX = n > 1 ? width / (n - 1) : width;
@@ -139,9 +139,9 @@ function progressionSvg(series, { width = 950, height = 440 }) {
     )
     .filter(({ p }) => p.valueLabel)
     .map(({ p, i, color, isFirst, isLast }) => {
-      const x = i * stepX + (isFirst ? 8 : isLast ? -8 : 0);
-      const y = scaleY(p.y) - 18;
-      const anchor = isFirst ? "start" : isLast ? "end" : "middle";
+      const x = i * stepX + (p.valueLabelDx ?? (isFirst ? 8 : isLast ? -8 : 0));
+      const y = scaleY(p.y) + (p.valueLabelDy ?? valueLabelOffsetY);
+      const anchor = p.valueLabelAnchor ?? (isFirst ? "start" : isLast ? "end" : "middle");
       return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" fill="${color}" font-size="${TYPOGRAPHY.l2ChartSmall}" font-weight="800" font-family="'Inter Tight',sans-serif">${escapeHtml(p.valueLabel)}</text>`;
     })
     .join("");
@@ -160,7 +160,7 @@ function progressionSvg(series, { width = 950, height = 440 }) {
   </svg>`;
 }
 
-export function PaceProgression({ kicker, headline, series = [], legend = [], supportingText, sampleSizeText, ctaType = "none", swipePrompt }) {
+export function PaceProgression({ kicker, headline, series = [], legend = [], supportingText, sampleSizeText, ctaType = "none", swipePrompt, chartScale = {} }) {
   const legendHtml = legend
     .map(
       (l) => `<div style="display:flex;align-items:center;gap:9px;font-size:${TYPOGRAPHY.l2ChartSmall}px;font-weight:700;color:${COLORS.muted};">
@@ -173,7 +173,7 @@ export function PaceProgression({ kicker, headline, series = [], legend = [], su
     ${kickerLabel(kicker)}
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1ChartHeadline}px;max-width:900px;margin-bottom:18px;">${headline}</div>
     ${legend.length ? `<div style="display:flex;align-items:center;margin-bottom:22px;">${legendHtml}</div>` : ""}
-    ${progressionSvg(series, {})}
+    ${progressionSvg(series, chartScale)}
     ${supportingText ? `<div class="dl-body-text" style="margin-top:30px;max-width:820px;">${supportingText}</div>` : ""}
   </div>`;
   return shell(content, { sampleSizeText, ctaType, swipePrompt });

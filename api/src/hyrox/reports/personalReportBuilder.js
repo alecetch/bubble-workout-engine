@@ -5,6 +5,7 @@ import { buildTrainingVolumeAdvice } from "./trainingVolumeAdvisor.js";
 import { buildStrengthSignalCopy } from "./strengthSignalAdvisor.js";
 import { resolveReportStrength } from "./reportSelections.js";
 import { buildRoxzoneSection } from "./roxzoneCommentary.js";
+import { ensureHyroxReportContract } from "./reportContractBuilder.js";
 import { renderMuscleDiagramPair } from "../engine/muscleDiagramRenderer.js";
 import { getSegmentLabel } from "../engine/segmentNormaliser.js";
 
@@ -14,6 +15,13 @@ function hasContext(athleteContext) {
 
 function section(sectionKey, title, content) {
   return { sectionKey, title, content };
+}
+
+function strengthSectionTitle(status) {
+  if (status === "reliable_strength") return "Biggest Strength";
+  if (status === "fastest_ahead_split_only") return "Best Relative Split";
+  if (status === "suppressed") return "Split Confidence";
+  return "No Clear Strength";
 }
 
 const WARNING_LABELS = Object.freeze({
@@ -390,8 +398,10 @@ function ctaCopy(calculatorMode = "target", primaryCategory = null) {
 }
 
 export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null) {
+  const reportContract = ensureHyroxReportContract({ analysisJson, athleteContext, calculatorMode, insights, contract });
   const limiter = analysisJson.headline?.biggestLimiter ?? analysisJson.limiters?.[0] ?? null;
-  const strength = resolveReportStrength(analysisJson);
+  const strengthPolicy = reportContract.strengthPolicy ?? {};
+  const strength = strengthPolicy.strength ?? resolveReportStrength(analysisJson);
   const total = segment(analysisJson, "total_time");
   const recommendations = buildRecommendations(
     analysisJson,
@@ -484,7 +494,12 @@ export function buildPersonalReport(analysisJson = {}, insights = [], athleteCon
   }
   sections.push(section("running_fatigue", "Running and Fatigue Profile", runningFatigueContent(analysisJson)));
   const strengthBs = splitStatusLabel(strength);
-  sections.push(section("biggest_strength", "Biggest Strength", strength ? `${strength.label} is the strongest benchmarked area${strengthBs ? ` - ${strengthBs} vs your benchmark band` : ""}.` : "No single high-confidence strength dominated this result."));
+  const strengthContent = strengthPolicy.status === "fastest_ahead_split_only" && strengthPolicy.explanation
+    ? strengthPolicy.explanation
+    : strength
+      ? `${strength.label} is the strongest benchmarked area${strengthBs ? ` - ${strengthBs} vs your benchmark band` : ""}.`
+      : strengthPolicy.explanation ?? "No single high-confidence strength dominated this result.";
+  sections.push(section("biggest_strength", strengthSectionTitle(strengthPolicy.status), strengthContent));
   sections.push(section(
     "biggest_limiter",
     stationBreakdownTitle(calculatorMode, primaryCategory, analysisJson.benchmarkContext?.analysisFrame),

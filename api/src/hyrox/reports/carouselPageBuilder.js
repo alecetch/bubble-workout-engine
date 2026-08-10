@@ -58,7 +58,7 @@ const CAROUSEL_CSS = `
   --red: #ff4b63;
   --red-dim: rgba(255, 75, 99, 0.16);
   --font-display: "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Space Mono", "Roboto Mono", "Courier New", monospace;
+  --font-mono: "Space Mono", "Roboto Mono", Consolas, "Liberation Mono", "Courier New", monospace;
   --font-body: Inter, "Helvetica Neue", Arial, sans-serif;
 
   /* Social typography scale (Phase 2 of the mobile-readability review) — every generated
@@ -67,8 +67,8 @@ const CAROUSEL_CSS = `
      Ranges are calibrated so nothing meaningful sits below ~24px at native 1080px render, which
      is the threshold that held up as readable-without-zooming at 360-390px feed width in testing. */
   --fs-hero: 180px;        /* single short hero value (A1 hero number) */
-  --fs-hero-alt: 104px;    /* two-part hero (value + FASTER/SLOWER/AVAILABLE word), A3/A4/A5 */
-  --fs-hero-word: 50px;    /* the FASTER/SLOWER/AVAILABLE word beside --fs-hero-alt */
+  --fs-hero-alt: 104px;    /* two-part hero (value + FASTER/SLOWER/TO FIND word), A3/A4/A5 */
+  --fs-hero-word: 50px;    /* the FASTER/SLOWER/TO FIND word beside --fs-hero-alt */
   --fs-heading: 60px;      /* slide titles / station names */
   --fs-heading-mono: 46px; /* mono-font headline (A1 hook-title), wider glyphs than sans */
   --fs-body: 34px;         /* important body copy / captions */
@@ -169,7 +169,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
 .regional-context { color: var(--muted); font-size: 20px; font-style: italic; line-height: 1.35; max-width: 720px; margin: -12px auto 24px; text-transform: none; }
 .thin-rule { width: 220px; height: 1px; background: var(--line); margin: 0 auto 40px; }
 /* Two-part social hero: a value ("40 SEC" / "1:15") plus a bold direction word (FASTER / SLOWER /
-   AVAILABLE / TO FIND), replacing the old bare "+0:40" mathematical gap (Phase 5/6/13). */
+   TO FIND / RECOVERABLE), replacing the old bare "+0:40" mathematical gap (Phase 5/6/13). */
 .giant-phrase { display: flex; align-items: baseline; justify-content: center; gap: 20px; flex-wrap: wrap; }
 .giant-value { font-family: var(--font-display); font-weight: 300; font-size: var(--fs-hero-alt); line-height: 0.9; letter-spacing: -0.03em; }
 .giant-word { font-family: var(--font-mono); font-weight: 800; font-size: var(--fs-hero-word); text-transform: uppercase; letter-spacing: 0.01em; }
@@ -337,7 +337,7 @@ export function buildCarouselPage(carouselData = {}) {
       ${watermark}
       ${brandHeader}
       <div class="center-stack">
-        <div class="kicker">BIGGEST STRENGTH</div>
+        <div class="kicker" data-field="slides.2.strength_heading">BIGGEST STRENGTH</div>
         <h2 class="station-title" data-field="slides.2.station">-</h2>
         <div class="percentile"><span data-field="slides.2.percentile">BENCHMARKED</span></div>
         <div class="thin-rule"></div>

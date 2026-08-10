@@ -28,8 +28,16 @@ export function buildCaption({ slide0 = {}, athleteContext = {}, analysisJson = 
   if (slide0.largest_fitness_limiter && slide0.biggest_limiter === "PENALTIES") {
     lines.push(`Largest fitness limiter: ${slide0.largest_fitness_limiter.station}`);
   }
-  if (slide0.best_station && !/^NO RELIABLE/i.test(String(slide0.best_station))) {
-    lines.push(`Biggest strength: ${slide0.best_station}`);
+  const strengthStatus = narrative.strengthPolicy?.status;
+  const strengthLabel = narrative.strengthPolicy?.displayLabel
+    ? String(narrative.strengthPolicy.displayLabel).toUpperCase()
+    : slide0.best_station;
+  if (strengthLabel && !/^NO RELIABLE/i.test(String(strengthLabel))) {
+    if (strengthStatus === "reliable_strength") {
+      lines.push(`Biggest strength: ${strengthLabel}`);
+    } else if (strengthStatus === "fastest_ahead_split_only") {
+      lines.push(`Best relative split: ${strengthLabel}`);
+    }
   }
 
   lines.push("", "Now I know exactly what to work on next.", "");

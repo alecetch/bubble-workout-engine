@@ -79,6 +79,11 @@ function personalStrengthContent(analysisJson, athleteContext = {}) {
   return report.sections.find((section) => section.sectionKey === "biggest_strength")?.content ?? "";
 }
 
+function personalStrengthSection(analysisJson, athleteContext = {}) {
+  const report = buildPersonalReport(analysisJson, [], athleteContext, interpretation(), "target");
+  return report.sections.find((section) => section.sectionKey === "biggest_strength") ?? null;
+}
+
 function assertNoBlankCopy(value) {
   const text = String(value ?? "");
   assert.doesNotMatch(text, /\bundefined\b|\bnull\b|\(\s*\)/i);
@@ -165,13 +170,16 @@ describe("HYROX artifact limiter consistency", () => {
     const browser = buildBrowserSummary(analysisJson, [], athleteContext, "target");
     const raceCard = buildHyroxRaceCardData(analysisJson, athleteContext);
     const carousel = buildTemplateA(analysisJson, [], athleteContext);
-    const personalStrength = personalStrengthContent(analysisJson, athleteContext);
+    const personalStrength = personalStrengthSection(analysisJson, athleteContext);
 
     assert.equal(browser.biggestStrength.label, "Farmers Carry");
     assert.equal(raceCard.strongestStation.name, "Farmers Carry");
+    assert.equal(raceCard.strongestStation.cardHeader, "Strongest Station");
     assert.equal(carousel.slides[0].best_station, "FARMERS CARRY");
+    assert.equal(carousel.slides[2].strength_heading, "BIGGEST STRENGTH");
     assert.equal(carousel.slides[2].station, "FARMERS CARRY");
-    assert.match(personalStrength, /Farmers Carry is the strongest benchmarked area/i);
+    assert.equal(personalStrength.title, "Biggest Strength");
+    assert.match(personalStrength.content, /Farmers Carry is the strongest benchmarked area/i);
   });
 
   it("uses a contract-owned best-relative-split fallback when strict strength is null", () => {
@@ -187,20 +195,28 @@ describe("HYROX artifact limiter consistency", () => {
     const browser = buildBrowserSummary(analysisJson, [], athleteContext, "target");
     const raceCard = buildHyroxRaceCardData(analysisJson, athleteContext);
     const carousel = buildTemplateA(analysisJson, [], athleteContext);
-    const personalStrength = personalStrengthContent(analysisJson, athleteContext);
+    const caption = buildCaption({ slide0: carousel.slides[0], athleteContext, analysisJson });
+    const personalStrength = personalStrengthSection(analysisJson, athleteContext);
     const browserMarkdown = screen4Boxes(browser, "target");
 
     assert.equal(browser.biggestStrength, null);
-	    assert.equal(raceCard.strongestStation.name, "Farmers Carry");
-	    assert.equal(raceCard.strongestStation.policyStatus, "fastest_ahead_split_only");
-	    assert.equal(raceCard.strongestStation.percentile, null);
-	    assert.equal(carousel.slides[0].best_station, "FARMERS CARRY");
-	    assert.equal(carousel.slides[2].station, "FARMERS CARRY");
-	    assert.ok(carousel.slides[5].features.includes("Best Relative Split"));
-	    assert.ok(!carousel.slides[5].features.includes("Strongest Station"));
-	    assert.match(carousel.slides[2].caption, /no protectable strength/i);
+		    assert.equal(raceCard.strongestStation.name, "Farmers Carry");
+		    assert.equal(raceCard.strongestStation.policyStatus, "fastest_ahead_split_only");
+    assert.equal(raceCard.strongestStation.cardHeader, "Best Relative Split");
+		    assert.equal(raceCard.strongestStation.percentile, null);
+		    assert.equal(carousel.slides[0].best_station, "FARMERS CARRY");
+    assert.equal(carousel.slides[2].strength_heading, "BEST RELATIVE SPLIT");
+		    assert.equal(carousel.slides[2].station, "FARMERS CARRY");
+		    assert.ok(carousel.slides[5].features.includes("Best Relative Split"));
+		    assert.ok(!carousel.slides[5].features.includes("Strongest Station"));
+    assert.match(carousel.slides[2].caption, /strongest relative split/i);
+    assert.match(carousel.slides[2].caption, /No clear protectable strength was identified with enough confidence/i);
     assert.doesNotMatch(`${carousel.slides[0].best_station} ${carousel.slides[2].station} ${carousel.slides[2].caption}`, /SKIERG|SkiErg/);
-    assert.match(personalStrength, /No single high-confidence strength dominated this result/i);
+    assert.match(caption, /Best relative split: FARMERS CARRY/);
+    assert.doesNotMatch(caption, /Biggest strength: FARMERS CARRY/);
+    assert.equal(personalStrength.title, "Best Relative Split");
+    assert.match(personalStrength.content, /Farmers Carry was your strongest relative split/i);
+    assert.match(personalStrength.content, /No clear protectable strength was identified with enough confidence/i);
     assertNoBlankCopy(browserMarkdown);
     assertNoBlankCopy(JSON.stringify({
       best_station: carousel.slides[0].best_station,
@@ -230,9 +246,16 @@ describe("HYROX artifact limiter consistency", () => {
     const athleteContext = { displayName: "Alex Smith", targetFinishTimeSeconds: 3600 };
 
     const raceCard = buildHyroxRaceCardData(analysisJson, athleteContext);
+    const carousel = buildTemplateA(analysisJson, [], athleteContext);
+    const caption = buildCaption({ slide0: carousel.slides[0], athleteContext, analysisJson });
+    const personalStrength = personalStrengthSection(analysisJson, athleteContext);
     const html = buildRaceCardHtml(raceCard);
 
     assert.equal(raceCard.strongestStation, null, "no split is ahead of the comparison, so there is no best-relative-split fallback either");
+    assert.equal(carousel.slides[2].strength_heading, "NO CLEAR STRENGTH");
+    assert.doesNotMatch(caption, /Biggest strength:/);
+    assert.doesNotMatch(caption, /Best relative split:/);
+    assert.equal(personalStrength.title, "No Clear Strength");
     assert.ok(raceCard.biggestLimiter, "the biggest limiter card should still be present");
     assert.doesNotMatch(html, /Best Relative Split/i);
     assert.doesNotMatch(html, /Strongest Station/i);

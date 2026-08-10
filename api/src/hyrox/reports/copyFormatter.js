@@ -142,8 +142,8 @@ export function formatSocialGapPhrase(seconds) {
 }
 
 // Magnitude-only parts (no faster/slower direction) for opportunity/potential-gain framing —
-// e.g. { value: "46", unit: "SEC" } to pair with a caller-supplied word like "AVAILABLE" or
-// "TO FIND", or { value: "1:02", unit: null } once the magnitude passes a minute.
+// e.g. { value: "46", unit: "SEC" } to pair with a caller-supplied word like "TO FIND",
+// or { value: "1:02", unit: null } once the magnitude passes a minute.
 export function formatSocialMagnitudeParts(seconds) {
   const n = Number(seconds);
   if (!Number.isFinite(n)) return null;
@@ -153,12 +153,12 @@ export function formatSocialMagnitudeParts(seconds) {
   return { value: formatTime(abs), unit: null };
 }
 
-// "Available"/opportunity framing for a theoretical saving (always positive magnitude, no
-// faster/slower direction needed — e.g. "UP TO 46 SEC AVAILABLE" for a limiter's potential gain).
+// Opportunity framing for a theoretical saving (always positive magnitude, no faster/slower
+// direction needed — e.g. "UP TO 46 SEC TO FIND" for a limiter's potential gain).
 export function formatSocialOpportunityPhrase(seconds) {
   const parts = formatSocialMagnitudeParts(seconds);
   if (!parts) return null;
-  return `UP TO ${[parts.value, parts.unit].filter(Boolean).join(" ")} AVAILABLE`;
+  return `UP TO ${[parts.value, parts.unit].filter(Boolean).join(" ")} TO FIND`;
 }
 
 export function label(value) {

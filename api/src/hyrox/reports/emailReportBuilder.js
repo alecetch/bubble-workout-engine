@@ -852,12 +852,13 @@ function renderExecutiveSummary(section) {
 
 function renderStrengthCard(section) {
   const text = esc(enforceTone(Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? "")));
+  const title = esc(String(section.title ?? "Biggest Strength").toUpperCase());
   return `
   <tr>
 	    <td style="background-color:#f8fafc;padding:10px 24px;border-top:1px solid #e2e8f0;border-left:3px solid #22d3ee;">
-      <span style="color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">BIGGEST STRENGTH</span>
-    </td>
-  </tr>
+	      <span style="color:#22d3ee;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;">${title}</span>
+	    </td>
+	  </tr>
   <tr>
 	    <td style="background-color:#ffffff;padding:16px 24px;border-bottom:1px solid #e2e8f0;">
       <p style="color:#0f172a;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0;">${text}</p>

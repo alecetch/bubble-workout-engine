@@ -649,14 +649,12 @@ function buildStrengthPolicy(analysisJson = {}, splitProfile, policy) {
     };
   }
   if (fastestAhead) {
-    // When the split's own gap is penalty-adjusted, name the penalty explicitly -- otherwise
-    // "best relative split, but no protectable strength" reads as a contradiction with no
-    // visible cause. Non-penalty fallbacks (no strength candidate at all, an implausibly-fast
-    // data artifact) keep the original, more generic wording since there's no single number to point to.
+    // When the split's own gap is penalty-adjusted, name the penalty explicitly; otherwise
+    // qualify the relative split so it does not imply a high-confidence protectable strength.
     const penaltySeconds = Number(fastestAhead.penaltyAdjustmentSeconds) || 0;
     const explanation = penaltySeconds > 0
-      ? `${fastestAhead.label} is the best relative split, but that gap comes from a ${fastestAhead.penaltyAdjustmentFormatted} penalty adjustment, so execution needs attention.`
-      : `${fastestAhead.label} is the best relative split, but no protectable strength was identified with enough evidence.`;
+      ? `${fastestAhead.label} was your strongest relative split, but that gap comes from a ${fastestAhead.penaltyAdjustmentFormatted} penalty adjustment, so execution needs attention.`
+      : `${fastestAhead.label} was your strongest relative split. No clear protectable strength was identified with enough confidence.`;
     return {
       status: "fastest_ahead_split_only",
       displayLabel: fastestAhead.label,
