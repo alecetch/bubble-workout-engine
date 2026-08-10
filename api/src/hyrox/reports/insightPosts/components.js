@@ -6,7 +6,7 @@
 // Phase 13 in the brief: structured insight data -> a small template library -> rendered asset,
 // not 16 hand-coded one-off pages.
 
-import { COLORS, TYPOGRAPHY, escapeHtml, dataLabHeader, dataLabFooter, dataLabSwipePrompt } from "./theme.js";
+import { COLORS, COMPOSITION, TYPOGRAPHY, escapeHtml, dataLabHeader, dataLabFooter, dataLabSwipePrompt } from "./theme.js";
 
 function shell(contentHtml, { sampleSizeText, ctaType, swipePrompt, ctaLabel }) {
   return `<div class="root">
@@ -31,7 +31,7 @@ const TONE_COLOR = Object.freeze({
 
 // ── 1. InsightHero — big headline + one dominant statistic ─────────────────────────────────────
 export function InsightHero({ kicker, headline, primaryStat, primaryStatSuffix, supportingText, sampleSizeText, ctaType = "none", swipePrompt, ctaLabel }) {
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:24px;padding-bottom:24px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:24px;padding-bottom:24px;transform:translateY(${COMPOSITION.heroShiftY}px);">
     ${kickerLabel(kicker)}
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1Headline}px;max-width:880px;">${headline}</div>
     <div style="margin-top:40px;display:flex;align-items:flex-end;gap:20px;">
@@ -56,7 +56,7 @@ export function StatComparison({ kicker, headline, items = [], note, supportingT
     )
     .join("");
 
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:24px;padding-bottom:24px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:24px;padding-bottom:24px;transform:translateY(${COMPOSITION.comparisonShiftY}px);">
     ${kickerLabel(kicker)}
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1HeadlineCompact}px;max-width:900px;margin-bottom:48px;">${headline}</div>
     ${note ? `<div style="font-size:${TYPOGRAPHY.l2ChartSmall}px;font-weight:800;letter-spacing:0.6px;color:${COLORS.cyan};text-transform:uppercase;text-align:right;margin-bottom:12px;">${escapeHtml(note)}</div>` : ""}
@@ -83,7 +83,7 @@ export function RankedBars({ kicker, headline, bars = [], axisNote, supportingTe
     })
     .join("");
 
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:20px;padding-bottom:20px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:20px;padding-bottom:20px;transform:translateY(${COMPOSITION.chartShiftY}px);">
     ${kickerLabel(kicker)}
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1ChartHeadline}px;max-width:900px;margin-bottom:8px;">${headline}</div>
     ${axisNote ? `<div style="font-size:${TYPOGRAPHY.l2ChartSmall}px;font-weight:600;color:${COLORS.muted};margin-bottom:32px;">${escapeHtml(axisNote)}</div>` : `<div style="margin-bottom:32px;"></div>`}
@@ -169,7 +169,7 @@ export function PaceProgression({ kicker, headline, series = [], legend = [], su
     )
     .join(`<div style="width:28px;"></div>`);
 
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:20px;padding-bottom:20px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:20px;padding-bottom:20px;transform:translateY(${COMPOSITION.chartShiftY}px);">
     ${kickerLabel(kicker)}
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1ChartHeadline}px;max-width:900px;margin-bottom:18px;">${headline}</div>
     ${legend.length ? `<div style="display:flex;align-items:center;margin-bottom:22px;">${legendHtml}</div>` : ""}
@@ -199,7 +199,7 @@ export function ThresholdComparison({ kicker, headline, segments = [], bandLabel
     )
     .join(`<div style="width:26px;"></div>`);
 
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:20px;padding-bottom:20px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:20px;padding-bottom:20px;transform:translateY(${COMPOSITION.comparisonShiftY}px);">
     ${kickerLabel(kicker)}
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1ChartHeadline}px;max-width:900px;margin-bottom:36px;">${headline}</div>
     ${bandLabel ? `<div style="font-size:${TYPOGRAPHY.l2ChartSmall}px;font-weight:700;color:${COLORS.text};margin-bottom:14px;">${escapeHtml(bandLabel)}${totalLabel ? ` <span style="color:${COLORS.muted};font-weight:600;">(${escapeHtml(totalLabel)})</span>` : ""}</div>` : ""}
@@ -213,7 +213,7 @@ export function ThresholdComparison({ kicker, headline, segments = [], bandLabel
 // ── 6. DistributionCard — a percentile bar with a threshold marker (not a fabricated bell curve —
 //    we only have the actual percentile figure, not a full density shape, so this stays defensible) ──
 export function DistributionCard({ kicker, headline, markerPct, markerLabel, statValue, statLabel, supportingText, sampleSizeText, ctaType = "none", swipePrompt }) {
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:24px;padding-bottom:24px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:24px;padding-bottom:24px;transform:translateY(${COMPOSITION.heroShiftY}px);">
     ${kickerLabel(kicker)}
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1HeadlineCompact}px;max-width:880px;margin-bottom:44px;">${headline}</div>
     <div style="position:relative;height:56px;border-radius:8px;overflow:visible;background:linear-gradient(90deg, ${COLORS.cyan} 0%, rgba(34,211,238,0.15) ${markerPct}%, rgba(255,255,255,0.05) ${markerPct}%);">
@@ -236,7 +236,7 @@ export function DistributionCard({ kicker, headline, markerPct, markerLabel, sta
 // it — added so a slide can promote a comparison out of caveat-sized text without inflating the
 // caveat itself (mobile-readability audit, 2026-08).
 export function AthleteTakeaway({ headline = "WHAT THIS MEANS", text, statLine, caveat, caveatFontSize = TYPOGRAPHY.l2Caveat, sampleSizeText, ctaType = "none", swipePrompt }) {
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:24px 84px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:24px 84px;transform:translateY(${COMPOSITION.meaningShiftY}px);">
     <div style="font-size:${TYPOGRAPHY.l2ChartLabel}px;font-weight:800;letter-spacing:1.5px;color:${COLORS.cyan};text-transform:uppercase;margin-bottom:30px;">${escapeHtml(headline)}</div>
     <div style="width:120px;height:2px;background:${COLORS.cyan};margin-bottom:38px;"></div>
     <div style="font-family:'Inter Tight',Arial,sans-serif;font-weight:700;font-size:${TYPOGRAPHY.l2Takeaway}px;line-height:1.3;color:${COLORS.text};">${text}</div>
@@ -256,7 +256,7 @@ export function InsightCTA({ headline, bullets = [], buttonText = "ANALYSE MY HY
     )
     .join("");
 
-  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:24px 90px;">
+  const content = `<div class="gutter" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:24px 90px;transform:translateY(${COMPOSITION.ctaShiftY}px);">
     <div class="dl-headline" style="font-size:${TYPOGRAPHY.l1HeadlineCompact}px;margin-bottom:34px;">${headline}</div>
     <ul style="list-style:none;text-align:left;margin-bottom:46px;">${bulletsHtml}</ul>
     <div style="width:440px;height:70px;border-radius:8px;background:${COLORS.cyan};display:flex;align-items:center;justify-content:center;font-family:'Inter Tight',Arial,sans-serif;font-weight:800;font-size:24px;letter-spacing:0.3px;color:#06101e;text-transform:uppercase;">${escapeHtml(buttonText)}</div>
