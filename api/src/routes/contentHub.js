@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { marked } from "marked";
 import { parseFrontmatter } from "../utils/markdown.js";
 import { escapeHtml } from "./referralLanding.js";
-import { wrapPage } from "../views/pageChrome.js";
+import { gatePage, wrapPage } from "../views/pageChrome.js";
 import { sendEmail } from "../services/emailService.js";
 import { pool } from "../db.js";
 
@@ -118,7 +118,7 @@ function notFound(res) {
   );
 }
 
-contentHubRouter.get("/guides", (_req, res) => {
+contentHubRouter.get("/guides", gatePage, (_req, res) => {
   const guides = readGuides();
   const categories = [...new Set(guides.map((guide) => guide.category).filter(Boolean))];
   const filters = categories.length > 1
@@ -145,14 +145,14 @@ ${cards}
 </div>`;
   return res.setHeader("Content-Type", "text/html; charset=utf-8").send(
     wrapPage("Training Guides", body, {
-      description: "In-depth Hyrox and strength training guides from the Formai team.",
+      description: "In-depth Hyrox and strength training guides from the Forma team.",
       canonical: "/guides",
       extraCss: HUB_CSS,
     }),
   );
 });
 
-contentHubRouter.get("/guides/:slug", (req, res) => {
+contentHubRouter.get("/guides/:slug", gatePage, (req, res) => {
   const { slug } = req.params;
   if (!/^[a-z0-9-]+$/.test(slug)) return notFound(res);
 
@@ -230,13 +230,13 @@ export function createGuideSignupHandler(db = pool) {
       console.error("guide email_signups insert error", err);
     }
 
-    const baseUrl = process.env.BASE_URL ?? "https://getformai.com";
+    const baseUrl = process.env.BASE_URL ?? "https://getforma.fit";
     const downloadUrl = `${baseUrl}${meta.leadMagnetFile}`;
     sendEmail({
       to: email,
-      subject: `Your download - ${meta.title ?? "Formai Guide"}`,
-      text: `Here's your download:\n\n${downloadUrl}\n\nHappy training,\nFormai`,
-      html: `<p>Here's your download: <a href="${escapeHtml(downloadUrl)}">${escapeHtml(meta.leadMagnetTitle ?? "Download")}</a></p><p>Happy training,<br>Formai</p>`,
+      subject: `Your download - ${meta.title ?? "Forma Guide"}`,
+      text: `Here's your download:\n\n${downloadUrl}\n\nHappy training,\nForma`,
+      html: `<p>Here's your download: <a href="${escapeHtml(downloadUrl)}">${escapeHtml(meta.leadMagnetTitle ?? "Download")}</a></p><p>Happy training,<br>Forma</p>`,
     }).catch(() => {});
 
     return res.redirect(302, meta.leadMagnetFile);

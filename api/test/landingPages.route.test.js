@@ -17,6 +17,8 @@ function buildSitemapApp() {
 }
 
 async function request(app, path) {
+  const previousPreview = process.env.MARKETING_PREVIEW_ENABLED;
+  process.env.MARKETING_PREVIEW_ENABLED = "true";
   const server = app.listen(0);
   try {
     await new Promise((resolve) => server.once("listening", resolve));
@@ -24,6 +26,8 @@ async function request(app, path) {
     const body = await response.text();
     return { response, body };
   } finally {
+    if (previousPreview === undefined) delete process.env.MARKETING_PREVIEW_ENABLED;
+    else process.env.MARKETING_PREVIEW_ENABLED = previousPreview;
     await new Promise((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });
@@ -40,17 +44,10 @@ test("GET /hyrox returns an HTML page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /text\/html/);
 });
 
-test("GET /hyrox renders Hyrox copy and CTA", async () => {
-  const saved = process.env.APP_STORE_URL;
-  process.env.APP_STORE_URL = "https://apps.apple.com/formai-test";
-  try {
-    const { body } = await request(buildMarketingApp(), "/hyrox");
-    assert.match(body, /Hyrox/);
-    assert.match(body, /href="https:\/\/apps\.apple\.com\/formai-test"/);
-  } finally {
-    if (saved === undefined) delete process.env.APP_STORE_URL;
-    else process.env.APP_STORE_URL = saved;
-  }
+test("GET /hyrox renders Hyrox copy and launch CTA", async () => {
+  const { body } = await request(buildMarketingApp(), "/hyrox");
+  assert.match(body, /Hyrox/);
+  assert.match(body, /href="\/download"/);
 });
 
 test("GET /hyrox includes sport-specific SEO metadata", async () => {
@@ -77,7 +74,7 @@ test("GET /strength returns an HTML page", async () => {
 test("GET /strength renders strength copy and CTA", async () => {
   const { body } = await request(buildMarketingApp(), "/strength");
   assert.match(body, /strength/i);
-  assert.match(body, /href="#"/);
+  assert.match(body, /href="\/download"/);
 });
 
 test("GET /strength includes sport-specific SEO metadata", async () => {

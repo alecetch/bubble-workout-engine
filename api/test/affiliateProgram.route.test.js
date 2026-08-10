@@ -41,6 +41,8 @@ function buildAdminApp(db) {
 }
 
 async function request(app, path, options = {}) {
+  const previousPreview = process.env.MARKETING_PREVIEW_ENABLED;
+  process.env.MARKETING_PREVIEW_ENABLED = "true";
   const server = app.listen(0);
   try {
     await new Promise((resolve) => server.once("listening", resolve));
@@ -48,6 +50,8 @@ async function request(app, path, options = {}) {
     const body = await response.text();
     return { response, body };
   } finally {
+    if (previousPreview === undefined) delete process.env.MARKETING_PREVIEW_ENABLED;
+    else process.env.MARKETING_PREVIEW_ENABLED = previousPreview;
     await new Promise((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });

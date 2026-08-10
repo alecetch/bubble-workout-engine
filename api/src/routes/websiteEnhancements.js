@@ -4,7 +4,7 @@ import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
 import { escapeHtml } from "./referralLanding.js";
-import { wrapPage } from "../views/pageChrome.js";
+import { gatePage, wrapPage } from "../views/pageChrome.js";
 import { sendEmail } from "../services/emailService.js";
 import { requireInternalToken } from "../middleware/auth.js";
 import { parseFrontmatter } from "../utils/markdown.js";
@@ -122,21 +122,39 @@ function readBlogPosts() {
 
 function renderSignupForm(res, errorMsg = "") {
   const body = `<div class="signup-page">
-  <h1>Get Hyrox and strength tips in your inbox.</h1>
+  <h1>Join the Forma launch list.</h1>
   <p class="signup-sub">Training insights, app updates, and early access to new features. No spam. Unsubscribe anytime.</p>
   ${errorMsg ? `<p class="signup-error">${escapeHtml(errorMsg)}</p>` : ""}
   <form method="POST" action="/signup" class="signup-form">
     <input type="email" name="email" placeholder="you@example.com" required autocomplete="email">
     <button type="submit" class="cta-btn">Sign me up</button>
   </form>
-  <p class="trial-note" style="margin-top:24px;">Or download the app and start your free 14-day trial.</p>
-  <a href="${escapeHtml(process.env.APP_STORE_URL ?? "#")}" class="cta-btn" style="margin-top:12px;">Download on App Store</a>
+  <p class="trial-note" style="margin-top:24px;">Or get notified when the app launches.</p>
+  <a href="/download" class="cta-btn" style="margin-top:12px;">Get launch updates</a>
 </div>`;
   return sendHtml(res, "Sign up for updates", body, {
     description: "Get Hyrox and strength training tips in your inbox.",
     canonical: "/signup",
     extraCss: SIGNUP_CSS,
   });
+}
+
+export async function insertEmailSignupAndNotify(email, source = "website", db = pool) {
+  try {
+    await db.query(
+      "INSERT INTO email_signups (email, source) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING",
+      [email, source],
+    );
+  } catch (err) {
+    console.error("email_signups insert error", err);
+  }
+
+  sendEmail({
+    to: email,
+    subject: "You're on the Forma list",
+    text: `Hi,\n\nYou're signed up for Forma updates. We'll send training tips and app news - no spam.\n\nWe'll email you when Forma is ready.\n\nTo unsubscribe, reply with 'unsubscribe'.\n\nForma`,
+    html: `<p>You're signed up for Forma updates. We'll send training tips and app news - no spam.</p><p>We'll email you when Forma is ready.</p><p style="color:#94A3B8;font-size:12px;">To unsubscribe, reply with 'unsubscribe'.</p>`,
+  }).catch((err) => console.error("confirmation email error", err));
 }
 
 export function createSignupHandlers(db = pool) {
@@ -153,21 +171,7 @@ export function createSignupHandlers(db = pool) {
     }
 
     const email = raw.toLowerCase();
-    try {
-      await db.query(
-        "INSERT INTO email_signups (email) VALUES ($1) ON CONFLICT (email) DO NOTHING",
-        [email],
-      );
-    } catch (err) {
-      console.error("email_signups insert error", err);
-    }
-
-    sendEmail({
-      to: email,
-      subject: "You're on the Formai list",
-      text: `Hi,\n\nYou're signed up for Formai updates. We'll send training tips and app news - no spam.\n\nDownload Formai: ${process.env.APP_STORE_URL ?? "https://getformai.com/download"}\n\nTo unsubscribe, reply with 'unsubscribe'.\n\nFormai`,
-      html: `<p>You're signed up for Formai updates. We'll send training tips and app news - no spam.</p><p><a href="${escapeHtml(process.env.APP_STORE_URL ?? "https://getformai.com/download")}">Download Formai</a></p><p style="color:#94A3B8;font-size:12px;">To unsubscribe, reply with 'unsubscribe'.</p>`,
-    }).catch((err) => console.error("confirmation email error", err));
+    await insertEmailSignupAndNotify(email, "website", db);
 
     return res.redirect(302, "/signup/confirmed");
   }
@@ -190,18 +194,22 @@ export function createAdminEmailSignupsHandler(db = pool) {
 }
 
 websiteEnhancementsRouter.get("/robots.txt", (_req, res) => {
-  const baseUrl = process.env.BASE_URL ?? "https://getformai.com";
+  const baseUrl = process.env.BASE_URL ?? "https://getforma.fit";
   res
     .setHeader("Content-Type", "text/plain; charset=utf-8")
     .send(`User-agent: *\nAllow: /\nSitemap: ${baseUrl}/sitemap.xml\n`);
 });
 
 websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
-  const baseUrl = process.env.BASE_URL ?? "https://getformai.com";
+  const baseUrl = process.env.BASE_URL ?? "https://getforma.fit";
   const today = new Date().toISOString().slice(0, 10);
-  const staticPaths = ["/", "/download", "/pricing", "/hyrox", "/strength", "/testimonials", "/press", "/guides", "/partners", "/blog", "/changelog", "/privacy", "/terms", "/support", "/signup"];
+  const previewEnabled = process.env.MARKETING_PREVIEW_ENABLED === "true";
+  const staticPaths = previewEnabled
+    ? ["/", "/download", "/pricing", "/hyrox", "/strength", "/testimonials", "/press", "/guides", "/partners", "/blog", "/changelog", "/privacy", "/terms", "/support", "/signup"]
+    : ["/", "/download", "/privacy", "/terms"];
   let blogSlugs = [];
   try {
+    if (!previewEnabled) throw new Error("preview gated");
     blogSlugs = readdirSync(BLOG_DIR)
       .filter((file) => file.endsWith(".md"))
       .map((file) => `/blog/${basename(file, ".md")}`);
@@ -210,6 +218,7 @@ websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
   }
   let guideSlugs = [];
   try {
+    if (!previewEnabled) throw new Error("preview gated");
     guideSlugs = readdirSync(GUIDES_DIR_SITEMAP)
       .filter((file) => file.endsWith(".md"))
       .map((file) => `/guides/${basename(file, ".md")}`);
@@ -224,47 +233,46 @@ websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
     .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
 });
 
-websiteEnhancementsRouter.get("/pricing", (_req, res) => {
-  const appStoreUrl = escapeHtml(process.env.APP_STORE_URL ?? "#");
+websiteEnhancementsRouter.get("/pricing", gatePage, (_req, res) => {
   const monthly = escapeHtml(process.env.MONTHLY_PRICE ?? "");
   const annual = escapeHtml(process.env.ANNUAL_PRICE ?? "");
   const monthlyDisplay = monthly || "See App Store for pricing";
   const annualDisplay = annual || "See App Store for pricing";
-  const body = `<div class="pricing-page"><div class="pricing-hero"><h1>Start free. Train smarter.</h1><p>Try every feature free for 14 days. No credit card required.</p></div><div class="container"><div class="trial-card"><h2>14-day free trial</h2><ul><li>Full access to every feature, every day</li><li>No credit card required to start</li><li>Referred users receive a 21-day trial</li><li>Your data is yours - export or delete anytime</li></ul></div><div class="plan-row"><div class="plan-card"><h3>Monthly</h3><div class="plan-price">${monthlyDisplay}</div><div class="plan-billing">Billed monthly</div><a href="${appStoreUrl}" class="cta-btn">Start free trial</a></div><div class="plan-card featured"><div class="plan-badge">Best value</div><h3>Annual</h3><div class="plan-price">${annualDisplay}</div><div class="plan-billing">Billed once per year</div>${annual ? '<div class="plan-saving">Save ~33% vs monthly</div>' : ""}<a href="${appStoreUrl}" class="cta-btn">Start free trial</a></div></div><div class="pricing-faq"><h2>Common questions</h2><div class="pfaq-item"><p class="pfaq-q">Is there really no credit card required?</p><p class="pfaq-a">Correct. The free trial is fully unrestricted.</p></div><div class="pfaq-item"><p class="pfaq-q">What happens when my trial ends?</p><p class="pfaq-a">The app asks if you'd like to subscribe. If you don't, your history is preserved.</p></div><div class="pfaq-item"><p class="pfaq-q">Can I switch between monthly and annual?</p><p class="pfaq-a">Yes. Go to iPhone Settings - [Your Name] - Subscriptions - Formai.</p></div><div class="pfaq-item"><p class="pfaq-q">How do I cancel?</p><p class="pfaq-a">Go to iPhone Settings - [Your Name] - Subscriptions - Formai - Cancel Subscription.</p></div></div><div style="text-align:center;"><a href="${appStoreUrl}" class="cta-btn">Download on App Store</a><p class="trial-note" style="margin-top:12px;">14-day free trial - no credit card required</p></div></div></div>`;
+  const body = `<div class="pricing-page"><div class="pricing-hero"><h1>Start free. Train smarter.</h1><p>Preview pricing for the Forma app launch.</p></div><div class="container"><div class="trial-card"><h2>Launch pricing</h2><ul><li>Full access to every feature, every day</li><li>Your data is yours - export or delete anytime</li><li>Pricing will be confirmed before launch</li></ul></div><div class="plan-row"><div class="plan-card"><h3>Monthly</h3><div class="plan-price">${monthlyDisplay}</div><div class="plan-billing">Billed monthly</div><a href="/download" class="cta-btn">Get launch updates</a></div><div class="plan-card featured"><div class="plan-badge">Best value</div><h3>Annual</h3><div class="plan-price">${annualDisplay}</div><div class="plan-billing">Billed once per year</div>${annual ? '<div class="plan-saving">Save ~33% vs monthly</div>' : ""}<a href="/download" class="cta-btn">Get launch updates</a></div></div><div class="pricing-faq"><h2>Common questions</h2><div class="pfaq-item"><p class="pfaq-q">Is the app available yet?</p><p class="pfaq-a">Not yet. Join the launch list and we will email you when Forma is ready.</p></div><div class="pfaq-item"><p class="pfaq-q">Can I switch between monthly and annual?</p><p class="pfaq-a">Yes. Subscription management will be handled through your device once the app is live.</p></div></div><div style="text-align:center;"><a href="/download" class="cta-btn">Get launch updates</a></div></div></div>`;
   return sendHtml(res, "Pricing", body, {
-    description: "Formai pricing - 14-day free trial, then simple monthly or annual subscription. No credit card required to start.",
+    description: "Forma pricing preview for the upcoming training app.",
     canonical: "/pricing",
     extraCss: PRICING_CSS,
   });
 });
 
 const { getHandler: signupGet, postHandler: signupPost } = createSignupHandlers();
-websiteEnhancementsRouter.get("/signup", signupGet);
+websiteEnhancementsRouter.get("/signup", gatePage, signupGet);
 websiteEnhancementsRouter.post("/signup", express.urlencoded({ extended: false }), signupPost);
 
-websiteEnhancementsRouter.get("/signup/confirmed", (_req, res) => {
-  const body = `<div class="signup-page" style="text-align:center;"><h1>You're on the list.</h1><p class="signup-sub">We'll be in touch with training tips and app updates.</p><p style="color:#94A3B8;margin-top:16px;">In the meantime, download the app and start your free 14-day trial.</p><a href="${escapeHtml(process.env.APP_STORE_URL ?? "#")}" class="cta-btn" style="margin-top:24px;">Download on App Store</a></div>`;
+websiteEnhancementsRouter.get("/signup/confirmed", gatePage, (_req, res) => {
+  const body = `<div class="signup-page" style="text-align:center;"><h1>You're on the list.</h1><p class="signup-sub">We'll be in touch with training tips and app updates.</p><p style="color:#94A3B8;margin-top:16px;">In the meantime, you can also join the app launch list.</p><a href="/download" class="cta-btn" style="margin-top:24px;">Get launch updates</a></div>`;
   return sendHtml(res, "You're signed up", body, {
-    description: "You're on the Formai list.",
+    description: "You're on the Forma list.",
     canonical: "/signup/confirmed",
     extraCss: SIGNUP_CSS,
   });
 });
 
-websiteEnhancementsRouter.get("/blog", (_req, res) => {
+websiteEnhancementsRouter.get("/blog", gatePage, (_req, res) => {
   const posts = readBlogPosts();
   const cards = posts.length
     ? posts.map((post) => `<div class="post-card"><div class="post-date">${escapeHtml(post.date)}</div><h2><a href="/blog/${escapeHtml(post.slug)}">${escapeHtml(post.title)}</a></h2><p class="post-excerpt">${escapeHtml(post.excerpt)}</p><a href="/blog/${escapeHtml(post.slug)}" class="read-more">Read more -></a></div>`).join("")
     : "<p style='color:#94A3B8;'>No posts yet - check back soon.</p>";
   const body = `<div class="container-narrow blog-index"><h1>Blog</h1><p class="blog-intro">Training insights, programme design, and app updates.</p>${cards}</div>`;
   return sendHtml(res, "Blog", body, {
-    description: "Formai blog - Hyrox training, strength programming, and app updates.",
+    description: "Forma blog - Hyrox training, strength programming, and app updates.",
     canonical: "/blog",
     extraCss: BLOG_CSS,
   });
 });
 
-websiteEnhancementsRouter.get("/blog/:slug", (req, res) => {
+websiteEnhancementsRouter.get("/blog/:slug", gatePage, (req, res) => {
   const { slug } = req.params;
   if (!/^[a-z0-9-]+$/.test(slug)) {
     return res.status(404).send(wrapPage("Not Found", "<p style='padding:80px 24px;text-align:center;color:#94A3B8;'>Post not found.</p>"));
@@ -286,17 +294,16 @@ websiteEnhancementsRouter.get("/blog/:slug", (req, res) => {
   });
 });
 
-websiteEnhancementsRouter.get("/changelog", (_req, res) => {
+websiteEnhancementsRouter.get("/changelog", gatePage, (_req, res) => {
   let html = "<p style='color:#94A3B8;'>Changelog coming soon.</p>";
   try {
     html = marked.parse(readFileSync(CHANGELOG_FILE, "utf8"));
   } catch {
     html = "<p style='color:#94A3B8;'>Changelog coming soon.</p>";
   }
-  const appStoreUrl = escapeHtml(process.env.APP_STORE_URL ?? "#");
-  const body = `<div class="container-narrow changelog-page"><h1>Changelog</h1><p class="changelog-intro">A running record of what's new in Formai.</p><a class="changelog-download" href="${appStoreUrl}">Download the latest version on App Store</a><div class="changelog-body">${html}</div></div>`;
+  const body = `<div class="container-narrow changelog-page"><h1>Changelog</h1><p class="changelog-intro">A running record of what's new in Forma.</p><a class="changelog-download" href="/download">Get launch updates</a><div class="changelog-body">${html}</div></div>`;
   return sendHtml(res, "Changelog", body, {
-    description: "Formai changelog - see what's new in every version of the app.",
+    description: "Forma changelog - see what's new in every version of the app.",
     canonical: "/changelog",
     extraCss: CHANGELOG_CSS,
   });

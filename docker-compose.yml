@@ -22,6 +22,7 @@ services:
     working_dir: /app
     volumes:
       - ./api:/app
+      - ./web/dist:/app/public/web:ro
       - ./assets:/app/assets
       - ./docs:/app/docs
       - ./migrations:/app/migrations

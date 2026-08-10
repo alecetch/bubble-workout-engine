@@ -43,7 +43,10 @@ export function HyroxLandingPage() {
             </Link>
           </FormPanel>
           <FormPanel className={styles.card}>
-            <span className={styles.chipAlt}>No race needed</span>
+            <div className={styles.chipRow}>
+              <span className={styles.chipAlt}>No race needed</span>
+              <span className={styles.chipBeta}>Beta</span>
+            </div>
             <h2>Predict my first HYROX</h2>
             <p>
               No race result yet? Estimate your likely finish time from your current

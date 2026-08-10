@@ -17,6 +17,8 @@ function buildSitemapApp() {
 }
 
 async function request(app, path) {
+  const previousPreview = process.env.MARKETING_PREVIEW_ENABLED;
+  process.env.MARKETING_PREVIEW_ENABLED = "true";
   const server = app.listen(0);
   try {
     await new Promise((resolve) => server.once("listening", resolve));
@@ -24,6 +26,8 @@ async function request(app, path) {
     const body = await response.text();
     return { response, body };
   } finally {
+    if (previousPreview === undefined) delete process.env.MARKETING_PREVIEW_ENABLED;
+    else process.env.MARKETING_PREVIEW_ENABLED = previousPreview;
     await new Promise((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });
@@ -63,7 +67,7 @@ test("GET /press falls back when press and support emails are unset", async () =
   try {
     const { response, body } = await request(buildMarketingApp(), "/press");
     assert.equal(response.status, 200);
-    assert.match(body, /hello@getformai\.com/);
+    assert.match(body, /hello@getforma\.fit/);
   } finally {
     if (savedPress === undefined) delete process.env.PRESS_EMAIL;
     else process.env.PRESS_EMAIL = savedPress;
