@@ -49,9 +49,9 @@ const CAROUSEL_CSS = `
 :root {
   --bg: #080e1a;
   --panel: #0d1422;
-  --line: rgba(255, 255, 255, 0.105);
-  --muted: rgba(232, 238, 248, 0.56);
-  --muted-2: rgba(232, 238, 248, 0.36);
+  --line: rgba(255, 255, 255, 0.14);
+  --muted: rgba(232, 238, 248, 0.62);
+  --muted-2: rgba(232, 238, 248, 0.44);
   --text: #f5f7fb;
   --blue: #08a7f5;
   --blue-dim: rgba(8, 167, 245, 0.13);
@@ -60,13 +60,28 @@ const CAROUSEL_CSS = `
   --font-display: "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Space Mono", "Roboto Mono", "Courier New", monospace;
   --font-body: Inter, "Helvetica Neue", Arial, sans-serif;
+
+  /* Social typography scale (Phase 2 of the mobile-readability review) — every generated
+     carousel slide pulls sizes from here rather than a bespoke px value per rule, so a future
+     "still too small at 390px" finding is a one-line token change, not a slide-by-slide hunt.
+     Ranges are calibrated so nothing meaningful sits below ~24px at native 1080px render, which
+     is the threshold that held up as readable-without-zooming at 360-390px feed width in testing. */
+  --fs-hero: 180px;        /* single short hero value (A1 hero number) */
+  --fs-hero-alt: 104px;    /* two-part hero (value + FASTER/SLOWER/AVAILABLE word), A3/A4/A5 */
+  --fs-hero-word: 50px;    /* the FASTER/SLOWER/AVAILABLE word beside --fs-hero-alt */
+  --fs-heading: 60px;      /* slide titles / station names */
+  --fs-heading-mono: 46px; /* mono-font headline (A1 hook-title), wider glyphs than sans */
+  --fs-body: 34px;         /* important body copy / captions */
+  --fs-metric: 40px;       /* metric values (A1 summary grid, race-row numbers) */
+  --fs-label: 28px;        /* secondary labels / kickers */
+  --fs-meta: 24px;         /* dataset notes, legend, footer-adjacent metadata */
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: #03060c; color: var(--text); font-family: var(--font-body); }
 .carousel { display: grid; gap: 28px; justify-content: center; padding: 28px; }
 .slide {
   width: 1080px;
-  height: 1080px;
+  height: 1350px;
   position: relative;
   overflow: hidden;
   background: var(--bg);
@@ -75,23 +90,34 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
   color: var(--text);
 }
 .forma-brand { position: absolute; top: 48px; left: 70px; display: flex; align-items: center; z-index: 3; }
-.site { position: absolute; right: 72px; bottom: 28px; color: var(--muted); font-size: 14px; z-index: 2; }
-.cta-url { color: var(--blue); font-family: var(--font-mono); font-size: 18px; letter-spacing: 0.02em; margin-top: 18px; }
-.footer { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; color: var(--muted-2); font-size: 12px; letter-spacing: 0.03em; }
+.site { position: absolute; right: 72px; bottom: 28px; color: var(--muted); font-size: var(--fs-meta); z-index: 2; }
+.cta-url { color: var(--blue); font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.02em; margin-top: 18px; }
+.footer { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; color: var(--muted-2); font-size: var(--fs-meta); letter-spacing: 0.03em; }
 .blue { color: var(--blue); }
 .danger { color: var(--red); }
 .purple { color: #a78bfa; }
-.hook-copy { position: absolute; left: 70px; top: 141px; z-index: 2; }
-.small-kicker { color: var(--muted); font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 18px; }
-.hook-title { font-family: var(--font-mono); font-weight: 900; font-size: 41px; line-height: 1.13; text-transform: uppercase; margin: 0 0 38px 0; letter-spacing: -0.04em; }
-.hero-number { font-family: var(--font-display); font-weight: 900; font-size: 190px; line-height: 0.9; letter-spacing: -0.06em; }
-.metric-strip { position: absolute; left: 70px; right: 70px; top: 500px; display: grid; border-top: 1px solid var(--line); padding-top: 18px; z-index: 2; }
-.metric-strip-4 { grid-template-columns: repeat(4, 1fr); }
-.metric-item { min-height: 58px; padding: 0 14px; border-left: 1px solid var(--line); }
-.metric-item:first-child { border-left: none; padding-left: 0; }
-.metric-label { color: var(--muted-2); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 9px; }
-.metric-value { font-family: var(--font-mono); font-size: 20px; font-weight: 800; text-transform: uppercase; }
-.swipe-prompt { position: absolute; left: 70px; top: 594px; font-size: 18px; font-weight: 700; color: var(--text); z-index: 2; }
+/* Hook copy + metric grid + swipe prompt used to each carry their own hardcoded absolute
+   top offset, sized for the shortest-case content (e.g. a single-line "RUN 8" best-station
+   value). Real data can be longer — "NO RELIABLE STRENGTH" wraps to 2 lines in the metric grid
+   — and a fixed offset below it doesn't know that happened, so it silently overlapped whatever
+   came next. Flowing all three through one column instead means growth in one section pushes
+   the next one down automatically, for any content length, not just the cases tested by eye. */
+.slide-hook-body { position: absolute; left: 70px; right: 70px; top: 150px; bottom: 90px; z-index: 2; display: flex; flex-direction: column; }
+.hook-copy { flex-shrink: 0; }
+.small-kicker { color: var(--muted); font-size: var(--fs-label); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 20px; }
+.hook-title { font-family: var(--font-mono); font-weight: 900; font-size: var(--fs-heading-mono); line-height: 1.15; text-transform: uppercase; margin: 0 0 40px 0; letter-spacing: -0.03em; }
+.hero-number { font-family: var(--font-display); font-weight: 900; font-size: var(--fs-hero); line-height: 0.9; letter-spacing: -0.06em; }
+/* 2x2 metric grid (Phase 3) — was a single cramped 4-column row; fewer, larger elements per
+   cell instead of the same info packed tighter. */
+.metric-strip { flex-shrink: 0; display: grid; border-top: 1px solid var(--line); padding-top: 26px; margin-top: 56px; }
+.metric-strip-2x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; row-gap: 32px; column-gap: 20px; }
+.metric-item { min-height: 76px; padding: 0 24px; }
+.metric-strip-2x2 .metric-item:nth-child(odd) { padding-left: 0; }
+.metric-strip-2x2 .metric-item:nth-child(even) { border-left: 1px solid var(--line); }
+.metric-strip-2x2 .metric-item:nth-child(3), .metric-strip-2x2 .metric-item:nth-child(4) { border-top: 1px solid var(--line); padding-top: 28px; }
+.metric-label { color: var(--muted-2); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
+.metric-value { font-family: var(--font-mono); font-size: var(--fs-metric); font-weight: 800; text-transform: uppercase; line-height: 1.2; }
+.swipe-prompt { flex-shrink: 0; margin-top: 40px; font-size: var(--fs-label); font-weight: 700; color: var(--text); }
 .watermark {
   position: absolute;
   inset: 0;
@@ -106,52 +132,72 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
    more strongly there. Data/table slides (A2's station table, and the stat/insight
    slides in between) keep the subtle base opacity so numbers stay easy to scan. */
 .slide-hook .watermark, .slide-cta .watermark { opacity: 0.28; }
-.slide-title { font-weight: 300; text-transform: uppercase; font-size: 41px; line-height: 1.1; letter-spacing: 0.02em; text-align: center; margin: 0; }
-.slide-flow .slide-title { position: absolute; top: 136px; left: 0; right: 0; }
-.flow-summary { position: absolute; top: 185px; left: 80px; right: 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; }
-.summary-box { height: 70px; border: 1px solid; border-radius: 6px; display: grid; place-items: center; text-align: center; text-transform: uppercase; font-family: var(--font-mono); font-size: 22px; font-weight: 800; }
+.slide-title { font-weight: 400; text-transform: uppercase; font-size: var(--fs-heading); line-height: 1.15; letter-spacing: 0.02em; text-align: center; margin: 0; }
+.slide-flow .slide-title { position: absolute; top: 118px; left: 0; right: 0; }
+.flow-summary { position: absolute; top: 210px; left: 70px; right: 70px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+.summary-box { height: 92px; border: 1px solid; border-radius: 8px; display: grid; place-items: center; gap: 6px; text-align: center; text-transform: uppercase; font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 800; }
 .summary-box.positive { border-color: var(--blue); background: var(--blue-dim); color: var(--blue); }
 .summary-box.negative { border-color: var(--red); background: var(--red-dim); color: var(--red); }
-.summary-label { font-family: var(--font-body); color: var(--muted-2); font-size: 13px; font-weight: 500; margin-bottom: -6px; }
-.table-head { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; }
-.pos-head { position: absolute; top: 274px; right: 90px; }
-.race-table { position: absolute; top: 300px; left: 80px; right: 80px; }
-.race-row { display: grid; grid-template-columns: 1.8fr 0.8fr 0.35fr; align-items: center; height: 40px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 20px; }
-.race-row .name { text-transform: uppercase; color: var(--text); }
-.race-row .time { color: var(--muted); text-align: center; font-family: var(--font-mono); }
-.race-row .delta { text-align: right; font-family: var(--font-mono); font-weight: 700; }
-.legend { position: absolute; bottom: 58px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 14px; }
-.center-stack { position: absolute; left: 120px; right: 120px; top: 210px; text-align: center; }
-.kicker { color: var(--muted); font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 24px; }
+.summary-label { font-family: var(--font-body); color: var(--muted-2); font-size: var(--fs-meta); font-weight: 600; }
+/* Race-flow column header row — replaces a lone floating "GAP" label with all three columns
+   named, so the table doesn't rely on the reader inferring what the left/middle columns are. */
+.race-head { position: absolute; top: 336px; left: 70px; right: 70px; display: grid; grid-template-columns: 1.5fr 0.8fr 0.7fr; color: var(--muted-2); font-size: 19px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.race-head .time-col { text-align: center; }
+.race-head .gap-col { text-align: right; }
+.race-table { position: absolute; top: 378px; left: 70px; right: 70px; }
+.race-row { display: grid; grid-template-columns: 1.5fr 0.8fr 0.7fr; align-items: center; height: 54px; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 27px; }
+.race-row .name { text-transform: uppercase; color: var(--text); font-weight: 500; }
+.race-row .time { color: var(--muted); text-align: center; font-family: var(--font-mono); font-size: 24px; }
+.race-row .delta { text-align: right; font-family: var(--font-mono); font-weight: 800; font-size: 29px; }
+/* The row budget below the header (top:378 to the legend) fits 16 rows at the sizes above.
+   A penalty row (present whenever the athlete recorded a penalty) makes it 17 — RENDERER_JS adds
+   this class when the actual row count exceeds what was sized for, rather than the table quietly
+   overflowing into the legend/footer, which happened when this was still a fixed 16-row budget. */
+.race-table.compact .race-row { height: 47px; font-size: 24px; }
+.race-table.compact .race-row .time { font-size: 21px; }
+.race-table.compact .race-row .delta { font-size: 25px; }
+.legend { position: absolute; bottom: 58px; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 32px; color: var(--muted); font-size: var(--fs-meta); font-weight: 600; }
+.legend-item { display: inline-flex; align-items: center; gap: 10px; }
+.legend-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.legend-dot.blue { background: var(--blue); }
+.legend-dot.danger { background: var(--red); }
+.center-stack { position: absolute; inset: 190px 90px 210px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.kicker { color: var(--muted); font-size: var(--fs-label); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 26px; }
 .kicker.secondary { margin-top: 36px; margin-bottom: 18px; }
-.station-title { font-weight: 300; font-size: 58px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 22px; }
-.percentile { color: var(--blue); font-family: var(--font-mono); font-size: 26px; text-transform: uppercase; margin: 0 auto 26px; }
-.regional-context { color: var(--muted); font-size: 17px; font-style: italic; line-height: 1.35; max-width: 680px; margin: -12px auto 24px; text-transform: none; }
-.trophy { font-family: var(--font-body); font-size: 26px; }
-.thin-rule { width: 200px; height: 1px; background: var(--line); margin: 0 auto 36px; }
-.giant { font-family: var(--font-display); font-weight: 300; font-size: 190px; line-height: 0.9; letter-spacing: -0.04em; }
-.subhero { font-family: var(--font-mono); font-size: 24px; text-transform: uppercase; margin-top: 18px; }
-.subhero.small { font-size: 19px; line-height: 1.35; margin-top: 38px; }
-.caption { color: var(--muted); font-size: 20px; line-height: 1.5; margin-top: 34px; }
-.insight-wrap { position: absolute; inset: 170px 90px 90px; text-align: center; }
-.two-line { font-size: 58px; line-height: 1.18; }
-.short-rule { width: 198px; height: 2px; background: var(--blue); margin: 34px auto 50px; }
-.insight-wrap p { font-size: 25px; line-height: 1.35; margin: 22px 0; }
-.wide { width: 200px; margin: 36px auto; }
-.payoff { margin-top: 34px !important; }
-.top-ten { font-size: 83px; font-family: var(--font-mono); letter-spacing: 0.04em; margin-top: 22px; }
-.cta-wrap { position: absolute; inset: 205px 120px 90px; text-align: center; }
-.feature-list { list-style: none; margin: 0 auto 58px; padding: 0; width: 360px; text-align: left; }
-.feature-list li { font-size: 24px; margin: 24px 0; }
+.station-title { font-weight: 400; font-size: var(--fs-heading); text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 22px; }
+.percentile { color: var(--blue); font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; margin: 0 auto 26px; }
+.regional-context { color: var(--muted); font-size: 20px; font-style: italic; line-height: 1.35; max-width: 720px; margin: -12px auto 24px; text-transform: none; }
+.thin-rule { width: 220px; height: 1px; background: var(--line); margin: 0 auto 40px; }
+/* Two-part social hero: a value ("40 SEC" / "1:15") plus a bold direction word (FASTER / SLOWER /
+   AVAILABLE / TO FIND), replacing the old bare "+0:40" mathematical gap (Phase 5/6/13). */
+.giant-phrase { display: flex; align-items: baseline; justify-content: center; gap: 20px; flex-wrap: wrap; }
+.giant-value { font-family: var(--font-display); font-weight: 300; font-size: var(--fs-hero-alt); line-height: 0.9; letter-spacing: -0.03em; }
+.giant-word { font-family: var(--font-mono); font-weight: 800; font-size: var(--fs-hero-word); text-transform: uppercase; letter-spacing: 0.01em; }
+.subhero { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; margin-top: 22px; }
+.subhero.small { font-size: var(--fs-meta); line-height: 1.4; margin-top: 30px; }
+.caption { color: var(--muted); font-size: var(--fs-body); line-height: 1.5; margin-top: 36px; max-width: 820px; }
+.insight-wrap { position: absolute; inset: 170px 80px 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.two-line { font-size: var(--fs-heading); line-height: 1.2; }
+.short-rule { width: 210px; height: 2px; background: var(--blue); margin: 30px auto; }
+.insight-pairs { display: flex; justify-content: center; gap: 56px; margin: 10px 0 20px; flex-wrap: wrap; }
+.insight-pair { min-width: 260px; }
+.insight-pair-label { font-family: var(--font-body); color: var(--muted-2); font-size: var(--fs-meta); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 10px; }
+.insight-pair-name { font-family: 'Inter Tight', var(--font-body); font-weight: 700; font-size: 32px; text-transform: uppercase; margin-bottom: 10px; }
+.insight-pair-value { display: flex; align-items: baseline; justify-content: center; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-weight: 800; font-size: 42px; text-transform: uppercase; }
+.insight-wrap p.payoff { font-size: var(--fs-body); line-height: 1.4; margin: 18px 0 10px; color: var(--text); max-width: 760px; }
+.top-ten { font-size: 68px; font-family: var(--font-mono); letter-spacing: 0.03em; margin-top: 14px; }
+.cta-wrap { position: absolute; inset: 200px 110px 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.feature-list { list-style: none; margin: 0 auto 54px; padding: 0; width: 420px; text-align: left; }
+.feature-list li { font-size: var(--fs-body); margin: 26px 0; }
 .feature-list li::before { content: "\\2713"; color: var(--blue); display: inline-block; width: 46px; }
-.cta-button { width: 480px; height: 62px; border: none; border-radius: 5px; background: var(--blue); color: #07101e; font-family: var(--font-mono); font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; }
+.cta-button { width: 520px; height: 74px; border: none; border-radius: 6px; background: var(--blue); color: #07101e; font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; }
 .lower { margin: 50px auto 36px; background: var(--line); height: 1px; }
 .cta-logo-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
-.cta-brand { font-size: 34px; letter-spacing: 0.04em; }
-.cta-subtitle { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.cta-brand { font-size: 38px; letter-spacing: 0.04em; }
+.cta-subtitle { color: var(--muted); font-size: var(--fs-meta); margin-top: 8px; }
 @media screen and (max-width: 1120px) {
   .carousel { padding: 0; gap: 12px; }
-  .slide { transform-origin: top center; width: min(100vw, 1080px); height: min(100vw, 1080px); }
+  .slide { transform-origin: top center; width: min(100vw, 1080px); height: calc(min(100vw, 1080px) * 1350 / 1080); }
 }
 .page-header { text-align: center; padding: 32px 20px 8px; font-family: Arial, sans-serif; }
 .page-header h1 { color: #08a7f5; font-size: 22px; font-weight: 700; margin: 0 0 8px; letter-spacing: 0.04em; }
@@ -175,6 +221,10 @@ const RENDERER_JS = `
   if (raceTable) {
     raceTable.innerHTML = '';
     const rows = get('slides.1.stations') || [];
+    // A penalty row makes 17 rows instead of the usual 16 (8 runs + 8 stations) — the fixed
+    // top-of-table-to-legend budget below the header was sized for 16, so anything beyond that
+    // switches to a slightly smaller compact row style rather than overflowing into the legend.
+    raceTable.classList.toggle('compact', rows.length > 16);
     rows.forEach(row => {
       const delta = String(row.delta ?? '');
       const deltaClass = row.tone === 'positive' ? 'blue' : row.tone === 'negative' ? 'danger' : row.tone === 'penalty' ? 'purple' : '';
@@ -227,34 +277,36 @@ export function buildCarouselPage(carouselData = {}) {
     <section class="slide slide-hook" data-slide="A1_ATHLETE_HOOK">
       ${watermark}
       ${brandHeader}
-      <div class="hook-copy">
-        <div class="small-kicker" data-field="slides.0.percentile">BENCHMARKED RESULT</div>
-        <div class="regional-context" data-field="slides.0.regional_context" data-optional></div>
-        <h1 class="hook-title">
-          <span class="danger" data-field="slides.0.limiter_word">OPPORTUNITY</span>
-          <span data-field="slides.0.headline_suffix">SETS THE STORY</span>
-        </h1>
-        <div class="hero-number blue" data-field="slides.0.hero_number">0:00</div>
+      <div class="slide-hook-body">
+        <div class="hook-copy">
+          <div class="small-kicker" data-field="slides.0.percentile">BENCHMARKED RESULT</div>
+          <div class="regional-context" data-field="slides.0.regional_context" data-optional></div>
+          <h1 class="hook-title">
+            <span class="danger" data-field="slides.0.limiter_word">OPPORTUNITY</span>
+            <span data-field="slides.0.headline_suffix">SETS THE STORY</span>
+          </h1>
+          <div class="hero-number blue" data-field="slides.0.hero_number">0:00</div>
+        </div>
+        <div class="metric-strip metric-strip-2x2" aria-label="Summary metrics">
+          <div class="metric-item">
+            <div class="metric-label">TIME</div>
+            <div class="metric-value" data-field="slides.0.overall_time">-</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label" data-field="slides.0.metric2_label">WORLD RANK</div>
+            <div class="metric-value" data-field="slides.0.world_rank">-</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">BEST STATION</div>
+            <div class="metric-value blue" data-field="slides.0.best_station">-</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">LIMITING STATION</div>
+            <div class="metric-value danger" data-field="slides.0.biggest_limiter">-</div>
+          </div>
+        </div>
+        <div class="swipe-prompt"><span class="blue">&#8594;</span> <span data-field="slides.0.swipe_prompt">Swipe to see where time was gained and lost.</span></div>
       </div>
-      <div class="metric-strip metric-strip-4" aria-label="Summary metrics">
-        <div class="metric-item">
-          <div class="metric-label">TIME</div>
-          <div class="metric-value" data-field="slides.0.overall_time">-</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label" data-field="slides.0.metric2_label">WORLD RANK</div>
-          <div class="metric-value" data-field="slides.0.world_rank">-</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label">BEST STATION</div>
-          <div class="metric-value blue" data-field="slides.0.best_station">-</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label">LIMITING STATION</div>
-          <div class="metric-value danger" data-field="slides.0.biggest_limiter">-</div>
-        </div>
-      </div>
-      <div class="swipe-prompt"><span class="blue">&#8594;</span> <span data-field="slides.0.swipe_prompt">Swipe to see where time was gained and lost.</span></div>
       <div class="site" data-field="brand.site">www.getforma.fit</div>
     </section>
 
@@ -272,9 +324,12 @@ export function buildCarouselPage(carouselData = {}) {
           <div><span data-field="slides.1.biggest_loss.station">-</span> <span data-field="slides.1.biggest_loss.delta">-</span></div>
         </div>
       </div>
-      <div class="table-head pos-head">GAP</div>
+      <div class="race-head"><span>SPLIT</span><span class="time-col">TIME</span><span class="gap-col">GAP</span></div>
       <div class="race-table" data-repeat="slides.1.stations"></div>
-      <div class="legend"><span class="blue">BLUE</span> = FASTER THAN <span data-field="slides.1.comparison_basis">TARGET</span> &nbsp;&nbsp;&nbsp;&nbsp; <span class="danger">RED</span> = SLOWER THAN <span data-field="slides.1.comparison_basis">TARGET</span></div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot blue"></span>FASTER THAN <span data-field="slides.1.comparison_basis">TARGET</span></span>
+        <span class="legend-item"><span class="legend-dot danger"></span>SLOWER THAN <span data-field="slides.1.comparison_basis">TARGET</span></span>
+      </div>
       <div class="footer">FORMA &nbsp;|&nbsp; <span data-field="brand.site">www.getforma.fit</span></div>
     </section>
 
@@ -284,10 +339,14 @@ export function buildCarouselPage(carouselData = {}) {
       <div class="center-stack">
         <div class="kicker">BIGGEST STRENGTH</div>
         <h2 class="station-title" data-field="slides.2.station">-</h2>
-        <div class="percentile"><span class="trophy">&#127942;</span> <span data-field="slides.2.percentile">BENCHMARKED</span></div>
+        <div class="percentile"><span data-field="slides.2.percentile">BENCHMARKED</span></div>
         <div class="thin-rule"></div>
-        <div class="giant" data-field="slides.2.position_gain">-</div>
-        <div class="subhero blue" data-field="slides.2.position_gain_label">TIME AHEAD OF MEDIAN</div>
+        <div class="giant-phrase blue">
+          <span class="giant-value" data-field="slides.2.position_gain_value">-</span>
+          <span class="giant-word" data-field="slides.2.position_gain_unit" data-optional></span>
+          <span class="giant-word" data-field="slides.2.position_gain_direction" data-optional></span>
+        </div>
+        <div class="subhero blue" data-field="slides.2.position_gain_sublabel">THAN MEDIAN</div>
         <p class="caption" data-field="slides.2.caption">This is the strongest benchmarked area in this result.</p>
       </div>
       <div class="footer">DATA SOURCE: HYROX OFFICIAL</div>
@@ -299,11 +358,13 @@ export function buildCarouselPage(carouselData = {}) {
       <div class="center-stack opportunity-stack">
         <div class="kicker">BIGGEST OPPORTUNITY</div>
         <h2 class="station-title" data-field="slides.3.station">-</h2>
-        <div class="kicker secondary">POTENTIAL GAIN</div>
         <div class="thin-rule"></div>
-        <div class="giant blue" data-field="slides.3.potential_gain">0:00</div>
-        <p class="caption">Improving to benchmark average could save<br><span data-field="slides.3.potential_gain_text">time.</span></p>
-        <div class="subhero blue small">CURRENT SPLIT GAP:<br><span data-field="slides.3.current_station_rank">BENCHMARKED</span></div>
+        <div class="giant-phrase blue">
+          <span class="giant-value" data-field="slides.3.opportunity_value">-</span>
+          <span class="giant-word" data-field="slides.3.opportunity_unit" data-optional></span>
+          <span class="giant-word" data-field="slides.3.opportunity_word" data-optional></span>
+        </div>
+        <div class="subhero blue" data-field="slides.3.opportunity_sublabel">VS MEDIAN</div>
       </div>
       <div class="footer">DATA SOURCE: HYROX OFFICIAL</div>
     </section>
@@ -314,10 +375,28 @@ export function buildCarouselPage(carouselData = {}) {
       <div class="insight-wrap">
         <h2 class="slide-title two-line">WHAT THE<br>DATA SHOWS</h2>
         <div class="short-rule"></div>
-        <p><span data-field="slides.4.athlete_first_name">Athlete</span> showed <span class="blue" data-field="slides.4.gain_text">a strong benchmark performance</span> on <span data-field="slides.4.gain_station">the strongest station</span>.</p>
-        <p>There is <span class="danger" data-field="slides.4.loss_text">time potential</span> at <span data-field="slides.4.loss_station">the limiter station</span>.</p>
-        <div class="thin-rule wide"></div>
-        <p class="payoff">Closing this gap could move closer to</p>
+        <div class="insight-pairs">
+          <div class="insight-pair">
+            <div class="insight-pair-label">Strength</div>
+            <div class="insight-pair-name" data-field="slides.4.gain_station_name">-</div>
+            <div class="insight-pair-value blue">
+              <span data-field="slides.4.gain_value" data-optional></span>
+              <span data-field="slides.4.gain_unit" data-optional></span>
+              <span data-field="slides.4.gain_direction" data-optional></span>
+            </div>
+          </div>
+          <div class="insight-pair">
+            <div class="insight-pair-label">Opportunity</div>
+            <div class="insight-pair-name" data-field="slides.4.loss_station_name">-</div>
+            <div class="insight-pair-value danger">
+              <span data-field="slides.4.loss_value" data-optional></span>
+              <span data-field="slides.4.loss_unit" data-optional></span>
+              <span data-field="slides.4.loss_word" data-optional></span>
+            </div>
+          </div>
+        </div>
+        <div class="short-rule"></div>
+        <p class="payoff" data-field="slides.4.insight_short">Closing this gap could move you closer to your next PB.</p>
         <div class="top-ten blue" data-field="slides.4.outcome_text">YOUR NEXT PB</div>
       </div>
       <div class="footer">FORMA &nbsp;|&nbsp; <span data-field="brand.site">www.getforma.fit</span></div>
@@ -327,7 +406,7 @@ export function buildCarouselPage(carouselData = {}) {
       ${watermark}
       ${brandHeader}
       <div class="cta-wrap">
-        <h2 class="slide-title two-line">DISCOVER YOUR<br>HYROX BOTTLENECK</h2>
+        <h2 class="slide-title two-line" data-field="slides.5.headline">DISCOVER YOUR HYROX BOTTLENECK</h2>
         <div class="short-rule"></div>
         <ul class="feature-list" data-repeat="slides.5.features"></ul>
         <button class="cta-button" data-field="slides.5.button">ANALYSE MY HYROX RESULT</button>

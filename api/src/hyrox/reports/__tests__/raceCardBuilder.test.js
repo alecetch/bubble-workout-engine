@@ -246,7 +246,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     // the source SVG coordinates, which can't reveal this on their own). The label's x
     // is deliberately offset from the bar's mx to compensate, so assert that exact,
     // known-correct offset rather than x === mx, which renders visibly off-centre.
-    const compactLabelFont = 21; // minimum split-label tier
+    const compactLabelFont = 25; // minimum split-label tier (Phase 2 mobile-readability bump)
     const expectedCompensation = compactLabelFont * 0.34;
     for (const key of ["run_1", "wall_balls"]) {
       const mx = Number(attrValue(splitProfile, "data-split-bar", key, "data-split-mx"));
@@ -271,7 +271,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(splitProfile, /data-split-delta="run_1"[^>]*fill="#3b82f6"[^>]*>\+0:18<\/text>/);
     assert.match(splitProfile, /data-split-delta="ski_erg"[^>]*fill="#ef4444"[^>]*>-0:32<\/text>/);
     assert.match(splitProfile, /data-split-delta="run_2"[^>]*fill="#64748b"[^>]*>0:00<\/text>/);
-    assert.match(splitProfile, /data-split-delta="run_1"[^>]*font-size="21"[^>]*font-weight="800"/);
+    assert.match(splitProfile, /data-split-delta="run_1"[^>]*font-size="26"[^>]*font-weight="800"/);
   });
 
   it("uses raceOrder to keep missing middle splits from shifting labels", () => {
@@ -301,7 +301,7 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(splitProfile, /data-split-label="sandbag_lunges"[^>]*>SB LUNGE<\/text>/);
     assert.match(splitProfile, /data-split-label="farmers_carry"[^>]*>F\. CARRY<\/text>/);
     assert.match(splitProfile, /data-split-label="wall_balls"[^>]*>W BALLS<\/text>/);
-    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*font-size="21"[^>]*letter-spacing="0\.4"[^>]*>BBJ<\/text>/);
+    assert.match(splitProfile, /data-split-label="burpee_broad_jump"[^>]*font-size="25"[^>]*letter-spacing="0\.4"[^>]*>BBJ<\/text>/);
     assert.doesNotMatch(splitProfile, /BURPEE<\/text>|BROAD JUMP<\/text>|SANDBAG<\/text>|LUNGES<\/text>|FARMERS<\/text>|>CARRY<\/text>|>WALL BALLS<\/text>/);
   });
 
@@ -382,8 +382,8 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
 
     assert.equal(timeMatches.length, 16);
     assert.equal(new Set(timeYs).size, 1);
-    assert.equal(timeYs[0], "425.0");
-    assert.ok(timeMatches.every((tag) => tag.includes('font-size="24"')));
+    assert.equal(timeYs[0], "495.0");
+    assert.ok(timeMatches.every((tag) => tag.includes('font-size="28"')));
     assert.ok(timeMatches.every((tag) => tag.includes("font-variant-numeric: tabular-nums")));
     assert.ok(timeMatches.every((tag) => tag.includes('text-anchor="start"')));
     assert.ok(timeMatches.every((tag) => tag.includes('transform="rotate(-90')));
@@ -433,10 +433,10 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(html, /\.card-hdr \{[^}]*font-size: 21px;/);
     assert.match(html, /\.card-sub \{[^}]*font-size: 21px;/);
     assert.match(html, /\.card-cta \{[^}]*font-size: 21px;/);
-    assert.match(html, /\.leg \{[^}]*font-size: 21px;[^}]*font-weight: 800;/);
-    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>\+0:30<\/text>/);
-    assert.match(splitProfile, /fill="#94a3b8" font-size="21"[^>]*font-weight="700"[^>]*>-0:30<\/text>/);
-    assert.doesNotMatch(splitProfile, /fill="#475569" font-size="21"[^>]*>[+-]0:30<\/text>/);
+    assert.match(html, /\.leg \{[^}]*font-size: 24px;[^}]*font-weight: 800;/);
+    assert.match(splitProfile, /fill="#94a3b8" font-size="24"[^>]*font-weight="700"[^>]*>\+0:30<\/text>/);
+    assert.match(splitProfile, /fill="#94a3b8" font-size="24"[^>]*font-weight="700"[^>]*>-0:30<\/text>/);
+    assert.doesNotMatch(splitProfile, /fill="#475569" font-size="24"[^>]*>[+-]0:30<\/text>/);
     assert.match(html, /Race Split Profile &mdash; VS TARGET/);
     assert.match(html, /<div class="leg"><div class="dot bl"><\/div>FASTER<\/div>/);
     assert.match(html, /<div class="leg"><div class="dot rd"><\/div>SLOWER<\/div>/);

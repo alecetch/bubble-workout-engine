@@ -82,7 +82,10 @@ export async function screenshotSlides(carouselHtml, sharedBrowser = null) {
   let page;
   try {
     page = await browser.newPage();
-    await page.setViewport({ width: 1080, height: 7000 });
+    // 6 slides * 1350px (Phase 10 migration, was 1080px) + 5 * 28px gaps + 2 * 28px .carousel
+    // padding = 8296px; rounded up with headroom so a future slide-height bump doesn't silently
+    // clip the last slide(s) out of the rendered layout viewport.
+    await page.setViewport({ width: 1080, height: 8500 });
     const inlinedHtml = await inlineAssetPaths(carouselHtml);
     await page.setContent(inlinedHtml, { waitUntil: "load", timeout: 30000 });
     // Small buffer so layout is computed before screenshotting; rAF is unreliable

@@ -116,6 +116,51 @@ export function formatGain(seconds) {
   return Number.isFinite(n) ? formatTime(n) : null;
 }
 
+// Social-facing gap language: translates a signed seconds value into plain athlete wording
+// ("40 SEC FASTER" / "1:15 SLOWER" / "ON BENCHMARK") instead of a bare mathematical +/- gap.
+// Positive seconds = slower than the comparison (matches the sign convention already used for
+// tone: gap > 0 -> "negative" tone/red, gap < 0 -> "positive" tone/blue, see templateSlotMapper.js).
+// Kept as one small shared helper so every social-facing slide/card agrees on the same wording
+// and threshold, rather than each caller re-deriving "faster"/"slower" from the sign itself.
+const ON_BENCHMARK_THRESHOLD_SECONDS = 3;
+
+export function formatSocialGapParts(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n)) return null;
+  const abs = Math.round(Math.abs(n));
+  if (abs < ON_BENCHMARK_THRESHOLD_SECONDS) return { value: "ON BENCHMARK", unit: null, direction: null };
+  const direction = n > 0 ? "SLOWER" : "FASTER";
+  if (abs < 60) return { value: String(abs), unit: "SEC", direction };
+  return { value: formatTime(abs), unit: null, direction };
+}
+
+export function formatSocialGapPhrase(seconds) {
+  const parts = formatSocialGapParts(seconds);
+  if (!parts) return null;
+  if (!parts.direction) return parts.value;
+  return [parts.value, parts.unit, parts.direction].filter(Boolean).join(" ");
+}
+
+// Magnitude-only parts (no faster/slower direction) for opportunity/potential-gain framing —
+// e.g. { value: "46", unit: "SEC" } to pair with a caller-supplied word like "AVAILABLE" or
+// "TO FIND", or { value: "1:02", unit: null } once the magnitude passes a minute.
+export function formatSocialMagnitudeParts(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n)) return null;
+  const abs = Math.round(Math.abs(n));
+  if (abs < ON_BENCHMARK_THRESHOLD_SECONDS) return null;
+  if (abs < 60) return { value: String(abs), unit: "SEC" };
+  return { value: formatTime(abs), unit: null };
+}
+
+// "Available"/opportunity framing for a theoretical saving (always positive magnitude, no
+// faster/slower direction needed — e.g. "UP TO 46 SEC AVAILABLE" for a limiter's potential gain).
+export function formatSocialOpportunityPhrase(seconds) {
+  const parts = formatSocialMagnitudeParts(seconds);
+  if (!parts) return null;
+  return `UP TO ${[parts.value, parts.unit].filter(Boolean).join(" ")} AVAILABLE`;
+}
+
 export function label(value) {
   return String(value ?? "")
     .replace(/_/g, " ")
