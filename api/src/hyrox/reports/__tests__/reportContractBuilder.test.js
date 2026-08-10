@@ -287,7 +287,8 @@ describe("buildHyroxReportContract", () => {
 
     assert.equal(contract.strengthPolicy.status, "fastest_ahead_split_only");
     assert.equal(contract.strengthPolicy.displayLabel, "Farmers Carry");
-    assert.match(contract.strengthPolicy.explanation, /no protectable strength/i);
+    assert.match(contract.strengthPolicy.explanation, /Farmers Carry was your strongest relative split/i);
+    assert.match(contract.strengthPolicy.explanation, /No clear protectable strength was identified with enough confidence/i);
   });
 
   it("names the penalty when a fastest-ahead split is disqualified because it's penalty-inflated", () => {
@@ -310,7 +311,7 @@ describe("buildHyroxReportContract", () => {
     assert.equal(contract.strengthPolicy.status, "fastest_ahead_split_only");
     assert.equal(contract.strengthPolicy.displayLabel, "Farmers Carry");
     assert.match(contract.strengthPolicy.explanation, /2:54 penalty adjustment, so execution needs attention\./i);
-    assert.doesNotMatch(contract.strengthPolicy.explanation, /no protectable strength was identified with enough evidence\./i);
+    assert.doesNotMatch(contract.strengthPolicy.explanation, /No clear protectable strength was identified with enough confidence\./i);
     assert.equal(contract.strengthPolicy.fallbackReason, "penalty_inflated_split");
   });
 

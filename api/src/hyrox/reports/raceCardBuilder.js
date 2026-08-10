@@ -381,8 +381,12 @@ function buildChart(splitRows) {
   const W = 990;
   const yLW = 58;        // y-label column width
   const barW_total = W - yLW;
-  const chartH = 230;    // height of bar zone
-  const labelH = 205;    // rotated split-name + time zone below (fixed — do not grow, see labelStartY note)
+  // Chart + label zone grown for mobile legibility (Phase 9 of the mobile-readability review) —
+  // the .splits container has always had spare vertical room below this SVG at 1080x1350 (it's a
+  // flex:1 area that historically stopped well short of the footer), so this uses existing slack
+  // rather than compressing the athlete-identity/score header above it.
+  const chartH = 260;    // height of bar zone
+  const labelH = 260;    // rotated split-name + time zone below — scales with labelStartY/timeY below
   const totalH = chartH + labelH;
   const midY = chartH / 2;  // centre line
   // Value-label clamp bounds: never let a variance label render within this many px of the
@@ -399,11 +403,11 @@ function buildChart(splitRows) {
   const pxPerSec = midY / maxSec;
 
   const slotW = barW_total / n;
-  const barW = Math.min(compact ? 34 : 58, Math.floor(slotW * 0.52));
-  const valueFont = 21;
-  const labelFont = 21;
-  const labelStartY = chartH + 112;
-  const timeY = chartH + 195;
+  const barW = Math.min(compact ? 40 : 66, Math.floor(slotW * 0.52));
+  const valueFont = 26;
+  const labelFont = 25;
+  const labelStartY = chartH + 140;
+  const timeY = chartH + 235;
 
   const p = [];
 
@@ -414,7 +418,7 @@ function buildChart(splitRows) {
     const y = (midY - s * pxPerSec).toFixed(1);
     const isZero = s === 0;
     p.push(`<line x1="${yLW}" y1="${y}" x2="${W}" y2="${y}" stroke="${isZero ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.09)"}" stroke-width="${isZero ? 1.5 : 0.9}"/>`);
-    p.push(`<text x="${yLW - 8}" y="${(+y + 7.2).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="21" font-family="Inter,sans-serif" font-weight="700">${lbl}</text>`);
+    p.push(`<text x="${yLW - 8}" y="${(+y + 7.2).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="24" font-family="Inter,sans-serif" font-weight="700">${lbl}</text>`);
   }
 
   for (let i = 0; i < rows.length; i++) {
@@ -463,7 +467,7 @@ function buildChart(splitRows) {
     if (row.userTime) {
       const timeX = Number(mx) + (compact ? 7.5 : 8.2);
       const timeText = row.isPenaltyAdjusted ? `${row.userTime}*` : row.userTime;
-      p.push(`<text data-split-time="${escapeHtml(row.key ?? row.label)}" data-split-raw-time="${escapeHtml(row.rawUserTime ?? "")}" x="${timeX.toFixed(1)}" y="${timeY.toFixed(1)}" text-anchor="start" fill="#f0f6ff" font-size="24" font-weight="900" font-family="'Inter Tight',sans-serif" style="font-variant-numeric: tabular-nums;" transform="rotate(${LABEL_ROTATION_DEGREES} ${timeX.toFixed(1)} ${timeY.toFixed(1)})">${escapeHtml(timeText)}</text>`);
+      p.push(`<text data-split-time="${escapeHtml(row.key ?? row.label)}" data-split-raw-time="${escapeHtml(row.rawUserTime ?? "")}" x="${timeX.toFixed(1)}" y="${timeY.toFixed(1)}" text-anchor="start" fill="#f0f6ff" font-size="28" font-weight="900" font-family="'Inter Tight',sans-serif" style="font-variant-numeric: tabular-nums;" transform="rotate(${LABEL_ROTATION_DEGREES} ${timeX.toFixed(1)} ${timeY.toFixed(1)})">${escapeHtml(timeText)}</text>`);
     }
   }
 
@@ -622,9 +626,9 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
 /* ─── SPLIT PROFILE ─── */
 .splits { padding: 16px 44px 0; flex: 1; min-height: 0; overflow: hidden; }
 .sp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.sp-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 21px; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
+.sp-title { font-family: 'Inter Tight',Arial,sans-serif; font-weight: 800; font-size: 25px; letter-spacing: 1px; color: var(--text); text-transform: uppercase; }
 .sp-legend { display: flex; align-items: center; gap: 16px; }
-.leg { display: flex; align-items: center; gap: 7px; font-size: 21px; font-weight: 800; color: var(--muted); letter-spacing: 0.2px; }
+.leg { display: flex; align-items: center; gap: 7px; font-size: 24px; font-weight: 800; color: var(--muted); letter-spacing: 0.2px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .dot.bl { background: var(--blue); } .dot.rd { background: var(--neg); }
 

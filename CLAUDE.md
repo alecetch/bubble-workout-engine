@@ -1,5 +1,10 @@
 # CLAUDE.md — Project conventions for AI assistants
 
+## Instagram social standards
+For Forma Data Lab Instagram work, read `docs/instagram/INSTAGRAM_STANDARDS.md` before editing the
+renderer or copy. Preserve the 1080x1350 canvas, 72px horizontal safe inset, y=100 shared header,
+and L1/L2/L3 typography tiers; regenerate PNGs from source and run the mobile/grid QA sheet.
+
 ## Git & PR conventions
 - Always work on a fresh branch. Never commit directly to `main`.
 - Branch naming: `feat/`, `fix/`, `hotfix/`, or `chore/` prefix + kebab-case description of the outcome (e.g. `feat/add-hero-media`, `fix/flyway-missing-state`)

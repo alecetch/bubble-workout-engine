@@ -3,7 +3,7 @@ import { getBenchmarkStats } from "../engine/benchmarkService.js";
 import { hasBenchmarkPercentileData } from "./comparisonOptions.js";
 import { hasGoalGroup } from "./comparisonBasis.js";
 import { comparisonProfileLabel } from "./comparisonProfileLabel.js";
-import { ageGroupContextLine, formatGain, formatPercent, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
+import { ageGroupContextLine, formatGain, formatPercent, formatSocialGapParts, formatSocialMagnitudeParts, formatTime, formatTimeDiff, label, regionalContextLine } from "./copyFormatter.js";
 import { resolveHeroImage } from "./heroImageResolver.js";
 import { ensureHyroxReportContract } from "./reportContractBuilder.js";
 import { dataQualityNote, reportStrengthGapSeconds, resolveReportStrength } from "./reportSelections.js";
@@ -39,6 +39,27 @@ function opportunityStation(analysisJson) {
 
 function upper(value) {
   return String(value ?? "").toUpperCase();
+}
+
+function strengthPresentationLabel(status) {
+  if (status === "reliable_strength") return "BIGGEST STRENGTH";
+  if (status === "fastest_ahead_split_only") return "BEST RELATIVE SPLIT";
+  if (status === "suppressed") return "SPLIT CONFIDENCE";
+  return "NO CLEAR STRENGTH";
+}
+
+// Parses an already-formatted signed time string ("-0:33", "+1:02:15", "0:00") back to seconds.
+// Needed because strengthPolicy's "fastest_ahead_split_only" fallback (used whenever there's no
+// fully "reliable" strength, e.g. Marcus Fernandes' case below) only carries a pre-formatted
+// displayGap string, not raw seconds — strengthGapSeconds() doesn't reliably resolve a number for
+// that shape, so the social phrase must be able to derive its value from the string form too.
+function parseSignedTimeToSeconds(value) {
+  const str = String(value ?? "").trim();
+  const match = /^([+-]?)(\d+):(\d{2})(?::(\d{2}))?$/.exec(str);
+  if (!match) return null;
+  const [, sign, a, b, c] = match;
+  const seconds = c != null ? Number(a) * 3600 + Number(b) * 60 + Number(c) : Number(a) * 60 + Number(b);
+  return sign === "-" ? -seconds : seconds;
 }
 
 function titleCaseName(value) {
@@ -377,6 +398,7 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
       },
       {
         slide_id: "A3_BIGGEST_STRENGTH",
+        strength_heading: strengthPresentationLabel(strengthPolicy.status),
         station: narrative.artifactSlots?.carousel?.strengthLabel ?? (strength ? upper(strength.label ?? label(strength.segmentKey)) : "NO RELIABLE STRENGTH"),
         percentile: strengthPolicy.status === "fastest_ahead_split_only"
           ? "Best relative split"
@@ -385,6 +407,23 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
           ? String(strengthPolicy.displayGap).replace(/^-/, "+")
           : strength && Number.isFinite(strengthGap) ? (formatTimeDiff(Math.abs(strengthGap)) ?? "+0:00") : "N/A",
         position_gain_label: `TIME AHEAD OF ${basis}`,
+        // Plain-language parts for the social carousel slide (Phase 13 sign convention) — the
+        // strength slide is definitionally a "faster" claim, so the direction always reads FASTER;
+        // "position_gain"/"position_gain_label" above are kept for any other consumer of this data.
+        // Falls back to parsing strengthPolicy.displayGap when strengthGap itself isn't a finite
+        // number, since the "fastest_ahead_split_only" policy branch only carries a formatted string.
+        ...(() => {
+          const magnitude = Number.isFinite(strengthGap)
+            ? Math.abs(strengthGap)
+            : Math.abs(parseSignedTimeToSeconds(strengthPolicy.displayGap) ?? NaN);
+          const parts = strength && Number.isFinite(magnitude) ? formatSocialGapParts(-magnitude) : null;
+          return {
+            position_gain_value: parts?.value ?? "NO DATA",
+            position_gain_unit: parts?.unit ?? null,
+            position_gain_direction: parts?.direction ?? null,
+          };
+        })(),
+        position_gain_sublabel: `THAN ${basis}`,
         caption: strengthPolicy.explanation ?? (strength
           ? `${stationSubject(strength)} is the strongest benchmarked area in this result.`
           : "No reliable strongest station could be identified from the available split data."),
@@ -401,6 +440,17 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         potential_gain: formatGain(gain) ?? "0:00",
         potential_gain_text: wordsForSeconds(gain),
         current_station_rank: primaryIsPenalty ? "EXECUTION" : splitGapSummary(limiter, analysisJson),
+        // Plain-language parts replacing the old three-times-repeated gap (giant number + prose
+        // restatement + "current split gap" line) — Phase 6. One value + one word instead.
+        ...(() => {
+          const parts = primaryIsPenalty ? null : formatSocialMagnitudeParts(gain);
+          return {
+            opportunity_value: parts?.value ?? (primaryIsPenalty ? "CLEAN EXECUTION" : "N/A"),
+            opportunity_unit: parts?.unit ?? null,
+            opportunity_word: primaryIsPenalty ? "RECOVERABLE" : (parts ? "TO FIND" : null),
+          };
+        })(),
+        opportunity_sublabel: `VS ${basis}`,
         action_text: roxzoneAction?.carouselAction ?? null,
         confidence_note: roxzoneAction?.confidenceText ?? narrative.dataQualityPolicy?.compactCaveat ?? null,
       },
@@ -413,6 +463,31 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
         loss_station: String(displaySegmentLabel(limiter, limiter?.label) ?? "the limiter").toLowerCase(),
         outcome_text: athleteContext.targetLabel ?? "YOUR NEXT PB",
         insight: `Closing this gap could move ${firstName(athleteContext)} closer to ${athleteContext.targetLabel ?? "the next target"}.`,
+        // Fewer words, bigger text (Phase 7): a strength/opportunity pair the slide renders as two
+        // large stat blocks, plus one short interpretation line — all derived from the same
+        // strength/limiter data already computed above, not new analysis.
+        gain_station_name: strength ? upper(strength.label ?? label(strength.segmentKey)) : "NO CLEAR STRENGTH",
+        ...(() => {
+          const magnitude = Number.isFinite(strengthGap)
+            ? Math.abs(strengthGap)
+            : Math.abs(parseSignedTimeToSeconds(strengthPolicy.displayGap) ?? NaN);
+          const parts = strength && Number.isFinite(magnitude) ? formatSocialGapParts(-magnitude) : null;
+          return {
+            gain_value: parts?.value ?? null,
+            gain_unit: parts?.unit ?? null,
+            gain_direction: parts?.direction ?? null,
+          };
+        })(),
+        loss_station_name: upper(displaySegmentLabel(limiter, limiter?.label ?? label(limiter?.segmentKey)) ?? "N/A"),
+        ...(() => {
+          const parts = primaryIsPenalty ? null : formatSocialMagnitudeParts(gain);
+          return {
+            loss_value: parts?.value ?? (primaryIsPenalty ? "CLEAN EXECUTION" : null),
+            loss_unit: parts?.unit ?? null,
+            loss_word: primaryIsPenalty ? "RECOVERABLE" : (parts ? "TO FIND" : null),
+          };
+        })(),
+        insight_short: `Closing your clearest gap could move you closer to ${athleteContext.targetLabel ?? "your next PB"}.`,
       },
       {
         slide_id: "A6_CTA",
