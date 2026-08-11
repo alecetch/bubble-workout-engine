@@ -653,6 +653,7 @@
                     <th>Scope</th>
                     <th>Confidence</th>
                     <th>Email</th>
+                    <th>Type</th>
                     <th>Share Pack</th>
                   </tr>
                 </thead>
@@ -1205,7 +1206,7 @@
       function renderHyroxSubmissions(rows, total) {
         const tbody = document.getElementById("hx-submissions-body");
         if (!rows.length) {
-          tbody.innerHTML = `<tr><td colspan="13" class="empty-state">No HYROX submissions found for this period.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="14" class="empty-state">No HYROX submissions found for this period.</td></tr>`;
         } else {
           tbody.innerHTML = rows.map((row) => `<tr class="clickable" data-hx-submission-id="${escapeHtml(row.submissionId)}">
             <td>${escapeHtml(formatDateTime(row.createdAt))}</td>
@@ -1220,6 +1221,7 @@
             <td>${escapeHtml(row.analysisScope || "-")}</td>
             <td>${escapeHtml(row.confidence || "-")}</td>
             <td>${escapeHtml(row.emailStatus || "-")}</td>
+            <td>${row.isTestSubmission ? '<span class="badge-amber">Test</span>' : "Real"}</td>
             <td>${row.hasSharePack ? "Yes" : "No"}</td>
           </tr>`).join("");
         }
@@ -1261,6 +1263,7 @@
             ["Benchmark Group", row.benchmarkGroupKey],
             ["Confidence", row.confidence],
             ["Email Status", row.emailStatus],
+            ["Type", row.isTestSubmission ? "Test" : "Real"],
             ["Share Pack", row.hasSharePack ? "Yes" : "No"],
           ];
           content.innerHTML = `<h2>HYROX Submission</h2><dl>${fields.map(([label, value]) => `

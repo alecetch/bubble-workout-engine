@@ -270,6 +270,42 @@ test("GET /hyrox/submissions omits email and display_name", async () => {
   });
 });
 
+test("GET /hyrox/submissions flags the test account email without exposing it", async () => {
+  const db = emptyDb({
+    query() {
+      return {
+        rows: [
+          {
+            submission_id: "sub-test",
+            created_at: "2026-06-24T10:00:00Z",
+            email: "AlecPringle@Outlook.com",
+            total_count: 2,
+          },
+          {
+            submission_id: "sub-real",
+            created_at: "2026-06-24T10:00:00Z",
+            email: "someone.else@example.com",
+            total_count: 2,
+          },
+        ],
+      };
+    },
+  });
+
+  await withToken(async () => {
+    await withServer(makeApp(db), async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/hyrox/submissions`, { headers: authHeaders() });
+      const body = await res.json();
+      const [testRow, realRow] = body.rows;
+      assert.equal(testRow.isTestSubmission, true);
+      assert.equal(realRow.isTestSubmission, false);
+      assert.equal(Object.hasOwn(testRow, "email"), false);
+      assert.equal(Object.hasOwn(realRow, "email"), false);
+      assert.equal(JSON.stringify(body).toLowerCase().includes("alecpringle@outlook.com"), false);
+    });
+  });
+});
+
 test("GET /hyrox/submission/:id with no row returns 404", async () => {
   await withToken(async () => {
     await withServer(makeApp(emptyDb({ query: () => ({ rows: [] }) })), async (baseUrl) => {
@@ -321,6 +357,31 @@ test("GET /hyrox/submission/:id returns sanitized detail", async () => {
       assert.equal(res.status, 200);
       assert.equal(body.submissionId, "sub-1");
       assert.equal(Object.hasOwn(body, "email"), false);
+      assert.equal(body.isTestSubmission, false);
+    });
+  });
+});
+
+test("GET /hyrox/submission/:id flags the test account email without exposing it", async () => {
+  const db = emptyDb({
+    query() {
+      return {
+        rows: [{
+          submission_id: "sub-1",
+          created_at: "2026-06-24T10:00:00Z",
+          email: "alecpringle@outlook.com",
+        }],
+      };
+    },
+  });
+
+  await withToken(async () => {
+    await withServer(makeApp(db), async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/hyrox/submission/sub-1`, { headers: authHeaders() });
+      const body = await res.json();
+      assert.equal(body.isTestSubmission, true);
+      assert.equal(Object.hasOwn(body, "email"), false);
+      assert.equal(JSON.stringify(body).toLowerCase().includes("alecpringle@outlook.com"), false);
     });
   });
 });

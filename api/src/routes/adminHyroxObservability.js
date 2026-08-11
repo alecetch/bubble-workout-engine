@@ -3,6 +3,12 @@ import { requireInternalToken } from "../middleware/auth.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { clampInt, safeString } from "../utils/validate.js";
 
+const TEST_SUBMISSION_EMAIL = "alecpringle@outlook.com";
+
+function isTestSubmissionEmail(email) {
+  return typeof email === "string" && email.trim().toLowerCase() === TEST_SUBMISSION_EMAIL;
+}
+
 function roundPct(numerator, denominator) {
   return denominator > 0 ? Number(((numerator / denominator) * 100).toFixed(1)) : 0;
 }
@@ -438,6 +444,7 @@ export function createAdminHyroxObservabilityRouter(db) {
           hs.source,
           hs.calculator_mode,
           hs.roxzone_mode,
+          hs.email,
           jsonb_array_length(hs.splits_json) AS splits_count,
           ha.analysis_scope,
           ha.confidence,
@@ -480,6 +487,7 @@ export function createAdminHyroxObservabilityRouter(db) {
           analysisScope: row.analysis_scope,
           confidence: row.confidence,
           emailStatus: row.email_status,
+          isTestSubmission: isTestSubmissionEmail(row.email),
           hasSharePack: row.has_share_pack === true,
         })),
         total: rowTotal(rows),
@@ -509,6 +517,7 @@ export function createAdminHyroxObservabilityRouter(db) {
           hs.source,
           hs.calculator_mode,
           hs.roxzone_mode,
+          hs.email,
           jsonb_array_length(hs.splits_json) AS splits_count,
           hs.marketing_consent,
           hs.analysis_duration_ms,
@@ -563,6 +572,7 @@ export function createAdminHyroxObservabilityRouter(db) {
         benchmarkGroupKey: row.benchmark_group_key,
         confidence: row.confidence,
         emailStatus: row.email_status,
+        isTestSubmission: isTestSubmissionEmail(row.email),
         hasSharePack: row.has_share_pack === true,
       });
     } catch (err) {
