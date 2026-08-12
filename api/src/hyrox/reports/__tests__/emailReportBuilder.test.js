@@ -2787,24 +2787,9 @@ describe("renderSplitTable", () => {
 	  it("renders full split detail", () => {
 	    const htmlBody = renderSplit();
 	    assert.match(htmlBody, /FULL SPLIT DETAIL/);
-	    assert.match(htmlBody, /View the full split report/);
-	    assert.match(htmlBody, /\/api\/hyrox\/carousel\/22222222-2222-4222-8222-222222222222/);
+	    assert.ok(!htmlBody.includes("View the full split report"));
 	    assert.ok(!htmlBody.includes("REDUCED SPLIT DETAIL"));
 	  });
-
-  it("omits full split report link when no submission id exists", () => {
-    const section = splitTableSection();
-    const { htmlBody } = buildEmailReport(
-      { sections: [section] },
-      mockAnalysis({
-        segments: section.tableData.segments,
-        penalties: section.tableData.penalties,
-        benchmarkContext: section.tableData.benchmarkContext,
-      }),
-      mockContext(),
-    );
-    assert.ok(!htmlBody.includes("View the full split report"));
-  });
 
   it("renders full rows in race order", () => {
 	    const htmlBody = renderSplit();
