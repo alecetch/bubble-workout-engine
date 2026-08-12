@@ -102,6 +102,55 @@ test("getSplitRecommendation returns PPL recommendation for 5-day hypertrophy", 
   assert.deepEqual(res.body.recommendation, ["push", "pull", "legs", "upper_body", "lower_body"]);
 });
 
+test("getSplitRecommendation returns full 6-day and 7-day hypertrophy recommendations from config", async () => {
+  const configJson = {
+    builder: {
+      day_templates: [
+        { day_key: "push_day", focus: "push" },
+        { day_key: "pull_day", focus: "pull" },
+        { day_key: "legs_day", focus: "legs" },
+        { day_key: "day4", focus: "full" },
+      ],
+      day_templates_by_dpw: {
+        "6": ["push_day", "pull_day", "legs_day", "push_day", "pull_day", "legs_day"],
+        "7": ["push_day", "pull_day", "legs_day", "push_day", "pull_day", "legs_day", "day4"],
+      },
+    },
+  };
+
+  for (const daysPerWeek of [6, 7]) {
+    let callCount = 0;
+    const db = {
+      async query() {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            rowCount: 1,
+            rows: [{
+              preferred_split_json: null,
+              preferred_days: Array.from({ length: daysPerWeek }, (_, index) => `day-${index + 1}`),
+              program_type_slug: "hypertrophy",
+              main_goals_slugs: [],
+            }],
+          };
+        }
+        return {
+          rowCount: 1,
+          rows: [{ program_generation_config_json: configJson }],
+        };
+      },
+    };
+    const { getSplitRecommendation } = createSplitRecommendationHandlers(db);
+    const res = mockRes();
+
+    await getSplitRecommendation(makeReq(), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.daysPerWeek, daysPerWeek);
+    assert.equal(res.body.recommendation.length, daysPerWeek);
+  }
+});
+
 test("getSplitRecommendation returns existing preference when set", async () => {
   const db = {
     async query() {
