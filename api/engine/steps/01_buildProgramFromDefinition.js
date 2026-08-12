@@ -24,6 +24,7 @@ import {
   matchesSimulationFilters,
   normalizeSimulationSlotFields,
 } from "../orderedSimulation.js";
+import logger from "../../src/utils/logger.js";
 
 function toStr(v) {
   return v === null || v === undefined ? "" : String(v);
@@ -111,7 +112,7 @@ function rotatePreferredSplitFromStart(preferredSplit, preferredDays, anchorMs) 
     .map((item) => item.focus);
 }
 
-function resolveTemplateSequence(byDpw, dayTemplates, dperweek) {
+export function resolveTemplateSequence(byDpw, dayTemplates, dperweek, context = {}) {
   if (!byDpw || typeof byDpw !== "object") {
     return dayTemplates.slice(0, dperweek);
   }
@@ -120,7 +121,22 @@ function resolveTemplateSequence(byDpw, dayTemplates, dperweek) {
     return dayTemplates.slice(0, dperweek);
   }
   const index = Object.fromEntries(dayTemplates.map((t) => [t.day_key, t]));
-  return keys.map((k) => index[k]).filter(Boolean);
+  const resolved = keys.map((k) => index[k]).filter(Boolean);
+  if (resolved.length !== dperweek) {
+    logger.warn(
+      {
+        event: "program_generation_config.day_templates_by_dpw_length_mismatch",
+        config_key: context.configKey ?? context.config_key ?? null,
+        program_type: context.programType ?? context.program_type ?? null,
+        days_per_week: dperweek,
+        configured_length: keys.length,
+        resolved_length: resolved.length,
+        missing_day_keys: keys.filter((k) => !index[k]),
+      },
+      "day_templates_by_dpw resolved length mismatch",
+    );
+  }
+  return resolved;
 }
 
 const USER_FOCUS_TO_TEMPLATE_FOCUS = {
@@ -679,6 +695,7 @@ export async function buildProgramFromDefinition({ inputs, request, compiledConf
     builderCfg.dayTemplatesByDpw,
     dayTemplates,
     dperweek,
+    { configKey: compiledConfig?.configKey, programType: compiledConfig?.programType },
   );
   const rawPreferredSplit = clientProfile?.preferredSplitJson?.day_focuses ?? clientProfile?.preferred_split_json?.day_focuses ?? null;
   const preferredDayIndexes = parsePreferredDayIndexes(request?.preferred_days_json ?? clientProfile?.preferred_days);
