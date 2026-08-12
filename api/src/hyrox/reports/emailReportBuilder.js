@@ -1289,8 +1289,6 @@ function renderSplitTable(section, analysisJson, contract = null) {
   const achievedBand = benchmarkContext.achievedBand ?? null;
   const analysisFrame = benchmarkContext.analysisFrame ?? {};
   const gapComparisonBand = analysisFrame.comparisonBand ?? achievedBand;
-  const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
-  const splitReportUrl = analysisJson.submissionId ? `${baseUrl}/api/hyrox/carousel/${analysisJson.submissionId}` : null;
   const segMap = new Map(segments.map((segment) => [segment.segmentKey, segment]));
   const contractAnalysisJson = { ...analysisJson, segments, penalties, benchmarkContext };
   const narrative = ensureHyroxReportContract({ analysisJson: contractAnalysisJson, contract });
@@ -2761,9 +2759,6 @@ function renderSplitTable(section, analysisJson, contract = null) {
     </tr>`;
   }
 
-  const splitReportLink = splitReportUrl
-    ? `<a href="${esc(splitReportUrl)}" target="_blank" style="display:block;background-color:#e8f7fd;border:1px solid #bdeafb;border-radius:8px;padding:14px 16px;margin-top:12px;color:#22d3ee;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;text-decoration:none;">View the full split report &#8594;</a>`
-    : "";
   const splitGapHeader = !hasGoalGroup && gapComparisonBand && gapComparisonBand !== achievedBand
     ? `Gap vs ${bandDisplayLabel(gapComparisonBand)}`
     : hasGoalGroup
@@ -2794,7 +2789,6 @@ function renderSplitTable(section, analysisJson, contract = null) {
 	        </table>
         ${splitTableNote}
         ${estimatedSplitNote}
-	        ${splitReportLink}
 	      </td>
     </tr>`;
 }
