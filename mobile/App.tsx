@@ -138,9 +138,14 @@ export default function App(): React.JSX.Element {
         await registerPushToken(tokenData.data);
         logger.boot("push registerPushToken success");
       } catch (error) {
-        logger.error(
-          "push",
-          "registration failed",
+        // Deliberately logger.boot (console.log), not logger.warn/error: push
+        // registration routinely fails on simulators/emulators and devices
+        // without notification permission. console.warn/error trigger React
+        // Native's LogBox overlay in dev/debug builds, which then sits on top
+        // of the UI and can swallow touch/scroll gestures (this broke the
+        // Maestro E2E Settings flow in CI when this was logger.error).
+        logger.boot(
+          "push registration failed",
           error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
         );
         // Never block app startup on notification registration.
