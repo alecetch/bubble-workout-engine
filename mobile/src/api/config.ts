@@ -1,3 +1,5 @@
+import { logger } from "../utils/logger";
+
 type EnvShape = {
   require?: (moduleName: string) => unknown;
 };
@@ -80,7 +82,8 @@ function warnIfLocalhostBaseUrlOnDevice(): void {
       null;
 
     if (hostUri && !hostUri.includes("localhost") && !hostUri.includes("127.0.0.1")) {
-      console.warn(
+      logger.warn(
+        "api",
         "API_BASE_URL is localhost. On a physical device this won't reach your dev machine.",
       );
     }

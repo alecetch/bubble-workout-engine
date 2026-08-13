@@ -14,6 +14,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramReview">;
 
@@ -63,7 +64,7 @@ function formatMappedList(values: string[] | undefined, labelsByCode: Map<string
 }
 
 export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Element {
-  console.log("[boot] ProgramReviewScreen render");
+  logger.boot("ProgramReviewScreen render");
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
   const setIdentity = useOnboardingStore((state) => state.setIdentity);
   const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
@@ -90,9 +91,9 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
   );
 
   useEffect(() => {
-    console.log("[boot] ProgramReviewScreen mounted");
+    logger.boot("ProgramReviewScreen mounted");
     return () => {
-      console.log("[boot] ProgramReviewScreen unmounted");
+      logger.boot("ProgramReviewScreen unmounted");
     };
   }, []);
 

@@ -5,10 +5,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import { queryKeys, useCompleteProgram, useEntitlement, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
-import { getProgramEndCheck } from "../../api/programCompletion";
 import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/segmentLog";
-import { getPrsFeed } from "../../api/history";
-import { getProgramOverview, type ProgramDayFullResponse, type ProgramOverviewResponse } from "../../api/programViewer";
+import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { EquipmentOverrideSheet } from "../../components/program/EquipmentOverrideSheet";
@@ -24,53 +22,14 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
-import {
-  getSegmentLog,
-  allExercisesComplete,
-  getWorkoutComplete,
-  setSegmentLog,
-  setWorkoutComplete,
-  type SegmentLogEntry,
-} from "../../utils/localWorkoutLog";
+import { setSegmentLog, setWorkoutComplete, type SegmentLogEntry } from "../../utils/localWorkoutLog";
 import { useSettingsStore } from "../../state/settings/useSettingsStore";
-import { hasRequestedStoreReview } from "../../utils/storeReview";
+import { useDayCompletionFlow } from "./hooks/useDayCompletionFlow";
+import { useExerciseSwapSheet } from "./hooks/useExerciseSwapSheet";
+import { useLocalDayState } from "./hooks/useLocalDayState";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDay">;
 type Segment = ProgramDayFullResponse["segments"][number];
-type WeekShareData = {
-  weekNumber: number;
-  sessionsCompleted: number;
-  totalVolumeKg: number;
-};
-
-function getCompletedWeekShareData(
-  overview: Pick<ProgramOverviewResponse, "calendarDays">,
-  weekNumber: number | null,
-  completedProgramDayId: string,
-  totalVolumeKg: number,
-): WeekShareData | null {
-  if (weekNumber == null) return null;
-  const thisWeekTrainingDays = overview.calendarDays.filter(
-    (calendarDay) =>
-      calendarDay.isTrainingDay &&
-      Boolean(calendarDay.programDayId) &&
-      calendarDay.weekNumber === weekNumber,
-  );
-  const thisWeekAllDone =
-    thisWeekTrainingDays.length > 0 &&
-    thisWeekTrainingDays.every(
-      (calendarDay) =>
-        calendarDay.status === "complete" ||
-        calendarDay.programDayId === completedProgramDayId,
-    );
-
-  if (!thisWeekAllDone) return null;
-  return {
-    weekNumber,
-    sessionsCompleted: thisWeekTrainingDays.length,
-    totalVolumeKg,
-  };
-}
 
 const WEEKDAY_LABELS: Record<string, string> = {
   Mon: "Mondays",
@@ -99,21 +58,13 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const markDayComplete = useMarkDayComplete();
   const completeProgram = useCompleteProgram();
   const queryClient = useQueryClient();
-  const [segmentLogs, setSegmentLogs] = useState<Record<string, SegmentLogEntry>>({});
-  const [segmentLogRows, setSegmentLogRows] = useState<Record<string, SaveSegmentLogPayload["rows"]>>({});
-  const [workoutComplete, setWorkoutCompleteState] = useState(false);
-  const [allExerciseCardsComplete, setAllExerciseCardsComplete] = useState(false);
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
-  const [swapSheetVisible, setSwapSheetVisible] = useState(false);
-  const [swapTargetProgramExerciseId, setSwapTargetProgramExerciseId] = useState<string | null>(null);
-  const [swapTargetExerciseName, setSwapTargetExerciseName] = useState<string | null>(null);
   const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
-  const [prHits, setPrHits] = useState<string[]>([]);
-  const [prE1rmKg, setPrE1rmKg] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetY = useRef(0);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
+  const day = dayQuery.data?.day;
   const programId = dayQuery.data?.day?.programId ?? activeProgramId ?? "";
   const nav = navigation as unknown as NativeStackNavigationProp<ProgramsStackParamList>;
   const hydrateSettings = useSettingsStore((state) => state.hydrate);
@@ -134,25 +85,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       parent?.navigate("HomeTab", { screen: "Paywall" } as never);
     }
   }, [entitlementQuery.data?.is_active, entitlementQuery.isSuccess, navigation]);
-
-  const handlePrsDetected = useCallback(
-    (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => {
-      if (prs.length === 0) return;
-      setPrHits((current) => {
-        const merged = new Set(current);
-        for (const pr of prs) {
-          if (pr.exerciseName) merged.add(pr.exerciseName);
-        }
-        return Array.from(merged);
-      });
-      setPrE1rmKg((current) => {
-        const nextMax = prs.reduce((max, pr) => Math.max(max, pr.estimated1rmKg ?? 0), 0);
-        if (nextMax <= 0) return current;
-        return current == null ? nextMax : Math.max(current, nextMax);
-      });
-    },
-    [],
-  );
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -180,126 +112,54 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     [orderedSegments],
   );
 
-  const refreshExerciseCompletion = useCallback(() => {
-    void allExercisesComplete(programDayId, allExerciseIds).then(setAllExerciseCardsComplete);
-  }, [allExerciseIds, programDayId]);
+  const {
+    segmentLogs,
+    setSegmentLogs,
+    segmentLogRows,
+    setSegmentLogRows,
+    workoutComplete,
+    setWorkoutCompleteState,
+    allExerciseCardsComplete,
+    refreshExerciseCompletion,
+  } = useLocalDayState(programDayId, orderedSegments, allExerciseIds);
 
-  useEffect(() => {
-    let cancelled = false;
+  const computeSessionStats = useCallback(
+    (): { totalVolumeKg: number; totalSets: number; exerciseCount: number } =>
+      computeSessionStatsFromLoggedRows(segmentLogRows),
+    [segmentLogRows],
+  );
 
-    async function loadLocalState(): Promise<void> {
-      const completion = await getWorkoutComplete(programDayId);
-      const entries = await Promise.all(
-        orderedSegments.map(async (segment) => ({
-          segmentId: segment.id,
-          log: await getSegmentLog(programDayId, segment.id),
-        })),
-      );
+  const {
+    prHits,
+    prE1rmKg,
+    handlePrsDetected,
+    handleSummaryDismiss,
+  } = useDayCompletionFlow({
+    programDayId,
+    programId,
+    userId,
+    markDayComplete,
+    completeProgram,
+    queryClient,
+    nav,
+    setSummaryVisible,
+    setWorkoutCompleteState,
+    setConfirmationText,
+    computeSessionStats,
+    day,
+  });
 
-      if (cancelled) return;
-
-      const logsMap: Record<string, SegmentLogEntry> = {};
-      entries.forEach((entry) => {
-        if (entry.log) logsMap[entry.segmentId] = entry.log;
-      });
-
-      setSegmentLogs(logsMap);
-      setWorkoutCompleteState(completion);
-      setAllExerciseCardsComplete(await allExercisesComplete(programDayId, allExerciseIds));
-    }
-
-    void loadLocalState();
-    return () => {
-      cancelled = true;
-    };
-  }, [allExerciseIds, orderedSegments, programDayId]);
-
-  async function handleSummaryDismiss(): Promise<void> {
-    setSummaryVisible(false);
-    try {
-      await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId });
-      await setWorkoutComplete(programDayId, true);
-      setWorkoutCompleteState(true);
-      setConfirmationText(null);
-
-      let shouldShowReview = false;
-      let weekCompleteNumber: number | undefined;
-      let weekCompleteSessions: number | undefined;
-
-      if (userId && prHits.length === 0) {
-        try {
-          const feed = await getPrsFeed(userId);
-          const names = feed.rows.map((row) => row.exerciseName).filter(Boolean);
-          if (names.length > 0) {
-            setPrHits(names);
-            const bestE1rm = feed.rows.reduce(
-              (max, row) => Math.max(max, row.estimatedE1rmKg ?? 0),
-              0,
-            );
-            if (bestE1rm > 0) setPrE1rmKg(bestE1rm);
-            const already = await hasRequestedStoreReview(userId);
-            if (!already) shouldShowReview = true;
-          }
-        } catch {
-          // PR feed lookup is best-effort.
-        }
-      }
-
-      if (prHits.length > 0) {
-        const already = await hasRequestedStoreReview(userId);
-        if (!already) shouldShowReview = true;
-      }
-
-      if (!programId || !userId) return;
-
-      const overview = await queryClient.fetchQuery({
-        queryKey: queryKeys.programOverview(programId, { userId }),
-        queryFn: () => getProgramOverview(programId, { userId }),
-        staleTime: 0,
-      });
-
-      const shareData = getCompletedWeekShareData(
-        overview,
-        day.weekNumber ?? null,
-        programDayId,
-        computeSessionStats().totalVolumeKg,
-      );
-      if (shareData) {
-        weekCompleteNumber = shareData.weekNumber;
-        weekCompleteSessions = shareData.sessionsCompleted;
-      }
-
-      const endCheck = await queryClient.fetchQuery({
-        queryKey: queryKeys.programEndCheck(programId),
-        queryFn: () => getProgramEndCheck(programId),
-      });
-
-      if (endCheck.lifecycleStatus === "completed") {
-        nav.navigate("ProgramComplete", { programId });
-        return;
-      }
-
-      if (endCheck.isLastScheduledDayComplete && endCheck.missedWorkoutsCount === 0) {
-        await completeProgram.mutateAsync({ programId, mode: "as_scheduled" });
-        nav.navigate("ProgramComplete", { programId });
-        return;
-      }
-
-      if (endCheck.canCompleteWithSkips) {
-        nav.navigate("ProgramEndCheck", { programId });
-        return;
-      }
-
-      nav.navigate("ProgramDashboard", {
-        programId,
-        showReviewPrompt: shouldShowReview || undefined,
-        weekCompleteNumber,
-        weekCompleteSessions,
-      });
-    } catch (error) {
-      setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
-    }
-  }
+  const {
+    swapSheetVisible,
+    swapTargetProgramExerciseId,
+    swapTargetExerciseName,
+    closeSwapSheet,
+    handleSwapApplied,
+  } = useExerciseSwapSheet({
+    onSwapApplied: () => {
+      void dayQuery.refetch();
+    },
+  });
 
   async function handleUndoComplete(): Promise<void> {
     try {
@@ -310,12 +170,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to undo completion.");
     }
-  }
-
-  function closeSwapSheet(): void {
-    setSwapSheetVisible(false);
-    setSwapTargetProgramExerciseId(null);
-    setSwapTargetExerciseName(null);
   }
 
   function handleViewExerciseDetail(
@@ -381,10 +235,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     })();
   }
 
-  function computeSessionStats(): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {
-    return computeSessionStatsFromLoggedRows(segmentLogRows);
-  }
-
   if (dayQuery.isLoading) {
     return (
       <View style={styles.root}>
@@ -414,12 +264,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     );
   }
 
-  const day = dayQuery.data.day;
-  const scheduledWeekday = day.scheduledWeekday ?? "";
+  const loadedDay = dayQuery.data.day;
+  const scheduledWeekday = loadedDay.scheduledWeekday ?? "";
   const scheduledWeekdayLabel = toWeekdayPlural(scheduledWeekday);
-  const weekNumber = day.weekNumber ?? 1;
-  const currentEquipmentPreset = day.equipmentOverridePresetSlug ?? null;
-  const currentEquipmentItems = day.equipmentOverrideItemSlugs ?? [];
+  const weekNumber = loadedDay.weekNumber ?? 1;
+  const currentEquipmentPreset = loadedDay.equipmentOverridePresetSlug ?? null;
+  const currentEquipmentItems = loadedDay.equipmentOverrideItemSlugs ?? [];
   const sessionStats = computeSessionStats();
   const adaptedCount = dayQuery.data
     ? dayQuery.data.segments
@@ -458,9 +308,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         scrollEventThrottle={100}
       >
         <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>{day.label ?? "Workout Day"}</Text>
+          <Text style={styles.heroTitle}>{loadedDay.label ?? "Workout Day"}</Text>
           <Text style={styles.heroSummary}>
-            {`${day.type ?? "Session"}${day.sessionDuration ? ` • ${day.sessionDuration} min` : ""}`}
+            {`${loadedDay.type ?? "Session"}${loadedDay.sessionDuration ? ` • ${loadedDay.sessionDuration} min` : ""}`}
           </Text>
         </View>
 
@@ -544,10 +394,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         programDayId={programDayId}
         userId={userId}
         onClose={closeSwapSheet}
-        onSwapApplied={() => {
-          closeSwapSheet();
-          void dayQuery.refetch();
-        }}
+        onSwapApplied={handleSwapApplied}
       />
       <SessionSummaryModal
         visible={summaryVisible}

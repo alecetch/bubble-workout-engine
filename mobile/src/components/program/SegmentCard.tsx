@@ -15,15 +15,15 @@ import { typography } from "../../theme/typography";
 import { PressableScale } from "../interaction/PressableScale";
 import { SkeletonBlock } from "../feedback/SkeletonBlock";
 import {
-  buildInitialSetInputMap,
   formatRoundSummary,
   getExerciseSetCount,
-  guidelinePrefill,
-  repsPrefill,
   type SetInputState,
 } from "./sessionUxLogic";
 import { getSegmentPresentation, isRoundBasedSegment } from "./segmentCardLogic";
-import { getExerciseComplete, setExerciseComplete } from "../../utils/localWorkoutLog";
+import { setExerciseComplete } from "../../utils/localWorkoutLog";
+import { useLocalExerciseCompletion } from "./hooks/useLocalExerciseCompletion";
+import { useRoundBasedLogging } from "./hooks/useRoundBasedLogging";
+import { useSegmentSetLogging } from "./hooks/useSegmentSetLogging";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
@@ -163,23 +163,51 @@ export function SegmentCard({
   const existingLogsQuery = useSegmentExerciseLogs(segment.id, programDayId, { userId });
   const saveLogsMutation = useSaveSegmentLogs();
   const [inlineLoggingOpen, setInlineLoggingOpen] = useState(false);
-  const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
-  const [exerciseRirMap, setExerciseRirMap] = useState<Record<string, number | null>>({});
-  const [doneSetKeys, setDoneSetKeys] = useState<Set<string>>(new Set());
   const [pbSetKeys, setPbSetKeys] = useState<Set<string>>(new Set());
-  const [initialized, setInitialized] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(initialDurationSeconds ?? 0);
   const [timerRunning, setTimerRunning] = useState(false);
   const restEntry = useTimerStore((state) => state.entries[segment.id] ?? null);
   const [restDisplaySeconds, setRestDisplaySeconds] = useState(0);
-  const [activeSetKey, setActiveSetKey] = useState<string | null>(null);
-  const [completedExerciseIds, setCompletedExerciseIds] = useState<Set<string>>(new Set());
   const [showAdjustControls, setShowAdjustControls] = useState(false);
-  const [activeRoundIndex, setActiveRoundIndex] = useState(0);
-  const [completedRoundIndices, setCompletedRoundIndices] = useState<Set<number>>(new Set());
-  const [expandedRoundIndices, setExpandedRoundIndices] = useState<Set<number>>(new Set());
-  const [roundSaveError, setRoundSaveError] = useState<string | null>(null);
-  const [showPostStopRir, setShowPostStopRir] = useState(false);
+  const pendingEmptyRoundRef = useRef(false);
+  const {
+    activeRoundIndex,
+    setActiveRoundIndex,
+    completedRoundIndices,
+    setCompletedRoundIndices,
+    expandedRoundIndices,
+    setExpandedRoundIndices,
+    roundSaveError,
+    setRoundSaveError,
+    showPostStopRir,
+    setShowPostStopRir,
+    resetRoundState,
+  } = useRoundBasedLogging();
+  const {
+    inputMap,
+    setInputMap,
+    exerciseRirMap,
+    setExerciseRirMap,
+    doneSetKeys,
+    setDoneSetKeys,
+    activeSetKey,
+    setActiveSetKey,
+    initialized,
+  } = useSegmentSetLogging({
+    loggableExercises,
+    existingLogsQuery,
+    inlineLoggingOpen,
+    isRoundBased,
+    totalRounds,
+    onRoundStateReset: () => {
+      resetRoundState();
+      pendingEmptyRoundRef.current = false;
+    },
+  });
+  const { completedExerciseIds, setCompletedExerciseIds } = useLocalExerciseCompletion(
+    loggableExercises,
+    programDayId,
+  );
   const allExercisesMarkedComplete =
     loggableExercises.length > 0 &&
     loggableExercises.every((ex) => (ex.id ? completedExerciseIds.has(ex.id) : false));
@@ -188,7 +216,6 @@ export function SegmentCard({
   const inlinePanelRef = useRef<View>(null);
   const cardRootRef = useRef<View>(null);
   const prevRestRunning = useRef(false);
-  const pendingEmptyRoundRef = useRef(false);
 
   const segmentTypeBadgeLabel =
     segment.segmentType &&
@@ -211,88 +238,6 @@ export function SegmentCard({
     }, 1000);
     return () => clearInterval(id);
   }, [timerRunning]);
-
-  useEffect(() => {
-    if (!inlineLoggingOpen || initialized || existingLogsQuery.isLoading) return;
-    const existingRows = existingLogsQuery.data ?? [];
-    if (isRoundBased) {
-      const nextInputMap = Object.fromEntries(
-        loggableExercises.map((exercise) => {
-          const key = exercise.id ?? "";
-          const prefilled = buildInitialSetInputMap([exercise], existingRows)[key] ?? [];
-          const prefillWeight = isUnloadedExercise(exercise) ? "" : guidelinePrefill(exercise);
-          const prefillReps = repsPrefill(exercise);
-          return [
-            key,
-            Array.from({ length: totalRounds }, (_value, index) => {
-              const existing = prefilled[index];
-              const hasExistingLog = existingRows.some((row) => row.programExerciseId === key && row.orderIndex === index + 1);
-              return hasExistingLog && existing
-                ? existing
-                : { weight: prefillWeight, reps: prefillReps, rirActual: null };
-            }),
-          ];
-        }),
-      );
-      setInputMap(nextInputMap);
-      setExerciseRirMap(
-        existingRows.reduce<Record<string, number | null>>((acc, row) => {
-          if (!row.programExerciseId) return acc;
-          if (row.orderIndex !== totalRounds) return acc;
-          acc[row.programExerciseId] = row.rirActual ?? null;
-          return acc;
-        }, {}),
-      );
-      setDoneSetKeys(new Set());
-      setCompletedRoundIndices(new Set());
-      setExpandedRoundIndices(new Set());
-      setActiveRoundIndex(0);
-      setRoundSaveError(null);
-      setShowPostStopRir(false);
-      pendingEmptyRoundRef.current = false;
-      if (loggableExercises.length === 0) return;
-      setInitialized(true);
-      return;
-    }
-    setInputMap(buildInitialSetInputMap(loggableExercises, existingRows));
-    setExerciseRirMap(
-      existingRows.reduce<Record<string, number | null>>((acc, row) => {
-        if (!row.programExerciseId) return acc;
-        if (acc[row.programExerciseId] != null) return acc;
-        acc[row.programExerciseId] = row.rirActual ?? null;
-        return acc;
-      }, {}),
-    );
-    setDoneSetKeys(new Set());
-    setActiveSetKey(findNextUncheckedSetKey(loggableExercises, new Set()));
-    if (loggableExercises.length === 0) return;
-    setInitialized(true);
-  }, [
-    existingLogsQuery.data,
-    existingLogsQuery.isLoading,
-    inlineLoggingOpen,
-    initialized,
-    isRoundBased,
-    loggableExercises,
-    totalRounds,
-  ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const entries = await Promise.all(
-        loggableExercises.map(async (exercise) => ({
-          id: exercise.id ?? "",
-          complete: await getExerciseComplete(programDayId, exercise.id ?? ""),
-        })),
-      );
-      if (cancelled) return;
-      setCompletedExerciseIds(new Set(entries.filter((entry) => entry.complete).map((entry) => entry.id)));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loggableExercises, programDayId]);
 
   useEffect(() => {
     if (!restEntry?.restIsRunning) {
@@ -368,16 +313,13 @@ export function SegmentCard({
   function closeInlinePanel(options: { clearInputs?: boolean } = {}): void {
     const clearInputs = options.clearInputs ?? true;
     setInlineLoggingOpen(false);
-    setInitialized(false);
     setShowAdjustControls(false);
     setRoundSaveError(null);
     setShowPostStopRir(false);
     pendingEmptyRoundRef.current = false;
     panelScrolledRef.current = false;
     if (clearInputs) {
-      setActiveRoundIndex(0);
-      setCompletedRoundIndices(new Set());
-      setExpandedRoundIndices(new Set());
+      resetRoundState();
       setInputMap({});
       setExerciseRirMap({});
       setDoneSetKeys(new Set());
