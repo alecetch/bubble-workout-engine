@@ -89,6 +89,38 @@ jobs:
         working-directory: mobile
         run: npx vitest run --coverage
 
+  native-drift-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Regenerate android/ and check for drift
+        working-directory: mobile
+        run: |
+          npx expo prebuild --platform android --no-install
+          if ! git diff --exit-code -- android; then
+            echo "::error::mobile/android/ is out of sync with app.json / native dependencies."
+            echo "::error::Run 'npx expo prebuild --platform android' locally and commit the diff."
+            exit 1
+          fi
+          UNTRACKED=$(git status --porcelain -- android | grep '^??' || true)
+          if [ -n "$UNTRACKED" ]; then
+            echo "::error::expo prebuild created new files under android/ that are not committed:"
+            echo "$UNTRACKED"
+            exit 1
+          fi
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 45
