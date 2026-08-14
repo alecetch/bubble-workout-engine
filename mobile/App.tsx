@@ -9,7 +9,14 @@ import { StatusBar } from "expo-status-bar";
 import { Platform } from "react-native";
 import { AuthNavigator } from "./src/navigation/AuthNavigator";
 import { AppTabs } from "./src/navigation/AppTabs";
+import { ErrorBoundary } from "./src/components/system/ErrorBoundary";
 import { configurePurchases } from "./src/lib/purchases";
+import {
+  initCrashReporting,
+  reportError,
+  setCrashReportingUser,
+  wrapWithCrashReporting,
+} from "./src/lib/crashReporting";
 import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
 import { navigateFromNotificationResponse } from "./src/navigation/notificationRouting";
@@ -17,6 +24,8 @@ import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 import { getAppStorage } from "./src/utils/appStorage";
 import { logger } from "./src/utils/logger";
+
+initCrashReporting();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -81,7 +90,7 @@ function flushPendingNotificationResponse(): void {
   }
 }
 
-export default function App(): React.JSX.Element {
+function App(): React.JSX.Element {
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const userId = useSessionStore((state) => state.userId);
   const entryRoute = useSessionStore((state) => state.entryRoute);
@@ -161,6 +170,10 @@ export default function App(): React.JSX.Element {
   }, []);
 
   React.useEffect(() => {
+    setCrashReportingUser(userId ?? null);
+  }, [userId]);
+
+  React.useEffect(() => {
     if (!CAN_USE_NOTIFICATIONS_NATIVE) return undefined;
     if (!ENABLE_NOTIFICATION_RESPONSE_HANDLERS) return undefined;
 
@@ -215,12 +228,18 @@ export default function App(): React.JSX.Element {
         onReady={flushPendingNotificationResponse}
       >
         <StatusBar style="light" />
-        {isAuthenticated ? (
-          <AppTabs homeInitialRoute={entryRoute} />
-        ) : (
-          <AuthNavigator />
-        )}
+        <ErrorBoundary
+          onError={(error, componentStack) => reportError(error, { componentStack })}
+        >
+          {isAuthenticated ? (
+            <AppTabs homeInitialRoute={entryRoute} />
+          ) : (
+            <AuthNavigator />
+          )}
+        </ErrorBoundary>
       </NavigationContainer>
     </QueryClientProvider>
   );
 }
+
+export default wrapWithCrashReporting(App);

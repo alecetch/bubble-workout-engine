@@ -295,6 +295,26 @@
     },
     {
       "type": "component",
+      "source": "src/components/program/segmentCard/RirRoundPicker.tsx",
+      "test": "src/components/program/segmentCard/RirRoundPicker.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/segmentCard/RoundSummaryRow.tsx",
+      "test": "src/components/program/segmentCard/RoundSummaryRow.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/program/SessionPickerSheet.tsx",
       "test": null,
       "status": "excluded",
@@ -362,6 +382,16 @@
         "sharing"
       ],
       "reason": "share-card rendering is native/media boundary, covered by feature-level UI tests later"
+    },
+    {
+      "type": "component",
+      "source": "src/components/system/ErrorBoundary.tsx",
+      "test": "src/components/system/ErrorBoundary.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "system"
+      ],
+      "reason": ""
     },
     {
       "type": "component",
