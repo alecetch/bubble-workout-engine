@@ -8,6 +8,7 @@ import type { ProgramsStackParamList } from "./ProgramsStackNavigator";
 import type { SettingsStackParamList } from "./SettingsStackNavigator";
 import type { AppEntryRoute } from "../state/session/sessionStore";
 import { colors } from "../theme/colors";
+import { logger } from "../utils/logger";
 
 export type RootTabParamList = {
   HomeTab: NavigatorScreenParams<OnboardingStackParamList> | undefined;
@@ -24,35 +25,35 @@ type AppTabsProps = {
 };
 
 function ProgramsTabScreen(): React.JSX.Element {
-  console.log("[boot] ProgramsTabScreen require start");
+  logger.boot("ProgramsTabScreen require start");
   const mod = require("./ProgramsStackNavigator") as typeof import("./ProgramsStackNavigator");
-  console.log("[boot] ProgramsTabScreen require success");
+  logger.boot("ProgramsTabScreen require success");
   return <mod.ProgramsStackNavigator />;
 }
 
 function TodayTabScreen(): React.JSX.Element {
-  console.log("[boot] TodayTabScreen require start");
+  logger.boot("TodayTabScreen require start");
   const mod = require("../screens/today/TodayScreen") as typeof import("../screens/today/TodayScreen");
-  console.log("[boot] TodayTabScreen require success");
+  logger.boot("TodayTabScreen require success");
   return <mod.TodayScreen />;
 }
 
 function HistoryTabScreen(): React.JSX.Element {
-  console.log("[boot] HistoryTabScreen require start");
+  logger.boot("HistoryTabScreen require start");
   const mod = require("./HistoryStackNavigator") as typeof import("./HistoryStackNavigator");
-  console.log("[boot] HistoryTabScreen require success");
+  logger.boot("HistoryTabScreen require success");
   return <mod.HistoryStackNavigator />;
 }
 
 function SettingsTabScreen(): React.JSX.Element {
-  console.log("[boot] SettingsTabScreen require start");
+  logger.boot("SettingsTabScreen require start");
   const mod = require("./SettingsStackNavigator") as typeof import("./SettingsStackNavigator");
-  console.log("[boot] SettingsTabScreen require success");
+  logger.boot("SettingsTabScreen require success");
   return <mod.SettingsStackNavigator />;
 }
 
 export function AppTabs({ homeInitialRoute }: AppTabsProps): React.JSX.Element {
-  console.log("[boot] AppTabs render", { homeInitialRoute });
+  logger.boot("AppTabs render", { homeInitialRoute });
 
   return (
     <Tab.Navigator

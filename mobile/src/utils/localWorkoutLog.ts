@@ -1,3 +1,9 @@
+import {
+  _resetForTest as resetPersistentStorageForTest,
+  getPersistentStorage,
+  type StorageLike,
+} from "./persistentStorage";
+
 type SegmentLogPayload = {
   rounds?: number;
   load?: number;
@@ -11,45 +17,12 @@ export type SegmentLogEntry = SegmentLogPayload & {
 
 export type DayStatus = "scheduled" | "started" | "complete";
 
-type AsyncStorageLike = {
-  getItem: (key: string) => Promise<string | null>;
-  setItem: (key: string, value: string) => Promise<void>;
-};
-
-const inMemoryStore = new Map<string, string>();
-
 export function _resetForTest(): void {
-  inMemoryStore.clear();
+  resetPersistentStorageForTest();
 }
 
-function getStorage(): AsyncStorageLike {
-  const requireFn = (globalThis as { require?: (id: string) => unknown }).require;
-  if (!requireFn) {
-    return {
-      getItem: async (key) => inMemoryStore.get(key) ?? null,
-      setItem: async (key, value) => {
-        inMemoryStore.set(key, value);
-      },
-    };
-  }
-
-  try {
-    const loaded = requireFn("@react-native-async-storage/async-storage") as {
-      default?: Partial<AsyncStorageLike>;
-    };
-    if (typeof loaded?.default?.getItem === "function" && typeof loaded.default.setItem === "function") {
-      return loaded.default as AsyncStorageLike;
-    }
-  } catch {
-    // Fall through to in-memory store in environments without AsyncStorage installed.
-  }
-
-  return {
-    getItem: async (key) => inMemoryStore.get(key) ?? null,
-    setItem: async (key, value) => {
-      inMemoryStore.set(key, value);
-    },
-  };
+function getStorage(): StorageLike {
+  return getPersistentStorage();
 }
 
 function segmentLogKey(programDayId: string, segmentId: string): string {

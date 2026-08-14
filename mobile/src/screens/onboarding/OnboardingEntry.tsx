@@ -18,6 +18,7 @@ import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
+import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "OnboardingEntry">;
 
@@ -39,9 +40,9 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
   const [fatalError, setFatalError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("[boot] OnboardingEntry mounted");
+    logger.boot("OnboardingEntry mounted");
     return () => {
-      console.log("[boot] OnboardingEntry unmounted");
+      logger.boot("OnboardingEntry unmounted");
     };
   }, []);
 
@@ -112,7 +113,7 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
     if (!meQuery.isSuccess || !referenceDataQuery.isSuccess) return;
     if (!profileId || !profileQuery.data) return;
 
-    console.log("[boot] OnboardingEntry hydrate success", { profileId });
+    logger.boot("OnboardingEntry hydrate success", { profileId });
 
     resetFromProfile(profileQuery.data);
 
@@ -122,32 +123,32 @@ export function OnboardingEntry({ navigation }: Props): React.JSX.Element {
     hydratedRef.current = true;
 
     if (resumeStep === 1) {
-      console.log("[boot] OnboardingEntry navigate Step1Goals");
+      logger.boot("OnboardingEntry navigate Step1Goals");
       navigation.replace("Step1Goals");
       return;
     }
     if (resumeStep === 2) {
-      console.log("[boot] OnboardingEntry navigate Step2Equipment");
+      logger.boot("OnboardingEntry navigate Step2Equipment");
       navigation.replace("Step2Equipment");
       return;
     }
     if (resumeStep === "2b") {
-      console.log("[boot] OnboardingEntry navigate Step2bBaselineLoads");
+      logger.boot("OnboardingEntry navigate Step2bBaselineLoads");
       navigation.replace("Step2bBaselineLoads");
       return;
     }
     if (resumeStep === 3) {
-      console.log("[boot] OnboardingEntry navigate Step3Schedule");
+      logger.boot("OnboardingEntry navigate Step3Schedule");
       navigation.replace("Step3Schedule");
       return;
     }
     if (resumeStep === "done") {
-      console.log("[boot] OnboardingEntry navigate ProgramReview");
+      logger.boot("OnboardingEntry navigate ProgramReview");
       navigation.replace("ProgramReview");
       return;
     }
 
-    console.log("[boot] OnboardingEntry navigate default Step3Schedule");
+    logger.boot("OnboardingEntry navigate default Step3Schedule");
     navigation.replace("Step3Schedule");
   }, [
     meQuery.isSuccess,

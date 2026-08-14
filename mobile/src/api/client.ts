@@ -1,5 +1,6 @@
 import { API_BASE_URL, ENGINE_KEY } from "./config";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
+import { logger } from "../utils/logger";
 
 type ApiDiagnostics = {
   lastAttemptedUrl: string | null;
@@ -158,7 +159,7 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
   const url = `${API_BASE_URL}${normalizedPath}`;
   apiDiagnostics.lastAttemptedUrl = url;
 
-  console.log(`[api] request ${method} ${url}`);
+  logger.api(`request ${method} ${url}`);
 
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
@@ -192,7 +193,7 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
       : error instanceof Error
         ? error.message
         : String(error);
-    console.log(`[api] network failure ${method} ${url}`, message);
+    logger.api(`network failure ${method} ${url}`, message);
     apiDiagnostics.lastErrorMessage = message;
     if (requestSignal.didTimeout() || (isAbortError(error) && !signal?.aborted)) {
       throw new NetworkTimeoutError(message);
@@ -202,12 +203,12 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
     requestSignal.cleanup();
   }
 
-  console.log(`[api] response ${method} ${url} ${response.status}`);
+  logger.api(`response ${method} ${url} ${response.status}`);
 
   const data = await parseResponseBody(response);
 
   if (!response.ok) {
-    console.log(`[api] non-2xx body ${method} ${url}`, data);
+    logger.api(`non-2xx response ${method} ${url} status=${response.status}`);
     const fallbackMessage = `Request failed (${response.status})`;
     const messageFromBody =
       typeof data === "object" && data !== null && "error" in data && typeof (data as { error: unknown }).error === "string"
@@ -393,7 +394,7 @@ export async function authPostFormData<T>(
   const url = `${API_BASE_URL}${normalizedPath}`;
   apiDiagnostics.lastAttemptedUrl = url;
 
-  console.log(`[api] request POST ${url}`);
+  logger.api(`request POST ${url}`);
 
   let response: Response;
   const requestSignal = createRequestSignal(options.signal, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
@@ -413,7 +414,7 @@ export async function authPostFormData<T>(
       : error instanceof Error
         ? error.message
         : String(error);
-    console.log(`[api] network failure POST ${url}`, message);
+    logger.api(`network failure POST ${url}`, message);
     apiDiagnostics.lastErrorMessage = message;
     if (requestSignal.didTimeout() || (isAbortError(error) && !options.signal?.aborted)) {
       throw new NetworkTimeoutError(message);
@@ -423,11 +424,11 @@ export async function authPostFormData<T>(
     requestSignal.cleanup();
   }
 
-  console.log(`[api] response POST ${url} ${response.status}`);
+  logger.api(`response POST ${url} ${response.status}`);
   const data = await parseResponseBody(response);
 
   if (!response.ok) {
-    console.log(`[api] non-2xx body POST ${url}`, data);
+    logger.api(`non-2xx response POST ${url} status=${response.status}`);
     const fallbackMessage = `Request failed (${response.status})`;
     const messageFromBody =
       typeof data === "object" && data !== null && "error" in data && typeof (data as { error: unknown }).error === "string"

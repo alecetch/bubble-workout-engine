@@ -27,6 +27,7 @@ import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { toggleInjuryFlag } from "./toggleInjuryFlag";
+import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Step1Goals">;
 
@@ -114,13 +115,11 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
       noneInjurySlug,
     ) as InjuryFlag[];
 
-    if (__DEV__) {
-      console.log("[step1:injury-toggle]", {
-        clicked: injury,
-        currentInjuryFlags: currentDraft.injuryFlags,
-        nextInjuryFlags,
-      });
-    }
+    logger.boot("step1:injury-toggle", {
+      clicked: injury,
+      currentInjuryFlags: currentDraft.injuryFlags,
+      nextInjuryFlags,
+    });
 
     setDraft({ injuryFlags: nextInjuryFlags });
     const validation = validateStep(1, { ...currentDraft, injuryFlags: nextInjuryFlags });

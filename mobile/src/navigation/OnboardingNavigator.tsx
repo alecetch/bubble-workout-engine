@@ -27,6 +27,7 @@ import { ProgramReviewScreen } from "../screens/program/ProgramReviewScreen";
 import { colors } from "../theme/colors";
 import { spacing } from "../theme/spacing";
 import { typography } from "../theme/typography";
+import { logger } from "../utils/logger";
 
 export type OnboardingStackParamList = {
   OnboardingEntry: undefined;
@@ -115,7 +116,7 @@ function ExerciseDetailScreenDeferred(props: any): React.JSX.Element {
 }
 
 export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: OnboardingNavigatorProps): React.JSX.Element {
-  console.log("[boot] OnboardingNavigator render", { initialRouteName });
+  logger.boot("OnboardingNavigator render", { initialRouteName });
   return (
     <Stack.Navigator
       initialRouteName={initialRouteName}

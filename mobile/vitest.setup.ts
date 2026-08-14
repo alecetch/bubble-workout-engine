@@ -3,7 +3,6 @@ import { cleanup } from "@testing-library/react";
 import { configureAxe, toHaveNoViolations } from "jest-axe";
 import React from "react";
 
-if (typeof window !== "undefined") {
 expect.extend(toHaveNoViolations);
 configureAxe({ rules: [{ id: "color-contrast", enabled: false }] });
 
@@ -323,4 +322,3 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
     })),
   };
 });
-}

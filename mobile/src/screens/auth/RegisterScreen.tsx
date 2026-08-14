@@ -17,6 +17,7 @@ import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { getAppStorage } from "../../utils/appStorage";
+import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
@@ -123,7 +124,11 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
     try {
       await saveTokens(result.access_token, result.refresh_token);
     } catch (error) {
-      console.error("[RegisterScreen] saveTokens failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
+      logger.error(
+        "auth",
+        "RegisterScreen saveTokens failed",
+        error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
+      );
       // Account created — navigate to login so they can sign in.
       navigation.navigate("Login");
       setIsSubmitting(false);
@@ -152,7 +157,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
         trialExpiresAt: result.trial_expires_at ?? null,
       });
     } catch (error) {
-      console.error("[RegisterScreen] post-registration profile fetch failed:", error);
+      logger.error("auth", "RegisterScreen post-registration profile fetch failed", error);
       navigation.navigate("Login");
     } finally {
       setIsSubmitting(false);

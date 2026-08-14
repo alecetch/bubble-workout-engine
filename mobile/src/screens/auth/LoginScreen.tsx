@@ -16,6 +16,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
@@ -85,7 +86,11 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         trialExpiresAt: result.trial_expires_at ?? null,
       });
     } catch (error) {
-      console.error("[LoginScreen] sign-in failed:", error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error));
+      logger.error(
+        "auth",
+        "LoginScreen sign-in failed",
+        error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
+      );
       if (error instanceof ApiError && error.status === 401) {
         setErrorMessage("Incorrect email or password.");
       } else if (isNetworkTimeoutError(error)) {

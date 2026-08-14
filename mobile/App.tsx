@@ -12,9 +12,11 @@ import { AppTabs } from "./src/navigation/AppTabs";
 import { configurePurchases } from "./src/lib/purchases";
 import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
+import { navigateFromNotificationResponse } from "./src/navigation/notificationRouting";
 import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 import { getAppStorage } from "./src/utils/appStorage";
+import { logger } from "./src/utils/logger";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,18 +27,13 @@ const queryClient = new QueryClient({
   },
 });
 
-// Notification tap-through handling can be re-enabled once the underlying
-// native HostFunction failure is understood. Token registration stays enabled.
-const ENABLE_NOTIFICATION_RESPONSE_HANDLERS = false;
+// Notification tap-through handling is off by default because of an unresolved
+// native HostFunction failure (see docs/specs/mobile-notification-tap-through-decision-spec.md).
+// Set EXPO_PUBLIC_ENABLE_NOTIFICATION_TAP_THROUGH=true on a dev-client build to test
+// re-enabling it without a source change. Token registration is unaffected either way.
+const ENABLE_NOTIFICATION_RESPONSE_HANDLERS =
+  process.env.EXPO_PUBLIC_ENABLE_NOTIFICATION_TAP_THROUGH === "true";
 const CAN_USE_NOTIFICATIONS_NATIVE = Constants.executionEnvironment !== "storeClient";
-
-function logBoot(message: string, detail?: unknown): void {
-  if (detail === undefined) {
-    console.log(`[boot] ${message}`);
-    return;
-  }
-  console.log(`[boot] ${message}`, detail);
-}
 
 const appTheme: Theme = {
   ...DefaultTheme,
@@ -60,35 +57,16 @@ if (ENABLE_NOTIFICATION_RESPONSE_HANDLERS) {
         shouldSetBadge: false,
       }),
     });
-  } catch {
-    // Some native notification host functions can fail on startup in unsupported runtimes.
+  } catch (error) {
+    logger.error(
+      "notifications",
+      "setNotificationHandler failed",
+      error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
+    );
   }
 }
 
 let pendingNotificationResponse: Notifications.NotificationResponse | null = null;
-
-function navigateFromNotificationResponse(response: Notifications.NotificationResponse | null): boolean {
-  if (!response || !navigationRef.isReady()) return false;
-
-  const data = (response.notification.request.content.data ?? {}) as Record<string, unknown>;
-  const event = typeof data.event === "string" ? data.event : null;
-  if (!event) return true;
-
-  if (event === "pr" || event === "pr_multi") {
-    navigationRef.navigate("HistoryTab", { screen: "HistoryMain" });
-    return true;
-  }
-
-  if ((event === "deload" || event === "reminder") && typeof data.programDayId === "string") {
-    navigationRef.navigate("ProgramsTab", {
-      screen: "ProgramDay",
-      params: { programDayId: data.programDayId },
-    });
-    return true;
-  }
-
-  return true;
-}
 
 function handleNotificationResponse(response: Notifications.NotificationResponse | null): void {
   if (!navigateFromNotificationResponse(response)) {
@@ -108,7 +86,7 @@ export default function App(): React.JSX.Element {
   const userId = useSessionStore((state) => state.userId);
   const entryRoute = useSessionStore((state) => state.entryRoute);
 
-  logBoot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
+  logger.boot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
 
   React.useEffect(() => {
     void (async () => {
@@ -126,41 +104,47 @@ export default function App(): React.JSX.Element {
 
   React.useEffect(() => {
     if (!CAN_USE_NOTIFICATIONS_NATIVE) {
-      logBoot("push registration skipped", { reason: "expo-go" });
+      logger.boot("push registration skipped", { reason: "expo-go" });
       return;
     }
     if (!isAuthenticated || !userId) return;
 
     (async () => {
       try {
-        logBoot("push registration start", { platform: Platform.OS });
+        logger.boot("push registration start", { platform: Platform.OS });
         if (Platform.OS === "android") {
-          logBoot("push setNotificationChannelAsync start");
+          logger.boot("push setNotificationChannelAsync start");
           await Notifications.setNotificationChannelAsync("default", {
             name: "default",
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
           });
-          logBoot("push setNotificationChannelAsync success");
+          logger.boot("push setNotificationChannelAsync success");
         }
 
-        logBoot("push requestPermissionsAsync start");
+        logger.boot("push requestPermissionsAsync start");
         const { status } = await Notifications.requestPermissionsAsync();
-        logBoot("push requestPermissionsAsync success", { status });
+        logger.boot("push requestPermissionsAsync success", { status });
         if (status !== "granted") return;
 
         const projectId =
           Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
-        logBoot("push getExpoPushTokenAsync start", { hasProjectId: Boolean(projectId) });
+        logger.boot("push getExpoPushTokenAsync start", { hasProjectId: Boolean(projectId) });
         const tokenData = await Notifications.getExpoPushTokenAsync(
           projectId ? { projectId } : undefined,
         );
-        logBoot("push getExpoPushTokenAsync success", { hasToken: Boolean(tokenData.data) });
-        logBoot("push registerPushToken start");
+        logger.boot("push getExpoPushTokenAsync success", { hasToken: Boolean(tokenData.data) });
+        logger.boot("push registerPushToken start");
         await registerPushToken(tokenData.data);
-        logBoot("push registerPushToken success");
+        logger.boot("push registerPushToken success");
       } catch (error) {
-        logBoot(
+        // Deliberately logger.boot (console.log), not logger.warn/error: push
+        // registration routinely fails on simulators/emulators and devices
+        // without notification permission. console.warn/error trigger React
+        // Native's LogBox overlay in dev/debug builds, which then sits on top
+        // of the UI and can swallow touch/scroll gestures (this broke the
+        // Maestro E2E Settings flow in CI when this was logger.error).
+        logger.boot(
           "push registration failed",
           error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
         );
@@ -171,9 +155,9 @@ export default function App(): React.JSX.Element {
 
   React.useEffect(() => {
     const key = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ?? "";
-    logBoot("configurePurchases start", { hasKey: Boolean(key) });
+    logger.boot("configurePurchases start", { hasKey: Boolean(key) });
     configurePurchases(key);
-    logBoot("configurePurchases done");
+    logger.boot("configurePurchases done");
   }, []);
 
   React.useEffect(() => {
@@ -183,25 +167,37 @@ export default function App(): React.JSX.Element {
     let sub: { remove: () => void } | null = null;
 
     try {
-      logBoot("notification response hydration start");
+      logger.boot("notification response hydration start");
       void Notifications.getLastNotificationResponseAsync()
         .then(handleNotificationResponse)
-        .catch(() => {
-          // Ignore notification hydration issues during startup.
+        .catch((error) => {
+          logger.error(
+            "notifications",
+            "last notification response hydration failed",
+            error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
+          );
         });
 
-      logBoot("notification response listener start");
+      logger.boot("notification response listener start");
       sub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
-      logBoot("notification response listener success");
-    } catch {
-      // Never block app startup on notification listener registration.
+      logger.boot("notification response listener success");
+    } catch (error) {
+      logger.error(
+        "notifications",
+        "response listener registration failed",
+        error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
+      );
     }
 
     return () => {
       try {
         sub?.remove();
-      } catch {
-        // Ignore teardown errors from notification listeners.
+      } catch (error) {
+        logger.error(
+          "notifications",
+          "listener teardown failed",
+          error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
+        );
       }
     };
   }, []);

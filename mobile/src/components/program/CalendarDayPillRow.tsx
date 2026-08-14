@@ -5,6 +5,7 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { logger } from "../../utils/logger";
 
 export type CalendarDayPillItem = {
   id: string;
@@ -66,8 +67,8 @@ function formatCalendarParts(item: CalendarDayPillItem): { weekday: string; dayN
 
   const valid = Boolean(parsed && Number.isFinite(parsed.getTime()) && Number.isFinite(dayNumValue));
 
-  if (!valid && __DEV__) {
-    console.warn("[CalendarDayPillRow] Missing or invalid scheduledDate for day pill", item);
+  if (!valid) {
+    logger.warn("calendar", "Missing or invalid scheduledDate for day pill", item);
   }
 
   // Always derive weekday from the date, never from scheduledWeekday.

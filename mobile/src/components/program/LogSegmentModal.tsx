@@ -24,6 +24,7 @@ import { spacing } from "../../theme/spacing";
 import { useTimerStore } from "../../state/timer/useTimerStore";
 import { useSettingsStore } from "../../state/settings/useSettingsStore";
 import { typography } from "../../theme/typography";
+import { logger } from "../../utils/logger";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 
@@ -168,7 +169,7 @@ export function LogSegmentModal({
     if (!segment) return;
 
     const rows = buildSegmentLogRows(exercises, inputMap);
-    console.log("[LogSegmentModal] save rows", JSON.stringify(rows));
+    logger.api("LogSegmentModal save rows", JSON.stringify(rows));
     const payload: SaveSegmentLogPayload = {
       userId,
       programId,
@@ -183,7 +184,7 @@ export function LogSegmentModal({
         onClose();
       },
       onError: (err) => {
-        console.error("[LogSegmentModal] save failed", err);
+        logger.error("log-segment", "save failed", err);
       },
     });
   };
