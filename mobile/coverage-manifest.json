@@ -365,6 +365,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/system/ErrorBoundary.tsx",
+      "test": "src/components/system/ErrorBoundary.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "system"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/timers/PremiumTimer.tsx",
       "test": "src/components/timers/PremiumTimer.component.test.tsx",
       "status": "covered",
