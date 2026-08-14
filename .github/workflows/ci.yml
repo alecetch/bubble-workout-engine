@@ -85,6 +85,10 @@ jobs:
         working-directory: mobile
         run: node scripts/validate-coverage-manifest.mjs
 
+      - name: Check accessibility label regression
+        working-directory: mobile
+        run: node scripts/check-a11y-regression.mjs
+
       - name: Run mobile tests
         working-directory: mobile
         run: npx vitest run --coverage

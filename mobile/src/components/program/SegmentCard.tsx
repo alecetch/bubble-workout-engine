@@ -24,6 +24,8 @@ import { setExerciseComplete } from "../../utils/localWorkoutLog";
 import { useLocalExerciseCompletion } from "./hooks/useLocalExerciseCompletion";
 import { useRoundBasedLogging } from "./hooks/useRoundBasedLogging";
 import { useSegmentSetLogging } from "./hooks/useSegmentSetLogging";
+import { RIR_OPTIONS, RirRoundPicker } from "./segmentCard/RirRoundPicker";
+import { RoundSummaryRow } from "./segmentCard/RoundSummaryRow";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
@@ -51,7 +53,6 @@ type SegmentCardProps = {
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
-const RIR_OPTIONS = ["4+", "3", "2", "1", "0"] as const;
 const CHIP_PALETTE: Record<string, { bg: string; text: string; border: string }> = {
   increase_load: { bg: "#052e16", text: colors.success, border: "#16a34a" },
   increase_reps: { bg: "#052e16", text: colors.success, border: "#16a34a" },
@@ -747,81 +748,6 @@ export function SegmentCard({
     return `${weight} kg x ${reps}`;
   }
 
-  function renderRirPickerForExercise(exercise: Exercise): React.ReactNode {
-    const exerciseKey = exercise.id ?? "";
-    const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
-    return (
-      <View key={exerciseKey} style={styles.roundRirExerciseBlock}>
-        <Text style={styles.roundExerciseName} numberOfLines={1}>{exercise.name}</Text>
-        <View style={styles.rirPills}>
-          {RIR_OPTIONS.map((option) => {
-            const optionValue = option === "4+" ? 4 : Number(option);
-            const selected = exerciseRir === optionValue;
-            return (
-              <PressableScale
-                key={option}
-                containerStyle={styles.rirPillContainer}
-                style={[styles.rirPill, selected && styles.rirPillSelected]}
-                hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
-                accessibilityLabel={`${exercise.name} ${option} reps in reserve`}
-                onPress={() => {
-                  setExerciseRirMap((current) => ({
-                    ...current,
-                    [exerciseKey]: optionValue,
-                  }));
-                }}
-              >
-                <Text style={[styles.rirPillLabel, selected && styles.rirPillLabelSelected]}>
-                  {option}
-                </Text>
-              </PressableScale>
-            );
-          })}
-        </View>
-      </View>
-    );
-  }
-
-  function renderRoundSummaryRow(roundIndex: number): React.ReactNode {
-    const expanded = expandedRoundIndices.has(roundIndex);
-    const summaryParts = loggableExercises
-      .map((exercise) => {
-        const value = formatRoundExerciseValue(exercise, roundIndex);
-        return value ? `${exercise.name} ${value}` : null;
-      })
-      .filter((value): value is string => Boolean(value));
-    return (
-      <PressableScale
-        key={roundIndex}
-        style={styles.roundSummaryRow}
-        onPress={() => {
-          setExpandedRoundIndices((current) => {
-            const next = new Set(current);
-            if (next.has(roundIndex)) {
-              next.delete(roundIndex);
-            } else {
-              next.add(roundIndex);
-            }
-            return next;
-          });
-        }}
-      >
-        <Text style={styles.roundSummaryLabel}>
-          {`Round ${roundIndex + 1} ✓${summaryParts.length > 0 ? `  ${summaryParts.join(" · ")}` : ""}`}
-        </Text>
-        {expanded ? (
-          <View style={styles.roundExpandedBlock}>
-            {loggableExercises.map((exercise) => (
-              <Text key={exercise.id ?? exercise.name} style={styles.roundLockedLabel}>
-                {`${exercise.name}: ${formatRoundExerciseValue(exercise, roundIndex) ?? "not logged"}`}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-      </PressableScale>
-    );
-  }
-
   function renderRoundBasedPanel(): React.ReactNode {
     return (
       <>
@@ -832,7 +758,26 @@ export function SegmentCard({
           const isLastRound = roundIndex === totalRounds - 1;
 
           if (isCompleted) {
-            return renderRoundSummaryRow(roundIndex);
+            return (
+              <RoundSummaryRow
+                key={roundIndex}
+                roundIndex={roundIndex}
+                expanded={expandedRoundIndices.has(roundIndex)}
+                onToggle={(index) =>
+                  setExpandedRoundIndices((current) => {
+                    const next = new Set(current);
+                    if (next.has(index)) {
+                      next.delete(index);
+                    } else {
+                      next.add(index);
+                    }
+                    return next;
+                  })
+                }
+                loggableExercises={loggableExercises}
+                getExerciseValue={formatRoundExerciseValue}
+              />
+            );
           }
 
           if (isLocked) {
@@ -897,7 +842,19 @@ export function SegmentCard({
                   <Text style={styles.exerciseRirQuestion}>
                     How many more reps could you complete per set?
                   </Text>
-                  {loggableExercises.map(renderRirPickerForExercise)}
+                  {loggableExercises.map((exercise) => (
+                    <RirRoundPicker
+                      key={exercise.id ?? exercise.name}
+                      exercise={exercise}
+                      selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
+                      onSelect={(optionValue) =>
+                        setExerciseRirMap((current) => ({
+                          ...current,
+                          [exercise.id ?? ""]: optionValue,
+                        }))
+                      }
+                    />
+                  ))}
                   <View style={styles.rirHintRow}>
                     <Text style={styles.rirHintText}>Too easy</Text>
                     <Text style={styles.rirHintText}>Max effort</Text>
@@ -921,7 +878,19 @@ export function SegmentCard({
             <Text style={styles.exerciseRirQuestion}>
               How many more reps could you complete per set?
             </Text>
-            {loggableExercises.map(renderRirPickerForExercise)}
+            {loggableExercises.map((exercise) => (
+              <RirRoundPicker
+                key={exercise.id ?? exercise.name}
+                exercise={exercise}
+                selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
+                onSelect={(optionValue) =>
+                  setExerciseRirMap((current) => ({
+                    ...current,
+                    [exercise.id ?? ""]: optionValue,
+                  }))
+                }
+              />
+            ))}
             <View style={styles.rirHintRow}>
               <Text style={styles.rirHintText}>Too easy</Text>
               <Text style={styles.rirHintText}>Max effort</Text>
@@ -956,7 +925,11 @@ export function SegmentCard({
         </View>
         <View style={styles.headerRight}>
           {initialDurationSeconds != null && initialDurationSeconds > 0 ? (
-            <PressableScale style={styles.durationChip} onPress={handleTimerPress}>
+            <PressableScale
+              style={styles.durationChip}
+              accessibilityLabel={timerRunning ? "Pause segment timer" : "Start segment timer"}
+              onPress={handleTimerPress}
+            >
               <Ionicons
                 name={timerRunning ? "pause-circle-outline" : "time-outline"}
                 size={13}
@@ -1290,6 +1263,7 @@ export function SegmentCard({
                   <View style={styles.setMutationRow}>
                     <PressableScale
                       style={[styles.setMutationButton, setInputs.length <= 1 && styles.setMutationButtonDisabled]}
+                      accessibilityLabel={`Remove set for ${exercise.name}`}
                       onPress={() => handleRemoveSet(exercise)}
                     >
                       <Ionicons
@@ -1303,6 +1277,7 @@ export function SegmentCard({
                     </PressableScale>
                     <PressableScale
                       style={styles.setMutationButton}
+                      accessibilityLabel={`Add set for ${exercise.name}`}
                       onPress={() => handleAddSet(exercise)}
                     >
                       <Ionicons name="add-circle-outline" size={16} color={colors.textPrimary} />
@@ -1741,25 +1716,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
   },
-  roundSummaryRow: {
-    gap: spacing.xs,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.success,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-  },
-  roundSummaryLabel: {
-    color: colors.textPrimary,
-    ...typography.small,
-    fontWeight: "700",
-  },
-  roundExpandedBlock: {
-    gap: spacing.xs,
-  },
-  roundRirExerciseBlock: {
-    gap: spacing.xs,
-  },
   markRoundButton: {
     alignSelf: "stretch",
     minHeight: 38,
@@ -1964,3 +1920,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

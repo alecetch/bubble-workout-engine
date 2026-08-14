@@ -295,6 +295,26 @@
     },
     {
       "type": "component",
+      "source": "src/components/program/segmentCard/RirRoundPicker.tsx",
+      "test": "src/components/program/segmentCard/RirRoundPicker.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/segmentCard/RoundSummaryRow.tsx",
+      "test": "src/components/program/segmentCard/RoundSummaryRow.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/program/SessionPickerSheet.tsx",
       "test": null,
       "status": "excluded",
