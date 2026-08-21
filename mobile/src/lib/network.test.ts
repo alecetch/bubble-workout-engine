@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initNetworkMonitoring, useIsOffline } from "./network";
 
 vi.mock("@react-native-community/netinfo", () => ({
-  default: { addEventListener: vi.fn(() => vi.fn()) },
+  default: { addEventListener: vi.fn(() => vi.fn()), configure: vi.fn() },
 }));
 
 beforeEach(() => {
@@ -44,6 +44,14 @@ describe("network monitoring", () => {
     expect(setOnline).toHaveBeenNthCalledWith(1, false);
     expect(setOnline).toHaveBeenNthCalledWith(2, true);
     expect(cleanup).toBe(unsubscribe);
+  });
+
+  it("disables netinfo's background internet-reachability polling", () => {
+    initNetworkMonitoring();
+
+    expect(NetInfo.configure).toHaveBeenCalledTimes(1);
+    const config = vi.mocked(NetInfo.configure).mock.calls[0][0];
+    expect(config.reachabilityShouldRun?.()).toBe(false);
   });
 
   it("returns true initially when React Query is offline", () => {
