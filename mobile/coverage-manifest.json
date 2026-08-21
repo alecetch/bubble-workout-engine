@@ -395,6 +395,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/system/OfflineBanner.tsx",
+      "test": "src/components/system/OfflineBanner.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "system"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/timers/PremiumTimer.tsx",
       "test": "src/components/timers/PremiumTimer.component.test.tsx",
       "status": "covered",
