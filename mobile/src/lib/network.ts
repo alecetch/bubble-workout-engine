@@ -3,10 +3,19 @@ import { onlineManager } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 export function initNetworkMonitoring(): void {
+  // Maestro's Android emulator in CI has unreliable/unstable connectivity reporting - registering
+  // NetInfo's native listener there caused the app to repeatedly fail to reach a stable UI state,
+  // stalling E2E flows for 10-20+ minutes at a time until the job hit its 45-minute timeout.
+  // Disabling reachability polling alone (see below) reduced but did not eliminate this, so the
+  // whole feature is skipped in the E2E build via an env flag CI sets - the same pattern already
+  // used for EXPO_PUBLIC_ENABLE_NOTIFICATION_TAP_THROUGH. No production behavior changes.
+  if (process.env.EXPO_PUBLIC_DISABLE_NETWORK_MONITORING === "true") {
+    return;
+  }
+
   // We only ever read `isConnected` (link-layer state), never `isInternetReachable` - so disable
   // netinfo's periodic reachability polling (a repeating fetch() against an external URL) entirely.
-  // Left enabled, this caused Maestro E2E to hang for ~20 minutes on the very first app launch in
-  // CI, where the reachability check can't reliably resolve on the Android emulator's network.
+  // This alone measurably helped the E2E stall above but did not fully eliminate it.
   NetInfo.configure({ reachabilityShouldRun: () => false });
 
   onlineManager.setEventListener((setOnline) => {

@@ -19,6 +19,7 @@ afterEach(() => {
   onlineManager.setOnline(true);
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("network monitoring", () => {
@@ -52,6 +53,19 @@ describe("network monitoring", () => {
     expect(NetInfo.configure).toHaveBeenCalledTimes(1);
     const config = vi.mocked(NetInfo.configure).mock.calls[0][0];
     expect(config.reachabilityShouldRun?.()).toBe(false);
+  });
+
+  it("skips netinfo entirely when EXPO_PUBLIC_DISABLE_NETWORK_MONITORING is set", () => {
+    vi.stubEnv("EXPO_PUBLIC_DISABLE_NETWORK_MONITORING", "true");
+    const setEventListenerSpy = vi
+      .spyOn(onlineManager, "setEventListener")
+      .mockImplementation(() => undefined);
+
+    initNetworkMonitoring();
+
+    expect(NetInfo.configure).not.toHaveBeenCalled();
+    expect(setEventListenerSpy).not.toHaveBeenCalled();
+    expect(NetInfo.addEventListener).not.toHaveBeenCalled();
   });
 
   it("returns true initially when React Query is offline", () => {
