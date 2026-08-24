@@ -154,7 +154,7 @@ describe("SettingsScreen", () => {
 
   it("shares referral invite text without duplicating the URL field", async () => {
     referralMocks.info.mockReturnValue({
-      data: { code: "Z25TZAYC", shareUrl: "https://getformai.com/ref/Z25TZAYC" },
+      data: { code: "Z25TZAYC", shareUrl: "https://getforma.fit/ref/Z25TZAYC" },
       isLoading: false,
       isError: false,
     });
@@ -164,8 +164,10 @@ describe("SettingsScreen", () => {
 
     await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
     expect(Share.share).toHaveBeenCalledWith({
-      message: "Train smarter with Formai. Start your free trial: https://getformai.com/ref/Z25TZAYC",
+      message: "Train smarter with Forma. Start your free trial: https://getforma.fit/ref/Z25TZAYC",
     });
+    expect(document.body.textContent).toContain("Share Forma with a friend");
+    expect(document.body.textContent).not.toContain("Formai");
   });
 });
 
