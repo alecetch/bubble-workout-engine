@@ -23,6 +23,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/legal/LegalLinksRow.tsx",
+      "test": "src/components/legal/LegalLinksRow.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "legal"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/onboarding/DayChipRow.tsx",
       "test": "src/components/onboarding/DayChipRow.component.test.tsx",
       "status": "covered",

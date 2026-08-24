@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { LegalLinksRow } from "../../components/legal/LegalLinksRow";
 import {
   getPurchaseOfferings,
   isPurchaseCancelledError,
@@ -124,6 +125,7 @@ export function PaywallScreen(): React.JSX.Element {
         Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.
         Manage in App Store settings.
       </Text>
+      <LegalLinksRow />
     </ScrollView>
   );
 }
