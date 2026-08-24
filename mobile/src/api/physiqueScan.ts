@@ -1,4 +1,4 @@
-import { ApiError, authGetJson, authenticatedFetch } from "./client";
+import { ApiError, authDeleteJson, authGetJson, authenticatedFetch } from "./client";
 
 export type RegionScore = {
   score: number | null;
@@ -127,6 +127,14 @@ export async function getScanTrend(): Promise<TrendResponse> {
 export async function getScan(scanId: string): Promise<ScanDetailResponse> {
   try {
     return await authGetJson(`/api/physique/scans/${scanId}`);
+  } catch (error) {
+    return mapPremiumError(error);
+  }
+}
+
+export async function deleteScan(scanId: string): Promise<{ ok: boolean }> {
+  try {
+    return await authDeleteJson<{ ok: boolean }>(`/api/physique/scans/${scanId}`);
   } catch (error) {
     return mapPremiumError(error);
   }
