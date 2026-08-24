@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Linking,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -16,6 +17,7 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { deleteAccount, getAccountInfo } from "../../api/accountApi";
 import { apiLogout } from "../../api/authApi";
+import { API_BASE_URL } from "../../api/config";
 import {
   useClientProfile,
   useEntitlement,
@@ -495,6 +497,23 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               onPress={() =>
                 tabNavigation.navigate("HomeTab", { screen: "RecalibrateA" } as never)
               }
+              showChevron
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>LEGAL</SectionLabel>
+          <View style={styles.sectionCard}>
+            <SettingsRow
+              label="Terms of Service"
+              onPress={() => void Linking.openURL(`${API_BASE_URL}/terms`)}
+              showChevron
+              showDivider
+            />
+            <SettingsRow
+              label="Privacy Policy"
+              onPress={() => void Linking.openURL(`${API_BASE_URL}/privacy`)}
               showChevron
             />
           </View>
