@@ -1,5 +1,6 @@
 import { API_BASE_URL, ENGINE_KEY } from "./config";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
+import { useSessionStore } from "../state/session/sessionStore";
 import { logger } from "../utils/logger";
 
 type ApiDiagnostics = {
@@ -11,6 +12,10 @@ const apiDiagnostics: ApiDiagnostics = {
   lastAttemptedUrl: null,
   lastErrorMessage: null,
 };
+
+function handleSessionExpired(): void {
+  useSessionStore.getState().clearSession();
+}
 
 export class ApiError extends Error {
   status: number;
@@ -248,13 +253,14 @@ let refreshPromise: Promise<string | null> | null = null;
 async function refreshAccessToken(): Promise<string | null> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
-      const refreshToken = await getRefreshToken();
-      if (!refreshToken) {
-        await clearTokens();
-        return null;
-      }
-
       try {
+        const refreshToken = await getRefreshToken();
+        if (!refreshToken) {
+          await clearTokens();
+          handleSessionExpired();
+          return null;
+        }
+
         const refreshed = await apiFetch<{ access_token: string; refresh_token: string }>(
           "/api/auth/refresh",
           {
@@ -266,6 +272,7 @@ async function refreshAccessToken(): Promise<string | null> {
         return refreshed.access_token;
       } catch {
         await clearTokens();
+        handleSessionExpired();
         return null;
       } finally {
         refreshPromise = null;
@@ -320,6 +327,7 @@ export async function authenticatedFetch<T>(
       const retryApiError = retryError instanceof ApiError ? retryError : null;
       if (retryApiError?.status === 401) {
         await clearTokens();
+        handleSessionExpired();
         throw new ApiError(401, "Session expired", { code: "session_expired" });
       }
       throw retryError;
