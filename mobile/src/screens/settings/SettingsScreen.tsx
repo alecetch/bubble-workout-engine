@@ -261,7 +261,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     const shareUrl = referralQuery.data?.shareUrl ?? "";
     if (!shareUrl) return;
     await Share.share({
-      message: `Train smarter with Formai. Start your free trial: ${shareUrl}`,
+      message: `Train smarter with Forma. Start your free trial: ${shareUrl}`,
     });
   };
 
@@ -407,7 +407,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               <>
                 <SettingsRow
                   label="Your referral code"
-                  description="Share Formai with a friend. Get a free month when they subscribe."
+                  description="Share Forma with a friend. Get a free month when they subscribe."
                   value={referralQuery.data.code}
                   showDivider
                 />

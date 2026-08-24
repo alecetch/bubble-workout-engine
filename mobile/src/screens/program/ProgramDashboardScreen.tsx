@@ -544,7 +544,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
           <View style={styles.reviewPromptContent}>
             <Text style={styles.reviewPromptTitle}>{reviewPromptMessage ? "Thanks" : "Nice PR."}</Text>
             <Text style={styles.reviewPromptText}>
-              {reviewPromptMessage ?? "Enjoying Formai? A quick rating helps us improve."}
+              {reviewPromptMessage ?? "Enjoying Forma? A quick rating helps us improve."}
             </Text>
           </View>
           <View style={styles.reviewPromptActions}>

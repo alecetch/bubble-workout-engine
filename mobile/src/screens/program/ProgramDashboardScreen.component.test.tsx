@@ -190,6 +190,8 @@ describe("ProgramDashboardScreen", () => {
     renderDashboard(undefined, { programId: "prog-1", showReviewPrompt: true });
 
     expect(screen.getByText("Nice PR.")).toBeInTheDocument();
+    expect(screen.getByText("Enjoying Forma? A quick rating helps us improve.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("Formai");
   });
 
   it("shows the week-complete banner when weekCompleteNumber is set", () => {
