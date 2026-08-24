@@ -4,7 +4,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDayScreen } from "./ProgramDayScreen";
-import { useCompleteProgram, useEntitlement, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { useCompleteProgram, useEntitlement, useHistoryOverview, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getPrsFeed } from "../../api/history";
 import { getProgramEndCheck } from "../../api/programCompletion";
 import { getProgramOverview } from "../../api/programViewer";
@@ -74,6 +74,7 @@ vi.mock("../../api/hooks", () => ({
   },
   useCompleteProgram: vi.fn(),
   useEntitlement: vi.fn(),
+  useHistoryOverview: vi.fn(),
   useMarkDayComplete: vi.fn(),
   useProgramDayFull: vi.fn(),
 }));
@@ -154,10 +155,11 @@ vi.mock("../../components/program/SegmentCard", () => ({
 }));
 
 vi.mock("../../components/program/SessionSummaryModal", () => ({
-  SessionSummaryModal: ({ onDismiss, totalSets, totalVolumeKg, visible }: any) =>
+  SessionSummaryModal: ({ onDismiss, streakDays, totalSets, totalVolumeKg, visible }: any) =>
     visible ? (
       <div role="dialog" aria-label="Session summary">
         <p>Great work</p>
+        <p>{streakDays} day streak</p>
         <p>{totalSets} sets</p>
         <p>{totalVolumeKg} kg</p>
         <button type="button" onClick={() => onDismiss?.()}>
@@ -169,6 +171,7 @@ vi.mock("../../components/program/SessionSummaryModal", () => ({
 
 const useProgramDayFullMock = vi.mocked(useProgramDayFull);
 const useEntitlementMock = vi.mocked(useEntitlement);
+const useHistoryOverviewMock = vi.mocked(useHistoryOverview);
 const useMarkDayCompleteMock = vi.mocked(useMarkDayComplete);
 const useCompleteProgramMock = vi.mocked(useCompleteProgram);
 const useOnboardingStoreMock = vi.mocked(useOnboardingStore);
@@ -306,6 +309,9 @@ describe("ProgramDayScreen", () => {
     useEntitlementMock.mockReturnValue({
       data: { is_active: true },
       isSuccess: true,
+    } as any);
+    useHistoryOverviewMock.mockReturnValue({
+      data: { currentStreakDays: 7 },
     } as any);
     useMarkDayCompleteMock.mockReturnValue({
       mutateAsync: markDayMutateMock,
@@ -555,6 +561,28 @@ describe("ProgramDayScreen", () => {
 
     expect(await screen.findByRole("dialog", { name: "Session summary" })).toBeInTheDocument();
     expect(screen.getByText("Great work")).toBeInTheDocument();
+  });
+
+  it("passes current streak days into the session summary", async () => {
+    useHistoryOverviewMock.mockReturnValue({
+      data: { currentStreakDays: 12 },
+    } as any);
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+
+    expect(await screen.findByText("12 day streak")).toBeInTheDocument();
+  });
+
+  it("falls back to zero streak days when history overview has no data", async () => {
+    useHistoryOverviewMock.mockReturnValue({
+      data: undefined,
+    } as any);
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+
+    expect(await screen.findByText("0 day streak")).toBeInTheDocument();
   });
 
   it("calls allExercisesComplete on mount with the day's exercise IDs", async () => {
