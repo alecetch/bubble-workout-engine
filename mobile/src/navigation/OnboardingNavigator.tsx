@@ -68,6 +68,7 @@ export type OnboardingStackParamList = {
     showReviewPrompt?: boolean;
     weekCompleteNumber?: number;
     weekCompleteSessions?: number;
+    weekCompleteVolumeKg?: number;
   } | undefined;
   ProgramDay: {
     programDayId: string;
