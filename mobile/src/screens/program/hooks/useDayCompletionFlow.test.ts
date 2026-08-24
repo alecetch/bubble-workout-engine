@@ -148,4 +148,32 @@ describe("useDayCompletionFlow", () => {
 
     expect(nav.navigate).toHaveBeenCalledWith("ProgramEndCheck", { programId: "program-1" });
   });
+
+  it("threads completed week volume through to ProgramDashboard navigation", async () => {
+    const { result, queryClient, nav } = renderFlow({ programId: "program-1" });
+    queryClient.fetchQuery
+      .mockResolvedValueOnce({
+        calendarDays: [
+          {
+            isTrainingDay: true,
+            programDayId: "day-1",
+            weekNumber: 1,
+            status: "scheduled",
+          },
+        ],
+      })
+      .mockResolvedValueOnce(endCheck({}));
+
+    await act(async () => {
+      await result.current.handleSummaryDismiss();
+    });
+
+    expect(nav.navigate).toHaveBeenCalledWith("ProgramDashboard", {
+      programId: "program-1",
+      showReviewPrompt: undefined,
+      weekCompleteNumber: 1,
+      weekCompleteSessions: 1,
+      weekCompleteVolumeKg: 123,
+    });
+  });
 });

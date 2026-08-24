@@ -221,6 +221,16 @@ describe("ProgramReviewScreen", () => {
     expect(resetFromProfileMock).not.toHaveBeenCalled();
   });
 
+  it("routes the Body Metrics edit button to Step4BodyMetrics", () => {
+    const navigation = renderScreen();
+    const editButtons = screen.getAllByRole("button", { name: "Edit" });
+
+    fireEvent.click(editButtons[4]);
+
+    expect(navigation.navigate).toHaveBeenCalledWith("Step4BodyMetrics");
+    expect(navigation.navigate).not.toHaveBeenCalledWith("Step3Schedule");
+  });
+
   it("sends inactive users to the paywall instead of generating", () => {
     useEntitlementMock.mockReturnValueOnce({
       data: { is_active: false },
