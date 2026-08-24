@@ -61,11 +61,11 @@ vi.mock("../../components/program/DayPreviewCard", () => ({
 }));
 
 vi.mock("../../components/sharing/WeekShareCard", () => ({
-  WeekShareCard: ({ onReady }: any) => {
+  WeekShareCard: ({ onReady, totalVolumeKg }: any) => {
     React.useEffect(() => {
       onReady?.();
     }, [onReady]);
-    return <div data-testid="week-share-card" />;
+    return <div data-testid="week-share-card">Week share volume {totalVolumeKg}</div>;
   },
 }));
 
@@ -195,10 +195,16 @@ describe("ProgramDashboardScreen", () => {
   });
 
   it("shows the week-complete banner when weekCompleteNumber is set", () => {
-    renderDashboard(undefined, { programId: "prog-1", weekCompleteNumber: 2, weekCompleteSessions: 3 });
+    renderDashboard(undefined, {
+      programId: "prog-1",
+      weekCompleteNumber: 2,
+      weekCompleteSessions: 3,
+      weekCompleteVolumeKg: 4321,
+    });
 
     expect(screen.getByText("Week 2 complete!")).toBeInTheDocument();
     expect(screen.getByText("3 sessions completed")).toBeInTheDocument();
+    expect(screen.getByText("Week share volume 4321")).toBeInTheDocument();
   });
 
   it("does not show popup UI when no deferred params are passed", () => {

@@ -2,7 +2,8 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Share } from "react-native";
+import { Linking, Share } from "react-native";
+import { API_BASE_URL } from "../../api/config";
 import { useEntitlement } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 
@@ -75,6 +76,7 @@ vi.mock("../../components/interaction/PressableScale", () => ({
 import { SettingsScreen } from "./SettingsScreen";
 
 const nav = { navigate: vi.fn() };
+const openURLSpy = vi.spyOn(Linking, "openURL").mockResolvedValue(true);
 
 function makeQuery(overrides: Record<string, unknown> = {}) {
   return { data: undefined, isLoading: false, isError: false, refetch: vi.fn(), ...overrides };
@@ -91,6 +93,7 @@ function mockDefaultQueries() {
 
 function resetSettingsMocks() {
   nav.navigate.mockReset();
+  openURLSpy.mockClear();
   referralMocks.info.mockReturnValue({ data: null, isLoading: false, isError: false });
   referralMocks.stats.mockReturnValue({ data: null, isLoading: false, isError: false });
   vi.mocked(useEntitlement).mockReturnValue({ data: null, isLoading: false, isError: false } as any);
@@ -178,6 +181,25 @@ describe("workout section", () => {
 
     expect(screen.getByText("Show rest timer")).toBeInTheDocument();
     expect(screen.getByText("Display a countdown after each set")).toBeInTheDocument();
+  });
+});
+
+describe("legal section", () => {
+  beforeEach(() => {
+    resetSettingsMocks();
+  });
+
+  it("opens the hosted legal pages from Settings", () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+
+    expect(screen.getByText("Terms of Service")).toBeInTheDocument();
+    expect(screen.getByText("Privacy Policy")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Terms of Service" }));
+    expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/terms`);
+
+    fireEvent.click(screen.getByRole("button", { name: "Privacy Policy" }));
+    expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/privacy`);
   });
 });
 

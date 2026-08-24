@@ -74,7 +74,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const [reviewPromptMessage, setReviewPromptMessage] = useState<string | null>(null);
   const [isRequestingReview, setIsRequestingReview] = useState(false);
   const [weekBannerVisible, setWeekBannerVisible] = useState(false);
-  const [weekBannerData, setWeekBannerData] = useState<{ weekNumber: number; sessions: number } | null>(null);
+  const [weekBannerData, setWeekBannerData] = useState<{ weekNumber: number; sessions: number; totalVolumeKg: number } | null>(null);
   const [weekShareCardReady, setWeekShareCardReady] = useState(false);
   const [isSharingWeek, setIsSharingWeek] = useState(false);
   const weekCardRef = useRef<View>(null);
@@ -286,7 +286,11 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         setReviewPromptVisible(true);
       }
       if (p?.weekCompleteNumber != null) {
-        setWeekBannerData({ weekNumber: p.weekCompleteNumber, sessions: p.weekCompleteSessions ?? 0 });
+        setWeekBannerData({
+          weekNumber: p.weekCompleteNumber,
+          sessions: p.weekCompleteSessions ?? 0,
+          totalVolumeKg: p.weekCompleteVolumeKg ?? 0,
+        });
         setWeekBannerVisible(true);
         setWeekShareCardReady(false);
       }
@@ -295,6 +299,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
           showReviewPrompt: undefined,
           weekCompleteNumber: undefined,
           weekCompleteSessions: undefined,
+          weekCompleteVolumeKg: undefined,
         });
       }
     }, [
@@ -302,6 +307,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
       route.params?.showReviewPrompt,
       route.params?.weekCompleteNumber,
       route.params?.weekCompleteSessions,
+      route.params?.weekCompleteVolumeKg,
     ]),
   );
 
@@ -515,7 +521,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         <WeekShareCard
           weekNumber={weekBannerData.weekNumber}
           sessionsCompleted={weekBannerData.sessions}
-          totalVolumeKg={0}
+          totalVolumeKg={weekBannerData.totalVolumeKg}
           cardRef={weekCardRef}
           onReady={() => setWeekShareCardReady(true)}
         />
