@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Linking,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -16,6 +17,7 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { deleteAccount, getAccountInfo } from "../../api/accountApi";
 import { apiLogout } from "../../api/authApi";
+import { API_BASE_URL } from "../../api/config";
 import {
   useClientProfile,
   useEntitlement,
@@ -261,7 +263,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     const shareUrl = referralQuery.data?.shareUrl ?? "";
     if (!shareUrl) return;
     await Share.share({
-      message: `Train smarter with Formai. Start your free trial: ${shareUrl}`,
+      message: `Train smarter with Forma. Start your free trial: ${shareUrl}`,
     });
   };
 
@@ -407,7 +409,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               <>
                 <SettingsRow
                   label="Your referral code"
-                  description="Share Formai with a friend. Get a free month when they subscribe."
+                  description="Share Forma with a friend. Get a free month when they subscribe."
                   value={referralQuery.data.code}
                   showDivider
                 />
@@ -495,6 +497,23 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               onPress={() =>
                 tabNavigation.navigate("HomeTab", { screen: "RecalibrateA" } as never)
               }
+              showChevron
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>LEGAL</SectionLabel>
+          <View style={styles.sectionCard}>
+            <SettingsRow
+              label="Terms of Service"
+              onPress={() => void Linking.openURL(`${API_BASE_URL}/terms`)}
+              showChevron
+              showDivider
+            />
+            <SettingsRow
+              label="Privacy Policy"
+              onPress={() => void Linking.openURL(`${API_BASE_URL}/privacy`)}
               showChevron
             />
           </View>

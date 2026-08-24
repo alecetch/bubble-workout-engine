@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
-import { queryKeys, useCompleteProgram, useEntitlement, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { queryKeys, useCompleteProgram, useEntitlement, useHistoryOverview, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/segmentLog";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
@@ -57,6 +57,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const entitlementQuery = useEntitlement();
   const markDayComplete = useMarkDayComplete();
   const completeProgram = useCompleteProgram();
+  const historyOverviewQuery = useHistoryOverview(userId);
   const queryClient = useQueryClient();
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
@@ -403,7 +404,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         exerciseCount={sessionStats.exerciseCount}
         prHits={prHits}
         prE1rmKg={prE1rmKg}
-        streakDays={0}
+        streakDays={historyOverviewQuery.data?.currentStreakDays ?? 0}
         adaptedExercises={adaptedExercisesForSummary}
         onDismiss={() => {
           void handleSummaryDismiss();

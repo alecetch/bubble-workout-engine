@@ -1,5 +1,10 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const sentryReactNativeMock = resolve(__dirname, "src/test/sentryReactNativeMock.ts");
 
 export default defineConfig({
   plugins: [react()],
@@ -82,7 +87,7 @@ export default defineConfig({
           ],
         },
         resolve: {
-          alias: { "react-native": "react-native-web" },
+          alias: { "react-native": "react-native-web", "@sentry/react-native": sentryReactNativeMock },
         },
       },
       {
@@ -95,6 +100,9 @@ export default defineConfig({
             "src/**/*.component.test.ts",
             "src/**/*.unit.test.ts",
           ],
+        },
+        resolve: {
+          alias: { "@sentry/react-native": sentryReactNativeMock },
         },
       },
     ],

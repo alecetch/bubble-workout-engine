@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@sentry/react-native", () => ({
   init: vi.fn(),
   captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
   setUser: vi.fn(),
   wrap: vi.fn((component) => component),
 }));
@@ -87,5 +88,65 @@ describe("crashReporting", () => {
 
     expect(set.Sentry.setUser).toHaveBeenCalledWith({ id: "user-1" });
     expect(set.Sentry.setUser).toHaveBeenCalledWith(null);
+  });
+
+  it("does not add log breadcrumbs when the DSN is unset", async () => {
+    const { addLogBreadcrumb, Sentry } = await loadWithDsn(undefined);
+
+    addLogBreadcrumb("push", "error", "registration failed");
+
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it("adds log breadcrumbs without detail when the DSN is set", async () => {
+    const { addLogBreadcrumb, Sentry } = await loadWithDsn("https://example@sentry.io/1");
+
+    addLogBreadcrumb("push", "error", "registration failed");
+
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
+      category: "push",
+      level: "error",
+      message: "registration failed",
+      data: undefined,
+    });
+  });
+
+  it("normalizes Error detail for log breadcrumbs", async () => {
+    const { addLogBreadcrumb, Sentry } = await loadWithDsn("https://example@sentry.io/1");
+
+    addLogBreadcrumb("auth", "error", "sign-in failed", new Error("boom"));
+
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
+      category: "auth",
+      level: "error",
+      message: "sign-in failed",
+      data: { name: "Error", message: "boom" },
+    });
+  });
+
+  it("passes plain object detail through for log breadcrumbs", async () => {
+    const { addLogBreadcrumb, Sentry } = await loadWithDsn("https://example@sentry.io/1");
+
+    addLogBreadcrumb("calendar", "warning", "missing date", { id: "day-1" });
+
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
+      category: "calendar",
+      level: "warning",
+      message: "missing date",
+      data: { id: "day-1" },
+    });
+  });
+
+  it("wraps primitive detail for log breadcrumbs", async () => {
+    const { addLogBreadcrumb, Sentry } = await loadWithDsn("https://example@sentry.io/1");
+
+    addLogBreadcrumb("storage", "warning", "fallback", "some string");
+
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
+      category: "storage",
+      level: "warning",
+      message: "fallback",
+      data: { detail: "some string" },
+    });
   });
 });

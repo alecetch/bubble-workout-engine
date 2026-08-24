@@ -110,6 +110,7 @@ export function useDayCompletionFlow(params: {
       let shouldShowReview = false;
       let weekCompleteNumber: number | undefined;
       let weekCompleteSessions: number | undefined;
+      let weekCompleteVolumeKg: number | undefined;
 
       if (userId && prHits.length === 0) {
         try {
@@ -152,6 +153,7 @@ export function useDayCompletionFlow(params: {
       if (shareData) {
         weekCompleteNumber = shareData.weekNumber;
         weekCompleteSessions = shareData.sessionsCompleted;
+        weekCompleteVolumeKg = shareData.totalVolumeKg;
       }
 
       const endCheck = await queryClient.fetchQuery({
@@ -180,6 +182,7 @@ export function useDayCompletionFlow(params: {
         showReviewPrompt: shouldShowReview || undefined,
         weekCompleteNumber,
         weekCompleteSessions,
+        weekCompleteVolumeKg,
       });
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
