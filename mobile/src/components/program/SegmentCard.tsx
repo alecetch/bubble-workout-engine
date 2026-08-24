@@ -43,6 +43,7 @@ type SegmentCardProps = {
     exerciseName: string,
     exercise: Exercise,
   ) => void;
+  onRequestSwap?: (programExerciseId: string, exerciseName: string) => void;
   onAllSetsSaved: (segmentId: string) => void;
   onSubscriptionRequired?: () => void;
   onPrsDetected?: (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => void;
@@ -135,6 +136,7 @@ export function SegmentCard({
   programDayId,
   userId,
   onViewExerciseDetail,
+  onRequestSwap,
   onAllSetsSaved,
   onSubscriptionRequired,
   onPrsDetected,
@@ -986,14 +988,25 @@ export function SegmentCard({
                       key={exercise.id ?? `${segment.id}-exercise-${index}`}
                       style={[styles.exerciseRow, isComplete && styles.exerciseRowComplete]}
                     >
-                      <PressableScale
-                        style={styles.exerciseNamePressable}
-                        onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
-                      >
-                        <Text style={styles.exerciseName} numberOfLines={2} ellipsizeMode="tail">
-                          {exercise.name}
-                        </Text>
-                      </PressableScale>
+                      <View style={styles.exerciseTitleRow}>
+                        <PressableScale
+                          style={styles.exerciseNamePressable}
+                          onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
+                        >
+                          <Text style={styles.exerciseName} numberOfLines={2} ellipsizeMode="tail">
+                            {exercise.name}
+                          </Text>
+                        </PressableScale>
+                        {onRequestSwap ? (
+                          <PressableScale
+                            style={styles.swapButton}
+                            onPress={() => onRequestSwap(programExerciseId, exercise.name)}
+                            accessibilityLabel={`Swap ${exercise.name}`}
+                          >
+                            <Ionicons name="swap-horizontal-outline" size={16} color={colors.textSecondary} />
+                          </PressableScale>
+                        ) : null}
+                      </View>
                       {line2 ? (
                         <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
                           {line2}
@@ -1487,8 +1500,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     opacity: 0.65,
   },
+  exerciseTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
   exerciseNamePressable: {
+    flex: 1,
     alignSelf: "flex-start",
+  },
+  swapButton: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   exerciseName: {
     color: colors.textPrimary,

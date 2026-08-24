@@ -26,6 +26,13 @@ const appStorageMocks = vi.hoisted(() => ({
   setItem: vi.fn(),
 }));
 
+const swapSheetMocks = vi.hoisted(() => ({
+  openSwapSheet: vi.fn(),
+  closeSwapSheet: vi.fn(),
+  handleSwapApplied: vi.fn(),
+  segmentCardProps: [] as any[],
+}));
+
 vi.mock("@react-navigation/native", async () => {
   const ReactActual = await import("react");
   return {
@@ -143,14 +150,28 @@ vi.mock("../../components/program/ExerciseSwapSheet", () => ({
 }));
 
 vi.mock("../../components/program/SegmentCard", () => ({
-  SegmentCard: ({ segment }: any) => (
-    <section data-testid="segment-card">
-      <h2>{segment?.segmentName ?? segment?.name ?? "Segment"}</h2>
-      {segment?.exercises?.map((exercise: any) => (
-        <p key={exercise.id}>{exercise.name}</p>
-      ))}
-    </section>
-  ),
+  SegmentCard: (props: any) => {
+    swapSheetMocks.segmentCardProps.push(props);
+    return (
+      <section data-testid="segment-card">
+        <h2>{props.segment?.segmentName ?? props.segment?.name ?? "Segment"}</h2>
+        {props.segment?.exercises?.map((exercise: any) => (
+          <p key={exercise.id}>{exercise.name}</p>
+        ))}
+      </section>
+    );
+  },
+}));
+
+vi.mock("./hooks/useExerciseSwapSheet", () => ({
+  useExerciseSwapSheet: () => ({
+    swapSheetVisible: false,
+    swapTargetProgramExerciseId: null,
+    swapTargetExerciseName: null,
+    openSwapSheet: swapSheetMocks.openSwapSheet,
+    closeSwapSheet: swapSheetMocks.closeSwapSheet,
+    handleSwapApplied: swapSheetMocks.handleSwapApplied,
+  }),
 }));
 
 vi.mock("../../components/program/SessionSummaryModal", () => ({
@@ -279,6 +300,10 @@ describe("ProgramDayScreen", () => {
     appStorageMocks.getItem.mockResolvedValue(null);
     appStorageMocks.setItem.mockReset();
     appStorageMocks.setItem.mockResolvedValue(undefined);
+    swapSheetMocks.openSwapSheet.mockReset();
+    swapSheetMocks.closeSwapSheet.mockReset();
+    swapSheetMocks.handleSwapApplied.mockReset();
+    swapSheetMocks.segmentCardProps.length = 0;
     getProgramOverviewMock.mockResolvedValue({
       calendarDays: [
         {
@@ -384,6 +409,15 @@ describe("ProgramDayScreen", () => {
 
     expect(screen.getByText("Back Squat")).toBeInTheDocument();
     expect(screen.getByText("Leg Press")).toBeInTheDocument();
+    await waitForLocalStateLoad();
+  });
+
+  it("passes openSwapSheet through to SegmentCard as onRequestSwap", async () => {
+    renderScreen();
+
+    expect(swapSheetMocks.segmentCardProps).toHaveLength(2);
+    expect(swapSheetMocks.segmentCardProps[0].onRequestSwap).toBe(swapSheetMocks.openSwapSheet);
+    expect(swapSheetMocks.segmentCardProps[1].onRequestSwap).toBe(swapSheetMocks.openSwapSheet);
     await waitForLocalStateLoad();
   });
 
