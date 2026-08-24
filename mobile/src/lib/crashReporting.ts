@@ -32,3 +32,27 @@ export function wrapWithCrashReporting<P extends object>(
     Component as React.ComponentType<Record<string, unknown>>,
   ) as React.ComponentType<P>;
 }
+
+export function addLogBreadcrumb(
+  scope: string,
+  level: "warning" | "error",
+  message: string,
+  detail?: unknown,
+): void {
+  if (!dsn) return;
+  Sentry.addBreadcrumb({
+    category: scope,
+    level,
+    message,
+    data: normalizeBreadcrumbData(detail),
+  });
+}
+
+function normalizeBreadcrumbData(detail: unknown): Record<string, unknown> | undefined {
+  if (detail === undefined) return undefined;
+  if (detail instanceof Error) return { name: detail.name, message: detail.message };
+  if (typeof detail === "object" && detail !== null && !Array.isArray(detail)) {
+    return detail as Record<string, unknown>;
+  }
+  return { detail };
+}
