@@ -11,9 +11,7 @@ export function OfflineBanner(): React.JSX.Element | null {
 
   return (
     <View style={styles.banner} accessibilityRole="alert">
-      <Text style={styles.text}>
-        No internet connection — changes will save once you're back online
-      </Text>
+      <Text style={styles.text}>No internet connection - most changes will retry automatically</Text>
     </View>
   );
 }

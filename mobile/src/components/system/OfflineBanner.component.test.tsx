@@ -8,7 +8,7 @@ vi.mock("../../lib/network", () => ({
   useIsOffline: vi.fn(),
 }));
 
-const bannerText = "No internet connection — changes will save once you're back online";
+const bannerText = "No internet connection - most changes will retry automatically";
 
 describe("OfflineBanner", () => {
   it("renders nothing when online", () => {
