@@ -163,6 +163,13 @@ describe("RegisterScreen", () => {
     expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
   });
 
+  it("renders pre-auth legal links", () => {
+    renderScreen();
+
+    expect(screen.getByText("Terms of Service")).toBeInTheDocument();
+    expect(screen.getByText("Privacy Policy")).toBeInTheDocument();
+  });
+
   it("does not call apiRegister when fields are empty", async () => {
     renderScreen();
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));

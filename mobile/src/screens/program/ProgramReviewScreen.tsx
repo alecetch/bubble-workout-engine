@@ -18,7 +18,7 @@ import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramReview">;
 
-type EditTarget = "Step1Goals" | "Step2Equipment" | "Step3Schedule";
+type EditTarget = "Step1Goals" | "Step2Equipment" | "Step3Schedule" | "Step4BodyMetrics";
 
 function formatList(values: string[] | undefined): string {
   if (!values || values.length === 0) return "Not set";
@@ -303,7 +303,7 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Body Metrics</Text>
-            <PressableScale style={styles.editButton} onPress={() => handleEdit("Step3Schedule")}>
+            <PressableScale style={styles.editButton} onPress={() => handleEdit("Step4BodyMetrics")}>
               <Text style={styles.editLabel}>Edit</Text>
             </PressableScale>
           </View>

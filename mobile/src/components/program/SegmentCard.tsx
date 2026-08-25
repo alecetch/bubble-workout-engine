@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { type LayoutChangeEvent, StyleSheet, Text, TextInput, View } from "react-native";
+import { type LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import { ApiError } from "../../api/client";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import type { SaveSegmentLogPayload, SaveSegmentLogResult } from "../../api/segmentLog";
@@ -24,8 +24,11 @@ import { setExerciseComplete } from "../../utils/localWorkoutLog";
 import { useLocalExerciseCompletion } from "./hooks/useLocalExerciseCompletion";
 import { useRoundBasedLogging } from "./hooks/useRoundBasedLogging";
 import { useSegmentSetLogging } from "./hooks/useSegmentSetLogging";
-import { RIR_OPTIONS, RirRoundPicker } from "./segmentCard/RirRoundPicker";
-import { RoundSummaryRow } from "./segmentCard/RoundSummaryRow";
+import { InlineExerciseLogBlock } from "./segmentCard/InlineExerciseLogBlock";
+import { InlineRestStrip } from "./segmentCard/InlineRestStrip";
+import { RoundBasedLoggingPanel } from "./segmentCard/RoundBasedLoggingPanel";
+import { SegmentCardHeader } from "./segmentCard/SegmentCardHeader";
+import { SegmentExerciseListItem } from "./segmentCard/SegmentExerciseListItem";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
@@ -43,6 +46,7 @@ type SegmentCardProps = {
     exerciseName: string,
     exercise: Exercise,
   ) => void;
+  onRequestSwap?: (programExerciseId: string, exerciseName: string) => void;
   onAllSetsSaved: (segmentId: string) => void;
   onSubscriptionRequired?: () => void;
   onPrsDetected?: (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => void;
@@ -53,20 +57,6 @@ type SegmentCardProps = {
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
-const CHIP_PALETTE: Record<string, { bg: string; text: string; border: string }> = {
-  increase_load: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  increase_reps: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  increase_sets: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  reduce_rest: { bg: "#0c1a4a", text: colors.accent, border: "#3b82f6" },
-  deload_local: { bg: "#451a03", text: colors.warning, border: "#d97706" },
-};
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(Math.max(0, seconds) / 60);
-  const s = Math.max(0, seconds) % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 function parseMmssToSeconds(value?: string | null): number | null {
   if (!value) return null;
   const [mm, ss] = value.split(":");
@@ -81,11 +71,6 @@ function roundToNearestMinute(seconds: number | null): number | null {
   return seconds % 60 > 30
     ? Math.ceil(seconds / 60) * 60
     : Math.floor(seconds / 60) * 60;
-}
-
-function formatRestTimer(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
 function findNextUncheckedSetKey(
@@ -135,6 +120,7 @@ export function SegmentCard({
   programDayId,
   userId,
   onViewExerciseDetail,
+  onRequestSwap,
   onAllSetsSaved,
   onSubscriptionRequired,
   onPrsDetected,
@@ -748,203 +734,41 @@ export function SegmentCard({
     return `${weight} kg x ${reps}`;
   }
 
-  function renderRoundBasedPanel(): React.ReactNode {
-    return (
-      <>
-        {Array.from({ length: totalRounds }, (_value, roundIndex) => {
-          const isCompleted = completedRoundIndices.has(roundIndex);
-          const isActive = roundIndex === activeRoundIndex && !isCompleted && !showPostStopRir;
-          const isLocked = !isCompleted && !isActive;
-          const isLastRound = roundIndex === totalRounds - 1;
+  function handleSelectRir(exercise: Exercise, optionValue: number): void {
+    setExerciseRirMap((current) => ({
+      ...current,
+      [exercise.id ?? ""]: optionValue,
+    }));
+  }
 
-          if (isCompleted) {
-            return (
-              <RoundSummaryRow
-                key={roundIndex}
-                roundIndex={roundIndex}
-                expanded={expandedRoundIndices.has(roundIndex)}
-                onToggle={(index) =>
-                  setExpandedRoundIndices((current) => {
-                    const next = new Set(current);
-                    if (next.has(index)) {
-                      next.delete(index);
-                    } else {
-                      next.add(index);
-                    }
-                    return next;
-                  })
-                }
-                loggableExercises={loggableExercises}
-                getExerciseValue={formatRoundExerciseValue}
-              />
-            );
-          }
-
-          if (isLocked) {
-            return (
-              <View key={roundIndex} style={styles.roundLockedRow}>
-                <Text style={styles.roundLockedLabel}>
-                  {`Round ${roundIndex + 1} · complete round ${roundIndex} to unlock`}
-                </Text>
-              </View>
-            );
-          }
-
-          return (
-            <View key={roundIndex} style={styles.roundActiveBlock}>
-              <Text style={styles.roundActiveLabel}>{`Round ${roundIndex + 1}`}</Text>
-              {loggableExercises.map((exercise) => {
-                const exerciseKey = exercise.id ?? "";
-                const row = inputMap[exerciseKey]?.[roundIndex] ?? { weight: "", reps: "", rirActual: null };
-                return (
-                  <View key={exerciseKey} style={styles.roundExerciseRow}>
-                    <Text style={styles.roundExerciseName} numberOfLines={1}>{exercise.name}</Text>
-                    {isUnloadedExercise(exercise) ? (
-                      <View style={styles.weightInputGroup}>
-                        <Text style={styles.bodyweightDash}>—</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.weightInputGroup}>
-                        <TextInput
-                          value={row.weight}
-                          onChangeText={(value) => {
-                            const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
-                            updateSetInput(exerciseKey, roundIndex, (prev) => ({ ...prev, weight: sanitized }));
-                          }}
-                          keyboardType="decimal-pad"
-                          placeholder="0"
-                          placeholderTextColor={colors.textSecondary}
-                          style={styles.inputField}
-                        />
-                        <View style={styles.inputSuffixWrap}>
-                          <Text style={styles.inputSuffix}>kg</Text>
-                        </View>
-                      </View>
-                    )}
-                    <View style={styles.repsInputGroup}>
-                      <TextInput
-                        value={row.reps}
-                        onChangeText={(value) => {
-                          const sanitized = value.replace(/[^0-9]/g, "");
-                          updateSetInput(exerciseKey, roundIndex, (prev) => ({ ...prev, reps: sanitized }));
-                        }}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor={colors.textSecondary}
-                        style={styles.inputField}
-                      />
-                    </View>
-                  </View>
-                );
-              })}
-              {isLastRound ? (
-                <View style={styles.exerciseRirBlock}>
-                  <Text style={styles.exerciseRirQuestion}>
-                    How many more reps could you complete per set?
-                  </Text>
-                  {loggableExercises.map((exercise) => (
-                    <RirRoundPicker
-                      key={exercise.id ?? exercise.name}
-                      exercise={exercise}
-                      selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
-                      onSelect={(optionValue) =>
-                        setExerciseRirMap((current) => ({
-                          ...current,
-                          [exercise.id ?? ""]: optionValue,
-                        }))
-                      }
-                    />
-                  ))}
-                  <View style={styles.rirHintRow}>
-                    <Text style={styles.rirHintText}>Too easy</Text>
-                    <Text style={styles.rirHintText}>Max effort</Text>
-                  </View>
-                </View>
-              ) : null}
-              {roundSaveError ? (
-                <Text style={styles.roundSaveError}>{roundSaveError}</Text>
-              ) : null}
-              <PressableScale
-                style={styles.markRoundButton}
-                onPress={() => { void handleRoundComplete(roundIndex); }}
-              >
-                <Text style={styles.markRoundButtonLabel}>Mark round complete</Text>
-              </PressableScale>
-            </View>
-          );
-        })}
-        {showPostStopRir ? (
-          <View style={styles.postStopRirBlock}>
-            <Text style={styles.exerciseRirQuestion}>
-              How many more reps could you complete per set?
-            </Text>
-            {loggableExercises.map((exercise) => (
-              <RirRoundPicker
-                key={exercise.id ?? exercise.name}
-                exercise={exercise}
-                selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
-                onSelect={(optionValue) =>
-                  setExerciseRirMap((current) => ({
-                    ...current,
-                    [exercise.id ?? ""]: optionValue,
-                  }))
-                }
-              />
-            ))}
-            <View style={styles.rirHintRow}>
-              <Text style={styles.rirHintText}>Too easy</Text>
-              <Text style={styles.rirHintText}>Max effort</Text>
-            </View>
-            <PressableScale
-              style={styles.markRoundButton}
-              onPress={() => { void handlePostStopRirDone(); }}
-            >
-              <Text style={styles.markRoundButtonLabel}>Done</Text>
-            </PressableScale>
-          </View>
-        ) : null}
-      </>
-    );
+  function toggleExpandedRound(roundIndex: number): void {
+    setExpandedRoundIndices((current) => {
+      const next = new Set(current);
+      if (next.has(roundIndex)) {
+        next.delete(roundIndex);
+      } else {
+        next.add(roundIndex);
+      }
+      return next;
+    });
   }
 
   return (
     <View ref={cardRootRef} style={styles.card} onLayout={onLayout}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerCopy}>
-          <Text style={styles.segmentName}>{segment.segmentName}</Text>
-          {segmentTypeBadgeLabel ? (
-            <View style={styles.segmentTypeBadge}>
-              <Text style={styles.segmentTypeBadgeText}>{segmentTypeBadgeLabel}</Text>
-            </View>
-          ) : null}
-          {!presentation.isWarmupOrCooldown && presentation.segmentHasExercises && String(segment.notes ?? "").trim() ? (
-            <Text style={styles.segmentMeta} numberOfLines={3} ellipsizeMode="tail">
-              {String(segment.notes).trim()}
-            </Text>
-          ) : null}
-        </View>
-        <View style={styles.headerRight}>
-          {initialDurationSeconds != null && initialDurationSeconds > 0 ? (
-            <PressableScale
-              style={styles.durationChip}
-              accessibilityLabel={timerRunning ? "Pause segment timer" : "Start segment timer"}
-              onPress={handleTimerPress}
-            >
-              <Ionicons
-                name={timerRunning ? "pause-circle-outline" : "time-outline"}
-                size={13}
-                color={timerRunning ? colors.accent : colors.textSecondary}
-              />
-              <Text style={[styles.durationText, timerRunning && styles.durationTextRunning]}>
-                {formatDuration(secondsLeft)}
-              </Text>
-            </PressableScale>
-          ) : null}
-          <View style={[styles.loggedBadge, !isLogged && styles.loggedBadgeHidden]}>
-            <Text style={styles.loggedText}>Logged</Text>
-          </View>
-        </View>
-      </View>
+      <SegmentCardHeader
+        segmentName={segment.segmentName}
+        segmentTypeBadgeLabel={segmentTypeBadgeLabel}
+        notesText={
+          !presentation.isWarmupOrCooldown && presentation.segmentHasExercises && String(segment.notes ?? "").trim()
+            ? String(segment.notes).trim()
+            : null
+        }
+        initialDurationSeconds={initialDurationSeconds}
+        secondsLeft={secondsLeft}
+        timerRunning={timerRunning}
+        onTimerPress={handleTimerPress}
+        isLogged={isLogged}
+      />
 
       <View style={styles.bodyRow}>
         <View style={styles.bodyLhs}>
@@ -982,90 +806,24 @@ export function SegmentCard({
                       : formatExerciseSummary(exercise, inputMap[programExerciseId], doneSetKeys)
                     : null;
                   return (
-                    <View
+                    <SegmentExerciseListItem
                       key={exercise.id ?? `${segment.id}-exercise-${index}`}
-                      style={[styles.exerciseRow, isComplete && styles.exerciseRowComplete]}
-                    >
-                      <PressableScale
-                        style={styles.exerciseNamePressable}
-                        onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
-                      >
-                        <Text style={styles.exerciseName} numberOfLines={2} ellipsizeMode="tail">
-                          {exercise.name}
-                        </Text>
-                      </PressableScale>
-                      {line2 ? (
-                        <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
-                          {line2}
-                        </Text>
-                      ) : null}
-                      {summary ? (
-                        <Text style={styles.exerciseCompleteSummary} numberOfLines={1} ellipsizeMode="tail">
-                          {summary}
-                        </Text>
-                      ) : null}
-                      {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
-                        <View style={styles.restRow}>
-                          <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
-                          <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
-                        </View>
-                      ) : null}
-                      {(() => {
-                        const decision = exercise.adaptationDecision ?? null;
-                        if (!decision || decision.outcome === "hold") return null;
-                        const palette = CHIP_PALETTE[decision.outcome] ?? {
-                          bg: "#0c1a4a",
-                          text: colors.accent,
-                          border: "#3b82f6",
-                        };
-
-                        return (
-                          <PressableScale
-                            onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
-                            style={[
-                              styles.adaptChip,
-                              { backgroundColor: palette.bg, borderColor: palette.border },
-                            ]}
-                          >
-                            <Text style={[styles.adaptChipText, { color: palette.text }]}>
-                              {decision.displayChip}
-                            </Text>
-                          </PressableScale>
-                        );
-                      })()}
-                      {!inlineLoggingOpen && hasLoggableExercises && !isRoundBased ? (
-                        <PressableScale
-                          style={[
-                            styles.exerciseActionButton,
-                            isComplete && styles.exerciseActionButtonDisabled,
-                          ]}
-                          disabled={isComplete}
-                          onPress={() => {
-                            setInlineLoggingOpen(true);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.exerciseActionLabel,
-                              isComplete && styles.exerciseActionLabelDisabled,
-                            ]}
-                          >
-                            {isComplete ? "Exercise Complete" : "Start Exercise"}
-                          </Text>
-                        </PressableScale>
-                      ) : null}
-                      {!isRoundBased && showResumeButton && index === 0 ? (
-                        <PressableScale
-                          style={[styles.exerciseActionButton, styles.exerciseActionButtonResume]}
-                          onPress={() => { void handleResumeExercise(); }}
-                          accessibilityLabel="Resume exercise"
-                        >
-                          <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelResume]}>
-                            Resume
-                          </Text>
-                        </PressableScale>
-                      ) : null}
-                    </View>
+                      exercise={exercise}
+                      index={index}
+                      line2={line2 || null}
+                      summary={summary}
+                      isComplete={isComplete}
+                      programExerciseId={programExerciseId}
+                      exerciseId={exerciseId}
+                      inlineLoggingOpen={inlineLoggingOpen}
+                      hasLoggableExercises={hasLoggableExercises}
+                      isRoundBased={isRoundBased}
+                      showResumeButton={showResumeButton}
+                      onViewExerciseDetail={onViewExerciseDetail}
+                      onRequestSwap={onRequestSwap}
+                      onStartExercise={() => setInlineLoggingOpen(true)}
+                      onResumeExercise={() => { void handleResumeExercise(); }}
+                    />
                   );
 	                })
 	              ) : (
@@ -1131,54 +889,25 @@ export function SegmentCard({
           </View>
 
           {showRestStrip ? (
-            <View style={styles.restStrip}>
-              <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-              <Text style={styles.restStripLabel}>Rest</Text>
-              <Text style={styles.restStripCountdown}>{formatRestTimer(restDisplaySeconds)}</Text>
-              <View style={styles.restStripBarTrack}>
-                <View style={[styles.restStripBarFill, { flex: restProgress }]} />
-                <View style={{ flex: 1 - restProgress }} />
-              </View>
-              <PressableScale
-                style={styles.restStripSkip}
-                onPress={() => {
-                  useTimerStore.getState().stopRest(segment.id);
-                  setRestDisplaySeconds(0);
-                }}
-              >
-                <Text style={styles.restStripSkipLabel}>Reset</Text>
-              </PressableScale>
-              <PressableScale
-                style={styles.restAdjustChip}
-                onPress={() => setShowAdjustControls((current) => !current)}
-              >
-                <Text style={styles.restStripSkipLabel}>Adjust</Text>
-              </PressableScale>
-              {showAdjustControls ? (
-                <View style={styles.restAdjustControls}>
-                  {[
-                    { label: "-", delta: -15, longDelta: -60 },
-                    { label: "+", delta: 15, longDelta: 60 },
-                  ].map((button) => (
-                    <PressableScale
-                      key={button.label}
-                      style={styles.restAdjustButton}
-                      onPress={() => {
-                        const overrideKey = restEntry?.restOverrideKey ?? null;
-                        useTimerStore.getState().adjustRestDuration(segment.id, button.delta, overrideKey);
-                      }}
-                      onLongPress={() => {
-                        const overrideKey = restEntry?.restOverrideKey ?? null;
-                        useTimerStore.getState().adjustRestDuration(segment.id, button.longDelta, overrideKey);
-                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      }}
-                    >
-                      <Text style={styles.restStripSkipLabel}>{button.label}</Text>
-                    </PressableScale>
-                  ))}
-                </View>
-              ) : null}
-            </View>
+            <InlineRestStrip
+              restDisplaySeconds={restDisplaySeconds}
+              restProgress={restProgress}
+              showAdjustControls={showAdjustControls}
+              onToggleAdjust={() => setShowAdjustControls((current) => !current)}
+              onReset={() => {
+                useTimerStore.getState().stopRest(segment.id);
+                setRestDisplaySeconds(0);
+              }}
+              onAdjust={(delta) => {
+                const overrideKey = restEntry?.restOverrideKey ?? null;
+                useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
+              }}
+              onAdjustLongPress={(delta) => {
+                const overrideKey = restEntry?.restOverrideKey ?? null;
+                useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }}
+            />
           ) : null}
 
           {!initialized && existingLogsQuery.isLoading ? (
@@ -1186,7 +915,23 @@ export function SegmentCard({
               <SkeletonBlock height={160} />
             </View>
           ) : isRoundBased ? (
-            renderRoundBasedPanel()
+            <RoundBasedLoggingPanel
+              totalRounds={totalRounds}
+              completedRoundIndices={completedRoundIndices}
+              activeRoundIndex={activeRoundIndex}
+              showPostStopRir={showPostStopRir}
+              expandedRoundIndices={expandedRoundIndices}
+              onToggleExpandedRound={toggleExpandedRound}
+              loggableExercises={loggableExercises}
+              inputMap={inputMap}
+              onUpdateSetInput={updateSetInput}
+              exerciseRirMap={exerciseRirMap}
+              onSelectRir={handleSelectRir}
+              roundSaveError={roundSaveError}
+              onRoundComplete={handleRoundComplete}
+              onPostStopRirDone={handlePostStopRirDone}
+              getExerciseValue={formatRoundExerciseValue}
+            />
           ) : (
             loggableExercises.map((exercise) => {
               const exerciseKey = exercise.id ?? "";
@@ -1198,136 +943,21 @@ export function SegmentCard({
               }));
 
               return (
-                <View key={exerciseKey} style={styles.inlineExerciseBlock}>
-                  {setInputs.map((setInput, setIndex) => {
-                    const setKey = buildSetKey(exercise, setIndex);
-                    const isDone = doneSetKeys.has(setKey);
-                    const isActive = activeSetKey === setKey;
-                    return (
-                      <View key={setKey} style={[styles.setRow, isDone && styles.setRowDone, isActive && styles.setRowActive]}>
-                        <Text style={[styles.setLabel, isDone && styles.setLabelDone]}>{`Set ${setIndex + 1}`}</Text>
-                        {isDone && pbSetKeys.has(setKey) ? (
-                          <View style={styles.pbBadge}>
-                            <Text style={styles.pbBadgeText}>PB</Text>
-                          </View>
-                        ) : null}
-                        {isUnloadedExercise(exercise) ? (
-                          <View style={styles.weightInputGroup}>
-                            <Text style={[styles.bodyweightDash, isDone && styles.inputFieldDone]}>—</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.weightInputGroup}>
-                            <TextInput
-                              value={setInput.weight}
-                              onChangeText={(value) => {
-                                const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
-                                fillDown(exerciseKey, setIndex, "weight", sanitized, exercise);
-                              }}
-                              keyboardType="decimal-pad"
-                              placeholder="0"
-                              placeholderTextColor={colors.textSecondary}
-                              style={[styles.inputField, isDone && styles.inputFieldDone]}
-                            />
-                            <View style={styles.inputSuffixWrap}>
-                              <Text style={[styles.inputSuffix, isDone && styles.inputSuffixDone]}>kg</Text>
-                            </View>
-                          </View>
-                        )}
-                        <View style={styles.repsInputGroup}>
-                          <TextInput
-                            value={setInput.reps}
-                            onChangeText={(value) => {
-                              const sanitized = value.replace(/[^0-9]/g, "");
-                              fillDown(exerciseKey, setIndex, "reps", sanitized, exercise);
-                            }}
-                            keyboardType="numeric"
-                            placeholder="0"
-                            placeholderTextColor={colors.textSecondary}
-                            style={[styles.inputField, isDone && styles.inputFieldDone]}
-                          />
-                        </View>
-                        <PressableScale
-                          style={styles.checkboxButton}
-                          accessibilityLabel={`${exercise.name} set ${setIndex + 1} complete`}
-                          onPress={() => { void handleSetComplete(exercise, setIndex); }}
-                        >
-                          <Ionicons
-                            name={isDone ? "checkbox" : "checkbox-outline"}
-                            size={22}
-                            color={isDone ? colors.success : colors.textSecondary}
-                          />
-                        </PressableScale>
-                      </View>
-                    );
-                  })}
-                  <View style={styles.setMutationRow}>
-                    <PressableScale
-                      style={[styles.setMutationButton, setInputs.length <= 1 && styles.setMutationButtonDisabled]}
-                      accessibilityLabel={`Remove set for ${exercise.name}`}
-                      onPress={() => handleRemoveSet(exercise)}
-                    >
-                      <Ionicons
-                        name="remove-circle-outline"
-                        size={16}
-                        color={setInputs.length <= 1 ? colors.textSecondary : colors.textPrimary}
-                      />
-                      <Text style={[styles.setMutationLabel, setInputs.length <= 1 && styles.setMutationLabelDisabled]}>
-                        Remove set
-                      </Text>
-                    </PressableScale>
-                    <PressableScale
-                      style={styles.setMutationButton}
-                      accessibilityLabel={`Add set for ${exercise.name}`}
-                      onPress={() => handleAddSet(exercise)}
-                    >
-                      <Ionicons name="add-circle-outline" size={16} color={colors.textPrimary} />
-                      <Text style={styles.setMutationLabel}>Add set</Text>
-                    </PressableScale>
-                  </View>
-                  <View style={styles.exerciseRirBlock}>
-                    <PressableScale
-                      style={styles.logAllButton}
-                      onPress={() => { void handleLogAllSets(exercise); }}
-                    >
-                      <Text style={styles.logAllButtonLabel}>Log all sets as complete</Text>
-                    </PressableScale>
-                    <Text style={styles.exerciseRirQuestion}>
-                      How many more reps could you complete per set?
-                    </Text>
-                    <View style={styles.rirPills}>
-                      {RIR_OPTIONS.map((option) => {
-                        const optionValue = option === "4+" ? 4 : Number(option);
-                        const selected = exerciseRir === optionValue;
-                        return (
-                          <PressableScale
-                            key={option}
-                            containerStyle={styles.rirPillContainer}
-                            style={[
-                              styles.rirPill,
-                              selected && styles.rirPillSelected,
-                            ]}
-                            hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
-                            accessibilityLabel={`${option} reps in reserve`}
-                            onPress={() => {
-                              setExerciseRirMap((current) => ({
-                                ...current,
-                                [exerciseKey]: optionValue,
-                              }));
-                            }}
-                          >
-                            <Text style={[styles.rirPillLabel, selected && styles.rirPillLabelSelected]}>
-                              {option}
-                            </Text>
-                          </PressableScale>
-                        );
-                      })}
-                    </View>
-                    <View style={styles.rirHintRow}>
-                      <Text style={styles.rirHintText}>Too easy</Text>
-                      <Text style={styles.rirHintText}>Max effort</Text>
-                    </View>
-                  </View>
-                </View>
+                <InlineExerciseLogBlock
+                  key={exerciseKey}
+                  exercise={exercise}
+                  setInputs={setInputs}
+                  doneSetKeys={doneSetKeys}
+                  activeSetKey={activeSetKey}
+                  pbSetKeys={pbSetKeys}
+                  exerciseRir={exerciseRir}
+                  onFillDown={fillDown}
+                  onSetComplete={handleSetComplete}
+                  onAddSet={handleAddSet}
+                  onRemoveSet={handleRemoveSet}
+                  onLogAllSets={handleLogAllSets}
+                  onSelectRir={handleSelectRir}
+                />
               );
             })
           )}
@@ -1367,79 +997,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: spacing.sm,
-  },
-  headerCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  headerRight: {
-    flexShrink: 0,
-    alignItems: "flex-end",
-    gap: spacing.xs,
-  },
-  durationChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  durationText: {
-    color: colors.textSecondary,
-    ...typography.label,
-    fontVariant: ["tabular-nums"],
-  },
-  durationTextRunning: {
-    color: colors.accent,
-    fontWeight: "700",
-  },
-  segmentName: {
-    color: colors.textPrimary,
-    ...typography.h3,
-  },
-  segmentMeta: {
-    color: colors.textSecondary,
-    ...typography.small,
-  },
-  segmentTypeBadge: {
-    alignSelf: "flex-start",
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  segmentTypeBadgeText: {
-    color: colors.textSecondary,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  loggedBadge: {
-    borderRadius: radii.pill,
-    backgroundColor: "rgba(34,197,94,0.18)",
-    borderWidth: 1,
-    borderColor: colors.success,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  loggedBadgeHidden: {
-    opacity: 0,
-  },
-  loggedText: {
-    color: colors.success,
-    ...typography.small,
-    fontWeight: "600",
-  },
   bodyRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1475,34 +1032,9 @@ const styles = StyleSheet.create({
     ...typography.small,
     fontWeight: "600",
   },
-  exerciseRow: {
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-    gap: 4,
-  },
-  exerciseRowComplete: {
-    backgroundColor: colors.surface,
-    opacity: 0.65,
-  },
-  exerciseNamePressable: {
-    alignSelf: "flex-start",
-  },
-  exerciseName: {
-    color: colors.textPrimary,
-    ...typography.body,
-    fontWeight: "600",
-  },
   exerciseMeta: {
     color: colors.textSecondary,
     ...typography.small,
-  },
-  exerciseCompleteSummary: {
-    color: colors.textSecondary,
-    ...typography.small,
-    fontWeight: "600",
   },
   exerciseActionButton: {
     alignSelf: "flex-start",
@@ -1546,23 +1078,6 @@ const styles = StyleSheet.create({
   exerciseActionLabelResume: {
     color: colors.textSecondary,
   },
-  restRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  adaptChip: {
-    alignSelf: "flex-start",
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    paddingVertical: 2,
-    paddingHorizontal: spacing.sm,
-    marginTop: 2,
-  },
-  adaptChipText: {
-    ...typography.label,
-    fontWeight: "600",
-  },
   inlinePanel: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
@@ -1584,312 +1099,6 @@ const styles = StyleSheet.create({
   },
   loadingBlock: {
     gap: spacing.sm,
-  },
-  inlineExerciseBlock: {
-    gap: spacing.sm,
-  },
-  setRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  setRowDone: {
-    opacity: 0.8,
-  },
-  setRowActive: {
-    borderColor: colors.textPrimary,
-    borderWidth: 1,
-  },
-  setLabel: {
-    color: colors.textPrimary,
-    ...typography.small,
-    fontWeight: "700",
-    minWidth: 36,
-  },
-  setLabelDone: {
-    color: colors.textSecondary,
-  },
-  pbBadge: {
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: "#F59E0B",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    alignSelf: "center",
-  },
-  pbBadgeText: {
-    color: "#F59E0B",
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  weightInputGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    flex: 1.35,
-    height: 36,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-  },
-  repsInputGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 0.85,
-    height: 36,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-  },
-  inputField: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: typography.body.fontSize,
-    fontWeight: typography.body.fontWeight,
-    paddingVertical: 0,
-    margin: 0,
-    includeFontPadding: false,
-  },
-  inputFieldDone: {
-    color: colors.textSecondary,
-  },
-  inputSuffixWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  inputSuffix: {
-    color: colors.textSecondary,
-    fontSize: typography.small.fontSize,
-    fontWeight: typography.small.fontWeight,
-  },
-  inputSuffixDone: {
-    color: colors.textSecondary,
-  },
-  bodyweightDash: {
-    flex: 1,
-    color: colors.textPrimary,
-    ...typography.body,
-    textAlign: "center",
-  },
-  roundActiveBlock: {
-    gap: spacing.sm,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-  },
-  roundActiveLabel: {
-    color: colors.textPrimary,
-    ...typography.label,
-    fontWeight: "700",
-  },
-  roundExerciseRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  roundExerciseName: {
-    flex: 1,
-    color: colors.textPrimary,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  roundLockedRow: {
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: spacing.sm,
-  },
-  roundLockedLabel: {
-    color: colors.textSecondary,
-    ...typography.small,
-  },
-  markRoundButton: {
-    alignSelf: "stretch",
-    minHeight: 38,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.md,
-  },
-  markRoundButtonLabel: {
-    color: colors.background,
-    ...typography.label,
-    fontWeight: "700",
-  },
-  roundSaveError: {
-    color: colors.warning,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  postStopRirBlock: {
-    gap: spacing.sm,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-  },
-  exerciseRirBlock: {
-    gap: spacing.xs,
-  },
-  setMutationRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacing.xs,
-  },
-  setMutationButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: spacing.xs,
-  },
-  setMutationButtonDisabled: {
-    opacity: 0.35,
-  },
-  setMutationLabel: {
-    color: colors.textPrimary,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  setMutationLabelDisabled: {
-    color: colors.textSecondary,
-  },
-  exerciseRirQuestion: {
-    color: colors.textSecondary,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  rirPills: {
-    flexDirection: "row",
-    width: "100%",
-    gap: spacing.xs,
-  },
-  rirPillContainer: {
-    flex: 1,
-  },
-  rirPill: {
-    width: "100%",
-    minHeight: 48,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rirPillSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  rirPillLabel: {
-    color: colors.textPrimary,
-    fontSize: typography.body.fontSize,
-    lineHeight: 20,
-    fontWeight: "600",
-    includeFontPadding: false,
-    textAlign: "center",
-    textAlignVertical: "center",
-  },
-  rirPillLabelSelected: {
-    color: colors.textPrimary,
-  },
-  rirHintRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  logAllButton: {
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logAllButtonLabel: {
-    color: colors.textSecondary,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  rirHintText: {
-    color: colors.textSecondary,
-    ...typography.label,
-  },
-  checkboxButton: {
-    alignSelf: "center",
-  },
-  restStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  restStripLabel: {
-    color: colors.textSecondary,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  restStripCountdown: {
-    color: colors.textPrimary,
-    ...typography.small,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
-  },
-  restStripBarTrack: {
-    flex: 1,
-    height: 6,
-    borderRadius: 999,
-    overflow: "hidden",
-    flexDirection: "row",
-    backgroundColor: colors.surface,
-  },
-  restStripBarFill: {
-    backgroundColor: colors.accent,
-  },
-  restStripSkip: {
-    alignSelf: "flex-start",
-  },
-  restStripSkipLabel: {
-    color: colors.accent,
-    ...typography.small,
-    fontWeight: "600",
-  },
-  restAdjustChip: {
-    alignSelf: "flex-start",
-  },
-  restAdjustControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  restAdjustButton: {
-    minWidth: 28,
-    minHeight: 28,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
   },
   segmentRestRow: {
     flexDirection: "row",

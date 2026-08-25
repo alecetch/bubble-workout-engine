@@ -1,3 +1,5 @@
+import { addLogBreadcrumb } from "../lib/crashReporting";
+
 declare const __DEV__: boolean;
 
 type LogLevel = "log" | "warn" | "error";
@@ -5,6 +7,10 @@ type LogLevel = "log" | "warn" | "error";
 function emit(level: LogLevel, scope: string, message: string, detail?: unknown): void {
   const isDevRuntime = typeof __DEV__ !== "undefined" && __DEV__;
   if (!isDevRuntime && level === "log") return;
+
+  if (level === "warn" || level === "error") {
+    addLogBreadcrumb(scope, level === "warn" ? "warning" : "error", message, detail);
+  }
 
   const prefix = `[${scope}]`;
   if (detail === undefined) {

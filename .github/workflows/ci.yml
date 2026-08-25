@@ -274,7 +274,7 @@ jobs:
           disable-animations: true
           script: |
             adb reverse tcp:3000 tcp:3000
-            cd mobile && EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
+            cd mobile && EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
             npx --yes wait-on http://127.0.0.1:8081 --timeout 120000
             adb shell settings put global package_verifier_enable 0
             adb shell settings put global verifier_verify_adb_installs 0

@@ -23,6 +23,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/legal/LegalLinksRow.tsx",
+      "test": "src/components/legal/LegalLinksRow.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "legal"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/onboarding/DayChipRow.tsx",
       "test": "src/components/onboarding/DayChipRow.component.test.tsx",
       "status": "covered",
@@ -264,6 +274,26 @@
     },
     {
       "type": "component",
+      "source": "src/components/program/segmentCard/InlineExerciseLogBlock.tsx",
+      "test": "src/components/program/segmentCard/InlineExerciseLogBlock.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/segmentCard/InlineRestStrip.tsx",
+      "test": "src/components/program/segmentCard/InlineRestStrip.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/program/HeroHeader.tsx",
       "test": null,
       "status": "excluded",
@@ -297,6 +327,16 @@
       "type": "component",
       "source": "src/components/program/segmentCard/RirRoundPicker.tsx",
       "test": "src/components/program/segmentCard/RirRoundPicker.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/segmentCard/RoundBasedLoggingPanel.tsx",
+      "test": "src/components/program/segmentCard/RoundBasedLoggingPanel.component.test.tsx",
       "status": "covered",
       "tags": [
         "program"
@@ -387,6 +427,36 @@
       "type": "component",
       "source": "src/components/system/ErrorBoundary.tsx",
       "test": "src/components/system/ErrorBoundary.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "system"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/segmentCard/SegmentCardHeader.tsx",
+      "test": "src/components/program/segmentCard/SegmentCardHeader.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/program/segmentCard/SegmentExerciseListItem.tsx",
+      "test": "src/components/program/segmentCard/SegmentExerciseListItem.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/system/OfflineBanner.tsx",
+      "test": "src/components/system/OfflineBanner.component.test.tsx",
       "status": "covered",
       "tags": [
         "system"

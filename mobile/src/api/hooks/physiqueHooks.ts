@@ -11,6 +11,7 @@ import {
   type CheckInListResponse,
 } from "../physique";
 import {
+  deleteScan,
   getMilestones,
   getScans,
   getScanTrend,
@@ -31,6 +32,18 @@ export function useDeleteCheckIn(): UseMutationResult<{ ok: boolean }, Error, st
     mutationFn: deleteCheckIn,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueCheckIns });
+    },
+  });
+}
+
+export function useDeleteScan(): UseMutationResult<{ ok: boolean }, Error, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteScan,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueScans });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueScanTrend });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueMilestones });
     },
   });
 }
