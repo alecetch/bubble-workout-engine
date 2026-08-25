@@ -84,7 +84,7 @@ export function PaywallScreen(): React.JSX.Element {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>Formai</Text>
+        <Text style={styles.eyebrow}>Forma</Text>
         <Text style={styles.title}>Your trial has ended</Text>
         <Text style={styles.subtitle}>
           Subscribe to continue your training. Cancel anytime.

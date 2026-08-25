@@ -11,7 +11,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useEntitlement, usePhysiqueCheckIns } from "../../api/hooks";
+import { useDeleteCheckIn, useEntitlement, usePhysiqueCheckIns } from "../../api/hooks";
 import {
   recordConsent,
   submitCheckIn,
@@ -38,6 +38,7 @@ type ScreenState =
 export function PhysiqueCheckInScreen(): React.JSX.Element {
   const navigation = useNavigation<any>();
   const { data: checkInsData, refetch } = usePhysiqueCheckIns(6);
+  const deleteCheckInMutation = useDeleteCheckIn();
   const entitlementQuery = useEntitlement();
   const hasConsented = entitlementQuery.data?.physique_consent_given === true;
   const [state, setState] = useState<ScreenState>({ phase: "consent" });
@@ -131,6 +132,27 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
     }
   };
 
+  const handleDeleteCheckIn = (checkInId: string): void => {
+    Alert.alert(
+      "Delete check-in?",
+      "This removes the photo and analysis. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteCheckInMutation.mutate(checkInId, {
+              onError: () => {
+                Alert.alert("Error", "Could not delete this check-in. Please try again.");
+              },
+            });
+          },
+        },
+      ],
+    );
+  };
+
   const renderCheckIns = (): React.JSX.Element | null => {
     if (!checkInsData || checkInsData.check_ins.length === 0) return null;
     return (
@@ -173,6 +195,16 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
                   </Text>
                 </>
               )}
+              <PressableScale
+                style={styles.deleteCheckInBtn}
+                onPress={() => handleDeleteCheckIn(checkIn.id)}
+                disabled={deleteCheckInMutation.isPending}
+                accessibilityLabel={`Delete check-in from ${new Date(checkIn.submitted_at).toLocaleDateString("en-GB")}`}
+              >
+                <Text style={styles.deleteCheckInLabel}>
+                  {deleteCheckInMutation.isPending ? "Deleting..." : "Delete"}
+                </Text>
+              </PressableScale>
             </View>
           </View>
         ))}
@@ -430,6 +462,20 @@ const styles = StyleSheet.create({
   requestAnalysisLabel: {
     ...typography.small,
     color: colors.accent,
+    fontWeight: "600",
+  },
+  deleteCheckInBtn: {
+    marginTop: spacing.xs,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: "flex-start",
+  },
+  deleteCheckInLabel: {
+    ...typography.small,
+    color: colors.textSecondary,
     fontWeight: "600",
   },
   card: {

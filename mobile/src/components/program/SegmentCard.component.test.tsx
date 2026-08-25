@@ -65,6 +65,7 @@ function segmentCardElement(
       programDayId={props.programDayId ?? "day-1"}
       userId={props.userId}
       onViewExerciseDetail={props.onViewExerciseDetail ?? vi.fn()}
+      onRequestSwap={props.onRequestSwap}
 	      onAllSetsSaved={props.onAllSetsSaved ?? vi.fn()}
 	      onSubscriptionRequired={props.onSubscriptionRequired}
 	      onInlinePanelClose={props.onInlinePanelClose}
@@ -138,6 +139,23 @@ describe("SegmentCard", () => {
         name: "Barbell Squat",
       }),
     );
+  });
+
+  it("renders the swap button and calls onRequestSwap with the exercise target", () => {
+    const onRequestSwap = vi.fn();
+    const segment = makeSegment({}, [makeExercise({ id: "ex-1", name: "Barbell Squat" })]);
+    renderCard({ segment, onRequestSwap });
+
+    fireEvent.click(screen.getByRole("button", { name: "Swap Barbell Squat" }));
+
+    expect(onRequestSwap).toHaveBeenCalledWith("ex-1", "Barbell Squat");
+  });
+
+  it("omits the swap button when onRequestSwap is not provided", () => {
+    const segment = makeSegment({}, [makeExercise({ id: "ex-1", name: "Barbell Squat" })]);
+
+    expect(() => renderCard({ segment })).not.toThrow();
+    expect(screen.queryByRole("button", { name: "Swap Barbell Squat" })).not.toBeInTheDocument();
   });
 
   it("opens the inline logging panel when Start Exercise is tapped", async () => {

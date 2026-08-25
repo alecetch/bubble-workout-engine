@@ -25,7 +25,7 @@ export function WeekShareCard({
     <View style={styles.offscreen} pointerEvents="none">
       <View ref={cardRef} style={styles.card} collapsable={false} onLayout={onReady}>
         <View style={styles.topBar}>
-          <Text style={styles.brandName}>Formai</Text>
+          <Text style={styles.brandName}>Forma</Text>
         </View>
         <View style={styles.body}>
           <Text style={styles.weekDoneLabel}>Week Done</Text>
@@ -43,7 +43,7 @@ export function WeekShareCard({
           </View>
         </View>
         <View style={styles.footer}>
-          <Text style={styles.tagline}>Training with Formai</Text>
+          <Text style={styles.tagline}>Training with Forma</Text>
         </View>
       </View>
     </View>
