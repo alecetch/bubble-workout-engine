@@ -46,6 +46,7 @@ type SegmentCardProps = {
     exerciseName: string,
     exercise: Exercise,
   ) => void;
+  onRequestSwap?: (programExerciseId: string, exerciseName: string) => void;
   onAllSetsSaved: (segmentId: string) => void;
   onSubscriptionRequired?: () => void;
   onPrsDetected?: (prs: Array<{ exerciseName: string; estimated1rmKg: number }>) => void;
@@ -119,6 +120,7 @@ export function SegmentCard({
   programDayId,
   userId,
   onViewExerciseDetail,
+  onRequestSwap,
   onAllSetsSaved,
   onSubscriptionRequired,
   onPrsDetected,
@@ -818,6 +820,7 @@ export function SegmentCard({
                       isRoundBased={isRoundBased}
                       showResumeButton={showResumeButton}
                       onViewExerciseDetail={onViewExerciseDetail}
+                      onRequestSwap={onRequestSwap}
                       onStartExercise={() => setInlineLoggingOpen(true)}
                       onResumeExercise={() => { void handleResumeExercise(); }}
                     />

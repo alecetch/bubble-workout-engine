@@ -17,15 +17,18 @@ import {
   setCrashReportingUser,
   wrapWithCrashReporting,
 } from "./src/lib/crashReporting";
+import { initNetworkMonitoring } from "./src/lib/network";
 import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
 import { navigateFromNotificationResponse } from "./src/navigation/notificationRouting";
+import { OfflineBanner } from "./src/components/system/OfflineBanner";
 import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 import { getAppStorage } from "./src/utils/appStorage";
 import { logger } from "./src/utils/logger";
 
 initCrashReporting();
+initNetworkMonitoring();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -222,6 +225,7 @@ function App(): React.JSX.Element {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <OfflineBanner />
       <NavigationContainer
         theme={appTheme}
         ref={navigationRef}

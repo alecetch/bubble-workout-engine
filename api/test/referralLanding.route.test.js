@@ -49,6 +49,11 @@ test("GET /ref/VALIDCODE renders the referrer name and code", async () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
     assert.match(body, /Alec invited you/);
+    assert.match(body, /Forma Invite/);
+    assert.match(body, /invited you to try Forma/);
+    assert.match(body, /Open Forma/);
+    assert.match(body, /href="formai:\/\/"/);
+    assert.doesNotMatch(body, /Formai/);
     assert.match(body, /VALIDCODE/);
   });
 });
