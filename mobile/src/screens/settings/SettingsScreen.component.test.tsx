@@ -2,7 +2,7 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Linking, Share } from "react-native";
+import { Alert, Linking, Share } from "react-native";
 import { API_BASE_URL } from "../../api/config";
 import { useEntitlement } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -77,6 +77,8 @@ import { SettingsScreen } from "./SettingsScreen";
 
 const nav = { navigate: vi.fn() };
 const openURLSpy = vi.spyOn(Linking, "openURL").mockResolvedValue(true);
+const canOpenURLSpy = vi.spyOn(Linking, "canOpenURL").mockResolvedValue(true);
+const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 
 function makeQuery(overrides: Record<string, unknown> = {}) {
   return { data: undefined, isLoading: false, isError: false, refetch: vi.fn(), ...overrides };
@@ -94,6 +96,9 @@ function mockDefaultQueries() {
 function resetSettingsMocks() {
   nav.navigate.mockReset();
   openURLSpy.mockClear();
+  canOpenURLSpy.mockClear();
+  canOpenURLSpy.mockResolvedValue(true);
+  alertSpy.mockClear();
   referralMocks.info.mockReturnValue({ data: null, isLoading: false, isError: false });
   referralMocks.stats.mockReturnValue({ data: null, isLoading: false, isError: false });
   vi.mocked(useEntitlement).mockReturnValue({ data: null, isLoading: false, isError: false } as any);
@@ -189,17 +194,31 @@ describe("legal section", () => {
     resetSettingsMocks();
   });
 
-  it("opens the hosted legal pages from Settings", () => {
+  it("opens the hosted legal pages from Settings", async () => {
     render(<SettingsScreen navigation={nav as any} route={{} as any} />);
 
     expect(screen.getByText("Terms of Service")).toBeInTheDocument();
     expect(screen.getByText("Privacy Policy")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Terms of Service" }));
-    expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/terms`);
+    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/terms`));
 
     fireEvent.click(screen.getByRole("button", { name: "Privacy Policy" }));
-    expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/privacy`);
+    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/privacy`));
+  });
+
+  it("shows an alert when a hosted legal page cannot open", async () => {
+    openURLSpy.mockRejectedValueOnce(new Error("browser unavailable"));
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Terms of Service" }));
+
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Unable to open link",
+        "Please try again, or visit the site in your browser.",
+      ),
+    );
   });
 });
 
