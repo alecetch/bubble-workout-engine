@@ -9,6 +9,7 @@ import { createClientProfile, getClientProfile } from "../../api/clientProfiles"
 import { logInPurchases } from "../../lib/purchases";
 import { saveTokens } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { LegalLinksRow } from "../../components/legal/LegalLinksRow";
 import type { AuthStackParamList } from "../../navigation/AuthNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -327,6 +328,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
         <PressableScale style={styles.linkButton} disabled={isSubmitting} onPress={() => navigation.goBack()}>
           <Text style={styles.linkLabel}>Back</Text>
         </PressableScale>
+        <LegalLinksRow />
       </View>
     </View>
   );

@@ -83,6 +83,13 @@ describe("PaywallScreen", () => {
     expect(screen.getByText("Restore purchase")).toBeInTheDocument();
   });
 
+  it("renders pre-purchase legal links", () => {
+    renderScreen();
+
+    expect(screen.getByText("Terms of Service")).toBeInTheDocument();
+    expect(screen.getByText("Privacy Policy")).toBeInTheDocument();
+  });
+
   it("Subscribe calls getPurchaseOfferings then purchasePackage with the first available package", async () => {
     renderScreen();
 
