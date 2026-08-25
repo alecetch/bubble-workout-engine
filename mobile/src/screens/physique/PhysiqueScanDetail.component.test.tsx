@@ -1,10 +1,16 @@
 import React from "react";
 import { axe } from "jest-axe";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useQuery } from "@tanstack/react-query";
+import { Alert } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useDeleteScan } from "../../api/hooks";
 import { getScan } from "../../api/physiqueScan";
 import { PhysiqueScanDetailScreen } from "./PhysiqueScanDetail";
+
+vi.mock("../../api/hooks", () => ({
+  useDeleteScan: vi.fn(),
+}));
 
 vi.mock("../../api/physiqueScan", () => ({
   getScan: vi.fn(),
@@ -35,7 +41,10 @@ const SCAN_DETAIL = {
 };
 
 const useQueryMock = vi.mocked(useQuery);
+const useDeleteScanMock = vi.mocked(useDeleteScan);
 const getScanMock = vi.mocked(getScan);
+const deleteScanMutateMock = vi.fn();
+const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 
 function makeNav() {
   return { goBack: vi.fn(), navigate: vi.fn() };
@@ -53,11 +62,16 @@ function renderScreen(nav = makeNav()) {
 
 describe("PhysiqueScanDetailScreen", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     getScanMock.mockResolvedValue({ ok: true, scan: SCAN_DETAIL } as any);
     useQueryMock.mockReturnValue({
       data: { ok: true, scan: SCAN_DETAIL },
       isLoading: false,
       error: null,
+    } as any);
+    useDeleteScanMock.mockReturnValue({
+      mutate: deleteScanMutateMock,
+      isPending: false,
     } as any);
   });
   it("has no accessibility violations in the default render state", async () => {
@@ -113,5 +127,56 @@ describe("PhysiqueScanDetailScreen", () => {
     expect(screen.getByText("Great progress this month")).toBeInTheDocument();
     expect(screen.getByText("Chest")).toBeInTheDocument();
     expect(screen.getByText("AI coaching")).toBeInTheDocument();
+  });
+
+  it("renders a delete action", () => {
+    renderScreen();
+
+    expect(screen.getByRole("button", { name: "Delete scan" })).toBeInTheDocument();
+  });
+
+  it("confirms and deletes the scan, then navigates back on success", () => {
+    const navigation = renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete scan" }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Delete scan?",
+      "This removes the photo and analysis. This cannot be undone.",
+      expect.arrayContaining([
+        expect.objectContaining({ text: "Cancel", style: "cancel" }),
+        expect.objectContaining({ text: "Delete", style: "destructive" }),
+      ]),
+    );
+
+    const buttons = alertSpy.mock.calls[0][2] as Array<{ text: string; onPress?: () => void }>;
+    buttons.find((button) => button.text === "Delete")?.onPress?.();
+
+    expect(deleteScanMutateMock).toHaveBeenCalledWith(
+      "scan-abc",
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+
+    const mutateOptions = deleteScanMutateMock.mock.calls[0][1] as { onSuccess: () => void };
+    mutateOptions.onSuccess();
+
+    expect(navigation.goBack).toHaveBeenCalled();
+  });
+
+  it("shows an error alert and stays on the screen when delete fails", () => {
+    const navigation = renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete scan" }));
+    const buttons = alertSpy.mock.calls[0][2] as Array<{ text: string; onPress?: () => void }>;
+    buttons.find((button) => button.text === "Delete")?.onPress?.();
+
+    const mutateOptions = deleteScanMutateMock.mock.calls[0][1] as { onError: () => void };
+    mutateOptions.onError();
+
+    expect(alertSpy).toHaveBeenCalledWith("Error", "Could not delete this scan. Please try again.");
+    expect(navigation.goBack).not.toHaveBeenCalled();
   });
 });

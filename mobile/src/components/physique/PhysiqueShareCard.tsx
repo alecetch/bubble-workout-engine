@@ -49,7 +49,7 @@ export function PhysiqueShareCard({ scanResult }: { scanResult: ScanResult }): R
     <View style={styles.hiddenCanvas}>
       <ViewShot ref={viewShotRef} options={{ format: "png", quality: 1 }} style={styles.canvas}>
         <View style={styles.card}>
-          <Text style={styles.brand}>Formai</Text>
+          <Text style={styles.brand}>Forma</Text>
           <Text style={styles.label}>Physique Score</Text>
           <Text style={styles.score}>{scanResult.physique_score.toFixed(1)}</Text>
           <View style={styles.deltaChip}>
@@ -62,7 +62,7 @@ export function PhysiqueShareCard({ scanResult }: { scanResult: ScanResult }): R
               </Text>
             ))}
           </View>
-          <Text style={styles.tagline}>Track your physique at formai.app</Text>
+          <Text style={styles.tagline}>Track your physique at getforma.fit</Text>
         </View>
       </ViewShot>
     </View>

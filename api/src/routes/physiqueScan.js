@@ -2,7 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
 import { requirePremium } from "../middleware/requirePremium.js";
-import { getPresignedUrl, getInternalPresignedUrl, PHYSIQUE_BUCKET } from "../services/s3Service.js";
+import { deleteObject, getPresignedUrl, getInternalPresignedUrl, PHYSIQUE_BUCKET } from "../services/s3Service.js";
 import { runPremiumScan } from "../services/physiqueScanService.js";
 import { publicInternalError } from "../utils/publicError.js";
 
@@ -123,6 +123,31 @@ physiquePhotoRouter.get("/physique/photo", async (req, res) => {
 });
 
 export const physiqueScanRouter = express.Router();
+
+export function createDeleteScanHandler({
+  db = pool,
+  deleteObjectFn = deleteObject,
+  bucket = PHYSIQUE_BUCKET,
+} = {}) {
+  return async function handleDeleteScan(req, res) {
+    const userId = req.auth.user_id;
+    const scanId = req.params.id;
+    try {
+      const fetchR = await db.query(
+        `SELECT id, photo_s3_key FROM physique_scan WHERE id = $1 AND user_id = $2`,
+        [scanId, userId],
+      );
+      if (fetchR.rowCount === 0) {
+        return res.status(404).json({ ok: false, error: "Scan not found." });
+      }
+      await deleteObjectFn(fetchR.rows[0].photo_s3_key, bucket).catch(() => {});
+      await db.query(`DELETE FROM physique_scan WHERE id = $1`, [scanId]);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  };
+}
 
 physiqueScanRouter.get("/physique/scans", requirePremium, async (req, res) => {
   const userId = req.auth.user_id;
@@ -291,3 +316,5 @@ physiqueScanRouter.get("/physique/scans/:id", requirePremium, async (req, res) =
     return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
+
+physiqueScanRouter.delete("/physique/scans/:id", requirePremium, createDeleteScanHandler());

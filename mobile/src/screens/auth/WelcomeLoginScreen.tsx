@@ -2,6 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { LegalLinksRow } from "../../components/legal/LegalLinksRow";
 import type { AuthStackParamList } from "../../navigation/AuthNavigator";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
@@ -23,6 +24,7 @@ export function WelcomeLoginScreen({ navigation }: Props): React.JSX.Element {
         <PressableScale style={styles.secondaryButton} onPress={() => navigation.navigate("Register")}>
           <Text style={styles.secondaryLabel}>Create account</Text>
         </PressableScale>
+        <LegalLinksRow />
       </View>
     </View>
   );

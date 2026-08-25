@@ -1,7 +1,8 @@
 import React from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
+import { useDeleteScan } from "../../api/hooks";
 import { getScan } from "../../api/physiqueScan";
 import type { HistoryStackParamList } from "../../navigation/HistoryStackNavigator";
 import { colors } from "../../theme/colors";
@@ -16,10 +17,33 @@ function formatRegionName(slug: string): string {
 }
 
 export function PhysiqueScanDetailScreen({ route, navigation }: Props): React.JSX.Element {
+  const deleteScanMutation = useDeleteScan();
   const scanQuery = useQuery({
     queryKey: ["physiqueScanDetail", route.params.scanId],
     queryFn: () => getScan(route.params.scanId),
   });
+
+  const handleDelete = (): void => {
+    Alert.alert(
+      "Delete scan?",
+      "This removes the photo and analysis. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteScanMutation.mutate(route.params.scanId, {
+              onSuccess: () => navigation.goBack(),
+              onError: () => {
+                Alert.alert("Error", "Could not delete this scan. Please try again.");
+              },
+            });
+          },
+        },
+      ],
+    );
+  };
 
   if (scanQuery.isLoading) {
     return (
@@ -54,14 +78,32 @@ export function PhysiqueScanDetailScreen({ route, navigation }: Props): React.JS
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Text style={styles.backLabel}>← Back</Text>
-      </TouchableOpacity>
+      <View style={styles.actionsRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backLabel}>Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={handleDelete}
+          disabled={deleteScanMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel="Delete scan"
+        >
+          <Text style={styles.deleteLabel}>{deleteScanMutation.isPending ? "Deleting..." : "Delete"}</Text>
+        </TouchableOpacity>
+      </View>
       <Text style={styles.title}>Scan detail</Text>
       {scan.photo_url ? <Image source={{ uri: scan.photo_url }} style={styles.heroImage} /> : null}
       <View style={styles.card}>
         <Text style={styles.score}>{scan.physique_score.toFixed(1)}</Text>
-        <Text style={styles.body}>Score on {new Date(scan.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</Text>
+        <Text style={styles.body}>
+          Score on{" "}
+          {new Date(scan.submitted_at).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
+        </Text>
       </View>
       {scan.ai_coaching_narrative ? (
         <View style={styles.card}>
@@ -72,7 +114,7 @@ export function PhysiqueScanDetailScreen({ route, navigation }: Props): React.JS
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Observations</Text>
         {scan.observations.map((item) => (
-          <Text key={item} style={styles.body}>• {item}</Text>
+          <Text key={item} style={styles.body}>- {item}</Text>
         ))}
       </View>
       <View style={styles.card}>
@@ -89,7 +131,9 @@ export function PhysiqueScanDetailScreen({ route, navigation }: Props): React.JS
       {scan.comparison ? (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Comparison</Text>
-          <Text style={styles.body}>{scan.comparison.narrative ?? `${scan.comparison.score_delta.toFixed(1)} • ${scan.comparison.trend}`}</Text>
+          <Text style={styles.body}>
+            {scan.comparison.narrative ?? `${scan.comparison.score_delta.toFixed(1)} - ${scan.comparison.trend}`}
+          </Text>
         </View>
       ) : null}
     </ScrollView>
@@ -110,6 +154,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
   backButton: {
     alignSelf: "flex-start",
     paddingVertical: spacing.xs,
@@ -118,6 +168,18 @@ const styles = StyleSheet.create({
   backLabel: {
     color: colors.accent,
     ...typography.body,
+    fontWeight: "600",
+  },
+  deleteBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  deleteLabel: {
+    ...typography.small,
+    color: colors.textSecondary,
     fontWeight: "600",
   },
   title: {

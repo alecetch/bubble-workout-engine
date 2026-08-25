@@ -1,12 +1,14 @@
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useEntitlement, usePhysiqueCheckIns } from "../../api/hooks";
+import { useDeleteCheckIn, useEntitlement, usePhysiqueCheckIns } from "../../api/hooks";
 import { recordConsent, submitCheckIn, triggerAnalysis } from "../../api/physique";
 import { PhysiqueCheckInScreen } from "./PhysiqueCheckInScreen";
 
 vi.mock("../../api/hooks", () => ({
+  useDeleteCheckIn: vi.fn(),
   useEntitlement: vi.fn(),
   usePhysiqueCheckIns: vi.fn(),
 }));
@@ -39,11 +41,14 @@ vi.mock("../../components/interaction/PressableScale", () => ({
 
 const useEntitlementMock = vi.mocked(useEntitlement);
 const usePhysiqueCheckInsMock = vi.mocked(usePhysiqueCheckIns);
+const useDeleteCheckInMock = vi.mocked(useDeleteCheckIn);
 const launchImageLibraryAsyncMock = vi.mocked(ImagePicker.launchImageLibraryAsync);
 const submitCheckInMock = vi.mocked(submitCheckIn);
 const triggerAnalysisMock = vi.mocked(triggerAnalysis);
 const recordConsentMock = vi.mocked(recordConsent);
 const refetchMock = vi.fn();
+const deleteCheckInMutateMock = vi.fn();
+const alertSpy = vi.spyOn(Alert, "alert");
 
 function mockEntitlement(hasConsented: boolean) {
   useEntitlementMock.mockReturnValue({
@@ -96,6 +101,11 @@ async function renderConsentedScreenWithPreview() {
 describe("PhysiqueCheckInScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    alertSpy.mockImplementation(() => {});
+    useDeleteCheckInMock.mockReturnValue({
+      mutate: deleteCheckInMutateMock,
+      isPending: false,
+    } as any);
     mockCheckIns();
     mockEntitlement(false);
     launchImageLibraryAsyncMock.mockResolvedValue({ canceled: true, assets: [] } as any);
@@ -194,5 +204,62 @@ describe("PhysiqueCheckInScreen", () => {
     await waitFor(() => {
       expect(triggerAnalysisMock).toHaveBeenCalledWith("check-1");
     });
+  });
+
+  it("confirms and deletes a check-in, showing an error alert when the mutation fails", async () => {
+    mockEntitlement(true);
+    await mockCheckInsWith([
+      {
+        id: "check-1",
+        submitted_at: "2026-05-23T00:00:00Z",
+        photo_url: "https://example.com/photo.jpg",
+        analysis: null,
+        program_emphasis: [],
+      },
+      {
+        id: "check-2",
+        submitted_at: "2026-05-30T00:00:00Z",
+        photo_url: "https://example.com/photo-2.jpg",
+        analysis: {
+          observations: ["Broader shoulders"],
+          comparison_notes: "Improved from baseline.",
+          emphasis_suggestions: [],
+          disclaimer: "AI analysis is informational only.",
+        },
+        program_emphasis: [],
+      },
+    ]);
+
+    render(<PhysiqueCheckInScreen />);
+
+    expect(await screen.findByRole("button", { name: "Delete check-in from 23/05/2026" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete check-in from 30/05/2026" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete check-in from 23/05/2026" }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Delete check-in?",
+      "This removes the photo and analysis. This cannot be undone.",
+      expect.arrayContaining([
+        expect.objectContaining({ text: "Cancel", style: "cancel" }),
+        expect.objectContaining({ text: "Delete", style: "destructive" }),
+      ]),
+    );
+
+    const buttons = alertSpy.mock.calls[0][2] as Array<{ text: string; onPress?: () => void }>;
+    buttons.find((button) => button.text === "Delete")?.onPress?.();
+
+    expect(deleteCheckInMutateMock).toHaveBeenCalledWith(
+      "check-1",
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+
+    const mutateOptions = deleteCheckInMutateMock.mock.calls[0][1] as { onError: () => void };
+    mutateOptions.onError();
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Error",
+      "Could not delete this check-in. Please try again.",
+    );
   });
 });
