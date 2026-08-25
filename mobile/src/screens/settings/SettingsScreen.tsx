@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Linking,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -17,7 +16,6 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { deleteAccount, getAccountInfo } from "../../api/accountApi";
 import { apiLogout } from "../../api/authApi";
-import { API_BASE_URL } from "../../api/config";
 import {
   useClientProfile,
   useEntitlement,
@@ -34,6 +32,7 @@ import {
 import { getPreferredHeightUnit, getPreferredUnit } from "../../api/profileApi";
 import { clearTokens, getRefreshToken } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
+import { openLegalUrl } from "../../components/legal/LegalLinksRow";
 import { logOutPurchases } from "../../lib/purchases";
 import type { RootTabParamList } from "../../navigation/AppTabs";
 import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
@@ -507,13 +506,13 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
           <View style={styles.sectionCard}>
             <SettingsRow
               label="Terms of Service"
-              onPress={() => void Linking.openURL(`${API_BASE_URL}/terms`)}
+              onPress={() => void openLegalUrl("/terms")}
               showChevron
               showDivider
             />
             <SettingsRow
               label="Privacy Policy"
-              onPress={() => void Linking.openURL(`${API_BASE_URL}/privacy`)}
+              onPress={() => void openLegalUrl("/privacy")}
               showChevron
             />
           </View>

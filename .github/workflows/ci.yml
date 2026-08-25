@@ -89,6 +89,10 @@ jobs:
         working-directory: mobile
         run: node scripts/check-a11y-regression.mjs
 
+      - name: Check for stale brand strings
+        working-directory: mobile
+        run: node scripts/check-brand-strings.mjs
+
       - name: Run mobile tests
         working-directory: mobile
         run: npx vitest run --coverage
