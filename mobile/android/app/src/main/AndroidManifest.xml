@@ -33,7 +33,7 @@
       </intent-filter>
       <intent-filter android:autoVerify="true" data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
-        <data android:scheme="https" android:host="getformai.com" android:pathPrefix="/ref/"/>
+        <data android:scheme="https" android:host="getforma.fit" android:pathPrefix="/ref/"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>

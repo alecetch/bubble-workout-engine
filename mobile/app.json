@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.bubbleworkout.mobile",
       "associatedDomains": [
-        "applinks:getformai.com"
+        "applinks:getforma.fit"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -31,7 +31,7 @@
           "data": [
             {
               "scheme": "https",
-              "host": "getformai.com",
+              "host": "getforma.fit",
               "pathPrefix": "/ref/"
             }
           ],
