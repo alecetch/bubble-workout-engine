@@ -154,6 +154,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     swapSheetVisible,
     swapTargetProgramExerciseId,
     swapTargetExerciseName,
+    openSwapSheet,
     closeSwapSheet,
     handleSwapApplied,
   } = useExerciseSwapSheet({
@@ -343,6 +344,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             programDayId={programDayId}
             userId={userId}
             onViewExerciseDetail={handleViewExerciseDetail}
+            onRequestSwap={openSwapSheet}
             onAllSetsSaved={handleAllSetsSaved}
             onSubscriptionRequired={() => {
               const parent = navigation.getParent();
