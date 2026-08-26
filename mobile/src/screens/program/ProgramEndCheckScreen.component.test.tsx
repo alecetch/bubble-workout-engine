@@ -34,8 +34,13 @@ const mockEndCheck = {
   isLastScheduledDayComplete: true,
 };
 
-function renderScreen() {
-  const navigation = { navigate: vi.fn(), replace: vi.fn(), getParent: vi.fn(() => null) };
+function renderScreen(
+  navigation: { navigate: ReturnType<typeof vi.fn>; replace: ReturnType<typeof vi.fn>; getParent: ReturnType<typeof vi.fn> } = {
+    navigate: vi.fn(),
+    replace: vi.fn(),
+    getParent: vi.fn(() => null),
+  },
+) {
   render(
     <ProgramEndCheckScreen
       route={{ params: { programId: "prog-1" } } as any}
@@ -106,6 +111,25 @@ describe("ProgramEndCheckScreen", () => {
   it("shows complete-anyway CTA when completion with skips is allowed", () => {
     renderScreen();
     expect(screen.getByRole("button", { name: "Complete program anyway" })).toBeInTheDocument();
+  });
+
+  it("navigates in-stack when finishing missed workouts", () => {
+    const parentNavigate = vi.fn();
+    const navigation = {
+      navigate: vi.fn(),
+      replace: vi.fn(),
+      getParent: vi.fn(() => ({ navigate: parentNavigate })),
+    };
+    renderScreen(navigation);
+
+    fireEvent.click(screen.getByRole("button", { name: "Finish missed workouts" }));
+
+    expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", { programId: "prog-1" });
+    expect(navigation.getParent).not.toHaveBeenCalled();
+    expect(parentNavigate).not.toHaveBeenCalledWith(
+      "ProgramsTab",
+      expect.anything(),
+    );
   });
 
   it("calls completion mutation with the with_skips payload", async () => {
