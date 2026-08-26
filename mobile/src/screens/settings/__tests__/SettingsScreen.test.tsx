@@ -129,8 +129,10 @@ function resetMockState(): void {
   logoutSpy.mockResolvedValue(undefined);
 }
 
-vi.mock("@tanstack/react-query", async () => {
+vi.mock("@tanstack/react-query", async (importActual) => {
+  const actual = await importActual<typeof import("@tanstack/react-query")>();
   return {
+    ...actual,
     useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
       const key = String(queryKey[0]);
       if (key === "notificationPreferences") {
