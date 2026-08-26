@@ -122,7 +122,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     setWorkoutCompleteState,
     allExerciseCardsComplete,
     refreshExerciseCompletion,
-  } = useLocalDayState(programDayId, orderedSegments, allExerciseIds);
+  } = useLocalDayState(programDayId, orderedSegments, allExerciseIds, dayQuery.data?.day?.isCompleted ?? null);
 
   const computeSessionStats = useCallback(
     (): { totalVolumeKg: number; totalSets: number; exerciseCount: number } =>
