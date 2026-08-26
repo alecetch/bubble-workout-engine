@@ -1,5 +1,8 @@
 import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { queryKeys } from "../../api/hooks";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { LegalLinksRow } from "../../components/legal/LegalLinksRow";
 import {
@@ -9,6 +12,7 @@ import {
   purchasePackage,
   restorePurchases as restorePurchasesSdk,
 } from "../../lib/purchases";
+import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -22,8 +26,11 @@ const BENEFITS = [
   "Full session history and strength trend visualisation",
 ];
 
-export function PaywallScreen(): React.JSX.Element {
+type Props = NativeStackScreenProps<OnboardingStackParamList, "Paywall">;
+
+export function PaywallScreen({ navigation }: Props): React.JSX.Element {
   const setEntitlement = useSessionStore((state) => state.setEntitlement);
+  const queryClient = useQueryClient();
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -47,6 +54,10 @@ export function PaywallScreen(): React.JSX.Element {
       }
       await purchasePackage(pkg);
       setEntitlement("active", null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.entitlement });
+      Alert.alert("You're subscribed", "Welcome back — your training is unlocked.", [
+        { text: "Continue", onPress: () => navigation.goBack() },
+      ]);
     } catch (err: unknown) {
       if (!isPurchaseCancelledError(err)) {
         Alert.alert("Purchase failed", "Something went wrong. Please try again.");
@@ -67,6 +78,10 @@ export function PaywallScreen(): React.JSX.Element {
       const entitlement = customerInfo.entitlements.active.pro;
       if (entitlement) {
         setEntitlement("active", null);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.entitlement });
+        Alert.alert("Purchase restored", "Your subscription is active again.", [
+          { text: "Continue", onPress: () => navigation.goBack() },
+        ]);
       } else {
         Alert.alert("No purchase found", "We couldn't find an active subscription for this Apple ID.");
       }
