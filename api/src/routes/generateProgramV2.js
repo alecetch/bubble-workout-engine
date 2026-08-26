@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
-import { requireInternalToken } from "../middleware/auth.js";
+import { entitledUserAuth } from "../middleware/chains.js";
 import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
@@ -154,7 +154,7 @@ export function createGenerateProgramV2Handler({
 
   return async function generateProgramV2Handler(req, res) {
     const request_id = req.request_id;
-    const user_id = s(req.body?.user_id || req.body?.bubble_user_id);
+    const user_id = s(req.auth?.user_id) || s(req.body?.user_id || req.body?.bubble_user_id);
     const client_profile_id = s(
       req.body?.client_profile_id ||
       req.body?.clientProfileId,
@@ -832,4 +832,10 @@ export function createGenerateProgramV2Handler({
   };
 }
 
-generateProgramV2Router.post("/generate-plan-v2", requireInternalToken, createGenerateProgramV2Handler());
+export function createGenerateProgramV2Router(handlerOptions) {
+  const router = express.Router();
+  router.post("/generate-plan-v2", ...entitledUserAuth, createGenerateProgramV2Handler(handlerOptions));
+  return router;
+}
+
+generateProgramV2Router.use(createGenerateProgramV2Router());

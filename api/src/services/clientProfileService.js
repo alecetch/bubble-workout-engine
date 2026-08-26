@@ -75,7 +75,7 @@ export function makeClientProfileService(db = defaultPool) {
       SELECT cp.*
       FROM client_profile cp
       JOIN app_user au ON cp.user_id = au.id
-      WHERE au.subject_id = $1
+      WHERE au.id::text = $1 OR au.subject_id = $1
       LIMIT 1
       `,
       [userId],

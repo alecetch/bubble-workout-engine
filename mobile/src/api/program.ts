@@ -1,4 +1,4 @@
-import { ApiError, engineFetch } from "./client";
+import { ApiError, authenticatedFetch, engineFetch } from "./client";
 import { getEngineKeyStatus } from "./config";
 
 export type GenerateProgramPayload = {
@@ -29,6 +29,10 @@ function stringifyDetails(details: unknown): string {
 }
 
 function formatUnauthorizedMessage(endpoint: string, status: number, details: unknown): string {
+  if (endpoint === "/generate-plan-v2") {
+    return `Generation unauthorized (${status}) at ${endpoint}. body=${stringifyDetails(details)} Auth token or subscription entitlement required.`;
+  }
+
   const keyStatus = getEngineKeyStatus();
   return `Generation unauthorized (${status}) at ${endpoint}. body=${stringifyDetails(details)} Engine key status: hasKey=${keyStatus.hasKey}, source=${keyStatus.source}.`;
 }
@@ -78,7 +82,9 @@ async function generateAtEndpoint(
             anchor_date_ms: payload.anchor_date_ms,
           };
 
-  return engineFetch<GenerateProgramResponse>(endpoint, {
+  const fetcher = endpoint === "/generate-plan-v2" ? authenticatedFetch : engineFetch;
+
+  return fetcher<GenerateProgramResponse>(endpoint, {
     method: "POST",
     body,
   });
