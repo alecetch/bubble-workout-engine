@@ -53,6 +53,7 @@ const deleteAccountMutateSpy = vi.fn();
 const queryClientClearSpy = vi.fn();
 const clearTokensSpy = vi.fn();
 const clearSessionSpy = vi.fn();
+const clearPushTokenSpy = vi.fn();
 const logoutSpy = vi.fn();
 const getRefreshTokenSpy = vi.fn();
 const navigationNavigateSpy = vi.fn();
@@ -115,6 +116,7 @@ function resetMockState(): void {
   queryClientClearSpy.mockReset();
   clearTokensSpy.mockReset();
   clearSessionSpy.mockReset();
+  clearPushTokenSpy.mockReset();
   logoutSpy.mockReset();
   getRefreshTokenSpy.mockReset();
   navigationNavigateSpy.mockReset();
@@ -126,11 +128,14 @@ function resetMockState(): void {
   preferredHeightUnitRefetchSpy.mockReset();
   getRefreshTokenSpy.mockResolvedValue(null);
   clearTokensSpy.mockResolvedValue(undefined);
+  clearPushTokenSpy.mockResolvedValue(undefined);
   logoutSpy.mockResolvedValue(undefined);
 }
 
-vi.mock("@tanstack/react-query", async () => {
+vi.mock("@tanstack/react-query", async (importActual) => {
+  const actual = await importActual<typeof import("@tanstack/react-query")>();
   return {
+    ...actual,
     useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
       const key = String(queryKey[0]);
       if (key === "notificationPreferences") {
@@ -238,6 +243,12 @@ vi.mock("../../../api/authApi", () => ({
 vi.mock("../../../api/tokenStorage", () => ({
   getRefreshToken: () => getRefreshTokenSpy(),
   clearTokens: () => clearTokensSpy(),
+}));
+
+vi.mock("../../../api/notifications", () => ({
+  clearPushToken: () => clearPushTokenSpy(),
+  getNotificationPreferences: vi.fn(),
+  updateNotificationPreferences: vi.fn(),
 }));
 
 vi.mock("../../../state/session/sessionStore", () => ({
@@ -398,6 +409,21 @@ describe("SettingsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Log Out" }));
 
     await waitFor(() => {
+      expect(clearPushTokenSpy).toHaveBeenCalledTimes(1);
+      expect(clearTokensSpy).toHaveBeenCalledTimes(1);
+      expect(clearSessionSpy).toHaveBeenCalledTimes(1);
+      expect(queryClientClearSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("tapping Log Out still completes local logout when push-token cleanup fails", async () => {
+    clearPushTokenSpy.mockRejectedValue(new Error("push cleanup failed"));
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Log Out" }));
+
+    await waitFor(() => {
+      expect(clearPushTokenSpy).toHaveBeenCalledTimes(1);
       expect(clearTokensSpy).toHaveBeenCalledTimes(1);
       expect(clearSessionSpy).toHaveBeenCalledTimes(1);
       expect(queryClientClearSpy).toHaveBeenCalledTimes(1);

@@ -51,6 +51,7 @@ vi.mock("../../api/accountApi", () => ({
 }));
 
 vi.mock("../../api/notifications", () => ({
+  clearPushToken: vi.fn().mockResolvedValue(undefined),
   getNotificationPreferences: vi.fn(),
   updateNotificationPreferences: vi.fn(),
 }));
