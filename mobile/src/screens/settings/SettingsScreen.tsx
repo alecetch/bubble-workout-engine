@@ -25,6 +25,7 @@ import {
   useReferenceData,
 } from "../../api/hooks";
 import {
+  clearPushToken,
   getNotificationPreferences,
   updateNotificationPreferences,
   type NotificationPreferences,
@@ -245,6 +246,9 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
         // ignore logout API errors; local logout should still complete
       });
     }
+    void clearPushToken().catch(() => {
+      // ignore push-token clear errors; local logout should still complete
+    });
     await clearTokens();
     logOutPurchases();
     clearSession();
