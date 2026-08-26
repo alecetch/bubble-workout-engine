@@ -29,6 +29,7 @@ vi.mock("expo-image-picker", () => ({
   launchCameraAsync: vi.fn().mockResolvedValue({ canceled: true, assets: [] }),
   MediaTypeOptions: { Images: "Images" },
   requestCameraPermissionsAsync: vi.fn().mockResolvedValue({ status: "granted", granted: true }),
+  requestMediaLibraryPermissionsAsync: vi.fn().mockResolvedValue({ status: "granted", granted: true }),
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
@@ -43,6 +44,9 @@ const useEntitlementMock = vi.mocked(useEntitlement);
 const usePhysiqueCheckInsMock = vi.mocked(usePhysiqueCheckIns);
 const useDeleteCheckInMock = vi.mocked(useDeleteCheckIn);
 const launchImageLibraryAsyncMock = vi.mocked(ImagePicker.launchImageLibraryAsync);
+const launchCameraAsyncMock = vi.mocked(ImagePicker.launchCameraAsync);
+const requestMediaLibraryPermissionsAsyncMock = vi.mocked(ImagePicker.requestMediaLibraryPermissionsAsync);
+const requestCameraPermissionsAsyncMock = vi.mocked(ImagePicker.requestCameraPermissionsAsync);
 const submitCheckInMock = vi.mocked(submitCheckIn);
 const triggerAnalysisMock = vi.mocked(triggerAnalysis);
 const recordConsentMock = vi.mocked(recordConsent);
@@ -87,6 +91,7 @@ async function mockCheckInsWith(data: any[]) {
 
 async function renderConsentedScreenWithPreview() {
   mockEntitlement(true);
+  requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
   launchImageLibraryAsyncMock.mockResolvedValue({
     canceled: false,
     assets: [{ uri: "file:///tmp/physique.jpg" }],
@@ -108,7 +113,10 @@ describe("PhysiqueCheckInScreen", () => {
     } as any);
     mockCheckIns();
     mockEntitlement(false);
+    requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
+    requestCameraPermissionsAsyncMock.mockResolvedValue({ status: "granted", granted: true } as any);
     launchImageLibraryAsyncMock.mockResolvedValue({ canceled: true, assets: [] } as any);
+    launchCameraAsyncMock.mockResolvedValue({ canceled: true, assets: [] } as any);
     submitCheckInMock.mockResolvedValue({
       ok: true,
       analysis: {
@@ -133,6 +141,56 @@ describe("PhysiqueCheckInScreen", () => {
     expect(screen.getByText("Physique Tracking")).toBeInTheDocument();
     expect(screen.getByText("I understand - start tracking")).toBeInTheDocument();
     expect(recordConsentMock).not.toHaveBeenCalled();
+  });
+
+  it("shows an alert when photo library permission is denied", async () => {
+    mockEntitlement(true);
+    requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: false } as any);
+    render(<PhysiqueCheckInScreen />);
+
+    fireEvent.click(await screen.findByText("Choose from library"));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Photo library access required",
+        "Allow photo library access in Settings to choose a photo.",
+      );
+    });
+    expect(launchImageLibraryAsyncMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Analyse this photo")).not.toBeInTheDocument();
+  });
+
+  it("shows an alert when opening the photo library fails", async () => {
+    mockEntitlement(true);
+    requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
+    launchImageLibraryAsyncMock.mockRejectedValue(new Error("library failed"));
+    render(<PhysiqueCheckInScreen />);
+
+    fireEvent.click(await screen.findByText("Choose from library"));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Error",
+        "Could not open photo library. Please try again.",
+      );
+    });
+    expect(screen.queryByText("Analyse this photo")).not.toBeInTheDocument();
+  });
+
+  it("shows an alert when camera permission is denied", async () => {
+    mockEntitlement(true);
+    requestCameraPermissionsAsyncMock.mockResolvedValue({ granted: false } as any);
+    render(<PhysiqueCheckInScreen />);
+
+    fireEvent.click(await screen.findByText("Take photo"));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Camera access required",
+        "Allow camera access in Settings to take a photo.",
+      );
+    });
+    expect(launchCameraAsyncMock).not.toHaveBeenCalled();
   });
 
   it("shows a loading state while uploading a selected photo", async () => {
