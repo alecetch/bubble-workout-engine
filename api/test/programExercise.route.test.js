@@ -198,6 +198,7 @@ test("applySwap updates exercise and clears progression fields", async () => {
         }],
         rowCount: 1,
       },
+      { rows: [], rowCount: 0 },
       { rows: [{ column_name: "injury_flags" }], rowCount: 1 },
       { rows: [{ fitness_rank: 1, injury_flags_slugs: [], equipment_items_slugs: ["barbell", "machine"] }], rowCount: 1 },
       { rows: [], rowCount: 0 },
@@ -236,6 +237,10 @@ test("applySwap updates exercise and clears progression fields", async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body?.exercise_id, "safety_bar_squat");
   assert.equal(res.body?.original_exercise_id, "bb_back_squat");
+  const logGuardCall = calls.find((call) => call.sql.includes("FROM segment_exercise_log"));
+  assert.ok(logGuardCall);
+  assert.match(logGuardCall.sql, /is_draft = false/);
+  assert.deepEqual(logGuardCall.params, [VALID_UUID, USER_UUID]);
   const updateCall = calls.find((call) => call.sql.includes("UPDATE program_exercise"));
   assert.match(updateCall.sql, /recommended_load_kg = NULL/);
   assert.match(updateCall.sql, /progression_outcome = NULL/);
@@ -265,6 +270,7 @@ test("applySwap preserves original_exercise_id on second swap", async () => {
         }],
         rowCount: 1,
       },
+      { rows: [], rowCount: 0 },
       { rows: [{ column_name: "injury_flags" }], rowCount: 1 },
       { rows: [{ fitness_rank: 1, injury_flags_slugs: [], equipment_items_slugs: ["barbell", "machine"] }], rowCount: 1 },
       { rows: [], rowCount: 0 },
@@ -298,6 +304,160 @@ test("applySwap preserves original_exercise_id on second swap", async () => {
   assert.equal(res.body?.original_exercise_id, "bb_back_squat");
 });
 
+test("applySwap rejects when the current user's slot has real logged sets", async () => {
+  const calls = [];
+  const handlers = createProgramExerciseHandlers({
+    db: mockPool([
+      {
+        rows: [{
+          program_exercise_id: VALID_UUID,
+          program_day_id: VALID_UUID,
+          program_id: VALID_UUID,
+          exercise_id: "bb_back_squat",
+          exercise_name: "Back Squat",
+          original_exercise_id: null,
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 1,
+        }],
+        rowCount: 1,
+      },
+      { rows: [{ "?column?": 1 }], rowCount: 1 },
+    ], calls),
+    getAllowed: async () => ["safety_bar_squat"],
+  });
+  const req = {
+    request_id: "t",
+    params: { program_exercise_id: VALID_UUID },
+    body: { exercise_id: "safety_bar_squat" },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.applySwap(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body?.code, "validation_error");
+  assert.equal(res.body?.error, "This exercise already has logged sets today and can't be swapped");
+  assert.equal(calls.some((call) => call.sql.includes("UPDATE program_exercise")), false);
+  const logGuardCall = calls.find((call) => call.sql.includes("FROM segment_exercise_log"));
+  assert.ok(logGuardCall);
+  assert.match(logGuardCall.sql, /program_exercise_id = \$1/);
+  assert.match(logGuardCall.sql, /user_id = \$2/);
+  assert.match(logGuardCall.sql, /is_draft = false/);
+  assert.deepEqual(logGuardCall.params, [VALID_UUID, USER_UUID]);
+});
+
+test("applySwap allows swap when only draft logs exist for the slot", async () => {
+  const calls = [];
+  const handlers = createProgramExerciseHandlers({
+    db: mockPool([
+      {
+        rows: [{
+          program_exercise_id: VALID_UUID,
+          program_day_id: VALID_UUID,
+          program_id: VALID_UUID,
+          exercise_id: "bb_back_squat",
+          exercise_name: "Back Squat",
+          original_exercise_id: null,
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 1,
+        }],
+        rowCount: 1,
+      },
+      { rows: [], rowCount: 0 },
+      { rows: [{ column_name: "injury_flags" }], rowCount: 1 },
+      { rows: [{ fitness_rank: 1, injury_flags_slugs: [], equipment_items_slugs: ["barbell", "machine"] }], rowCount: 1 },
+      { rows: [], rowCount: 0 },
+      {
+        rows: [{
+          exercise_id: "safety_bar_squat",
+          name: "Safety Bar Squat",
+          is_loadable: true,
+          equipment_items_slugs: ["barbell"],
+          coaching_cues_json: [],
+          load_guidance: "",
+          logging_guidance: "",
+        }],
+        rowCount: 1,
+      },
+      { rows: [{ id: VALID_UUID, original_exercise_id: "bb_back_squat" }], rowCount: 1 },
+    ], calls),
+    getAllowed: async () => ["safety_bar_squat"],
+  });
+  const req = {
+    request_id: "t",
+    params: { program_exercise_id: VALID_UUID },
+    body: { exercise_id: "safety_bar_squat" },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.applySwap(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.exercise_id, "safety_bar_squat");
+  const logGuardCall = calls.find((call) => call.sql.includes("FROM segment_exercise_log"));
+  assert.ok(logGuardCall);
+  assert.match(logGuardCall.sql, /is_draft = false/);
+});
+
+test("applySwap allows swap when another user's logged set exists for the same slot", async () => {
+  const calls = [];
+  const handlers = createProgramExerciseHandlers({
+    db: mockPool([
+      {
+        rows: [{
+          program_exercise_id: VALID_UUID,
+          program_day_id: VALID_UUID,
+          program_id: VALID_UUID,
+          exercise_id: "bb_back_squat",
+          exercise_name: "Back Squat",
+          original_exercise_id: null,
+          purpose: "main_lift",
+          order_in_day: 1,
+          global_day_index: 1,
+        }],
+        rowCount: 1,
+      },
+      { rows: [], rowCount: 0 },
+      { rows: [{ column_name: "injury_flags" }], rowCount: 1 },
+      { rows: [{ fitness_rank: 1, injury_flags_slugs: [], equipment_items_slugs: ["barbell", "machine"] }], rowCount: 1 },
+      { rows: [], rowCount: 0 },
+      {
+        rows: [{
+          exercise_id: "safety_bar_squat",
+          name: "Safety Bar Squat",
+          is_loadable: true,
+          equipment_items_slugs: ["barbell"],
+          coaching_cues_json: [],
+          load_guidance: "",
+          logging_guidance: "",
+        }],
+        rowCount: 1,
+      },
+      { rows: [{ id: VALID_UUID, original_exercise_id: "bb_back_squat" }], rowCount: 1 },
+    ], calls),
+    getAllowed: async () => ["safety_bar_squat"],
+  });
+  const req = {
+    request_id: "t",
+    params: { program_exercise_id: VALID_UUID },
+    body: { exercise_id: "safety_bar_squat" },
+    auth: { user_id: USER_UUID },
+  };
+  const res = mockRes();
+
+  await handlers.applySwap(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.exercise_id, "safety_bar_squat");
+  const logGuardCall = calls.find((call) => call.sql.includes("FROM segment_exercise_log"));
+  assert.ok(logGuardCall);
+  assert.deepEqual(logGuardCall.params, [VALID_UUID, USER_UUID]);
+});
+
 test("applySwap rejects exercise not in allowed set", async () => {
   const handlers = createProgramExerciseHandlers({
     db: mockPool([
@@ -315,6 +475,7 @@ test("applySwap rejects exercise not in allowed set", async () => {
         }],
         rowCount: 1,
       },
+      { rows: [], rowCount: 0 },
       { rows: [{ column_name: "injury_flags" }], rowCount: 1 },
       { rows: [{ fitness_rank: 1, injury_flags_slugs: [], equipment_items_slugs: ["barbell"] }], rowCount: 1 },
     ]),

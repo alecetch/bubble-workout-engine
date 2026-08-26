@@ -70,7 +70,7 @@ export function SegmentExerciseListItem({
             {exercise.name}
           </Text>
         </PressableScale>
-        {onRequestSwap ? (
+        {onRequestSwap && !isComplete ? (
           <PressableScale
             style={styles.swapButton}
             onPress={() => onRequestSwap(programExerciseId, exercise.name)}

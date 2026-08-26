@@ -158,6 +158,25 @@ describe("SegmentCard", () => {
     expect(screen.queryByRole("button", { name: "Swap Barbell Squat" })).not.toBeInTheDocument();
   });
 
+  it("hides the swap button once the exercise is complete", async () => {
+    const onRequestSwap = vi.fn();
+    const segment = makeSegment({}, [makeExercise({ id: "ex-1", name: "Barbell Squat" })]);
+
+    try {
+      renderCard({ segment, onRequestSwap });
+
+      expect(screen.getByRole("button", { name: "Swap Barbell Squat" })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText("Start Exercise"));
+      fireEvent.click(await screen.findByText("Close Log"));
+
+      expect(await screen.findByText("Exercise Complete")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Swap Barbell Squat" })).not.toBeInTheDocument();
+    } finally {
+      _resetForTest();
+    }
+  });
+
   it("opens the inline logging panel when Start Exercise is tapped", async () => {
     renderCard();
 
