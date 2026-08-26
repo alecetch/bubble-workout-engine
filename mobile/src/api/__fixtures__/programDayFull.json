@@ -9,7 +9,8 @@
     "equipment_override_preset_slug": null,
     "equipment_override_items_slugs": null,
     "scheduled_weekday": "Wed",
-    "week_number": 1
+    "week_number": 1,
+    "is_completed": true
   },
   "segments": [
     {
