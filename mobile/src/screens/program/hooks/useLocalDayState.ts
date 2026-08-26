@@ -6,6 +6,7 @@ import {
   allExercisesComplete,
   getSegmentLog,
   getWorkoutComplete,
+  setWorkoutComplete,
   type SegmentLogEntry,
 } from "../../../utils/localWorkoutLog";
 
@@ -15,6 +16,7 @@ export function useLocalDayState(
   programDayId: string,
   orderedSegments: SegmentDetail[],
   allExerciseIds: string[],
+  serverIsCompleted: boolean | null,
 ): {
   segmentLogs: Record<string, SegmentLogEntry>;
   setSegmentLogs: React.Dispatch<React.SetStateAction<Record<string, SegmentLogEntry>>>;
@@ -38,7 +40,7 @@ export function useLocalDayState(
     let cancelled = false;
 
     async function loadLocalState(): Promise<void> {
-      const completion = await getWorkoutComplete(programDayId);
+      const localCompletion = await getWorkoutComplete(programDayId);
       const entries = await Promise.all(
         orderedSegments.map(async (segment) => ({
           segmentId: segment.id,
@@ -53,8 +55,13 @@ export function useLocalDayState(
         if (entry.log) logsMap[entry.segmentId] = entry.log;
       });
 
+      const resolvedCompletion = localCompletion || Boolean(serverIsCompleted);
+      if (Boolean(serverIsCompleted) && !localCompletion) {
+        void setWorkoutComplete(programDayId, true);
+      }
+
       setSegmentLogs(logsMap);
-      setWorkoutCompleteState(completion);
+      setWorkoutCompleteState(resolvedCompletion);
       setAllExerciseCardsComplete(await allExercisesComplete(programDayId, allExerciseIds));
     }
 
@@ -62,7 +69,7 @@ export function useLocalDayState(
     return () => {
       cancelled = true;
     };
-  }, [allExerciseIds, orderedSegments, programDayId]);
+  }, [allExerciseIds, orderedSegments, programDayId, serverIsCompleted]);
 
   return {
     segmentLogs,
