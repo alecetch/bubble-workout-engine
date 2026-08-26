@@ -2,7 +2,9 @@ import React from "react";
 import { axe } from "jest-axe";
 import { Alert } from "react-native";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { queryKeys } from "../../api/hooks";
 import {
   getPurchaseOfferings,
   isPurchaseCancelledError,
@@ -13,6 +15,14 @@ import {
 import { useSessionStore } from "../../state/session/sessionStore";
 import { PaywallScreen } from "./PaywallScreen";
 import { mockZustandSelector } from "../../__test-utils__";
+
+vi.mock("@tanstack/react-query", async (importActual) => {
+  const actual = await importActual<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQueryClient: vi.fn(),
+  };
+});
 
 vi.mock("../../lib/purchases", () => ({
   getPurchaseOfferings: vi.fn(),
@@ -36,6 +46,7 @@ vi.mock("../../components/interaction/PressableScale", () => ({
 
 const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 const setEntitlementMock = vi.fn();
+const invalidateQueriesMock = vi.fn();
 const MOCK_PACKAGE = { identifier: "$rc_monthly" };
 const MOCK_OFFERINGS = {
   current: { availablePackages: [MOCK_PACKAGE] },
@@ -49,15 +60,31 @@ const restorePurchasesMock = vi.mocked(restorePurchases);
 const useSessionStoreMock = vi.mocked(useSessionStore);
 
 function renderScreen() {
-  render(<PaywallScreen />);
+  const navigation = { goBack: vi.fn() };
+
+  render(
+    <PaywallScreen
+      navigation={navigation as any}
+      route={{ key: "Paywall", name: "Paywall", params: undefined } as any}
+    />,
+  );
+
+  return { invalidateQueriesMock, navigation };
+}
+
+function getAlertButtons(title: string) {
+  const call = alertSpy.mock.calls.find(([alertTitle]) => alertTitle === title);
+  return call?.[2] as Array<{ text?: string; onPress?: () => void }> | undefined;
 }
 
 describe("PaywallScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     alertSpy.mockClear();
+    invalidateQueriesMock.mockReset();
 
     mockZustandSelector(useSessionStoreMock as any, { setEntitlement: setEntitlementMock });
+    vi.mocked(useQueryClient).mockReturnValue({ invalidateQueries: invalidateQueriesMock } as any);
     getPurchaseOfferingsMock.mockResolvedValue(MOCK_OFFERINGS);
     purchasePackageMock.mockResolvedValue(undefined);
     restorePurchasesMock.mockResolvedValue({
@@ -113,6 +140,25 @@ describe("PaywallScreen", () => {
     );
   });
 
+  it("successful purchase invalidates entitlement and navigates back from confirmation", async () => {
+    const { invalidateQueriesMock, navigation } = renderScreen();
+
+    fireEvent.click(screen.getByText("Subscribe"));
+
+    await waitFor(() => {
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: queryKeys.entitlement });
+    });
+    expect(alertSpy).toHaveBeenCalledWith(
+      "You're subscribed",
+      "Welcome back — your training is unlocked.",
+      expect.any(Array),
+    );
+
+    const buttons = getAlertButtons("You're subscribed");
+    buttons?.find((button) => button.text === "Continue")?.onPress?.();
+    expect(navigation.goBack).toHaveBeenCalledOnce();
+  });
+
   it("cancelled purchase does not show any Alert", async () => {
     isPurchaseCancelledErrorMock.mockReturnValue(true);
     purchasePackageMock.mockRejectedValue(
@@ -130,13 +176,19 @@ describe("PaywallScreen", () => {
     isPurchaseCancelledErrorMock.mockReturnValue(false);
     purchasePackageMock.mockRejectedValue(new Error("billing unavailable"));
 
-    renderScreen();
+    const { invalidateQueriesMock } = renderScreen();
     fireEvent.click(screen.getByText("Subscribe"));
 
     await waitFor(() => expect(alertSpy).toHaveBeenCalledOnce());
     expect(alertSpy).toHaveBeenCalledWith(
       "Purchase failed",
       "Something went wrong. Please try again.",
+    );
+    expect(invalidateQueriesMock).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalledWith(
+      "You're subscribed",
+      expect.any(String),
+      expect.any(Array),
     );
   });
 
@@ -172,16 +224,41 @@ describe("PaywallScreen", () => {
     );
   });
 
+  it("successful restore invalidates entitlement and navigates back from confirmation", async () => {
+    const { invalidateQueriesMock, navigation } = renderScreen();
+
+    fireEvent.click(screen.getByText("Restore purchase"));
+
+    await waitFor(() => {
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: queryKeys.entitlement });
+    });
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Purchase restored",
+      "Your subscription is active again.",
+      expect.any(Array),
+    );
+
+    const buttons = getAlertButtons("Purchase restored");
+    buttons?.find((button) => button.text === "Continue")?.onPress?.();
+    expect(navigation.goBack).toHaveBeenCalledOnce();
+  });
+
   it("failed restore exception shows Restore failed Alert", async () => {
     restorePurchasesMock.mockRejectedValue(new Error("restore failed"));
 
-    renderScreen();
+    const { invalidateQueriesMock } = renderScreen();
     fireEvent.click(screen.getByText("Restore purchase"));
 
     await waitFor(() => expect(alertSpy).toHaveBeenCalledOnce());
     expect(alertSpy).toHaveBeenCalledWith(
       "Restore failed",
       "Unable to restore purchases. Please try again.",
+    );
+    expect(invalidateQueriesMock).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalledWith(
+      "Purchase restored",
+      expect.any(String),
+      expect.any(Array),
     );
   });
 });
