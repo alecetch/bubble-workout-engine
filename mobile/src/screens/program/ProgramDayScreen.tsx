@@ -408,6 +408,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         prE1rmKg={prE1rmKg}
         streakDays={historyOverviewQuery.data?.currentStreakDays ?? 0}
         adaptedExercises={adaptedExercisesForSummary}
+        isSubmitting={markDayComplete.isPending}
         onDismiss={() => {
           void handleSummaryDismiss();
         }}

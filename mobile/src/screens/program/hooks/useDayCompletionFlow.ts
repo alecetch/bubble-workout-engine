@@ -100,6 +100,7 @@ export function useDayCompletionFlow(params: {
   );
 
   const handleSummaryDismiss = useCallback(async (): Promise<void> => {
+    if (markDayComplete.isPending) return;
     setSummaryVisible(false);
     try {
       await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId });
@@ -192,6 +193,7 @@ export function useDayCompletionFlow(params: {
     computeSessionStats,
     day?.weekNumber,
     markDayComplete,
+    markDayComplete.isPending,
     nav,
     prHits,
     programDayId,
