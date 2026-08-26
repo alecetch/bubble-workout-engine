@@ -196,6 +196,22 @@ describe("LogSegmentModal", () => {
     expect(screen.getByText("Saved")).toBeInTheDocument();
   });
 
+  it("shows a retry banner when prior logs fail to load", () => {
+    const refetch = vi.fn();
+    useSegmentExerciseLogsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    } as any);
+
+    renderModal();
+
+    expect(screen.getByText("Couldn't load your previous sets for this exercise.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Retry"));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
   it("shows effort selector and records RIR selection", () => {
     renderModal();
 
