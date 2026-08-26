@@ -321,6 +321,21 @@ export function createProgramExerciseHandlers(options = pool) {
       try {
         const userId = resolveUserId(req);
         const current = await loadOwnedProgramExercise(client, program_exercise_id, userId);
+        const loggedResult = await client.query(
+          `
+          SELECT 1
+          FROM segment_exercise_log
+          WHERE program_exercise_id = $1
+            AND user_id = $2
+            AND is_draft = false
+          LIMIT 1
+          `,
+          [program_exercise_id, userId],
+        );
+        if (loggedResult.rowCount > 0) {
+          throw new RequestValidationError("This exercise already has logged sets today and can't be swapped");
+        }
+
         if (newExerciseId === current.exercise_id) {
           throw new RequestValidationError("Exercise is already assigned to this slot");
         }
