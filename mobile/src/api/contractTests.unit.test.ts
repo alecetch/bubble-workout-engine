@@ -76,6 +76,14 @@ describe("mobile API contract normalizers", () => {
       expect(result.day.label).toBe("Lower Body");
     });
 
+    it("maps day is_completed to day.isCompleted", async () => {
+      stubAuthGetJson(programDayFullFixture);
+
+      const result = await getProgramDayFull("day-1", {});
+
+      expect(result.day.isCompleted).toBe(true);
+    });
+
     it("normalizes adaptation_decision snake_case fields", async () => {
       stubAuthGetJson(programDayFullFixture);
 

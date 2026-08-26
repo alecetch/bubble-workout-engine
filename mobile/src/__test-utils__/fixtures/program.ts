@@ -80,6 +80,7 @@ export function buildProgramDay(
       equipmentOverrideItemSlugs: [],
       scheduledWeekday: "Mon",
       weekNumber: 1,
+      isCompleted: false,
     },
     segments,
     ...overrides,
