@@ -6,6 +6,7 @@ import {
   allExercisesComplete,
   getSegmentLog,
   getWorkoutComplete,
+  setWorkoutComplete,
 } from "../../../utils/localWorkoutLog";
 import { useLocalDayState } from "./useLocalDayState";
 
@@ -13,6 +14,7 @@ vi.mock("../../../utils/localWorkoutLog", () => ({
   allExercisesComplete: vi.fn(),
   getSegmentLog: vi.fn(),
   getWorkoutComplete: vi.fn(),
+  setWorkoutComplete: vi.fn(),
 }));
 
 type SegmentDetail = ProgramDayFullResponse["segments"][number];
@@ -20,6 +22,7 @@ type SegmentDetail = ProgramDayFullResponse["segments"][number];
 const allExercisesCompleteMock = vi.mocked(allExercisesComplete);
 const getSegmentLogMock = vi.mocked(getSegmentLog);
 const getWorkoutCompleteMock = vi.mocked(getWorkoutComplete);
+const setWorkoutCompleteMock = vi.mocked(setWorkoutComplete);
 
 function segment(id: string): SegmentDetail {
   return {
@@ -31,7 +34,7 @@ function segment(id: string): SegmentDetail {
 }
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe("useLocalDayState", () => {
@@ -43,7 +46,7 @@ describe("useLocalDayState", () => {
     allExercisesCompleteMock.mockResolvedValue(true);
 
     const { result } = renderHook(() =>
-      useLocalDayState("day-1", [segment("seg-1"), segment("seg-2")], ["ex-1"]),
+      useLocalDayState("day-1", [segment("seg-1"), segment("seg-2")], ["ex-1"], null),
     );
 
     await waitFor(() => expect(result.current.workoutComplete).toBe(true));
@@ -64,7 +67,7 @@ describe("useLocalDayState", () => {
     allExercisesCompleteMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
     const { result } = renderHook(() =>
-      useLocalDayState("day-1", [segment("seg-1")], ["ex-1"]),
+      useLocalDayState("day-1", [segment("seg-1")], ["ex-1"], null),
     );
     await waitFor(() => expect(result.current.allExerciseCardsComplete).toBe(false));
 
@@ -74,5 +77,33 @@ describe("useLocalDayState", () => {
 
     await waitFor(() => expect(result.current.allExerciseCardsComplete).toBe(true));
     expect(allExercisesCompleteMock).toHaveBeenLastCalledWith("day-1", ["ex-1"]);
+  });
+
+  it("reconciles server-completed days into local completion state", async () => {
+    getWorkoutCompleteMock.mockResolvedValue(false);
+    getSegmentLogMock.mockResolvedValue(null);
+    allExercisesCompleteMock.mockResolvedValue(false);
+
+    const { result } = renderHook(() =>
+      useLocalDayState("day-1", [segment("seg-1")], ["ex-1"], true),
+    );
+
+    await waitFor(() => expect(result.current.workoutComplete).toBe(true));
+
+    expect(setWorkoutCompleteMock).toHaveBeenCalledWith("day-1", true);
+  });
+
+  it("keeps local completion when the server value is false", async () => {
+    getWorkoutCompleteMock.mockResolvedValue(true);
+    getSegmentLogMock.mockResolvedValue(null);
+    allExercisesCompleteMock.mockResolvedValue(false);
+
+    const { result } = renderHook(() =>
+      useLocalDayState("day-1", [segment("seg-1")], ["ex-1"], false),
+    );
+
+    await waitFor(() => expect(result.current.workoutComplete).toBe(true));
+
+    expect(setWorkoutCompleteMock).not.toHaveBeenCalled();
   });
 });

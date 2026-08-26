@@ -97,6 +97,7 @@ export type ProgramDayFullResponse = {
     equipmentOverrideItemSlugs?: string[] | null;
     scheduledWeekday?: string;
     weekNumber?: number;
+    isCompleted: boolean;
   };
   segments: Array<{
     id: string;
@@ -415,6 +416,7 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
             .filter((value): value is string => Boolean(value)),
       scheduledWeekday: asString(rawDay.scheduledWeekday ?? rawDay.scheduled_weekday) ?? "",
       weekNumber: asNumber(rawDay.weekNumber ?? rawDay.week_number) ?? 1,
+      isCompleted: Boolean(rawDay.is_completed ?? rawDay.isCompleted),
     },
     segments: rawSegments.map((item, segmentIndex) => {
       const rawSegment = asObject(item);
