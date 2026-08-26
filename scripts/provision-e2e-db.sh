@@ -3,7 +3,6 @@ set -euo pipefail
 
 required_vars=(
   API_URL
-  ENGINE_KEY
   E2E_EMAIL
   E2E_PASSWORD
   PGHOST
@@ -96,6 +95,11 @@ UPDATE client_profile SET
   anchor_lifts_skipped      = true,
   updated_at                = now()
 WHERE id = '${client_profile_id}';
+
+UPDATE app_user SET
+  subscription_status = 'active',
+  updated_at = now()
+WHERE id = '${user_id}';
 SQL
 
 active_response="$tmp_dir/active-programs.json"
@@ -122,7 +126,7 @@ if [[ -z "$program_id" ]]; then
   anchor_date_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
   generate_body="{\"user_id\":$(json_escape "$user_id"),\"client_profile_id\":$(json_escape "$client_profile_id"),\"programType\":\"strength\",\"anchor_date_ms\":${anchor_date_ms}}"
   generate_response="$tmp_dir/generate.json"
-  status="$(post_json "${API_URL}/generate-plan-v2" "$generate_body" "$generate_response" -H "x-engine-key: ${ENGINE_KEY}")"
+  status="$(post_json "${API_URL}/generate-plan-v2" "$generate_body" "$generate_response" -H "authorization: Bearer ${access_token}")"
 
   if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
     echo "Program generation failed with HTTP ${status}" >&2
