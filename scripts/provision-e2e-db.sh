@@ -98,7 +98,6 @@ WHERE id = '${client_profile_id}';
 
 UPDATE app_user SET
   subscription_status = 'active',
-  trial_expires_at = NULL,
   updated_at = now()
 WHERE id = '${user_id}';
 SQL
