@@ -1,5 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { ApiError, authenticatedFetch } from "./client";
+import { queryClient } from "./queryClient";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
 import { server } from "./__tests__/msw-server";
 import { useSessionStore } from "../state/session/sessionStore";
@@ -12,6 +13,8 @@ vi.mock("./tokenStorage", () => ({
 }));
 
 const API_URL = "http://localhost:3000";
+const TEST_QUERY_KEY = ["some-test-key"] as const;
+const TEST_QUERY_DATA = { fake: true };
 
 function setAuthenticatedSession(): void {
   useSessionStore.setState({
@@ -33,6 +36,18 @@ function expectSessionExpiredRejection(promise: Promise<unknown>): Promise<void>
   } satisfies Partial<ApiError>);
 }
 
+function seedQueryCache(): void {
+  queryClient.setQueryData(TEST_QUERY_KEY, TEST_QUERY_DATA);
+}
+
+function expectQueryCacheCleared(): void {
+  expect(queryClient.getQueryData(TEST_QUERY_KEY)).toBeUndefined();
+}
+
+function expectQueryCachePreserved(): void {
+  expect(queryClient.getQueryData(TEST_QUERY_KEY)).toEqual(TEST_QUERY_DATA);
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   vi.mocked(getAccessToken).mockResolvedValue("access-token-1");
@@ -43,6 +58,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   useSessionStore.getState().clearSession();
+  queryClient.clear();
   vi.clearAllMocks();
   server.resetHandlers();
 });
@@ -50,6 +66,7 @@ afterAll(() => server.close());
 
 describe("authenticatedFetch session expiry handling", () => {
   it("clears auth state when no refresh token is available", async () => {
+    seedQueryCache();
     vi.mocked(getRefreshToken).mockResolvedValue(null);
     server.use(
       http.get(`${API_URL}/api/protected`, () => (
@@ -61,9 +78,11 @@ describe("authenticatedFetch session expiry handling", () => {
 
     expect(clearTokens).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().isAuthenticated).toBe(false);
+    expectQueryCacheCleared();
   });
 
   it("clears auth state when the refresh request fails", async () => {
+    seedQueryCache();
     vi.mocked(getRefreshToken).mockResolvedValue("refresh-token-1");
     server.use(
       http.get(`${API_URL}/api/protected`, () => (
@@ -78,9 +97,11 @@ describe("authenticatedFetch session expiry handling", () => {
 
     expect(clearTokens).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().isAuthenticated).toBe(false);
+    expectQueryCacheCleared();
   });
 
   it("clears auth state when the retried request is still unauthorized", async () => {
+    seedQueryCache();
     let requestCount = 0;
     vi.mocked(getRefreshToken).mockResolvedValue("refresh-token-1");
     server.use(
@@ -104,9 +125,11 @@ describe("authenticatedFetch session expiry handling", () => {
     expect(saveTokens).toHaveBeenCalledWith("access-token-2", "refresh-token-2");
     expect(clearTokens).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().isAuthenticated).toBe(false);
+    expectQueryCacheCleared();
   });
 
   it("keeps auth state unchanged when the first request succeeds", async () => {
+    seedQueryCache();
     server.use(
       http.get(`${API_URL}/api/protected`, () => HttpResponse.json({ ok: true })),
     );
@@ -115,9 +138,11 @@ describe("authenticatedFetch session expiry handling", () => {
 
     expect(clearTokens).not.toHaveBeenCalled();
     expect(useSessionStore.getState().isAuthenticated).toBe(true);
+    expectQueryCachePreserved();
   });
 
   it("does not start refresh flow for non-expiry 401 errors", async () => {
+    seedQueryCache();
     server.use(
       http.get(`${API_URL}/api/protected`, () => (
         HttpResponse.json({ code: "some_other_error" }, { status: 401 })
@@ -133,5 +158,6 @@ describe("authenticatedFetch session expiry handling", () => {
     expect(getRefreshToken).not.toHaveBeenCalled();
     expect(clearTokens).not.toHaveBeenCalled();
     expect(useSessionStore.getState().isAuthenticated).toBe(true);
+    expectQueryCachePreserved();
   });
 });
