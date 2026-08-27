@@ -112,7 +112,7 @@ function formatExerciseSummary(
   return `${prefix} @ ${Number.isFinite(weight) && weight > 0 ? weight : 0} kg ✓`;
 }
 
-export function SegmentCard({
+export const SegmentCard = React.memo(function SegmentCard({
   segment,
   isLogged,
   exerciseSetCounts,
@@ -986,7 +986,7 @@ export function SegmentCard({
       {!isLogged && hasLoggableExercises && !inlineLoggingOpen ? null : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
