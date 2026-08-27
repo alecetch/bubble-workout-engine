@@ -99,6 +99,7 @@ vi.mock("../../physiqueScan", () => ({
   getMilestones: vi.fn(),
   getScans: vi.fn(),
   getScanTrend: vi.fn(),
+  submitScan: vi.fn(),
 }));
 
 describe("api/hooks barrel", () => {
@@ -148,6 +149,7 @@ describe("api/hooks barrel", () => {
       "usePhysiqueCheckIns",
       "useDeleteCheckIn",
       "useDeleteScan",
+      "useSubmitScan",
       "usePhysiqueScans",
       "usePhysiqueScanTrend",
       "usePhysiqueMilestones",
