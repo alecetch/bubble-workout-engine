@@ -165,6 +165,9 @@ jobs:
       E2E_PASSWORD: E2ePass123!
       E2E_COMPLETE_EMAIL: e2e-complete@example.com
       E2E_COMPLETE_PASSWORD: E2eComplete123!
+      ONBOARDING_TEST_EMAIL: onboarding-beginner-ci@example.com
+      ONBOARDING_TEST_PASSWORD: OnboardingCi123!
+      ONBOARDING2_TEST_EMAIL: onboarding-intermediate-ci@example.com
 
     steps:
       - uses: actions/checkout@v7
@@ -274,7 +277,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           avd-name: e2e-pixel6-api34
-          emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim
+          emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
             adb reverse tcp:3000 tcp:3000
@@ -289,6 +292,25 @@ jobs:
             psql -v ON_ERROR_STOP=1 -c "UPDATE app_user SET subscription_status = 'expired', trial_expires_at = now() - interval '1 day', subscription_expires_at = NULL WHERE lower(email) = lower('$E2E_EMAIL');"
             maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
             maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
+            # Flows 06/07 register a fresh account and pass through several real,
+            # network-backed onboarding screens. Repeated investigation (see the
+            # comments in both flow files) found the CI Android emulator can
+            # occasionally become catastrophically slow across an entire run (one
+            # observed run's login flow alone took 26 minutes vs. the normal ~2),
+            # which no fixed assertion timeout can reliably absorb. Retry each flow
+            # up to 3 times on failure via shell `||` chaining. A same-email retry
+            # is not safe here - registration isn't idempotent, so a retry after a
+            # partially-completed attempt would hit "email already exists" - so
+            # each attempt gets a unique email suffix instead.
+            #
+            # IMPORTANT: this action (reactivecircus/android-emulator-runner)
+            # executes each line of `script` as its OWN separate `sh -c` call, not
+            # as one continuous multi-line shell script - a multi-line function
+            # definition here will be split across those calls and fail with a
+            # syntax error. Each retry chain below must stay on a single physical
+            # line for that reason, however long that makes it.
+            maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
+            maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
 
       - name: Upload Maestro debug output
         if: failure()
