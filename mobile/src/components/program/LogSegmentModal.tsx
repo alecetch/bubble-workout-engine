@@ -308,6 +308,14 @@ export function LogSegmentModal({
             {loggableExercises.length > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>ACTUAL</Text>
+                {existingLogsQuery.isError ? (
+                  <View style={styles.prefillErrorRow}>
+                    <Text style={styles.errorText}>Couldn't load your previous sets for this exercise.</Text>
+                    <PressableScale onPress={() => void existingLogsQuery.refetch()}>
+                      <Text style={styles.retryLink}>Retry</Text>
+                    </PressableScale>
+                  </View>
+                ) : null}
                 {loggableExercises.map((ex) => {
                   const key = ex.id ?? "";
                   const sets = inputMap[key] ?? [{ weight: "", reps: "", rirActual: null }];
@@ -825,5 +833,16 @@ const styles = StyleSheet.create({
     color: colors.error ?? "#ef4444",
     ...typography.small,
     textAlign: "center",
+  },
+  prefillErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  retryLink: {
+    color: colors.accent,
+    ...typography.small,
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
 });

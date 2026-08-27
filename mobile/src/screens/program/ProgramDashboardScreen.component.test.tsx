@@ -131,6 +131,7 @@ describe("ProgramDashboardScreen", () => {
     getProgramOverviewMock.mockReset();
     mockZustandSelector(useSessionStoreMock as any, {
       userId: "user-1",
+      activeProgramId: null,
       setActiveProgramId: setActiveProgramIdMock,
     });
     mockZustandSelector(useOnboardingStoreMock as any, { userId: "onboard-user" });
@@ -184,6 +185,34 @@ describe("ProgramDashboardScreen", () => {
   it("renders the program title", () => {
     renderDashboard();
     expect(screen.getByText("Strength Block")).toBeInTheDocument();
+  });
+
+  it("falls back to the active program id when the route omits programId", () => {
+    mockZustandSelector(useSessionStoreMock as any, {
+      userId: "user-1",
+      activeProgramId: "fallback-prog",
+      setActiveProgramId: setActiveProgramIdMock,
+    });
+
+    renderDashboard(undefined, {});
+
+    expect(useProgramOverviewMock).toHaveBeenCalledWith("fallback-prog", { userId: "user-1" });
+    expect(screen.getByText("Strength Block")).toBeInTheDocument();
+    expect(screen.queryByText("Missing program")).not.toBeInTheDocument();
+    expect(setActiveProgramIdMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the missing program guard when no route or active program id is available", () => {
+    mockZustandSelector(useSessionStoreMock as any, {
+      userId: "user-1",
+      activeProgramId: null,
+      setActiveProgramId: setActiveProgramIdMock,
+    });
+
+    renderDashboard(undefined, {});
+
+    expect(screen.getByText("Missing program")).toBeInTheDocument();
+    expect(screen.getByText("No program id was provided for this dashboard view.")).toBeInTheDocument();
   });
 
   it("shows the review prompt when route.params.showReviewPrompt is true", () => {

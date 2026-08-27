@@ -63,7 +63,13 @@ const summary = {
   },
 };
 
-function renderScreen(navigation = { navigate: vi.fn(), goBack: vi.fn(), getParent: vi.fn(() => null) }) {
+function renderScreen(
+  navigation: { navigate: ReturnType<typeof vi.fn>; goBack: ReturnType<typeof vi.fn>; getParent: ReturnType<typeof vi.fn> } = {
+    navigate: vi.fn(),
+    goBack: vi.fn(),
+    getParent: vi.fn(() => null),
+  },
+) {
   render(
     <ProgramCompleteScreen
       route={{ params: { programId: "prog-1" } } as any}
@@ -144,6 +150,25 @@ describe("ProgramCompleteScreen", () => {
     fireEvent.click(screen.getByText("Continue"));
     expect(resetFromProfileMock).toHaveBeenCalled();
     expect(navigation.navigate).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true });
+  });
+
+  it("navigates in-stack when going back to the program", () => {
+    const parentNavigate = vi.fn();
+    const navigation = {
+      navigate: vi.fn(),
+      goBack: vi.fn(),
+      getParent: vi.fn(() => ({ navigate: parentNavigate })),
+    };
+    renderScreen(navigation);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to program" }));
+
+    expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", { programId: "prog-1" });
+    expect(navigation.getParent).not.toHaveBeenCalled();
+    expect(parentNavigate).not.toHaveBeenCalledWith(
+      "ProgramsTab",
+      expect.anything(),
+    );
   });
 
   it("renders personal record highlights", () => {
