@@ -277,7 +277,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           avd-name: e2e-pixel6-api34
-          emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim
+          emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
             adb reverse tcp:3000 tcp:3000
