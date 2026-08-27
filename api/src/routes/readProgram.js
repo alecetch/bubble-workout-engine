@@ -784,28 +784,39 @@ export function createReadProgramHandlers(options = pool) {
       requireUuid(program_day_id, "program_day_id");
 
       let user_id = "";
+      let wasCompleted = false;
       const client = await db.connect();
       try {
         // Accept identity from body (PATCH) or query (fallback).
         user_id = resolveUserId(req);
 
         const r = await client.query(
-          `UPDATE program_day pd
-           SET is_completed = $3
-           FROM program p
-           WHERE pd.id = $1
-             AND p.id = pd.program_id
-             AND p.user_id = $2
-           RETURNING pd.id`,
+          `
+          WITH old AS (
+            SELECT pd.id, pd.is_completed AS was_completed
+            FROM program_day pd
+            JOIN program p ON p.id = pd.program_id
+            WHERE pd.id = $1 AND p.user_id = $2
+          )
+          UPDATE program_day pd
+          SET is_completed = $3
+          FROM program p, old
+          WHERE pd.id = $1
+            AND p.id = pd.program_id
+            AND p.user_id = $2
+            AND pd.id = old.id
+          RETURNING pd.id, old.was_completed
+          `,
           [program_day_id, user_id, Boolean(is_completed)],
         );
 
         if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
+        wasCompleted = Boolean(r.rows[0]?.was_completed);
       } finally {
         client.release();
       }
 
-      if (Boolean(is_completed)) {
+      if (Boolean(is_completed) && !wasCompleted) {
         // Fire-and-forget Layer B backstop. The intended primary trigger remains
         // PATCH /api/day/:program_day_id/complete; this path must never delay the response.
         db.query(
