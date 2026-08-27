@@ -39,6 +39,7 @@ const setWorkoutCompleteMock = vi.mocked(setWorkoutComplete);
 
 function renderFlow(overrides: Partial<Parameters<typeof useDayCompletionFlow>[0]> = {}) {
   const markDayComplete = {
+    isPending: false,
     mutateAsync: vi.fn().mockResolvedValue(undefined),
   } as any;
   const completeProgram = {
@@ -104,6 +105,32 @@ describe("useDayCompletionFlow", () => {
     });
     expect(setWorkoutCompleteMock).toHaveBeenCalledWith("day-1", true);
     expect(params.setWorkoutCompleteState).toHaveBeenCalledWith(true);
+  });
+
+  it("ignores a repeat summary dismiss while day completion is pending", async () => {
+    let resolveMutation: (() => void) | null = null;
+    const markDayComplete = {
+      isPending: false,
+      mutateAsync: vi.fn(() => {
+        markDayComplete.isPending = true;
+        return new Promise<void>((resolve) => {
+          resolveMutation = resolve;
+        });
+      }),
+    } as any;
+    const { result } = renderFlow({ markDayComplete });
+
+    const firstDismiss = act(async () => {
+      const first = result.current.handleSummaryDismiss();
+      await Promise.resolve();
+      await result.current.handleSummaryDismiss();
+      resolveMutation?.();
+      await first;
+    });
+
+    await firstDismiss;
+
+    expect(markDayComplete.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it("navigates to ProgramComplete when lifecycleStatus is completed", async () => {

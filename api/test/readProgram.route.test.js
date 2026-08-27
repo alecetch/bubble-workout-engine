@@ -368,6 +368,39 @@ test("dayComplete returns 200 while Layer B progression runs non-blocking", asyn
   });
 });
 
+test("dayComplete skips Layer B progression when day was already complete", async () => {
+  const calls = [];
+  const progressionDecisionService = {
+    async applyProgressionRecommendations(args) {
+      calls.push(args);
+      return { decisions: [] };
+    },
+  };
+  const handlers = createReadProgramHandlers({
+    db: mockPool([
+      { rowCount: 1, rows: [{ id: VALID_UUID, was_completed: true }] },
+    ]),
+    progressionDecisionService,
+  });
+  const req = {
+    request_id: "t",
+    params: { program_day_id: VALID_UUID },
+    query: {},
+    body: { is_completed: true },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.dayComplete(req, res);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.ok, true);
+  assert.equal(calls.length, 0);
+});
+
 test("dayFull attaches guideline loads when service returns them", async () => {
   const guidelineLoadService = {
     async annotateExercisesWithGuidelineLoads({ exercises }) {
