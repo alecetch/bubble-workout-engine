@@ -161,6 +161,14 @@ appId: com.bubbleworkout.mobile
 - tapOn: "Male"
 - tapOn: "Select age range"
 - tapOn: "25-34"
+# See the matching comment in 06-onboarding-beginner.yaml - height/weight
+# are on a separate "Body metrics" screen, reached via this screen's own
+# "Next" button.
+- tapOn: "Next"
+
+- extendedWaitUntil:
+    visible: "Body metrics"
+    timeout: 30000
 - scrollUntilVisible:
     element:
       text: "e.g. 175"

@@ -173,6 +173,18 @@ appId: com.bubbleworkout.mobile
 - tapOn: "Male"
 - tapOn: "Select age range"
 - tapOn: "25-34"
+# Height/weight are NOT on this screen - they moved to a separate
+# Step4BodyMetricsScreen ("Body metrics", nextLabel="Finish") at some point
+# after this flow was written. The flow's own "Finish" button reference
+# further down is this next screen's button, not this one's - this
+# screen's own advance button is "Next". Missing this transition is why
+# the flow could never find "e.g. 175"/"e.g. 72.5", regardless of how long
+# it scrolled or waited - those fields simply aren't on the Schedule screen.
+- tapOn: "Next"
+
+- extendedWaitUntil:
+    visible: "Body metrics"
+    timeout: 30000
 - scrollUntilVisible:
     element:
       text: "e.g. 175"
