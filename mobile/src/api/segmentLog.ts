@@ -33,29 +33,25 @@ export async function getSegmentExerciseLogs(params: {
   workoutSegmentId: string;
   programDayId: string;
 }): Promise<SegmentLogRow[]> {
-  try {
-    const query = new URLSearchParams();
-    if (params.userId) query.set("user_id", params.userId);
-    query.set("workout_segment_id", params.workoutSegmentId);
-    query.set("program_day_id", params.programDayId);
+  const query = new URLSearchParams();
+  if (params.userId) query.set("user_id", params.userId);
+  query.set("workout_segment_id", params.workoutSegmentId);
+  query.set("program_day_id", params.programDayId);
 
-    const response = await authGetJson<{ rows: unknown[] }>(`/api/segment-log?${query.toString()}`);
-    const rows = Array.isArray(response?.rows) ? response.rows : [];
+  const response = await authGetJson<{ rows: unknown[] }>(`/api/segment-log?${query.toString()}`);
+  const rows = Array.isArray(response?.rows) ? response.rows : [];
 
-    return rows.map((raw) => {
-      const row = raw as Record<string, unknown>;
-      return {
-        id: row.id != null ? String(row.id) : undefined,
-        programExerciseId: String(row.program_exercise_id ?? ""),
-        weightKg: row.weight_kg != null ? Number(row.weight_kg) : null,
-        repsCompleted: row.reps_completed != null ? Number(row.reps_completed) : null,
-        rirActual: row.rir_actual != null ? Number(row.rir_actual) : null,
-        orderIndex: Number(row.order_index ?? 0),
-      };
-    });
-  } catch {
-    return [];
-  }
+  return rows.map((raw) => {
+    const row = raw as Record<string, unknown>;
+    return {
+      id: row.id != null ? String(row.id) : undefined,
+      programExerciseId: String(row.program_exercise_id ?? ""),
+      weightKg: row.weight_kg != null ? Number(row.weight_kg) : null,
+      repsCompleted: row.reps_completed != null ? Number(row.reps_completed) : null,
+      rirActual: row.rir_actual != null ? Number(row.rir_actual) : null,
+      orderIndex: Number(row.order_index ?? 0),
+    };
+  });
 }
 
 export async function saveSegmentExerciseLogs(

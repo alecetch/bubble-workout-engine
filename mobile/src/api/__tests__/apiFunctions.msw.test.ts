@@ -4,6 +4,7 @@ import { getAccountInfo } from "../accountApi";
 import { getEntitlement } from "../entitlement";
 import { getMe, linkClientProfileToMe } from "../me";
 import { getNotificationPreferences } from "../notifications";
+import { getSegmentExerciseLogs } from "../segmentLog";
 import { server } from "./msw-server";
 
 vi.mock("../tokenStorage", () => ({
@@ -252,6 +253,24 @@ describe("API function HTTP integration", () => {
       await fetchActivePrograms();
 
       expect(capturedAuth).toBe("Bearer test-access-token");
+    });
+  });
+
+  describe("getSegmentExerciseLogs", () => {
+    it("rejects when segment-log fetch fails", async () => {
+      server.use(
+        http.get(`${API_URL}/api/segment-log`, () =>
+          HttpResponse.json({ error: "failed" }, { status: 500 }),
+        ),
+      );
+
+      await expect(
+        getSegmentExerciseLogs({
+          userId: "user-1",
+          workoutSegmentId: "segment-1",
+          programDayId: "day-1",
+        }),
+      ).rejects.toMatchObject({ status: 500 });
     });
   });
 });
