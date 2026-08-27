@@ -292,8 +292,33 @@ jobs:
             psql -v ON_ERROR_STOP=1 -c "UPDATE app_user SET subscription_status = 'expired', trial_expires_at = now() - interval '1 day', subscription_expires_at = NULL WHERE lower(email) = lower('$E2E_EMAIL');"
             maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
             maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
-            maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="$ONBOARDING_TEST_EMAIL" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
-            maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING_TEST_EMAIL="$ONBOARDING_TEST_EMAIL" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" -e ONBOARDING2_TEST_EMAIL="$ONBOARDING2_TEST_EMAIL" --no-ansi
+            # Flows 06/07 register a fresh account and pass through several real,
+            # network-backed onboarding screens. Repeated investigation (see the
+            # comments in both flow files) found the CI Android emulator can
+            # occasionally become catastrophically slow across an entire run (one
+            # observed run's login flow alone took 26 minutes vs. the normal ~2),
+            # which no fixed assertion timeout can reliably absorb. Retry each flow
+            # up to 3 times on failure. A same-email retry is not safe here -
+            # registration isn't idempotent, so a retry after a partially-completed
+            # attempt would hit "email already exists" - so each attempt gets a
+            # unique email suffix instead.
+            run_onboarding_flow() {
+              local flow_file="$1"
+              local email_var_name="$2"
+              local base_email="$3"
+              shift 3
+              local attempt
+              for attempt in 1 2 3; do
+                if maestro test "$flow_file" -e "${email_var_name}=${base_email}-r${attempt}" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" "$@" --no-ansi; then
+                  return 0
+                fi
+                echo "::warning::$flow_file failed on attempt $attempt/3"
+              done
+              echo "::error::$flow_file failed after 3 attempts"
+              return 1
+            }
+            run_onboarding_flow mobile/.maestro/06-onboarding-beginner.yaml ONBOARDING_TEST_EMAIL "$ONBOARDING_TEST_EMAIL"
+            run_onboarding_flow mobile/.maestro/07-onboarding-intermediate.yaml ONBOARDING2_TEST_EMAIL "$ONBOARDING2_TEST_EMAIL"
 
       - name: Upload Maestro debug output
         if: failure()
