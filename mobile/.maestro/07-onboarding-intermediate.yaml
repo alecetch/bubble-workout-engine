@@ -152,7 +152,7 @@ appId: com.bubbleworkout.mobile
 - tapOn: "Continue"
 
 - extendedWaitUntil:
-    visible: "Schedule and metrics"
+    visible: "Schedule"
     timeout: 30000
 - tapOn: "Mon"
 - tapOn: "Choose duration"
