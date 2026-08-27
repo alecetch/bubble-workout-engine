@@ -27,11 +27,6 @@ export function ProgramEndCheckScreen({ route, navigation }: Props): React.JSX.E
   const completeProgram = useCompleteProgram();
 
   function goToProgramDashboard(): void {
-    const parent = navigation.getParent() as any;
-    if (parent) {
-      parent.navigate("ProgramsTab", { screen: "ProgramDashboard", params: { programId } });
-      return;
-    }
     (navigation as any).navigate("ProgramDashboard", { programId });
   }
 
