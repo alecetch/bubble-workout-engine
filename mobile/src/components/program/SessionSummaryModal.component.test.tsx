@@ -69,4 +69,16 @@ describe("SessionSummaryModal", () => {
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it("disables Done while submitting", () => {
+    const onDismiss = vi.fn();
+
+    render(<SessionSummaryModal {...defaultProps({ isSubmitting: true, onDismiss })} />);
+
+    const doneButton = screen.getByRole("button", { name: "Done" });
+    expect(doneButton).toBeDisabled();
+
+    fireEvent.click(doneButton);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
 });

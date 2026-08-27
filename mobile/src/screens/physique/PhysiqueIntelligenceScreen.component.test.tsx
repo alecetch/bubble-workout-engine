@@ -2,21 +2,18 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as ImagePicker from "expo-image-picker";
+import { Alert } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useEntitlement, usePhysiqueScans } from "../../api/hooks";
+import { useEntitlement, usePhysiqueScans, useSubmitScan } from "../../api/hooks";
 import { ApiError } from "../../api/client";
 import { recordConsent } from "../../api/physique";
-import { submitScan } from "../../api/physiqueScan";
 import { captureAndShare } from "../../components/physique/PhysiqueShareCard";
 import { PhysiqueIntelligenceScreen } from "./PhysiqueIntelligenceScreen";
 
 vi.mock("../../api/hooks", () => ({
   useEntitlement: vi.fn(),
   usePhysiqueScans: vi.fn(),
-}));
-
-vi.mock("../../api/physiqueScan", () => ({
-  submitScan: vi.fn(),
+  useSubmitScan: vi.fn(),
 }));
 
 vi.mock("../../api/physique", () => ({
@@ -41,6 +38,7 @@ vi.mock("expo-image-picker", () => ({
   launchImageLibraryAsync: vi.fn(),
   launchCameraAsync: vi.fn(),
   requestCameraPermissionsAsync: vi.fn().mockResolvedValue({ granted: true }),
+  requestMediaLibraryPermissionsAsync: vi.fn().mockResolvedValue({ granted: true }),
   MediaTypeOptions: { Images: "images" },
   UIImagePickerControllerQualityType: {},
 }));
@@ -80,13 +78,17 @@ const SCAN_RESULT_FIXTURE = {
 };
 
 const mockRefetch = vi.fn();
+const submitScanMutateAsyncMock = vi.fn();
 const useEntitlementMock = vi.mocked(useEntitlement);
 const usePhysiqueScansMock = vi.mocked(usePhysiqueScans);
+const useSubmitScanMock = vi.mocked(useSubmitScan);
 const launchImageLibraryAsyncMock = vi.mocked(ImagePicker.launchImageLibraryAsync);
 const launchCameraAsyncMock = vi.mocked(ImagePicker.launchCameraAsync);
-const submitScanMock = vi.mocked(submitScan);
+const requestMediaLibraryPermissionsAsyncMock = vi.mocked(ImagePicker.requestMediaLibraryPermissionsAsync);
+const requestCameraPermissionsAsyncMock = vi.mocked(ImagePicker.requestCameraPermissionsAsync);
 const recordConsentMock = vi.mocked(recordConsent);
 const captureAndShareMock = vi.mocked(captureAndShare);
+const alertSpy = vi.spyOn(Alert, "alert");
 
 function renderScreen() {
   const mockParentNavigate = vi.fn();
@@ -107,6 +109,7 @@ function renderScreen() {
 }
 
 async function advanceToPreview() {
+  requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
   launchImageLibraryAsyncMock.mockResolvedValue({
     canceled: false,
     assets: [{ uri: "file:///tmp/photo.jpg" }],
@@ -120,7 +123,9 @@ async function advanceToPreview() {
 describe("PhysiqueIntelligenceScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    alertSpy.mockImplementation(() => {});
     mockRefetch.mockReset().mockResolvedValue(undefined);
+    submitScanMutateAsyncMock.mockReset().mockResolvedValue(SCAN_RESULT_FIXTURE);
 
     useEntitlementMock.mockReturnValue({
       data: { subscription_status: "active" },
@@ -137,9 +142,15 @@ describe("PhysiqueIntelligenceScreen", () => {
       error: null,
       refetch: mockRefetch,
     } as any);
+    useSubmitScanMock.mockReturnValue({
+      mutateAsync: submitScanMutateAsyncMock,
+      isPending: false,
+      isError: false,
+    } as any);
+    requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
+    requestCameraPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
     launchImageLibraryAsyncMock.mockResolvedValue({ canceled: true } as any);
     launchCameraAsyncMock.mockResolvedValue({ canceled: true } as any);
-    submitScanMock.mockResolvedValue(SCAN_RESULT_FIXTURE as any);
   });
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
@@ -159,6 +170,7 @@ describe("PhysiqueIntelligenceScreen", () => {
   });
 
   it("library picker returning an image transitions to preview phase", async () => {
+    requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
     launchImageLibraryAsyncMock.mockResolvedValue({
       canceled: false,
       assets: [{ uri: "file:///tmp/photo.jpg" }],
@@ -183,8 +195,40 @@ describe("PhysiqueIntelligenceScreen", () => {
     expect(screen.getByText("Take photo")).toBeInTheDocument();
   });
 
-  it("Analyse button transitions to uploading phase with activity indicator", async () => {
-    submitScanMock.mockImplementation(() => new Promise(() => {}));
+  it("shows an alert when photo library permission is denied", async () => {
+    requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: false } as any);
+
+    renderScreen();
+    fireEvent.click(screen.getByText("Choose from library"));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Photo library access required",
+        "Allow photo library access in Settings to choose a photo.",
+      );
+    });
+    expect(launchImageLibraryAsyncMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Analyse")).not.toBeInTheDocument();
+  });
+
+  it("shows an alert when opening the photo library fails", async () => {
+    requestMediaLibraryPermissionsAsyncMock.mockResolvedValue({ granted: true } as any);
+    launchImageLibraryAsyncMock.mockRejectedValue(new Error("library failed"));
+
+    renderScreen();
+    fireEvent.click(screen.getByText("Choose from library"));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Error",
+        "Could not open photo library. Please try again.",
+      );
+    });
+    expect(screen.queryByText("Analyse")).not.toBeInTheDocument();
+  });
+
+  it("Analyse button remains in uploading phase while submit mutation is paused", async () => {
+    submitScanMutateAsyncMock.mockImplementation(() => new Promise(() => {}));
 
     await advanceToPreview();
     fireEvent.click(screen.getByText("Analyse"));
@@ -192,19 +236,21 @@ describe("PhysiqueIntelligenceScreen", () => {
     expect(await screen.findByText("Analysing your physique...")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
     expect(screen.queryByText("Analyse")).not.toBeInTheDocument();
+    expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument();
   });
 
-  it("successful submitScan transitions to result phase with score", async () => {
+  it("successful submit scan mutation transitions to result phase with score", async () => {
     await advanceToPreview();
     fireEvent.click(screen.getByText("Analyse"));
 
     expect(await screen.findByText("74.0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share progress" })).toBeInTheDocument();
     expect(mockRefetch).toHaveBeenCalledTimes(1);
+    expect(submitScanMutateAsyncMock).toHaveBeenCalledWith("file:///tmp/photo.jpg");
   });
 
   it("422 response from submitScan transitions to low_quality phase", async () => {
-    submitScanMock.mockRejectedValue(new ApiError(422, "low quality"));
+    submitScanMutateAsyncMock.mockRejectedValue(new ApiError(422, "low quality"));
 
     await advanceToPreview();
     fireEvent.click(screen.getByText("Analyse"));
@@ -214,7 +260,7 @@ describe("PhysiqueIntelligenceScreen", () => {
   });
 
   it("pressing Try a different photo in low_quality returns to picker phase", async () => {
-    submitScanMock.mockRejectedValue(new ApiError(422, "low quality"));
+    submitScanMutateAsyncMock.mockRejectedValue(new ApiError(422, "low quality"));
 
     await advanceToPreview();
     fireEvent.click(screen.getByText("Analyse"));
@@ -226,7 +272,7 @@ describe("PhysiqueIntelligenceScreen", () => {
   });
 
   it("generic error from submitScan transitions to error phase", async () => {
-    submitScanMock.mockRejectedValue(new Error("Network error"));
+    submitScanMutateAsyncMock.mockRejectedValue(new Error("Network error"));
 
     await advanceToPreview();
     fireEvent.click(screen.getByText("Analyse"));
@@ -241,7 +287,7 @@ describe("PhysiqueIntelligenceScreen", () => {
       canceled: false,
       assets: [{ uri: "file:///tmp/photo.jpg" }],
     } as any);
-    submitScanMock.mockRejectedValue(new ApiError(402, "payment required"));
+    submitScanMutateAsyncMock.mockRejectedValue(new ApiError(402, "payment required"));
 
     fireEvent.click(screen.getByText("Choose from library"));
     await screen.findByText("Analyse");

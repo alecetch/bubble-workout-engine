@@ -13,8 +13,8 @@ import Svg, { Circle, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { captureAndShare, PhysiqueShareCard } from "../../components/physique/PhysiqueShareCard";
-import { useEntitlement, usePhysiqueScans } from "../../api/hooks";
-import { submitScan, type ScanResult } from "../../api/physiqueScan";
+import { useEntitlement, usePhysiqueScans, useSubmitScan } from "../../api/hooks";
+import { type ScanResult } from "../../api/physiqueScan";
 import { recordConsent } from "../../api/physique";
 import { ApiError } from "../../api/client";
 import type { HistoryStackParamList } from "../../navigation/HistoryStackNavigator";
@@ -63,6 +63,7 @@ function getDeltaTone(delta: number | null) {
 export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Element {
   const entitlementQuery = useEntitlement();
   const scansQuery = usePhysiqueScans(12);
+  const submitScanMutation = useSubmitScan();
   const [state, setState] = React.useState<ScreenState>({ phase: "picker" });
   const lastResultRef = React.useRef<ScanResult | null>(null);
 
@@ -98,18 +99,33 @@ export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Ele
       }
     }
 
-    const result = mode === "camera"
-      ? await ImagePicker.launchCameraAsync({
-          allowsEditing: true,
-          aspect: [3, 4],
-          quality: 0.8,
-        })
-      : await ImagePicker.launchImageLibraryAsync({
+    if (mode === "library") {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Photo library access required", "Allow photo library access in Settings to choose a photo.");
+        return;
+      }
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
           aspect: [3, 4],
           quality: 0.8,
         });
+        if (!result.canceled && result.assets[0]) {
+          setState({ phase: "preview", photoUri: result.assets[0].uri });
+        }
+      } catch {
+        Alert.alert("Error", "Could not open photo library. Please try again.");
+      }
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [3, 4],
+      quality: 0.8,
+    });
 
     if (!result.canceled && result.assets[0]) {
       setState({ phase: "preview", photoUri: result.assets[0].uri });
@@ -119,7 +135,7 @@ export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Ele
   const handleAnalyse = React.useCallback(async (photoUri: string) => {
     setState({ phase: "uploading" });
     try {
-      const result = await submitScan(photoUri);
+      const result = await submitScanMutation.mutateAsync(photoUri);
       lastResultRef.current = result;
       await scansQuery.refetch();
       setState({ phase: "result", photoUri, result });
@@ -141,7 +157,7 @@ export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Ele
         message: error instanceof Error ? error.message : "Unable to analyse your scan.",
       });
     }
-  }, [scansQuery]);
+  }, [scansQuery, submitScanMutation]);
 
   const handleShare = React.useCallback(async (result: ScanResult) => {
     try {
