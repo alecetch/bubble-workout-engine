@@ -15,6 +15,8 @@ import {
   getMilestones,
   getScans,
   getScanTrend,
+  submitScan,
+  type ScanResult,
 } from "../physiqueScan";
 import { queryKeys } from "./shared";
 
@@ -45,6 +47,12 @@ export function useDeleteScan(): UseMutationResult<{ ok: boolean }, Error, strin
       void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueScanTrend });
       void queryClient.invalidateQueries({ queryKey: queryKeys.physiqueMilestones });
     },
+  });
+}
+
+export function useSubmitScan(): UseMutationResult<ScanResult, Error, string> {
+  return useMutation({
+    mutationFn: submitScan,
   });
 }
 
