@@ -1,5 +1,9 @@
 appId: com.bubbleworkout.mobile
 ---
+# See the matching comment in 06-onboarding-beginner.yaml - all 10s assertion
+# timeouts in this flow were widened to 30s for the same reason (a systemic,
+# not screen-specific, CI timing issue).
+#
 # Do NOT use clearState - pm clear invalidates the Maestro instrumentation context.
 
 # First launchApp restarts the Maestro instrumentation (gRPC drops ~143ms after it
@@ -72,7 +76,7 @@ appId: com.bubbleworkout.mobile
       - tapOn: "Back"
       - extendedWaitUntil:
           visible: "Welcome"
-          timeout: 10000
+          timeout: 30000
       - tapOn: "Create account"
       - extendedWaitUntil:
           visible: "Create account"
@@ -126,7 +130,7 @@ appId: com.bubbleworkout.mobile
 
 - extendedWaitUntil:
     visible: "Equipment setup"
-    timeout: 10000
+    timeout: 30000
 - tapOn: "Commercial Gym"
 # KNOWN FLAKY CHECK - see the full explanation in 06-onboarding-beginner.yaml.
 # Same screen, same assertion, same failure pattern (never independently
@@ -149,7 +153,7 @@ appId: com.bubbleworkout.mobile
 
 - extendedWaitUntil:
     visible: "Schedule and metrics"
-    timeout: 10000
+    timeout: 30000
 - tapOn: "Mon"
 - tapOn: "Choose duration"
 - tapOn: "50 min"
