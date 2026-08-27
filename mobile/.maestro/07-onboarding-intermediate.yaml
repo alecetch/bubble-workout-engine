@@ -148,6 +148,15 @@ appId: com.bubbleworkout.mobile
 - extendedWaitUntil:
     visible: "Help us calibrate your first workout"
     timeout: 15000
+# The title renders before the rest of this screen has necessarily finished
+# settling (this screen surfaces exercise suggestions - Barbell Back Squat/
+# Deadlift/Bench Press in the failure screenshots - that may still be
+# populating). A bare tapOn has no explicit wait of its own, unlike
+# extendedWaitUntil, so give the actual tap target its own wait first
+# rather than relying on the title's wait to cover the whole screen.
+- extendedWaitUntil:
+    visible: "Skip this step"
+    timeout: 30000
 - tapOn: "Skip this step"
 - tapOn: "Continue"
 
