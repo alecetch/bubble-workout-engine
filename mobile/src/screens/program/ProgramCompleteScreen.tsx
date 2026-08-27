@@ -191,12 +191,7 @@ export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.E
   }
 
   function handleBackToProgram(): void {
-    const parent = navigation.getParent() as any;
-    if (parent) {
-      parent.navigate("ProgramsTab", { screen: "ProgramDashboard", params: { programId } });
-      return;
-    }
-    navigation.goBack();
+    (navigation as any).navigate("ProgramDashboard", { programId });
   }
 
   function handleContinue(): void {
