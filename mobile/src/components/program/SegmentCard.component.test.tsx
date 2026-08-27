@@ -18,6 +18,10 @@ const { impactAsyncMock } = vi.hoisted(() => ({
   impactAsyncMock: vi.fn(),
 }));
 
+const { getSegmentPresentationMock } = vi.hoisted(() => ({
+  getSegmentPresentationMock: vi.fn(),
+}));
+
 const mutateAsyncMock = vi.fn().mockResolvedValue({ saved: 1, prs: [] });
 const initEntryMock = vi.fn();
 const startRestMock = vi.fn();
@@ -33,6 +37,15 @@ vi.mock("../../api/hooks", () => ({
     mutateAsync: mutateAsyncMock,
   }),
 }));
+
+vi.mock("./segmentCardLogic", async () => {
+  const actual = await vi.importActual<typeof import("./segmentCardLogic")>("./segmentCardLogic");
+  getSegmentPresentationMock.mockImplementation(actual.getSegmentPresentation);
+  return {
+    ...actual,
+    getSegmentPresentation: getSegmentPresentationMock,
+  };
+});
 
 vi.mock("../../state/timer/useTimerStore", () => ({
   useTimerStore: vi.fn(),
@@ -113,6 +126,7 @@ describe("SegmentCard", () => {
     stopRestMock.mockClear();
     adjustRestDurationMock.mockClear();
     impactAsyncMock.mockClear();
+    getSegmentPresentationMock.mockClear();
     useSettingsStore.setState({ showRestTimer: true, hydrated: true });
     setMockTimerState();
   });
@@ -120,6 +134,34 @@ describe("SegmentCard", () => {
   it("renders Start Exercise for loadable segments", () => {
     renderCard();
     expect(screen.getByText("Start Exercise")).toBeInTheDocument();
+  });
+
+  it("skips unchanged parent rerenders but updates when logged state changes", () => {
+    const segment = makeSegment();
+    const props: Partial<React.ComponentProps<typeof SegmentCard>> = {
+      segment,
+      onAllSetsSaved: vi.fn(),
+      onInlinePanelClose: vi.fn(),
+      onInlinePanelOpen: vi.fn(),
+      onPrsDetected: vi.fn(),
+      onRequestSwap: vi.fn(),
+      onSubscriptionRequired: vi.fn(),
+      onViewExerciseDetail: vi.fn(),
+    };
+    function Harness({ isLogged, tick }: { isLogged: boolean; tick: number }) {
+      void tick;
+      return segmentCardElement({ ...props, isLogged });
+    }
+
+    const { rerender } = render(<Harness isLogged={false} tick={0} />);
+    expect(getSegmentPresentationMock).toHaveBeenCalledTimes(1);
+
+    getSegmentPresentationMock.mockClear();
+    rerender(<Harness isLogged={false} tick={1} />);
+    expect(getSegmentPresentationMock).not.toHaveBeenCalled();
+
+    rerender(<Harness isLogged={true} tick={1} />);
+    expect(getSegmentPresentationMock).toHaveBeenCalledTimes(1);
   });
 
   it("navigates to exercise detail when the exercise name is tapped", () => {

@@ -46,6 +46,18 @@ function toWeekdayPlural(raw: string | null | undefined): string {
   return WEEKDAY_LABELS[raw] ?? `${raw}s`;
 }
 
+function computeExerciseSetCounts(rows: SaveSegmentLogPayload["rows"]): Record<string, number> {
+  return rows.reduce<Record<string, number>>((acc, row) => {
+    const hasSavedData =
+      row.weightKg != null ||
+      row.repsCompleted != null ||
+      row.rirActual != null;
+    if (!hasSavedData || !row.programExerciseId) return acc;
+    acc[row.programExerciseId] = (acc[row.programExerciseId] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
 export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Element {
   const { programDayId } = route.params;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
@@ -174,12 +186,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     }
   }
 
-  function handleViewExerciseDetail(
+  const handleViewExerciseDetail = useCallback((
     exerciseId: string,
     programExerciseId: string,
     exerciseName: string,
     exercise: Segment["exercises"][number],
-  ): void {
+  ): void => {
     navigation.navigate("ExerciseDetail", {
       exerciseId,
       programExerciseId,
@@ -192,21 +204,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       guidelineLoadJson: exercise.guidelineLoad ? JSON.stringify(exercise.guidelineLoad) : null,
       adaptationDecisionJson: exercise.adaptationDecision ? JSON.stringify(exercise.adaptationDecision) : null,
     });
-  }
+  }, [navigation]);
 
-  function computeExerciseSetCounts(rows: SaveSegmentLogPayload["rows"]): Record<string, number> {
-    return rows.reduce<Record<string, number>>((acc, row) => {
-      const hasSavedData =
-        row.weightKg != null ||
-        row.repsCompleted != null ||
-        row.rirActual != null;
-      if (!hasSavedData || !row.programExerciseId) return acc;
-      acc[row.programExerciseId] = (acc[row.programExerciseId] ?? 0) + 1;
-      return acc;
-    }, {});
-  }
-
-  function handleAllSetsSaved(segmentId: string): void {
+  const handleAllSetsSaved = useCallback((segmentId: string): void => {
     void (async () => {
       const rows = await queryClient.fetchQuery({
         queryKey: queryKeys.segmentExerciseLogs(segmentId, programDayId),
@@ -235,7 +235,24 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       setSegmentLogRows((current) => ({ ...current, [segmentId]: normalizedRows }));
       await setSegmentLog(programDayId, segmentId, { exerciseSetCounts });
     })();
-  }
+  }, [programDayId, queryClient, setSegmentLogRows, setSegmentLogs, userId]);
+
+  const handleSubscriptionRequired = useCallback(() => {
+    const parent = navigation.getParent();
+    parent?.navigate("HomeTab", { screen: "Paywall" } as never);
+  }, [navigation]);
+
+  const handleInlinePanelOpen = useCallback((pageY: number) => {
+    const targetScreenY = 100;
+    const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
+    scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
+  }, []);
+
+  const handleInlinePanelClose = useCallback((pageY: number) => {
+    const targetScreenY = 80;
+    const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
+    scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
+  }, []);
 
   if (dayQuery.isLoading) {
     return (
@@ -346,22 +363,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             onViewExerciseDetail={handleViewExerciseDetail}
             onRequestSwap={openSwapSheet}
             onAllSetsSaved={handleAllSetsSaved}
-            onSubscriptionRequired={() => {
-              const parent = navigation.getParent();
-              parent?.navigate("HomeTab", { screen: "Paywall" } as never);
-            }}
+            onSubscriptionRequired={handleSubscriptionRequired}
             onPrsDetected={handlePrsDetected}
             onExerciseCompleteChange={refreshExerciseCompletion}
-            onInlinePanelOpen={(pageY) => {
-              const targetScreenY = 100;
-              const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
-              scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
-            }}
-            onInlinePanelClose={(pageY) => {
-              const targetScreenY = 80;
-              const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
-              scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
-            }}
+            onInlinePanelOpen={handleInlinePanelOpen}
+            onInlinePanelClose={handleInlinePanelClose}
           />
         ))}
       </ScrollView>
