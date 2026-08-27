@@ -298,27 +298,19 @@ jobs:
             # occasionally become catastrophically slow across an entire run (one
             # observed run's login flow alone took 26 minutes vs. the normal ~2),
             # which no fixed assertion timeout can reliably absorb. Retry each flow
-            # up to 3 times on failure. A same-email retry is not safe here -
-            # registration isn't idempotent, so a retry after a partially-completed
-            # attempt would hit "email already exists" - so each attempt gets a
-            # unique email suffix instead.
-            run_onboarding_flow() {
-              local flow_file="$1"
-              local email_var_name="$2"
-              local base_email="$3"
-              shift 3
-              local attempt
-              for attempt in 1 2 3; do
-                if maestro test "$flow_file" -e "${email_var_name}=${base_email}-r${attempt}" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" "$@" --no-ansi; then
-                  return 0
-                fi
-                echo "::warning::$flow_file failed on attempt $attempt/3"
-              done
-              echo "::error::$flow_file failed after 3 attempts"
-              return 1
-            }
-            run_onboarding_flow mobile/.maestro/06-onboarding-beginner.yaml ONBOARDING_TEST_EMAIL "$ONBOARDING_TEST_EMAIL"
-            run_onboarding_flow mobile/.maestro/07-onboarding-intermediate.yaml ONBOARDING2_TEST_EMAIL "$ONBOARDING2_TEST_EMAIL"
+            # up to 3 times on failure via shell `||` chaining. A same-email retry
+            # is not safe here - registration isn't idempotent, so a retry after a
+            # partially-completed attempt would hit "email already exists" - so
+            # each attempt gets a unique email suffix instead.
+            #
+            # IMPORTANT: this action (reactivecircus/android-emulator-runner)
+            # executes each line of `script` as its OWN separate `sh -c` call, not
+            # as one continuous multi-line shell script - a multi-line function
+            # definition here will be split across those calls and fail with a
+            # syntax error. Each retry chain below must stay on a single physical
+            # line for that reason, however long that makes it.
+            maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
+            maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
 
       - name: Upload Maestro debug output
         if: failure()
