@@ -1,12 +1,13 @@
 import "react-native-gesture-handler";
 import React from "react";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { Platform } from "react-native";
+import { queryClient } from "./src/api/queryClient";
 import { AuthNavigator } from "./src/navigation/AuthNavigator";
 import { AppTabs } from "./src/navigation/AppTabs";
 import { ErrorBoundary } from "./src/components/system/ErrorBoundary";
@@ -29,15 +30,6 @@ import { logger } from "./src/utils/logger";
 
 initCrashReporting();
 initNetworkMonitoring();
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000,
-      retry: 1,
-    },
-  },
-});
 
 // Notification tap-through handling is off by default because of an unresolved
 // native HostFunction failure (see docs/specs/mobile-notification-tap-through-decision-spec.md).

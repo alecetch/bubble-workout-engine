@@ -1,4 +1,5 @@
 import { API_BASE_URL, ENGINE_KEY } from "./config";
+import { queryClient } from "./queryClient";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
 import { useSessionStore } from "../state/session/sessionStore";
 import { logger } from "../utils/logger";
@@ -15,6 +16,7 @@ const apiDiagnostics: ApiDiagnostics = {
 
 function handleSessionExpired(): void {
   useSessionStore.getState().clearSession();
+  queryClient.clear();
 }
 
 export class ApiError extends Error {
