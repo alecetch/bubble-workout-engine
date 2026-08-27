@@ -128,14 +128,21 @@ appId: com.bubbleworkout.mobile
     visible: "Equipment setup"
     timeout: 10000
 - tapOn: "Commercial Gym"
-# 20s wasn't enough either (failed at 20.4s on a second CI run) - both failures'
-# debug screenshots proved the correct content ("24 items included") had rendered
-# moments after the assertion gave up, so this isn't an app bug. The CI runner
-# shares limited CPU across the Android emulator, Metro, the API server, and
-# Postgres at once (the same run showed emulator distress: "Failed to find
-# ColorBuffer", adb daemon connection errors) - a real but slow network round
-# trip to GET /equipment-items can plausibly stall well past 20s under that
-# contention. Widening generously rather than re-guessing a second small bump.
+# Four straight CI failures on this exact assertion (at 10s, 20.4s, 45s, and
+# 45s-with-swiftshader-GPU) all showed the same shape: the failure debug
+# screenshot, taken ~200-400ms after the assertion gives up, always shows the
+# correct content ("24 items included") already rendered. A real 5x-varying
+# fetch time wouldn't explain that; the app/data side is fine every time.
+# "Failed to find ColorBuffer" errors appear in every one of those runs
+# (independent of GPU backend), which is specifically about the emulator's
+# frame-compositing path, not 3D acceleration - a plausible read is that the
+# already-correct native frame isn't being flushed to whatever the continuous
+# UIAutomator hierarchy poll reads, while an explicit screenshot capture goes
+# through a path that does flush it (matching every observed failure
+# screenshot being correct). Forcing an explicit takeScreenshot here is a
+# cheap, harmless (doesn't touch scroll position or app state) way to test
+# that theory before the real assertion runs.
+- takeScreenshot: equipment-preset-loaded
 - extendedWaitUntil:
     visible: "items included"
     timeout: 45000

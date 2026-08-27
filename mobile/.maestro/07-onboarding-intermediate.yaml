@@ -129,7 +129,8 @@ appId: com.bubbleworkout.mobile
     timeout: 10000
 - tapOn: "Commercial Gym"
 # See the matching comment in 06-onboarding-beginner.yaml - same screen, same
-# CI-runner-contention timing issue, same fix.
+# failure pattern, same experimental fix.
+- takeScreenshot: equipment-preset-loaded
 - extendedWaitUntil:
     visible: "items included"
     timeout: 45000
