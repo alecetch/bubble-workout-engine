@@ -25,6 +25,7 @@ type SessionSummaryModalProps = {
   prE1rmKg?: number | null;
   streakDays: number;
   adaptedExercises?: Array<{ name: string; displayChip: string }>;
+  isSubmitting?: boolean;
   onDismiss: () => void;
 };
 
@@ -37,6 +38,7 @@ export function SessionSummaryModal({
   prE1rmKg,
   streakDays,
   adaptedExercises = [],
+  isSubmitting = false,
   onDismiss,
 }: SessionSummaryModalProps): React.JSX.Element {
   const prCardRef = useRef<View>(null);
@@ -126,7 +128,7 @@ export function SessionSummaryModal({
 
             <Text style={styles.streakText}>{streakCopy(streakDays)}</Text>
 
-            <PressableScale style={styles.doneButton} onPress={onDismiss}>
+            <PressableScale style={styles.doneButton} onPress={onDismiss} disabled={isSubmitting}>
               <Text style={styles.doneLabel}>Done</Text>
             </PressableScale>
           </View>
