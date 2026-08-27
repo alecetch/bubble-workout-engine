@@ -41,7 +41,9 @@ function shallowEqualRecord(
 }
 
 export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.Element {
-  const programId = route.params?.programId ?? null;
+  const routeProgramId = route.params?.programId ?? null;
+  const activeProgramId = useSessionStore((state) => state.activeProgramId);
+  const programId = routeProgramId ?? activeProgramId ?? null;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
   const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
@@ -49,10 +51,10 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (programId) {
-      setActiveProgramId(programId);
+    if (routeProgramId) {
+      setActiveProgramId(routeProgramId);
     }
-  }, [programId, setActiveProgramId]);
+  }, [routeProgramId, setActiveProgramId]);
 
   // ── UI state (user interactions only) ────────────────────────────────────
   //
