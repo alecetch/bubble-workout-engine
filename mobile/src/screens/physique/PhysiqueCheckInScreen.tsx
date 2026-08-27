@@ -80,14 +80,23 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
   };
 
   const pickFromLibrary = async (): Promise<void> => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setState({ phase: "preview", photoUri: result.assets[0].uri });
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Photo library access required", "Allow photo library access in Settings to choose a photo.");
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setState({ phase: "preview", photoUri: result.assets[0].uri });
+      }
+    } catch {
+      Alert.alert("Error", "Could not open photo library. Please try again.");
     }
   };
 
