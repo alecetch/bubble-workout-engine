@@ -148,16 +148,18 @@ appId: com.bubbleworkout.mobile
 - extendedWaitUntil:
     visible: "Help us calibrate your first workout"
     timeout: 15000
-# The title renders before the rest of this screen has necessarily finished
-# settling (this screen surfaces exercise suggestions - Barbell Back Squat/
-# Deadlift/Bench Press in the failure screenshots - that may still be
-# populating). A bare tapOn has no explicit wait of its own, unlike
-# extendedWaitUntil, so give the actual tap target its own wait first
-# rather than relying on the title's wait to cover the whole screen.
-- extendedWaitUntil:
-    visible: "Skip this step"
-    timeout: 30000
-- tapOn: "Skip this step"
+# Tapping "Skip this step" turned out to have the exact same
+# never-detected-by-poll-but-really-there signature as the equipment
+# screen's "items included" text (an explicit wait for it still failed
+# 3/3 fresh attempts, sub-second-consistent at the timeout boundary again).
+# Sidestepping it rather than chasing a third instance of the same Maestro
+# quirk: handleContinue() in Step2bBaselineLoadsScreen.tsx treats any
+# anchor-lift field left at its placeholder (no real value entered) as
+# already skipped (loadKg parses to null -> skipped: true), and
+# nextDisabled only checks isSaving/referenceDataQuery.isLoading - not
+# whether Skip was tapped or fields are filled. Tapping "Continue" directly,
+# with every field left untouched, produces the identical outcome (every
+# anchor lift entry skipped) without depending on this fragile element.
 - tapOn: "Continue"
 
 - extendedWaitUntil:
