@@ -128,9 +128,17 @@ appId: com.bubbleworkout.mobile
     visible: "Equipment setup"
     timeout: 10000
 - tapOn: "Commercial Gym"
+# 20s wasn't enough either (failed at 20.4s on a second CI run) - both failures'
+# debug screenshots proved the correct content ("24 items included") had rendered
+# moments after the assertion gave up, so this isn't an app bug. The CI runner
+# shares limited CPU across the Android emulator, Metro, the API server, and
+# Postgres at once (the same run showed emulator distress: "Failed to find
+# ColorBuffer", adb daemon connection errors) - a real but slow network round
+# trip to GET /equipment-items can plausibly stall well past 20s under that
+# contention. Widening generously rather than re-guessing a second small bump.
 - extendedWaitUntil:
     visible: "items included"
-    timeout: 20000
+    timeout: 45000
 - tapOn: "Next"
 
 - extendedWaitUntil:
