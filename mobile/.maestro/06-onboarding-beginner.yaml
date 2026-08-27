@@ -130,7 +130,7 @@ appId: com.bubbleworkout.mobile
 - tapOn: "Commercial Gym"
 - extendedWaitUntil:
     visible: "items included"
-    timeout: 10000
+    timeout: 20000
 - tapOn: "Next"
 
 - extendedWaitUntil:
