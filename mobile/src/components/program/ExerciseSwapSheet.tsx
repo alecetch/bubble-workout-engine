@@ -11,12 +11,23 @@ import {
   useApplyExerciseSwap,
   useExerciseSwapOptions,
 } from "../../api/hooks";
+import { ApiError } from "../../api/client";
 import type { ExerciseSwapOption } from "../../api/programExercise";
 import { PressableScale } from "../interaction/PressableScale";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+
+function getSwapErrorMessage(error: Error | null): string {
+  if (
+    error instanceof ApiError &&
+    (error.details as { code?: string } | undefined)?.code === "validation_error"
+  ) {
+    return error.message;
+  }
+  return "Unable to swap exercise. Please try again.";
+}
 
 type ExerciseSwapSheetProps = {
   visible: boolean;
@@ -125,7 +136,7 @@ export function ExerciseSwapSheet({
             from the new exercise.
           </Text>
           {applySwapMutation.isError ? (
-            <Text style={styles.errorText}>Unable to swap exercise</Text>
+            <Text style={styles.errorText}>{getSwapErrorMessage(applySwapMutation.error)}</Text>
           ) : null}
           <View style={styles.confirmActions}>
             <PressableScale
