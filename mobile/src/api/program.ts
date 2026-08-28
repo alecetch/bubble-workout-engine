@@ -1,5 +1,4 @@
-import { ApiError, authenticatedFetch, engineFetch } from "./client";
-import { getEngineKeyStatus } from "./config";
+import { ApiError, authenticatedFetch } from "./client";
 
 export type GenerateProgramPayload = {
   userId: string;
@@ -14,10 +13,6 @@ export type GenerateProgramResponse = {
   [key: string]: unknown;
 };
 
-function isFallbackEligibleStatus(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 404 || error.status === 401 || error.status === 403);
-}
-
 function stringifyDetails(details: unknown): string {
   if (details == null) return "none";
   if (typeof details === "string") return details;
@@ -28,93 +23,34 @@ function stringifyDetails(details: unknown): string {
   }
 }
 
-function formatUnauthorizedMessage(endpoint: string, status: number, details: unknown): string {
-  if (endpoint === "/generate-plan-v2") {
-    return `Generation unauthorized (${status}) at ${endpoint}. body=${stringifyDetails(details)} Auth token or subscription entitlement required.`;
-  }
-
-  const keyStatus = getEngineKeyStatus();
-  return `Generation unauthorized (${status}) at ${endpoint}. body=${stringifyDetails(details)} Engine key status: hasKey=${keyStatus.hasKey}, source=${keyStatus.source}.`;
-}
-
-function toEndpointError(
-  endpoint: "/generate-plan-v2" | "/generate-plan" | "/api/program/generate",
-  error: unknown,
-): Error {
+function toGenerationError(error: unknown): Error {
   if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-    return new Error(`${formatUnauthorizedMessage(endpoint, error.status, error.details)} Last failed endpoint: ${endpoint}.`);
-  }
-
-  if (error instanceof ApiError) {
     return new Error(
-      `Generation failed (${error.status}) at ${endpoint}. body=${stringifyDetails(error.details)} Last failed endpoint: ${endpoint}.`,
+      `Generation unauthorized (${error.status}) at /generate-plan-v2. body=${stringifyDetails(error.details)} Auth token or subscription entitlement required.`,
     );
   }
-
+  if (error instanceof ApiError) {
+    return new Error(
+      `Generation failed (${error.status}) at /generate-plan-v2. body=${stringifyDetails(error.details)}`,
+    );
+  }
   const baseMessage = error instanceof Error ? error.message : "Generation request failed.";
-  return new Error(`${baseMessage} Endpoint: ${endpoint}. Last failed endpoint: ${endpoint}.`);
-}
-
-async function generateAtEndpoint(
-  endpoint: "/generate-plan-v2" | "/generate-plan" | "/api/program/generate",
-  payload: GenerateProgramPayload,
-): Promise<GenerateProgramResponse> {
-  const body =
-    endpoint === "/generate-plan-v2"
-      ? {
-          user_id: payload.userId,
-          client_profile_id: payload.clientProfileId,
-          programType: payload.programType,
-          anchor_date_ms: payload.anchor_date_ms,
-        }
-      : endpoint === "/generate-plan"
-        ? {
-          clientProfileId: payload.clientProfileId,
-            user_id: payload.userId,
-            client_profile_id: payload.clientProfileId,
-            programType: payload.programType,
-            anchor_date_ms: payload.anchor_date_ms,
-          }
-        : {
-            user_id: payload.userId,
-            client_profile_id: payload.clientProfileId,
-            programType: payload.programType,
-            anchor_date_ms: payload.anchor_date_ms,
-          };
-
-  const fetcher = endpoint === "/generate-plan-v2" ? authenticatedFetch : engineFetch;
-
-  return fetcher<GenerateProgramResponse>(endpoint, {
-    method: "POST",
-    body,
-  });
+  return new Error(`${baseMessage} Endpoint: /generate-plan-v2.`);
 }
 
 export async function generateProgram(payload: GenerateProgramPayload): Promise<GenerateProgramResponse> {
-  const endpointV2: "/generate-plan-v2" = "/generate-plan-v2";
-  const endpointLegacy: "/generate-plan" = "/generate-plan";
-  const endpointApiFallback: "/api/program/generate" = "/api/program/generate";
-
   try {
-    return await generateAtEndpoint(endpointV2, payload);
+    return await authenticatedFetch<GenerateProgramResponse>("/generate-plan-v2", {
+      method: "POST",
+      body: {
+        user_id: payload.userId,
+        client_profile_id: payload.clientProfileId,
+        programType: payload.programType,
+        anchor_date_ms: payload.anchor_date_ms,
+      },
+    });
   } catch (error) {
-    if (!isFallbackEligibleStatus(error)) {
-      throw toEndpointError(endpointV2, error);
-    }
-  }
-
-  try {
-    return await generateAtEndpoint(endpointLegacy, payload);
-  } catch (error) {
-    if (!isFallbackEligibleStatus(error)) {
-      throw toEndpointError(endpointLegacy, error);
-    }
-  }
-
-  try {
-    return await generateAtEndpoint(endpointApiFallback, payload);
-  } catch (error) {
-    throw toEndpointError(endpointApiFallback, error);
+    throw toGenerationError(error);
   }
 }
 
