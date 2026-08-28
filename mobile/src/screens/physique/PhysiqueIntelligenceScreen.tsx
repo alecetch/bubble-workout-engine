@@ -227,8 +227,17 @@ export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Ele
     return (
       <View style={styles.centered}>
         <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.title}>Analysing your physique...</Text>
-        <Text style={styles.body}>This takes around 15 seconds</Text>
+        {submitScanMutation.isPaused ? (
+          <>
+            <Text style={styles.title}>Waiting for connection...</Text>
+            <Text style={styles.body}>We'll upload your scan as soon as you're back online.</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.title}>Analysing your physique...</Text>
+            <Text style={styles.body}>This takes around 15 seconds</Text>
+          </>
+        )}
       </View>
     );
   }
