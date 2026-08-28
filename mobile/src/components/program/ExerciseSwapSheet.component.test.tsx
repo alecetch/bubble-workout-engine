@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExerciseSwapSheet } from "./ExerciseSwapSheet";
 import { useApplyExerciseSwap, useExerciseSwapOptions } from "../../api/hooks";
+import { ApiError } from "../../api/client";
 
 vi.mock("../../api/hooks", () => ({
   useApplyExerciseSwap: vi.fn(),
@@ -99,6 +100,38 @@ describe("ExerciseSwapSheet", () => {
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
+  });
+
+  it("shows the server's specific rejection reason for a validation error", () => {
+    useApplyExerciseSwapMock.mockReturnValue({
+      mutate: mutateMock,
+      isPending: false,
+      isError: true,
+      error: new ApiError(400, "This exercise already has logged sets today and can't be swapped", {
+        code: "validation_error",
+      }),
+    } as any);
+
+    renderSheet();
+    fireEvent.click(screen.getByText("Leg Press"));
+
+    expect(
+      screen.getByText("This exercise already has logged sets today and can't be swapped"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a generic message for a non-validation error", () => {
+    useApplyExerciseSwapMock.mockReturnValue({
+      mutate: mutateMock,
+      isPending: false,
+      isError: true,
+      error: new Error("Network request failed"),
+    } as any);
+
+    renderSheet();
+    fireEvent.click(screen.getByText("Leg Press"));
+
+    expect(screen.getByText("Unable to swap exercise. Please try again.")).toBeInTheDocument();
   });
 
   it("renders an empty state", () => {
