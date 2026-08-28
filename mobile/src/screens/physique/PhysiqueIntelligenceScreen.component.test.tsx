@@ -239,6 +239,23 @@ describe("PhysiqueIntelligenceScreen", () => {
     expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument();
   });
 
+  it("shows offline-pending copy while the submit mutation is paused offline", async () => {
+    useSubmitScanMock.mockReturnValue({
+      mutateAsync: submitScanMutateAsyncMock,
+      isPending: true,
+      isPaused: true,
+      isError: false,
+    } as any);
+    submitScanMutateAsyncMock.mockImplementation(() => new Promise(() => {}));
+
+    await advanceToPreview();
+    fireEvent.click(screen.getByText("Analyse"));
+
+    expect(await screen.findByText("Waiting for connection...")).toBeInTheDocument();
+    expect(screen.getByText("We'll upload your scan as soon as you're back online.")).toBeInTheDocument();
+    expect(screen.queryByText("Analysing your physique...")).not.toBeInTheDocument();
+  });
+
   it("successful submit scan mutation transitions to result phase with score", async () => {
     await advanceToPreview();
     fireEvent.click(screen.getByText("Analyse"));
