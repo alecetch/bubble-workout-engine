@@ -6,7 +6,6 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { useActivePrograms, useClientProfile, useEntitlement, useEquipmentItems, useMe, useReferenceData } from "../../api/hooks";
 import { extractProgramId, generateProgram } from "../../api/program";
-import { getEngineKeyStatus } from "../../api/config";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -166,14 +165,7 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
         navigation.navigate("Paywall");
         return;
       }
-      if (error instanceof Error && error.message.includes("ENGINE_KEY missing in app runtime")) {
-        const keyStatus = getEngineKeyStatus();
-        setGenerationError(
-          `Generation requires ENGINE_KEY. Set EXPO_PUBLIC_ENGINE_KEY in your Expo env.\nEngine key status: hasKey=${keyStatus.hasKey}, source=${keyStatus.source}`,
-        );
-      } else {
-        setGenerationError(error instanceof Error ? error.message : "Failed to generate program.");
-      }
+      setGenerationError(error instanceof Error ? error.message : "Failed to generate program.");
     } finally {
       setIsGenerating(false);
     }
