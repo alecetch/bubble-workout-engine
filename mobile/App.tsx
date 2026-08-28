@@ -19,6 +19,7 @@ import {
   wrapWithCrashReporting,
 } from "./src/lib/crashReporting";
 import { initNetworkMonitoring } from "./src/lib/network";
+import { initQueryFocusManagement } from "./src/lib/queryFocus";
 import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
 import { navigateFromNotificationResponse } from "./src/navigation/notificationRouting";
@@ -30,6 +31,7 @@ import { logger } from "./src/utils/logger";
 
 initCrashReporting();
 initNetworkMonitoring();
+initQueryFocusManagement();
 
 // Notification tap-through handling is off by default because of an unresolved
 // native HostFunction failure (see docs/specs/mobile-notification-tap-through-decision-spec.md).
