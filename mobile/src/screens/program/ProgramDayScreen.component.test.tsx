@@ -433,11 +433,19 @@ describe("ProgramDayScreen", () => {
       isSuccess: true,
     } as any);
 
-    const { parentNavigation } = renderScreen();
+    const { navigation } = renderScreen();
 
-    await waitFor(() =>
-      expect(parentNavigation.navigate).toHaveBeenCalledWith("HomeTab", { screen: "Paywall" }),
-    );
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith("Paywall"));
+  });
+
+  it("navigates locally to Paywall when a 402 fires the subscription-required callback", async () => {
+    const { navigation, parentNavigation } = renderScreen();
+    await waitForLocalStateLoad();
+
+    swapSheetMocks.segmentCardProps[0].onSubscriptionRequired();
+
+    expect(navigation.navigate).toHaveBeenCalledWith("Paywall");
+    expect(parentNavigation.navigate).not.toHaveBeenCalled();
   });
 
   it("shows the completion CTA when workout state is ready", async () => {

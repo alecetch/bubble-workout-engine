@@ -94,8 +94,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
 
   useEffect(() => {
     if (entitlementQuery.isSuccess && !entitlementQuery.data.is_active) {
-      const parent = navigation.getParent();
-      parent?.navigate("HomeTab", { screen: "Paywall" } as never);
+      navigation.navigate("Paywall");
     }
   }, [entitlementQuery.data?.is_active, entitlementQuery.isSuccess, navigation]);
 
@@ -238,8 +237,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }, [programDayId, queryClient, setSegmentLogRows, setSegmentLogs, userId]);
 
   const handleSubscriptionRequired = useCallback(() => {
-    const parent = navigation.getParent();
-    parent?.navigate("HomeTab", { screen: "Paywall" } as never);
+    navigation.navigate("Paywall");
   }, [navigation]);
 
   const handleInlinePanelOpen = useCallback((pageY: number) => {
