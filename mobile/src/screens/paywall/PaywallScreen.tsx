@@ -13,6 +13,7 @@ import {
   restorePurchases as restorePurchasesSdk,
 } from "../../lib/purchases";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
+import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -26,7 +27,8 @@ const BENEFITS = [
   "Full session history and strength trend visualisation",
 ];
 
-type Props = NativeStackScreenProps<OnboardingStackParamList, "Paywall">;
+type PaywallParamList = OnboardingStackParamList & ProgramsStackParamList;
+type Props = NativeStackScreenProps<PaywallParamList, "Paywall">;
 
 export function PaywallScreen({ navigation }: Props): React.JSX.Element {
   const setEntitlement = useSessionStore((state) => state.setEntitlement);
