@@ -236,6 +236,34 @@ describe("ProgramDashboardScreen", () => {
     expect(screen.getByText("Week share volume 4321")).toBeInTheDocument();
   });
 
+  it("shows only the week-complete banner, not the review prompt, when both trigger in the same navigation", () => {
+    renderDashboard(undefined, {
+      programId: "prog-1",
+      showReviewPrompt: true,
+      weekCompleteNumber: 2,
+      weekCompleteSessions: 3,
+      weekCompleteVolumeKg: 4321,
+    });
+
+    expect(screen.getByText("Week 2 complete!")).toBeInTheDocument();
+    expect(screen.queryByText("Nice PR.")).not.toBeInTheDocument();
+  });
+
+  it("shows the queued review prompt after the week-complete banner is dismissed", () => {
+    renderDashboard(undefined, {
+      programId: "prog-1",
+      showReviewPrompt: true,
+      weekCompleteNumber: 2,
+      weekCompleteSessions: 3,
+      weekCompleteVolumeKg: 4321,
+    });
+
+    fireEvent.click(screen.getByLabelText("Dismiss week complete banner"));
+
+    expect(screen.queryByText("Week 2 complete!")).not.toBeInTheDocument();
+    expect(screen.getByText("Nice PR.")).toBeInTheDocument();
+  });
+
   it("does not show popup UI when no deferred params are passed", () => {
     renderDashboard(undefined, { programId: "prog-1" });
 
@@ -308,6 +336,34 @@ describe("ProgramDashboardScreen", () => {
     } as any);
     renderDashboard();
     expect(screen.getByText("Program complete")).toBeInTheDocument();
+    expect(screen.queryByText(/sessions missed/)).not.toBeInTheDocument();
+  });
+
+  it("hides the missed-session banner when the end-of-block banner is showing", () => {
+    useProgramEndCheckMock.mockReturnValue({
+      data: {
+        lifecycleStatus: "active",
+        canCompleteWithSkips: true,
+        missedWorkoutsCount: 2,
+        skippedWorkoutsCount: 1,
+      },
+      refetch: vi.fn(),
+    } as any);
+    useProgramOverviewMock.mockReturnValue({
+      data: data({
+        calendarDays: [
+          { calendarDate: "2026-04-27", isTrainingDay: true, programDayId: "day-1", weekNumber: 1 },
+          { calendarDate: "2026-04-28", isTrainingDay: true, programDayId: "day-2", weekNumber: 1 },
+          { calendarDate: "2026-04-29", isTrainingDay: true, programDayId: "day-3", weekNumber: 1 },
+        ],
+      }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+
+    renderDashboard();
+
     expect(screen.queryByText(/sessions missed/)).not.toBeInTheDocument();
   });
 });
