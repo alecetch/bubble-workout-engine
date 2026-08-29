@@ -742,6 +742,22 @@ describe("SegmentCard — round-based logging (superset)", () => {
     });
   });
 
+  it("positions the rest strip between the completed round and the active round, not above the round list", async () => {
+    mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
+    startRestMock.mockImplementation((segmentId: string) => {
+      setMockTimerState({ [segmentId]: runningRestEntry(segmentId) });
+    });
+    await openSupersetPanel();
+
+    fillActiveRound();
+    fireEvent.click(screen.getByText("Mark round complete"));
+
+    expect(await screen.findByText("01:30")).toBeInTheDocument();
+    const content = document.body.textContent ?? "";
+    expect(content.indexOf("Round 1")).toBeLessThan(content.indexOf("01:30"));
+    expect(content.indexOf("01:30")).toBeLessThan(content.indexOf("Round 2"));
+  });
+
   it("RIR pickers are absent on rounds 1-3 and present on round 4", async () => {
     await openSupersetPanel();
     expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();

@@ -940,28 +940,6 @@ export const SegmentCard = React.memo(function SegmentCard({
             </PressableScale>
           </View>
 
-          {showRestStrip ? (
-            <InlineRestStrip
-              restDisplaySeconds={restDisplaySeconds}
-              restProgress={restProgress}
-              showAdjustControls={showAdjustControls}
-              onToggleAdjust={() => setShowAdjustControls((current) => !current)}
-              onReset={() => {
-                useTimerStore.getState().stopRest(segment.id);
-                setRestDisplaySeconds(0);
-              }}
-              onAdjust={(delta) => {
-                const overrideKey = restEntry?.restOverrideKey ?? null;
-                useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
-              }}
-              onAdjustLongPress={(delta) => {
-                const overrideKey = restEntry?.restOverrideKey ?? null;
-                useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }}
-            />
-          ) : null}
-
           {!initialized && existingLogsQuery.isLoading ? (
             <View style={styles.loadingBlock}>
               <SkeletonBlock height={160} />
@@ -983,35 +961,78 @@ export const SegmentCard = React.memo(function SegmentCard({
               onRoundComplete={handleRoundComplete}
               onPostStopRirDone={handlePostStopRirDone}
               getExerciseValue={formatRoundExerciseValue}
+              showRestStrip={showRestStrip}
+              restStripProps={{
+                restDisplaySeconds,
+                restProgress,
+                showAdjustControls,
+                onToggleAdjust: () => setShowAdjustControls((current) => !current),
+                onReset: () => {
+                  useTimerStore.getState().stopRest(segment.id);
+                  setRestDisplaySeconds(0);
+                },
+                onAdjust: (delta) => {
+                  const overrideKey = restEntry?.restOverrideKey ?? null;
+                  useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
+                },
+                onAdjustLongPress: (delta) => {
+                  const overrideKey = restEntry?.restOverrideKey ?? null;
+                  useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                },
+              }}
             />
           ) : (
-            loggableExercises.map((exercise) => {
-              const exerciseKey = exercise.id ?? "";
-              const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
-              const setInputs = inputMap[exerciseKey] ?? Array.from({ length: getExerciseSetCount(exercise) }, () => ({
-                weight: "",
-                reps: "",
-                rirActual: null,
-              }));
-
-              return (
-                <InlineExerciseLogBlock
-                  key={exerciseKey}
-                  exercise={exercise}
-                  setInputs={setInputs}
-                  doneSetKeys={doneSetKeys}
-                  activeSetKey={activeSetKey}
-                  pbSetKeys={pbSetKeys}
-                  exerciseRir={exerciseRir}
-                  onFillDown={fillDown}
-                  onSetComplete={handleSetComplete}
-                  onAddSet={handleAddSet}
-                  onRemoveSet={handleRemoveSet}
-                  onLogAllSets={handleLogAllSets}
-                  onSelectRir={handleSelectRir}
+            <>
+              {showRestStrip ? (
+                <InlineRestStrip
+                  restDisplaySeconds={restDisplaySeconds}
+                  restProgress={restProgress}
+                  showAdjustControls={showAdjustControls}
+                  onToggleAdjust={() => setShowAdjustControls((current) => !current)}
+                  onReset={() => {
+                    useTimerStore.getState().stopRest(segment.id);
+                    setRestDisplaySeconds(0);
+                  }}
+                  onAdjust={(delta) => {
+                    const overrideKey = restEntry?.restOverrideKey ?? null;
+                    useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
+                  }}
+                  onAdjustLongPress={(delta) => {
+                    const overrideKey = restEntry?.restOverrideKey ?? null;
+                    useTimerStore.getState().adjustRestDuration(segment.id, delta, overrideKey);
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }}
                 />
-              );
-            })
+              ) : null}
+              {loggableExercises.map((exercise) => {
+                const exerciseKey = exercise.id ?? "";
+                const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
+                const setInputs = inputMap[exerciseKey] ?? Array.from({ length: getExerciseSetCount(exercise) }, () => ({
+                  weight: "",
+                  reps: "",
+                  rirActual: null,
+                }));
+
+                return (
+                  <InlineExerciseLogBlock
+                    key={exerciseKey}
+                    exercise={exercise}
+                    setInputs={setInputs}
+                    doneSetKeys={doneSetKeys}
+                    activeSetKey={activeSetKey}
+                    pbSetKeys={pbSetKeys}
+                    exerciseRir={exerciseRir}
+                    onFillDown={fillDown}
+                    onSetComplete={handleSetComplete}
+                    onAddSet={handleAddSet}
+                    onRemoveSet={handleRemoveSet}
+                    onLogAllSets={handleLogAllSets}
+                    onSelectRir={handleSelectRir}
+                  />
+                );
+              })}
+            </>
           )}
           {hasLoggableExercises ? (
             <PressableScale

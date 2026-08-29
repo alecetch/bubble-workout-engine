@@ -42,6 +42,8 @@ function renderPanel(
       onRoundComplete={props.onRoundComplete ?? vi.fn()}
       onPostStopRirDone={props.onPostStopRirDone ?? vi.fn()}
       getExerciseValue={props.getExerciseValue ?? (() => "80 kg x 8")}
+      showRestStrip={props.showRestStrip}
+      restStripProps={props.restStripProps}
     />,
   );
 }
@@ -78,5 +80,49 @@ describe("RoundBasedLoggingPanel", () => {
     renderPanel({ roundSaveError: "Failed to save" });
 
     expect(screen.getByText("Failed to save")).toBeInTheDocument();
+  });
+
+  it("renders the rest strip between the completed round summary and the active round", () => {
+    renderPanel({
+      completedRoundIndices: new Set([0]),
+      activeRoundIndex: 1,
+      showRestStrip: true,
+      restStripProps: {
+        restDisplaySeconds: 45,
+        restProgress: 0.5,
+        showAdjustControls: false,
+        onToggleAdjust: vi.fn(),
+        onReset: vi.fn(),
+        onAdjust: vi.fn(),
+        onAdjustLongPress: vi.fn(),
+      },
+    });
+
+    const content = document.body.textContent ?? "";
+    expect(screen.getByText("Rest")).toBeInTheDocument();
+    expect(screen.getByText("00:45")).toBeInTheDocument();
+    expect(content.indexOf("Round 1")).toBeLessThan(content.indexOf("00:45"));
+    expect(content.indexOf("00:45")).toBeLessThan(content.indexOf("Round 2"));
+  });
+
+  it("renders the rest strip before the post-stop RIR block", () => {
+    renderPanel({
+      showPostStopRir: true,
+      showRestStrip: true,
+      restStripProps: {
+        restDisplaySeconds: 30,
+        restProgress: 0.25,
+        showAdjustControls: false,
+        onToggleAdjust: vi.fn(),
+        onReset: vi.fn(),
+        onAdjust: vi.fn(),
+        onAdjustLongPress: vi.fn(),
+      },
+    });
+
+    const content = document.body.textContent ?? "";
+    expect(screen.getByText("Rest")).toBeInTheDocument();
+    expect(screen.getByText("00:30")).toBeInTheDocument();
+    expect(content.indexOf("00:30")).toBeLessThan(content.indexOf("How many more reps"));
   });
 });
