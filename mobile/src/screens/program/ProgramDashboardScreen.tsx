@@ -73,6 +73,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
     Record<string, ProgramDayStatus>
   >({});
   const [reviewPromptVisible, setReviewPromptVisible] = useState(false);
+  const [pendingReviewPrompt, setPendingReviewPrompt] = useState(false);
   const [reviewPromptMessage, setReviewPromptMessage] = useState<string | null>(null);
   const [isRequestingReview, setIsRequestingReview] = useState(false);
   const [weekBannerVisible, setWeekBannerVisible] = useState(false);
@@ -284,10 +285,10 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   useFocusEffect(
     useCallback(() => {
       const p = route.params;
-      if (p?.showReviewPrompt) {
-        setReviewPromptVisible(true);
-      }
-      if (p?.weekCompleteNumber != null) {
+      const hasWeekComplete = p?.weekCompleteNumber != null;
+      const hasReviewPrompt = Boolean(p?.showReviewPrompt);
+
+      if (hasWeekComplete) {
         setWeekBannerData({
           weekNumber: p.weekCompleteNumber,
           sessions: p.weekCompleteSessions ?? 0,
@@ -295,8 +296,14 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         });
         setWeekBannerVisible(true);
         setWeekShareCardReady(false);
+        if (hasReviewPrompt) {
+          setPendingReviewPrompt(true);
+        }
+      } else if (hasReviewPrompt) {
+        setReviewPromptVisible(true);
       }
-      if (p?.showReviewPrompt || p?.weekCompleteNumber != null) {
+
+      if (hasReviewPrompt || hasWeekComplete) {
         navigation.setParams?.({
           showReviewPrompt: undefined,
           weekCompleteNumber: undefined,
@@ -329,6 +336,14 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
       );
     } finally {
       setIsSharingWeek(false);
+    }
+  }
+
+  function handleDismissWeekBanner(): void {
+    setWeekBannerVisible(false);
+    if (pendingReviewPrompt) {
+      setPendingReviewPrompt(false);
+      setReviewPromptVisible(true);
     }
   }
 
@@ -466,7 +481,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         </PressableScale>
       ) : null}
 
-      {missedSessionCount >= 3 && !showCompletionBanner ? (
+      {missedSessionCount >= 3 && !showCompletionBanner && !showEndCheckBanner ? (
         <PressableScale
           style={styles.missedBanner}
           onPress={openRecalibrate}
@@ -543,6 +558,13 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
             <Text style={styles.weekShareButtonLabel}>
               {isSharingWeek || !weekShareCardReady ? "..." : "Share"}
             </Text>
+          </PressableScale>
+          <PressableScale
+            style={styles.weekCompleteCloseButton}
+            onPress={handleDismissWeekBanner}
+            accessibilityLabel="Dismiss week complete banner"
+          >
+            <Text style={styles.weekCompleteCloseLabel}>×</Text>
           </PressableScale>
         </View>
       ) : null}
@@ -731,6 +753,21 @@ const styles = StyleSheet.create({
   weekShareButtonLabel: {
     color: colors.background,
     ...typography.body,
+    fontWeight: "700",
+  },
+  weekCompleteCloseButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  weekCompleteCloseLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
     fontWeight: "700",
   },
   reviewPrompt: {
