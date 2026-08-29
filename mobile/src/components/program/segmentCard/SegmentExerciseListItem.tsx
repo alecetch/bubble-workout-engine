@@ -60,7 +60,13 @@ export function SegmentExerciseListItem({
   onResumeExercise,
 }: SegmentExerciseListItemProps): React.JSX.Element {
   return (
-    <View style={[styles.exerciseRow, isComplete && styles.exerciseRowComplete]}>
+    <View
+      style={[
+        styles.exerciseRow,
+        isRoundBased && styles.exerciseRowGrouped,
+        isComplete && (isRoundBased ? styles.exerciseRowGroupedComplete : styles.exerciseRowComplete),
+      ]}
+    >
       <View style={styles.exerciseTitleRow}>
         <PressableScale
           style={styles.exerciseNamePressable}
@@ -90,7 +96,7 @@ export function SegmentExerciseListItem({
           {summary}
         </Text>
       ) : null}
-      {exercise.restSeconds != null && exercise.restSeconds > 0 ? (
+      {!isRoundBased && exercise.restSeconds != null && exercise.restSeconds > 0 ? (
         <View style={styles.restRow}>
           <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
           <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
@@ -164,6 +170,14 @@ const styles = StyleSheet.create({
   },
   exerciseRowComplete: {
     backgroundColor: colors.surface,
+    opacity: 0.65,
+  },
+  exerciseRowGrouped: {
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    padding: 0,
+  },
+  exerciseRowGroupedComplete: {
     opacity: 0.65,
   },
   exerciseTitleRow: {

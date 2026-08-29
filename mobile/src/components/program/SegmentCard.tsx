@@ -786,49 +786,101 @@ export const SegmentCard = React.memo(function SegmentCard({
               ) : null}
 
               {presentation.segmentHasExercises ? (
-                exercises.map((exercise, index) => {
-                  const line2 = [
-                    exercise.sets != null ? `${exercise.sets} set${exercise.sets !== 1 ? "s" : ""}` : null,
-                    exercise.reps ? `${exercise.reps} ${exercise.repsUnit ?? "reps"}` : null,
-                    exercise.intensity ?? null,
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
-                  const programExerciseId = exercise.id ?? "";
-                  const exerciseId = exercise.exerciseId ?? programExerciseId;
+                isRoundBased ? (
+                  <View style={styles.pairedGroup} testID="segment-paired-group">
+                    {exercises.map((exercise, index) => {
+                      const line2 = [
+                        exercise.sets != null ? `${exercise.sets} set${exercise.sets !== 1 ? "s" : ""}` : null,
+                        exercise.reps ? `${exercise.reps} ${exercise.repsUnit ?? "reps"}` : null,
+                        exercise.intensity ?? null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+                      const programExerciseId = exercise.id ?? "";
+                      const exerciseId = exercise.exerciseId ?? programExerciseId;
+                      const isComplete = completedExerciseIds.has(programExerciseId);
+                      const summary = isComplete
+                        ? index === 0
+                          ? formatRoundSummary(loggableExercises, totalRounds, completedRoundIndices.size, inputMap, doneSetKeys)
+                          : null
+                        : null;
 
-                  const isComplete = completedExerciseIds.has(programExerciseId);
-                  const summary = isComplete
-                    ? isRoundBased
-                      ? index === 0
-                        ? formatRoundSummary(loggableExercises, totalRounds, completedRoundIndices.size, inputMap, doneSetKeys)
-                        : null
-                      : formatExerciseSummary(exercise, inputMap[programExerciseId], doneSetKeys)
-                    : null;
-                  return (
-                    <SegmentExerciseListItem
-                      key={exercise.id ?? `${segment.id}-exercise-${index}`}
-                      exercise={exercise}
-                      index={index}
-                      line2={line2 || null}
-                      summary={summary}
-                      isComplete={isComplete}
-                      programExerciseId={programExerciseId}
-                      exerciseId={exerciseId}
-                      inlineLoggingOpen={inlineLoggingOpen}
-                      hasLoggableExercises={hasLoggableExercises}
-                      isRoundBased={isRoundBased}
-                      showResumeButton={showResumeButton}
-                      onViewExerciseDetail={onViewExerciseDetail}
-                      onRequestSwap={onRequestSwap}
-                      onStartExercise={() => setInlineLoggingOpen(true)}
-                      onResumeExercise={() => { void handleResumeExercise(); }}
-                    />
-                  );
-	                })
-	              ) : (
-	                <Text style={styles.exerciseMeta}>No exercises available.</Text>
-	              )}
+                      return (
+                        <React.Fragment key={exercise.id ?? `${segment.id}-exercise-${index}`}>
+                          <SegmentExerciseListItem
+                            exercise={exercise}
+                            index={index}
+                            line2={line2 || null}
+                            summary={summary}
+                            isComplete={isComplete}
+                            programExerciseId={programExerciseId}
+                            exerciseId={exerciseId}
+                            inlineLoggingOpen={inlineLoggingOpen}
+                            hasLoggableExercises={hasLoggableExercises}
+                            isRoundBased={isRoundBased}
+                            showResumeButton={showResumeButton}
+                            onViewExerciseDetail={onViewExerciseDetail}
+                            onRequestSwap={onRequestSwap}
+                            onStartExercise={() => setInlineLoggingOpen(true)}
+                            onResumeExercise={() => { void handleResumeExercise(); }}
+                          />
+                          {index < exercises.length - 1 ? <View style={styles.pairedDivider} /> : null}
+                        </React.Fragment>
+                      );
+                    })}
+                    {(() => {
+                      const groupRestSeconds = loggableExercises[0]?.restSeconds ?? null;
+                      return groupRestSeconds != null && groupRestSeconds > 0 ? (
+                        <View style={styles.pairedGroupRestRow}>
+                          <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+                          <Text style={styles.pairedGroupRestLabel}>
+                            Rest {groupRestSeconds}s after each round
+                          </Text>
+                        </View>
+                      ) : null;
+                    })()}
+                  </View>
+                ) : (
+                  exercises.map((exercise, index) => {
+                    const line2 = [
+                      exercise.sets != null ? `${exercise.sets} set${exercise.sets !== 1 ? "s" : ""}` : null,
+                      exercise.reps ? `${exercise.reps} ${exercise.repsUnit ?? "reps"}` : null,
+                      exercise.intensity ?? null,
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    const programExerciseId = exercise.id ?? "";
+                    const exerciseId = exercise.exerciseId ?? programExerciseId;
+                    const isComplete = completedExerciseIds.has(programExerciseId);
+                    const summary = isComplete
+                      ? formatExerciseSummary(exercise, inputMap[programExerciseId], doneSetKeys)
+                      : null;
+
+                    return (
+                      <SegmentExerciseListItem
+                        key={exercise.id ?? `${segment.id}-exercise-${index}`}
+                        exercise={exercise}
+                        index={index}
+                        line2={line2 || null}
+                        summary={summary}
+                        isComplete={isComplete}
+                        programExerciseId={programExerciseId}
+                        exerciseId={exerciseId}
+                        inlineLoggingOpen={inlineLoggingOpen}
+                        hasLoggableExercises={hasLoggableExercises}
+                        isRoundBased={isRoundBased}
+                        showResumeButton={showResumeButton}
+                        onViewExerciseDetail={onViewExerciseDetail}
+                        onRequestSwap={onRequestSwap}
+                        onStartExercise={() => setInlineLoggingOpen(true)}
+                        onResumeExercise={() => { void handleResumeExercise(); }}
+                      />
+                    );
+                  })
+                )
+              ) : (
+                <Text style={styles.exerciseMeta}>No exercises available.</Text>
+              )}
               {isRoundBased && !inlineLoggingOpen && hasLoggableExercises ? (() => {
                 return (
                   <PressableScale
@@ -1031,6 +1083,30 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...typography.small,
     fontWeight: "600",
+  },
+  pairedGroup: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  pairedDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  pairedGroupRestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  pairedGroupRestLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
   },
   exerciseMeta: {
     color: colors.textSecondary,
