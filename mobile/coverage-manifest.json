@@ -14,12 +14,12 @@
     {
       "type": "component",
       "source": "src/components/interaction/PressableScale.tsx",
-      "test": null,
-      "status": "gap",
+      "test": "src/components/interaction/PressableScale.component.test.tsx",
+      "status": "covered",
       "tags": [
         "interaction"
       ],
-      "reason": "No component test exists yet for this testable surface."
+      "reason": ""
     },
     {
       "type": "component",

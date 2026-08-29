@@ -1,12 +1,13 @@
 import React from "react";
+import Animated from "react-native-reanimated";
 import {
   Pressable,
   type GestureResponderEvent,
   type PressableProps,
   type StyleProp,
-  View,
   type ViewStyle,
 } from "react-native";
+import { usePressScale } from "./usePressScale";
 
 type PressableScaleProps = {
   children: React.ReactNode;
@@ -35,18 +36,22 @@ export function PressableScale({
   accessibilityLabel,
   testID,
 }: PressableScaleProps): React.JSX.Element {
+  const { animatedStyle, onPressIn, onPressOut } = usePressScale({ disabled });
+
   return (
     <Pressable
       testID={testID}
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       hitSlop={hitSlop}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       style={containerStyle}
     >
-      <View style={style}>{children}</View>
+      <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>
     </Pressable>
   );
 }
