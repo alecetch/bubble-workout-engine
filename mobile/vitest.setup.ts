@@ -197,6 +197,7 @@ vi.mock("react-native-reanimated", () => ({
   withSpring: vi.fn((v: unknown) => v),
   withDelay: vi.fn((_: number, v: unknown) => v),
   withSequence: vi.fn((...args: unknown[]) => args[args.length - 1]),
+  withRepeat: vi.fn((v: unknown) => v),
   runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
   Easing: {
     out: vi.fn((f: unknown) => f),

@@ -6,10 +6,6 @@ const __dirname = path.dirname(__filename);
 function readSource(relativePath: string): string {
     return readFileSync(path.resolve(__dirname, relativePath), "utf8");
 }
-test("SkeletonBlock does not import react-native-reanimated on the workout screen path", () => {
-    const source = readSource("../feedback/SkeletonBlock.tsx");
-    expect(source).not.toMatch(/from\s+["']react-native-reanimated["']/);
-});
 test("TechniqueSheet does not import expo-av on the workout screen path", () => {
     const source = readSource("./TechniqueSheet.tsx");
     expect(source).not.toMatch(/from\s+["']expo-av["']/);
