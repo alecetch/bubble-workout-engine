@@ -231,6 +231,14 @@ export function HistoryScreen(): React.JSX.Element {
         </View>
       </View>
 
+      <View style={styles.sectionHeaderWrap}>
+        <Text style={styles.sectionTitle}>Timeline</Text>
+      </View>
+    </View>
+  );
+
+  const listFooter = (
+    <View style={styles.listFooter}>
       <PressableScale
         onPress={() => navigation.navigate("ProgressOverview")}
         style={styles.progressCard}
@@ -356,14 +364,6 @@ export function HistoryScreen(): React.JSX.Element {
         </View>
       )}
 
-      <View style={styles.sectionHeaderWrap}>
-        <Text style={styles.sectionTitle}>Timeline</Text>
-      </View>
-    </View>
-  );
-
-  const listFooter = (
-    <View style={styles.listFooter}>
       <View style={styles.sectionHeaderWrap}>
         <Text style={styles.sectionTitle}>{prsTitle}</Text>
       </View>
