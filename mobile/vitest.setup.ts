@@ -187,6 +187,10 @@ vi.mock("react-native-reanimated", () => ({
   },
   useSharedValue: vi.fn((v: unknown) => ({ value: v })),
   useAnimatedStyle: vi.fn((fn: () => unknown) => fn()),
+  interpolate: vi.fn((value: number, input: number[], output: number[]) => {
+    const index = input.indexOf(value);
+    return index >= 0 ? output[index] : output[0];
+  }),
   useAnimatedScrollHandler: vi.fn(() => vi.fn()),
   useDerivedValue: vi.fn((fn: () => unknown) => ({ value: fn() })),
   withTiming: vi.fn((v: unknown) => v),
