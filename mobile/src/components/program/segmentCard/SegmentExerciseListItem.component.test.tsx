@@ -96,6 +96,18 @@ describe("SegmentExerciseListItem", () => {
     expect(screen.getByText("Resume")).toBeInTheDocument();
   });
 
+  it("hides the per-exercise rest line when isRoundBased is true", () => {
+    renderItem({ isRoundBased: true, exercise: { ...exercise, restSeconds: 90 } });
+
+    expect(screen.queryByText(/Rest 90/)).not.toBeInTheDocument();
+  });
+
+  it("still shows the per-exercise rest line when isRoundBased is false", () => {
+    renderItem({ isRoundBased: false, exercise: { ...exercise, restSeconds: 90 } });
+
+    expect(screen.getByText("Rest 90 s")).toBeInTheDocument();
+  });
+
   it("calls onViewExerciseDetail with the right ids when the row title is tapped", () => {
     const onViewExerciseDetail = vi.fn();
     renderItem({ onViewExerciseDetail });

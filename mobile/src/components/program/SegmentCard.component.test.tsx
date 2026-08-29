@@ -628,6 +628,27 @@ describe("SegmentCard — round-based logging (superset)", () => {
     expect(content.indexOf("Start Exercise")).toBeGreaterThan(content.indexOf("Romanian Deadlift"));
   });
 
+  it("groups superset exercises into a single container with one rest line instead of one per exercise", () => {
+    renderCard({ segment: supersetSegment() });
+
+    expect(screen.getAllByText(/^Rest 90/)).toHaveLength(1);
+    expect(screen.getByText("Rest 90s after each round")).toBeInTheDocument();
+    expect(screen.getByText("Barbell Squat")).toBeInTheDocument();
+    expect(screen.getByText("Romanian Deadlift")).toBeInTheDocument();
+  });
+
+  it("still shows one rest line per exercise for a non-round-based segment", () => {
+    const segment = makeSegment({}, [
+      makeExercise({ id: "ex-1", exerciseId: "bb-squat", name: "Barbell Squat", restSeconds: 90 }),
+      makeExercise({ id: "ex-2", exerciseId: "bb-press", name: "Overhead Press", restSeconds: 60 }),
+    ]);
+
+    renderCard({ segment });
+
+    expect(screen.getByText("Rest 90 s")).toBeInTheDocument();
+    expect(screen.getByText("Rest 60 s")).toBeInTheDocument();
+  });
+
   it("prefills round inputs from guideline load and prescribed reps", async () => {
     const segment = makeSegment(
       { segmentType: "superset", segmentTypeLabel: "Superset", rounds: 4 },
