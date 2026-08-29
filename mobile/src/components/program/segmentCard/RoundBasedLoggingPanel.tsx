@@ -7,11 +7,22 @@ import { spacing } from "../../../theme/spacing";
 import { typography } from "../../../theme/typography";
 import { PressableScale } from "../../interaction/PressableScale";
 import type { SetInputState } from "../sessionUxLogic";
+import { InlineRestStrip } from "./InlineRestStrip";
 import { RirRoundPicker } from "./RirRoundPicker";
 import { RoundSummaryRow } from "./RoundSummaryRow";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
+
+type RestStripRenderProps = {
+  restDisplaySeconds: number;
+  restProgress: number;
+  showAdjustControls: boolean;
+  onToggleAdjust: () => void;
+  onReset: () => void;
+  onAdjust: (delta: number) => void;
+  onAdjustLongPress: (delta: number) => void;
+};
 
 type RoundBasedLoggingPanelProps = {
   totalRounds: number;
@@ -33,6 +44,8 @@ type RoundBasedLoggingPanelProps = {
   onRoundComplete: (roundIndex: number) => void | Promise<void>;
   onPostStopRirDone: () => void | Promise<void>;
   getExerciseValue: (exercise: Exercise, roundIndex: number) => string | null;
+  showRestStrip?: boolean;
+  restStripProps?: RestStripRenderProps;
 };
 
 function isUnloadedExercise(exercise: Exercise): boolean {
@@ -55,6 +68,8 @@ export function RoundBasedLoggingPanel({
   onRoundComplete,
   onPostStopRirDone,
   getExerciseValue,
+  showRestStrip = false,
+  restStripProps,
 }: RoundBasedLoggingPanelProps): React.JSX.Element {
   return (
     <>
@@ -88,7 +103,9 @@ export function RoundBasedLoggingPanel({
         }
 
         return (
-          <View key={roundIndex} style={styles.roundActiveBlock}>
+          <React.Fragment key={roundIndex}>
+            {showRestStrip && restStripProps ? <InlineRestStrip {...restStripProps} /> : null}
+            <View style={styles.roundActiveBlock}>
             <Text style={styles.roundActiveLabel}>{`Round ${roundIndex + 1}`}</Text>
             {loggableExercises.map((exercise) => {
               const exerciseKey = exercise.id ?? "";
@@ -162,33 +179,37 @@ export function RoundBasedLoggingPanel({
             >
               <Text style={styles.markRoundButtonLabel}>Mark round complete</Text>
             </PressableScale>
-          </View>
+            </View>
+          </React.Fragment>
         );
       })}
       {showPostStopRir ? (
-        <View style={styles.postStopRirBlock}>
-          <Text style={styles.exerciseRirQuestion}>
-            How many more reps could you complete per set?
-          </Text>
-          {loggableExercises.map((exercise) => (
-            <RirRoundPicker
-              key={exercise.id ?? exercise.name}
-              exercise={exercise}
-              selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
-              onSelect={(optionValue) => onSelectRir(exercise, optionValue)}
-            />
-          ))}
-          <View style={styles.rirHintRow}>
-            <Text style={styles.rirHintText}>Too easy</Text>
-            <Text style={styles.rirHintText}>Max effort</Text>
+        <>
+          {showRestStrip && restStripProps ? <InlineRestStrip {...restStripProps} /> : null}
+          <View style={styles.postStopRirBlock}>
+            <Text style={styles.exerciseRirQuestion}>
+              How many more reps could you complete per set?
+            </Text>
+            {loggableExercises.map((exercise) => (
+              <RirRoundPicker
+                key={exercise.id ?? exercise.name}
+                exercise={exercise}
+                selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
+                onSelect={(optionValue) => onSelectRir(exercise, optionValue)}
+              />
+            ))}
+            <View style={styles.rirHintRow}>
+              <Text style={styles.rirHintText}>Too easy</Text>
+              <Text style={styles.rirHintText}>Max effort</Text>
+            </View>
+            <PressableScale
+              style={styles.markRoundButton}
+              onPress={() => { void onPostStopRirDone(); }}
+            >
+              <Text style={styles.markRoundButtonLabel}>Done</Text>
+            </PressableScale>
           </View>
-          <PressableScale
-            style={styles.markRoundButton}
-            onPress={() => { void onPostStopRirDone(); }}
-          >
-            <Text style={styles.markRoundButtonLabel}>Done</Text>
-          </PressableScale>
-        </View>
+        </>
       ) : null}
     </>
   );
