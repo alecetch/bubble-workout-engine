@@ -98,7 +98,9 @@ const timelineItem = {
 };
 
 function renderScreen() {
-  ({ queryClient } = renderWithProviders(<HistoryScreen />));
+  const rendered = renderWithProviders(<HistoryScreen />);
+  ({ queryClient } = rendered);
+  return rendered;
 }
 
 function setAllHooksLoading() {
@@ -226,6 +228,21 @@ describe("HistoryScreen", () => {
 
     expect(screen.getByText("Lower Body")).toBeInTheDocument();
     expect(screen.getByText("45 mins")).toBeInTheDocument();
+  });
+
+  it("shows the Timeline section before the Programs and metrics sections", () => {
+    const { container } = renderScreen();
+
+    const content = container.textContent ?? "";
+    const timelineIndex = content.indexOf("Timeline");
+    const programsIndex = content.indexOf("Programs");
+    const progressOverviewIndex = content.indexOf("Progress Overview");
+
+    expect(timelineIndex).toBeGreaterThan(-1);
+    expect(programsIndex).toBeGreaterThan(-1);
+    expect(progressOverviewIndex).toBeGreaterThan(-1);
+    expect(timelineIndex).toBeLessThan(programsIndex);
+    expect(timelineIndex).toBeLessThan(progressOverviewIndex);
   });
 
   it("navigates to ExerciseTrend on exercise search result tap", async () => {
