@@ -143,6 +143,8 @@ export function ResetPasswordCodeScreen({ navigation, route }: Props): React.JSX
               style={styles.eyeBtn}
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              accessibilityRole="button"
             >
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -183,6 +185,8 @@ export function ResetPasswordCodeScreen({ navigation, route }: Props): React.JSX
               style={styles.eyeBtn}
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              accessibilityRole="button"
             >
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}
