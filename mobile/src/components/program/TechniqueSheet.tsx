@@ -76,7 +76,7 @@ export function TechniqueSheet({
       animationType="none"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close technique sheet" />
 
       <Animated.View
         style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}

@@ -223,6 +223,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
               style={styles.eyeBtn}
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              accessibilityRole="button"
             >
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -265,6 +267,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
               style={styles.eyeBtn}
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              accessibilityRole="button"
             >
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}

@@ -115,7 +115,12 @@ export function BonusWorkoutSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <PressableScale testID="bonus-sheet-backdrop" style={StyleSheet.absoluteFill} onPress={onClose}>
+        <PressableScale
+          testID="bonus-sheet-backdrop"
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityLabel="Close bonus workout sheet"
+        >
           <View />
         </PressableScale>
         <View style={styles.sheet}>
