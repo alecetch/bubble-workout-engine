@@ -13,7 +13,7 @@ import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavig
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
-import { radii } from "../../theme/components";
+import { radii, softBadgePalette } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 
@@ -22,12 +22,12 @@ type Props = NativeStackScreenProps<ProgramsStackParamList, "ExerciseDecisionHis
 const PAGE_SIZE = 20;
 
 const OUTCOME_CHIP_STYLE: Record<string, { bg: string; text: string; border: string }> = {
-  increase_load: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  increase_reps: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  increase_sets: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  reduce_rest: { bg: "#0c1a4a", text: colors.accent, border: "#3b82f6" },
+  increase_load: softBadgePalette.success,
+  increase_reps: softBadgePalette.success,
+  increase_sets: softBadgePalette.success,
+  reduce_rest: softBadgePalette.info,
   hold: { bg: colors.surface, text: colors.textSecondary, border: colors.border },
-  deload_local: { bg: "#451a03", text: colors.warning, border: "#d97706" },
+  deload_local: softBadgePalette.warning,
 };
 
 const OUTCOME_CHIP_LABEL: Record<string, string> = {
