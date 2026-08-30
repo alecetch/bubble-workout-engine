@@ -2,14 +2,14 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { AdaptationDecision } from "../../api/programViewer";
 import { colors } from "../../theme/colors";
-import { radii } from "../../theme/components";
+import { radii, softBadgePalette, type SoftBadgeSemantic } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { PressableScale } from "../interaction/PressableScale";
 
 const HIDDEN_OUTCOMES = new Set(["hold"]);
 
-type ChipSemantic = "success" | "warning" | "info";
+type ChipSemantic = SoftBadgeSemantic;
 
 const OUTCOME_SEMANTIC: Record<string, ChipSemantic> = {
   increase_load: "success",
@@ -17,12 +17,6 @@ const OUTCOME_SEMANTIC: Record<string, ChipSemantic> = {
   increase_sets: "success",
   reduce_rest: "info",
   deload_local: "warning",
-};
-
-const SEMANTIC_COLORS: Record<ChipSemantic, { bg: string; text: string; border: string }> = {
-  success: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  warning: { bg: "#451a03", text: colors.warning, border: "#d97706" },
-  info: { bg: "#0c1a4a", text: colors.accent, border: "#3b82f6" },
 };
 
 type Props = {
@@ -36,7 +30,7 @@ export function AdaptationChip({ decision, expanded, onToggle, onViewHistory }: 
   if (HIDDEN_OUTCOMES.has(decision.outcome)) return null;
 
   const semantic = OUTCOME_SEMANTIC[decision.outcome] ?? "info";
-  const palette = SEMANTIC_COLORS[semantic];
+  const palette = softBadgePalette[semantic];
 
   return (
     <View style={styles.wrapper}>

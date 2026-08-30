@@ -19,7 +19,7 @@ import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavig
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { colors } from "../../theme/colors";
-import { radii } from "../../theme/components";
+import { radii, softBadgePalette } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { setSegmentLog, setWorkoutComplete, type SegmentLogEntry } from "../../utils/localWorkoutLog";
@@ -529,9 +529,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   adaptBanner: {
-    backgroundColor: "#0c1a4a",
+    backgroundColor: softBadgePalette.info.bg,
     borderWidth: 1,
-    borderColor: "#3b82f6",
+    borderColor: softBadgePalette.info.border,
     borderRadius: radii.card,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,

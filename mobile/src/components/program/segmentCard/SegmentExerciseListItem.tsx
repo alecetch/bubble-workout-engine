@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import type { ProgramDayFullResponse } from "../../../api/programViewer";
 import { colors } from "../../../theme/colors";
-import { radii } from "../../../theme/components";
+import { radii, softBadgePalette } from "../../../theme/components";
 import { spacing } from "../../../theme/spacing";
 import { typography } from "../../../theme/typography";
 import { PressableScale } from "../../interaction/PressableScale";
@@ -12,11 +12,11 @@ type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
 
 const CHIP_PALETTE: Record<string, { bg: string; text: string; border: string }> = {
-  increase_load: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  increase_reps: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  increase_sets: { bg: "#052e16", text: colors.success, border: "#16a34a" },
-  reduce_rest: { bg: "#0c1a4a", text: colors.accent, border: "#3b82f6" },
-  deload_local: { bg: "#451a03", text: colors.warning, border: "#d97706" },
+  increase_load: softBadgePalette.success,
+  increase_reps: softBadgePalette.success,
+  increase_sets: softBadgePalette.success,
+  reduce_rest: softBadgePalette.info,
+  deload_local: softBadgePalette.warning,
 };
 
 type SegmentExerciseListItemProps = {
@@ -105,11 +105,7 @@ export function SegmentExerciseListItem({
       {(() => {
         const decision = exercise.adaptationDecision ?? null;
         if (!decision || decision.outcome === "hold") return null;
-        const palette = CHIP_PALETTE[decision.outcome] ?? {
-          bg: "#0c1a4a",
-          text: colors.accent,
-          border: "#3b82f6",
-        };
+        const palette = CHIP_PALETTE[decision.outcome] ?? softBadgePalette.info;
 
         return (
           <PressableScale
