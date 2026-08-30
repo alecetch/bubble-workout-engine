@@ -619,6 +619,19 @@ describe("SegmentCard — round-based logging (superset)", () => {
     _resetForTest();
   });
 
+  it("shows no badge for a single-exercise segment", () => {
+    const segment = makeSegment({ segmentType: "single", segmentTypeLabel: "Single" });
+    renderCard({ segment });
+
+    expect(screen.queryByText("Single")).not.toBeInTheDocument();
+  });
+
+  it("still shows the badge for a superset segment", () => {
+    renderCard({ segment: supersetSegment() });
+
+    expect(screen.getByText("Superset")).toBeInTheDocument();
+  });
+
   it("renders a single Start Exercise button below all superset exercise rows", () => {
     const { container } = renderCard({ segment: supersetSegment() });
 
