@@ -6,6 +6,14 @@ export const radii = {
   card: 20,
 } as const;
 
+export type SoftBadgeSemantic = "success" | "warning" | "info";
+
+export const softBadgePalette: Record<SoftBadgeSemantic, { bg: string; text: string; border: string }> = {
+  success: { bg: "#052e16", text: colors.success, border: "#16a34a" },
+  warning: { bg: "#451a03", text: colors.warning, border: "#d97706" },
+  info: { bg: "#0c1a4a", text: colors.accent, border: colors.accent },
+};
+
 export const shadows = {
   card: {
     shadowColor: "#000",
