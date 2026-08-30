@@ -40,7 +40,12 @@ export function SessionPickerSheet({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableOpacity style={styles.overlay} onPress={onClose} activeOpacity={1} />
+      <TouchableOpacity
+        style={styles.overlay}
+        onPress={onClose}
+        activeOpacity={1}
+        accessibilityLabel="Close session picker"
+      />
       <SafeAreaView style={styles.sheet}>
         <View style={styles.handle} />
         <Text style={styles.dateHeader}>{scheduledDate}</Text>

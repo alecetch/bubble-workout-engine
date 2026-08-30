@@ -455,7 +455,11 @@ export function EquipmentOverrideSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <PressableScale style={styles.backdropPressable} onPress={onClose}>
+        <PressableScale
+          style={styles.backdropPressable}
+          onPress={onClose}
+          accessibilityLabel="Close equipment override sheet"
+        >
           <View style={styles.backdropPressable} />
         </PressableScale>
         <View style={styles.sheetWrap}>
