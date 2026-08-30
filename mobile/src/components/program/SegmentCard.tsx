@@ -56,7 +56,7 @@ type SegmentCardProps = {
   onInlinePanelClose?: (pageY: number) => void;
 };
 
-const BADGE_SEGMENT_TYPES = new Set(["single", "superset", "giant_set", "amrap", "emom"]);
+const BADGE_SEGMENT_TYPES = new Set(["superset", "giant_set", "amrap", "emom"]);
 function parseMmssToSeconds(value?: string | null): number | null {
   if (!value) return null;
   const [mm, ss] = value.split(":");
