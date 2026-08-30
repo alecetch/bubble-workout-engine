@@ -304,16 +304,6 @@
     },
     {
       "type": "component",
-      "source": "src/components/program/LogSegmentModal.tsx",
-      "test": "src/components/program/LogSegmentModal.component.test.tsx",
-      "status": "covered",
-      "tags": [
-        "program"
-      ],
-      "reason": ""
-    },
-    {
-      "type": "component",
       "source": "src/components/program/SegmentCard.tsx",
       "test": "src/components/program/SegmentCard.component.test.tsx",
       "status": "covered",
