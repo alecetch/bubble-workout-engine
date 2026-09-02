@@ -22,6 +22,10 @@ const { getSegmentPresentationMock } = vi.hoisted(() => ({
   getSegmentPresentationMock: vi.fn(),
 }));
 
+const { useWindowDimensionsMock } = vi.hoisted(() => ({
+  useWindowDimensionsMock: vi.fn(() => ({ width: 390, height: 844, scale: 2, fontScale: 1 })),
+}));
+
 const mutateAsyncMock = vi.fn().mockResolvedValue({ saved: 1, prs: [] });
 const initEntryMock = vi.fn();
 const startRestMock = vi.fn();
@@ -44,6 +48,14 @@ vi.mock("./segmentCardLogic", async () => {
   return {
     ...actual,
     getSegmentPresentation: getSegmentPresentationMock,
+  };
+});
+
+vi.mock("react-native", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-native")>();
+  return {
+    ...actual,
+    useWindowDimensions: useWindowDimensionsMock,
   };
 });
 
@@ -127,6 +139,7 @@ describe("SegmentCard", () => {
     adjustRestDurationMock.mockClear();
     impactAsyncMock.mockClear();
     getSegmentPresentationMock.mockClear();
+    useWindowDimensionsMock.mockReturnValue({ width: 390, height: 844, scale: 2, fontScale: 1 });
     useSettingsStore.setState({ showRestTimer: true, hydrated: true });
     setMockTimerState();
   });
@@ -491,6 +504,7 @@ describe("SegmentCard — unloaded exercises, button state machine, and collapse
     stopRestMock.mockClear();
     adjustRestDurationMock.mockClear();
     impactAsyncMock.mockClear();
+    useWindowDimensionsMock.mockReturnValue({ width: 390, height: 844, scale: 2, fontScale: 1 });
     useSettingsStore.setState({ showRestTimer: true, hydrated: true });
     setMockTimerState();
   });
@@ -596,14 +610,21 @@ describe("SegmentCard — round-based logging (superset)", () => {
   async function openSupersetPanel() {
     renderCard({ segment: supersetSegment() });
     fireEvent.click(screen.getByText("Start Exercise"));
-    expect(await screen.findByText("Round 1")).toBeInTheDocument();
+    expect(await screen.findByText("Round 1 of 4")).toBeInTheDocument();
   }
 
   function fillActiveRound(weight = "80", reps = "8") {
-    const inputs = screen.getAllByPlaceholderText("0");
-    inputs.forEach((input, index) => {
-      fireEvent.change(input, { target: { value: index % 2 === 0 ? weight : reps } });
-    });
+    fireEvent.change(screen.getByLabelText("Weight for Barbell Squat"), { target: { value: weight } });
+    fireEvent.change(screen.getByLabelText("Reps for Barbell Squat"), { target: { value: reps } });
+    fireEvent.change(screen.getByLabelText("Weight for Romanian Deadlift"), { target: { value: weight } });
+    fireEvent.change(screen.getByLabelText("Reps for Romanian Deadlift"), { target: { value: reps } });
+  }
+
+  function clearActiveRound() {
+    fireEvent.change(screen.getByLabelText("Weight for Barbell Squat"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Reps for Barbell Squat"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Weight for Romanian Deadlift"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Reps for Romanian Deadlift"), { target: { value: "" } });
   }
 
   beforeEach(() => {
@@ -686,7 +707,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Start Exercise"));
 
-    await screen.findByText("Round 1");
+    await screen.findByText("Round 1 of 4");
     const inputs = screen.getAllByPlaceholderText("0");
     expect(inputs[0]).toHaveValue("80");
     expect(inputs[1]).toHaveValue("10");
@@ -702,7 +723,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     await vi.waitFor(() => {
       expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
-      expect(screen.getByText("Round 2")).toBeInTheDocument();
+      expect(screen.getByText("Round 2 of 4")).toBeInTheDocument();
       const inputs = screen.getAllByPlaceholderText("0");
       expect(inputs[0]).toHaveValue("82.5");
       expect(inputs[1]).toHaveValue("9");
@@ -729,7 +750,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
       expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
       expect(screen.getByText(/Round 1 ✓/)).toBeInTheDocument();
     });
-    expect(screen.getByText("Round 2")).toBeInTheDocument();
+    expect(screen.getByText("Round 2 of 4")).toBeInTheDocument();
     expect(screen.getByText("Round 3 · complete round 2 to unlock")).toBeInTheDocument();
   });
 
@@ -773,9 +794,11 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
   it("RIR pickers are absent on rounds 1-3 and present on round 4", async () => {
     await openSupersetPanel();
+    expect(screen.queryByRole("button", { name: "Superset effort 4+" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
 
     for (let i = 0; i < 3; i += 1) {
+      expect(await screen.findByText(`Round ${i + 1} of 4`)).toBeInTheDocument();
       fillActiveRound();
       fireEvent.click(screen.getByText("Mark round complete"));
       await vi.waitFor(() => {
@@ -784,15 +807,48 @@ describe("SegmentCard — round-based logging (superset)", () => {
       });
     }
 
-    expect(await screen.findByLabelText("Barbell Squat 4+ reps in reserve")).toBeInTheDocument();
-    expect(screen.getByLabelText("Romanian Deadlift 0 reps in reserve")).toBeInTheDocument();
+    expect(await screen.findByText("Round 4 of 4")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Superset effort 4+" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("segment-effort-picker")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Romanian Deadlift 0 reps in reserve" })).not.toBeInTheDocument();
+  });
+
+  it("applies the selected combined effort to both final-round superset rows", async () => {
+    await openSupersetPanel();
+
+    for (let i = 0; i < 3; i += 1) {
+      expect(await screen.findByText(`Round ${i + 1} of 4`)).toBeInTheDocument();
+      fillActiveRound();
+      fireEvent.click(screen.getByText("Mark round complete"));
+      await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1));
+    }
+
+    expect(await screen.findByText("Round 4 of 4")).toBeInTheDocument();
+    fillActiveRound("82.5", "9");
+    fireEvent.click(screen.getByRole("button", { name: "Superset effort 2" }));
+    fireEvent.click(screen.getByText("Mark round complete"));
+
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(4));
+    expect(mutateAsyncMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          programExerciseId: "ex-1",
+          orderIndex: 4,
+          rirActual: 2,
+        }),
+        expect.objectContaining({
+          programExerciseId: "ex-2",
+          orderIndex: 4,
+          rirActual: 2,
+        }),
+      ]),
+    }));
   });
 
   it("empty round shows inline warning; second tap saves", async () => {
     await openSupersetPanel();
-    screen.getAllByPlaceholderText("0").forEach((input) => {
-      fireEvent.change(input, { target: { value: "" } });
-    });
+    clearActiveRound();
 
     fireEvent.click(screen.getByText("Mark round complete"));
 
@@ -826,8 +882,40 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Close Log"));
 
-    expect(await screen.findByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Superset effort 4+" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
     expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+
+  it("applies post-stop combined effort to both rows from the last completed superset round", async () => {
+    await openSupersetPanel();
+
+    for (let i = 0; i < 2; i += 1) {
+      expect(await screen.findByText(`Round ${i + 1} of 4`)).toBeInTheDocument();
+      fillActiveRound("80", "8");
+      fireEvent.click(screen.getByText("Mark round complete"));
+      await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1));
+    }
+
+    fireEvent.click(screen.getByText("Close Log"));
+    fireEvent.click(await screen.findByRole("button", { name: "Superset effort 1" }));
+    fireEvent.click(screen.getByText("Done"));
+
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(3));
+    expect(mutateAsyncMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          programExerciseId: "ex-1",
+          orderIndex: 2,
+          rirActual: 1,
+        }),
+        expect.objectContaining({
+          programExerciseId: "ex-2",
+          orderIndex: 2,
+          rirActual: 1,
+        }),
+      ]),
+    }));
   });
 
   it("Resume button appears after Close Log on a superset (no rounds completed)", async () => {
@@ -844,7 +932,92 @@ describe("SegmentCard — round-based logging (superset)", () => {
     fireEvent.click(screen.getByText("Close Log"));
     fireEvent.click(await screen.findByText("Resume"));
 
-    expect(await screen.findByText("Round 1")).toBeInTheDocument();
+    expect(await screen.findByText("Round 1 of 4")).toBeInTheDocument();
     expect(screen.queryByText("Resume")).not.toBeInTheDocument();
+  });
+});
+
+describe("SegmentCard — AMRAP pair logging", () => {
+  function amrapPairSegment() {
+    return makeSegment(
+      {
+        segmentType: "amrap",
+        segmentTypeLabel: "AMRAP",
+        rounds: 1,
+      },
+      [
+        makeExercise({ id: "ex-1", exerciseId: "ski-erg", name: "Ski Erg", reps: "250-300", repsUnit: "m", sets: 1 }),
+        makeExercise({ id: "ex-2", exerciseId: "sandbag-lunge", name: "Sandbag Lunge", reps: "20-24", sets: 1 }),
+      ],
+    );
+  }
+
+  beforeEach(() => {
+    mutateAsyncMock.mockClear();
+    mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
+    initEntryMock.mockClear();
+    startRestMock.mockClear();
+    stopRestMock.mockClear();
+    adjustRestDurationMock.mockClear();
+    impactAsyncMock.mockClear();
+    useWindowDimensionsMock.mockReturnValue({ width: 390, height: 844, scale: 2, fontScale: 1 });
+    useSettingsStore.setState({ showRestTimer: true, hydrated: true });
+    setMockTimerState();
+    _resetForTest();
+  });
+
+  it("uses the side-by-side AMRAP pair panel without the round-based superset flow", async () => {
+    renderCard({ segment: amrapPairSegment() });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+
+    expect(await screen.findByTestId("amrap-pair-logging-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("amrap-pair-exercise-grid")).toBeInTheDocument();
+    expect(screen.getByTestId("round-exercise-ex-1-column")).toBeInTheDocument();
+    expect(screen.getByTestId("round-exercise-ex-2-column")).toBeInTheDocument();
+    expect(screen.queryByTestId("round-exercise-pair-grid")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark round complete")).not.toBeInTheDocument();
+  });
+
+  it("keeps AMRAP pair saves per exercise set instead of atomically completing a round", async () => {
+    renderCard({ segment: amrapPairSegment() });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+    await screen.findByTestId("amrap-pair-logging-panel");
+    fireEvent.change(screen.getByLabelText("Reps for Ski Erg"), { target: { value: "280" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ski Erg set 1 complete" }));
+
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
+      workoutSegmentId: "seg-1",
+      rows: [
+        expect.objectContaining({
+          programExerciseId: "ex-1",
+          orderIndex: 1,
+          repsCompleted: 280,
+          rirActual: null,
+        }),
+      ],
+    }));
+  });
+
+  it("renders no RIR or effort controls in the AMRAP pair panel", async () => {
+    renderCard({ segment: amrapPairSegment() });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+    await screen.findByTestId("amrap-pair-logging-panel");
+
+    expect(screen.queryByRole("button", { name: /reps in reserve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Superset effort/i })).not.toBeInTheDocument();
+  });
+
+  it("falls back to the existing flat logger when the AMRAP pair is too narrow", async () => {
+    useWindowDimensionsMock.mockReturnValue({ width: 320, height: 844, scale: 2, fontScale: 1 });
+    renderCard({ segment: amrapPairSegment() });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+
+    expect(screen.queryByTestId("amrap-pair-logging-panel")).not.toBeInTheDocument();
+    expect(await screen.findAllByText("Log all sets as complete")).toHaveLength(2);
   });
 });

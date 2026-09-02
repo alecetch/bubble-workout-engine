@@ -1,4 +1,9 @@
-import { getSegmentPresentation, isRoundBasedSegment } from "./segmentCardLogic.js";
+import {
+    getSegmentPresentation,
+    isCombinedSupersetEffort,
+    isPairLayoutEligible,
+    isRoundBasedSegment,
+} from "./segmentCardLogic.js";
 test("warmup segment shows notes-only behavior and no log button", () => {
     const out = getSegmentPresentation({
         segmentType: "warmup",
@@ -69,4 +74,19 @@ test("isRoundBasedSegment returns true for supersets", () => {
 });
 test("isRoundBasedSegment returns false for single segments", () => {
     expect(isRoundBasedSegment("single")).toBe(false);
+});
+test("isPairLayoutEligible returns true for two exercises", () => {
+    expect(isPairLayoutEligible(2)).toBe(true);
+});
+test("isPairLayoutEligible returns false for non-pair exercise counts", () => {
+    expect(isPairLayoutEligible(1)).toBe(false);
+    expect(isPairLayoutEligible(3)).toBe(false);
+    expect(isPairLayoutEligible(4)).toBe(false);
+});
+test("isCombinedSupersetEffort returns true only for two-exercise supersets", () => {
+    expect(isCombinedSupersetEffort("superset", 2)).toBe(true);
+    expect(isCombinedSupersetEffort("giant_set", 2)).toBe(false);
+    expect(isCombinedSupersetEffort("superset", 3)).toBe(false);
+    expect(isCombinedSupersetEffort("superset", 1)).toBe(false);
+    expect(isCombinedSupersetEffort(null, 2)).toBe(false);
 });

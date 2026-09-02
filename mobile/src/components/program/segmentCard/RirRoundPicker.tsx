@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   },
   rirPill: {
     width: "100%",
-    minHeight: 48,
+    minHeight: 36,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
