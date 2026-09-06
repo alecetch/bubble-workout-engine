@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import ViewShot from "react-native-view-shot";
+import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import type { ScanResult } from "../../api/physiqueScan";
 import { colors } from "../../theme/colors";
@@ -8,7 +8,7 @@ import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 
-let currentCaptureRef: ViewShot | null = null;
+let currentCaptureRef: ViewShotRef | null = null;
 let currentScanId: string | null = null;
 
 function formatDelta(value: number | null): string {
@@ -32,7 +32,7 @@ export async function captureAndShare(scanResult: ScanResult): Promise<void> {
 }
 
 export function PhysiqueShareCard({ scanResult }: { scanResult: ScanResult }): React.JSX.Element {
-  const viewShotRef = React.useRef<ViewShot | null>(null);
+  const viewShotRef = React.useRef<ViewShotRef | null>(null);
 
   React.useEffect(() => {
     currentCaptureRef = viewShotRef.current;

@@ -12,17 +12,17 @@ appId: com.bubbleworkout.mobile
     file: scripts/post-launch-sleep.js
 - launchApp:
     stopApp: false
-# Dev client always appears on launch. Wait for it, tap the Metro server entry,
-# then dismiss the bundle-loaded overlay. Server shows as 10.0.2.2:8081 on the
+# Dev client always appears on launch. The dev-launcher no longer auto-lists
+# discovered Metro servers as a tappable row (SDK 57) - type the address into
+# the manual-entry field and tap Connect. Server is 10.0.2.2:8081 on the
 # Android emulator (the emulator's address for the host machine).
 - runFlow:
     when:
       visible: "Development Build"
     commands:
-      - extendedWaitUntil:
-          visible: "http://10.0.2.2:8081"
-          timeout: 30000
-      - tapOn: "http://10.0.2.2:8081"
+      - tapOn: "http://"
+      - inputText: "http://10.0.2.2:8081"
+      - tapOn: "Connect"
       - extendedWaitUntil:
           visible: "Continue"
           timeout: 120000
