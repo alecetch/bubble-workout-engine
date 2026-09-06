@@ -19,7 +19,11 @@ import {
   getExerciseSetCount,
   type SetInputState,
 } from "./sessionUxLogic";
-import { getSegmentPresentation, isRoundBasedSegment } from "./segmentCardLogic";
+import {
+  getSegmentPresentation,
+  isCombinedSupersetEffort,
+  isRoundBasedSegment,
+} from "./segmentCardLogic";
 import { setExerciseComplete } from "../../utils/localWorkoutLog";
 import { useLocalExerciseCompletion } from "./hooks/useLocalExerciseCompletion";
 import { useRoundBasedLogging } from "./hooks/useRoundBasedLogging";
@@ -145,6 +149,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   );
   const hasLoggableExercises = loggableExercises.length > 0;
   const isRoundBased = isRoundBasedSegment(segment.segmentType);
+  const useCombinedSupersetEffort = isCombinedSupersetEffort(segment.segmentType, loggableExercises.length);
   const totalRounds = presentation.roundsValue;
   const showRestTimer = useSettingsStore((state) => state.showRestTimer);
   const existingLogsQuery = useSegmentExerciseLogs(segment.id, programDayId, { userId });
@@ -741,6 +746,18 @@ export const SegmentCard = React.memo(function SegmentCard({
     }));
   }
 
+  function handleSelectCombinedRir(optionValue: number): void {
+    setExerciseRirMap((current) => {
+      const next = { ...current };
+      loggableExercises.forEach((exercise) => {
+        if (exercise.id) {
+          next[exercise.id] = optionValue;
+        }
+      });
+      return next;
+    });
+  }
+
   function toggleExpandedRound(roundIndex: number): void {
     setExpandedRoundIndices((current) => {
       const next = new Set(current);
@@ -957,6 +974,8 @@ export const SegmentCard = React.memo(function SegmentCard({
               onUpdateSetInput={updateSetInput}
               exerciseRirMap={exerciseRirMap}
               onSelectRir={handleSelectRir}
+              useCombinedEffort={useCombinedSupersetEffort}
+              onSelectCombinedRir={handleSelectCombinedRir}
               roundSaveError={roundSaveError}
               onRoundComplete={handleRoundComplete}
               onPostStopRirDone={handlePostStopRirDone}

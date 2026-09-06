@@ -28,6 +28,14 @@ export function isRoundBasedSegment(segmentType?: string | null): boolean {
   return normalized === "superset" || normalized === "giant_set";
 }
 
+export function isPairLayoutEligible(exerciseCount: number): boolean {
+  return exerciseCount === 2;
+}
+
+export function isCombinedSupersetEffort(segmentType: string | null | undefined, exerciseCount: number): boolean {
+  return normalizeSegmentType(segmentType) === "superset" && isPairLayoutEligible(exerciseCount);
+}
+
 export function coerceRounds(rounds?: number | null): number {
   const parsed = Number(rounds);
   if (!Number.isFinite(parsed) || parsed < 1) return 1;

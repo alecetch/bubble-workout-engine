@@ -435,6 +435,17 @@
     },
     {
       "type": "component",
+      "source": "src/components/program/segmentCard/SegmentEffortPicker.tsx",
+      "test": "src/components/program/segmentCard/SegmentEffortPicker.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program",
+        "round-based-logging"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/program/segmentCard/SegmentExerciseListItem.tsx",
       "test": "src/components/program/segmentCard/SegmentExerciseListItem.component.test.tsx",
       "status": "covered",

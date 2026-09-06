@@ -38,6 +38,8 @@ function renderPanel(
       onUpdateSetInput={props.onUpdateSetInput ?? vi.fn()}
       exerciseRirMap={props.exerciseRirMap ?? {}}
       onSelectRir={props.onSelectRir ?? vi.fn()}
+      useCombinedEffort={props.useCombinedEffort ?? false}
+      onSelectCombinedRir={props.onSelectCombinedRir ?? vi.fn()}
       roundSaveError={props.roundSaveError ?? null}
       onRoundComplete={props.onRoundComplete ?? vi.fn()}
       onPostStopRirDone={props.onPostStopRirDone ?? vi.fn()}
@@ -66,6 +68,28 @@ describe("RoundBasedLoggingPanel", () => {
     expect(onSelectRir).toHaveBeenCalledWith(exercises[0], 3);
   });
 
+  it("renders one combined effort picker on the final round when enabled", () => {
+    const onSelectCombinedRir = vi.fn();
+    renderPanel({
+      totalRounds: 1,
+      activeRoundIndex: 0,
+      useCombinedEffort: true,
+      onSelectCombinedRir,
+      exerciseRirMap: { "ex-1": 2, "ex-2": 2 },
+    });
+
+    expect(screen.getByText("How hard was this superset?")).toBeInTheDocument();
+    expect(screen.getByTestId("segment-effort-picker")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Superset effort 2" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Romanian Deadlift 0 reps in reserve" })).not.toBeInTheDocument();
+    expect(screen.getByText("Comfortable")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Superset effort 3" }));
+
+    expect(onSelectCombinedRir).toHaveBeenCalledWith(3);
+  });
+
   it("renders post-stop RIR controls and calls onPostStopRirDone", () => {
     const onPostStopRirDone = vi.fn();
     renderPanel({ showPostStopRir: true, onPostStopRirDone });
@@ -74,6 +98,46 @@ describe("RoundBasedLoggingPanel", () => {
     fireEvent.click(screen.getByText("Done"));
 
     expect(onPostStopRirDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders combined effort controls in the post-stop flow when enabled", () => {
+    const onSelectCombinedRir = vi.fn();
+    const onPostStopRirDone = vi.fn();
+    renderPanel({
+      showPostStopRir: true,
+      useCombinedEffort: true,
+      onSelectCombinedRir,
+      onPostStopRirDone,
+    });
+
+    expect(screen.getByText("How hard was this superset?")).toBeInTheDocument();
+    expect(screen.getByTestId("segment-effort-picker")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Superset effort 0" }));
+    fireEvent.click(screen.getByText("Done"));
+
+    expect(onSelectCombinedRir).toHaveBeenCalledWith(0);
+    expect(onPostStopRirDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps three-exercise fixtures on per-exercise RIR when combined effort is off", () => {
+    renderPanel({
+      totalRounds: 1,
+      activeRoundIndex: 0,
+      loggableExercises: [
+        ...exercises,
+        buildExercise({ id: "ex-3", exerciseId: "db-row", name: "Dumbbell Row" }),
+      ],
+      inputMap: {
+        ...inputMap,
+        "ex-3": [{ weight: "30", reps: "12", rirActual: null }],
+      },
+      useCombinedEffort: false,
+    });
+
+    expect(screen.getAllByRole("button", { name: /reps in reserve/ })).toHaveLength(15);
+    expect(screen.queryByTestId("segment-effort-picker")).not.toBeInTheDocument();
   });
 
   it("renders roundSaveError when provided", () => {

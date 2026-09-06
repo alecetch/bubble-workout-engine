@@ -10,6 +10,7 @@ import type { SetInputState } from "../sessionUxLogic";
 import { InlineRestStrip } from "./InlineRestStrip";
 import { RirRoundPicker } from "./RirRoundPicker";
 import { RoundSummaryRow } from "./RoundSummaryRow";
+import { SegmentEffortPicker } from "./SegmentEffortPicker";
 
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
@@ -40,6 +41,8 @@ type RoundBasedLoggingPanelProps = {
   ) => void;
   exerciseRirMap: Record<string, number | null>;
   onSelectRir: (exercise: Exercise, optionValue: number) => void;
+  useCombinedEffort?: boolean;
+  onSelectCombinedRir?: (optionValue: number) => void;
   roundSaveError: string | null;
   onRoundComplete: (roundIndex: number) => void | Promise<void>;
   onPostStopRirDone: () => void | Promise<void>;
@@ -64,6 +67,8 @@ export function RoundBasedLoggingPanel({
   onUpdateSetInput,
   exerciseRirMap,
   onSelectRir,
+  useCombinedEffort = false,
+  onSelectCombinedRir,
   roundSaveError,
   onRoundComplete,
   onPostStopRirDone,
@@ -71,6 +76,9 @@ export function RoundBasedLoggingPanel({
   showRestStrip = false,
   restStripProps,
 }: RoundBasedLoggingPanelProps): React.JSX.Element {
+  const combinedRirValue = exerciseRirMap[loggableExercises[0]?.id ?? ""] ?? null;
+  const handleCombinedRirSelect = onSelectCombinedRir ?? (() => undefined);
+
   return (
     <>
       {Array.from({ length: totalRounds }, (_value, roundIndex) => {
@@ -154,18 +162,25 @@ export function RoundBasedLoggingPanel({
             {isLastRound ? (
               <View style={styles.exerciseRirBlock}>
                 <Text style={styles.exerciseRirQuestion}>
-                  How many more reps could you complete per set?
+                  {useCombinedEffort ? "How hard was this superset?" : "How many more reps could you complete per set?"}
                 </Text>
-                {loggableExercises.map((exercise) => (
-                  <RirRoundPicker
-                    key={exercise.id ?? exercise.name}
-                    exercise={exercise}
-                    selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
-                    onSelect={(optionValue) => onSelectRir(exercise, optionValue)}
+                {useCombinedEffort ? (
+                  <SegmentEffortPicker
+                    selectedValue={combinedRirValue}
+                    onSelect={handleCombinedRirSelect}
                   />
-                ))}
+                ) : (
+                  loggableExercises.map((exercise) => (
+                    <RirRoundPicker
+                      key={exercise.id ?? exercise.name}
+                      exercise={exercise}
+                      selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
+                      onSelect={(optionValue) => onSelectRir(exercise, optionValue)}
+                    />
+                  ))
+                )}
                 <View style={styles.rirHintRow}>
-                  <Text style={styles.rirHintText}>Too easy</Text>
+                  <Text style={styles.rirHintText}>{useCombinedEffort ? "Comfortable" : "Too easy"}</Text>
                   <Text style={styles.rirHintText}>Max effort</Text>
                 </View>
               </View>
@@ -188,18 +203,25 @@ export function RoundBasedLoggingPanel({
           {showRestStrip && restStripProps ? <InlineRestStrip {...restStripProps} /> : null}
           <View style={styles.postStopRirBlock}>
             <Text style={styles.exerciseRirQuestion}>
-              How many more reps could you complete per set?
+              {useCombinedEffort ? "How hard was this superset?" : "How many more reps could you complete per set?"}
             </Text>
-            {loggableExercises.map((exercise) => (
-              <RirRoundPicker
-                key={exercise.id ?? exercise.name}
-                exercise={exercise}
-                selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
-                onSelect={(optionValue) => onSelectRir(exercise, optionValue)}
+            {useCombinedEffort ? (
+              <SegmentEffortPicker
+                selectedValue={combinedRirValue}
+                onSelect={handleCombinedRirSelect}
               />
-            ))}
+            ) : (
+              loggableExercises.map((exercise) => (
+                <RirRoundPicker
+                  key={exercise.id ?? exercise.name}
+                  exercise={exercise}
+                  selectedRir={exerciseRirMap[exercise.id ?? ""] ?? null}
+                  onSelect={(optionValue) => onSelectRir(exercise, optionValue)}
+                />
+              ))
+            )}
             <View style={styles.rirHintRow}>
-              <Text style={styles.rirHintText}>Too easy</Text>
+              <Text style={styles.rirHintText}>{useCombinedEffort ? "Comfortable" : "Too easy"}</Text>
               <Text style={styles.rirHintText}>Max effort</Text>
             </View>
             <PressableScale
