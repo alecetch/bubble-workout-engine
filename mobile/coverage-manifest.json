@@ -315,6 +315,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/program/WorkoutProgressHeader.tsx",
+      "test": "src/components/program/WorkoutProgressHeader.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/program/segmentCard/RirRoundPicker.tsx",
       "test": "src/components/program/segmentCard/RirRoundPicker.component.test.tsx",
       "status": "covered",

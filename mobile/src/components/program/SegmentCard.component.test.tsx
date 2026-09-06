@@ -79,12 +79,13 @@ function segmentCardElement(
       userId={props.userId}
       onViewExerciseDetail={props.onViewExerciseDetail ?? vi.fn()}
       onRequestSwap={props.onRequestSwap}
-	      onAllSetsSaved={props.onAllSetsSaved ?? vi.fn()}
-	      onSubscriptionRequired={props.onSubscriptionRequired}
-	      onInlinePanelClose={props.onInlinePanelClose}
-	    />
-	  );
-	}
+      onAllSetsSaved={props.onAllSetsSaved ?? vi.fn()}
+      onSubscriptionRequired={props.onSubscriptionRequired}
+      onInlinePanelClose={props.onInlinePanelClose}
+      onSetsLoggedChange={props.onSetsLoggedChange}
+    />
+  );
+}
 
 function renderCard(
   props: Partial<React.ComponentProps<typeof SegmentCard>> = {},
@@ -300,6 +301,16 @@ describe("SegmentCard", () => {
     expect(inputs[0]).not.toHaveValue("80");
     expect(inputs[2]).toHaveValue("80");
     expect(inputs[4]).toHaveValue("80");
+  });
+
+  it("reports logged set count changes after logging one standard set", async () => {
+    const onSetsLoggedChange = vi.fn();
+    renderCard({ onSetsLoggedChange });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+
+    await vi.waitFor(() => expect(onSetsLoggedChange).toHaveBeenCalledWith("seg-1", 1));
   });
 
   it("calls onInlinePanelClose when Close Log is pressed", async () => {
@@ -731,6 +742,18 @@ describe("SegmentCard — round-based logging (superset)", () => {
     });
     expect(screen.getByText("Round 2")).toBeInTheDocument();
     expect(screen.getByText("Round 3 · complete round 2 to unlock")).toBeInTheDocument();
+  });
+
+  it("reports logged set count changes after completing one superset round", async () => {
+    const onSetsLoggedChange = vi.fn();
+    renderCard({ segment: supersetSegment(), onSetsLoggedChange });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    expect(await screen.findByText("Round 1")).toBeInTheDocument();
+    fillActiveRound();
+
+    fireEvent.click(screen.getByText("Mark round complete"));
+
+    await vi.waitFor(() => expect(onSetsLoggedChange).toHaveBeenCalledWith("seg-1", 2));
   });
 
   it("completed round collapses to summary line", async () => {

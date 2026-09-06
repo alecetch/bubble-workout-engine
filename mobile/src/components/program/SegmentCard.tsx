@@ -54,6 +54,7 @@ type SegmentCardProps = {
   onLayout?: (event: LayoutChangeEvent) => void;
   onInlinePanelOpen?: (pageY: number) => void;
   onInlinePanelClose?: (pageY: number) => void;
+  onSetsLoggedChange?: (segmentId: string, doneCount: number) => void;
 };
 
 const BADGE_SEGMENT_TYPES = new Set(["superset", "giant_set", "amrap", "emom"]);
@@ -128,6 +129,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   onLayout,
   onInlinePanelOpen,
   onInlinePanelClose,
+  onSetsLoggedChange,
 }: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
@@ -261,6 +263,10 @@ export const SegmentCard = React.memo(function SegmentCard({
     }
     prevRestRunning.current = restIsRunning;
   }, [doneSetKeys, loggableExercises, restEntry?.restIsRunning]);
+
+  useEffect(() => {
+    onSetsLoggedChange?.(segment.id, doneSetKeys.size);
+  }, [doneSetKeys, onSetsLoggedChange, segment.id]);
 
   const restProgress =
     restEntry != null && restEntry.restTotalSeconds > 0

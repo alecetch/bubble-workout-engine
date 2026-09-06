@@ -209,6 +209,16 @@ export function computeSessionStatsFromSegments(
   };
 }
 
+export function computeTotalPrescribedSets(orderedSegments: Segment[]): number {
+  return orderedSegments.reduce(
+    (sum, segment) =>
+      sum + (segment.exercises ?? [])
+        .filter((exercise) => exercise.id)
+        .reduce((exerciseSum, exercise) => exerciseSum + getExerciseSetCount(exercise), 0),
+    0,
+  );
+}
+
 export function computeSessionStatsFromLoggedRows(
   rowsBySegment: Record<string, SaveSegmentLogPayload["rows"]>,
 ): { totalVolumeKg: number; totalSets: number; exerciseCount: number } {

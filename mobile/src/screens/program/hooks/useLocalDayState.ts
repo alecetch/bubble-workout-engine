@@ -3,7 +3,7 @@ import type React from "react";
 import type { ProgramDayFullResponse } from "../../../api/programViewer";
 import type { SaveSegmentLogPayload } from "../../../api/segmentLog";
 import {
-  allExercisesComplete,
+  getExerciseComplete,
   getSegmentLog,
   getWorkoutComplete,
   setWorkoutComplete,
@@ -25,15 +25,31 @@ export function useLocalDayState(
   workoutComplete: boolean;
   setWorkoutCompleteState: React.Dispatch<React.SetStateAction<boolean>>;
   allExerciseCardsComplete: boolean;
+  completedExerciseIds: Set<string>;
   refreshExerciseCompletion: () => void;
 } {
   const [segmentLogs, setSegmentLogs] = useState<Record<string, SegmentLogEntry>>({});
   const [segmentLogRows, setSegmentLogRows] = useState<Record<string, SaveSegmentLogPayload["rows"]>>({});
   const [workoutComplete, setWorkoutCompleteState] = useState(false);
   const [allExerciseCardsComplete, setAllExerciseCardsComplete] = useState(false);
+  const [completedExerciseIds, setCompletedExerciseIds] = useState<Set<string>>(new Set());
 
   const refreshExerciseCompletion = useCallback(() => {
-    void allExercisesComplete(programDayId, allExerciseIds).then(setAllExerciseCardsComplete);
+    void (async () => {
+      const completed = await Promise.all(
+        allExerciseIds.map(async (programExerciseId) => ({
+          programExerciseId,
+          complete: await getExerciseComplete(programDayId, programExerciseId),
+        })),
+      );
+      const nextCompletedExerciseIds = new Set(
+        completed
+          .filter((entry) => entry.complete)
+          .map((entry) => entry.programExerciseId),
+      );
+      setCompletedExerciseIds(nextCompletedExerciseIds);
+      setAllExerciseCardsComplete(nextCompletedExerciseIds.size === allExerciseIds.length);
+    })();
   }, [allExerciseIds, programDayId]);
 
   useEffect(() => {
@@ -45,6 +61,12 @@ export function useLocalDayState(
         orderedSegments.map(async (segment) => ({
           segmentId: segment.id,
           log: await getSegmentLog(programDayId, segment.id),
+        })),
+      );
+      const exerciseCompletion = await Promise.all(
+        allExerciseIds.map(async (programExerciseId) => ({
+          programExerciseId,
+          complete: await getExerciseComplete(programDayId, programExerciseId),
         })),
       );
 
@@ -62,7 +84,13 @@ export function useLocalDayState(
 
       setSegmentLogs(logsMap);
       setWorkoutCompleteState(resolvedCompletion);
-      setAllExerciseCardsComplete(await allExercisesComplete(programDayId, allExerciseIds));
+      const nextCompletedExerciseIds = new Set(
+        exerciseCompletion
+          .filter((entry) => entry.complete)
+          .map((entry) => entry.programExerciseId),
+      );
+      setCompletedExerciseIds(nextCompletedExerciseIds);
+      setAllExerciseCardsComplete(nextCompletedExerciseIds.size === allExerciseIds.length);
     }
 
     void loadLocalState();
@@ -79,6 +107,7 @@ export function useLocalDayState(
     workoutComplete,
     setWorkoutCompleteState,
     allExerciseCardsComplete,
+    completedExerciseIds,
     refreshExerciseCompletion,
   };
 }
