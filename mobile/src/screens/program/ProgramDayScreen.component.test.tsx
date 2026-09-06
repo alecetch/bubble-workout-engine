@@ -3,6 +3,7 @@ import { axe } from "jest-axe";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Alert } from "react-native";
 import { ProgramDayScreen } from "./ProgramDayScreen";
 import { useCompleteProgram, useEntitlement, useHistoryOverview, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getPrsFeed } from "../../api/history";
@@ -10,7 +11,13 @@ import { getProgramEndCheck } from "../../api/programCompletion";
 import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
-import { allExercisesComplete, getSegmentLog, getWorkoutComplete, setWorkoutComplete } from "../../utils/localWorkoutLog";
+import {
+  getExerciseComplete,
+  getSegmentLog,
+  getWorkoutComplete,
+  getWorkoutStartedAt,
+  setWorkoutComplete,
+} from "../../utils/localWorkoutLog";
 import {
   buildExercise,
   buildProgramDay,
@@ -114,10 +121,10 @@ vi.mock("../../utils/localWorkoutLog", () => ({
   getSegmentLog: vi.fn().mockResolvedValue(null),
   setSegmentLog: vi.fn().mockResolvedValue(undefined),
   getWorkoutComplete: vi.fn().mockResolvedValue(false),
+  getWorkoutStartedAt: vi.fn().mockResolvedValue(null),
   setWorkoutComplete: vi.fn().mockResolvedValue(undefined),
   getExerciseComplete: vi.fn().mockResolvedValue(false),
   setExerciseComplete: vi.fn().mockResolvedValue(undefined),
-  allExercisesComplete: vi.fn().mockResolvedValue(true),
   hasAnySegmentLog: vi.fn().mockResolvedValue(false),
   getDayStatus: vi.fn().mockResolvedValue("scheduled"),
   _resetForTest: vi.fn(),
@@ -135,8 +142,14 @@ vi.mock("../../components/feedback/SkeletonBlock", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
-    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress, testID }: any) => (
+    <button
+      type="button"
+      aria-label={accessibilityLabel}
+      data-testid={testID}
+      disabled={disabled}
+      onClick={() => onPress?.()}
+    >
       {children}
     </button>
   ),
@@ -201,9 +214,11 @@ const getPrsFeedMock = vi.mocked(getPrsFeed);
 const getProgramOverviewMock = vi.mocked(getProgramOverview);
 const getProgramEndCheckMock = vi.mocked(getProgramEndCheck);
 const getWorkoutCompleteMock = vi.mocked(getWorkoutComplete);
+const getWorkoutStartedAtMock = vi.mocked(getWorkoutStartedAt);
 const getSegmentLogMock = vi.mocked(getSegmentLog);
+const getExerciseCompleteMock = vi.mocked(getExerciseComplete);
 const setWorkoutCompleteMock = vi.mocked(setWorkoutComplete);
-const allExercisesCompleteMock = vi.mocked(allExercisesComplete);
+const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 
 const markDayMutateMock = vi.fn();
 const completeProgramMutateMock = vi.fn();
@@ -288,6 +303,11 @@ async function waitForLocalStateLoad() {
   await waitFor(() => expect(getWorkoutCompleteMock).toHaveBeenCalledWith("day-1"));
 }
 
+async function openWorkoutSummary() {
+  await waitFor(() => expect(screen.getByTestId("workout-complete-ready")).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+}
+
 describe("ProgramDayScreen", () => {
   beforeEach(() => {
     markDayMutateMock.mockReset();
@@ -295,9 +315,11 @@ describe("ProgramDayScreen", () => {
     completeProgramMutateMock.mockReset();
     completeProgramMutateMock.mockResolvedValue({ ok: true });
     getWorkoutCompleteMock.mockResolvedValue(false);
+    getWorkoutStartedAtMock.mockResolvedValue(null);
     getSegmentLogMock.mockResolvedValue(null);
-    allExercisesCompleteMock.mockResolvedValue(true);
+    getExerciseCompleteMock.mockResolvedValue(true);
     setWorkoutCompleteMock.mockResolvedValue(undefined);
+    alertSpy.mockClear();
     getPrsFeedMock.mockResolvedValue({ rows: [], mode: "prs_28d", heaviest: null });
     appStorageMocks.getItem.mockReset();
     appStorageMocks.getItem.mockResolvedValue(null);
@@ -418,6 +440,15 @@ describe("ProgramDayScreen", () => {
     await waitForLocalStateLoad();
   });
 
+  it("renders the workout progress header with exercise and set totals", async () => {
+    getExerciseCompleteMock.mockImplementation(async (_programDayId, programExerciseId) => programExerciseId === "ex-1");
+    renderScreen();
+
+    expect(await screen.findByTestId("workout-progress-header")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("1 of 2 exercises")).toBeInTheDocument());
+    expect(screen.getByText("0 of 6 sets")).toBeInTheDocument();
+  });
+
   it("passes openSwapSheet through to SegmentCard as onRequestSwap", async () => {
     renderScreen();
 
@@ -460,7 +491,7 @@ describe("ProgramDayScreen", () => {
   it("calls the mark-complete mutation after the summary is dismissed", async () => {
     renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
@@ -492,7 +523,7 @@ describe("ProgramDayScreen", () => {
     } as any);
     const { navigation } = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
@@ -514,7 +545,7 @@ describe("ProgramDayScreen", () => {
     } as any);
     const { navigation } = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
@@ -532,7 +563,7 @@ describe("ProgramDayScreen", () => {
     } as any);
     const { navigation } = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
@@ -548,7 +579,7 @@ describe("ProgramDayScreen", () => {
 
     const { navigation } = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
@@ -580,7 +611,7 @@ describe("ProgramDayScreen", () => {
 
     const { navigation } = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
@@ -599,7 +630,7 @@ describe("ProgramDayScreen", () => {
   it("shows the session summary before completing the workout", async () => {
     renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
 
     expect(await screen.findByRole("dialog", { name: "Session summary" })).toBeInTheDocument();
     expect(screen.getByText("Great work")).toBeInTheDocument();
@@ -611,7 +642,7 @@ describe("ProgramDayScreen", () => {
     } as any);
     renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
 
     expect(await screen.findByText("12 day streak")).toBeInTheDocument();
   });
@@ -622,20 +653,18 @@ describe("ProgramDayScreen", () => {
     } as any);
     renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
 
     expect(await screen.findByText("0 day streak")).toBeInTheDocument();
   });
 
-  it("calls allExercisesComplete on mount with the day's exercise IDs", async () => {
+  it("checks each exercise completion state on mount with the day's exercise IDs", async () => {
     renderScreen();
 
     await waitFor(() =>
-      expect(allExercisesCompleteMock).toHaveBeenCalledWith(
-        "day-1",
-        expect.arrayContaining(["ex-1", "ex-2"]),
-      ),
+      expect(getExerciseCompleteMock).toHaveBeenCalledWith("day-1", "ex-1"),
     );
+    expect(getExerciseCompleteMock).toHaveBeenCalledWith("day-1", "ex-2");
   });
 
   it("navigates to the end-check screen when completion with skips is available", async () => {
@@ -647,11 +676,40 @@ describe("ProgramDayScreen", () => {
     } as any);
     const { navigation } = renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
     await waitFor(() =>
       expect(navigation.navigate).toHaveBeenCalledWith("ProgramEndCheck", { programId: "prog-1" }),
     );
+  });
+
+  it("warns before finishing when exercises remain incomplete", async () => {
+    getExerciseCompleteMock.mockImplementation(async (_programDayId, programExerciseId) => programExerciseId === "ex-1");
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByTestId("workout-complete-primary")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Workout not finished",
+      "You still have 1 exercise left to log. Finish anyway?",
+      expect.any(Array),
+    );
+    expect(screen.queryByRole("dialog", { name: "Session summary" })).not.toBeInTheDocument();
+
+    const buttons = alertSpy.mock.calls[0][2] as Array<{ text: string; onPress?: () => void }>;
+    buttons.find((button) => button.text === "Finish anyway")?.onPress?.();
+
+    expect(await screen.findByRole("dialog", { name: "Session summary" })).toBeInTheDocument();
+  });
+
+  it("opens the summary directly when every exercise is complete", async () => {
+    renderScreen();
+
+    await openWorkoutSummary();
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog", { name: "Session summary" })).toBeInTheDocument();
   });
 });
