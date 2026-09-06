@@ -73,6 +73,13 @@ appId: com.bubbleworkout.mobile
     timeout: 20000
 - tapOn:
     text: "Workout complete"
+# This account's day has no logged sets, so tapping "Workout complete" now surfaces a
+# confirmation ("Workout not finished... Finish anyway?") before the summary opens.
+- runFlow:
+    when:
+      visible: "Finish anyway"
+    commands:
+      - tapOn: "Finish anyway"
 - extendedWaitUntil:
     visible: "Session complete"
     timeout: 10000
