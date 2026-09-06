@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { type LayoutChangeEvent, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { type LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import { ApiError } from "../../api/client";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import type { SaveSegmentLogPayload, SaveSegmentLogResult } from "../../api/segmentLog";
@@ -22,7 +22,6 @@ import {
 import {
   getSegmentPresentation,
   isCombinedSupersetEffort,
-  isPairLayoutEligible,
   isRoundBasedSegment,
 } from "./segmentCardLogic";
 import { setExerciseComplete } from "../../utils/localWorkoutLog";
@@ -31,7 +30,6 @@ import { useRoundBasedLogging } from "./hooks/useRoundBasedLogging";
 import { useSegmentSetLogging } from "./hooks/useSegmentSetLogging";
 import { InlineExerciseLogBlock } from "./segmentCard/InlineExerciseLogBlock";
 import { InlineRestStrip } from "./segmentCard/InlineRestStrip";
-import { AmrapPairLoggingPanel } from "./segmentCard/AmrapPairLoggingPanel";
 import { RoundBasedLoggingPanel } from "./segmentCard/RoundBasedLoggingPanel";
 import { SegmentCardHeader } from "./segmentCard/SegmentCardHeader";
 import { SegmentExerciseListItem } from "./segmentCard/SegmentExerciseListItem";
@@ -135,7 +133,6 @@ export const SegmentCard = React.memo(function SegmentCard({
   onInlinePanelOpen,
   onInlinePanelClose,
 }: SegmentCardProps): React.JSX.Element {
-  const { width: windowWidth } = useWindowDimensions();
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
     rounds: segment.rounds,
@@ -151,7 +148,6 @@ export const SegmentCard = React.memo(function SegmentCard({
     [exercises],
   );
   const hasLoggableExercises = loggableExercises.length > 0;
-  const normalizedSegmentType = (segment.segmentType ?? "").toLowerCase();
   const isRoundBased = isRoundBasedSegment(segment.segmentType);
   const useCombinedSupersetEffort = isCombinedSupersetEffort(segment.segmentType, loggableExercises.length);
   const totalRounds = presentation.roundsValue;
@@ -285,17 +281,6 @@ export const SegmentCard = React.memo(function SegmentCard({
       return sum + (inputMap[key]?.length ?? getExerciseSetCount(ex));
     }, 0);
   }, [initialized, inputMap, loggableExercises]);
-  const amrapPairColumnGap = spacing.sm;
-  const amrapPairAvailableWidth = windowWidth - spacing.md * 2 - amrapPairColumnGap;
-  const amrapPairColumnWidth = amrapPairAvailableWidth / 2;
-  const useAmrapPairLayout =
-    normalizedSegmentType === "amrap" &&
-    isPairLayoutEligible(loggableExercises.length) &&
-    amrapPairColumnWidth >= 150 &&
-    loggableExercises.every((exercise) => {
-      const exerciseKey = exercise.id ?? "";
-      return (inputMap[exerciseKey]?.length ?? getExerciseSetCount(exercise)) === 1;
-    });
 
   function restOverrideKey(programExerciseId: string): string {
     return `${programDayId}:${programExerciseId}`;
@@ -1039,17 +1024,7 @@ export const SegmentCard = React.memo(function SegmentCard({
                   }}
                 />
               ) : null}
-              {useAmrapPairLayout ? (
-                <AmrapPairLoggingPanel
-                  exercises={loggableExercises as [Exercise, Exercise]}
-                  inputMap={inputMap}
-                  doneSetKeys={doneSetKeys}
-                  activeSetKey={activeSetKey}
-                  pbSetKeys={pbSetKeys}
-                  onUpdateSetInput={updateSetInput}
-                  onSetComplete={handleSetComplete}
-                />
-              ) : loggableExercises.map((exercise) => {
+              {loggableExercises.map((exercise) => {
                 const exerciseKey = exercise.id ?? "";
                 const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
                 const setInputs = inputMap[exerciseKey] ?? Array.from({ length: getExerciseSetCount(exercise) }, () => ({

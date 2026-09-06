@@ -315,17 +315,6 @@
     },
     {
       "type": "component",
-      "source": "src/components/program/segmentCard/AmrapPairLoggingPanel.tsx",
-      "test": "src/components/program/segmentCard/AmrapPairLoggingPanel.component.test.tsx",
-      "status": "covered",
-      "tags": [
-        "program",
-        "amrap"
-      ],
-      "reason": ""
-    },
-    {
-      "type": "component",
       "source": "src/components/program/segmentCard/RirRoundPicker.tsx",
       "test": "src/components/program/segmentCard/RirRoundPicker.component.test.tsx",
       "status": "covered",
@@ -341,17 +330,6 @@
       "status": "covered",
       "tags": [
         "program"
-      ],
-      "reason": ""
-    },
-    {
-      "type": "component",
-      "source": "src/components/program/segmentCard/RoundExerciseColumn.tsx",
-      "test": "src/components/program/segmentCard/RoundExerciseColumn.component.test.tsx",
-      "status": "covered",
-      "tags": [
-        "program",
-        "round-based-logging"
       ],
       "reason": ""
     },

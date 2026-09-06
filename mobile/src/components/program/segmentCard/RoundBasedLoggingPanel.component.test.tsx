@@ -4,18 +4,6 @@ import { buildExercise } from "../../../__test-utils__";
 import type { SetInputState } from "../sessionUxLogic";
 import { RoundBasedLoggingPanel } from "./RoundBasedLoggingPanel";
 
-const { useWindowDimensionsMock } = vi.hoisted(() => ({
-  useWindowDimensionsMock: vi.fn(() => ({ width: 390, height: 844, scale: 2, fontScale: 1 })),
-}));
-
-vi.mock("react-native", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-native")>();
-  return {
-    ...actual,
-    useWindowDimensions: useWindowDimensionsMock,
-  };
-});
-
 vi.mock("../../interaction/PressableScale", () => ({
   PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
     <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
@@ -25,8 +13,8 @@ vi.mock("../../interaction/PressableScale", () => ({
 }));
 
 const exercises = [
-  buildExercise({ id: "ex-1", name: "Barbell Squat", reps: "8-12" }),
-  buildExercise({ id: "ex-2", exerciseId: "bb-rdl", name: "Romanian Deadlift", reps: "10-12" }),
+  buildExercise({ id: "ex-1", name: "Barbell Squat" }),
+  buildExercise({ id: "ex-2", exerciseId: "bb-rdl", name: "Romanian Deadlift" }),
 ];
 
 const inputMap: Record<string, SetInputState[]> = {
@@ -63,58 +51,12 @@ function renderPanel(
 }
 
 describe("RoundBasedLoggingPanel", () => {
-  beforeEach(() => {
-    useWindowDimensionsMock.mockReturnValue({ width: 390, height: 844, scale: 2, fontScale: 1 });
-  });
-
   it("renders completed, active, and locked round states", () => {
     renderPanel({ completedRoundIndices: new Set([0]), activeRoundIndex: 1 });
 
     expect(screen.getByText(/Round 1/)).toBeInTheDocument();
-    expect(screen.getByText("Round 2 of 3")).toBeInTheDocument();
+    expect(screen.getByText("Round 2")).toBeInTheDocument();
     expect(screen.getByText("Round 3 · complete round 2 to unlock")).toBeInTheDocument();
-  });
-
-  it("renders two exercises side by side when a pair has enough width", () => {
-    renderPanel();
-
-    expect(screen.getByTestId("round-exercise-pair-grid")).toBeInTheDocument();
-    expect(screen.getByTestId("round-exercise-ex-1-column")).toBeInTheDocument();
-    expect(screen.getByTestId("round-exercise-ex-2-column")).toBeInTheDocument();
-    expect(screen.getByLabelText("Weight for Barbell Squat")).toHaveValue("80");
-    expect(screen.getByLabelText("Reps for Barbell Squat")).toHaveValue("8");
-    expect(screen.getByLabelText("Weight for Romanian Deadlift")).toHaveValue("70");
-    expect(screen.getByLabelText("Reps for Romanian Deadlift")).toHaveValue("10");
-  });
-
-  it("keeps three-exercise giant sets in the vertical stack", () => {
-    renderPanel({
-      loggableExercises: [
-        ...exercises,
-        buildExercise({ id: "ex-3", exerciseId: "db-row", name: "Dumbbell Row" }),
-      ],
-      inputMap: {
-        ...inputMap,
-        "ex-3": [{ weight: "30", reps: "12", rirActual: null }],
-      },
-    });
-
-    expect(screen.getByTestId("round-exercise-stack")).toBeInTheDocument();
-    expect(screen.getByTestId("round-exercise-ex-1-row")).toBeInTheDocument();
-    expect(screen.getByTestId("round-exercise-ex-2-row")).toBeInTheDocument();
-    expect(screen.getByTestId("round-exercise-ex-3-row")).toBeInTheDocument();
-    expect(screen.queryByTestId("round-exercise-pair-grid")).not.toBeInTheDocument();
-  });
-
-  it("falls back to the vertical stack for a two-exercise pair on narrow widths", () => {
-    useWindowDimensionsMock.mockReturnValue({ width: 320, height: 844, scale: 2, fontScale: 1 });
-
-    renderPanel();
-
-    expect(screen.getByTestId("round-exercise-stack")).toBeInTheDocument();
-    expect(screen.getByTestId("round-exercise-ex-1-row")).toBeInTheDocument();
-    expect(screen.getByTestId("round-exercise-ex-2-row")).toBeInTheDocument();
-    expect(screen.queryByTestId("round-exercise-pair-grid")).not.toBeInTheDocument();
   });
 
   it("calls onSelectRir when tapping the active last round RIR picker", () => {
@@ -124,18 +66,6 @@ describe("RoundBasedLoggingPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Barbell Squat 3 reps in reserve" }));
 
     expect(onSelectRir).toHaveBeenCalledWith(exercises[0], 3);
-  });
-
-  it("renders final-round RIR once per exercise below the exercise grid", () => {
-    renderPanel({ totalRounds: 1, activeRoundIndex: 0 });
-
-    expect(screen.getByTestId("round-exercise-pair-grid")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Barbell Squat .* reps in reserve/ })).toHaveLength(5);
-    expect(screen.getAllByRole("button", { name: /Romanian Deadlift .* reps in reserve/ })).toHaveLength(5);
-
-    const content = document.body.textContent ?? "";
-    expect(content.indexOf("Romanian Deadlift")).toBeLessThan(content.indexOf("How many more reps"));
-    expect(content.indexOf("How many more reps")).toBeLessThan(content.indexOf("Too easy"));
   });
 
   it("renders one combined effort picker on the final round when enabled", () => {
