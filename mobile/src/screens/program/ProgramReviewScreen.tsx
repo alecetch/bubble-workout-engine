@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(15, 23, 42, 0.82)",
     alignItems: "center",
     justifyContent: "center",
