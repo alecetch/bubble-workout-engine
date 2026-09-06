@@ -229,7 +229,7 @@ describe("SegmentCard", () => {
     expect(await screen.findByText("Set 1")).toBeInTheDocument();
   });
 
-  it("renders set rows on the first open for a multi-exercise segment", async () => {
+  it("renders only the first exercise set rows on the first open for a multi-exercise segment", async () => {
     const segment = makeSegment({}, [
       makeExercise({ id: "ex-1", name: "Barbell Squat" }),
       makeExercise({ id: "ex-2", exerciseId: "bb-rdl", name: "Romanian Deadlift" }),
@@ -239,7 +239,8 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getAllByText("Start Exercise")[0]);
 
     expect(await screen.findByText("Close")).toBeInTheDocument();
-    expect(screen.getAllByText("Set 1")).toHaveLength(2);
+    expect(screen.getAllByText("Set 1")).toHaveLength(1);
+    expect(screen.getByText(/Romanian Deadlift.*complete Barbell Squat to unlock/)).toBeInTheDocument();
   });
 
   it("renders set rows after closing and reopening the inline logging panel", async () => {
@@ -489,6 +490,94 @@ describe("SegmentCard", () => {
     renderCard({ segment: makeSegment({}, [exercise]) });
 
     expect(screen.getByText("Deload this week")).toBeInTheDocument();
+  });
+});
+
+describe("SegmentCard — sequential standard-segment logging", () => {
+  function standardMultiExerciseSegment() {
+    return makeSegment({}, [
+      makeExercise({
+        id: "ex-1",
+        exerciseId: "bb-squat",
+        name: "Barbell Squat",
+        sets: 3,
+      }),
+      makeExercise({
+        id: "ex-2",
+        exerciseId: "leg-press",
+        name: "Leg Press",
+        sets: 3,
+      }),
+    ]);
+  }
+
+  beforeEach(() => {
+    mutateAsyncMock.mockClear();
+    mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
+    initEntryMock.mockClear();
+    startRestMock.mockClear();
+    stopRestMock.mockClear();
+    adjustRestDurationMock.mockClear();
+    impactAsyncMock.mockClear();
+    useSettingsStore.setState({ showRestTimer: true, hydrated: true });
+    setMockTimerState();
+    _resetForTest();
+  });
+
+  it("opens a fresh multi-exercise segment with exercise 1 active and exercise 2 locked", async () => {
+    renderCard({ segment: standardMultiExerciseSegment() });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+
+    expect(await screen.findByText("Set 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Barbell Squat set 1 complete" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Leg Press set 1 complete" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Leg Press.*complete Barbell Squat to unlock/)).toBeInTheDocument();
+  });
+
+  it("collapses exercise 1 and unlocks exercise 2 after exercise 1 is fully logged", async () => {
+    renderCard({ segment: standardMultiExerciseSegment() });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+    fireEvent.click(await screen.findByText("Log all sets as complete"));
+
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Barbell Squat ✓.*3 x 7 @ 0 kg/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Leg Press set 1 complete" })).toBeInTheDocument();
+    expect(screen.queryByText(/Leg Press.*complete Barbell Squat to unlock/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the single-exercise segment path unsequenced", async () => {
+    renderCard();
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+
+    expect(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" })).toBeInTheDocument();
+    expect(screen.queryByText(/complete .* to unlock/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Barbell Squat ✓/)).not.toBeInTheDocument();
+  });
+
+  it("restarts the sequence from exercise 1 after a completed multi-exercise segment is resumed", async () => {
+    // "Resume" (handleResumeExercise) un-marks every exercise's persisted completion before
+    // reopening the panel, and reopening always re-hydrates doneSetKeys from the (empty, in
+    // this mock) server log rows — so a resumed segment legitimately restarts the sequence
+    // from exercise 1 rather than preserving prior in-session completion.
+    renderCard({ segment: standardMultiExerciseSegment() });
+
+    fireEvent.click(screen.getAllByText("Start Exercise")[0]);
+    fireEvent.click(await screen.findByText("Log all sets as complete"));
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Leg Press set 1 complete" })).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Log all sets as complete"));
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByText("Close Log"));
+    fireEvent.click(await screen.findByText("Resume"));
+
+    expect(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" })).toBeInTheDocument();
+    // Await the locked-row text first so the assertion below observes the settled post-reset
+    // state, not a transient render before the reopen-hydration effect (useSegmentSetLogging)
+    // has reset doneSetKeys.
+    expect(await screen.findByText(/Leg Press.*complete Barbell Squat to unlock/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Leg Press set 1 complete" })).not.toBeInTheDocument();
   });
 });
 

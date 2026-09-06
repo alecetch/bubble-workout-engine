@@ -91,6 +91,15 @@ function findNextUncheckedSetKey(
   return null;
 }
 
+function isExerciseFullyLogged(exercise: Exercise, doneSetKeys: Set<string>): boolean {
+  const exerciseKey = exercise.id ?? exercise.exerciseId ?? exercise.name;
+  const setCount = getExerciseSetCount(exercise);
+  for (let setIndex = 0; setIndex < setCount; setIndex += 1) {
+    if (!doneSetKeys.has(`${exerciseKey}:${setIndex}`)) return false;
+  }
+  return true;
+}
+
 function isUnloadedExercise(exercise: Exercise): boolean {
   return exercise.isUnloaded === true || exercise.isLoadable === false;
 }
@@ -282,6 +291,10 @@ export const SegmentCard = React.memo(function SegmentCard({
       return sum + (inputMap[key]?.length ?? getExerciseSetCount(ex));
     }, 0);
   }, [initialized, inputMap, loggableExercises]);
+  const activeExerciseIndex = useMemo(
+    () => loggableExercises.findIndex((exercise) => !isExerciseFullyLogged(exercise, doneSetKeys)),
+    [doneSetKeys, loggableExercises],
+  );
 
   function restOverrideKey(programExerciseId: string): string {
     return `${programDayId}:${programExerciseId}`;
@@ -1011,8 +1024,31 @@ export const SegmentCard = React.memo(function SegmentCard({
                   }}
                 />
               ) : null}
-              {loggableExercises.map((exercise) => {
+              {loggableExercises.map((exercise, index) => {
                 const exerciseKey = exercise.id ?? "";
+                const isSequenced = loggableExercises.length > 1 && activeExerciseIndex !== -1;
+
+                if (isSequenced && index > activeExerciseIndex) {
+                  return (
+                    <View key={exerciseKey} style={styles.exerciseLockedRow}>
+                      <Text style={styles.exerciseLockedLabel}>
+                        {`${exercise.name} · complete ${loggableExercises[index - 1].name} to unlock`}
+                      </Text>
+                    </View>
+                  );
+                }
+
+                if (isSequenced && index < activeExerciseIndex) {
+                  const summaryText = formatExerciseSummary(exercise, inputMap[exerciseKey], doneSetKeys);
+                  return (
+                    <View key={exerciseKey} style={styles.exerciseLoggedSummaryRow}>
+                      <Text style={styles.exerciseLoggedSummaryLabel}>
+                        {`${exercise.name} ✓${summaryText ? `  ${summaryText}` : ""}`}
+                      </Text>
+                    </View>
+                  );
+                }
+
                 const exerciseRir = exerciseRirMap[exerciseKey] ?? null;
                 const setInputs = inputMap[exerciseKey] ?? Array.from({ length: getExerciseSetCount(exercise) }, () => ({
                   weight: "",
@@ -1202,6 +1238,29 @@ const styles = StyleSheet.create({
   },
   loadingBlock: {
     gap: spacing.sm,
+  },
+  exerciseLockedRow: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.sm,
+  },
+  exerciseLockedLabel: {
+    color: colors.textSecondary,
+    ...typography.small,
+  },
+  exerciseLoggedSummaryRow: {
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+  },
+  exerciseLoggedSummaryLabel: {
+    color: colors.textPrimary,
+    ...typography.small,
+    fontWeight: "700",
   },
   segmentRestRow: {
     flexDirection: "row",
