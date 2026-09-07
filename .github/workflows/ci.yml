@@ -143,6 +143,9 @@ jobs:
   # this, a hung first attempt would still be "running" when the job's own ceiling
   # killed it, so the `||` retries never got a chance to fire.
   e2e-flows:
+    # Without this, GitHub concatenates every matrix field (including the full
+    # multi-line script) into the auto-generated check name - unreadable in the UI.
+    name: e2e-flows (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
