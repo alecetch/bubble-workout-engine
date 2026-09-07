@@ -173,8 +173,17 @@ jobs:
               timeout 480 maestro test mobile/.maestro/03-settings-edit-name.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
               psql -v ON_ERROR_STOP=1 -c "UPDATE app_user SET subscription_status = 'expired', trial_expires_at = now() - interval '1 day', subscription_expires_at = NULL WHERE lower(email) = lower('$E2E_EMAIL');"
               timeout 480 maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
+          # Unlike the other single-flow legs (06/07), this one shipped with no
+          # retry, on the assumption one flow was inherently low-risk. Post-merge
+          # data said otherwise: 3 of 4 real runs failed on the exact same
+          # "Continue" assertion right after the dev-launcher connects (identical
+          # boilerplate to every other flow, which aren't failing this way) - this
+          # leg has zero margin against a single slow bundle load since it has
+          # neither multiple flows nor a retry to absorb one bad attempt. This
+          # flow's account is fixed and re-logged-into each time (not a fresh
+          # registration like 06/07), so a same-account retry is safe.
           - name: program-complete
-            timeout: 30
+            timeout: 45
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
@@ -182,7 +191,7 @@ jobs:
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
               adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
-              timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
+              timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
           # Flows 06/07 register a fresh account and pass through several real,
           # network-backed onboarding screens. Repeated investigation (see the
           # comments in both flow files) found the CI Android emulator can
