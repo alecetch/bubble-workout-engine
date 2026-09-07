@@ -142,6 +142,14 @@ jobs:
   # retry-on-failure chains for 06/07 actually able to run a 2nd/3rd attempt - before
   # this, a hung first attempt would still be "running" when the job's own ceiling
   # killed it, so the `||` retries never got a chance to fire.
+  #
+  # Each leg's `timeout` (job-level minutes) looks generous for how little it does,
+  # but the APK cache key includes a hash of `mobile/src/**`, so any PR touching
+  # mobile source - most of them - forces every leg to independently cold-build the
+  # APK from scratch (observed ~18-20 min alone). A tight per-leg budget that only
+  # accounts for the flow itself will spuriously time out during that build, not
+  # during Maestro - confirmed the hard way (see PR #386's first run, where a 20-min
+  # single-flow leg died mid-`Build debug APK`, before a single `maestro test` ran).
   e2e-flows:
     # Without this, GitHub concatenates every matrix field (including the full
     # multi-line script) into the auto-generated check name - unreadable in the UI.
@@ -166,7 +174,7 @@ jobs:
               psql -v ON_ERROR_STOP=1 -c "UPDATE app_user SET subscription_status = 'expired', trial_expires_at = now() - interval '1 day', subscription_expires_at = NULL WHERE lower(email) = lower('$E2E_EMAIL');"
               timeout 480 maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi
           - name: program-complete
-            timeout: 20
+            timeout: 30
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
@@ -193,7 +201,7 @@ jobs:
           # syntax error. Each retry chain below must stay on a single physical
           # line for that reason, however long that makes it.
           - name: onboarding-beginner
-            timeout: 35
+            timeout: 45
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
@@ -203,7 +211,7 @@ jobs:
               adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
               timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
           - name: onboarding-intermediate
-            timeout: 35
+            timeout: 45
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
