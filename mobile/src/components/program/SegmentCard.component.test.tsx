@@ -773,6 +773,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
   it("RIR pickers are absent on rounds 1-3 and present on round 4", async () => {
     await openSupersetPanel();
+    expect(screen.queryByRole("button", { name: "Superset effort 4+" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
 
     for (let i = 0; i < 3; i += 1) {
@@ -784,8 +785,44 @@ describe("SegmentCard — round-based logging (superset)", () => {
       });
     }
 
-    expect(await screen.findByLabelText("Barbell Squat 4+ reps in reserve")).toBeInTheDocument();
-    expect(screen.getByLabelText("Romanian Deadlift 0 reps in reserve")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Superset effort 4+" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("segment-effort-picker")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Romanian Deadlift 0 reps in reserve" })).not.toBeInTheDocument();
+  });
+
+  it("applies the selected combined effort to both final-round superset rows", async () => {
+    await openSupersetPanel();
+
+    for (let i = 0; i < 3; i += 1) {
+      fillActiveRound();
+      fireEvent.click(screen.getByText("Mark round complete"));
+      await vi.waitFor(() => {
+        expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1);
+        expect(screen.getByText(new RegExp(`Round ${i + 1} .*`))).toBeInTheDocument();
+      });
+    }
+
+    expect(await screen.findByText("Round 4")).toBeInTheDocument();
+    fillActiveRound("82.5", "9");
+    fireEvent.click(screen.getByRole("button", { name: "Superset effort 2" }));
+    fireEvent.click(screen.getByText("Mark round complete"));
+
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(4));
+    expect(mutateAsyncMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          programExerciseId: "ex-1",
+          orderIndex: 4,
+          rirActual: 2,
+        }),
+        expect.objectContaining({
+          programExerciseId: "ex-2",
+          orderIndex: 4,
+          rirActual: 2,
+        }),
+      ]),
+    }));
   });
 
   it("empty round shows inline warning; second tap saves", async () => {
@@ -826,8 +863,42 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Close Log"));
 
-    expect(await screen.findByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Superset effort 4+" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Barbell Squat 4+ reps in reserve" })).not.toBeInTheDocument();
     expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+
+  it("applies post-stop combined effort to both rows from the last completed superset round", async () => {
+    await openSupersetPanel();
+
+    for (let i = 0; i < 2; i += 1) {
+      fillActiveRound("80", "8");
+      fireEvent.click(screen.getByText("Mark round complete"));
+      await vi.waitFor(() => {
+        expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1);
+        expect(screen.getByText(new RegExp(`Round ${i + 1} .*`))).toBeInTheDocument();
+      });
+    }
+
+    fireEvent.click(screen.getByText("Close Log"));
+    fireEvent.click(await screen.findByRole("button", { name: "Superset effort 1" }));
+    fireEvent.click(screen.getByText("Done"));
+
+    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(3));
+    expect(mutateAsyncMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          programExerciseId: "ex-1",
+          orderIndex: 2,
+          rirActual: 1,
+        }),
+        expect.objectContaining({
+          programExerciseId: "ex-2",
+          orderIndex: 2,
+          rirActual: 1,
+        }),
+      ]),
+    }));
   });
 
   it("Resume button appears after Close Log on a superset (no rounds completed)", async () => {
