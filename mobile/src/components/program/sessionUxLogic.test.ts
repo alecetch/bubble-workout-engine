@@ -1,4 +1,4 @@
-import { buildInitialSetInputMap, buildSegmentLogRows, computeSessionStatsFromLoggedRows, computeSessionStatsFromSegments, formatRoundSummary, getExerciseSetCount, guidelinePrefill, parseRepsPrefill, parseWeightPrefill, repsPrefill, } from "./sessionUxLogic";
+import { buildInitialSetInputMap, buildSegmentLogRows, computeSessionStatsFromLoggedRows, computeSessionStatsFromSegments, computeTotalPrescribedSets, formatRoundSummary, getExerciseSetCount, guidelinePrefill, parseRepsPrefill, parseWeightPrefill, repsPrefill, } from "./sessionUxLogic";
 test("guidelinePrefill prefers progression load over guideline load when both are present", () => {
     expect(guidelinePrefill({
         guidelineLoad: { value: 80 },
@@ -149,6 +149,22 @@ test("computeSessionStatsFromSegments uses logged segments only", () => {
     expect(stats.totalSets).toBe(3);
     expect(stats.exerciseCount).toBe(1);
     expect(stats.totalVolumeKg).toBe(1500);
+});
+test("computeTotalPrescribedSets counts prescribed sets across loadable and unloaded exercises", () => {
+    expect(computeTotalPrescribedSets([
+        {
+            id: "seg-1",
+            exercises: [
+                { id: "pe-1", name: "Back Squat", sets: 3, isLoadable: true },
+                { id: "pe-2", name: "Push-up", sets: 2, isLoadable: false },
+                { id: null, name: "Untracked", sets: 5, isLoadable: true },
+            ],
+        },
+        {
+            id: "seg-2",
+            exercises: [{ id: "pe-3", name: "Carry", sets: null, isLoadable: true }],
+        },
+    ] as never)).toBe(6);
 });
 test("parseWeightPrefill parses a plain numeric string", () => {
     expect(parseWeightPrefill("70")).toBe("70");

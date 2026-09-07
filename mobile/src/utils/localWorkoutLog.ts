@@ -37,6 +37,10 @@ function workoutDayStartedKey(programDayId: string): string {
   return `workout:day-started:${programDayId}`;
 }
 
+function workoutDayStartedAtKey(programDayId: string): string {
+  return `workout:day-started-at:${programDayId}`;
+}
+
 function workoutDayCompleteKey(programDayId: string): string {
   return `workout:day-complete:${programDayId}`;
 }
@@ -72,11 +76,13 @@ export async function setSegmentLog(
     rounds: payload.rounds,
     load: payload.load,
     notes: payload.notes,
+    exerciseSetCounts: payload.exerciseSetCounts,
     updatedAt: new Date().toISOString(),
   };
   await Promise.all([
     storage.setItem(segmentLogKey(programDayId, segmentId), JSON.stringify(entry)),
     storage.setItem(workoutDayStartedKey(programDayId), "1"),
+    markWorkoutStartedAt(programDayId),
   ]);
   return entry;
 }
@@ -92,8 +98,27 @@ export async function setWorkoutComplete(programDayId: string, value: boolean): 
   await Promise.all([
     storage.setItem(workoutCompleteKey(programDayId), value ? "1" : "0"),
     storage.setItem(workoutDayCompleteKey(programDayId), value ? "1" : "0"),
-    value ? storage.setItem(workoutDayStartedKey(programDayId), "1") : Promise.resolve(),
+    value
+      ? Promise.all([
+          storage.setItem(workoutDayStartedKey(programDayId), "1"),
+          markWorkoutStartedAt(programDayId),
+        ])
+      : Promise.resolve(),
   ]);
+}
+
+export async function getWorkoutStartedAt(programDayId: string): Promise<number | null> {
+  const storage = getStorage();
+  const raw = await storage.getItem(workoutDayStartedAtKey(programDayId));
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export async function markWorkoutStartedAt(programDayId: string): Promise<void> {
+  const storage = getStorage();
+  const existing = await storage.getItem(workoutDayStartedAtKey(programDayId));
+  if (existing) return;
+  await storage.setItem(workoutDayStartedAtKey(programDayId), String(Date.now()));
 }
 
 export async function getExerciseComplete(
@@ -113,7 +138,12 @@ export async function setExerciseComplete(
   const storage = getStorage();
   await Promise.all([
     storage.setItem(exerciseCompleteKey(programDayId, programExerciseId), value ? "1" : "0"),
-    value ? storage.setItem(workoutDayStartedKey(programDayId), "1") : Promise.resolve(),
+    value
+      ? Promise.all([
+          storage.setItem(workoutDayStartedKey(programDayId), "1"),
+          markWorkoutStartedAt(programDayId),
+        ])
+      : Promise.resolve(),
   ]);
 }
 

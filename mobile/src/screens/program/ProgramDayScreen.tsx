@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import { queryKeys, useCompleteProgram, useEntitlement, useHistoryOverview, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/segmentLog";
@@ -13,7 +13,8 @@ import { EquipmentOverrideSheet } from "../../components/program/EquipmentOverri
 import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
-import { computeSessionStatsFromLoggedRows } from "../../components/program/sessionUxLogic";
+import { computeSessionStatsFromLoggedRows, computeTotalPrescribedSets } from "../../components/program/sessionUxLogic";
+import { WorkoutProgressHeader } from "../../components/program/WorkoutProgressHeader";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -22,7 +23,12 @@ import { colors } from "../../theme/colors";
 import { radii, softBadgePalette } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
-import { setSegmentLog, setWorkoutComplete, type SegmentLogEntry } from "../../utils/localWorkoutLog";
+import {
+  getWorkoutStartedAt,
+  setSegmentLog,
+  setWorkoutComplete,
+  type SegmentLogEntry,
+} from "../../utils/localWorkoutLog";
 import { useSettingsStore } from "../../state/settings/useSettingsStore";
 import { useDayCompletionFlow } from "./hooks/useDayCompletionFlow";
 import { useExerciseSwapSheet } from "./hooks/useExerciseSwapSheet";
@@ -74,8 +80,12 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
+  const [segmentDoneSetCounts, setSegmentDoneSetCounts] = useState<Record<string, number>>({});
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetY = useRef(0);
+  const segmentOffsetsRef = useRef<Record<string, number>>({});
+  const headerHeightRef = useRef(0);
   const dayLabel = dayQuery.data?.day?.label?.trim() || "Workout";
   const day = dayQuery.data?.day;
   const programId = dayQuery.data?.day?.programId ?? activeProgramId ?? "";
@@ -132,8 +142,35 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     workoutComplete,
     setWorkoutCompleteState,
     allExerciseCardsComplete,
+    completedExerciseIds,
     refreshExerciseCompletion,
   } = useLocalDayState(programDayId, orderedSegments, allExerciseIds, dayQuery.data?.day?.isCompleted ?? null);
+  const totalExercises = allExerciseIds.length;
+  const completedExerciseCount = completedExerciseIds.size;
+  const totalPrescribedSets = useMemo(() => computeTotalPrescribedSets(orderedSegments), [orderedSegments]);
+  const loggedSetCount = useMemo(
+    () =>
+      orderedSegments.reduce((sum, segment) => {
+        const liveDoneCount = segmentDoneSetCounts[segment.id];
+        if (liveDoneCount != null) return sum + liveDoneCount;
+        const savedCounts = segmentLogs[segment.id]?.exerciseSetCounts;
+        if (!savedCounts) return sum;
+        return sum + Object.values(savedCounts).reduce((savedSum, count) => savedSum + count, 0);
+      }, 0),
+    [orderedSegments, segmentDoneSetCounts, segmentLogs],
+  );
+
+  const refreshStartedAt = useCallback(() => {
+    void getWorkoutStartedAt(programDayId).then((value) => {
+      if (value != null) {
+        setStartedAtMs((current) => current ?? value);
+      }
+    });
+  }, [programDayId]);
+
+  useEffect(() => {
+    void getWorkoutStartedAt(programDayId).then(setStartedAtMs);
+  }, [programDayId]);
 
   const computeSessionStats = useCallback(
     (): { totalVolumeKg: number; totalSets: number; exerciseCount: number } =>
@@ -233,24 +270,64 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       setSegmentLogs((current) => ({ ...current, [segmentId]: entry }));
       setSegmentLogRows((current) => ({ ...current, [segmentId]: normalizedRows }));
       await setSegmentLog(programDayId, segmentId, { exerciseSetCounts });
+      refreshStartedAt();
     })();
-  }, [programDayId, queryClient, setSegmentLogRows, setSegmentLogs, userId]);
+  }, [programDayId, queryClient, refreshStartedAt, setSegmentLogRows, setSegmentLogs, userId]);
+
+  const handleSetsLoggedChange = useCallback((segmentId: string, doneCount: number) => {
+    setSegmentDoneSetCounts((current) =>
+      current[segmentId] === doneCount ? current : { ...current, [segmentId]: doneCount },
+    );
+    if (doneCount > 0) {
+      refreshStartedAt();
+    }
+  }, [refreshStartedAt]);
+
+  const handleSegmentLayout = useCallback((segmentId: string, y: number) => {
+    segmentOffsetsRef.current[segmentId] = y;
+  }, []);
+
+  const handleJumpToNext = useCallback(() => {
+    const nextSegment = orderedSegments.find((segment) =>
+      (segment.exercises ?? []).some((exercise) => exercise.id && !completedExerciseIds.has(exercise.id)),
+    );
+    if (!nextSegment) return;
+    const y = segmentOffsetsRef.current[nextSegment.id];
+    if (y == null) return;
+    scrollViewRef.current?.scrollTo({ y: Math.max(0, y - headerHeightRef.current - spacing.sm), animated: true });
+  }, [completedExerciseIds, orderedSegments]);
 
   const handleSubscriptionRequired = useCallback(() => {
     navigation.navigate("Paywall");
   }, [navigation]);
 
   const handleInlinePanelOpen = useCallback((pageY: number) => {
-    const targetScreenY = 100;
+    const targetScreenY = headerHeightRef.current + spacing.sm;
     const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
     scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
   }, []);
 
   const handleInlinePanelClose = useCallback((pageY: number) => {
-    const targetScreenY = 80;
+    const targetScreenY = headerHeightRef.current + spacing.sm;
     const newScrollY = scrollOffsetY.current + (pageY - targetScreenY);
     scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
   }, []);
+
+  const handleCompletePress = useCallback(() => {
+    if (completedExerciseCount < totalExercises) {
+      const remaining = totalExercises - completedExerciseCount;
+      Alert.alert(
+        "Workout not finished",
+        `You still have ${remaining} exercise${remaining === 1 ? "" : "s"} left to log. Finish anyway?`,
+        [
+          { text: "Keep logging", style: "cancel" },
+          { text: "Finish anyway", onPress: () => setSummaryVisible(true) },
+        ],
+      );
+      return;
+    }
+    setSummaryVisible(true);
+  }, [completedExerciseCount, totalExercises]);
 
   if (dayQuery.isLoading) {
     return (
@@ -316,6 +393,16 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
 
   return (
     <View style={styles.root}>
+      <WorkoutProgressHeader
+        completedExercises={completedExerciseCount}
+        totalExercises={totalExercises}
+        loggedSets={loggedSetCount}
+        totalSets={totalPrescribedSets}
+        startedAtMs={startedAtMs}
+        showJumpToNext={completedExerciseCount < totalExercises}
+        onJumpToNext={handleJumpToNext}
+        onLayout={(height) => { headerHeightRef.current = height; }}
+      />
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.content}
@@ -364,8 +451,10 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             onSubscriptionRequired={handleSubscriptionRequired}
             onPrsDetected={handlePrsDetected}
             onExerciseCompleteChange={refreshExerciseCompletion}
+            onLayout={(event) => handleSegmentLayout(segment.id, event.nativeEvent.layout.y)}
             onInlinePanelOpen={handleInlinePanelOpen}
             onInlinePanelClose={handleInlinePanelClose}
+            onSetsLoggedChange={handleSetsLoggedChange}
           />
         ))}
       </ScrollView>
@@ -376,7 +465,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             styles.completeButton,
             workoutComplete && styles.completeButtonDone,
           ]}
-          onPress={() => setSummaryVisible(true)}
+          onPress={handleCompletePress}
           testID={completeButtonTestId}
         >
           <Text style={styles.completeButtonLabel}>Workout complete</Text>

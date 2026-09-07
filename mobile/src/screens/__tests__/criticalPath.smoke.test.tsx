@@ -51,6 +51,7 @@ vi.mock("../../utils/localWorkoutLog", () => ({
   setExerciseComplete: vi.fn().mockResolvedValue(undefined),
   allExercisesComplete: vi.fn().mockResolvedValue(true),
   getWorkoutComplete: vi.fn().mockResolvedValue(false),
+  getWorkoutStartedAt: vi.fn().mockResolvedValue(null),
   getSegmentLog: vi.fn().mockResolvedValue(null),
   setSegmentLog: vi.fn().mockResolvedValue(undefined),
   setWorkoutComplete: vi.fn().mockResolvedValue(undefined),
