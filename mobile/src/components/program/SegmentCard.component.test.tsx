@@ -59,6 +59,8 @@ vi.mock("expo-haptics", () => ({
   impactAsync: impactAsyncMock,
 }));
 
+// expo-video is mocked globally in vitest.setup.ts.
+
 type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
 const useTimerStoreMock = vi.mocked(useTimerStore);

@@ -52,7 +52,8 @@
       "expo-asset",
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "@sentry/react-native/expo"
+      "@sentry/react-native/expo",
+      "expo-video"
     ],
     "extra": {
       "eas": {

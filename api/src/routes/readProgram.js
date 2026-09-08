@@ -5,7 +5,7 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { makeGuidelineLoadService } from "../services/guidelineLoadService.js";
 import { makeNotificationService } from "../services/notificationService.js";
 import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
-import { resolveMediaUrl } from "../utils/mediaUrl.js";
+import { buildExerciseMediaUrl, resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
@@ -572,8 +572,14 @@ export function createReadProgramHandlers(options = pool) {
           pe.coaching_cues_json,
           pe.load_hint,
           pe.log_prompt,
+          em.still_image_key,
+          em.video_key,
+          COALESCE(em.video_status, 'none') AS video_status,
+          em.poster_frame_key,
           (eps.exercise_id IS NULL) AS is_new_exercise
         FROM program_exercise pe
+        LEFT JOIN exercise_media em
+          ON em.exercise_id = pe.exercise_id
         LEFT JOIN exercise_progression_state eps
           ON eps.user_id = $2
           AND eps.exercise_id = pe.exercise_id
@@ -669,10 +675,19 @@ export function createReadProgramHandlers(options = pool) {
             recommended_reps_target,
             recommended_sets,
             recommended_rest_seconds,
+            still_image_key,
+            video_key,
+            video_status,
+            poster_frame_key,
             ...rest
           } = item;
+          const resolvedVideoStatus = video_status ?? "none";
           return {
             ...rest,
+            stillImageUrl: buildExerciseMediaUrl(still_image_key ?? "exercise-media/_placeholder/still.jpg"),
+            videoUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(video_key) || null : null,
+            posterImageUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(poster_frame_key) || null : null,
+            videoStatus: resolvedVideoStatus,
             progression_recommendation: progression_outcome
               ? {
                   outcome: progression_outcome,
@@ -709,10 +724,19 @@ export function createReadProgramHandlers(options = pool) {
             recommended_reps_target,
             recommended_sets,
             recommended_rest_seconds,
+            still_image_key,
+            video_key,
+            video_status,
+            poster_frame_key,
             ...rest
           } = item;
+          const resolvedVideoStatus = video_status ?? "none";
           return {
             ...rest,
+            stillImageUrl: buildExerciseMediaUrl(still_image_key ?? "exercise-media/_placeholder/still.jpg"),
+            videoUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(video_key) || null : null,
+            posterImageUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(poster_frame_key) || null : null,
+            videoStatus: resolvedVideoStatus,
             progression_recommendation: progression_outcome
               ? {
                   outcome: progression_outcome,

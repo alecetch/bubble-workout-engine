@@ -711,3 +711,184 @@ test("dayFull exposes is_new_exercise false when exercise has prior exposures", 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body?.segments?.[0]?.items?.[0]?.is_new_exercise, false);
 });
+
+test("dayFull always exposes a non-empty stillImageUrl with placeholder fallback", async () => {
+  const handlers = createReadProgramHandlers({
+    db: mockPool([
+      {
+        rowCount: 1,
+        rows: [{
+          program_day_id: VALID_UUID,
+          day_label: "Day 1",
+          day_type: "strength",
+          session_duration_mins: 50,
+          hero_image_key: null,
+          hero_image_url: null,
+          client_profile_id: VALID_UUID,
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          block_order: 1,
+          segment_order_in_block: 1,
+          segment_type: "single",
+          segment_title: "Main lift",
+        }],
+      },
+      {
+        rowCount: 2,
+        rows: [
+          {
+            workout_segment_id: VALID_UUID,
+            program_exercise_id: "33333333-3333-4333-8333-333333333333",
+            exercise_id: "bb_back_squat",
+            exercise_name: "Back Squat",
+            order_in_day: 1,
+            is_loadable: true,
+            coaching_cues_json: [],
+            is_new_exercise: false,
+            progression_outcome: null,
+            still_image_key: "exercise-media/bb_back_squat/still.jpg",
+            video_status: "none",
+          },
+          {
+            workout_segment_id: VALID_UUID,
+            program_exercise_id: "44444444-4444-4444-8444-444444444444",
+            exercise_id: "row",
+            exercise_name: "Row",
+            order_in_day: 2,
+            is_loadable: false,
+            coaching_cues_json: [],
+            is_new_exercise: false,
+            progression_outcome: null,
+            still_image_key: null,
+            video_status: null,
+          },
+        ],
+      },
+      { rowCount: 0, rows: [] },
+    ]),
+    guidelineLoadService: {
+      async annotateExercisesWithGuidelineLoads({ exercises }) {
+        return exercises;
+      },
+    },
+  });
+  const req = {
+    request_id: "t",
+    params: { program_day_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.dayFull(req, res);
+
+  const items = res.body?.segments?.[0]?.items ?? [];
+  assert.equal(res.statusCode, 200);
+  assert.ok(items[0].stillImageUrl.includes("exercise-media/bb_back_squat/still.jpg"));
+  assert.ok(items[1].stillImageUrl.includes("exercise-media/_placeholder/still.jpg"));
+});
+
+test("dayFull only resolves video and poster URLs when media status is ready", async () => {
+  const handlers = createReadProgramHandlers({
+    db: mockPool([
+      {
+        rowCount: 1,
+        rows: [{
+          program_day_id: VALID_UUID,
+          day_label: "Day 1",
+          day_type: "strength",
+          session_duration_mins: 50,
+          hero_image_key: null,
+          hero_image_url: null,
+          client_profile_id: VALID_UUID,
+        }],
+      },
+      {
+        rowCount: 1,
+        rows: [{
+          workout_segment_id: VALID_UUID,
+          block_order: 1,
+          segment_order_in_block: 1,
+          segment_type: "single",
+          segment_title: "Main lift",
+        }],
+      },
+      {
+        rowCount: 3,
+        rows: [
+          {
+            workout_segment_id: VALID_UUID,
+            exercise_id: "ready",
+            exercise_name: "Ready",
+            order_in_day: 1,
+            is_loadable: true,
+            coaching_cues_json: [],
+            is_new_exercise: false,
+            progression_outcome: null,
+            still_image_key: "exercise-media/ready/still.jpg",
+            video_key: "exercise-media/ready/video.mp4",
+            poster_frame_key: "exercise-media/ready/poster.jpg",
+            video_status: "ready",
+          },
+          {
+            workout_segment_id: VALID_UUID,
+            exercise_id: "processing",
+            exercise_name: "Processing",
+            order_in_day: 2,
+            is_loadable: true,
+            coaching_cues_json: [],
+            is_new_exercise: false,
+            progression_outcome: null,
+            still_image_key: "exercise-media/processing/still.jpg",
+            video_key: "exercise-media/processing/video.mp4",
+            poster_frame_key: "exercise-media/processing/poster.jpg",
+            video_status: "processing",
+          },
+          {
+            workout_segment_id: VALID_UUID,
+            exercise_id: "failed",
+            exercise_name: "Failed",
+            order_in_day: 3,
+            is_loadable: true,
+            coaching_cues_json: [],
+            is_new_exercise: false,
+            progression_outcome: null,
+            still_image_key: "exercise-media/failed/still.jpg",
+            video_key: "exercise-media/failed/video.mp4",
+            poster_frame_key: "exercise-media/failed/poster.jpg",
+            video_status: "failed",
+          },
+        ],
+      },
+    ]),
+    guidelineLoadService: {
+      async annotateExercisesWithGuidelineLoads({ exercises }) {
+        return exercises;
+      },
+    },
+  });
+  const req = {
+    request_id: "t",
+    params: { program_day_id: VALID_UUID },
+    auth: { user_id: USER_UUID },
+    log: { error() {}, warn() {} },
+  };
+  const res = mockRes();
+
+  await handlers.dayFull(req, res);
+
+  const [ready, processing, failed] = res.body?.segments?.[0]?.items ?? [];
+  assert.equal(ready.videoStatus, "ready");
+  assert.ok(ready.videoUrl.includes("exercise-media/ready/video.mp4"));
+  assert.ok(ready.posterImageUrl.includes("exercise-media/ready/poster.jpg"));
+  assert.equal(processing.videoStatus, "processing");
+  assert.equal(processing.videoUrl, null);
+  assert.equal(processing.posterImageUrl, null);
+  assert.equal(failed.videoStatus, "failed");
+  assert.equal(failed.videoUrl, null);
+  assert.equal(failed.posterImageUrl, null);
+});

@@ -264,6 +264,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/program/ExerciseMediaThumb.tsx",
+      "test": "src/components/program/ExerciseMediaThumb.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/program/GuidelineLoadHint.tsx",
       "test": "src/components/program/GuidelineLoadHint.component.test.tsx",
       "status": "covered",

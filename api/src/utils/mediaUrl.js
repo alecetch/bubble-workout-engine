@@ -11,6 +11,31 @@ export function buildPublicUrl(imageKey) {
 }
 
 /**
+ * Build a public exercise media URL from an S3 key.
+ * In local dev, the existing S3_PUBLIC_BASE_URL is often scoped to
+ * /assets/media-assets for hero images; exercise media is served from the
+ * sibling /assets/exercise-media path.
+ * @param {string | null | undefined} mediaKey
+ * @returns {string}
+ */
+export function buildExerciseMediaUrl(mediaKey) {
+  const key = String(mediaKey ?? "").trim().replace(/^\/+/, "");
+  if (!key) return "";
+
+  const configuredBase = (process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (configuredBase) {
+    return `${configuredBase}/${key.replace(/^exercise-media\/+/, "")}`;
+  }
+
+  const base = (process.env.S3_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!base) return key;
+  if (/\/assets\/media-assets$/i.test(base)) {
+    return `${base.replace(/\/assets\/media-assets$/i, "/assets/exercise-media")}/${key.replace(/^exercise-media\/+/, "")}`;
+  }
+  return `${base}/${key}`;
+}
+
+/**
  * Resolve media URL from a row with image_url/image_key.
  * @param {{ image_url?: string | null, image_key?: string | null } | null | undefined} row
  * @returns {string | null}

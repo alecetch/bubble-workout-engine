@@ -15,6 +15,12 @@ vi.mock("../../interaction/PressableScale", () => ({
   ),
 }));
 
+vi.mock("../ExerciseMediaThumb", () => ({
+  ExerciseMediaThumb: ({ videoUrl }: { videoUrl: string | null }) => (
+    <div data-testid="exercise-media-thumb">{videoUrl ? "video" : "still"}</div>
+  ),
+}));
+
 const exercise = buildExercise({ id: "ex-1", exerciseId: "bb-squat", name: "Barbell Squat" });
 
 function renderItem(
@@ -115,5 +121,35 @@ describe("SegmentExerciseListItem", () => {
     fireEvent.click(screen.getByText("Barbell Squat"));
 
     expect(onViewExerciseDetail).toHaveBeenCalledWith("bb-squat", "ex-1", "Barbell Squat", exercise);
+  });
+
+  it("renders an exercise media thumbnail when media is available", () => {
+    renderItem({
+      exercise: {
+        ...exercise,
+        stillImageUrl: "https://cdn.example.com/still.jpg",
+        videoUrl: "https://cdn.example.com/video.mp4",
+        posterImageUrl: "https://cdn.example.com/poster.jpg",
+        videoStatus: "ready",
+      },
+    });
+
+    expect(screen.getByTestId("exercise-media-thumb")).toHaveTextContent("video");
+  });
+
+  it("keeps title navigation working with a still-only thumbnail", () => {
+    const onViewExerciseDetail = vi.fn();
+    const stillOnly = {
+      ...exercise,
+      stillImageUrl: "https://cdn.example.com/still.jpg",
+      videoUrl: null,
+      videoStatus: "none" as const,
+    };
+    renderItem({ exercise: stillOnly, onViewExerciseDetail });
+
+    expect(screen.getByTestId("exercise-media-thumb")).toHaveTextContent("still");
+    fireEvent.click(screen.getByText("Barbell Squat"));
+
+    expect(onViewExerciseDetail).toHaveBeenCalledWith("bb-squat", "ex-1", "Barbell Squat", stillOnly);
   });
 });

@@ -122,6 +122,23 @@ vi.mock("expo-asset", () => ({
   },
 }));
 
+// expo-video's real module resolves through expo-modules-core, which reads the
+// React Native __DEV__ global at import time — undefined under jsdom, so any
+// test that transitively imports it (via ExerciseMediaThumb) crashes at module
+// load unless it's mocked here, not just in the files that exercise it directly.
+vi.mock("expo-video", () => ({
+  useVideoPlayer: (
+    _source: unknown,
+    setup?: (player: { loop: boolean; muted: boolean; play: () => void }) => void,
+  ) => {
+    const player = { loop: false, muted: false, play: vi.fn() };
+    setup?.(player);
+    return player;
+  },
+  VideoView: ({ testID }: { testID?: string }) =>
+    React.createElement("div", { "data-testid": testID || "video-view" }),
+}));
+
 // ── React Navigation ──────────────────────────────────────────────────────────
 
 vi.mock("@react-navigation/native", () => ({

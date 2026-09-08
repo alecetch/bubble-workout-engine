@@ -9,6 +9,10 @@ export type ExerciseGuidance = {
   techniqueExecution: string[];
   techniqueMistakes: string[];
   techniqueVideoUrl: string | null;
+  stillImageUrl: string;
+  videoUrl: string | null;
+  posterImageUrl: string | null;
+  videoStatus: "none" | "processing" | "ready" | "failed";
   loadGuidance: string | null;
   loggingGuidance: string | null;
   targetRegions: string[];
@@ -35,6 +39,10 @@ function normalizeGuidance(raw: unknown): ExerciseGuidance {
     techniqueExecution: asStringArray(g.techniqueExecution),
     techniqueMistakes: asStringArray(g.techniqueMistakes),
     techniqueVideoUrl: asString(g.techniqueVideoUrl),
+    stillImageUrl: asString(g.stillImageUrl ?? g.still_image_url) ?? "",
+    videoUrl: asString(g.videoUrl ?? g.video_url),
+    posterImageUrl: asString(g.posterImageUrl ?? g.poster_image_url),
+    videoStatus: (asString(g.videoStatus ?? g.video_status) ?? "none") as ExerciseGuidance["videoStatus"],
     loadGuidance: asString(g.loadGuidance),
     loggingGuidance: asString(g.loggingGuidance),
     targetRegions: asStringArray(g.targetRegions),
