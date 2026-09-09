@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPublicUrl, resolveMediaUrl } from "../mediaUrl.js";
+import { buildExerciseMediaUrl, buildPublicUrl, resolveMediaUrl } from "../mediaUrl.js";
 
 test("buildPublicUrl constructs base + key and trims slashes", () => {
   const oldBase = process.env.S3_PUBLIC_BASE_URL;
@@ -45,6 +45,38 @@ test("resolveMediaUrl builds from image_key when image_url empty", () => {
     assert.equal(resolveMediaUrl(row), "https://cdn.example.com/hero/a.jpg");
   } finally {
     process.env.S3_PUBLIC_BASE_URL = oldBase;
+  }
+});
+
+test("buildExerciseMediaUrl derives sibling local static base from media-assets base", () => {
+  const oldBase = process.env.S3_PUBLIC_BASE_URL;
+  const oldExerciseBase = process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+  process.env.S3_PUBLIC_BASE_URL = "http://192.168.1.213:3000/assets/media-assets";
+  delete process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+  try {
+    assert.equal(
+      buildExerciseMediaUrl("exercise-media/_placeholder/still.jpg"),
+      "http://192.168.1.213:3000/assets/exercise-media/_placeholder/still.jpg",
+    );
+  } finally {
+    process.env.S3_PUBLIC_BASE_URL = oldBase;
+    process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL = oldExerciseBase;
+  }
+});
+
+test("buildExerciseMediaUrl honors explicit exercise media public base", () => {
+  const oldBase = process.env.S3_PUBLIC_BASE_URL;
+  const oldExerciseBase = process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+  process.env.S3_PUBLIC_BASE_URL = "http://wrong.example.com/assets/media-assets";
+  process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL = "https://cdn.example.com/exercise-media/";
+  try {
+    assert.equal(
+      buildExerciseMediaUrl("exercise-media/sled_push/video.mp4"),
+      "https://cdn.example.com/exercise-media/sled_push/video.mp4",
+    );
+  } finally {
+    process.env.S3_PUBLIC_BASE_URL = oldBase;
+    process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL = oldExerciseBase;
   }
 });
 

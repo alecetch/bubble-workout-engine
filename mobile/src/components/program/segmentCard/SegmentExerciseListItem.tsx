@@ -6,6 +6,7 @@ import { colors } from "../../../theme/colors";
 import { radii, softBadgePalette } from "../../../theme/components";
 import { spacing } from "../../../theme/spacing";
 import { typography } from "../../../theme/typography";
+import { ExerciseMediaThumb } from "../ExerciseMediaThumb";
 import { PressableScale } from "../../interaction/PressableScale";
 
 type Segment = ProgramDayFullResponse["segments"][number];
@@ -67,102 +68,114 @@ export function SegmentExerciseListItem({
         isComplete && (isRoundBased ? styles.exerciseRowGroupedComplete : styles.exerciseRowComplete),
       ]}
     >
-      <View style={styles.exerciseTitleRow}>
-        <PressableScale
-          style={styles.exerciseNamePressable}
-          onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
-        >
-          <Text style={styles.exerciseName} numberOfLines={2} ellipsizeMode="tail">
-            {exercise.name}
-          </Text>
-        </PressableScale>
-        {onRequestSwap && !isComplete ? (
+      {exercise.stillImageUrl ? (
+        <ExerciseMediaThumb
+          stillImageUrl={exercise.stillImageUrl}
+          videoUrl={exercise.videoUrl ?? null}
+          posterImageUrl={exercise.posterImageUrl ?? null}
+          videoStatus={exercise.videoStatus ?? "none"}
+        />
+      ) : null}
+      <View style={styles.exerciseContent}>
+        <View style={styles.exerciseTitleRow}>
           <PressableScale
-            style={styles.swapButton}
-            onPress={() => onRequestSwap(programExerciseId, exercise.name)}
-            accessibilityLabel={`Swap ${exercise.name}`}
+            style={styles.exerciseNamePressable}
+            onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
           >
-            <Ionicons name="swap-horizontal-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.exerciseName} numberOfLines={2} ellipsizeMode="tail">
+              {exercise.name}
+            </Text>
+          </PressableScale>
+          {onRequestSwap && !isComplete ? (
+            <PressableScale
+              style={styles.swapButton}
+              onPress={() => onRequestSwap(programExerciseId, exercise.name)}
+              accessibilityLabel={`Swap ${exercise.name}`}
+            >
+              <Ionicons name="swap-horizontal-outline" size={16} color={colors.textSecondary} />
+            </PressableScale>
+          ) : null}
+        </View>
+        {line2 ? (
+          <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
+            {line2}
+          </Text>
+        ) : null}
+        {summary ? (
+          <Text style={styles.exerciseCompleteSummary} numberOfLines={1} ellipsizeMode="tail">
+            {summary}
+          </Text>
+        ) : null}
+        {!isRoundBased && exercise.restSeconds != null && exercise.restSeconds > 0 ? (
+          <View style={styles.restRow}>
+            <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+            <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
+          </View>
+        ) : null}
+        {(() => {
+          const decision = exercise.adaptationDecision ?? null;
+          if (!decision || decision.outcome === "hold") return null;
+          const palette = CHIP_PALETTE[decision.outcome] ?? softBadgePalette.info;
+
+          return (
+            <PressableScale
+              onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
+              style={[
+                styles.adaptChip,
+                { backgroundColor: palette.bg, borderColor: palette.border },
+              ]}
+            >
+              <Text style={[styles.adaptChipText, { color: palette.text }]}>
+                {decision.displayChip}
+              </Text>
+            </PressableScale>
+          );
+        })()}
+        {!inlineLoggingOpen && hasLoggableExercises && !isRoundBased ? (
+          <PressableScale
+            style={[
+              styles.exerciseActionButton,
+              isComplete && styles.exerciseActionButtonDisabled,
+            ]}
+            disabled={isComplete}
+            onPress={onStartExercise}
+          >
+            <Text
+              style={[
+                styles.exerciseActionLabel,
+                isComplete && styles.exerciseActionLabelDisabled,
+              ]}
+            >
+              {isComplete ? "Exercise Complete" : "Start Exercise"}
+            </Text>
+          </PressableScale>
+        ) : null}
+        {!isRoundBased && showResumeButton && index === 0 ? (
+          <PressableScale
+            style={[styles.exerciseActionButton, styles.exerciseActionButtonResume]}
+            onPress={onResumeExercise}
+            accessibilityLabel="Resume exercise"
+          >
+            <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelResume]}>
+              Resume
+            </Text>
           </PressableScale>
         ) : null}
       </View>
-      {line2 ? (
-        <Text style={styles.exerciseMeta} numberOfLines={1} ellipsizeMode="tail">
-          {line2}
-        </Text>
-      ) : null}
-      {summary ? (
-        <Text style={styles.exerciseCompleteSummary} numberOfLines={1} ellipsizeMode="tail">
-          {summary}
-        </Text>
-      ) : null}
-      {!isRoundBased && exercise.restSeconds != null && exercise.restSeconds > 0 ? (
-        <View style={styles.restRow}>
-          <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
-          <Text style={styles.exerciseMeta}>Rest {exercise.restSeconds} s</Text>
-        </View>
-      ) : null}
-      {(() => {
-        const decision = exercise.adaptationDecision ?? null;
-        if (!decision || decision.outcome === "hold") return null;
-        const palette = CHIP_PALETTE[decision.outcome] ?? softBadgePalette.info;
-
-        return (
-          <PressableScale
-            onPress={() => onViewExerciseDetail(exerciseId, programExerciseId, exercise.name, exercise)}
-            style={[
-              styles.adaptChip,
-              { backgroundColor: palette.bg, borderColor: palette.border },
-            ]}
-          >
-            <Text style={[styles.adaptChipText, { color: palette.text }]}>
-              {decision.displayChip}
-            </Text>
-          </PressableScale>
-        );
-      })()}
-      {!inlineLoggingOpen && hasLoggableExercises && !isRoundBased ? (
-        <PressableScale
-          style={[
-            styles.exerciseActionButton,
-            isComplete && styles.exerciseActionButtonDisabled,
-          ]}
-          disabled={isComplete}
-          onPress={onStartExercise}
-        >
-          <Text
-            style={[
-              styles.exerciseActionLabel,
-              isComplete && styles.exerciseActionLabelDisabled,
-            ]}
-          >
-            {isComplete ? "Exercise Complete" : "Start Exercise"}
-          </Text>
-        </PressableScale>
-      ) : null}
-      {!isRoundBased && showResumeButton && index === 0 ? (
-        <PressableScale
-          style={[styles.exerciseActionButton, styles.exerciseActionButtonResume]}
-          onPress={onResumeExercise}
-          accessibilityLabel="Resume exercise"
-        >
-          <Text style={[styles.exerciseActionLabel, styles.exerciseActionLabelResume]}>
-            Resume
-          </Text>
-        </PressableScale>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   exerciseRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
     padding: spacing.sm,
-    gap: 4,
+    gap: spacing.sm,
   },
   exerciseRowComplete: {
     backgroundColor: colors.surface,
@@ -181,6 +194,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm,
+  },
+  exerciseContent: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
   },
   exerciseNamePressable: {
     flex: 1,

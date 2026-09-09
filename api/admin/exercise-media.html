@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exercise Media</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --panel: #fff; --border: #d8dee6;
+      --text: #1f2937; --muted: #6b7280; --primary: #0f62fe;
+      --danger: #b42318; --success: #0f766e; --warn: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Segoe UI, Arial, sans-serif; font-size: 13px; }
+    .page { padding: 12px; }
+    .header { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    h1 { margin: 0; font-size: 20px; }
+    button { border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; padding: 6px 13px; cursor: pointer; white-space: nowrap; font: inherit; }
+    button:hover { filter: brightness(.9); }
+    button.secondary { background: #fff; color: var(--primary); }
+    button.danger { background: var(--danger); border-color: var(--danger); }
+    button.sm { padding: 3px 9px; font-size: 12px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 940px; }
+    th, td { border-bottom: 1px solid #ecf0f4; padding: 7px 8px; text-align: left; vertical-align: middle; white-space: nowrap; }
+    th { background: #f9fbfd; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    tbody tr:hover { background: #f4f8ff; }
+    .thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: #111827; }
+    .name { font-weight: 600; }
+    .muted { color: var(--muted); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #e5e7eb; color: #374151; }
+    .badge.success { background: #d1fae5; color: #065f46; }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+    .badge.danger { background: #fee2e2; color: #991b1b; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    #status { color: var(--muted); }
+    #status.ok { color: var(--success); }
+    #status.err { color: var(--danger); }
+  </style>
+</head>
+<body>
+  <div id="nav-placeholder"></div>
+  <main class="page">
+    <header class="header">
+      <div>
+        <h1>Exercise Media</h1>
+        <div id="status">Loading...</div>
+      </div>
+      <button id="refresh" class="secondary">Refresh</button>
+    </header>
+    <section class="panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Thumbnail</th>
+            <th>Exercise</th>
+            <th>Still</th>
+            <th>Video</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+  <input id="still-input" type="file" accept="image/jpeg,image/png" hidden />
+  <input id="video-input" type="file" accept="video/mp4,video/quicktime,video/x-m4v" hidden />
+  <script src="/admin/nav.js"></script>
+  <script>
+    const token = localStorage.getItem("internalToken") || localStorage.getItem("adminToken") || "";
+    const rowsEl = document.getElementById("rows");
+    const statusEl = document.getElementById("status");
+    const stillInput = document.getElementById("still-input");
+    const videoInput = document.getElementById("video-input");
+    let selectedExerciseId = null;
+
+    function setStatus(text, cls) {
+      statusEl.textContent = text;
+      statusEl.className = cls || "";
+    }
+
+    function headers() {
+      return token ? { "X-Internal-Token": token } : {};
+    }
+
+    function formatDuration(seconds) {
+      if (!Number.isFinite(Number(seconds))) return "";
+      const total = Math.round(Number(seconds));
+      const mins = Math.floor(total / 60);
+      const secs = String(total % 60).padStart(2, "0");
+      return mins > 0 ? `${mins}:${secs}` : `0:${secs}`;
+    }
+
+    function stillBadge(row) {
+      return row.stillImageIsPlaceholder
+        ? '<span class="badge warn">Placeholder</span>'
+        : '<span class="badge success">Real</span>';
+    }
+
+    function videoBadge(row) {
+      if (row.videoStatus === "ready") {
+        return `<span class="badge success">Ready · ${formatDuration(row.videoDurationSec)}</span>`;
+      }
+      if (row.videoStatus === "processing") return '<span class="badge warn">Processing...</span>';
+      if (row.videoStatus === "failed") return '<span class="badge danger">Failed</span>';
+      return '<span class="badge">No video</span>';
+    }
+
+    function render(rows) {
+      rowsEl.innerHTML = rows.map((row) => `
+        <tr>
+          <td><img class="thumb" src="${row.stillImageUrl}" alt=""></td>
+          <td><div class="name">${row.name}</div><div class="muted">${row.exerciseId}</div></td>
+          <td>${stillBadge(row)}</td>
+          <td>${videoBadge(row)}</td>
+          <td>
+            <div class="actions">
+              <button class="sm secondary" data-action="still" data-id="${row.exerciseId}">${row.stillImageIsPlaceholder ? "Upload still" : "Replace still"}</button>
+              <button class="sm secondary" data-action="video" data-id="${row.exerciseId}">${row.videoStatus === "ready" ? "Replace video" : "Upload video"}</button>
+              ${row.videoStatus === "ready" ? `<button class="sm danger" data-action="delete-video" data-id="${row.exerciseId}">Delete video</button>` : ""}
+              ${row.posterFrameKey && row.stillImageIsPlaceholder ? `<button class="sm secondary" data-action="poster" data-id="${row.exerciseId}">Use frame as still</button>` : ""}
+            </div>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    async function load() {
+      setStatus("Loading...");
+      const res = await fetch("/admin/exercise-media/list", { headers: headers() });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error || "Could not load exercise media.");
+      render(body.exercises || []);
+      setStatus(`${(body.exercises || []).length} active exercises`, "ok");
+    }
+
+    async function upload(kind, file) {
+      const form = new FormData();
+      form.append(kind, file);
+      setStatus(`Uploading ${kind}...`);
+      const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/${kind}`, {
+        method: "POST",
+        headers: headers(),
+        body: form,
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error || `Could not upload ${kind}.`);
+      await load();
+    }
+
+    rowsEl.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      selectedExerciseId = button.dataset.id;
+      try {
+        if (button.dataset.action === "still") return stillInput.click();
+        if (button.dataset.action === "video") return videoInput.click();
+        if (button.dataset.action === "delete-video") {
+          const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/video`, { method: "DELETE", headers: headers() });
+          const body = await res.json();
+          if (!res.ok || !body.ok) throw new Error(body.error || "Could not delete video.");
+          return load();
+        }
+        if (button.dataset.action === "poster") {
+          const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/use-poster-as-still`, { method: "POST", headers: headers() });
+          const body = await res.json();
+          if (!res.ok || !body.ok) throw new Error(body.error || "Could not use poster frame.");
+          return load();
+        }
+      } catch (err) {
+        setStatus(err.message || "Action failed.", "err");
+      }
+    });
+
+    stillInput.addEventListener("change", () => {
+      if (stillInput.files[0]) upload("still", stillInput.files[0]).catch((err) => setStatus(err.message, "err"));
+      stillInput.value = "";
+    });
+    videoInput.addEventListener("change", () => {
+      if (videoInput.files[0]) upload("video", videoInput.files[0]).catch((err) => setStatus(err.message, "err"));
+      videoInput.value = "";
+    });
+    document.getElementById("refresh").addEventListener("click", () => load().catch((err) => setStatus(err.message, "err")));
+    load().catch((err) => setStatus(err.message, "err"));
+  </script>
+</body>
+</html>

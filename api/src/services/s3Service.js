@@ -14,6 +14,7 @@ const ENDPOINT = process.env.S3_ENDPOINT || undefined;
 // http://192.168.1.213:9000) so mobile devices can fetch signed photo URLs.
 const PUBLIC_ENDPOINT = process.env.S3_PUBLIC_ENDPOINT || ENDPOINT;
 export const PHYSIQUE_BUCKET = process.env.S3_PHYSIQUE_BUCKET || "physique-photos";
+export const EXERCISE_MEDIA_BUCKET = process.env.S3_EXERCISE_MEDIA_BUCKET || "exercise-media";
 
 let _client = null;
 let _publicClient = null;
@@ -63,6 +64,16 @@ export async function getObject(key, bucket = DEFAULT_BUCKET) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
+}
+
+export async function getObjectStream(key, bucket = DEFAULT_BUCKET, range = undefined) {
+  return getClient().send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ...(range ? { Range: range } : {}),
+    }),
+  );
 }
 
 export async function deleteObject(key, bucket = DEFAULT_BUCKET) {

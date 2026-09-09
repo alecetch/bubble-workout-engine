@@ -4,6 +4,7 @@
       label: "Engine",
       items: [
         { label: "Exercises",           href: "/admin/exercises" },
+        { label: "Exercise Media",      href: "/admin/exercise-media" },
         { label: "Rep Rules",           href: "/admin/rep-rules" },
         { label: "Narration",           href: "/admin/narration" },
         { label: "Progression Sandbox", href: "/admin/progression-sandbox" },

@@ -121,6 +121,10 @@ export type ProgramDayFullResponse = {
       intensity?: string | null;
       tempo?: string | null;
       restSeconds?: number | null;
+      stillImageUrl?: string;
+      videoUrl?: string | null;
+      posterImageUrl?: string | null;
+      videoStatus?: "none" | "processing" | "ready" | "failed";
       notes?: string | null;
       equipment?: string[] | null;
       isLoadable?: boolean | null;
@@ -460,6 +464,16 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
             intensity: asNullableString(rawExercise.intensity_prescription ?? rawExercise.intensity),
             tempo: asNullableString(rawExercise.tempo),
             restSeconds: asNullableNumber(rawExercise.rest_seconds ?? rawExercise.restSeconds),
+            stillImageUrl: asString(rawExercise.still_image_url ?? rawExercise.stillImageUrl) ?? "",
+            videoUrl: rawExercise.video_url === undefined && rawExercise.videoUrl === undefined
+              ? undefined
+              : asNullableString(rawExercise.video_url ?? rawExercise.videoUrl),
+            posterImageUrl: rawExercise.poster_image_url === undefined && rawExercise.posterImageUrl === undefined
+              ? undefined
+              : asNullableString(rawExercise.poster_image_url ?? rawExercise.posterImageUrl),
+            videoStatus: (
+              asNullableString(rawExercise.video_status ?? rawExercise.videoStatus) ?? "none"
+            ) as "none" | "processing" | "ready" | "failed",
             notes: asNullableString(rawExercise.notes),
             equipment: rawExercise.equipment == null
               ? rawExercise.equipment === null
