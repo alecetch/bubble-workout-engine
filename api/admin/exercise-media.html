@@ -25,7 +25,9 @@
     th, td { border-bottom: 1px solid #ecf0f4; padding: 7px 8px; text-align: left; vertical-align: middle; white-space: nowrap; }
     th { background: #f9fbfd; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
     tbody tr:hover { background: #f4f8ff; }
-    .thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: #111827; }
+    .thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: #111827; cursor: pointer; }
+    .thumb:hover { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .link-btn { background: none; border: none; color: var(--primary); padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
     .name { font-weight: 600; }
     .muted { color: var(--muted); }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #e5e7eb; color: #374151; }
@@ -36,6 +38,19 @@
     #status { color: var(--muted); }
     #status.ok { color: var(--success); }
     #status.err { color: var(--danger); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+    .kpi-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .kpi-card.alert { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); }
+    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .kpi-value { font-size: 26px; font-weight: 700; margin-top: 2px; }
+    .kpi-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; align-items: center; justify-content: center; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--panel); border-radius: 10px; padding: 20px; width: 640px; max-width: 95vw; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border); }
+    .modal h3 { margin-top: 0; }
+    .modal-media img, .modal-media video { display: block; width: 100%; max-height: 70vh; border-radius: 8px; background: #111827; object-fit: contain; }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
   </style>
 </head>
 <body>
@@ -48,6 +63,7 @@
       </div>
       <button id="refresh" class="secondary">Refresh</button>
     </header>
+    <div class="kpi-grid" id="stats"></div>
     <section class="panel">
       <table>
         <thead>
@@ -65,14 +81,41 @@
   </main>
   <input id="still-input" type="file" accept="image/jpeg,image/png" hidden />
   <input id="video-input" type="file" accept="video/mp4,video/quicktime,video/x-m4v" hidden />
+  <div id="media-modal" class="modal-bg">
+    <div class="modal">
+      <h3 id="media-modal-title">Preview</h3>
+      <div class="modal-media" id="media-modal-content"></div>
+      <div class="modal-footer">
+        <button class="secondary" id="media-modal-close">Close</button>
+      </div>
+    </div>
+  </div>
   <script src="/admin/nav.js"></script>
   <script>
     const token = localStorage.getItem("internalToken") || localStorage.getItem("adminToken") || "";
     const rowsEl = document.getElementById("rows");
+    const statsEl = document.getElementById("stats");
     const statusEl = document.getElementById("status");
     const stillInput = document.getElementById("still-input");
     const videoInput = document.getElementById("video-input");
     let selectedExerciseId = null;
+    let rowsById = new Map();
+    const mediaModal = document.getElementById("media-modal");
+    const mediaModalTitle = document.getElementById("media-modal-title");
+    const mediaModalContent = document.getElementById("media-modal-content");
+
+    function openMediaModal(title, html) {
+      mediaModalTitle.textContent = title;
+      mediaModalContent.innerHTML = html;
+      mediaModal.classList.add("open");
+    }
+    function closeMediaModal() {
+      mediaModal.classList.remove("open");
+      mediaModalContent.innerHTML = ""; // clears the <video> element so playback actually stops
+    }
+    document.getElementById("media-modal-close").addEventListener("click", closeMediaModal);
+    mediaModal.addEventListener("click", (event) => { if (event.target === mediaModal) closeMediaModal(); });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMediaModal(); });
 
     function setStatus(text, cls) {
       statusEl.textContent = text;
@@ -106,19 +149,55 @@
       return '<span class="badge">No video</span>';
     }
 
+    function renderStats(rows) {
+      const total = rows.length;
+      const realStills = rows.filter((r) => !r.stillImageIsPlaceholder).length;
+      const videosReady = rows.filter((r) => r.videoStatus === "ready").length;
+      const processing = rows.filter((r) => r.videoStatus === "processing").length;
+      const failed = rows.filter((r) => r.videoStatus === "failed").length;
+      const attention = processing + failed;
+
+      const cards = [
+        { label: "Exercises", value: total, note: "active in the catalogue" },
+        { label: "Real stills", value: realStills, note: `${total - realStills} still on the placeholder` },
+        { label: "Videos ready", value: videosReady, note: `${total - videosReady} with no video yet` },
+        {
+          label: "Needs attention",
+          value: attention,
+          note: attention > 0 ? `${processing} processing, ${failed} failed` : "nothing in progress or failed",
+          alert: attention > 0,
+        },
+      ];
+
+      statsEl.innerHTML = cards.map((c) => `
+        <div class="kpi-card${c.alert ? " alert" : ""}">
+          <div class="kpi-label">${c.label}</div>
+          <div class="kpi-value">${c.value}</div>
+          <div class="kpi-note">${c.note}</div>
+        </div>
+      `).join("");
+    }
+
     function render(rows) {
+      rowsById = new Map(rows.map((row) => [row.exerciseId, row]));
       rowsEl.innerHTML = rows.map((row) => `
         <tr>
-          <td><img class="thumb" src="${row.stillImageUrl}" alt=""></td>
+          <td><img class="thumb" data-action="view-still" data-id="${row.exerciseId}" src="${row.stillImageUrl}" alt="" title="Click to view full size"></td>
           <td><div class="name">${row.name}</div><div class="muted">${row.exerciseId}</div></td>
-          <td>${stillBadge(row)}</td>
-          <td>${videoBadge(row)}</td>
+          <td>
+            ${stillBadge(row)}
+            <div><button class="link-btn sm" data-action="view-still" data-id="${row.exerciseId}">View</button></div>
+          </td>
+          <td>
+            ${videoBadge(row)}
+            ${row.videoStatus === "ready" ? `<div><button class="link-btn sm" data-action="view-video" data-id="${row.exerciseId}">View</button></div>` : ""}
+          </td>
           <td>
             <div class="actions">
               <button class="sm secondary" data-action="still" data-id="${row.exerciseId}">${row.stillImageIsPlaceholder ? "Upload still" : "Replace still"}</button>
               <button class="sm secondary" data-action="video" data-id="${row.exerciseId}">${row.videoStatus === "ready" ? "Replace video" : "Upload video"}</button>
               ${row.videoStatus === "ready" ? `<button class="sm danger" data-action="delete-video" data-id="${row.exerciseId}">Delete video</button>` : ""}
-              ${row.posterFrameKey && row.stillImageIsPlaceholder ? `<button class="sm secondary" data-action="poster" data-id="${row.exerciseId}">Use frame as still</button>` : ""}
+              ${row.posterFrameKey ? `<button class="sm secondary" data-action="poster" data-id="${row.exerciseId}">Use frame as still</button>` : ""}
             </div>
           </td>
         </tr>
@@ -130,8 +209,10 @@
       const res = await fetch("/admin/exercise-media/list", { headers: headers() });
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.error || "Could not load exercise media.");
-      render(body.exercises || []);
-      setStatus(`${(body.exercises || []).length} active exercises`, "ok");
+      const exercises = body.exercises || [];
+      renderStats(exercises);
+      render(exercises);
+      setStatus(`${exercises.length} active exercises`, "ok");
     }
 
     async function upload(kind, file) {
@@ -145,26 +226,61 @@
       });
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.error || `Could not upload ${kind}.`);
+      return body.media;
+    }
+
+    async function usePosterAsStill(exerciseId) {
+      const res = await fetch(`/admin/exercise-media/${encodeURIComponent(exerciseId)}/use-poster-as-still`, { method: "POST", headers: headers() });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error || "Could not use poster frame.");
+    }
+
+    async function uploadVideo(file) {
+      const media = await upload("video", file);
+      // Ask every time a video lands with a usable frame — on first upload and on
+      // replace alike — not just when the still still happens to be a placeholder.
+      if (media && media.videoStatus === "ready" && media.posterFrameKey) {
+        if (confirm("Video uploaded. Use this video's frame as the exercise's still image?")) {
+          await usePosterAsStill(selectedExerciseId);
+        }
+      }
       await load();
     }
 
     rowsEl.addEventListener("click", async (event) => {
-      const button = event.target.closest("button[data-action]");
+      const button = event.target.closest("[data-action]");
       if (!button) return;
       selectedExerciseId = button.dataset.id;
       try {
+        if (button.dataset.action === "view-still") {
+          const row = rowsById.get(selectedExerciseId);
+          if (!row) return;
+          return openMediaModal(`${row.name} — still`, `<img src="${row.stillImageUrl}" alt="${row.name}">`);
+        }
+        if (button.dataset.action === "view-video") {
+          const row = rowsById.get(selectedExerciseId);
+          if (!row || !row.videoUrl) return;
+          return openMediaModal(
+            `${row.name} — video`,
+            `<video src="${row.videoUrl}" poster="${row.posterImageUrl || ""}" controls autoplay></video>`,
+          );
+        }
         if (button.dataset.action === "still") return stillInput.click();
         if (button.dataset.action === "video") return videoInput.click();
         if (button.dataset.action === "delete-video") {
+          const row = rowsById.get(selectedExerciseId);
+          // Deleting clears the poster frame along with the video, so this is the
+          // last chance to keep it as the still — ask before it's gone for good.
+          if (row && row.posterFrameKey && confirm("Deleting this video will also remove its extracted frame. Use it as the still image before deleting?")) {
+            await usePosterAsStill(selectedExerciseId);
+          }
           const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/video`, { method: "DELETE", headers: headers() });
           const body = await res.json();
           if (!res.ok || !body.ok) throw new Error(body.error || "Could not delete video.");
           return load();
         }
         if (button.dataset.action === "poster") {
-          const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/use-poster-as-still`, { method: "POST", headers: headers() });
-          const body = await res.json();
-          if (!res.ok || !body.ok) throw new Error(body.error || "Could not use poster frame.");
+          await usePosterAsStill(selectedExerciseId);
           return load();
         }
       } catch (err) {
@@ -173,11 +289,11 @@
     });
 
     stillInput.addEventListener("change", () => {
-      if (stillInput.files[0]) upload("still", stillInput.files[0]).catch((err) => setStatus(err.message, "err"));
+      if (stillInput.files[0]) upload("still", stillInput.files[0]).then(() => load()).catch((err) => setStatus(err.message, "err"));
       stillInput.value = "";
     });
     videoInput.addEventListener("change", () => {
-      if (videoInput.files[0]) upload("video", videoInput.files[0]).catch((err) => setStatus(err.message, "err"));
+      if (videoInput.files[0]) uploadVideo(videoInput.files[0]).catch((err) => setStatus(err.message, "err"));
       videoInput.value = "";
     });
     document.getElementById("refresh").addEventListener("click", () => load().catch((err) => setStatus(err.message, "err")));

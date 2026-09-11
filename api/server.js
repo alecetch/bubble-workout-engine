@@ -193,6 +193,10 @@ const adminCspMiddleware = helmet.contentSecurityPolicy({
     scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
     styleSrc: ["'self'", "'unsafe-inline'"],
     imgSrc: ["'self'", "data:", "http:", "https:"],
+    // Exercise-media video/still URLs can resolve to a LAN IP (S3_EXERCISE_MEDIA_PUBLIC_BASE_URL,
+    // for on-device testing) even when the admin page itself is loaded from localhost — CSP treats
+    // those as different origins, so media-src needs the same http:/https: allowance imgSrc already has.
+    mediaSrc: ["'self'", "http:", "https:"],
     connectSrc: ["'self'"],
     fontSrc: ["'self'", "data:"],
     frameSrc: ["'self'", "blob:"],
