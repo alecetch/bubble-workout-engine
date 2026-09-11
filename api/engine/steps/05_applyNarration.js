@@ -272,6 +272,15 @@ function readWarmupHooksForEx(byId, exId) {
   return out;
 }
 
+function readTargetRegionsForEx(byId, exId) {
+  if (!byId || !exId) return [];
+  const ex = byId[String(exId)];
+  if (!ex) return [];
+  const arr = safeJsonParse(ex.target_regions_json || ex.tr || ex.targetRegionsJson, null);
+  if (!Array.isArray(arr)) return [];
+  return arr.map((value) => s(value).trim()).filter(Boolean);
+}
+
 function readCoachingCues(ex) {
   if (!ex) return "";
   const arr = safeJsonParse(ex.coaching_cues_json || ex.coaching_cues, null);
@@ -502,6 +511,7 @@ function makeCounters() {
     week_templates_used: 0,
     warmup_hooks_found_days: 0,
     warmup_segment_added_days: 0,
+    warmup_items_selected_days: 0,
     cooldown_segment_added_days: 0,
   };
 }
@@ -509,6 +519,127 @@ function addCounters(a, b) {
   const out = makeCounters();
   for (const k of Object.keys(out)) out[k] = (a?.[k] ?? 0) + (b?.[k] ?? 0);
   return out;
+}
+
+function normalizeWarmupCatalog(raw) {
+  const rows = Array.isArray(raw) ? raw : [];
+  return rows
+    .map((row) => {
+      const id = s(row?.warmup_exercise_id || row?.warmupExerciseId);
+      if (!id) return null;
+      const targetRegions = safeJsonParse(row.target_regions_json ?? row.targetRegionsJson, []);
+      const equipment = Array.isArray(row.equipment_items_slugs)
+        ? row.equipment_items_slugs
+        : safeJsonParse(row.equipment_items_slugs ?? row.equipmentItemsSlugs, []);
+      return {
+        ...row,
+        warmup_exercise_id: id,
+        target_regions_json: Array.isArray(targetRegions) ? targetRegions.map((v) => s(v)).filter(Boolean) : [],
+        equipment_items_slugs: Array.isArray(equipment) ? equipment.map((v) => s(v)).filter(Boolean) : [],
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.warmup_exercise_id.localeCompare(b.warmup_exercise_id));
+}
+
+function normalizeWarmupHistory(raw) {
+  const out = new Map();
+  if (raw instanceof Map) {
+    for (const [region, ids] of raw.entries()) {
+      out.set(s(region), new Set(Array.from(ids || []).map((id) => s(id)).filter(Boolean)));
+    }
+    return out;
+  }
+  const obj = isObj(raw) ? raw : {};
+  for (const [region, ids] of Object.entries(obj)) {
+    out.set(s(region), new Set((Array.isArray(ids) ? ids : []).map((id) => s(id)).filter(Boolean)));
+  }
+  return out;
+}
+
+function requiredWarmupRegionsForDay(day, catalogById) {
+  const priority = { main: 0, secondary: 1, accessory: 2 };
+  const rows = [];
+  const segs = Array.isArray(day?.segments) ? day.segments : [];
+  for (let si = 0; si < segs.length; si++) {
+    const seg = segs[si] || {};
+    const segType = s(seg.segment_type);
+    const purpose = s(seg.purpose);
+    if (segType === "warmup" || segType === "cooldown" || purpose === "warmup" || purpose === "cooldown") continue;
+    const items = Array.isArray(seg.items) ? seg.items : [];
+    for (let ii = 0; ii < items.length; ii++) {
+      rows.push({
+        priority: Object.prototype.hasOwnProperty.call(priority, purpose) ? priority[purpose] : 3,
+        segmentIndex: si,
+        itemIndex: ii,
+        item: items[ii],
+      });
+    }
+  }
+  rows.sort((a, b) => a.priority - b.priority || a.segmentIndex - b.segmentIndex || a.itemIndex - b.itemIndex);
+
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const exId = s(row.item?.ex_id || row.item?.exercise_id);
+    for (const region of readTargetRegionsForEx(catalogById, exId)) {
+      if (seen.has(region)) continue;
+      seen.add(region);
+      out.push(region);
+      if (out.length >= 5) return out;
+    }
+  }
+  return out;
+}
+
+function parseDurationOrRepsLabel(label) {
+  const text = s(label).trim();
+  const match = text.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+  if (!match) return { reps_prescribed: "", reps_unit: "" };
+  return { reps_prescribed: match[1], reps_unit: s(match[2]).trim() };
+}
+
+function selectWarmupItemsForDay(day, requiredRegions, context) {
+  const catalog = context.warmupCatalog || [];
+  const effectiveEquipment = new Set((context.effectiveEquipment || []).map((value) => s(value)).filter(Boolean));
+  const history = context.warmupHistory;
+  const items = [];
+  const dayKey = s(day?.program_day_key) || `${toInt(day?.week_index, 0)}|${toInt(day?.day_index, 0)}`;
+
+  for (const region of requiredRegions) {
+    const equipmentEligible = catalog.filter((row) => {
+      const targetRegions = Array.isArray(row.target_regions_json) ? row.target_regions_json : [];
+      const requiredEquipment = Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [];
+      return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug));
+    });
+    if (!equipmentEligible.length) continue;
+
+    let recentSet = history.get(region);
+    if (!recentSet) {
+      recentSet = new Set();
+      history.set(region, recentSet);
+    }
+
+    let pool = equipmentEligible.filter((row) => !recentSet.has(row.warmup_exercise_id));
+    if (!pool.length) pool = equipmentEligible;
+    pool = pool.slice().sort((a, b) => a.warmup_exercise_id.localeCompare(b.warmup_exercise_id));
+    const picked = pool[hash32(`${dayKey}|${region}`) % pool.length];
+    if (!picked) continue;
+
+    const parsed = parseDurationOrRepsLabel(picked.duration_or_reps_label);
+    items.push({
+      exercise_id: picked.warmup_exercise_id,
+      segment_type: "warmup",
+      purpose: "warmup",
+      sets_prescribed: picked.rounds ?? 1,
+      reps_prescribed: parsed.reps_prescribed,
+      reps_unit: parsed.reps_unit,
+      notes: picked.cue_text ?? "",
+    });
+    recentSet.add(picked.warmup_exercise_id);
+  }
+
+  return items;
 }
 
 // ---------------- core: enrich only a "days[]" array ----------------
@@ -563,6 +694,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       }
       if (purp === "secondary" && !secondaryName) secondaryName = nm;
     }
+    const requiredWarmupRegions = requiredWarmupRegionsForDay(day, catalogById);
 
     const dayFocus = dayFocusFromDay(day);
     const matchCtx = { ...matchBase, day_focus: dayFocus };
@@ -751,12 +883,13 @@ function enrichDays(days, templates, cfg, catalogById, context) {
     }
 
     if (!hasWarmSeg) {
+      const warmupItems = selectWarmupItemsForDay(day, requiredWarmupRegions, context);
       const warmSeg = {
         segment_index: 0,
         segment_type: "warmup",
         purpose: "warmup",
         rounds: 1,
-        items: [],
+        items: warmupItems,
         narration: {
           title: day.narration.warmup?.title || "Warm-up",
           execution:
@@ -770,6 +903,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       };
       day.segments.unshift(warmSeg);
       debugCounters.warmup_segment_added_days += 1;
+      if (warmupItems.length) debugCounters.warmup_items_selected_days += 1;
     }
 
     if (!hasCoolSeg) {
@@ -909,6 +1043,9 @@ export async function applyNarration({
   fitnessRank,
   programLength,
   catalogJson,
+  warmupCatalog,
+  warmupHistory,
+  effectiveEquipment,
   cooldownSeconds, // copy only for future; not used in engine right now
 }) {
   if (!program) throw new Error("applyNarration: missing program");
@@ -972,6 +1109,11 @@ export async function applyNarration({
 
   const cat = safeJsonParse(catalogJson, null);
   const catalogById = buildCatalogIndex(cat);
+  const normalizedWarmupCatalog = normalizeWarmupCatalog(warmupCatalog);
+  const warmupHistoryByRegion = normalizeWarmupHistory(warmupHistory);
+  const normalizedEffectiveEquipment = Array.isArray(effectiveEquipment)
+    ? effectiveEquipment.map((value) => s(value)).filter(Boolean)
+    : [];
 
   // Split adoption into template vs weeks, plus totals (and mirror Step 4 week-by-week stats)
   const adoption = {
@@ -997,6 +1139,9 @@ export async function applyNarration({
       program_type: cfg.program_type,
       totalWeeks,
       debugCounters: adoption.template,
+      warmupCatalog: normalizedWarmupCatalog,
+      warmupHistory: warmupHistoryByRegion,
+      effectiveEquipment: normalizedEffectiveEquipment,
     });
   }
 
@@ -1017,6 +1162,9 @@ export async function applyNarration({
         program_type: cfg.program_type,
         totalWeeks,
         debugCounters: wkCounters,
+        warmupCatalog: normalizedWarmupCatalog,
+        warmupHistory: warmupHistoryByRegion,
+        effectiveEquipment: normalizedEffectiveEquipment,
       });
 
       // Aggregate into overall weeks bucket
@@ -1044,6 +1192,7 @@ export async function applyNarration({
       total_weeks_default: cfg.total_weeks_default,
       total_weeks_used: totalWeeks,
       catalog_json_present: !!(cat && Array.isArray(cat.ex) && cat.ex.length),
+      warmup_catalog_count: normalizedWarmupCatalog.length,
     },
     adoption: {
       template: adoption.template,

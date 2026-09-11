@@ -761,23 +761,26 @@ export async function emitPlanRows({
 
         for (let ii = 0; ii < items.length; ii++) {
           const it = items[ii];
-          const ex = byId[String(it.ex_id)];
+          const itemExerciseId = s(it.ex_id || it.exercise_id);
+          const itemSets = it.sets ?? it.sets_prescribed;
+          const itemRepsUnit = s(it.reps_unit) || "reps";
+          const itemNotes = s(it.notes) || buildWarmup(byId[String(itemExerciseId)]);
 
           rows.push([
             "EX",
-            s(it.ex_id),
+            itemExerciseId,
             String(orderInDay++),
             String(block_order),
             s(purpose),
             s(purpose.charAt(0).toUpperCase() + purpose.slice(1)),
             String(ii + 1),
-            n(it.sets),
+            n(itemSets),
             s(it.reps_prescribed),
-            "reps",
+            itemRepsUnit,
             s(it.rir_target ? "~" + it.rir_target + " RIR" : ""),
             s(it.tempo_prescribed),
             n(it.rest_after_set_sec),
-            buildWarmup(ex),
+            itemNotes,
             s(block_key),
             "",
             "",

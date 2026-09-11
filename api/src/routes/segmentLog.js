@@ -193,7 +193,7 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
         const programExerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
         const regionResult = await client.query(
           `
-          SELECT pe.id AS program_exercise_id, ec.strength_primary_region
+          SELECT pe.id AS program_exercise_id, pe.segment_type, ec.strength_primary_region
           FROM program_exercise pe
           LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
           WHERE pe.id = ANY($1::uuid[])
@@ -203,6 +203,19 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
         const regionByProgramExerciseId = new Map(
           regionResult.rows.map((r) => [r.program_exercise_id, r.strength_primary_region]),
         );
+        const segmentTypeByProgramExerciseId = new Map(
+          regionResult.rows.map((r) => [r.program_exercise_id, safeString(r.segment_type)]),
+        );
+
+        if (rows.some((row) => segmentTypeByProgramExerciseId.get(row.program_exercise_id) === "warmup")) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            ok: false,
+            request_id,
+            code: "validation_error",
+            error: "warmup segments are not loggable",
+          });
+        }
 
         for (const row of rows) {
           const region = regionByProgramExerciseId.get(row.program_exercise_id) ?? null;

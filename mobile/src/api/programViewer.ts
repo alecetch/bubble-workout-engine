@@ -125,6 +125,10 @@ export type ProgramDayFullResponse = {
       videoUrl?: string | null;
       posterImageUrl?: string | null;
       videoStatus?: "none" | "processing" | "ready" | "failed";
+      warmupExerciseId?: string;
+      cueText?: string;
+      rounds?: number | null;
+      durationOrRepsLabel?: string;
       notes?: string | null;
       equipment?: string[] | null;
       isLoadable?: boolean | null;
@@ -474,6 +478,10 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
             videoStatus: (
               asNullableString(rawExercise.video_status ?? rawExercise.videoStatus) ?? "none"
             ) as "none" | "processing" | "ready" | "failed",
+            warmupExerciseId: asString(rawExercise.warmup_exercise_id ?? rawExercise.warmupExerciseId),
+            cueText: asString(rawExercise.cue_text ?? rawExercise.cueText),
+            rounds: asNullableNumber(rawExercise.rounds),
+            durationOrRepsLabel: asString(rawExercise.duration_or_reps_label ?? rawExercise.durationOrRepsLabel),
             notes: asNullableString(rawExercise.notes),
             equipment: rawExercise.equipment == null
               ? rawExercise.equipment === null

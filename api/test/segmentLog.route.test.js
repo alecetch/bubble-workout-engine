@@ -226,6 +226,47 @@ test("postSegmentLog accepts rir_actual of 0", async () => {
   assert.equal(insertCall.params[8], 0);
 });
 
+test("postSegmentLog rejects warmup program exercises without writing logs", async () => {
+  const queries = [];
+  const handlers = createSegmentLogHandlers({
+    async connect() {
+      return {
+        async query(sql, params) {
+          queries.push({ sql, params });
+          if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return {
+              rows: [{ program_exercise_id: VALID_UUID, segment_type: "warmup", strength_primary_region: null }],
+              rowCount: 1,
+            };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  });
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: 0, reps_completed: 10 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body?.error, "warmup segments are not loggable");
+  assert.equal(queries.some((query) => query.sql.includes("INSERT INTO segment_exercise_log")), false);
+  assert.equal(queries.some((query) => query.sql === "ROLLBACK"), true);
+});
+
 test("postSegmentLog accepts rir_actual of 3", async () => {
   const queries = [];
   const handlers = createSegmentLogHandlers({

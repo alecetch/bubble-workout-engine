@@ -510,6 +510,7 @@ export function createGenerateProgramV2Handler({
         duration_mins: mappedMinutesPerSession ?? 50,
         days_per_week: daysPerWeek,
         fitness_rank: mappedFitnessRank,
+        equipment_items_slugs: mappedEquipmentSlugs,
       },
     });
 

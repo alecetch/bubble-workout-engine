@@ -274,6 +274,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/program/WarmupSegmentSection.tsx",
+      "test": "src/components/program/WarmupSegmentSection.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "program"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/program/GuidelineLoadHint.tsx",
       "test": "src/components/program/GuidelineLoadHint.component.test.tsx",
       "status": "covered",
