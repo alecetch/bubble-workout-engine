@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Warm-up Exercises</title>
+  <style>
+    :root{--bg:#f6f7fb;--panel:#fff;--text:#172033;--muted:#667085;--border:#d9dee8;--accent:#0f62fe;--danger:#b42318;--ok:#067647;--warn:#b54708}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Segoe UI,Arial,sans-serif}
+    main{padding:24px;max-width:1280px}
+    h1{margin:0 0 16px;font-size:24px}
+    .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+    input,textarea,button{font:inherit}
+    input,textarea{border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff}
+    textarea{min-height:76px;resize:vertical}
+    button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:8px 10px;cursor:pointer}
+    button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    button.danger{color:var(--danger)}
+    table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border)}
+    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+    th{font-size:12px;color:var(--muted);text-transform:uppercase;background:#f9fafb}
+    .thumb{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+    .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;background:#eef2ff;color:#3538cd}
+    .badge.ready{background:#ecfdf3;color:var(--ok)}.badge.failed{background:#fef3f2;color:var(--danger)}.badge.processing{background:#fffaeb;color:var(--warn)}
+    .chips{display:flex;gap:4px;flex-wrap:wrap}.chip{background:#eef2f6;border:1px solid var(--border);border-radius:999px;padding:2px 7px;font-size:12px}
+    dialog{border:1px solid var(--border);border-radius:8px;padding:0;width:min(720px,96vw)}
+    dialog::backdrop{background:rgba(15,23,42,.35)}
+    .drawer{padding:18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:5px}.field.full{grid-column:1/-1}
+    .chip-input{display:flex;gap:6px}.chip-list{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}.chip button{border:0;background:transparent;padding:0 0 0 5px}
+    .status{color:var(--muted);margin-left:auto}
+  </style>
+</head>
+<body>
+  <div id="nav-placeholder"></div>
+  <main>
+    <h1>Warm-up Exercises</h1>
+    <div class="toolbar">
+      <input id="token" placeholder="Internal token">
+      <button id="save-token">Save token</button>
+      <button class="primary" id="new-btn">New warm-up exercise</button>
+      <span class="status" id="status"></span>
+    </div>
+    <table>
+      <thead><tr><th>Still</th><th>Name</th><th>Regions</th><th>Equipment</th><th>Prescription</th><th>Video</th><th>Archived</th><th>Actions</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </main>
+
+  <dialog id="editor">
+    <form method="dialog" class="drawer">
+      <h2 id="editor-title">Warm-up Exercise</h2>
+      <div class="grid">
+        <label class="field full">Name<input id="name"></label>
+        <label class="field">Rounds<input id="rounds" type="number" min="1"></label>
+        <label class="field">Duration/reps<input id="label" placeholder="10 reps"></label>
+        <label class="field full">Regions<div class="chip-input"><input id="regions-input"><button id="add-region">Add</button></div><div id="regions" class="chip-list"></div></label>
+        <label class="field full">Equipment<div class="chip-input"><input id="equipment-input"><button id="add-equipment">Add</button></div><div id="equipment" class="chip-list"></div></label>
+        <label class="field full">Cue text<textarea id="cue"></textarea></label>
+        <label class="field">Still image<input id="still" type="file" accept="image/*"></label>
+        <label class="field">Video<input id="video" type="file" accept="video/*"></label>
+      </div>
+      <div class="toolbar" style="margin-top:16px">
+        <button class="primary" id="save">Save</button>
+        <button id="poster">Use poster as still</button>
+        <button id="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/admin/nav.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { rows: [], editing: null, regions: [], equipment: [] };
+    $("token").value = localStorage.getItem("warmup_admin_internal_token") || "";
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+    function headers(json=true){const h={"X-Internal-Token":$("token").value.trim()}; if(json)h["Content-Type"]="application/json"; return h;}
+    function setStatus(text){$("status").textContent=text;}
+    async function api(path, options={}){const r=await fetch(path,{...options,headers:{...headers(!options.body || !(options.body instanceof FormData)),...(options.headers||{})}});const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.error||r.statusText);return b;}
+    function chips(values){return (values||[]).map((v)=>`<span class="chip">${esc(v)}</span>`).join("");}
+    function render(){
+      $("rows").innerHTML = state.rows.map((r)=>`
+        <tr>
+          <td><img class="thumb" src="${esc(r.stillImageUrl||"")}" alt=""></td>
+          <td><strong>${esc(r.name)}</strong><br><span class="badge">${esc(r.warmupExerciseId)}</span></td>
+          <td><div class="chips">${chips(r.targetRegions)}</div></td>
+          <td><div class="chips">${chips(r.equipmentItemsSlugs)}</div></td>
+          <td>${esc([r.rounds ? `${r.rounds} rounds` : "", r.durationOrRepsLabel].filter(Boolean).join(" · "))}</td>
+          <td><span class="badge ${esc(r.videoStatus)}">${esc(r.videoStatus)}</span></td>
+          <td>${r.isArchived ? "Yes" : "No"}</td>
+          <td><button data-edit="${esc(r.warmupExerciseId)}">Edit</button> <button data-archive="${esc(r.warmupExerciseId)}">${r.isArchived ? "Restore" : "Archive"}</button></td>
+        </tr>`).join("") || `<tr><td colspan="8">No warm-up exercises yet.</td></tr>`;
+    }
+    async function load(){setStatus("Loading..."); const b=await api("/admin/warmup-exercises/list"); state.rows=b.warmupExercises||[]; render(); setStatus(`Loaded ${state.rows.length}`);}
+    function renderChipEditor(kind){$(kind).innerHTML=state[kind].map((v,i)=>`<span class="chip">${esc(v)}<button data-chip="${kind}" data-index="${i}">x</button></span>`).join("");}
+    function openEditor(row=null){state.editing=row; state.regions=[...(row?.targetRegions||[])]; state.equipment=[...(row?.equipmentItemsSlugs||[])]; $("name").value=row?.name||""; $("rounds").value=row?.rounds||""; $("label").value=row?.durationOrRepsLabel||""; $("cue").value=row?.cueText||""; renderChipEditor("regions"); renderChipEditor("equipment"); $("editor").showModal();}
+    function addChip(kind,inputId){const v=$(inputId).value.trim(); if(v&&!state[kind].includes(v))state[kind].push(v); $(inputId).value=""; renderChipEditor(kind);}
+    async function save(){
+      const payload={name:$("name").value,targetRegions:state.regions,equipmentItemsSlugs:state.equipment,cueText:$("cue").value,durationOrRepsLabel:$("label").value,rounds:$("rounds").value};
+      const id=state.editing?.warmupExerciseId;
+      const b=await api(id?`/admin/warmup-exercises/${encodeURIComponent(id)}`:"/admin/warmup-exercises",{method:id?"PATCH":"POST",body:JSON.stringify(payload)});
+      const savedId=id || b.warmupExercise?.warmupExerciseId;
+      for (const [field, input] of [["still",$("still")],["video",$("video")]]) {
+        if (!input.files?.[0]) continue;
+        const fd=new FormData(); fd.append(field,input.files[0]);
+        await api(`/admin/warmup-exercises/${encodeURIComponent(savedId)}/${field}`,{method:"POST",body:fd,headers:{"X-Internal-Token":$("token").value.trim()}});
+      }
+      $("editor").close(); await load();
+    }
+    $("save-token").onclick=()=>{localStorage.setItem("warmup_admin_internal_token",$("token").value.trim()); load().catch((e)=>setStatus(e.message));};
+    $("new-btn").onclick=()=>openEditor();
+    $("add-region").onclick=(e)=>{e.preventDefault();addChip("regions","regions-input");};
+    $("add-equipment").onclick=(e)=>{e.preventDefault();addChip("equipment","equipment-input");};
+    $("cancel").onclick=(e)=>{e.preventDefault();$("editor").close();};
+    $("save").onclick=(e)=>{e.preventDefault();save().catch((err)=>setStatus(err.message));};
+    $("poster").onclick=async(e)=>{e.preventDefault(); if(!state.editing)return; await api(`/admin/warmup-exercises/${encodeURIComponent(state.editing.warmupExerciseId)}/use-poster-as-still`,{method:"POST"}); await load();};
+    document.addEventListener("click",async(e)=>{const t=e.target;if(t.dataset?.edit)openEditor(state.rows.find((r)=>r.warmupExerciseId===t.dataset.edit)); if(t.dataset?.archive){const r=state.rows.find((x)=>x.warmupExerciseId===t.dataset.archive); if(r?.isArchived) await api(`/admin/warmup-exercises/${encodeURIComponent(r.warmupExerciseId)}`,{method:"PATCH",body:JSON.stringify({...r,isArchived:false})}); else await api(`/admin/warmup-exercises/${encodeURIComponent(t.dataset.archive)}`,{method:"DELETE"}); await load();} if(t.dataset?.chip){state[t.dataset.chip].splice(Number(t.dataset.index),1); renderChipEditor(t.dataset.chip);}});
+    if ($("token").value) load().catch((e)=>setStatus(e.message));
+  </script>
+</body>
+</html>

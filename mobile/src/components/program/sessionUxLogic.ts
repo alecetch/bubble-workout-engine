@@ -1,5 +1,6 @@
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import type { SaveSegmentLogPayload, SegmentLogRow } from "../../api/segmentLog";
+import { isWarmupOrCooldownSegment } from "./segmentCardLogic";
 
 export type GuidelinePrefillExercise = {
   guidelineLoad?: { value?: number | string | null } | null;
@@ -210,7 +211,7 @@ export function computeSessionStatsFromSegments(
 }
 
 export function computeTotalPrescribedSets(orderedSegments: Segment[]): number {
-  return orderedSegments.reduce(
+  return orderedSegments.filter((segment) => !isWarmupOrCooldownSegment(segment.segmentType)).reduce(
     (sum, segment) =>
       sum + (segment.exercises ?? [])
         .filter((exercise) => exercise.id)

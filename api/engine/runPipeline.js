@@ -47,6 +47,26 @@ function normalizeNarrationTemplateRows(raw) {
   return [];
 }
 
+function normalizeArray(value) {
+  if (Array.isArray(value)) return value.map((v) => String(v ?? "").trim()).filter(Boolean);
+  if (value == null || value === "") return [];
+  return [String(value).trim()].filter(Boolean);
+}
+
+function warmupHistoryRowsByRegion(rows) {
+  const out = {};
+  for (const row of rows || []) {
+    const exerciseId = String(row?.exercise_id ?? "").trim();
+    if (!exerciseId) continue;
+    const regions = normalizeArray(safeJsonParseMaybe(row?.target_regions_json, []));
+    for (const region of regions) {
+      if (!out[region]) out[region] = [];
+      if (!out[region].includes(exerciseId)) out[region].push(exerciseId);
+    }
+  }
+  return out;
+}
+
 function hardcodedProgramGenerationConfigRow(programType, schemaVersion) {
   return {
     config_key: `hardcoded_${programType}_v${schemaVersion}`,
@@ -268,6 +288,13 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
   let narrationTemplates = null;
   let narrationSource = "json";
   const step5Notes = [];
+  let warmupCatalog = [];
+  let warmupHistory = {};
+  const effectiveEquipment = normalizeArray(
+    request?.equipment_items_slugs ??
+    request?.equipmentItemSlugs ??
+    inputs?.clientProfile?.response?.equipment_items_slugs,
+  );
 
   const requestNarrationTemplatesRaw = request?.narration_templates_json;
   const hasRequestNarrationOverride =
@@ -304,6 +331,51 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
     }
   }
 
+  try {
+    const warmupCatalogR = await dbClient.query(
+      `SELECT
+         we.*,
+         wm.still_image_key,
+         wm.video_key,
+         wm.video_status,
+         wm.poster_frame_key
+       FROM warmup_exercise we
+       LEFT JOIN warmup_exercise_media wm USING (warmup_exercise_id)
+       WHERE we.is_archived = false
+       ORDER BY we.warmup_exercise_id`,
+    );
+    warmupCatalog = warmupCatalogR.rows ?? [];
+  } catch (err) {
+    warmupCatalog = [];
+    step5Notes.push(`Warm-up catalogue unavailable (${err?.message || String(err)}); skipping selected warm-ups`);
+  }
+
+  const existingProgramId = request?.program_id ?? request?.programId ?? null;
+  if (existingProgramId) {
+    try {
+      const anchorDate = request?.anchor_date ?? request?.anchorDate ?? (
+        Number.isFinite(Number(request?.anchor_day_ms ?? request?.anchor_date_ms))
+          ? new Date(Number(request.anchor_day_ms ?? request.anchor_date_ms)).toISOString().slice(0, 10)
+          : new Date().toISOString().slice(0, 10)
+      );
+      const warmupHistoryR = await dbClient.query(
+        `SELECT pe.exercise_id, we.target_regions_json
+         FROM program_exercise pe
+         JOIN workout_segment ws ON ws.id = pe.workout_segment_id
+         JOIN program_day pd ON pd.id = pe.program_day_id
+         JOIN warmup_exercise we ON we.warmup_exercise_id = pe.exercise_id
+         WHERE pe.segment_type = 'warmup'
+           AND pd.program_id = $1
+           AND pd.scheduled_date >= $2::date - interval '7 days'`,
+        [existingProgramId, anchorDate],
+      );
+      warmupHistory = warmupHistoryRowsByRegion(warmupHistoryR.rows);
+    } catch (err) {
+      warmupHistory = {};
+      step5Notes.push(`Warm-up history unavailable (${err?.message || String(err)}); using in-run no-repeat only`);
+    }
+  }
+
   const narrationTemplatesJson = build?.narration_json ?? JSON.stringify([]);
   if (!Array.isArray(narrationTemplates) || narrationTemplates.length === 0) {
     const hasBuildNarrationJson =
@@ -328,6 +400,9 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
     fitnessRank,
     programLength,
     catalogJson: build.catalog_json,
+    warmupCatalog,
+    warmupHistory,
+    effectiveEquipment,
     cooldownSeconds: request?.cooldown_seconds ?? 120,
   });
   step5.debug = step5.debug || {};

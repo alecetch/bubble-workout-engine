@@ -14,6 +14,7 @@ import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
 import { computeSessionStatsFromLoggedRows, computeTotalPrescribedSets } from "../../components/program/sessionUxLogic";
+import { isWarmupOrCooldownSegment } from "../../components/program/segmentCardLogic";
 import { WorkoutProgressHeader } from "../../components/program/WorkoutProgressHeader";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
@@ -130,7 +131,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }, [dayQuery.data?.segments]);
 
   const allExerciseIds = useMemo(
-    () => orderedSegments.flatMap((segment) => segment.exercises.map((exercise) => exercise.id).filter((id): id is string => Boolean(id))),
+    () => orderedSegments
+      .filter((segment) => !isWarmupOrCooldownSegment(segment.segmentType))
+      .flatMap((segment) => segment.exercises.map((exercise) => exercise.id).filter((id): id is string => Boolean(id))),
     [orderedSegments],
   );
 
