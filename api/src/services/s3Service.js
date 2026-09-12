@@ -18,6 +18,7 @@ export const EXERCISE_MEDIA_BUCKET = process.env.S3_EXERCISE_MEDIA_BUCKET || "ex
 
 let _client = null;
 let _publicClient = null;
+let _exerciseMediaClient = null;
 
 function getClient() {
   if (!_client) {
@@ -31,6 +32,25 @@ function getClient() {
     });
   }
   return _client;
+}
+
+// The exercise-media bucket is a separate Tigris project from the default
+// bucket (formas3), with its own dedicated access key/secret - Tigris scopes
+// credentials per-project, they aren't interchangeable. Falls back to the
+// default credentials when the dedicated ones aren't set (local dev's MinIO
+// uses one shared credential pair for every bucket).
+export function getClientForBucket(bucket) {
+  if (bucket !== EXERCISE_MEDIA_BUCKET) return getClient();
+  const accessKeyId = process.env.S3_EXERCISE_MEDIA_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID || "";
+  const secretAccessKey = process.env.S3_EXERCISE_MEDIA_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY || "";
+  if (!_exerciseMediaClient) {
+    _exerciseMediaClient = new S3Client({
+      region: REGION,
+      ...(ENDPOINT ? { endpoint: ENDPOINT, forcePathStyle: true } : {}),
+      credentials: { accessKeyId, secretAccessKey },
+    });
+  }
+  return _exerciseMediaClient;
 }
 
 // Separate client for generating presigned GET URLs using the publicly reachable
@@ -51,14 +71,14 @@ function getPublicClient() {
 }
 
 export async function putObject(key, buffer, contentType, bucket = DEFAULT_BUCKET) {
-  await getClient().send(
+  await getClientForBucket(bucket).send(
     new PutObjectCommand({ Bucket: bucket, Key: key, Body: buffer, ContentType: contentType }),
   );
   return key;
 }
 
 export async function getObject(key, bucket = DEFAULT_BUCKET) {
-  const result = await getClient().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const result = await getClientForBucket(bucket).send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const chunks = [];
   for await (const chunk of result.Body) {
     chunks.push(chunk);
@@ -67,7 +87,7 @@ export async function getObject(key, bucket = DEFAULT_BUCKET) {
 }
 
 export async function getObjectStream(key, bucket = DEFAULT_BUCKET, range = undefined) {
-  return getClient().send(
+  return getClientForBucket(bucket).send(
     new GetObjectCommand({
       Bucket: bucket,
       Key: key,
@@ -77,7 +97,7 @@ export async function getObjectStream(key, bucket = DEFAULT_BUCKET, range = unde
 }
 
 export async function deleteObject(key, bucket = DEFAULT_BUCKET) {
-  await getClient().send(
+  await getClientForBucket(bucket).send(
     new DeleteObjectCommand({ Bucket: bucket, Key: key }),
   );
 }
@@ -91,5 +111,5 @@ export async function getPresignedUrl(key, expiresInSeconds = 3600, bucket = DEF
 // For server-side fetches (signed against the internal minio endpoint).
 export async function getInternalPresignedUrl(key, expiresInSeconds = 60, bucket = DEFAULT_BUCKET) {
   const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-  return getSignedUrl(getClient(), command, { expiresIn: expiresInSeconds });
+  return getSignedUrl(getClientForBucket(bucket), command, { expiresIn: expiresInSeconds });
 }
