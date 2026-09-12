@@ -61,7 +61,10 @@
         <h1>Exercise Media</h1>
         <div id="status">Loading...</div>
       </div>
-      <button id="refresh" class="secondary">Refresh</button>
+      <div class="actions">
+        <button id="promote-all" class="secondary" hidden>Promote all pending (0)</button>
+        <button id="refresh" class="secondary">Refresh</button>
+      </div>
     </header>
     <div class="kpi-grid" id="stats"></div>
     <section class="panel">
@@ -100,6 +103,8 @@
     const videoInput = document.getElementById("video-input");
     let selectedExerciseId = null;
     let rowsById = new Map();
+    let promotionEnabled = false;
+    let currentRows = [];
     const mediaModal = document.getElementById("media-modal");
     const mediaModalTitle = document.getElementById("media-modal-title");
     const mediaModalContent = document.getElementById("media-modal-content");
@@ -149,6 +154,50 @@
       return '<span class="badge">No video</span>';
     }
 
+    function needsStillPromotion(row) {
+      return row && row.stillImageIsPlaceholder === false && !row.promotedStillAt;
+    }
+
+    function needsVideoPromotion(row) {
+      return row && row.videoStatus === "ready" && !row.promotedVideoAt;
+    }
+
+    function needsPromotion(row) {
+      return needsStillPromotion(row) || needsVideoPromotion(row);
+    }
+
+    function promotionLabel(row) {
+      const parts = [];
+      if (needsStillPromotion(row)) parts.push("still");
+      if (needsVideoPromotion(row)) parts.push("video");
+      if (!parts.length) return "Promoted";
+      return `Promote ${parts.join(" + ")}`;
+    }
+
+    function promotionFailureSummary(results) {
+      const failed = [];
+      (results || []).forEach((result) => {
+        const errors = result.errors || {};
+        const parts = [];
+        if (errors.still) parts.push(`still: ${errors.still}`);
+        if (errors.video) parts.push(`video: ${errors.video}`);
+        if (parts.length) failed.push(`${result.name || result.exerciseId}: ${parts.join("; ")}`);
+      });
+      return failed;
+    }
+
+    function updatePromoteAll(rows) {
+      const button = document.getElementById("promote-all");
+      if (!promotionEnabled) {
+        button.hidden = true;
+        return;
+      }
+      const pending = rows.filter(needsPromotion).length;
+      button.hidden = false;
+      button.disabled = pending === 0;
+      button.textContent = `Promote all pending (${pending})`;
+    }
+
     function renderStats(rows) {
       const total = rows.length;
       const realStills = rows.filter((r) => !r.stillImageIsPlaceholder).length;
@@ -179,7 +228,9 @@
     }
 
     function render(rows) {
+      currentRows = rows;
       rowsById = new Map(rows.map((row) => [row.exerciseId, row]));
+      updatePromoteAll(rows);
       rowsEl.innerHTML = rows.map((row) => `
         <tr>
           <td><img class="thumb" data-action="view-still" data-id="${row.exerciseId}" src="${row.stillImageUrl}" alt="" title="Click to view full size"></td>
@@ -196,6 +247,7 @@
             <div class="actions">
               <button class="sm secondary" data-action="still" data-id="${row.exerciseId}">${row.stillImageIsPlaceholder ? "Upload still" : "Replace still"}</button>
               <button class="sm secondary" data-action="video" data-id="${row.exerciseId}">${row.videoStatus === "ready" ? "Replace video" : "Upload video"}</button>
+              ${promotionEnabled ? `<button class="sm secondary" data-action="promote" data-id="${row.exerciseId}" ${needsPromotion(row) ? "" : "disabled"}>${promotionLabel(row)}</button>` : ""}
               ${row.videoStatus === "ready" ? `<button class="sm danger" data-action="delete-video" data-id="${row.exerciseId}">Delete video</button>` : ""}
               ${row.posterFrameKey ? `<button class="sm secondary" data-action="poster" data-id="${row.exerciseId}">Use frame as still</button>` : ""}
             </div>
@@ -209,6 +261,7 @@
       const res = await fetch("/admin/exercise-media/list", { headers: headers() });
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.error || "Could not load exercise media.");
+      promotionEnabled = body.promotionEnabled === true;
       const exercises = body.exercises || [];
       renderStats(exercises);
       render(exercises);
@@ -283,6 +336,17 @@
           await usePosterAsStill(selectedExerciseId);
           return load();
         }
+        if (button.dataset.action === "promote") {
+          setStatus("Promoting to production...");
+          const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/promote`, { method: "POST", headers: headers() });
+          const body = await res.json();
+          if (!res.ok || !body.ok) throw new Error(body.error || "Could not promote exercise media.");
+          const failures = promotionFailureSummary([{ ...body, exerciseId: selectedExerciseId, name: rowsById.get(selectedExerciseId)?.name }]);
+          await load();
+          if (failures.length) setStatus(`Promotion finished with errors: ${failures.join(" | ")}`, "err");
+          else setStatus("Promotion complete.", "ok");
+          return;
+        }
       } catch (err) {
         setStatus(err.message || "Action failed.", "err");
       }
@@ -297,6 +361,23 @@
       videoInput.value = "";
     });
     document.getElementById("refresh").addEventListener("click", () => load().catch((err) => setStatus(err.message, "err")));
+    document.getElementById("promote-all").addEventListener("click", async () => {
+      const pending = currentRows.filter(needsPromotion).length;
+      if (!pending) return;
+      if (!confirm(`This will push ${pending} exercise(s)' still/video to PRODUCTION. Continue?`)) return;
+      try {
+        setStatus("Promoting pending media to production...");
+        const res = await fetch("/admin/exercise-media/promote-all", { method: "POST", headers: headers() });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || "Could not promote pending exercise media.");
+        const failures = promotionFailureSummary(body.results || []);
+        await load();
+        if (failures.length) setStatus(`Bulk promotion finished with errors: ${failures.join(" | ")}`, "err");
+        else setStatus(`Bulk promotion complete for ${(body.results || []).length} exercise(s).`, "ok");
+      } catch (err) {
+        setStatus(err.message || "Bulk promotion failed.", "err");
+      }
+    });
     load().catch((err) => setStatus(err.message, "err"));
   </script>
 </body>
