@@ -204,6 +204,11 @@ const adminCspMiddleware = helmet.contentSecurityPolicy({
     objectSrc: ["'none'"],
     baseUri: ["'self'"],
     frameAncestors: ["'none'"],
+    // Exercise-media stills/videos are served over plain HTTP in local dev
+    // (LAN IP, no TLS). Helmet's default directives silently add
+    // upgrade-insecure-requests, which rewrites those http: URLs to https:
+    // before the browser fetches them, causing ERR_SSL_PROTOCOL_ERROR.
+    upgradeInsecureRequests: null,
   },
 });
 
@@ -326,9 +331,14 @@ app.use("/generate-plan-v2", generationRateLimiter);
 app.use("/api/generate-plan-v2", generationRateLimiter);
 
 // Serve local media assets (dev only — in prod these are served from S3).
-app.use("/assets/media-assets", express.static(join(__dirname, "assets/media-assets")));
-app.use("/assets/exercise-media", exerciseMediaAssetsRouter);
-app.use("/assets/exercise-media", express.static(join(__dirname, "assets/exercise-media")));
+// helmet()'s default Cross-Origin-Resource-Policy is "same-origin", which blocks
+// <img>/<video> loads whenever the admin page and the asset host differ (e.g. page
+// loaded from localhost, asset resolved to a LAN IP for on-device testing) — these
+// are public media assets, so mark them loadable cross-origin.
+const publicAssetCrossOrigin = helmet.crossOriginResourcePolicy({ policy: "cross-origin" });
+app.use("/assets/media-assets", publicAssetCrossOrigin, express.static(join(__dirname, "assets/media-assets")));
+app.use("/assets/exercise-media", publicAssetCrossOrigin, exerciseMediaAssetsRouter);
+app.use("/assets/exercise-media", publicAssetCrossOrigin, express.static(join(__dirname, "assets/exercise-media")));
 app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));
 app.use("/images", express.static(join(__dirname, "public/images")));
 app.use("/downloads", express.static(join(__dirname, "public/downloads")));

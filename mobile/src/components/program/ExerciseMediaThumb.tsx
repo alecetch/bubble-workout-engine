@@ -106,6 +106,7 @@ export function ExerciseMediaThumb({
             onPress={() => setMode("expanded")}
             accessibilityRole="button"
             accessibilityLabel="Close exercise video fullscreen"
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Ionicons name="close-outline" size={22} color={colors.textPrimary} />
           </Pressable>
@@ -183,7 +184,9 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   closeControl: {
+    // Top-left, not top-right: Expo's floating dev-menu bubble sits top-right
+    // in Expo Go / dev-client, and previously covered this button entirely.
     top: spacing.lg,
-    right: spacing.lg,
+    left: spacing.lg,
   },
 });
