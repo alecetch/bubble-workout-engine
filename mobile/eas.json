@@ -30,5 +30,13 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://bubble-workout-api.fly.dev"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6760257141",
+        "appleTeamId": "NNHW7677GQ"
+      }
+    }
   }
 }

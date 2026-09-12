@@ -12,6 +12,10 @@ const APP_JSON_ALLOWLIST = [
   { key: "scheme", value: "formai" },
   { key: "bundleIdentifier", value: "com.bubbleworkout.mobile" },
   { key: "package", value: "com.bubbleworkout.mobile" },
+  // Must match the slug the EAS project is already registered under
+  // (see extra.eas.projectId) - renaming it would disconnect existing
+  // iOS credentials/provisioning rather than just relabeling the app.
+  { key: "slug", value: "bubble-workout-mobile" },
 ];
 
 function toPosix(relativePath) {
