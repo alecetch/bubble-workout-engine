@@ -342,6 +342,11 @@ app.use("/assets/exercise-media", publicAssetCrossOrigin, express.static(join(__
 app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));
 app.use("/images", express.static(join(__dirname, "public/images")));
 app.use("/downloads", express.static(join(__dirname, "public/downloads")));
+// Must be registered before any app.use("/admin", ...adminOnly, ...) mount below —
+// those apply requireInternalToken to any path under /admin by prefix, which would
+// otherwise 401 this plain <script src> request (browsers never attach the internal
+// token header to it), breaking the shared nav sidebar on every admin page.
+app.get("/admin/nav.js", (_req, res) => res.sendFile(join(__dirname, "admin/nav.js")));
 app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coverage.html"));
 app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
 app.get("/admin/exercise-media", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercise-media.html"));
