@@ -241,3 +241,27 @@ test("video upload ready path, corrupt failure, delete, and poster-as-still beha
   assert.equal(audits.length, 3);
   assert.deepEqual(audits.map((row) => row.entity), ["exercise_media", "exercise_media", "exercise_media"]);
 });
+
+test("video upload marks status failed (not stuck at processing) when storage write fails after compression", async () => {
+  process.env.INTERNAL_API_TOKEN = TOKEN;
+  const db = createDb();
+  await withServer(db, {
+    putObjectFn: async () => {
+      throw new Error("storage unavailable");
+    },
+    compressExerciseVideoFn: async () => ({
+      compressedBuffer: Buffer.from("mp4"),
+      posterBuffer: Buffer.from("poster"),
+      durationSec: 2.4,
+    }),
+  }, async (base) => {
+    const res = await fetch(`${base}/admin/exercise-media/sled_push/video`, {
+      method: "POST",
+      headers: headers(),
+      body: form("video", new Blob(["valid"], { type: "video/mp4" }), "demo.mp4"),
+    });
+    assert.equal(res.status, 500);
+    assert.equal(db.state.media.get("sled_push").video_status, "failed");
+    assert.equal(db.state.media.get("sled_push").video_key, null);
+  });
+});

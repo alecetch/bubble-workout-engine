@@ -217,21 +217,35 @@ export function createAdminExerciseMediaRouter({
 
       const videoKey = `exercise-media/${exerciseId}/video.mp4`;
       const posterKey = `exercise-media/${exerciseId}/poster.jpg`;
-      await putObjectFn(exerciseMediaObjectKey(videoKey), compressed.compressedBuffer, "video/mp4", EXERCISE_MEDIA_BUCKET);
-      await putObjectFn(exerciseMediaObjectKey(posterKey), compressed.posterBuffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
-      const result = await db.query(
-        `UPDATE exercise_media
-         SET video_key = $2,
-             poster_frame_key = $3,
-             video_duration_sec = $4,
-             video_status = 'ready',
-             video_source_filename = $5,
-             uploaded_by = $6,
-             updated_at = now()
-         WHERE exercise_id = $1
-         RETURNING *`,
-        [exerciseId, videoKey, posterKey, compressed.durationSec, req.file.originalname ?? null, actorFromReq(req)],
-      );
+      let result;
+      try {
+        await putObjectFn(exerciseMediaObjectKey(videoKey), compressed.compressedBuffer, "video/mp4", EXERCISE_MEDIA_BUCKET);
+        await putObjectFn(exerciseMediaObjectKey(posterKey), compressed.posterBuffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
+        result = await db.query(
+          `UPDATE exercise_media
+           SET video_key = $2,
+               poster_frame_key = $3,
+               video_duration_sec = $4,
+               video_status = 'ready',
+               video_source_filename = $5,
+               uploaded_by = $6,
+               updated_at = now()
+           WHERE exercise_id = $1
+           RETURNING *`,
+          [exerciseId, videoKey, posterKey, compressed.durationSec, req.file.originalname ?? null, actorFromReq(req)],
+        );
+      } catch (err) {
+        // Compression succeeded but storage/DB write after it failed - without this,
+        // the row is left stuck at 'processing' forever (video_key never gets set,
+        // and nothing else ever revisits this row to resolve it).
+        await db.query(
+          `UPDATE exercise_media
+           SET video_status = 'failed', updated_at = now()
+           WHERE exercise_id = $1`,
+          [exerciseId],
+        );
+        return res.status(500).json({ ok: false, error: publicInternalError(err) });
+      }
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.video.upload", {
         video_key: videoKey,
         poster_frame_key: posterKey,
