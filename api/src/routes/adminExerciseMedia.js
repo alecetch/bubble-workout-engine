@@ -67,6 +67,20 @@ function mediaUrl(key) {
   return buildExerciseMediaUrl(key) || "";
 }
 
+function promotionConfig() {
+  const baseUrl = String(process.env.PROD_ADMIN_API_BASE_URL || "").trim().replace(/\/+$/, "");
+  const token = String(process.env.PROD_INTERNAL_API_TOKEN || "").trim();
+  return { baseUrl, token, enabled: Boolean(baseUrl && token) };
+}
+
+function isoOrNull(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value);
+  if (Number.isFinite(parsed.getTime())) return parsed.toISOString();
+  return String(value);
+}
+
 function exerciseMediaObjectKey(key) {
   return String(key ?? "").trim().replace(/^\/+/, "").replace(/^exercise-media\/+/, "");
 }
@@ -96,6 +110,10 @@ function mapMediaRow(row) {
     posterFrameKey: row.poster_frame_key ?? null,
     videoUrl: status === "ready" ? mediaUrl(row.video_key) || null : null,
     posterImageUrl: status === "ready" ? mediaUrl(row.poster_frame_key) || null : null,
+    promoted_still_at: isoOrNull(row.promoted_still_at),
+    promotedStillAt: isoOrNull(row.promoted_still_at),
+    promoted_video_at: isoOrNull(row.promoted_video_at),
+    promotedVideoAt: isoOrNull(row.promoted_video_at),
     updated_at: row.updated_at ?? null,
     updatedAt: row.updated_at ?? null,
   };
@@ -118,15 +136,125 @@ async function writeAudit(auditLogFn, req, exerciseId, action, detail) {
   });
 }
 
+function needsStillPromotion(row) {
+  return row?.still_image_is_placeholder === false && !row?.promoted_still_at;
+}
+
+function needsVideoPromotion(row) {
+  return row?.video_status === "ready" && !row?.promoted_video_at;
+}
+
+function errorMessageFromResponse(status, body) {
+  const bodyError = body && typeof body === "object" ? body.error || body.message : "";
+  return bodyError ? String(bodyError) : `Production upload failed with status ${status}`;
+}
+
+async function readJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 export function createAdminExerciseMediaRouter({
   db = pool,
   putObjectFn = putObject,
   getObjectFn = getObject,
   compressExerciseVideoFn = compressExerciseVideo,
   auditLogFn = auditLog,
+  fetchFn = (...args) => fetch(...args),
 } = {}) {
   const router = express.Router();
   router.use(requireInternalToken, requireTrustedAdminOrigin);
+
+  async function fetchPromotionRows({ exerciseId = null, eligibleOnly = false } = {}) {
+    const conditions = ["ec.is_archived = FALSE"];
+    const params = [];
+    if (exerciseId) {
+      params.push(exerciseId);
+      conditions.push(`ec.exercise_id = $${params.length}`);
+    }
+    if (eligibleOnly) {
+      conditions.push(`(
+        (em.still_image_is_placeholder = false AND em.promoted_still_at IS NULL)
+        OR (em.video_status = 'ready' AND em.promoted_video_at IS NULL)
+      )`);
+    }
+    const result = await db.query(
+      `SELECT
+         ec.exercise_id,
+         ec.name,
+         ec.is_archived,
+         em.still_image_key,
+         em.still_image_is_placeholder,
+         em.video_key,
+         COALESCE(em.video_status, 'none') AS video_status,
+         em.video_duration_sec,
+         em.video_source_filename,
+         em.poster_frame_key,
+         em.promoted_still_at,
+         em.promoted_video_at,
+         em.updated_at
+       FROM exercise_catalogue ec
+       LEFT JOIN exercise_media em ON em.exercise_id = ec.exercise_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY ec.name ASC`,
+      params,
+    );
+    return result.rows;
+  }
+
+  async function promoteOne(row) {
+    const { baseUrl, token, enabled } = promotionConfig();
+    if (!enabled) {
+      return { ok: false, error: "Production promotion is not configured" };
+    }
+
+    const promoted = { still: false, video: false };
+    const errors = {};
+    const exerciseId = row.exercise_id;
+
+    async function promotePart(kind, key, contentType, fileName, timestampColumn) {
+      try {
+        const buffer = await getObjectFn(exerciseMediaObjectKey(key), EXERCISE_MEDIA_BUCKET);
+        const form = new FormData();
+        form.append(kind, new Blob([buffer], { type: contentType }), fileName);
+        const response = await fetchFn(`${baseUrl}/admin/exercise-media/${encodeURIComponent(exerciseId)}/${kind}`, {
+          method: "POST",
+          headers: { "X-Internal-Token": token },
+          body: form,
+        });
+        const body = await readJsonResponse(response);
+        if (!response.ok || !body?.ok) {
+          errors[kind] = errorMessageFromResponse(response.status, body);
+          return;
+        }
+        await db.query(
+          `UPDATE exercise_media SET ${timestampColumn} = now(), updated_at = now() WHERE exercise_id = $1`,
+          [exerciseId],
+        );
+        promoted[kind] = true;
+      } catch (err) {
+        errors[kind] = err?.message || String(err);
+      }
+    }
+
+    if (needsStillPromotion(row)) {
+      await promotePart("still", row.still_image_key, "image/jpeg", "still.jpg", "promoted_still_at");
+    }
+    if (needsVideoPromotion(row)) {
+      await promotePart("video", row.video_key, "video/mp4", "video.mp4", "promoted_video_at");
+    }
+
+    return {
+      ok: true,
+      exerciseId,
+      name: row.name,
+      promoted,
+      ...(Object.keys(errors).length ? { errors } : {}),
+    };
+  }
 
   router.get("/exercise-media/list", async (_req, res) => {
     try {
@@ -142,13 +270,19 @@ export function createAdminExerciseMediaRouter({
            em.video_duration_sec,
            em.video_source_filename,
            em.poster_frame_key,
+           em.promoted_still_at,
+           em.promoted_video_at,
            em.updated_at
          FROM exercise_catalogue ec
          LEFT JOIN exercise_media em ON em.exercise_id = ec.exercise_id
          WHERE ec.is_archived = FALSE
          ORDER BY ec.name ASC`,
       );
-      return res.json({ ok: true, exercises: result.rows.map(mapMediaRow) });
+      return res.json({
+        ok: true,
+        promotionEnabled: promotionConfig().enabled,
+        exercises: result.rows.map(mapMediaRow),
+      });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
@@ -172,6 +306,7 @@ export function createAdminExerciseMediaRouter({
            still_image_key = EXCLUDED.still_image_key,
            still_image_is_placeholder = false,
            uploaded_by = EXCLUDED.uploaded_by,
+           promoted_still_at = null,
            updated_at = now()
          RETURNING *`,
         [exerciseId, key, actorFromReq(req)],
@@ -197,6 +332,7 @@ export function createAdminExerciseMediaRouter({
          VALUES ($1, 'exercise-media/_placeholder/still.jpg', 'processing', $2, now())
          ON CONFLICT (exercise_id) DO UPDATE SET
            video_status = 'processing',
+           promoted_video_at = null,
            uploaded_by = EXCLUDED.uploaded_by,
            updated_at = now()`,
         [exerciseId, actorFromReq(req)],
@@ -229,6 +365,7 @@ export function createAdminExerciseMediaRouter({
                video_status = 'ready',
                video_source_filename = $5,
                uploaded_by = $6,
+               promoted_video_at = null,
                updated_at = now()
            WHERE exercise_id = $1
            RETURNING *`,
@@ -269,6 +406,7 @@ export function createAdminExerciseMediaRouter({
              video_duration_sec = null,
              video_source_filename = null,
              video_status = 'none',
+             promoted_video_at = null,
              uploaded_by = $2,
              updated_at = now()
          WHERE exercise_id = $1
@@ -303,6 +441,7 @@ export function createAdminExerciseMediaRouter({
         `UPDATE exercise_media
          SET still_image_key = $2,
              still_image_is_placeholder = false,
+             promoted_still_at = null,
              uploaded_by = $3,
              updated_at = now()
          WHERE exercise_id = $1
@@ -311,6 +450,53 @@ export function createAdminExerciseMediaRouter({
       );
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.still.use_poster", { poster_frame_key: posterKey });
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  router.post("/exercise-media/:exerciseId/promote", async (req, res) => {
+    const configured = promotionConfig();
+    if (!configured.enabled) {
+      return res.status(400).json({ ok: false, error: "Production promotion is not configured" });
+    }
+
+    const exerciseId = String(req.params.exerciseId ?? "").trim();
+    try {
+      const rows = await fetchPromotionRows({ exerciseId });
+      if (!rows.length) {
+        return res.status(404).json({ ok: false, code: "not_found", error: "Exercise not found." });
+      }
+      const result = await promoteOne(rows[0]);
+      return res.json({
+        ok: true,
+        promoted: result.promoted,
+        ...(result.errors ? { errors: result.errors } : {}),
+      });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  router.post("/exercise-media/promote-all", async (_req, res) => {
+    const configured = promotionConfig();
+    if (!configured.enabled) {
+      return res.status(400).json({ ok: false, error: "Production promotion is not configured" });
+    }
+
+    try {
+      const rows = await fetchPromotionRows({ eligibleOnly: true });
+      const results = [];
+      for (const row of rows) {
+        const result = await promoteOne(row);
+        results.push({
+          exerciseId: row.exercise_id,
+          name: row.name,
+          promoted: result.promoted ?? { still: false, video: false },
+          ...(result.errors ? { errors: result.errors } : {}),
+        });
+      }
+      return res.json({ ok: true, results });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
