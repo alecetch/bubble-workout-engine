@@ -11,6 +11,7 @@ import { compressExerciseVideo } from "../services/exerciseMediaCompression.js";
 import { auditLog } from "../utils/auditLog.js";
 import { buildExerciseMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
+import logger from "../utils/logger.js";
 
 const MAX_STILL_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
@@ -236,6 +237,7 @@ export function createAdminExerciseMediaRouter({
         );
         promoted[kind] = true;
       } catch (err) {
+        logger.error({ err, exerciseId, kind }, "exercise-media promotion request failed locally");
         errors[kind] = err?.message || String(err);
       }
     }
@@ -284,6 +286,7 @@ export function createAdminExerciseMediaRouter({
         exercises: result.rows.map(mapMediaRow),
       });
     } catch (err) {
+      req.log?.error({ err }, "exercise-media list failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
@@ -314,6 +317,7 @@ export function createAdminExerciseMediaRouter({
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.still.upload", { still_image_key: key });
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
     } catch (err) {
+      req.log?.error({ err, exerciseId }, "exercise-media still upload failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
@@ -342,6 +346,7 @@ export function createAdminExerciseMediaRouter({
       try {
         compressed = await compressExerciseVideoFn(req.file.buffer);
       } catch (err) {
+        req.log?.error({ err, exerciseId }, "exercise-media video compression failed");
         await db.query(
           `UPDATE exercise_media
            SET video_status = 'failed', updated_at = now()
@@ -375,6 +380,7 @@ export function createAdminExerciseMediaRouter({
         // Compression succeeded but storage/DB write after it failed - without this,
         // the row is left stuck at 'processing' forever (video_key never gets set,
         // and nothing else ever revisits this row to resolve it).
+        req.log?.error({ err, exerciseId }, "exercise-media video storage/DB write failed after compression");
         await db.query(
           `UPDATE exercise_media
            SET video_status = 'failed', updated_at = now()
@@ -389,6 +395,7 @@ export function createAdminExerciseMediaRouter({
       });
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
     } catch (err) {
+      req.log?.error({ err, exerciseId }, "exercise-media video upload failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
@@ -416,6 +423,7 @@ export function createAdminExerciseMediaRouter({
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.video.delete", {});
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
     } catch (err) {
+      req.log?.error({ err, exerciseId }, "exercise-media video delete failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
@@ -451,6 +459,7 @@ export function createAdminExerciseMediaRouter({
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.still.use_poster", { poster_frame_key: posterKey });
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
     } catch (err) {
+      req.log?.error({ err, exerciseId }, "exercise-media use-poster-as-still failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
@@ -474,11 +483,12 @@ export function createAdminExerciseMediaRouter({
         ...(result.errors ? { errors: result.errors } : {}),
       });
     } catch (err) {
+      req.log?.error({ err, exerciseId }, "exercise-media promote failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
 
-  router.post("/exercise-media/promote-all", async (_req, res) => {
+  router.post("/exercise-media/promote-all", async (req, res) => {
     const configured = promotionConfig();
     if (!configured.enabled) {
       return res.status(400).json({ ok: false, error: "Production promotion is not configured" });
@@ -498,6 +508,7 @@ export function createAdminExerciseMediaRouter({
       }
       return res.json({ ok: true, results });
     } catch (err) {
+      req.log?.error({ err }, "exercise-media promote-all failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
