@@ -604,6 +604,7 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
   const effectiveEquipment = new Set((context.effectiveEquipment || []).map((value) => s(value)).filter(Boolean));
   const history = context.warmupHistory;
   const items = [];
+  const pickedTodayById = new Map();
   const dayKey = s(day?.program_day_key) || `${toInt(day?.week_index, 0)}|${toInt(day?.day_index, 0)}`;
 
   for (const region of requiredRegions) {
@@ -620,14 +621,28 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
       history.set(region, recentSet);
     }
 
-    let pool = equipmentEligible.filter((row) => !recentSet.has(row.warmup_exercise_id));
-    if (!pool.length) pool = equipmentEligible;
+    let pool = equipmentEligible.filter((row) => !recentSet.has(row.warmup_exercise_id) && !pickedTodayById.has(row.warmup_exercise_id));
+    if (!pool.length) pool = equipmentEligible.filter((row) => !pickedTodayById.has(row.warmup_exercise_id));
     pool = pool.slice().sort((a, b) => a.warmup_exercise_id.localeCompare(b.warmup_exercise_id));
+
+    if (!pool.length) {
+      const reusable = equipmentEligible
+        .slice()
+        .sort((a, b) => a.warmup_exercise_id.localeCompare(b.warmup_exercise_id));
+      const reuse = reusable[hash32(`${dayKey}|${region}`) % reusable.length];
+      const existingItem = pickedTodayById.get(reuse?.warmup_exercise_id);
+      if (existingItem) {
+        existingItem.sets_prescribed = Math.min((existingItem.sets_prescribed || 1) + (reuse.rounds ?? 1), 4);
+        recentSet.add(reuse.warmup_exercise_id);
+        continue;
+      }
+    }
+
     const picked = pool[hash32(`${dayKey}|${region}`) % pool.length];
     if (!picked) continue;
 
     const parsed = parseDurationOrRepsLabel(picked.duration_or_reps_label);
-    items.push({
+    const item = {
       exercise_id: picked.warmup_exercise_id,
       segment_type: "warmup",
       purpose: "warmup",
@@ -635,8 +650,10 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
       reps_prescribed: parsed.reps_prescribed,
       reps_unit: parsed.reps_unit,
       notes: picked.cue_text ?? "",
-    });
+    };
+    items.push(item);
     recentSet.add(picked.warmup_exercise_id);
+    pickedTodayById.set(picked.warmup_exercise_id, item);
   }
 
   return items;

@@ -20,7 +20,7 @@ function segment(purpose, items) {
   return { purpose, segment_type: "single", rounds: 1, items };
 }
 
-function warmup(id, regions, equipment = []) {
+function warmup(id, regions, equipment = [], rounds = 1) {
   return {
     warmup_exercise_id: id,
     name: id,
@@ -28,7 +28,7 @@ function warmup(id, regions, equipment = []) {
     equipment_items_slugs: equipment,
     cue_text: `${id} cue`,
     duration_or_reps_label: "10 reps",
-    rounds: 1,
+    rounds,
   };
 }
 
@@ -123,4 +123,46 @@ test("applyNarration avoids in-run repeats across generated weeks when alternati
   });
 
   assert.notEqual(warmupItems(out, 0, 0)[0].exercise_id, warmupItems(out, 1, 0)[0].exercise_id);
+});
+
+test("applyNarration folds unavoidable same-day warm-up duplicates into one card", async () => {
+  const out = await narrate({
+    catalog: [{ id: "main-a", tr: ["chest", "shoulders"] }],
+    warmupCatalog: [warmup("scap-push-up", ["chest", "shoulders"], [], 2)],
+    weeks: [{ week_index: 1, days: [{ week_index: 1, day_index: 1, program_day_key: "W1D1", segments: [segment("main", [ex("main-a")])] }] }],
+  });
+
+  const items = warmupItems(out);
+  assert.equal(items.filter((item) => item.exercise_id === "scap-push-up").length, 1);
+  assert.equal(items[0].exercise_id, "scap-push-up");
+  assert.equal(items[0].sets_prescribed, 4);
+});
+
+test("applyNarration prefers distinct same-day warm-up exercises when an eligible alternative exists", async () => {
+  const out = await narrate({
+    catalog: [{ id: "main-a", tr: ["chest", "shoulders"] }],
+    warmupCatalog: [
+      warmup("scap-push-up", ["chest", "shoulders"]),
+      warmup("wall-slide", ["shoulders"]),
+    ],
+    weeks: [{ week_index: 1, days: [{ week_index: 1, day_index: 1, program_day_key: "W1D1", segments: [segment("main", [ex("main-a")])] }] }],
+  });
+
+  const ids = warmupItems(out).map((item) => item.exercise_id);
+  assert.equal(ids.length, 2);
+  assert.equal(new Set(ids).size, 2);
+  assert.deepEqual(warmupItems(out).map((item) => item.sets_prescribed), [1, 1]);
+});
+
+test("applyNarration caps folded same-day warm-up duplicate rounds at four", async () => {
+  const out = await narrate({
+    catalog: [{ id: "main-a", tr: ["chest", "shoulders", "upper_back", "triceps", "arms"] }],
+    warmupCatalog: [warmup("single-multi-region", ["chest", "shoulders", "upper_back", "triceps", "arms"], [], 1)],
+    weeks: [{ week_index: 1, days: [{ week_index: 1, day_index: 1, program_day_key: "W1D1", segments: [segment("main", [ex("main-a")])] }] }],
+  });
+
+  const items = warmupItems(out);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].exercise_id, "single-multi-region");
+  assert.equal(items[0].sets_prescribed, 4);
 });
