@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { WarmupSegmentSection } from "./WarmupSegmentSection";
+import { SessionExerciseSegmentSection } from "./SessionExerciseSegmentSection";
 
 vi.mock("@expo/vector-icons", () => ({
   Ionicons: ({ name }: { name: string }) => <span>{name}</span>,
@@ -21,9 +21,9 @@ const items = [
   },
 ];
 
-describe("WarmupSegmentSection", () => {
+describe("SessionExerciseSegmentSection", () => {
   it("starts collapsed with a header and chevron", () => {
-    render(<WarmupSegmentSection items={items} />);
+    render(<SessionExerciseSegmentSection title="Warm-up" items={items} />);
 
     expect(screen.getByText("Warm-up")).toBeInTheDocument();
     expect(screen.getByText("1 item")).toBeInTheDocument();
@@ -32,7 +32,7 @@ describe("WarmupSegmentSection", () => {
   });
 
   it("expands item cards with copy and media", () => {
-    render(<WarmupSegmentSection items={items} />);
+    render(<SessionExerciseSegmentSection title="Warm-up" items={items} />);
 
     fireEvent.click(screen.getByTestId("warmup-toggle"));
 
@@ -43,8 +43,13 @@ describe("WarmupSegmentSection", () => {
   });
 
   it("renders nothing for empty items", () => {
-    const { queryByTestId } = render(<WarmupSegmentSection items={[]} />);
+    const { queryByTestId } = render(<SessionExerciseSegmentSection title="Warm-up" items={[]} />);
 
     expect(queryByTestId("warmup-segment-section")).not.toBeInTheDocument();
   });
+});
+
+it("renders the cool-down title", () => {
+  render(<SessionExerciseSegmentSection title="Cool-down" items={items} />);
+  expect(screen.getByText("Cool-down")).toBeInTheDocument();
 });

@@ -7,6 +7,8 @@ import { maybeSendPhysiqueNudge } from "../services/physiqueNudgeService.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
 
+const NON_LOGGABLE_SEGMENT_TYPES = new Set(["warmup", "cooldown"]);
+
 export const segmentLogRouter = express.Router();
 
 class NotFoundError extends Error {
@@ -207,13 +209,13 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
           regionResult.rows.map((r) => [r.program_exercise_id, safeString(r.segment_type)]),
         );
 
-        if (rows.some((row) => segmentTypeByProgramExerciseId.get(row.program_exercise_id) === "warmup")) {
+        if (rows.some((row) => NON_LOGGABLE_SEGMENT_TYPES.has(segmentTypeByProgramExerciseId.get(row.program_exercise_id)))) {
           await client.query("ROLLBACK");
           return res.status(400).json({
             ok: false,
             request_id,
             code: "validation_error",
-            error: "warmup segments are not loggable",
+            error: "warmup/cooldown segments are not loggable",
           });
         }
 

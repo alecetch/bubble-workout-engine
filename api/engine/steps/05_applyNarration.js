@@ -513,6 +513,7 @@ function makeCounters() {
     warmup_segment_added_days: 0,
     warmup_items_selected_days: 0,
     cooldown_segment_added_days: 0,
+    cooldown_items_selected_days: 0,
   };
 }
 function addCounters(a, b) {
@@ -521,11 +522,11 @@ function addCounters(a, b) {
   return out;
 }
 
-function normalizeWarmupCatalog(raw) {
+function normalizeBookendCatalog(raw, type) {
   const rows = Array.isArray(raw) ? raw : [];
   return rows
     .map((row) => {
-      const id = s(row?.warmup_exercise_id || row?.warmupExerciseId);
+      const id = s(row?.[`${type}_exercise_id`] || row?.[`${type}ExerciseId`]);
       if (!id) return null;
       const targetRegions = safeJsonParse(row.target_regions_json ?? row.targetRegionsJson, []);
       const equipment = Array.isArray(row.equipment_items_slugs)
@@ -533,16 +534,16 @@ function normalizeWarmupCatalog(raw) {
         : safeJsonParse(row.equipment_items_slugs ?? row.equipmentItemsSlugs, []);
       return {
         ...row,
-        warmup_exercise_id: id,
+        [`${type}_exercise_id`]: id,
         target_regions_json: Array.isArray(targetRegions) ? targetRegions.map((v) => s(v)).filter(Boolean) : [],
         equipment_items_slugs: Array.isArray(equipment) ? equipment.map((v) => s(v)).filter(Boolean) : [],
       };
     })
     .filter(Boolean)
-    .sort((a, b) => a.warmup_exercise_id.localeCompare(b.warmup_exercise_id));
+    .sort((a, b) => a[`${type}_exercise_id`].localeCompare(b[`${type}_exercise_id`]));
 }
 
-function normalizeWarmupHistory(raw) {
+function normalizeBookendHistory(raw) {
   const out = new Map();
   if (raw instanceof Map) {
     for (const [region, ids] of raw.entries()) {
@@ -557,7 +558,7 @@ function normalizeWarmupHistory(raw) {
   return out;
 }
 
-function requiredWarmupRegionsForDay(day, catalogById) {
+function requiredBookendRegionsForDay(day, catalogById) {
   const priority = { main: 0, secondary: 1, accessory: 2 };
   const rows = [];
   const segs = Array.isArray(day?.segments) ? day.segments : [];
@@ -659,6 +660,66 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
   return items;
 }
 
+function selectCooldownItemsForDay(day, requiredRegions, context) {
+  const catalog = context.cooldownCatalog || [];
+  const effectiveEquipment = new Set((context.effectiveEquipment || []).map((value) => s(value)).filter(Boolean));
+  const history = context.cooldownHistory;
+  const items = [];
+  const pickedTodayById = new Map();
+  const dayKey = s(day?.program_day_key) || `${toInt(day?.week_index, 0)}|${toInt(day?.day_index, 0)}`;
+
+  for (const region of requiredRegions) {
+    const equipmentEligible = catalog.filter((row) => {
+      const targetRegions = Array.isArray(row.target_regions_json) ? row.target_regions_json : [];
+      const requiredEquipment = Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [];
+      return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug));
+    });
+    if (!equipmentEligible.length) continue;
+
+    let recentSet = history.get(region);
+    if (!recentSet) {
+      recentSet = new Set();
+      history.set(region, recentSet);
+    }
+
+    let pool = equipmentEligible.filter((row) => !recentSet.has(row.cooldown_exercise_id) && !pickedTodayById.has(row.cooldown_exercise_id));
+    if (!pool.length) pool = equipmentEligible.filter((row) => !pickedTodayById.has(row.cooldown_exercise_id));
+    pool = pool.slice().sort((a, b) => a.cooldown_exercise_id.localeCompare(b.cooldown_exercise_id));
+
+    if (!pool.length) {
+      const reusable = equipmentEligible
+        .slice()
+        .sort((a, b) => a.cooldown_exercise_id.localeCompare(b.cooldown_exercise_id));
+      const reuse = reusable[hash32(`${dayKey}|${region}`) % reusable.length];
+      const existingItem = pickedTodayById.get(reuse?.cooldown_exercise_id);
+      if (existingItem) {
+        existingItem.sets_prescribed = Math.min((existingItem.sets_prescribed || 1) + (reuse.rounds ?? 1), 4);
+        recentSet.add(reuse.cooldown_exercise_id);
+        continue;
+      }
+    }
+
+    const picked = pool[hash32(`${dayKey}|${region}`) % pool.length];
+    if (!picked) continue;
+
+    const parsed = parseDurationOrRepsLabel(picked.duration_or_reps_label);
+    const item = {
+      exercise_id: picked.cooldown_exercise_id,
+      segment_type: "cooldown",
+      purpose: "cooldown",
+      sets_prescribed: picked.rounds ?? 1,
+      reps_prescribed: parsed.reps_prescribed,
+      reps_unit: parsed.reps_unit,
+      notes: picked.cue_text ?? "",
+    };
+    items.push(item);
+    recentSet.add(picked.cooldown_exercise_id);
+    pickedTodayById.set(picked.cooldown_exercise_id, item);
+  }
+
+  return items;
+}
+
 // ---------------- core: enrich only a "days[]" array ----------------
 function enrichDays(days, templates, cfg, catalogById, context) {
   const duration = toInt(context.duration_mins, 0) || 0;
@@ -711,7 +772,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       }
       if (purp === "secondary" && !secondaryName) secondaryName = nm;
     }
-    const requiredWarmupRegions = requiredWarmupRegionsForDay(day, catalogById);
+    const requiredBookendRegions = requiredBookendRegionsForDay(day, catalogById);
 
     const dayFocus = dayFocusFromDay(day);
     const matchCtx = { ...matchBase, day_focus: dayFocus };
@@ -900,7 +961,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
     }
 
     if (!hasWarmSeg) {
-      const warmupItems = selectWarmupItemsForDay(day, requiredWarmupRegions, context);
+      const warmupItems = selectWarmupItemsForDay(day, requiredBookendRegions, context);
       const warmSeg = {
         segment_index: 0,
         segment_type: "warmup",
@@ -924,6 +985,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
     }
 
     if (!hasCoolSeg) {
+      const cooldownItems = selectCooldownItemsForDay(day, requiredBookendRegions, context);
       let maxIdx = 0;
       for (const seg of day.segments) {
         const si2 = toInt(seg && seg.segment_index, 0);
@@ -936,7 +998,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
         segment_type: "cooldown",
         purpose: "cooldown",
         rounds: 1,
-        items: [],
+        items: cooldownItems,
         narration: {
           title: cd?.title || "Cool-down",
           execution: cd?.steps_text || "2:00 easy flush + 60–90s breathing reset.",
@@ -948,6 +1010,7 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       };
       day.segments.push(coolSeg);
       debugCounters.cooldown_segment_added_days += 1;
+      if (cooldownItems.length) debugCounters.cooldown_items_selected_days += 1;
     }
   }
 
@@ -1062,6 +1125,8 @@ export async function applyNarration({
   catalogJson,
   warmupCatalog,
   warmupHistory,
+  cooldownCatalog,
+  cooldownHistory,
   effectiveEquipment,
   cooldownSeconds, // copy only for future; not used in engine right now
 }) {
@@ -1126,8 +1191,10 @@ export async function applyNarration({
 
   const cat = safeJsonParse(catalogJson, null);
   const catalogById = buildCatalogIndex(cat);
-  const normalizedWarmupCatalog = normalizeWarmupCatalog(warmupCatalog);
-  const warmupHistoryByRegion = normalizeWarmupHistory(warmupHistory);
+  const normalizedWarmupCatalog = normalizeBookendCatalog(warmupCatalog, "warmup");
+  const warmupHistoryByRegion = normalizeBookendHistory(warmupHistory);
+  const normalizedCooldownCatalog = normalizeBookendCatalog(cooldownCatalog, "cooldown");
+  const cooldownHistoryByRegion = normalizeBookendHistory(cooldownHistory);
   const normalizedEffectiveEquipment = Array.isArray(effectiveEquipment)
     ? effectiveEquipment.map((value) => s(value)).filter(Boolean)
     : [];
@@ -1158,6 +1225,8 @@ export async function applyNarration({
       debugCounters: adoption.template,
       warmupCatalog: normalizedWarmupCatalog,
       warmupHistory: warmupHistoryByRegion,
+      cooldownCatalog: normalizedCooldownCatalog,
+      cooldownHistory: cooldownHistoryByRegion,
       effectiveEquipment: normalizedEffectiveEquipment,
     });
   }
@@ -1181,6 +1250,8 @@ export async function applyNarration({
         debugCounters: wkCounters,
         warmupCatalog: normalizedWarmupCatalog,
         warmupHistory: warmupHistoryByRegion,
+        cooldownCatalog: normalizedCooldownCatalog,
+        cooldownHistory: cooldownHistoryByRegion,
         effectiveEquipment: normalizedEffectiveEquipment,
       });
 
@@ -1210,6 +1281,7 @@ export async function applyNarration({
       total_weeks_used: totalWeeks,
       catalog_json_present: !!(cat && Array.isArray(cat.ex) && cat.ex.length),
       warmup_catalog_count: normalizedWarmupCatalog.length,
+      cooldown_catalog_count: normalizedCooldownCatalog.length,
     },
     adoption: {
       template: adoption.template,

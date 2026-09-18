@@ -583,6 +583,12 @@ export function createReadProgramHandlers(options = pool) {
           wm.video_key AS warmup_video_key,
           COALESCE(wm.video_status, 'none') AS warmup_video_status,
           wm.poster_frame_key AS warmup_poster_frame_key,
+          ce.name AS cooldown_name,
+          ce.rounds AS cooldown_rounds,
+          cm.still_image_key AS cooldown_still_image_key,
+          cm.video_key AS cooldown_video_key,
+          COALESCE(cm.video_status, 'none') AS cooldown_video_status,
+          cm.poster_frame_key AS cooldown_poster_frame_key,
           (eps.exercise_id IS NULL) AS is_new_exercise
         FROM program_exercise pe
         LEFT JOIN exercise_media em
@@ -591,6 +597,10 @@ export function createReadProgramHandlers(options = pool) {
           ON we.warmup_exercise_id = pe.exercise_id AND pe.segment_type = 'warmup'
         LEFT JOIN warmup_exercise_media wm
           ON wm.warmup_exercise_id = we.warmup_exercise_id
+        LEFT JOIN cooldown_exercise ce
+          ON ce.cooldown_exercise_id = pe.exercise_id AND pe.segment_type = 'cooldown'
+        LEFT JOIN cooldown_exercise_media cm
+          ON cm.cooldown_exercise_id = ce.cooldown_exercise_id
         LEFT JOIN exercise_progression_state eps
           ON eps.user_id = $2
           AND eps.exercise_id = pe.exercise_id
@@ -696,21 +706,29 @@ export function createReadProgramHandlers(options = pool) {
             warmup_video_key,
             warmup_video_status,
             warmup_poster_frame_key,
+            cooldown_name,
+            cooldown_rounds,
+            cooldown_still_image_key,
+            cooldown_video_key,
+            cooldown_video_status,
+            cooldown_poster_frame_key,
             ...rest
           } = item;
           const isWarmup = item.segment_type === "warmup";
-          const mediaStillKey = isWarmup ? warmup_still_image_key : still_image_key;
-          const mediaVideoKey = isWarmup ? warmup_video_key : video_key;
-          const mediaPosterKey = isWarmup ? warmup_poster_frame_key : poster_frame_key;
-          const resolvedVideoStatus = (isWarmup ? warmup_video_status : video_status) ?? "none";
+          const isCooldown = item.segment_type === "cooldown";
+          const isBookend = isWarmup || isCooldown;
+          const mediaStillKey = isWarmup ? warmup_still_image_key : isCooldown ? cooldown_still_image_key : still_image_key;
+          const mediaVideoKey = isWarmup ? warmup_video_key : isCooldown ? cooldown_video_key : video_key;
+          const mediaPosterKey = isWarmup ? warmup_poster_frame_key : isCooldown ? cooldown_poster_frame_key : poster_frame_key;
+          const resolvedVideoStatus = (isWarmup ? warmup_video_status : isCooldown ? cooldown_video_status : video_status) ?? "none";
           const durationOrRepsLabel = [rest.reps_prescribed, rest.reps_unit].map(safeString).filter(Boolean).join(" ");
           return {
             ...rest,
-            exercise_name: isWarmup ? warmup_name ?? rest.exercise_name : rest.exercise_name,
+            exercise_name: isWarmup ? warmup_name ?? rest.exercise_name : isCooldown ? cooldown_name ?? rest.exercise_name : rest.exercise_name,
             warmupExerciseId: isWarmup ? rest.exercise_id : undefined,
-            rounds: isWarmup ? warmup_rounds : undefined,
-            durationOrRepsLabel: isWarmup ? durationOrRepsLabel : undefined,
-            cueText: isWarmup ? rest.notes ?? "" : undefined,
+            rounds: isWarmup ? warmup_rounds : isCooldown ? cooldown_rounds : undefined,
+            durationOrRepsLabel: isBookend ? durationOrRepsLabel : undefined,
+            cueText: isBookend ? rest.notes ?? "" : undefined,
             stillImageUrl: buildExerciseMediaUrl(mediaStillKey ?? "exercise-media/_placeholder/still.jpg"),
             videoUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(mediaVideoKey) || null : null,
             posterImageUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(mediaPosterKey) || null : null,

@@ -274,8 +274,8 @@
     },
     {
       "type": "component",
-      "source": "src/components/program/WarmupSegmentSection.tsx",
-      "test": "src/components/program/WarmupSegmentSection.component.test.tsx",
+      "source": "src/components/program/SessionExerciseSegmentSection.tsx",
+      "test": "src/components/program/SessionExerciseSegmentSection.component.test.tsx",
       "status": "covered",
       "tags": [
         "program"

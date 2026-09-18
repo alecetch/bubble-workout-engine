@@ -25,7 +25,7 @@ import {
   normalizeSegmentType,
   isRoundBasedSegment,
 } from "./segmentCardLogic";
-import { WarmupSegmentSection } from "./WarmupSegmentSection";
+import { SessionExerciseSegmentSection } from "./SessionExerciseSegmentSection";
 import { setExerciseComplete } from "../../utils/localWorkoutLog";
 import { useLocalExerciseCompletion } from "./hooks/useLocalExerciseCompletion";
 import { useRoundBasedLogging } from "./hooks/useRoundBasedLogging";
@@ -811,8 +811,11 @@ export const SegmentCard = React.memo(function SegmentCard({
       <View style={styles.bodyRow}>
         <View style={styles.bodyLhs}>
           {presentation.isWarmupOrCooldown ? (
-            normalizeSegmentType(segment.segmentType) === "warmup" ? (
-              <WarmupSegmentSection items={segment.exercises} />
+            ["warmup", "cooldown"].includes(normalizeSegmentType(segment.segmentType)) ? (
+              <SessionExerciseSegmentSection
+                title={normalizeSegmentType(segment.segmentType) === "warmup" ? "Warm-up" : "Cool-down"}
+                items={segment.exercises}
+              />
             ) : (
               <View style={styles.notesContainer} testID="segment-notes-content">
                 <Text style={styles.notesText}>{presentation.notesText}</Text>

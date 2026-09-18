@@ -10,7 +10,8 @@ import { ExerciseMediaThumb } from "./ExerciseMediaThumb";
 
 type WarmupExercise = ProgramDayFullResponse["segments"][number]["exercises"][number];
 
-type WarmupSegmentSectionProps = {
+type SessionExerciseSegmentSectionProps = {
+  title: string;
   items: WarmupExercise[];
 };
 
@@ -31,7 +32,7 @@ function prescriptionLabel(item: WarmupExercise): string {
   return pieces.join(" · ");
 }
 
-export function WarmupSegmentSection({ items }: WarmupSegmentSectionProps): React.JSX.Element | null {
+export function SessionExerciseSegmentSection({ items, title }: SessionExerciseSegmentSectionProps): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const visibleItems = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!visibleItems.length) return null;
@@ -42,11 +43,11 @@ export function WarmupSegmentSection({ items }: WarmupSegmentSectionProps): Reac
         style={styles.header}
         onPress={() => setExpanded((value) => !value)}
         accessibilityRole="button"
-        accessibilityLabel={expanded ? "Collapse warm-up" : "Expand warm-up"}
+        accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title.toLowerCase()}`}
         testID="warmup-toggle"
       >
         <View>
-          <Text style={styles.title}>Warm-up</Text>
+          <Text style={styles.title}>{title}</Text>
           <Text style={styles.count}>{visibleItems.length} item{visibleItems.length === 1 ? "" : "s"}</Text>
         </View>
         <Ionicons

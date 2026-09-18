@@ -53,7 +53,7 @@ function normalizeArray(value) {
   return [String(value).trim()].filter(Boolean);
 }
 
-function warmupHistoryRowsByRegion(rows) {
+function historyRowsByRegion(rows) {
   const out = {};
   for (const row of rows || []) {
     const exerciseId = String(row?.exercise_id ?? "").trim();
@@ -290,6 +290,8 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
   const step5Notes = [];
   let warmupCatalog = [];
   let warmupHistory = {};
+  let cooldownCatalog = [];
+  let cooldownHistory = {};
   const effectiveEquipment = normalizeArray(
     request?.equipment_items_slugs ??
     request?.equipmentItemSlugs ??
@@ -350,14 +352,33 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
     step5Notes.push(`Warm-up catalogue unavailable (${err?.message || String(err)}); skipping selected warm-ups`);
   }
 
+  try {
+    const cooldownCatalogR = await dbClient.query(
+      `SELECT
+         ce.*,
+         cm.still_image_key,
+         cm.video_key,
+         cm.video_status,
+         cm.poster_frame_key
+       FROM cooldown_exercise ce
+       LEFT JOIN cooldown_exercise_media cm USING (cooldown_exercise_id)
+       WHERE ce.is_archived = false
+       ORDER BY ce.cooldown_exercise_id`,
+    );
+    cooldownCatalog = cooldownCatalogR.rows ?? [];
+  } catch (err) {
+    cooldownCatalog = [];
+    step5Notes.push(`Cool-down catalogue unavailable (${err?.message || String(err)}); skipping selected cool-downs`);
+  }
+
   const existingProgramId = request?.program_id ?? request?.programId ?? null;
   if (existingProgramId) {
+    const anchorDate = request?.anchor_date ?? request?.anchorDate ?? (
+      Number.isFinite(Number(request?.anchor_day_ms ?? request?.anchor_date_ms))
+        ? new Date(Number(request.anchor_day_ms ?? request.anchor_date_ms)).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10)
+    );
     try {
-      const anchorDate = request?.anchor_date ?? request?.anchorDate ?? (
-        Number.isFinite(Number(request?.anchor_day_ms ?? request?.anchor_date_ms))
-          ? new Date(Number(request.anchor_day_ms ?? request.anchor_date_ms)).toISOString().slice(0, 10)
-          : new Date().toISOString().slice(0, 10)
-      );
       const warmupHistoryR = await dbClient.query(
         `SELECT pe.exercise_id, we.target_regions_json
          FROM program_exercise pe
@@ -369,10 +390,27 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
            AND pd.scheduled_date >= $2::date - interval '7 days'`,
         [existingProgramId, anchorDate],
       );
-      warmupHistory = warmupHistoryRowsByRegion(warmupHistoryR.rows);
+      warmupHistory = historyRowsByRegion(warmupHistoryR.rows);
     } catch (err) {
       warmupHistory = {};
       step5Notes.push(`Warm-up history unavailable (${err?.message || String(err)}); using in-run no-repeat only`);
+    }
+    try {
+      const cooldownHistoryR = await dbClient.query(
+        `SELECT pe.exercise_id, ce.target_regions_json
+         FROM program_exercise pe
+         JOIN workout_segment ws ON ws.id = pe.workout_segment_id
+         JOIN program_day pd ON pd.id = pe.program_day_id
+         JOIN cooldown_exercise ce ON ce.cooldown_exercise_id = pe.exercise_id
+         WHERE pe.segment_type = 'cooldown'
+           AND pd.program_id = $1
+           AND pd.scheduled_date >= $2::date - interval '7 days'`,
+        [existingProgramId, anchorDate],
+      );
+      cooldownHistory = historyRowsByRegion(cooldownHistoryR.rows);
+    } catch (err) {
+      cooldownHistory = {};
+      step5Notes.push(`Cool-down history unavailable (${err?.message || String(err)}); using in-run no-repeat only`);
     }
   }
 
@@ -402,6 +440,8 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
     catalogJson: build.catalog_json,
     warmupCatalog,
     warmupHistory,
+    cooldownCatalog,
+    cooldownHistory,
     effectiveEquipment,
     cooldownSeconds: request?.cooldown_seconds ?? 120,
   });

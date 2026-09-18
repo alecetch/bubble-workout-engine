@@ -449,6 +449,22 @@ describe("ProgramDayScreen", () => {
     expect(screen.getByText("0 of 6 sets")).toBeInTheDocument();
   });
 
+  it("excludes real warm-up and cool-down items from exercise and set progress totals", async () => {
+    getExerciseCompleteMock.mockImplementation(async (_programDayId, programExerciseId) => programExerciseId === "ex-1");
+    const bookends = ["warmup", "cooldown"].map((type) => buildSegment(
+      { id: `${type}-segment`, purpose: type, segmentType: type, segmentName: type },
+      [buildExercise({ id: `${type}-item`, exerciseId: `${type}-exercise`, sets: 2, rounds: 2, durationOrRepsLabel: "30 sec" })],
+    ));
+    useProgramDayFullMock.mockReturnValue({
+      data: { ...mockDay, segments: [bookends[0], ...mockDay.segments, bookends[1]] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    } as any);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("1 of 2 exercises")).toBeInTheDocument());
+    expect(screen.getByText("0 of 6 sets")).toBeInTheDocument();
+    await waitForLocalStateLoad();
+  });
+
   it("passes openSwapSheet through to SegmentCard as onRequestSwap", async () => {
     renderScreen();
 
