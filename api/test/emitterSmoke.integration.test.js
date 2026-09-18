@@ -118,7 +118,7 @@ test("emitter rows - PRG/DAY/EX column positions match importEmitterService expe
     assert.ok(ex[8]?.trim().length > 0, "EX cols[8] = reps_prescribed must be non-empty");
     assert.ok(ex[17]?.trim().length > 0, "EX cols[17] = segment_key must be non-empty");
     assert.ok(
-      ["single", "superset", "giant_set", "amrap", "emom", "warmup"].includes(ex[18]),
+      ["single", "superset", "giant_set", "amrap", "emom", "warmup", "cooldown"].includes(ex[18]),
       `EX cols[18] = segment_type must be a known type, got: ${ex[18]}`,
     );
     assert.ok(ex[25]?.trim().length > 0, "EX cols[25] = program_day_key must be non-empty");

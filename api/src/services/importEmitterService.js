@@ -827,6 +827,19 @@ export async function importEmitterPayload({ poolOrClient, payload, request_id }
       [program_id],
     );
 
+    await client.query(
+      `
+      UPDATE program_exercise pe
+      SET exercise_name = ce.name,
+          notes = coalesce(ce.cue_text, '')
+      FROM cooldown_exercise ce
+      WHERE pe.exercise_id = ce.cooldown_exercise_id
+        AND pe.segment_type = 'cooldown'
+        AND pe.program_id = $1
+      `,
+      [program_id],
+    );
+
     await client.query("COMMIT");
 
     logger.info({ event: "import_emitter.committed",

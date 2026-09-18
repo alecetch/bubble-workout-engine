@@ -34,18 +34,18 @@ function toSlug(value) {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "warmup-exercise";
+    .replace(/^-+|-+$/g, "") || "cooldown-exercise";
 }
 
 function mediaObjectKey(key) {
   return String(key ?? "").trim().replace(/^\/+/, "").replace(/^exercise-media\/+/, "");
 }
 
-function mapWarmupRow(row) {
+function mapCooldownRow(row) {
   const status = row.video_status ?? "none";
   return {
-    warmup_exercise_id: row.warmup_exercise_id,
-    warmupExerciseId: row.warmup_exercise_id,
+    cooldown_exercise_id: row.cooldown_exercise_id,
+    cooldownExerciseId: row.cooldown_exercise_id,
     name: row.name,
     target_regions_json: normalizeArray(row.target_regions_json),
     targetRegions: normalizeArray(row.target_regions_json),
@@ -81,10 +81,10 @@ function mapWarmupRow(row) {
   };
 }
 
-async function ensureWarmup(db, warmupExerciseId) {
+async function ensureCooldown(db, cooldownExerciseId) {
   const result = await db.query(
-    `SELECT warmup_exercise_id FROM warmup_exercise WHERE warmup_exercise_id = $1`,
-    [warmupExerciseId],
+    `SELECT cooldown_exercise_id FROM cooldown_exercise WHERE cooldown_exercise_id = $1`,
+    [cooldownExerciseId],
   );
   return result.rowCount > 0;
 }
@@ -93,16 +93,16 @@ async function allocateSlug(db, name) {
   const base = toSlug(name);
   for (let i = 1; i < 1000; i += 1) {
     const candidate = i === 1 ? base : `${base}-${i}`;
-    if (!(await ensureWarmup(db, candidate))) return candidate;
+    if (!(await ensureCooldown(db, candidate))) return candidate;
   }
-  throw new Error("Unable to allocate warm-up exercise id");
+  throw new Error("Unable to allocate cool-down exercise id");
 }
 
 async function writeAudit(auditLogFn, req, id, action, detail) {
-  await auditLogFn(req, { action, entity: "warmup_exercise", entityId: id, detail });
+  await auditLogFn(req, { action, entity: "cooldown_exercise", entityId: id, detail });
 }
 
-export function createAdminWarmupExercisesRouter({
+export function createAdminCooldownExercisesRouter({
   db = pool,
   putObjectFn = putObject,
   getObjectFn = getObject,
@@ -112,7 +112,7 @@ export function createAdminWarmupExercisesRouter({
   const router = express.Router();
   router.use(requireInternalToken, requireTrustedAdminOrigin);
 
-  router.get("/warmup-exercises/list", async (_req, res) => {
+  router.get("/cooldown-exercises/list", async (_req, res) => {
     try {
       const result = await db.query(
         `SELECT
@@ -125,25 +125,25 @@ export function createAdminWarmupExercisesRouter({
            wm.video_source_filename,
            wm.poster_frame_key,
            COALESCE(wm.updated_at, we.updated_at) AS updated_at
-         FROM warmup_exercise we
-         LEFT JOIN warmup_exercise_media wm USING (warmup_exercise_id)
+         FROM cooldown_exercise we
+         LEFT JOIN cooldown_exercise_media wm USING (cooldown_exercise_id)
          ORDER BY we.is_archived ASC, we.name ASC`,
         [PLACEHOLDER_STILL_KEY],
       );
-      return res.json({ ok: true, warmupExercises: result.rows.map(mapWarmupRow) });
+      return res.json({ ok: true, cooldownExercises: result.rows.map(mapCooldownRow) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
 
-  router.post("/warmup-exercises", async (req, res) => {
+  router.post("/cooldown-exercises", async (req, res) => {
     try {
       const name = String(req.body?.name ?? "").trim();
       if (!name) return res.status(400).json({ ok: false, code: "validation_error", error: "name is required" });
       const id = await allocateSlug(db, name);
       const result = await db.query(
-        `INSERT INTO warmup_exercise (
-           warmup_exercise_id, name, target_regions_json, equipment_items_slugs,
+        `INSERT INTO cooldown_exercise (
+           cooldown_exercise_id, name, target_regions_json, equipment_items_slugs,
            cue_text, duration_or_reps_label, rounds, updated_at
          )
          VALUES ($1,$2,$3::jsonb,$4::text[],$5,$6,$7,now())
@@ -159,22 +159,22 @@ export function createAdminWarmupExercisesRouter({
         ],
       );
       await db.query(
-        `INSERT INTO warmup_exercise_media (warmup_exercise_id, still_image_key, still_image_is_placeholder, uploaded_by, updated_at)
+        `INSERT INTO cooldown_exercise_media (cooldown_exercise_id, still_image_key, still_image_is_placeholder, uploaded_by, updated_at)
          VALUES ($1, $2, true, $3, now())`,
         [id, PLACEHOLDER_STILL_KEY, actorFromReq(req)],
       );
-      await writeAudit(auditLogFn, req, id, "warmup_exercise.create", {});
-      return res.json({ ok: true, warmupExercise: mapWarmupRow({ ...result.rows[0], still_image_key: PLACEHOLDER_STILL_KEY }) });
+      await writeAudit(auditLogFn, req, id, "cooldown_exercise.create", {});
+      return res.json({ ok: true, cooldownExercise: mapCooldownRow({ ...result.rows[0], still_image_key: PLACEHOLDER_STILL_KEY }) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
 
-  router.patch("/warmup-exercises/:id", async (req, res) => {
+  router.patch("/cooldown-exercises/:id", async (req, res) => {
     const id = String(req.params.id ?? "").trim();
     try {
       const result = await db.query(
-        `UPDATE warmup_exercise
+        `UPDATE cooldown_exercise
          SET name = $2,
              target_regions_json = $3::jsonb,
              equipment_items_slugs = $4::text[],
@@ -183,7 +183,7 @@ export function createAdminWarmupExercisesRouter({
              rounds = $7,
              is_archived = COALESCE($8, is_archived),
              updated_at = now()
-         WHERE warmup_exercise_id = $1
+         WHERE cooldown_exercise_id = $1
          RETURNING *`,
         [
           id,
@@ -196,40 +196,40 @@ export function createAdminWarmupExercisesRouter({
           req.body?.is_archived ?? req.body?.isArchived ?? null,
         ],
       );
-      if (result.rowCount === 0) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
-      await writeAudit(auditLogFn, req, id, "warmup_exercise.update", {});
-      return res.json({ ok: true, warmupExercise: mapWarmupRow(result.rows[0]) });
+      if (result.rowCount === 0) return res.status(404).json({ ok: false, code: "not_found", error: "Cool-down exercise not found." });
+      await writeAudit(auditLogFn, req, id, "cooldown_exercise.update", {});
+      return res.json({ ok: true, cooldownExercise: mapCooldownRow(result.rows[0]) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
 
-  router.delete("/warmup-exercises/:id", async (req, res) => {
+  router.delete("/cooldown-exercises/:id", async (req, res) => {
     const id = String(req.params.id ?? "").trim();
     try {
       const result = await db.query(
-        `UPDATE warmup_exercise SET is_archived = true, updated_at = now() WHERE warmup_exercise_id = $1 RETURNING *`,
+        `UPDATE cooldown_exercise SET is_archived = true, updated_at = now() WHERE cooldown_exercise_id = $1 RETURNING *`,
         [id],
       );
-      if (result.rowCount === 0) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
-      await writeAudit(auditLogFn, req, id, "warmup_exercise.archive", {});
-      return res.json({ ok: true, warmupExercise: mapWarmupRow(result.rows[0]) });
+      if (result.rowCount === 0) return res.status(404).json({ ok: false, code: "not_found", error: "Cool-down exercise not found." });
+      await writeAudit(auditLogFn, req, id, "cooldown_exercise.archive", {});
+      return res.json({ ok: true, cooldownExercise: mapCooldownRow(result.rows[0]) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
 
-  router.post("/warmup-exercises/:id/still", uploadStill, async (req, res) => {
+  router.post("/cooldown-exercises/:id/still", uploadStill, async (req, res) => {
     const id = String(req.params.id ?? "").trim();
     if (!req.file) return res.status(400).json({ ok: false, code: "missing_file", error: "Still image file is required." });
     try {
-      if (!(await ensureWarmup(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
-      const key = `warmup-exercise-media/${id}/still.jpg`;
+      if (!(await ensureCooldown(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Cool-down exercise not found." });
+      const key = `cooldown-exercise-media/${id}/still.jpg`;
       await putObjectFn(mediaObjectKey(key), req.file.buffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
       const result = await db.query(
-        `INSERT INTO warmup_exercise_media (warmup_exercise_id, still_image_key, still_image_is_placeholder, uploaded_by, updated_at)
+        `INSERT INTO cooldown_exercise_media (cooldown_exercise_id, still_image_key, still_image_is_placeholder, uploaded_by, updated_at)
          VALUES ($1, $2, false, $3, now())
-         ON CONFLICT (warmup_exercise_id) DO UPDATE SET
+         ON CONFLICT (cooldown_exercise_id) DO UPDATE SET
            still_image_key = EXCLUDED.still_image_key,
            still_image_is_placeholder = false,
            uploaded_by = EXCLUDED.uploaded_by,
@@ -237,22 +237,22 @@ export function createAdminWarmupExercisesRouter({
          RETURNING *`,
         [id, key, actorFromReq(req)],
       );
-      await writeAudit(auditLogFn, req, id, "warmup_exercise.still.upload", { still_image_key: key });
-      return res.json({ ok: true, media: mapWarmupRow({ ...result.rows[0], warmup_exercise_id: id }) });
+      await writeAudit(auditLogFn, req, id, "cooldown_exercise.still.upload", { still_image_key: key });
+      return res.json({ ok: true, media: mapCooldownRow({ ...result.rows[0], cooldown_exercise_id: id }) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
 
-  router.post("/warmup-exercises/:id/video", uploadVideo, async (req, res) => {
+  router.post("/cooldown-exercises/:id/video", uploadVideo, async (req, res) => {
     const id = String(req.params.id ?? "").trim();
     if (!req.file) return res.status(400).json({ ok: false, code: "missing_file", error: "Video file is required." });
     try {
-      if (!(await ensureWarmup(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
+      if (!(await ensureCooldown(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Cool-down exercise not found." });
       await db.query(
-        `INSERT INTO warmup_exercise_media (warmup_exercise_id, still_image_key, video_status, uploaded_by, updated_at)
+        `INSERT INTO cooldown_exercise_media (cooldown_exercise_id, still_image_key, video_status, uploaded_by, updated_at)
          VALUES ($1, $2, 'processing', $3, now())
-         ON CONFLICT (warmup_exercise_id) DO UPDATE SET
+         ON CONFLICT (cooldown_exercise_id) DO UPDATE SET
            video_status = 'processing',
            uploaded_by = EXCLUDED.uploaded_by,
            updated_at = now()`,
@@ -263,16 +263,16 @@ export function createAdminWarmupExercisesRouter({
       try {
         compressed = await compressExerciseVideoFn(req.file.buffer);
       } catch (err) {
-        await db.query(`UPDATE warmup_exercise_media SET video_status = 'failed', updated_at = now() WHERE warmup_exercise_id = $1`, [id]);
+        await db.query(`UPDATE cooldown_exercise_media SET video_status = 'failed', updated_at = now() WHERE cooldown_exercise_id = $1`, [id]);
         return res.status(422).json({ ok: false, code: "video_processing_failed", error: publicInternalError(err) });
       }
 
-      const videoKey = `warmup-exercise-media/${id}/video.mp4`;
-      const posterKey = `warmup-exercise-media/${id}/poster.jpg`;
+      const videoKey = `cooldown-exercise-media/${id}/video.mp4`;
+      const posterKey = `cooldown-exercise-media/${id}/poster.jpg`;
       await putObjectFn(mediaObjectKey(videoKey), compressed.compressedBuffer, "video/mp4", EXERCISE_MEDIA_BUCKET);
       await putObjectFn(mediaObjectKey(posterKey), compressed.posterBuffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
       const result = await db.query(
-        `UPDATE warmup_exercise_media
+        `UPDATE cooldown_exercise_media
          SET video_key = $2,
              poster_frame_key = $3,
              video_duration_sec = $4,
@@ -280,39 +280,39 @@ export function createAdminWarmupExercisesRouter({
              video_source_filename = $5,
              uploaded_by = $6,
              updated_at = now()
-         WHERE warmup_exercise_id = $1
+         WHERE cooldown_exercise_id = $1
          RETURNING *`,
         [id, videoKey, posterKey, compressed.durationSec, req.file.originalname ?? null, actorFromReq(req)],
       );
-      await writeAudit(auditLogFn, req, id, "warmup_exercise.video.upload", { video_key: videoKey, poster_frame_key: posterKey });
-      return res.json({ ok: true, media: mapWarmupRow({ ...result.rows[0], warmup_exercise_id: id }) });
+      await writeAudit(auditLogFn, req, id, "cooldown_exercise.video.upload", { video_key: videoKey, poster_frame_key: posterKey });
+      return res.json({ ok: true, media: mapCooldownRow({ ...result.rows[0], cooldown_exercise_id: id }) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
 
-  router.post("/warmup-exercises/:id/use-poster-as-still", async (req, res) => {
+  router.post("/cooldown-exercises/:id/use-poster-as-still", async (req, res) => {
     const id = String(req.params.id ?? "").trim();
     try {
-      if (!(await ensureWarmup(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
-      const current = await db.query(`SELECT poster_frame_key FROM warmup_exercise_media WHERE warmup_exercise_id = $1`, [id]);
+      if (!(await ensureCooldown(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Cool-down exercise not found." });
+      const current = await db.query(`SELECT poster_frame_key FROM cooldown_exercise_media WHERE cooldown_exercise_id = $1`, [id]);
       const posterKey = current.rows[0]?.poster_frame_key ?? null;
       if (!posterKey) return res.status(400).json({ ok: false, code: "missing_poster", error: "No poster frame is available." });
-      const stillKey = `warmup-exercise-media/${id}/still.jpg`;
+      const stillKey = `cooldown-exercise-media/${id}/still.jpg`;
       const posterBuffer = await getObjectFn(mediaObjectKey(posterKey), EXERCISE_MEDIA_BUCKET);
       await putObjectFn(mediaObjectKey(stillKey), posterBuffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
       const result = await db.query(
-        `UPDATE warmup_exercise_media
+        `UPDATE cooldown_exercise_media
          SET still_image_key = $2,
              still_image_is_placeholder = false,
              uploaded_by = $3,
              updated_at = now()
-         WHERE warmup_exercise_id = $1
+         WHERE cooldown_exercise_id = $1
          RETURNING *`,
         [id, stillKey, actorFromReq(req)],
       );
-      await writeAudit(auditLogFn, req, id, "warmup_exercise.still.use_poster", { poster_frame_key: posterKey });
-      return res.json({ ok: true, media: mapWarmupRow({ ...result.rows[0], warmup_exercise_id: id }) });
+      await writeAudit(auditLogFn, req, id, "cooldown_exercise.still.use_poster", { poster_frame_key: posterKey });
+      return res.json({ ok: true, media: mapCooldownRow({ ...result.rows[0], cooldown_exercise_id: id }) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
@@ -321,4 +321,4 @@ export function createAdminWarmupExercisesRouter({
   return router;
 }
 
-export const adminWarmupExercisesRouter = createAdminWarmupExercisesRouter();
+export const adminCooldownExercisesRouter = createAdminCooldownExercisesRouter();

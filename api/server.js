@@ -49,6 +49,7 @@ import { createAdminHyroxObservabilityRouter } from "./src/routes/adminHyroxObse
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminExerciseMediaRouter } from "./src/routes/adminExerciseMedia.js";
 import { adminWarmupExercisesRouter } from "./src/routes/adminWarmupExercises.js";
+import { adminCooldownExercisesRouter } from "./src/routes/adminCooldownExercises.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
 import { adminRepRulesRouter } from "./src/routes/adminRepRules.js";
 import { adminPreviewRouter } from "./src/routes/adminPreview.js";
@@ -351,6 +352,7 @@ app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res,
 app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
 app.get("/admin/exercise-media", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercise-media.html"));
 app.get("/admin/warmup-exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "warmup-exercises.html"));
+app.get("/admin/cooldown-exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "cooldown-exercises.html"));
 app.get("/admin/health", adminCspMiddleware, (_req, res) => sendAdminPage(res, "health.html"));
 app.get("/admin/narration", adminCspMiddleware, (_req, res) => sendAdminPage(res, "narration.html"));
 app.get("/admin/rep-rules", adminCspMiddleware, (_req, res) => sendAdminPage(res, "rep-rules.html"));
@@ -913,6 +915,7 @@ app.use("/admin", ...adminOnly, adminConfigsRouter);
 app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
 app.use("/admin", ...adminOnly, adminExerciseMediaRouter);
 app.use("/admin", ...adminOnly, adminWarmupExercisesRouter);
+app.use("/admin", ...adminOnly, adminCooldownExercisesRouter);
 app.use("/admin", ...adminOnly, adminNarrationRouter);
 app.use("/admin", ...adminOnly, adminRepRulesRouter);
 app.use("/admin", ...adminOnly, adminSyncRouter);

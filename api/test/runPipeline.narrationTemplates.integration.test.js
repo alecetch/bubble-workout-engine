@@ -112,7 +112,7 @@ function makeDb({
       if (sql.includes("FROM program_generation_config")) {
         return { rows: [] };
       }
-      if (sql.includes("FROM warmup_exercise")) {
+      if (sql.includes("FROM warmup_exercise") || sql.includes("FROM cooldown_exercise")) {
         return { rows: [] };
       }
       throw new Error(`Unexpected SQL in test db: ${sql}`);

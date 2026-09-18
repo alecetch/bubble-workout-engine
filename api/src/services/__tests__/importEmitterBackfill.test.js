@@ -182,3 +182,27 @@ test("backfill UPDATE handles zero EX rows without error", async () => {
   assert.ok(updateCall, "expected UPDATE query even when there are no EX rows");
   assert.ok(commitCall, "expected COMMIT query");
 });
+
+
+test("cool-down backfill follows inserts, uses its catalogue, and is scoped before commit", async () => {
+  const client = makeClient();
+  const rows = makeRows().map((row) => {
+    const cells = row.split("|");
+    if (cells[0] === "SEG") { cells[2] = "cooldown"; cells[15] = "cooldown"; }
+    if (cells[0] === "EX") { cells[1] = "cooldown-childs-pose"; cells[4] = "cooldown"; cells[18] = "cooldown"; }
+    return cells.join("|");
+  });
+  await importEmitterPayload({ poolOrClient: client, request_id: "cooldown-backfill", payload: {
+    user_id: "user-1", anchor_date_ms: Date.UTC(2026, 0, 1), program_id: "program-cooldown", rows,
+  } });
+  const index = client.calls.findIndex((call) => call.sql.includes("FROM cooldown_exercise ce"));
+  const backfill = client.calls[index];
+  assert.ok(index > client.calls.findIndex((call) => call.sql.includes("INSERT INTO program_exercise")));
+  assert.ok(index < client.calls.findIndex((call) => call.sql === "COMMIT"));
+  assert.match(backfill.sql, /exercise_name = ce.name/);
+  assert.match(backfill.sql, /notes = coalesce\(ce.cue_text, ''\)/);
+  assert.match(backfill.sql, /pe.exercise_id = ce.cooldown_exercise_id/);
+  assert.match(backfill.sql, /pe.segment_type = 'cooldown'/);
+  assert.match(backfill.sql, /pe.program_id = \$1/);
+  assert.deepEqual(backfill.params, ["program-cooldown"]);
+});

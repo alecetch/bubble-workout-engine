@@ -892,3 +892,58 @@ test("dayFull only resolves video and poster URLs when media status is ready", a
   assert.equal(failed.videoUrl, null);
   assert.equal(failed.posterImageUrl, null);
 });
+
+
+test("dayFull resolves cool-down, warm-up and strength media independently on the same day", async () => {
+  const types = ["warmup", "single", "cooldown"];
+  const queries = [];
+  const db = mockPool([
+    { rowCount: 1, rows: [{ program_day_id: VALID_UUID, client_profile_id: VALID_UUID }] },
+    { rowCount: 3, rows: types.map((type, index) => ({ workout_segment_id: type, segment_type: type, block_order: index + 1 })) },
+    { rowCount: 3, rows: types.map((type, index) => ({
+      workout_segment_id: type, program_exercise_id: `${type}-pe`, exercise_id: `${type}-ex`,
+      segment_type: type, exercise_name: "Strength", order_in_day: index + 1,
+      reps_prescribed: type === "cooldown" ? "30" : "10", reps_unit: type === "cooldown" ? "sec" : "reps",
+      notes: `${type} cue`,
+      still_image_key: "exercise-media/strength/still.jpg", video_status: "none",
+      warmup_name: "Warm-up exercise", warmup_rounds: 1,
+      warmup_still_image_key: "warmup-exercise-media/warm/still.jpg", warmup_video_status: "processing",
+      warmup_video_key: "warmup-exercise-media/warm/video.mp4",
+      cooldown_name: "Cool-down stretch", cooldown_rounds: 2,
+      cooldown_still_image_key: "cooldown-exercise-media/cool/still.jpg", cooldown_video_status: "ready",
+      cooldown_video_key: "cooldown-exercise-media/cool/video.mp4", cooldown_poster_frame_key: "cooldown-exercise-media/cool/poster.jpg",
+    })) },
+    { rowCount: 0, rows: [] },
+  ]);
+  const handlers = createReadProgramHandlers({
+    db: { async connect() { return { async query(sql, params) { queries.push(sql); return db.query(sql, params); }, release() {} }; } },
+    guidelineLoadService: { async annotateExercisesWithGuidelineLoads({ exercises }) { return exercises; } },
+  });
+  const res = mockRes();
+  await handlers.dayFull({ request_id: "cooldown", params: { program_day_id: VALID_UUID }, auth: { user_id: USER_UUID }, log: { error() {}, warn() {} } }, res);
+  assert.equal(res.statusCode, 200);
+  const [warm, strength, cool] = res.body.segments.map((segment) => segment.items[0]);
+  assert.equal(cool.exercise_name, "Cool-down stretch");
+  assert.equal(cool.rounds, 2);
+  assert.equal(cool.durationOrRepsLabel, "30 sec");
+  assert.equal(cool.cueText, "cooldown cue");
+  assert.equal(cool.videoStatus, "ready");
+  assert.ok(cool.stillImageUrl.includes("cooldown-exercise-media/cool/still.jpg"));
+  assert.ok(cool.videoUrl.includes("cooldown-exercise-media/cool/video.mp4"));
+  assert.ok(cool.posterImageUrl.includes("cooldown-exercise-media/cool/poster.jpg"));
+  assert.equal(cool.cooldown_name, undefined);
+  assert.equal(warm.exercise_name, "Warm-up exercise");
+  assert.equal(warm.rounds, 1);
+  assert.equal(warm.durationOrRepsLabel, "10 reps");
+  assert.equal(warm.cueText, "warmup cue");
+  assert.ok(warm.stillImageUrl.includes("warmup-exercise-media/warm/still.jpg"));
+  assert.equal(warm.videoStatus, "processing");
+  assert.equal(warm.videoUrl, null);
+  assert.equal(strength.exercise_name, "Strength");
+  assert.ok(strength.stillImageUrl.includes("exercise-media/strength/still.jpg"));
+  assert.equal(strength.rounds, undefined);
+  assert.equal(strength.cueText, undefined);
+  const exerciseQuery = queries.find((sql) => sql.includes("LEFT JOIN cooldown_exercise ce"));
+  assert.match(exerciseQuery, /ce.cooldown_exercise_id = pe.exercise_id AND pe.segment_type = 'cooldown'/);
+  assert.match(exerciseQuery, /LEFT JOIN cooldown_exercise_media cm/);
+});
