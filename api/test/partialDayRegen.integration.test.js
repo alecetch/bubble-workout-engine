@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { pool } from "../src/db.js";
 import { regenerateDaysWithEquipment } from "../src/services/partialDayRegenService.js";
+import { addBonusDay } from "../src/services/bonusDayService.js";
 
 function isoDate(date) {
   return date.toISOString().slice(0, 10);
@@ -257,6 +258,7 @@ async function cleanupFixture(db, fixture) {
         )`,
     [fixture.programId, [fixture.ownerSubjectId, fixture.strangerSubjectId]],
   );
+  await db.query(`DELETE FROM program_calendar_day WHERE program_id = $1`, [fixture.programId]);
   await db.query(`DELETE FROM program_exercise WHERE program_id = $1`, [fixture.programId]);
   await db.query(`DELETE FROM workout_segment WHERE program_id = $1`, [fixture.programId]);
   await db.query(`DELETE FROM program_day WHERE program_id = $1`, [fixture.programId]);
@@ -407,6 +409,56 @@ test("regenerateDaysWithEquipment rejects access for the wrong user", async (t) 
         return true;
       },
     );
+  } finally {
+    await cleanupFixture(pool, fixture);
+  }
+});
+
+test("regenerateDaysWithEquipment regenerates a bonus day whose key is not in the regenerated program", async (t) => {
+  if (!await ensureDb(t)) return;
+  const fixture = await seedProgramFixture(pool);
+
+  try {
+    // Tuesday of the fixture week: a rest day, so no training-day conflict.
+    const bonusDate = isoDate(new Date(nextWeekday(1).getTime() + 24 * 60 * 60 * 1000));
+    const { programDayId } = await addBonusDay(pool, {
+      programId: fixture.programId,
+      userId: fixture.ownerUserId,
+      programType: "hypertrophy",
+      targetDate: bonusDate,
+      scope: "today",
+    });
+
+    const dayR = await pool.query(`SELECT program_day_key, is_bonus FROM program_day WHERE id = $1`, [programDayId]);
+    assert.equal(dayR.rows[0].is_bonus, true);
+    const bonusKey = dayR.rows[0].program_day_key;
+    assert.match(bonusKey, /^bonus:/);
+
+    const result = await regenerateDaysWithEquipment(pool, {
+      programId: fixture.programId,
+      userId: fixture.ownerUserId,
+      dayIds: [programDayId],
+      equipmentPresetSlug: "bodyweight",
+      equipmentItemSlugs: [],
+    });
+
+    assert.equal(result.regenerated, 1);
+    assert.deepEqual(result.dayIds, [programDayId]);
+
+    const exR = await pool.query(
+      `SELECT program_day_key, equipment_items_slugs_csv
+       FROM program_exercise
+       WHERE program_day_id = $1`,
+      [programDayId],
+    );
+    assert.ok(exR.rowCount > 0, "bonus day should have regenerated exercises");
+    assert.ok(exR.rows.every((row) => row.program_day_key === bonusKey), "exercises keep the bonus day key");
+
+    const overrideR = await pool.query(
+      `SELECT equipment_override_preset_slug FROM program_day WHERE id = $1`,
+      [programDayId],
+    );
+    assert.equal(overrideR.rows[0].equipment_override_preset_slug, "bodyweight");
   } finally {
     await cleanupFixture(pool, fixture);
   }
