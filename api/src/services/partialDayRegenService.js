@@ -32,6 +32,12 @@ function toAnchorDayMs(dateValue) {
   return date.getTime();
 }
 
+const WEEKDAY_CODES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+function weekdayForDate(dateValue) {
+  return WEEKDAY_CODES[new Date(toAnchorDayMs(dateValue)).getUTCDay()] ?? "";
+}
+
 async function loadPhysiqueContext(db, userId) {
   try {
     const premiumR = await db.query(
@@ -79,10 +85,15 @@ async function buildRegenerationPlan(db, {
   exerciseRows,
   physiqueContext,
   allowedExerciseIds,
+  focusType = null,
+  singleDay = false,
 }) {
   const inputs = buildInputsFromProfile(profile, exerciseRows, physiqueContext);
   if (Array.isArray(allowedExerciseIds) && allowedExerciseIds.length > 0) {
     inputs.allowed_exercise_ids = allowedExerciseIds;
+  }
+  if (focusType) {
+    inputs.preferredSplitJson = { day_focuses: [toSlug(focusType)] };
   }
   const preferredDays = Array.isArray(profile.preferredDays) ? profile.preferredDays : [];
   const durationMins = Number.isFinite(Number(profile.minutesPerSession))
@@ -101,8 +112,9 @@ async function buildRegenerationPlan(db, {
       anchor_date_ms: anchorDayMs,
       preferred_days_json: preferredDays.join(","),
       duration_mins: durationMins,
-      days_per_week: preferredDays.length || 3,
+      days_per_week: singleDay ? 1 : (preferredDays.length || 3),
       fitness_rank: fitnessRank,
+      ...(singleDay ? { program_length: 1 } : {}),
     },
   });
 
@@ -174,7 +186,8 @@ export async function regenerateDaysWithEquipment(
   );
 
   const targetDaysR = await db.query(
-    `SELECT id, program_day_key, is_completed
+    `SELECT id, program_day_key, is_completed, is_bonus, day_type, focus_type,
+            scheduled_date::text AS scheduled_date
      FROM program_day
      WHERE id = ANY($1::uuid[])
        AND program_id = $2`,
@@ -199,6 +212,10 @@ export async function regenerateDaysWithEquipment(
     pendingDays.push({
       dayId,
       dayKey: meta?.program_day_key ?? null,
+      isBonus: meta?.is_bonus === true,
+      dayType: meta?.day_type ?? null,
+      focusType: meta?.focus_type ?? null,
+      scheduledDate: meta?.scheduled_date ?? null,
     });
   }
 
@@ -239,16 +256,47 @@ export async function regenerateDaysWithEquipment(
   }
 
   const physiqueContext = await loadPhysiqueContext(db, userId);
-  const parsedPlan = await buildRegenerationPlan(db, {
-    programType: ownershipR.rows[0].program_type || overrideProfile.programType || "hypertrophy",
-    userId,
-    startDate: ownershipR.rows[0].start_date,
-    profile: overrideProfile,
-    exerciseRows: exerciseCatalogueR.rows,
-    physiqueContext,
-    allowedExerciseIds,
-  });
-  const exercisesByDayKey = buildExerciseRowsByDayKey(parsedPlan);
+  const programType = ownershipR.rows[0].program_type || overrideProfile.programType || "hypertrophy";
+
+  // Regular days are matched by program_day_key against a regenerated full program.
+  let exercisesByDayKey = new Map();
+  if (pendingDays.some((day) => !day.isBonus)) {
+    const parsedPlan = await buildRegenerationPlan(db, {
+      programType,
+      userId,
+      startDate: ownershipR.rows[0].start_date,
+      profile: overrideProfile,
+      exerciseRows: exerciseCatalogueR.rows,
+      physiqueContext,
+      allowedExerciseIds,
+    });
+    exercisesByDayKey = buildExerciseRowsByDayKey(parsedPlan);
+  }
+
+  // Bonus days are keyed `bonus:<programId>:<date>`, which never appears in a regenerated
+  // program. Regenerate each as a single-day program (as addBonusDay does) and use its only day.
+  const exercisesByBonusDayId = new Map();
+  for (const bonusDay of pendingDays.filter((day) => day.isBonus)) {
+    if (!bonusDay.scheduledDate) {
+      throw new Error(`Bonus day ${bonusDay.dayId} has no scheduled_date`);
+    }
+    const parsedBonus = await buildRegenerationPlan(db, {
+      programType: bonusDay.dayType || programType,
+      userId,
+      startDate: bonusDay.scheduledDate,
+      profile: { ...overrideProfile, preferredDays: [weekdayForDate(bonusDay.scheduledDate)] },
+      exerciseRows: exerciseCatalogueR.rows,
+      physiqueContext,
+      allowedExerciseIds,
+      focusType: bonusDay.focusType,
+      singleDay: true,
+    });
+    const templateDayKey = parsedBonus.days?.[0]?.program_day_key;
+    exercisesByBonusDayId.set(
+      bonusDay.dayId,
+      (parsedBonus.exs ?? []).filter((ex) => ex.program_day_key === templateDayKey),
+    );
+  }
 
   for (const pendingDay of pendingDays) {
     const client = await db.connect();
@@ -296,7 +344,9 @@ export async function regenerateDaysWithEquipment(
       }
 
       const dayKey = dayR.rows[0].program_day_key;
-      const nextExercises = exercisesByDayKey.get(dayKey) ?? [];
+      const nextExercises = pendingDay.isBonus
+        ? exercisesByBonusDayId.get(pendingDay.dayId) ?? []
+        : exercisesByDayKey.get(dayKey) ?? [];
       const segmentIdByKey = new Map(
         segmentsR.rows.map((row) => [String(row.segment_key ?? "").trim(), row.id]),
       );
@@ -345,7 +395,7 @@ export async function regenerateDaysWithEquipment(
             programId,
             pendingDay.dayId,
             workoutSegmentId,
-            ex.program_day_key,
+            dayKey,
             ex.segment_key,
             ex.segment_type,
             ex.exercise_id,
