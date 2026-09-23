@@ -131,6 +131,14 @@
       return token ? { "X-Internal-Token": token } : {};
     }
 
+    function mediaPreviewUrl(mediaUrl, updatedAt) {
+      if (!mediaUrl || !updatedAt) return mediaUrl || "";
+      // Replacements overwrite the same object key, which browsers cache for a day.
+      const url = new URL(mediaUrl, window.location.href);
+      url.searchParams.set("v", updatedAt);
+      return url.href;
+    }
+
     function formatDuration(seconds) {
       if (!Number.isFinite(Number(seconds))) return "";
       const total = Math.round(Number(seconds));
@@ -233,7 +241,7 @@
       updatePromoteAll(rows);
       rowsEl.innerHTML = rows.map((row) => `
         <tr>
-          <td><img class="thumb" data-action="view-still" data-id="${row.exerciseId}" src="${row.stillImageUrl}" alt="" title="Click to view full size"></td>
+          <td><img class="thumb" data-action="view-still" data-id="${row.exerciseId}" src="${mediaPreviewUrl(row.stillImageUrl, row.updatedAt)}" alt="" title="Click to view full size"></td>
           <td><div class="name">${row.name}</div><div class="muted">${row.exerciseId}</div></td>
           <td>
             ${stillBadge(row)}
@@ -308,14 +316,14 @@
         if (button.dataset.action === "view-still") {
           const row = rowsById.get(selectedExerciseId);
           if (!row) return;
-          return openMediaModal(`${row.name} — still`, `<img src="${row.stillImageUrl}" alt="${row.name}">`);
+          return openMediaModal(`${row.name} — still`, `<img src="${mediaPreviewUrl(row.stillImageUrl, row.updatedAt)}" alt="${row.name}">`);
         }
         if (button.dataset.action === "view-video") {
           const row = rowsById.get(selectedExerciseId);
           if (!row || !row.videoUrl) return;
           return openMediaModal(
             `${row.name} — video`,
-            `<video src="${row.videoUrl}" poster="${row.posterImageUrl || ""}" controls autoplay></video>`,
+            `<video src="${mediaPreviewUrl(row.videoUrl, row.updatedAt)}" poster="${mediaPreviewUrl(row.posterImageUrl, row.updatedAt)}" controls autoplay></video>`,
           );
         }
         if (button.dataset.action === "still") return stillInput.click();
