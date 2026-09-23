@@ -84,6 +84,7 @@ export default defineConfig({
             "src/**/*.component.test.{ts,tsx}",
             "src/**/*.unit.test.{ts,tsx}",
             "src/**/__tests__/**/*.test.tsx",
+            "src/navigation/*.test.tsx",
           ],
         },
         resolve: {

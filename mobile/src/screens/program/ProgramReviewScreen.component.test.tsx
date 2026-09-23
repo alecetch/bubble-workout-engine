@@ -216,6 +216,20 @@ describe("ProgramReviewScreen", () => {
     });
   });
 
+  it("navigates to TodayTab through the parent navigator after generation", async () => {
+    const parentNavigation = { navigate: vi.fn() };
+    const navigation = renderScreen();
+    navigation.getParent.mockReturnValue(parentNavigation as any);
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Program" }));
+
+    await waitFor(() => {
+      expect(setActiveProgramIdMock).toHaveBeenCalledWith("prog-1");
+      expect(parentNavigation.navigate).toHaveBeenCalledWith("TodayTab");
+    });
+    expect(navigation.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
+  });
+
   it("preserveDraft skips resetFromProfile", () => {
     renderScreen({ preserveDraft: true });
     expect(resetFromProfileMock).not.toHaveBeenCalled();

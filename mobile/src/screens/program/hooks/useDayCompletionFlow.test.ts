@@ -48,8 +48,12 @@ function renderFlow(overrides: Partial<Parameters<typeof useDayCompletionFlow>[0
   const queryClient = {
     fetchQuery: vi.fn(),
   } as any;
+  const parentNav = {
+    navigate: vi.fn(),
+  };
   const nav = {
     navigate: vi.fn(),
+    getParent: vi.fn(() => parentNav),
   } as any;
   const params = {
     programDayId: "day-1",
@@ -67,7 +71,7 @@ function renderFlow(overrides: Partial<Parameters<typeof useDayCompletionFlow>[0
     ...overrides,
   };
   const rendered = renderHook(() => useDayCompletionFlow(params));
-  return { ...rendered, params, markDayComplete, completeProgram, queryClient, nav };
+  return { ...rendered, params, markDayComplete, completeProgram, queryClient, nav, parentNav };
 }
 
 function overview() {
@@ -202,5 +206,34 @@ describe("useDayCompletionFlow", () => {
       weekCompleteSessions: 1,
       weekCompleteVolumeKg: 123,
     });
+  });
+
+  it("navigates ordinary completions to TodayTab via the parent navigator", async () => {
+    const { result, queryClient, nav, parentNav } = renderFlow({ programId: "program-1" });
+    queryClient.fetchQuery
+      .mockResolvedValueOnce({
+        calendarDays: [
+          {
+            isTrainingDay: true,
+            programDayId: "day-1",
+            weekNumber: 1,
+            status: "scheduled",
+          },
+          {
+            isTrainingDay: true,
+            programDayId: "day-2",
+            weekNumber: 1,
+            status: "scheduled",
+          },
+        ],
+      })
+      .mockResolvedValueOnce(endCheck({}));
+
+    await act(async () => {
+      await result.current.handleSummaryDismiss();
+    });
+
+    expect(parentNav.navigate).toHaveBeenCalledWith("TodayTab");
+    expect(nav.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
   });
 });

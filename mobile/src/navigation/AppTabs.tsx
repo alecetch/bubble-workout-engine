@@ -57,7 +57,7 @@ export function AppTabs({ homeInitialRoute }: AppTabsProps): React.JSX.Element {
 
   return (
     <Tab.Navigator
-      initialRouteName="HomeTab"
+      initialRouteName={homeInitialRoute === "ProgramReview" ? "TodayTab" : "HomeTab"}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.accent,

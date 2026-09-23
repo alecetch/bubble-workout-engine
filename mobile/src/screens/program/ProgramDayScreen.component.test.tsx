@@ -520,7 +520,7 @@ describe("ProgramDayScreen", () => {
     expect(setWorkoutCompleteMock).toHaveBeenCalledWith("day-1", true);
   });
 
-  it("navigates to ProgramDashboard after an ordinary workout completion", async () => {
+  it("navigates to TodayTab after an ordinary workout completion", async () => {
     getProgramOverviewMock.mockResolvedValueOnce({
       calendarDays: [
         {
@@ -537,19 +537,13 @@ describe("ProgramDayScreen", () => {
         },
       ],
     } as any);
-    const { navigation } = renderScreen();
+    const { navigation, parentNavigation } = renderScreen();
 
     await openWorkoutSummary();
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
 
-    await waitFor(() =>
-      expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", {
-        programId: "prog-1",
-        showReviewPrompt: undefined,
-        weekCompleteNumber: undefined,
-        weekCompleteSessions: undefined,
-      }),
-    );
+    await waitFor(() => expect(parentNavigation.navigate).toHaveBeenCalledWith("TodayTab"));
+    expect(navigation.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
   });
 
   it("does not navigate to ProgramDashboard when lifecycleStatus is completed", async () => {
