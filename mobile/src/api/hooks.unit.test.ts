@@ -148,6 +148,7 @@ describe("api hooks", () => {
         expect(getProgramDayFullMock).not.toHaveBeenCalled();
       });
     });
+
   });
 
   describe("staleTime values", () => {

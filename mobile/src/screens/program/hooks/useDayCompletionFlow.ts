@@ -178,13 +178,19 @@ export function useDayCompletionFlow(params: {
         return;
       }
 
-      nav.navigate("ProgramDashboard", {
-        programId,
-        showReviewPrompt: shouldShowReview || undefined,
-        weekCompleteNumber,
-        weekCompleteSessions,
-        weekCompleteVolumeKg,
-      });
+      const hasCelebration = shouldShowReview || weekCompleteNumber != null;
+      if (hasCelebration) {
+        nav.navigate("ProgramDashboard", {
+          programId,
+          showReviewPrompt: shouldShowReview || undefined,
+          weekCompleteNumber,
+          weekCompleteSessions,
+          weekCompleteVolumeKg,
+        });
+        return;
+      }
+
+      (nav.getParent() as any)?.navigate("TodayTab" as never);
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
     }

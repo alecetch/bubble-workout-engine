@@ -149,10 +149,7 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
         setActiveProgramId(programId);
         const parent = navigation.getParent();
         if (parent) {
-          (parent as any).navigate(
-            "ProgramsTab" as never,
-            { screen: "ProgramDashboard", params: { programId } } as never,
-          );
+          (parent as any).navigate("TodayTab" as never);
         } else {
           navigation.navigate("ProgramDashboard", { programId });
         }
