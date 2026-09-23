@@ -244,12 +244,11 @@ export function useProgramEndCheck(
   });
 }
 
-export function useActivePrograms(enabled: boolean = true): UseQueryResult<ActiveProgramsResponse> {
+export function useActivePrograms(): UseQueryResult<ActiveProgramsResponse> {
   return useQuery({
     queryKey: queryKeys.activePrograms,
     queryFn: fetchActivePrograms,
     staleTime: 60 * 1000,
-    enabled,
   });
 }
 

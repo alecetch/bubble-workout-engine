@@ -44,22 +44,15 @@ vi.mock("./SettingsStackNavigator", () => ({
 }));
 
 describe("AppTabs", () => {
-  it("starts on TodayTab when the home initial route is ProgramReview and an active program exists", () => {
-    render(<AppTabs homeInitialRoute="ProgramReview" hasActiveProgram />);
-
-    expect(screen.getByTestId("today-tab")).toBeInTheDocument();
-    expect(screen.queryByTestId("home-tab")).not.toBeInTheDocument();
-  });
-
-  it("starts on HomeTab when the home initial route is ProgramReview but there is no active program", () => {
-    render(<AppTabs homeInitialRoute="ProgramReview" hasActiveProgram={false} />);
+  it("starts on HomeTab when the home initial route is ProgramReview", () => {
+    render(<AppTabs homeInitialRoute="ProgramReview" />);
 
     expect(screen.getByTestId("home-tab")).toHaveTextContent("Home: ProgramReview");
     expect(screen.queryByTestId("today-tab")).not.toBeInTheDocument();
   });
 
-  it("starts on HomeTab when the home initial route is OnboardingEntry, even with an active program", () => {
-    render(<AppTabs homeInitialRoute="OnboardingEntry" hasActiveProgram />);
+  it("starts on HomeTab when the home initial route is OnboardingEntry", () => {
+    render(<AppTabs homeInitialRoute="OnboardingEntry" />);
 
     expect(screen.getByTestId("home-tab")).toHaveTextContent("Home: OnboardingEntry");
     expect(screen.queryByTestId("today-tab")).not.toBeInTheDocument();

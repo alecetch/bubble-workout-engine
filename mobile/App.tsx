@@ -6,9 +6,8 @@ import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { Platform } from "react-native";
 import { queryClient } from "./src/api/queryClient";
-import { useActivePrograms } from "./src/api/hooks";
 import { AuthNavigator } from "./src/navigation/AuthNavigator";
 import { AppTabs } from "./src/navigation/AppTabs";
 import { ErrorBoundary } from "./src/components/system/ErrorBoundary";
@@ -25,7 +24,7 @@ import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
 import { navigateFromNotificationResponse } from "./src/navigation/notificationRouting";
 import { OfflineBanner } from "./src/components/system/OfflineBanner";
-import { useSessionStore, type AppEntryRoute } from "./src/state/session/sessionStore";
+import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 import { getAppStorage } from "./src/utils/appStorage";
 import { logger } from "./src/utils/logger";
@@ -86,24 +85,6 @@ function flushPendingNotificationResponse(): void {
   if (navigateFromNotificationResponse(pendingNotificationResponse)) {
     pendingNotificationResponse = null;
   }
-}
-
-// Renders inside QueryClientProvider/NavigationContainer so useActivePrograms has query
-// context; App() itself can't call it since App() is what mounts the QueryClientProvider.
-function HomeTabGate({ entryRoute }: { entryRoute: AppEntryRoute }): React.JSX.Element {
-  const needsActiveProgramCheck = entryRoute === "ProgramReview";
-  const activeProgramsQuery = useActivePrograms(needsActiveProgramCheck);
-  const hasActiveProgram = (activeProgramsQuery.data?.programs?.length ?? 0) > 0;
-
-  if (needsActiveProgramCheck && activeProgramsQuery.isLoading) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
-        <ActivityIndicator color={colors.accent} size="large" />
-      </View>
-    );
-  }
-
-  return <AppTabs homeInitialRoute={entryRoute} hasActiveProgram={hasActiveProgram} />;
 }
 
 function App(): React.JSX.Element {
@@ -249,7 +230,7 @@ function App(): React.JSX.Element {
           onError={(error, componentStack) => reportError(error, { componentStack })}
         >
           {isAuthenticated ? (
-            <HomeTabGate entryRoute={entryRoute} />
+            <AppTabs homeInitialRoute={entryRoute} />
           ) : (
             <AuthNavigator />
           )}
