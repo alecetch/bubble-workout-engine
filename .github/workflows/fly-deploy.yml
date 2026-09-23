@@ -1,15 +1,19 @@
 name: fly-deploy-api
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "api/**"
-      - "migrations/**"
-      - "scripts/migrate.sh"
-      - ".github/workflows/fly-deploy.yml"
-  workflow_dispatch:
+  workflow_call:
+    secrets:
+      FLY_API_TOKEN:
+        required: true
+      DATABASE_URL:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-api-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -34,6 +38,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v6
