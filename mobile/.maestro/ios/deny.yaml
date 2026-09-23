@@ -1,0 +1,6 @@
+appId: com.bubbleworkout.mobile
+---
+- runFlow:
+    file: auth-program-session.yaml
+    env:
+      PERMISSION_BUTTON: "Don.t Allow"

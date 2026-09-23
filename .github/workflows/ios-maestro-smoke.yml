@@ -1,0 +1,135 @@
+name: iOS Maestro smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      failure_injection:
+        description: Negative control (must produce a red run)
+        type: choice
+        options: [none, login, navigation]
+        default: none
+      cold_build:
+        description: Bypass app cache to measure a cold build
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      IOS_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-26-5
+      IOS_DEVICE: com.apple.CoreSimulator.SimDeviceType.iPhone-17
+      MAESTRO_VERSION: 2.5.1
+      MAESTRO_CLI_NO_ANALYTICS: "1"
+      FLYWAY_VERSION: 10.22.0
+      CI: "1"
+      EXPO_NO_DOTENV: "1"
+      EXPO_PUBLIC_API_BASE_URL: http://127.0.0.1:3000
+      EXPO_PUBLIC_ENGINE_KEY: ci-test-engine-key-32chars-long
+      EXPO_PUBLIC_DISABLE_NETWORK_MONITORING: "true"
+      EXPO_PUBLIC_ENABLE_NOTIFICATION_TAP_THROUGH: "false"
+      SENTRY_DISABLE_AUTO_UPLOAD: "true"
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: workout
+      PGPASSWORD: workout-ci
+      PGDATABASE: workout_test
+      NODE_ENV: test
+      EMAIL_PROVIDER: console
+      JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
+      JWT_ISSUER: workout-engine-ci
+      ENGINE_KEY: ci-test-engine-key-32chars-long
+      INTERNAL_API_TOKEN: ci-test-internal-api-token
+      REVENUECAT_WEBHOOK_SECRET: ci-test-webhook-secret
+      E2E_EMAIL: ios-smoke@example.com
+      E2E_PASSWORD: E2ePass123!
+      FAILURE_INJECTION: ${{ inputs.failure_injection }}
+      RUN_OWNER: ${{ github.actor }}
+      MACOS_RATE_USD: ${{ vars.IOS_SMOKE_MACOS_RATE_USD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Initialize measurements
+        run: |
+          mkdir -p artifacts/ios-smoke
+          date +%s > artifacts/ios-smoke/started-at
+          xcodebuild -version | tee artifacts/ios-smoke/xcode.txt
+          xcrun simctl list runtimes > artifacts/ios-smoke/runtimes.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22.23.2"
+          cache: npm
+          cache-dependency-path: |
+            api/package-lock.json
+            mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17.0.12+7"
+      - name: Install native tools
+        timeout-minutes: 10
+        run: |
+          brew install postgresql@16 coreutils
+          echo "$(brew --prefix postgresql@16)/bin" >> "$GITHUB_PATH"
+          gem install cocoapods -v 1.17.0 --no-document
+          curl --fail --location --retry 2 "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip" -o "$RUNNER_TEMP/maestro.zip"
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro-cli"
+          echo "$RUNNER_TEMP/maestro-cli/maestro/bin" >> "$GITHUB_PATH"
+          curl --fail --location --retry 2 "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-macosx-arm64.tar.gz" -o "$RUNNER_TEMP/flyway.tar.gz"
+          tar -xzf "$RUNNER_TEMP/flyway.tar.gz" -C "$RUNNER_TEMP"
+      - name: Install dependencies
+        run: |
+          npm --prefix api ci
+          npm --prefix mobile ci
+      - name: Start isolated Postgres and API fixtures
+        timeout-minutes: 8
+        run: bash scripts/ios-smoke-fixtures.sh
+      - name: Restore exact simulator app cache
+        id: app-cache
+        if: ${{ !inputs.cold_build }}
+        uses: actions/cache/restore@v6
+        with:
+          path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/Forma.app
+          key: ios-smoke-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.6-ios26.5-${{ hashFiles('mobile/**', '!mobile/node_modules/**', '!mobile/.expo/**', '!mobile/android/**', '!mobile/ios/**', '!mobile/ios-smoke-build/**', 'scripts/ios-smoke-build.sh', '.github/workflows/ios-maestro-smoke.yml') }}
+      - name: Build bundled simulator app without distribution signing
+        timeout-minutes: 35
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        run: bash scripts/ios-smoke-build.sh
+      - name: Save exact simulator app cache
+        if: ${{ !inputs.cold_build && steps.app-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/Forma.app
+          key: ${{ steps.app-cache.outputs.cache-primary-key }}
+      - name: Run iOS smoke cases
+        timeout-minutes: 25
+        run: bash scripts/ios-smoke-run.sh
+      - name: Record measurements
+        if: always()
+        env:
+          APP_CACHE_HIT: ${{ steps.app-cache.outputs.cache-hit }}
+          SMOKE_JOB_STATUS: ${{ job.status }}
+        run: |
+          node scripts/ios-smoke-report.mjs
+      - name: Stop isolated fixtures
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/ios-smoke-api.pid" ]; then kill "$(cat "$RUNNER_TEMP/ios-smoke-api.pid")" || true; fi
+          if [ -d "$RUNNER_TEMP/ios-smoke-pg" ]; then pg_ctl -D "$RUNNER_TEMP/ios-smoke-pg" -m immediate stop || true; fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ios-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/ios-smoke
+          retention-days: 14
+          if-no-files-found: warn

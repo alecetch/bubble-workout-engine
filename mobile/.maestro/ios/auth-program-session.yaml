@@ -1,0 +1,52 @@
+appId: com.bubbleworkout.mobile
+---
+- launchApp:
+    permissions:
+      all: unset
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 30000
+- tapOn: "Sign in"
+- tapOn:
+    id: "email-input"
+- inputText: ${TEST_EMAIL}
+- tapOn:
+    id: "password-input"
+- inputText: ${TEST_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "login-submit-button"
+# This assertion is mandatory: a previously granted prompt cannot pass this case.
+- extendedWaitUntil:
+    visible: '.*Would Like to Send You Notifications.*'
+    timeout: 30000
+- tapOn: ${PERMISSION_BUTTON}
+- assertNotVisible: '.*Would Like to Send You Notifications.*'
+- extendedWaitUntil:
+    visible: "Program Review"
+    timeout: 30000
+- tapOn: "Programs"
+- extendedWaitUntil:
+    visible: "Active Programs"
+    timeout: 30000
+- assertVisible: ${EXPECTED_PROGRAM}
+- tapOn: ${EXPECTED_PROGRAM}
+- scrollUntilVisible:
+    element:
+      text: "Start workout"
+    direction: DOWN
+- assertVisible: "Start workout"
+- tapOn: "Settings"
+- assertVisible: "Settings"
+# Force quit without clearing app data or logging in again.
+- stopApp
+- openLink: "formai://"
+- extendedWaitUntil:
+    visible: "Program Review"
+    timeout: 30000
+- assertNotVisible: "Sign in"
+- tapOn: "Programs"
+- extendedWaitUntil:
+    visible: "Active Programs"
+    timeout: 30000
+- assertVisible: ${EXPECTED_PROGRAM}
