@@ -10,6 +10,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "vitest run",
+    "check:ios-safety": "node scripts/check-ios-safety.mjs",
+    "check:ios-signoff": "node scripts/validate-ios-signoff.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:all": "vitest run --coverage"

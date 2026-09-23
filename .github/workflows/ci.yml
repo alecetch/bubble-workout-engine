@@ -85,6 +85,12 @@ jobs:
         working-directory: mobile
         run: node scripts/validate-coverage-manifest.mjs
 
+      - name: Check iOS crash-avoidance rules and release gate tests
+        working-directory: mobile
+        run: |
+          node scripts/check-ios-safety.mjs
+          node --test scripts/__tests__/check-ios-safety.test.mjs scripts/__tests__/validate-ios-signoff.test.mjs
+
       - name: Check accessibility label regression
         working-directory: mobile
         run: node scripts/check-a11y-regression.mjs
