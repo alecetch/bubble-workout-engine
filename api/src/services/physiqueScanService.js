@@ -344,7 +344,12 @@ async function fetchPriorPhotoForAnalysis(priorRecentScan) {
   }
 }
 
-export async function runPremiumScan(userId, photoBuffer, db = pool) {
+export async function runPremiumScan(userId, photoBuffer, db = pool, {
+  analysePhoto = analysePremiumPhysiquePhoto,
+  putPhoto = putObject,
+  deletePhoto = deleteObject,
+  fetchPriorPhoto = fetchPriorPhotoForAnalysis,
+} = {}) {
   let s3Key = null;
 
   try {
@@ -376,6 +381,32 @@ export async function runPremiumScan(userId, photoBuffer, db = pool) {
       throw err;
     }
 
+    // Autocommitted before external work: concurrent requests compete for one
+    // account reservation, and failures must not refund a potentially paid call.
+    const reservation = await db.query(
+      `UPDATE app_user
+       SET physique_scan_attempted_at = now()
+       WHERE id = $1
+         AND (physique_scan_attempted_at IS NULL
+              OR physique_scan_attempted_at <= now() - interval '24 hours')
+       RETURNING physique_scan_attempted_at`,
+      [userId],
+    );
+    if (!reservation.rows.length) {
+      const usage = await db.query(
+        `SELECT physique_scan_attempted_at + interval '24 hours' AS next_scan_at,
+                GREATEST(1, CEIL(EXTRACT(EPOCH FROM
+                  (physique_scan_attempted_at + interval '24 hours' - now())))) AS retry_after_seconds
+         FROM app_user WHERE id = $1`,
+        [userId],
+      );
+      const err = new Error("You can try one physique scan every 24 hours. Please come back when your next scan is available.");
+      err.code = "physique_scan_limit_reached";
+      err.nextScanAt = usage.rows[0]?.next_scan_at ?? null;
+      err.retryAfterSeconds = Number(usage.rows[0]?.retry_after_seconds ?? 86400);
+      throw err;
+    }
+
     const priorScans = priorScansResult.rows ?? [];
     const priorRecentScan = priorScans.find((row) => {
       const submittedAt = new Date(row.submitted_at).getTime();
@@ -384,10 +415,10 @@ export async function runPremiumScan(userId, photoBuffer, db = pool) {
 
     const timestamp = Date.now();
     s3Key = `physique/${userId}/premium-${timestamp}.jpg`;
-    await putObject(s3Key, photoBuffer, "image/jpeg", PHYSIQUE_BUCKET);
+    await putPhoto(s3Key, photoBuffer, "image/jpeg", PHYSIQUE_BUCKET);
 
-    const priorPhoto = await fetchPriorPhotoForAnalysis(priorRecentScan);
-    const rawAnalysis = await analysePremiumPhysiquePhoto(photoBuffer.toString("base64"), priorPhoto);
+    const priorPhoto = await fetchPriorPhoto(priorRecentScan);
+    const rawAnalysis = await analysePhoto(photoBuffer.toString("base64"), priorPhoto);
     const normalized = normalisePremiumAnalysis(rawAnalysis, priorRecentScan);
 
     const visibleRegionCount = Object.values(normalized.region_scores)
@@ -483,7 +514,7 @@ export async function runPremiumScan(userId, photoBuffer, db = pool) {
     };
   } catch (err) {
     if (s3Key) {
-      deleteObject(s3Key, PHYSIQUE_BUCKET).catch(() => {});
+      deletePhoto(s3Key, PHYSIQUE_BUCKET).catch(() => {});
     }
     throw err;
   }
