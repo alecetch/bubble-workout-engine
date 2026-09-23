@@ -22,6 +22,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 
 type AppTabsProps = {
   homeInitialRoute: AppEntryRoute;
+  hasActiveProgram: boolean;
 };
 
 function ProgramsTabScreen(): React.JSX.Element {
@@ -52,12 +53,12 @@ function SettingsTabScreen(): React.JSX.Element {
   return <mod.SettingsStackNavigator />;
 }
 
-export function AppTabs({ homeInitialRoute }: AppTabsProps): React.JSX.Element {
-  logger.boot("AppTabs render", { homeInitialRoute });
+export function AppTabs({ homeInitialRoute, hasActiveProgram }: AppTabsProps): React.JSX.Element {
+  logger.boot("AppTabs render", { homeInitialRoute, hasActiveProgram });
 
   return (
     <Tab.Navigator
-      initialRouteName={homeInitialRoute === "ProgramReview" ? "TodayTab" : "HomeTab"}
+      initialRouteName={homeInitialRoute === "ProgramReview" && hasActiveProgram ? "TodayTab" : "HomeTab"}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.accent,

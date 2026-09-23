@@ -148,6 +148,17 @@ describe("api hooks", () => {
         expect(getProgramDayFullMock).not.toHaveBeenCalled();
       });
     });
+
+    it("useActivePrograms does not fetch when enabled is false", async () => {
+      const { result } = renderHook(() => useActivePrograms(false), {
+        wrapper: makeWrapper(queryClient),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(fetchActiveProgramsMock).not.toHaveBeenCalled();
+    });
   });
 
   describe("staleTime values", () => {
