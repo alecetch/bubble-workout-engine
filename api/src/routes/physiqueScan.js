@@ -6,7 +6,7 @@ import { deleteObject, getPresignedUrl, getInternalPresignedUrl, PHYSIQUE_BUCKET
 import { runPremiumScan } from "../services/physiqueScanService.js";
 import { publicInternalError } from "../utils/publicError.js";
 
-const PHOTO_TOKEN_SECRET = process.env.JWT_SECRET || "dev-secret";
+const PHOTO_TOKEN_SECRET = process.env.JWT_SECRET;
 const API_BASE = (process.env.API_PUBLIC_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 
 function toScoreDelta(current, prior) {
@@ -62,25 +62,39 @@ function parseRegionTrendRows(rows) {
   return regionTrends;
 }
 
-export async function handleScanSubmit(req, res) {
-  const userId = req.auth.user_id;
-  if (!req.file) {
-    return res.status(400).json({ ok: false, code: "missing_photo", error: "Photo file is required." });
-  }
+export function createScanSubmitHandler({ db = pool, runScan = runPremiumScan } = {}) {
+  return async function handleScanSubmit(req, res) {
+    const userId = req.auth.user_id;
+    if (!req.file) {
+      return res.status(400).json({ ok: false, code: "missing_photo", error: "Photo file is required." });
+    }
 
-  try {
-    const result = await runPremiumScan(userId, req.file.buffer, pool);
-    return res.status(201).json(result);
-  } catch (err) {
-    if (err?.code === "consent_required") {
-      return res.status(403).json({ ok: false, code: "consent_required", error: err.message });
+    try {
+      const result = await runScan(userId, req.file.buffer, db);
+      return res.status(201).json(result);
+    } catch (err) {
+      if (err?.code === "physique_scan_limit_reached") {
+        res.set("Retry-After", String(err.retryAfterSeconds));
+        return res.status(429).json({
+          ok: false,
+          code: err.code,
+          error: err.message,
+          next_scan_at: err.nextScanAt,
+          retry_after_seconds: err.retryAfterSeconds,
+        });
+      }
+      if (err?.code === "consent_required") {
+        return res.status(403).json({ ok: false, code: "consent_required", error: err.message });
+      }
+      if (err?.code === "low_quality_photo") {
+        return res.status(422).json({ ok: false, code: "low_quality_photo", error: err.message });
+      }
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
-    if (err?.code === "low_quality_photo") {
-      return res.status(422).json({ ok: false, code: "low_quality_photo", error: err.message });
-    }
-    return res.status(500).json({ ok: false, error: publicInternalError(err) });
-  }
+  };
 }
+
+export const handleScanSubmit = createScanSubmitHandler();
 
 // Mounted without userAuth — the signed token in ?t= is self-contained auth.
 export const physiquePhotoRouter = express.Router();
