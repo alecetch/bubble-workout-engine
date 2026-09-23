@@ -70,7 +70,11 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const state = { rows: [], editing: null, regions: [], equipment: [] };
-    $("token").value = localStorage.getItem("cooldown_admin_internal_token") || "";
+    $("token").value = localStorage.getItem("cooldown_admin_internal_token")
+      || localStorage.getItem("internalToken")
+      || localStorage.getItem("adminToken")
+      || localStorage.getItem("warmup_admin_internal_token")
+      || "";
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
     function headers(json=true){const h={"X-Internal-Token":$("token").value.trim()}; if(json)h["Content-Type"]="application/json"; return h;}
     function setStatus(text){$("status").textContent=text;}
@@ -113,7 +117,12 @@
     $("save").onclick=(e)=>{e.preventDefault();save().catch((err)=>setStatus(err.message));};
     $("poster").onclick=async(e)=>{e.preventDefault(); if(!state.editing)return; await api(`/admin/cooldown-exercises/${encodeURIComponent(state.editing.cooldownExerciseId)}/use-poster-as-still`,{method:"POST"}); await load();};
     document.addEventListener("click",async(e)=>{const t=e.target;if(t.dataset?.edit)openEditor(state.rows.find((r)=>r.cooldownExerciseId===t.dataset.edit)); if(t.dataset?.archive){const r=state.rows.find((x)=>x.cooldownExerciseId===t.dataset.archive); if(r?.isArchived) await api(`/admin/cooldown-exercises/${encodeURIComponent(r.cooldownExerciseId)}`,{method:"PATCH",body:JSON.stringify({...r,isArchived:false})}); else await api(`/admin/cooldown-exercises/${encodeURIComponent(t.dataset.archive)}`,{method:"DELETE"}); await load();} if(t.dataset?.chip){state[t.dataset.chip].splice(Number(t.dataset.index),1); renderChipEditor(t.dataset.chip);}});
-    if ($("token").value) load().catch((e)=>setStatus(e.message));
+    if ($("token").value) {
+      load().catch((e)=>setStatus(e.message));
+    } else {
+      setStatus("Enter your admin token and click Save token to load exercises.");
+      $("rows").innerHTML = '<tr><td colspan="8">Admin authentication is required to load exercises.</td></tr>';
+    }
   </script>
 </body>
 </html>
