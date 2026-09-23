@@ -288,6 +288,27 @@ describe("PhysiqueIntelligenceScreen", () => {
     expect(screen.queryByText("Photo not usable")).not.toBeInTheDocument();
   });
 
+  it("shows a friendly cooldown state with next availability and no retry action", async () => {
+    submitScanMutateAsyncMock.mockRejectedValue(new ApiError(429, "Rate limited", {
+      code: "physique_scan_limit_reached", next_scan_at: "2026-09-24T10:00:00Z", retry_after_seconds: 86400,
+    }));
+    await advanceToPreview();
+    fireEvent.click(screen.getByText("Analyse"));
+    expect(await screen.findByText("Your next scan can wait")).toBeInTheDocument();
+    expect(screen.getByText(/Your next scan is available on/)).toBeInTheDocument();
+    expect(screen.getByText(/one physique scan every 24 hours/)).toBeInTheDocument();
+    expect(screen.queryByText("Analyse")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(submitScanMutateAsyncMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses friendly fallback copy when the cooldown date is missing", async () => {
+    submitScanMutateAsyncMock.mockRejectedValue(new ApiError(429, "Rate limited", { code: "physique_scan_limit_reached" }));
+    await advanceToPreview();
+    fireEvent.click(screen.getByText("Analyse"));
+    expect(await screen.findByText("Please come back tomorrow for your next scan.")).toBeInTheDocument();
+  });
+
   it("generic error from submitScan transitions to error phase", async () => {
     submitScanMutateAsyncMock.mockRejectedValue(new Error("Network error"));
 

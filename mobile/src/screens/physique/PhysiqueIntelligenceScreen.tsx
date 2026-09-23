@@ -33,6 +33,7 @@ type ScreenState =
   | { phase: "result"; photoUri: string; result: ScanResult }
   | { phase: "upgrade" }
   | { phase: "low_quality" }
+  | { phase: "limited"; nextScanAt: string | null }
   | { phase: "error"; message: string };
 
 const MILESTONE_LABELS: Record<string, string> = {
@@ -140,6 +141,12 @@ export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Ele
       await scansQuery.refetch();
       setState({ phase: "result", photoUri, result });
     } catch (error) {
+      if (error instanceof ApiError && error.status === 429 &&
+          (error.details as { code?: string } | undefined)?.code === "physique_scan_limit_reached") {
+        const nextScanAt = (error.details as { next_scan_at?: string }).next_scan_at;
+        setState({ phase: "limited", nextScanAt: nextScanAt && Number.isFinite(Date.parse(nextScanAt)) ? nextScanAt : null });
+        return;
+      }
       if (error instanceof ApiError && error.status === 402) {
         setState({ phase: "upgrade" });
         return;
@@ -166,6 +173,23 @@ export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Ele
       Alert.alert("Share unavailable", error instanceof Error ? error.message : "Unable to share this card yet.");
     }
   }, []);
+
+  if (state.phase === "limited") {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.title}>Your next scan can wait</Text>
+        <Text style={styles.body}>You can try one physique scan every 24 hours, including attempts that could not be completed.</Text>
+        <Text style={styles.body}>
+          {state.nextScanAt
+            ? `Your next scan is available on ${new Date(state.nextScanAt).toLocaleString()}.`
+            : "Please come back tomorrow for your next scan."}
+        </Text>
+        <PressableScale style={styles.primaryButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.primaryLabel}>Done</Text>
+        </PressableScale>
+      </View>
+    );
+  }
 
   if (state.phase === "upgrade") {
     return (

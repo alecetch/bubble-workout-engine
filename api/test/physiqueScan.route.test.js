@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createDeleteScanHandler } from "../src/routes/physiqueScan.js";
+import { createDeleteScanHandler, createScanSubmitHandler } from "../src/routes/physiqueScan.js";
 import { makeRequirePremium } from "../src/middleware/requirePremium.js";
 
 const OWNER_ID = "11111111-1111-4111-8111-111111111111";
@@ -171,4 +171,19 @@ test("DELETE /api/physique/scans/:id requires premium", async () => {
     assert.equal(response.status, 402);
     assert.equal(body.code, "premium_required");
   });
+});
+
+
+test("scan limit returns 429 with retry metadata and Retry-After", async () => {
+  const handler = createScanSubmitHandler({ runScan: async (userId) => {
+    assert.equal(userId, OWNER_ID);
+    throw Object.assign(new Error("Come back tomorrow."), { code: "physique_scan_limit_reached", retryAfterSeconds: 3600, nextScanAt: "2026-09-24T10:00:00Z" });
+  } });
+  const res = { headers: {}, set(key, value) { this.headers[key] = value; }, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+  await handler({ auth: { user_id: OWNER_ID }, file: { buffer: Buffer.from("photo") } }, res);
+  assert.equal(res.statusCode, 429);
+  assert.equal(res.headers["Retry-After"], "3600");
+  assert.equal(res.body.code, "physique_scan_limit_reached");
+  assert.equal(res.body.next_scan_at, "2026-09-24T10:00:00Z");
+  assert.equal(res.body.retry_after_seconds, 3600);
 });
