@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "buildId": "REPLACE_WITH_EAS_BUILD_UUID",
+  "sourceCommit": "REPLACE_WITH_FULL_BUILD_SOURCE_SHA",
+  "tester": "REPLACE_WITH_TESTER",
+  "appVersion": "REPLACE_WITH_VERSION",
+  "buildNumber": "REPLACE_WITH_BUILD_NUMBER",
+  "deviceModel": "REPLACE_WITH_PHYSICAL_IPHONE",
+  "iosVersion": "REPLACE_WITH_IOS_VERSION",
+  "physicalDevice": true,
+  "testedAt": "REPLACE_WITH_UTC_TIMESTAMP",
+  "evidenceUrl": "REPLACE_WITH_DURABLE_HTTPS_EVIDENCE",
+  "notificationTapThroughEnabled": false,
+  "checks": {
+    "auth_keychain": "pending",
+    "notification_allow": "pending",
+    "notification_deny": "pending",
+    "universal_link_cold": "pending",
+    "universal_link_warm": "pending",
+    "workout_complete": "pending",
+    "rapid_loading_unmount": "pending",
+    "technique_media": "pending",
+    "notification_tap_through": "pending"
+  }
+}

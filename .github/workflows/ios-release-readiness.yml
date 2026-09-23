@@ -1,0 +1,70 @@
+name: iOS release readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      signoff_path:
+        description: Committed releases/ios/<candidate>.json record
+        required: true
+        type: string
+      build_id:
+        description: Exact EAS build UUID being released
+        required: true
+        type: string
+      source_sha:
+        description: Full Git SHA reported by that EAS build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  signoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Validate committed physical-device sign-off
+        env:
+          SIGNOFF_PATH: ${{ inputs.signoff_path }}
+          BUILD_ID: ${{ inputs.build_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { validateSignoff } from './mobile/scripts/validate-ios-signoff.mjs';
+          const root = fs.realpathSync('releases/ios');
+          const file = fs.realpathSync(process.env.SIGNOFF_PATH);
+          if (!file.startsWith(root + path.sep) || !file.endsWith('.json')) throw new Error('Record must be under releases/ios');
+          const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const errors = validateSignoff(record, { buildId: process.env.BUILD_ID, sourceCommit: process.env.SOURCE_SHA });
+          if (errors.length) throw new Error(errors.join('\n'));
+          fs.mkdirSync('ios-signoff-artifact');
+          fs.copyFileSync(file, 'ios-signoff-artifact/signoff.json');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, 'Physical-device sign-off validated for the specified iOS candidate. This is a human attestation, not automated iOS E2E coverage.\n');
+          JS
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: ios-candidate
+          persist-credentials: false
+      - name: Install safety checker dependencies
+        working-directory: mobile
+        run: npm ci
+      - name: Audit the candidate source against ADR-019
+        run: node mobile/scripts/check-ios-safety.mjs ios-candidate/mobile
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ios-release-signoff-${{ inputs.build_id }}
+          path: ios-signoff-artifact/signoff.json
+          if-no-files-found: error
+          retention-days: 90
