@@ -5,8 +5,40 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
+  deploy-changes:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      required: ${{ steps.changes.outputs.required }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Check deployment paths
+        id: changes
+        run: node scripts/deploy-changes.mjs
+
+  # The local reusable workflow runs at this same commit. Default success()
+  # semantics deliberately block deployment on failed, cancelled or skipped CI.
+  deploy:
+    needs: [test, e2e, native-drift-check, deploy-changes]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.deploy-changes.outputs.required == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/fly-deploy.yml
+    secrets:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
   test:
     runs-on: ubuntu-latest
 
@@ -80,6 +112,10 @@ jobs:
       - name: TypeScript check (mobile)
         working-directory: mobile
         run: npx tsc --noEmit
+
+      - name: Check production deployment gating
+        working-directory: mobile
+        run: node --test scripts/__tests__/deploy-ci-gating.test.mjs
 
       - name: Validate coverage manifest
         working-directory: mobile
