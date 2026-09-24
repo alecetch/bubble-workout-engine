@@ -6,7 +6,7 @@ import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import { Platform } from "react-native";
+import { ActivityIndicator, Platform, View } from "react-native";
 import { queryClient } from "./src/api/queryClient";
 import { AuthNavigator } from "./src/navigation/AuthNavigator";
 import { AppTabs } from "./src/navigation/AppTabs";
@@ -28,6 +28,8 @@ import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
 import { getAppStorage } from "./src/utils/appStorage";
 import { logger } from "./src/utils/logger";
+import { captureReferralLinks } from "./src/navigation/referralLinks";
+import { restoreSession } from "./src/state/session/restoreSession";
 
 initCrashReporting();
 initNetworkMonitoring();
@@ -94,19 +96,17 @@ function App(): React.JSX.Element {
 
   logger.boot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
 
+  const [restoringSession, setRestoringSession] = React.useState(true);
   React.useEffect(() => {
-    void (async () => {
-      try {
-        const url = await Linking.getInitialURL();
-        if (!url) return;
-        const match = url.match(/(?:^|\/)ref\/([A-Z2-9]{8})(?:$|\?)/);
-        if (!match?.[1]) return;
-        await getAppStorage().setItem("pendingReferralCode", match[1]);
-      } catch {
-        // Referral deep-link capture is best-effort only.
-      }
-    })();
+    let active = true;
+    void restoreSession(() => active)
+      .catch(() => { logger.boot("session restoration failed; showing sign-in"); })
+      .finally(() => { if (active) setRestoringSession(false); });
+    return () => { active = false; };
   }, []);
+
+  React.useEffect(() => captureReferralLinks(Linking, code =>
+    getAppStorage().setItem("pendingReferralCode", code)), []);
 
   React.useEffect(() => {
     if (!CAN_USE_NOTIFICATIONS_NATIVE) {
@@ -216,6 +216,12 @@ function App(): React.JSX.Element {
     if (!isAuthenticated) return;
     flushPendingNotificationResponse();
   }, [isAuthenticated]);
+
+  if (restoringSession) {
+    return <View style={{ flex: 1, justifyContent: "center", backgroundColor: colors.background }}>
+      <ActivityIndicator accessibilityLabel="Restoring session" />
+    </View>;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

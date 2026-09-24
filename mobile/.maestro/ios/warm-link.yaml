@@ -1,0 +1,20 @@
+appId: com.bubbleworkout.mobile
+---
+- launchApp:
+    permissions:
+      all: unset
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 30000
+- openLink: "formai://ref/WXYZ6789"
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 30000
+- tapOn: "Create account"
+- scrollUntilVisible:
+    element:
+      id: "referral-code-input"
+    direction: DOWN
+- assertVisible:
+    id: "referral-code-input"
+    text: "WXYZ6789"

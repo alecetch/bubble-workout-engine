@@ -120,3 +120,7 @@ api/.fly/
 ##################################
 
 docs/
+
+# Local iOS smoke build and diagnostic artifacts
+mobile/ios-smoke-build/
+artifacts/ios-smoke/

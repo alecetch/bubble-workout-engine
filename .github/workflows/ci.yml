@@ -115,7 +115,7 @@ jobs:
 
       - name: Check production deployment gating
         working-directory: mobile
-        run: node --test scripts/__tests__/deploy-ci-gating.test.mjs
+        run: node --test scripts/__tests__/deploy-ci-gating.test.mjs scripts/__tests__/ios-smoke-ci.test.mjs scripts/__tests__/ios-smoke-runner.test.mjs
 
       - name: Validate coverage manifest
         working-directory: mobile

@@ -1,0 +1,14 @@
+appId: com.bubbleworkout.mobile
+---
+- openLink: "formai://ref/ABCD2345"
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 30000
+- tapOn: "Create account"
+- scrollUntilVisible:
+    element:
+      id: "referral-code-input"
+    direction: DOWN
+- assertVisible:
+    id: "referral-code-input"
+    text: "ABCD2345"
