@@ -1,5 +1,7 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { WELCOME_HERO_URL } from "../../api/config";
+import { Image, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { LegalLinksRow } from "../../components/legal/LegalLinksRow";
@@ -13,6 +15,23 @@ type Props = NativeStackScreenProps<AuthStackParamList, "WelcomeLogin">;
 export function WelcomeLoginScreen({ navigation }: Props): React.JSX.Element {
   return (
     <View style={styles.root}>
+      {WELCOME_HERO_URL ? (
+        <>
+          <Image
+            source={{ uri: WELCOME_HERO_URL }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+          <LinearGradient
+            colors={["transparent", "rgba(15,23,42,0.55)", "rgba(15,23,42,0.90)"]}
+            locations={[0, 0.55, 1]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        </>
+      ) : null}
       <View style={styles.content}>
         <Text style={styles.title}>Welcome</Text>
       </View>
