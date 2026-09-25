@@ -225,12 +225,12 @@
     {
       "type": "component",
       "source": "src/components/program/CombinedCalendar.tsx",
-      "test": null,
-      "status": "excluded",
+      "test": "src/components/program/CombinedCalendar.component.test.tsx",
+      "status": "covered",
       "tags": [
         "program"
       ],
-      "reason": "presentational calendar shell, covered through program screen behaviour"
+      "reason": ""
     },
     {
       "type": "component",
@@ -376,12 +376,12 @@
     {
       "type": "component",
       "source": "src/components/program/SessionPickerSheet.tsx",
-      "test": null,
-      "status": "excluded",
+      "test": "src/components/program/SessionPickerSheet.component.test.tsx",
+      "status": "covered",
       "tags": [
         "program"
       ],
-      "reason": "presentational picker shell, covered through program screen behaviour"
+      "reason": ""
     },
     {
       "type": "component",

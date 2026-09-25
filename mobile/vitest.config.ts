@@ -48,9 +48,7 @@ export default defineConfig({
         "src/components/physique/PhysiqueShareCard.tsx", // physique share-card at native screenshot boundary
         "src/components/interaction/usePressScale.ts", // animation hook using Reanimated worklets; no testable business logic
         "src/components/interaction/haptics.ts", // thin wrapper over expo-haptics native API; not mockable in jsdom
-        "src/components/program/CombinedCalendar.tsx", // presentational calendar shell, covered through program screen behaviour
         "src/components/program/HeroHeader.tsx", // Reanimated + expo-linear-gradient animation component; animation worklet boundary
-        "src/components/program/SessionPickerSheet.tsx", // presentational picker shell, covered through program screen behaviour
         "src/components/program/TechniqueSheet.tsx", // presentational technique sheet, covered through workout flow behaviour
         "src/components/sharing/WeekShareCard.tsx", // share-card rendering is native/media boundary, covered by feature-level UI tests later
         "src/components/timers/RingTimer.tsx", // visual timer shell, covered through premium timer/countdown behaviour
