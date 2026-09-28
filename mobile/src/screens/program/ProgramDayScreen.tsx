@@ -11,6 +11,7 @@ import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { EquipmentOverrideSheet } from "../../components/program/EquipmentOverrideSheet";
 import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
+import { HeroHeader } from "../../components/program/HeroHeader";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
 import { computeSessionStatsFromLoggedRows, computeTotalPrescribedSets } from "../../components/program/sessionUxLogic";
@@ -414,12 +415,11 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         onScroll={(e) => { scrollOffsetY.current = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={100}
       >
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>{loadedDay.label ?? "Workout Day"}</Text>
-          <Text style={styles.heroSummary}>
-            {`${loadedDay.type ?? "Session"}${loadedDay.sessionDuration ? ` • ${loadedDay.sessionDuration} min` : ""}`}
-          </Text>
-        </View>
+        <HeroHeader
+          title={loadedDay.label ?? "Workout Day"}
+          summary={`${loadedDay.type ?? "Session"}${loadedDay.sessionDuration ? ` • ${loadedDay.sessionDuration} min` : ""}`}
+          heroMedia={loadedDay.heroMedia ?? null}
+        />
 
         <PressableScale
           style={styles.changeEquipmentLink}
@@ -585,22 +585,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: "600",
-  },
-  heroCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  heroTitle: {
-    color: colors.textPrimary,
-    ...typography.h2,
-  },
-  heroSummary: {
-    color: colors.textSecondary,
-    ...typography.body,
   },
   changeEquipmentLink: {
     alignSelf: "flex-start",

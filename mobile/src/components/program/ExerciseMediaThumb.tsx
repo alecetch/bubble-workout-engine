@@ -36,8 +36,10 @@ export function ExerciseMediaThumb({
       <View style={styles.miniFrame} testID="exercise-media-thumb">
         <Image source={{ uri: stillImageUrl }} style={styles.miniImage} resizeMode="cover" />
         {playableVideoUrl ? (
-          <View style={styles.playBadge} testID="exercise-media-play-badge">
-            <Ionicons name="play" size={12} color={colors.textPrimary} />
+          <View style={styles.playOverlay} pointerEvents="none" testID="exercise-media-play-overlay">
+            <View style={styles.playBadge} testID="exercise-media-play-badge">
+              <Ionicons name="play" size={16} color={colors.textPrimary} />
+            </View>
           </View>
         ) : null}
       </View>
@@ -132,16 +134,19 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  playBadge: {
-    position: "absolute",
-    right: 3,
-    bottom: 3,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  playOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(15,23,42,0.28)",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accent,
+  },
+  playBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15,23,42,0.78)",
     borderWidth: 1,
     borderColor: colors.textPrimary,
   },

@@ -9,6 +9,7 @@ type EnvShape = {
 // process.env) is not transformed by Metro and produces undefined in builds.
 const BAKED_API_BASE_URL: string = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 const BAKED_ENGINE_KEY: string = process.env.EXPO_PUBLIC_ENGINE_KEY ?? "";
+const BAKED_WELCOME_HERO_URL: string = process.env.EXPO_PUBLIC_WELCOME_HERO_URL ?? "";
 
 const requireFn = (globalThis as EnvShape).require;
 
@@ -44,6 +45,7 @@ function resolveEngineKey(): { key: string; source: EngineKeySource } {
 
 export const API_BASE_URL = (BAKED_API_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const ENGINE_KEY_RESOLUTION = resolveEngineKey();
+export const WELCOME_HERO_URL = BAKED_WELCOME_HERO_URL;
 export const ENGINE_KEY = ENGINE_KEY_RESOLUTION.key;
 
 export function getEngineKeyStatus(): { hasKey: boolean; source: string } {

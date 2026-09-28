@@ -23,6 +23,13 @@ describe("ExerciseMediaThumb", () => {
     expect(screen.getByTestId("exercise-media-play-badge")).toBeInTheDocument();
   });
 
+  it("shows a centered scrim and badge for a playable video", () => {
+    render(<ExerciseMediaThumb {...baseProps} />);
+    const overlay = screen.getByTestId("exercise-media-play-overlay");
+    expect(overlay).toContainElement(screen.getByTestId("exercise-media-play-badge"));
+    expect(overlay).toHaveStyle({ alignItems: "center", justifyContent: "center", pointerEvents: "none" });
+  });
+
   it("expands the player after tapping the playable thumbnail", () => {
     render(<ExerciseMediaThumb {...baseProps} />);
 
@@ -60,6 +67,7 @@ describe("ExerciseMediaThumb", () => {
 
     expect(screen.getByTestId("exercise-media-thumb")).toBeInTheDocument();
     expect(screen.queryByTestId("exercise-media-play-badge")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("exercise-media-play-overlay")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Play exercise video")).not.toBeInTheDocument();
   });
 });

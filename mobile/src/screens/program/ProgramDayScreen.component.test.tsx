@@ -28,6 +28,15 @@ import {
 
 vi.unmock("@tanstack/react-query");
 
+vi.mock("../../components/program/HeroHeader", () => ({
+  HeroHeader: (props: any) => (
+    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""}>
+      <h1>{props.title}</h1>
+      <p>{props.summary}</p>
+    </div>
+  ),
+}));
+
 const appStorageMocks = vi.hoisted(() => ({
   getItem: vi.fn(),
   setItem: vi.fn(),
@@ -414,6 +423,29 @@ describe("ProgramDayScreen", () => {
     expect(screen.getByText("Network down")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Retry"));
     expect(refetch).toHaveBeenCalledTimes(1);
+    await waitForLocalStateLoad();
+  });
+
+  it("passes the resolved day image to HeroHeader", async () => {
+    const heroMedia = "https://cdn.example.com/day-hero.jpg";
+    useProgramDayFullMock.mockReturnValue({
+      data: { ...mockDay, day: { ...mockDay.day, heroMedia } },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    } as any);
+    renderScreen();
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", heroMedia);
+    expect(screen.getByText("Lower Body")).toBeInTheDocument();
+    await waitForLocalStateLoad();
+  });
+
+  it("passes an empty hero to the text fallback when no day image is available", async () => {
+    useProgramDayFullMock.mockReturnValue({
+      data: { ...mockDay, day: { ...mockDay.day, heroMedia: null } },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    } as any);
+    renderScreen();
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "");
+    expect(screen.getByText("Lower Body")).toBeInTheDocument();
     await waitForLocalStateLoad();
   });
 
