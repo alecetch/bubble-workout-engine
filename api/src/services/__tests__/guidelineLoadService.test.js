@@ -48,13 +48,17 @@ function targetRow(exerciseId, metadata) {
   };
 }
 
+// Relative to now: the service scores anchors <= 180 days old as recent, so a fixed
+// date silently ages out (a hardcoded 2026-04-01 started failing on 2026-09-28).
+const RECENT_ANCHOR_UPDATED_AT = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
 function anchorRow({
   family,
   exerciseId,
   loadKg,
   reps,
   rir = null,
-  updatedAt = "2026-04-01T00:00:00.000Z",
+  updatedAt = RECENT_ANCHOR_UPDATED_AT,
   meta = {},
 }) {
   return {
