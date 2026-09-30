@@ -54,7 +54,8 @@ function anchorRow({
   loadKg,
   reps,
   rir = null,
-  updatedAt = "2026-04-01T00:00:00.000Z",
+  // Relative to now so the default anchor stays inside the service's 180-day freshness window.
+  updatedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
   meta = {},
 }) {
   return {
