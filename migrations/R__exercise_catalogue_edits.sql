@@ -11864,3 +11864,412 @@ ON CONFLICT (exercise_id) DO UPDATE SET
   technique_mistakes_json = EXCLUDED.technique_mistakes_json,
   technique_video_url = EXCLUDED.technique_video_url,
   load_estimation_metadata = EXCLUDED.load_estimation_metadata;
+
+
+-- ════════════════════════════════════════
+-- Exercise Catalogue Admin Changes
+-- Generated: 2026-09-30 17:22:28 UTC
+-- Description: Exercise naming cleanup batch 1: metadata, archives, renames
+-- Changes: 63-- [1] edit: sled_push
+UPDATE exercise_catalogue
+  SET min_fitness_rank = 1,
+      updated_at = now()
+  WHERE exercise_id = 'sled_push';
+
+-- [2] edit: sled_pull
+UPDATE exercise_catalogue
+  SET min_fitness_rank = 1,
+      updated_at = now()
+  WHERE exercise_id = 'sled_pull';
+
+-- [3] edit: air_bike_sprint
+UPDATE exercise_catalogue
+  SET min_fitness_rank = 1,
+      updated_at = now()
+  WHERE exercise_id = 'air_bike_sprint';
+
+-- [4] edit: db_bench_press
+UPDATE exercise_catalogue
+  SET preferred_in_json = '["strength_main","hypertrophy_main","strength_secondary","hypertrophy_secondary"]'::jsonb,
+      updated_at = now()
+  WHERE exercise_id = 'db_bench_press';
+
+-- [5] edit: singleleg_bodyweight_rdl
+UPDATE exercise_catalogue
+  SET preferred_in_json = '["strength_accessory","hypertrophy_secondary","strength_secondary","hypertrophy_accessory"]'::jsonb,
+      updated_at = now()
+  WHERE exercise_id = 'singleleg_bodyweight_rdl';
+
+-- [6] edit: db_walking_lunges
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Walking Lunge',
+      preferred_in_json = '["conditioning_main","hyrox_power","hyrox_station","strength_accessory","hypertrophy_secondary","strength_secondary","hypertrophy_accessory"]'::jsonb,
+      updated_at = now()
+  WHERE exercise_id = 'db_walking_lunges';
+
+-- [7] edit: skullcrusher
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Skullcrusher',
+      equipment_items_slugs = ARRAY['bench', 'dumbbells']::text[],
+      equipment_json = '["bench","dumbbells"]'::jsonb,
+      updated_at = now()
+  WHERE exercise_id = 'skullcrusher';
+
+-- [8] archive: farmer_carry_dumbbells
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'farmer_carry_dumbbells';
+
+-- [9] archive: farmer_carry_kettlebells
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'farmer_carry_kettlebells';
+
+-- [10] archive: farmers_carry
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'farmers_carry';
+
+-- [11] archive: farmer_carry_handles
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'farmer_carry_handles';
+
+-- [12] archive: db_flat_press
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'db_flat_press';
+
+-- [13] archive: incline_db_bench_press
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'incline_db_bench_press';
+
+-- [14] archive: tempo_back_squat
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'tempo_back_squat';
+
+-- [15] archive: sled_push_low_handle
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'sled_push_low_handle';
+
+-- [16] archive: sled_pull_rope
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'sled_pull_rope';
+
+-- [17] archive: weighted_walking_lunge
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'weighted_walking_lunge';
+
+-- [18] archive: assault_bike
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'assault_bike';
+
+-- [19] archive: singleleg_romanian_deadlift
+UPDATE exercise_catalogue
+  SET is_archived = true,
+      updated_at = now()
+  WHERE exercise_id = 'singleleg_romanian_deadlift';
+
+-- [20] edit: incline_bb_bench_press
+UPDATE exercise_catalogue
+  SET name = 'Barbell Incline Bench Press',
+      updated_at = now()
+  WHERE exercise_id = 'incline_bb_bench_press';
+
+-- [21] edit: db_incline_press
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Incline Bench Press',
+      updated_at = now()
+  WHERE exercise_id = 'db_incline_press';
+
+-- [22] edit: singlearm_db_row
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Single-Arm Row',
+      updated_at = now()
+  WHERE exercise_id = 'singlearm_db_row';
+
+-- [23] edit: singleleg_db_romanian_deadlift
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Single-Leg Romanian Deadlift',
+      updated_at = now()
+  WHERE exercise_id = 'singleleg_db_romanian_deadlift';
+
+-- [24] edit: singleleg_kb_romanian_deadlift
+UPDATE exercise_catalogue
+  SET name = 'Kettlebell Single-Leg Romanian Deadlift',
+      updated_at = now()
+  WHERE exercise_id = 'singleleg_kb_romanian_deadlift';
+
+-- [25] edit: seated_db_calf_raise
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Seated Calf Raise',
+      updated_at = now()
+  WHERE exercise_id = 'seated_db_calf_raise';
+
+-- [26] edit: double_db_front_squat
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Front Squat',
+      updated_at = now()
+  WHERE exercise_id = 'double_db_front_squat';
+
+-- [27] edit: rear_delt_fly_machine_or_db
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Rear Delt Fly',
+      updated_at = now()
+  WHERE exercise_id = 'rear_delt_fly_machine_or_db';
+
+-- [28] edit: stepup_weighted
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Step-Up',
+      updated_at = now()
+  WHERE exercise_id = 'stepup_weighted';
+
+-- [29] edit: front_rack_carry
+UPDATE exercise_catalogue
+  SET name = 'Barbell Front Rack Carry',
+      updated_at = now()
+  WHERE exercise_id = 'front_rack_carry';
+
+-- [30] edit: standing_calf_raise
+UPDATE exercise_catalogue
+  SET name = 'Machine Standing Calf Raise',
+      updated_at = now()
+  WHERE exercise_id = 'standing_calf_raise';
+
+-- [31] edit: seated_calf_raise
+UPDATE exercise_catalogue
+  SET name = 'Machine Seated Calf Raise',
+      updated_at = now()
+  WHERE exercise_id = 'seated_calf_raise';
+
+-- [32] edit: hack_squat_machine
+UPDATE exercise_catalogue
+  SET name = 'Machine Hack Squat',
+      updated_at = now()
+  WHERE exercise_id = 'hack_squat_machine';
+
+-- [33] edit: chestsupported_row_machine
+UPDATE exercise_catalogue
+  SET name = 'Machine Chest-Supported Row',
+      updated_at = now()
+  WHERE exercise_id = 'chestsupported_row_machine';
+
+-- [34] edit: face_pull
+UPDATE exercise_catalogue
+  SET name = 'Cable Face Pull',
+      updated_at = now()
+  WHERE exercise_id = 'face_pull';
+
+-- [35] edit: straightarm_pulldown
+UPDATE exercise_catalogue
+  SET name = 'Cable Straight-Arm Pulldown',
+      updated_at = now()
+  WHERE exercise_id = 'straightarm_pulldown';
+
+-- [36] edit: overhead_cable_extension
+UPDATE exercise_catalogue
+  SET name = 'Cable Overhead Triceps Extension',
+      updated_at = now()
+  WHERE exercise_id = 'overhead_cable_extension';
+
+-- [37] edit: db_rdl
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell Romanian Deadlift',
+      updated_at = now()
+  WHERE exercise_id = 'db_rdl';
+
+-- [38] edit: bstance_rdl
+UPDATE exercise_catalogue
+  SET name = 'Dumbbell B-Stance Romanian Deadlift',
+      updated_at = now()
+  WHERE exercise_id = 'bstance_rdl';
+
+-- [39] edit: rdl_and_bent_over_row
+UPDATE exercise_catalogue
+  SET name = 'Kettlebell Romanian Deadlift to Bent-Over Row',
+      updated_at = now()
+  WHERE exercise_id = 'rdl_and_bent_over_row';
+
+-- [40] edit: bodyweight_reverse_lunge
+UPDATE exercise_catalogue
+  SET name = 'Reverse Lunge',
+      updated_at = now()
+  WHERE exercise_id = 'bodyweight_reverse_lunge';
+
+-- [41] edit: single_leg_standing_calf_raise
+UPDATE exercise_catalogue
+  SET name = 'Single-Leg Standing Calf Raise',
+      updated_at = now()
+  WHERE exercise_id = 'single_leg_standing_calf_raise';
+
+-- [42] edit: bb_row_upright_row
+UPDATE exercise_catalogue
+  SET name = 'Barbell Upright Row',
+      updated_at = now()
+  WHERE exercise_id = 'bb_row_upright_row';
+
+-- [43] edit: kb_row_upright_row
+UPDATE exercise_catalogue
+  SET name = 'Kettlebell Upright Row',
+      updated_at = now()
+  WHERE exercise_id = 'kb_row_upright_row';
+
+-- [44] edit: kb_row_upright_row_and_swing
+UPDATE exercise_catalogue
+  SET name = 'Kettlebell Swing to Upright Row',
+      updated_at = now()
+  WHERE exercise_id = 'kb_row_upright_row_and_swing';
+
+-- [45] edit: wall_ball
+UPDATE exercise_catalogue
+  SET name = 'Wall Ball',
+      updated_at = now()
+  WHERE exercise_id = 'wall_ball';
+
+-- [46] edit: dead_tread
+UPDATE exercise_catalogue
+  SET name = 'Dead Tread',
+      updated_at = now()
+  WHERE exercise_id = 'dead_tread';
+
+-- [47] edit: table_row
+UPDATE exercise_catalogue
+  SET name = 'Table Row',
+      updated_at = now()
+  WHERE exercise_id = 'table_row';
+
+-- [48] edit: wheelbarrow_pull
+UPDATE exercise_catalogue
+  SET name = 'Wheelbarrow Pull',
+      updated_at = now()
+  WHERE exercise_id = 'wheelbarrow_pull';
+
+-- [49] edit: hamstring_walkouts
+UPDATE exercise_catalogue
+  SET name = 'Hamstring Walkout',
+      updated_at = now()
+  WHERE exercise_id = 'hamstring_walkouts';
+
+-- [50] edit: kb_swing_high
+UPDATE exercise_catalogue
+  SET name = 'Kettlebell Swing (High)',
+      updated_at = now()
+  WHERE exercise_id = 'kb_swing_high';
+
+-- [51] edit: kb_swing_low
+UPDATE exercise_catalogue
+  SET name = 'Kettlebell Swing (Low)',
+      updated_at = now()
+  WHERE exercise_id = 'kb_swing_low';
+
+-- [52] edit: pike_push_up
+UPDATE exercise_catalogue
+  SET name = 'Pike Push-Up',
+      updated_at = now()
+  WHERE exercise_id = 'pike_push_up';
+
+-- [53] edit: atomic_push_ups
+UPDATE exercise_catalogue
+  SET name = 'Atomic Push-Up',
+      updated_at = now()
+  WHERE exercise_id = 'atomic_push_ups';
+
+-- [54] edit: closegrip_pushups
+UPDATE exercise_catalogue
+  SET name = 'Close-Grip Push-Up',
+      updated_at = now()
+  WHERE exercise_id = 'closegrip_pushups';
+
+-- [55] edit: box_step_up
+UPDATE exercise_catalogue
+  SET name = 'Box Step-Up',
+      updated_at = now()
+  WHERE exercise_id = 'box_step_up';
+
+-- [56] edit: mountain_climber
+UPDATE exercise_catalogue
+  SET name = 'Mountain Climber',
+      updated_at = now()
+  WHERE exercise_id = 'mountain_climber';
+
+-- [57] edit: walking_lunges
+UPDATE exercise_catalogue
+  SET name = 'Walking Lunge',
+      updated_at = now()
+  WHERE exercise_id = 'walking_lunges';
+
+-- [58] edit: kb_walking_lunges
+UPDATE exercise_catalogue
+  SET name = 'Kettlebell Walking Lunge',
+      updated_at = now()
+  WHERE exercise_id = 'kb_walking_lunges';
+
+-- [59] edit: shuttle_runs
+UPDATE exercise_catalogue
+  SET name = 'Shuttle Run',
+      updated_at = now()
+  WHERE exercise_id = 'shuttle_runs';
+
+-- [60] edit: wide_table_rear_delt_row
+UPDATE exercise_catalogue
+  SET name = 'Wide Table Rear Delt Row',
+      updated_at = now()
+  WHERE exercise_id = 'wide_table_rear_delt_row';
+
+-- [61] edit: cyclist_squat_heels_elevated
+UPDATE exercise_catalogue
+  SET name = 'Heel-Elevated Cyclist Squat',
+      updated_at = now()
+  WHERE exercise_id = 'cyclist_squat_heels_elevated';
+
+-- [62] edit: devils_press
+UPDATE exercise_catalogue
+  SET name = 'Devil''s Press',
+      updated_at = now()
+  WHERE exercise_id = 'devils_press';
+
+-- [63] edit: weighted_pushup
+UPDATE exercise_catalogue
+  SET name = 'Plate-Loaded Push-Up',
+      updated_at = now()
+  WHERE exercise_id = 'weighted_pushup';
+
+
+-- ════════════════════════════════════════
+-- Exercise Catalogue Admin Changes
+-- Generated: 2026-09-30 17:22:35 UTC
+-- Description: Exercise naming cleanup batch 2: renames freed by batch 1
+-- Changes: 3-- [1] edit: farmer_carry_weighted
+UPDATE exercise_catalogue
+  SET name = 'Farmer Carry',
+      updated_at = now()
+  WHERE exercise_id = 'farmer_carry_weighted';
+
+-- [2] edit: singleleg_bodyweight_rdl
+UPDATE exercise_catalogue
+  SET name = 'Single-Leg Romanian Deadlift',
+      updated_at = now()
+  WHERE exercise_id = 'singleleg_bodyweight_rdl';
+
+-- [3] edit: standing_calf_raise_bodyweight
+UPDATE exercise_catalogue
+  SET name = 'Standing Calf Raise',
+      updated_at = now()
+  WHERE exercise_id = 'standing_calf_raise_bodyweight';
