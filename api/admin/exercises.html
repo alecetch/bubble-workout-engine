@@ -188,7 +188,7 @@
   <div class="header">
     <div class="header-top">
       <h1>Exercise Catalogue</h1>
-      <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">Sync Sync All to Flyway</button>
+      <button id="sync-all-btn" style="background:#198754;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:13px;margin-left:8px">Sync All to Flyway</button>
     </div>
     <div class="controls">
       <div class="ctrl">
@@ -288,6 +288,12 @@
       <button id="clear-filters-btn" type="button" class="secondary sm" style="align-self:flex-end">Clear filters</button>
     </div>
     <div id="status"></div>
+  </div>
+  <div id="sync-status-banner" style="display:none;padding:10px 20px;font-size:13px;border-radius:4px;margin:0;">
+    <span id="sync-status-text"></span>
+    <button id="sync-now-btn" style="margin-left:12px;display:none;background:#d97706;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;">
+      Sync Now
+    </button>
   </div>
 
   <!-- Tabs -->
@@ -841,6 +847,7 @@ async function loadState() {
   setStatus("Loading...");
   try {
     const data = await apiFetch(`${BASE}/full-state`);
+    checkSyncStatus(); // not awaited: snapshot generation shouldn't delay the table render
     exercises = data.exercises ?? [];
     gaps = data.coverage_gaps ?? [];
     equipmentSlugs = data.equipmentSlugs ?? [];
@@ -1578,6 +1585,7 @@ document.getElementById("session-apply-btn").addEventListener("click", async () 
   el.textContent = "Applying..."; el.style.color = "#fff";
   try {
     const d = await apiFetch(`${BASE}/session/apply-to-db`, { method: "POST" });
+    checkSyncStatus();
     el.textContent = d.message ?? "Done"; el.style.color = "#6ee7b7";
     const state = await apiFetch(`${BASE}/full-state`);
     exercises = state.exercises ?? [];
@@ -1627,6 +1635,7 @@ document.getElementById("mig-apply-btn").addEventListener("click", async () => {
   el.textContent = "Applying..."; el.style.color = "var(--muted)";
   try {
     const d = await apiFetch(`${BASE}/session/apply-to-db`, { method: "POST" });
+    checkSyncStatus();
     el.textContent = d.message ?? "Done"; el.style.color = "var(--success)";
     const state = await apiFetch(`${BASE}/full-state`);
     exercises = state.exercises ?? [];
@@ -1645,6 +1654,7 @@ document.getElementById("mig-generate-btn").addEventListener("click", async () =
   el.textContent = "Applying...";
   try {
     const d = await apiFetch(`${BASE}/session/generate-migration`, { method: "POST" });
+    checkSyncStatus();
     el.textContent = d.message ?? "Done";
     el.style.color = d.db_error ? "var(--err)" : "var(--success)";
     if (d.db_applied) {
@@ -2103,23 +2113,65 @@ if (ensureActiveAdminSession()) {
 }
 installAdminIdleTimeout();
 
-document.getElementById("sync-all-btn").addEventListener("click", async () => {
-  const btn = document.getElementById("sync-all-btn");
+async function checkSyncStatus() {
+  try {
+    const data = await apiFetch("/admin/sync-status");
+    const banner = document.getElementById("sync-status-banner");
+    const text = document.getElementById("sync-status-text");
+    const btn = document.getElementById("sync-now-btn");
+    if (!banner || !text || !btn) return;
+
+    banner.style.display = "block";
+    if (data.status === "dirty") {
+      banner.style.background = "#451a03";
+      banner.style.color = "#fbbf24";
+      banner.style.border = "1px solid #92400e";
+      text.textContent = `Seed files out of date: ${data.changed_files.join(", ")}`;
+      btn.style.display = "inline";
+    } else if (data.status === "clean") {
+      banner.style.background = "#052e16";
+      banner.style.color = "#4ade80";
+      banner.style.border = "1px solid #166534";
+      const lastSynced = data.last_synced_at
+        ? new Date(data.last_synced_at).toLocaleString()
+        : "never";
+      text.textContent = `Seed files are up to date (last synced ${lastSynced}).`;
+      btn.style.display = "none";
+    } else {
+      banner.style.background = "#1f2937";
+      banner.style.color = "#9ca3af";
+      banner.style.border = "1px solid #374151";
+      text.textContent = data.message;
+      btn.style.display = "none";
+    }
+  } catch (_) {
+    const banner = document.getElementById("sync-status-banner");
+    if (banner) banner.style.display = "none";
+  }
+}
+
+async function syncAllToFlyway(btn) {
   btn.disabled = true;
+  const originalText = btn.textContent;
   btn.textContent = "Syncing...";
   try {
     const data = await apiFetch("/admin/sync-all-to-flyway", { method: "POST" });
     const lines = data.files.map(f =>
-      `${f.ok ? "OK" : "X"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
+      `${f.ok ? (f.written ? "OK (written)" : "OK (unchanged)") : "FAILED"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
     ).join("\n");
-    window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
+    window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"} (${data.written_count} written):\n\n${lines}`);
+    checkSyncStatus();
   } catch (err) {
     window.alert("Sync failed: " + (err.message || String(err)));
   } finally {
     btn.disabled = false;
-    btn.textContent = "Sync Sync All to Flyway";
+    btn.textContent = originalText;
   }
-});
+}
+
+for (const id of ["sync-all-btn", "sync-now-btn"]) {
+  document.getElementById(id).addEventListener("click", () => syncAllToFlyway(document.getElementById(id)));
+}
 </script>
 <datalist id="pref-tag-options">
   <option value="conditioning_main"><option value="finisher">

@@ -1,5 +1,5 @@
 import express from "express";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pool } from "../db.js";
@@ -219,9 +219,9 @@ ON CONFLICT (template_id) DO UPDATE SET
 
 // ── File writer ────────────────────────────────────────────────────────────
 
-function writeSnapshot(filename, content) {
+function writeSnapshot(dir, filename, content) {
   try {
-    writeFileSync(join(MIGRATIONS_DIR, filename), content, "utf8");
+    writeFileSync(join(dir, filename), content, "utf8");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -234,110 +234,105 @@ function toIsoOrNull(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export async function getSyncStatus(db = pool) {
-  const { rows: auditRows } = await db.query(`
+export const SYNC_TARGETS = [
+  "R__exercise_catalogue_edits.sql",
+  "R__seed_program_generation_config.sql",
+  "R__seed_program_rep_rules.sql",
+  "R__seed_narration_template.sql",
+];
+
+export async function buildSyncSnapshots(db = pool) {
+  const snapshots = [
+    await exportExerciseCatalogueSnapshot(),
+    await generatePgcSnapshot(db),
+    await generateRepRulesSnapshot(db),
+    await generateNarrationSnapshot(db),
+  ];
+  return snapshots.map((snapshot, i) => ({ file: SYNC_TARGETS[i], ...snapshot }));
+}
+
+export function normalizeSnapshot(text) {
+  return String(text).replace(/\r\n/g, "\n").split("\n")
+    .filter(line => !line.startsWith("-- Generated:")).join("\n");
+}
+
+export async function getSyncStatus(db = pool, {
+  migrationsDir = MIGRATIONS_DIR,
+  buildSnapshots = buildSyncSnapshots,
+} = {}) {
+  const { rows } = await db.query(`
     SELECT ts FROM admin_audit_log
     WHERE action = 'sync_all_to_flyway'
     ORDER BY ts DESC LIMIT 1
   `);
-  const lastSyncedAt = auditRows[0]?.ts ?? null;
-
-  const { rows: editRows } = await db.query(`
-    SELECT MAX(latest) AS latest FROM (
-      SELECT MAX(updated_at) AS latest FROM narration_template
-      UNION ALL
-      SELECT MAX(updated_at) FROM program_rep_rule
-      UNION ALL
-      SELECT MAX(updated_at) FROM program_generation_config
-      UNION ALL
-      SELECT MAX(updated_at) FROM exercise_catalogue
-    ) sub
-  `);
-  const latestEditAt = editRows[0]?.latest ?? null;
-
-  const lastSyncedTime = lastSyncedAt === null ? null : new Date(lastSyncedAt).getTime();
-  const latestEditTime = latestEditAt === null ? null : new Date(latestEditAt).getTime();
-  const dirty = lastSyncedTime === null
-    || (latestEditTime !== null && latestEditTime > lastSyncedTime);
-
+  const last_synced_at = toIsoOrNull(rows[0]?.ts);
+  if (!existsSync(migrationsDir)) {
+    return { status: "unavailable", dirty: false, last_synced_at, files: [], changed_files: [],
+      message: "Seed files are not present in this environment; sync status is unavailable." };
+  }
+  const snapshots = await buildSnapshots(db);
+  const files = snapshots.map(({ file, content, rows }) => {
+    try {
+      const disk = readFileSync(join(migrationsDir, file), "utf8");
+      return { file, rows, status: normalizeSnapshot(disk) === normalizeSnapshot(content) ? "in_sync" : "changed" };
+    } catch (err) {
+      return err.code === "ENOENT" ? { file, rows, status: "missing" }
+        : { file, rows, status: "error", error: err.message };
+    }
+  });
+  const changed_files = files.filter(f => f.status === "changed" || f.status === "missing").map(f => f.file);
+  const errors = files.filter(f => f.status === "error");
+  const dirty = changed_files.length > 0;
   return {
-    dirty,
-    last_synced_at: toIsoOrNull(lastSyncedAt),
-    latest_edit_at: toIsoOrNull(latestEditAt),
-    message: dirty
-      ? "Unsynced changes detected. Run 'Sync All to Flyway' to protect your edits."
+    status: errors.length ? "error" : dirty ? "dirty" : "clean",
+    dirty, last_synced_at, files, changed_files,
+    message: errors.length ? `Could not read one or more seed files: ${errors.map(f => f.file).join(", ")}.`
+      : dirty ? `Seed files differ from the database: ${changed_files.join(", ")}. Run 'Sync All to Flyway' to protect your edits.`
       : "Seed files are up to date.",
   };
 }
 
-// ── GET /admin/sync-status ───────────────────────────────────────────────
+function syncOptions(req) {
+  return {
+    migrationsDir: req.app?.locals?.migrationsDir ?? MIGRATIONS_DIR,
+    buildSnapshots: req.app?.locals?.syncSnapshotBuilder ?? buildSyncSnapshots,
+  };
+}
 
-adminSyncRouter.get("/sync-status", async (_req, res) => {
+adminSyncRouter.get("/sync-status", async (req, res) => {
   try {
-    const db = _req.app?.locals?.pool || pool;
-    return res.json(await getSyncStatus(db));
+    return res.json(await getSyncStatus(req.app?.locals?.pool || pool, syncOptions(req)));
   } catch (err) {
     return res.status(500).json({ ok: false, error: publicInternalError(err) });
   }
 });
 
-// ── POST /admin/sync-all-to-flyway ─────────────────────────────────────────
-
 adminSyncRouter.post("/sync-all-to-flyway", async (req, res) => {
   const results = [];
-
+  let written_count = 0;
   try {
-    // 1. Exercise catalogue (delegates to existing generator)
-    const exerciseSnap = await exportExerciseCatalogueSnapshot();
-    const exerciseWrite = writeSnapshot("R__exercise_catalogue_edits.sql", exerciseSnap.content);
-    results.push({
-      file: "R__exercise_catalogue_edits.sql",
-      rows: exerciseSnap.rows,
-      ok: exerciseWrite.ok,
-      error: exerciseWrite.error ?? null,
+    const db = req.app?.locals?.pool || pool;
+    const { migrationsDir, buildSnapshots } = syncOptions(req);
+    const audit = req.app?.locals?.syncAuditLog ?? auditLog;
+    for (const { file, content, rows } of await buildSnapshots(db)) {
+      try {
+        const path = join(migrationsDir, file);
+        const unchanged = existsSync(path)
+          && normalizeSnapshot(readFileSync(path, "utf8")) === normalizeSnapshot(content);
+        const result = unchanged ? { ok: true } : writeSnapshot(migrationsDir, file, content);
+        const written = result.ok && !unchanged;
+        if (written) written_count++;
+        results.push({ file, rows, ok: result.ok, written, error: result.error ?? null });
+      } catch (err) {
+        results.push({ file, rows, ok: false, written: false, error: err.message });
+      }
+    }
+    const ok = results.every(r => r.ok);
+    await audit(req, {
+      action: "sync_all_to_flyway", entity: "migration_files", entityId: "all", detail: { results },
     });
-
-    // 2. Program generation config
-    const pgcSnap = await generatePgcSnapshot(pool);
-    const pgcWrite = writeSnapshot("R__seed_program_generation_config.sql", pgcSnap.content);
-    results.push({
-      file: "R__seed_program_generation_config.sql",
-      rows: pgcSnap.rows,
-      ok: pgcWrite.ok,
-      error: pgcWrite.error ?? null,
-    });
-
-    // 3. Rep rules
-    const repSnap = await generateRepRulesSnapshot(pool);
-    const repWrite = writeSnapshot("R__seed_program_rep_rules.sql", repSnap.content);
-    results.push({
-      file: "R__seed_program_rep_rules.sql",
-      rows: repSnap.rows,
-      ok: repWrite.ok,
-      error: repWrite.error ?? null,
-    });
-
-    // 4. Narration templates
-    const narSnap = await generateNarrationSnapshot(pool);
-    const narWrite = writeSnapshot("R__seed_narration_template.sql", narSnap.content);
-    results.push({
-      file: "R__seed_narration_template.sql",
-      rows: narSnap.rows,
-      ok: narWrite.ok,
-      error: narWrite.error ?? null,
-    });
-
-    const allOk = results.every((r) => r.ok);
-
-    await auditLog(req, {
-      action: "sync_all_to_flyway",
-      entity: "migration_files",
-      entityId: "all",
-      detail: { results },
-    });
-
-    return res.status(allOk ? 200 : 207).json({ ok: allOk, files: results });
+    return res.status(ok ? 200 : 207).json({ ok, written_count, files: results });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: publicInternalError(err), files: results });
+    return res.status(500).json({ ok: false, error: publicInternalError(err), written_count, files: results });
   }
 });
