@@ -619,13 +619,13 @@
           if (!banner || !text || !btn) return;
 
           banner.style.display = "block";
-          if (data.dirty) {
+          if (data.status === "dirty") {
             banner.style.background = "#451a03";
             banner.style.color = "#fbbf24";
             banner.style.border = "1px solid #92400e";
-            text.textContent = "Unsynced admin edits detected - seed files are out of date.";
+            text.textContent = `Seed files out of date: ${data.changed_files.join(", ")}`;
             btn.style.display = "inline";
-          } else {
+          } else if (data.status === "clean") {
             banner.style.background = "#052e16";
             banner.style.color = "#4ade80";
             banner.style.border = "1px solid #166534";
@@ -633,6 +633,12 @@
               ? new Date(data.last_synced_at).toLocaleString()
               : "never";
             text.textContent = `Seed files are up to date (last synced ${lastSynced}).`;
+            btn.style.display = "none";
+          } else {
+            banner.style.background = "#1f2937";
+            banner.style.color = "#9ca3af";
+            banner.style.border = "1px solid #374151";
+            text.textContent = data.message;
             btn.style.display = "none";
           }
         } catch (_) {
@@ -648,9 +654,9 @@
         try {
           const data = await apiFetch("/admin/sync-all-to-flyway", { method: "POST" });
           const lines = data.files.map(f =>
-            `${f.ok ? "OK" : "FAILED"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
+            `${f.ok ? (f.written ? "OK (written)" : "OK (unchanged)") : "FAILED"} ${f.file} (${f.rows} rows)${f.error ? " - " + f.error : ""}`
           ).join("\n");
-          window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"}:\n\n${lines}`);
+          window.alert(`Sync ${data.ok ? "complete" : "partial - some files failed"} (${data.written_count} written):\n\n${lines}`);
           await checkSyncStatus();
         } catch (err) {
           window.alert("Sync failed: " + (err.message || String(err)));
