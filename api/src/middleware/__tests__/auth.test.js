@@ -67,14 +67,32 @@ test("valid INTERNAL_API_TOKEN passes", async () => {
   });
 });
 
-test("valid ENGINE_KEY passes", async () => {
-  await withEnv({ ENGINE_KEY: "engine-key-16chars" }, () => {
-    const req = mockReq({ headers: { "x-engine-key": "engine-key-16chars" } });
+test("X-Engine-Key alone is rejected even when it matches ENGINE_KEY", () => {
+  withEnv({ ENGINE_KEY: "engine-key-test-only", INTERNAL_API_TOKEN: "internal-token-test-only" }, () => {
     const res = mockRes();
-    let nextCalled = false;
-    requireInternalToken(req, res, () => { nextCalled = true; });
-    assert.equal(nextCalled, true);
-    assert.equal(res.statusCode, 200);
+    requireInternalToken(mockReq({ headers: { "x-engine-key": "engine-key-test-only" } }), res, () => assert.fail("must reject"));
+    assert.equal(res.statusCode, 401);
+    assert.deepEqual(res.body, { ok: false, request_id: "test-req-id", code: "unauthorized", error: "Invalid or missing X-Internal-Token" });
+  });
+});
+
+test("X-Engine-Key does not substitute for a wrong X-Internal-Token", () => {
+  withEnv({ ENGINE_KEY: "engine-key-test-only", INTERNAL_API_TOKEN: "internal-token-test-only" }, () => {
+    const res = mockRes();
+    requireInternalToken(mockReq({ headers: { "x-engine-key": "engine-key-test-only", "x-internal-token": "wrong" } }), res, () => assert.fail("must reject"));
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.code, "unauthorized");
+    assert.equal(res.body.error, "Invalid or missing X-Internal-Token");
+  });
+});
+
+test("fails closed when INTERNAL_API_TOKEN is unset even if ENGINE_KEY is set", () => {
+  withEnv({ ENGINE_KEY: "engine-key-test-only" }, () => {
+    const res = mockRes();
+    requireInternalToken(mockReq({ headers: { "x-engine-key": "engine-key-test-only" } }), res, () => assert.fail("must reject"));
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.code, "unauthorized");
+    assert.equal(res.body.error, "Server authentication is not configured");
   });
 });
 
@@ -100,7 +118,7 @@ test("missing token header returns 401", async () => {
   });
 });
 
-test("neither env var configured rejects all requests (fail-safe)", async () => {
+test("unconfigured internal token rejects all requests (fail-safe)", async () => {
   await withEnv({}, () => {
     const req = mockReq({ headers: { "x-internal-token": "anything" } });
     const res = mockRes();

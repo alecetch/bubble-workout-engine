@@ -1,6 +1,7 @@
 import "./instrument.js";
 import * as Sentry from "@sentry/node";
 import "dotenv/config";
+import { getStartupEnvErrors } from "./src/startupEnv.js";
 import { validateProductionEnv } from "./src/config/validateProductionEnv.js";
 
 validateProductionEnv();
@@ -119,13 +120,6 @@ import {
 } from "./src/middleware/rateLimits.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const WEAK_SECRET_VALUES = new Set(["change-me", "secret", "password", "app", "minioadmin"]);
-
-function isWeakSecret(value, minLength = 12) {
-  const text = (value || "").toString().trim();
-  if (!text) return true;
-  return text.length < minLength || WEAK_SECRET_VALUES.has(text.toLowerCase());
-}
 
 function failStartup(message) {
   logger.fatal({ event: "server.startup.fatal", message }, "Startup validation failed");
@@ -133,54 +127,8 @@ function failStartup(message) {
 }
 
 function validateStartupEnv() {
-  const engineKey = (process.env.ENGINE_KEY || "").trim();
-  const internalApiToken = (process.env.INTERNAL_API_TOKEN || "").trim();
-  const jwtSecret = (process.env.JWT_SECRET || "").trim();
-  const jwtIssuer = (process.env.JWT_ISSUER || "").trim();
-  const databaseUrl = (process.env.DATABASE_URL || "").trim();
-  const pgHost = (process.env.PGHOST || "").trim();
-  const pgUser = (process.env.PGUSER || "").trim();
-  const pgPassword = (process.env.PGPASSWORD || "").trim();
-  const pgDatabase = (process.env.PGDATABASE || "").trim();
-
-  if (isWeakSecret(engineKey, 16)) {
-    failStartup("ENGINE_KEY is missing, too short, or uses a weak default.");
-  }
-  if (isWeakSecret(internalApiToken, 16)) {
-    failStartup("INTERNAL_API_TOKEN is missing, too short, or uses a weak default.");
-  }
-  if (isWeakSecret(jwtSecret, 32)) {
-    failStartup("JWT_SECRET is missing, too short, or uses a weak default.");
-  }
-  if (!jwtIssuer) {
-    failStartup("JWT_ISSUER is missing.");
-  }
-
-  if (databaseUrl) {
-    let parsed;
-    try {
-      parsed = new URL(databaseUrl);
-    } catch {
-      failStartup("DATABASE_URL is present but is not a valid URL.");
-    }
-    if (!(parsed.protocol === "postgres:" || parsed.protocol === "postgresql:")) {
-      failStartup("DATABASE_URL must use postgres:// or postgresql://.");
-    }
-    if (!parsed.hostname || !parsed.pathname || parsed.pathname === "/") {
-      failStartup("DATABASE_URL must include host and database name.");
-    }
-    if (isWeakSecret(parsed.password, 8)) {
-      failStartup("DATABASE_URL contains a missing, too short, or weak database password.");
-    }
-    return;
-  }
-
-  if (!pgHost || !pgUser || !pgPassword || !pgDatabase) {
-    failStartup("Database configuration is missing. Set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE.");
-  }
-  if (isWeakSecret(pgPassword, 8)) {
-    failStartup("PGPASSWORD is too short or uses a weak default.");
-  }
+  const errors = getStartupEnvErrors();
+  if (errors.length) failStartup(errors[0]);
 }
 
 validateStartupEnv();
@@ -369,7 +317,7 @@ app.get("/admin/content-studio", adminCspMiddleware, (_req, res) => sendAdminPag
 app.get("/admin/coach-portal", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coach-portal.html"));
 // /admin/users serves the HTML page for browser navigation; AJAX calls (x-internal-token present) fall through to adminUsersRouter
 app.get("/admin/users", (req, res, next) => {
-  if (req.headers["x-internal-token"] || req.headers["x-engine-key"]) return next();
+  if (req.headers["x-internal-token"]) return next();
   adminCspMiddleware(req, res, () => sendAdminPage(res, "users.html"));
 });
 

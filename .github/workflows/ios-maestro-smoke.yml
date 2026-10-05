@@ -34,7 +34,6 @@ jobs:
       CI: "1"
       EXPO_NO_DOTENV: "1"
       EXPO_PUBLIC_API_BASE_URL: http://127.0.0.1:3000
-      EXPO_PUBLIC_ENGINE_KEY: ci-test-engine-key-32chars-long
       EXPO_PUBLIC_DISABLE_NETWORK_MONITORING: "true"
       EXPO_PUBLIC_ENABLE_NOTIFICATION_TAP_THROUGH: "false"
       SENTRY_DISABLE_AUTO_UPLOAD: "true"
@@ -47,7 +46,6 @@ jobs:
       EMAIL_PROVIDER: console
       JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
       JWT_ISSUER: workout-engine-ci
-      ENGINE_KEY: ci-test-engine-key-32chars-long
       INTERNAL_API_TOKEN: ci-test-internal-api-token
       REVENUECAT_WEBHOOK_SECRET: ci-test-webhook-secret
       E2E_EMAIL: ios-smoke@example.com

@@ -106,10 +106,8 @@ test("computeCoverageStats handles an empty manifest", () => {
 
 test("test coverage route returns available false when manifest file is missing", async () => {
   const oldToken = process.env.INTERNAL_API_TOKEN;
-  const oldEngineKey = process.env.ENGINE_KEY;
   const oldManifestPath = process.env.COVERAGE_MANIFEST_PATH;
   process.env.INTERNAL_API_TOKEN = "test-token";
-  delete process.env.ENGINE_KEY;
   process.env.COVERAGE_MANIFEST_PATH = "C:/this/path/does/not/exist/coverage-manifest.json";
 
   const app = express();
@@ -127,8 +125,6 @@ test("test coverage route returns available false when manifest file is missing"
   } finally {
     if (oldToken == null) delete process.env.INTERNAL_API_TOKEN;
     else process.env.INTERNAL_API_TOKEN = oldToken;
-    if (oldEngineKey == null) delete process.env.ENGINE_KEY;
-    else process.env.ENGINE_KEY = oldEngineKey;
     if (oldManifestPath == null) delete process.env.COVERAGE_MANIFEST_PATH;
     else process.env.COVERAGE_MANIFEST_PATH = oldManifestPath;
   }
@@ -136,9 +132,7 @@ test("test coverage route returns available false when manifest file is missing"
 
 test("test coverage route requires admin auth", async () => {
   const oldToken = process.env.INTERNAL_API_TOKEN;
-  const oldEngineKey = process.env.ENGINE_KEY;
   process.env.INTERNAL_API_TOKEN = "test-token";
-  delete process.env.ENGINE_KEY;
 
   const app = express();
   app.use("/api/admin/observability", adminObservabilityRouter);
@@ -154,7 +148,5 @@ test("test coverage route requires admin auth", async () => {
   } finally {
     if (oldToken == null) delete process.env.INTERNAL_API_TOKEN;
     else process.env.INTERNAL_API_TOKEN = oldToken;
-    if (oldEngineKey == null) delete process.env.ENGINE_KEY;
-    else process.env.ENGINE_KEY = oldEngineKey;
   }
 });

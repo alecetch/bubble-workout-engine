@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./config", () => ({
   API_BASE_URL: "http://localhost:3000",
-  ENGINE_KEY: "",
 }));
 
 vi.mock("./tokenStorage", () => ({
