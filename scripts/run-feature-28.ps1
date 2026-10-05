@@ -159,7 +159,7 @@ function Invoke-JsonPost($Uri, $Body, $Headers = @{}) {
 }
 
 # Provisions the main test account (flows 01-04): Strength Block, multi-day program.
-function Initialize-TestUserAndProgram($ApiBaseUrl, $EngineKey) {
+function Initialize-TestUserAndProgram($ApiBaseUrl) {
     Step "Ensuring main test account ($TestEmail) and Strength Block exist"
 
     $loginBody = @{ email = $TestEmail; password = $TestPassword }
@@ -223,7 +223,7 @@ WHERE id = '$profileId';
             client_profile_id = $profileId
             programType = "strength"
             anchor_date_ms = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-        } @{ "x-engine-key" = $EngineKey }
+        } @{ Authorization = "Bearer $($auth.access_token)" }
         $programId = $generated.program_id
     }
 
@@ -234,7 +234,7 @@ WHERE id = '$profileId';
 }
 
 # Provisions the complete-program test account (flow 05): 1-day program scheduled for today.
-function Initialize-CompleteUserAndProgram($ApiBaseUrl, $EngineKey) {
+function Initialize-CompleteUserAndProgram($ApiBaseUrl) {
     Step "Ensuring complete-flow test account ($CompleteEmail) and Final Block exist"
 
     $loginBody = @{ email = $CompleteEmail; password = $CompletePassword }
@@ -298,7 +298,7 @@ WHERE id = '$profileId';
             client_profile_id = $profileId
             programType = "strength"
             anchor_date_ms = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-        } @{ "x-engine-key" = $EngineKey }
+        } @{ Authorization = "Bearer $($auth.access_token)" }
         $programId = $generated.program_id
     }
 
@@ -341,9 +341,6 @@ if ($LASTEXITCODE -ne 0) { throw "docker compose up failed" }
 # EXPO_PUBLIC_API_BASE_URL is set to the LAN IP so the mobile app on the emulator
 # can reach the host, but this script runs on the host itself and must use localhost.
 $apiBaseUrl = "http://localhost:3000"
-
-$engineKey = Read-DotEnvValue (Join-Path $repoRoot "api\.env") "ENGINE_KEY"
-if (-not $engineKey) { throw "ENGINE_KEY not found in api/.env" }
 
 Wait-ApiHealth "$apiBaseUrl/health" 600
 Write-Host "API ready at $apiBaseUrl"
@@ -430,10 +427,10 @@ $flows = if ($Flow -eq "all") {
     @($Flow)
 }
 
-Initialize-TestUserAndProgram $apiBaseUrl $engineKey
+Initialize-TestUserAndProgram $apiBaseUrl
 
 if ($flows -contains "05-program-complete") {
-    Initialize-CompleteUserAndProgram $apiBaseUrl $engineKey
+    Initialize-CompleteUserAndProgram $apiBaseUrl
 }
 
 # ---------------------------------------------------------------------------

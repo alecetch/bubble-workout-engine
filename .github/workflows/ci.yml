@@ -99,7 +99,6 @@ jobs:
           PGDATABASE: workout_test
           NODE_ENV: test
           INTERNAL_API_TOKEN: ci-test-token
-          ENGINE_KEY: ci-test-key
           JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
           JWT_ISSUER: workout-engine-ci
           REVENUECAT_WEBHOOK_SECRET: ci-test-webhook-secret
@@ -205,7 +204,7 @@ jobs:
             timeout: 45
             script: |
               adb reverse tcp:3000 tcp:3000
-              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
+              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
               npx --yes wait-on http://127.0.0.1:8081 --timeout 120000
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
@@ -228,7 +227,7 @@ jobs:
             timeout: 45
             script: |
               adb reverse tcp:3000 tcp:3000
-              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
+              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
               npx --yes wait-on http://127.0.0.1:8081 --timeout 120000
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
@@ -255,7 +254,7 @@ jobs:
             timeout: 45
             script: |
               adb reverse tcp:3000 tcp:3000
-              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
+              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
               npx --yes wait-on http://127.0.0.1:8081 --timeout 120000
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
@@ -265,7 +264,7 @@ jobs:
             timeout: 45
             script: |
               adb reverse tcp:3000 tcp:3000
-              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_ENGINE_KEY="$ENGINE_KEY" EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
+              cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
               npx --yes wait-on http://127.0.0.1:8081 --timeout 120000
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
@@ -297,7 +296,6 @@ jobs:
       NODE_ENV: test
       JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
       JWT_ISSUER: workout-engine-ci
-      ENGINE_KEY: ci-test-engine-key-32chars-long
       INTERNAL_API_TOKEN: ci-test-internal-api-token
       REVENUECAT_WEBHOOK_SECRET: ci-test-webhook-secret
       MAESTRO_CLI_NO_ANALYTICS: "1"

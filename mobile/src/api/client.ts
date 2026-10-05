@@ -1,4 +1,4 @@
-import { API_BASE_URL, ENGINE_KEY } from "./config";
+import { API_BASE_URL } from "./config";
 import { queryClient } from "./queryClient";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
 import { useSessionStore } from "../state/session/sessionStore";
@@ -65,10 +65,6 @@ async function parseResponseBody(response: Response): Promise<unknown> {
     return text;
   }
 }
-
-type InternalRequestOptions = RequestOptions & {
-  extraHeaders?: Record<string, string>;
-};
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 
@@ -153,13 +149,12 @@ export function isNetworkConnectivityError(error: unknown): boolean {
   );
 }
 
-async function requestJson<T>(path: string, options: InternalRequestOptions = {}): Promise<T> {
+async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const {
     method = "GET",
     body,
     headers,
     signal,
-    extraHeaders,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   } = options;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -170,7 +165,6 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
 
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
-    ...extraHeaders,
     ...headers,
   };
 
@@ -236,18 +230,6 @@ async function requestJson<T>(path: string, options: InternalRequestOptions = {}
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   return requestJson<T>(path, options);
-}
-
-export async function engineFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (!ENGINE_KEY) {
-    throw new Error("ENGINE_KEY missing in app runtime. Set EXPO_PUBLIC_ENGINE_KEY for Expo builds.");
-  }
-
-  const extraHeaders: Record<string, string> = {
-    "X-Engine-Key": ENGINE_KEY,
-  };
-
-  return requestJson<T>(path, { ...options, extraHeaders });
 }
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -335,29 +317,6 @@ export async function authenticatedFetch<T>(
       throw retryError;
     }
   }
-}
-
-export function engineGetJson<T>(
-  path: string,
-  options?: Omit<RequestOptions, "method" | "body">,
-): Promise<T> {
-  return engineFetch<T>(path, { ...options, method: "GET" });
-}
-
-export function enginePostJson<TResponse, TBody = unknown>(
-  path: string,
-  body: TBody,
-  options?: Omit<RequestOptions, "method" | "body">,
-): Promise<TResponse> {
-  return engineFetch<TResponse>(path, { ...options, method: "POST", body });
-}
-
-export function enginePatchJson<TResponse, TBody = unknown>(
-  path: string,
-  body: TBody,
-  options?: Omit<RequestOptions, "method" | "body">,
-): Promise<TResponse> {
-  return engineFetch<TResponse>(path, { ...options, method: "PATCH", body });
 }
 
 export function authGetJson<T>(

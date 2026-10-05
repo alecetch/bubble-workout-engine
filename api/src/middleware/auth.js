@@ -16,7 +16,7 @@ function safeTokenCompare(a, b) {
 }
 
 /**
- * requireInternalToken — lightweight write-route guard.
+ * requireInternalToken — admin and internal route guard.
  *
  * Requires header:  X-Internal-Token: <value>
  * Matched against:  process.env.INTERNAL_API_TOKEN
@@ -24,19 +24,16 @@ function safeTokenCompare(a, b) {
  * Fail-safe: if INTERNAL_API_TOKEN is not set in the environment, every
  * request is rejected rather than accidentally left open.
  *
- * TODO: replace with per-user JWT / session auth before public launch.
+ * Guards admin and internal routes only; end-user routes use requireAuth.
  */
 export function requireInternalToken(req, res, next) {
   const { request_id } = req;
   const internalToken = (req.headers["x-internal-token"] || "").toString();
-  const engineKey = (req.headers["x-engine-key"] || "").toString();
   const expectedInternal = (process.env.INTERNAL_API_TOKEN || "").toString();
-  const expectedEngine = (process.env.ENGINE_KEY || "").toString();
 
   const internalConfigured = Boolean(expectedInternal);
-  const engineConfigured = Boolean(expectedEngine);
 
-  if (!internalConfigured && !engineConfigured) {
+  if (!internalConfigured) {
     return res.status(401).json({
       ok: false,
       request_id,
@@ -46,14 +43,13 @@ export function requireInternalToken(req, res, next) {
   }
 
   const internalOk = internalConfigured && safeTokenCompare(internalToken, expectedInternal);
-  const engineOk = engineConfigured && safeTokenCompare(engineKey, expectedEngine);
 
-  if (!internalOk && !engineOk) {
+  if (!internalOk) {
     return res.status(401).json({
       ok: false,
       request_id,
       code: "unauthorized",
-      error: "Invalid or missing X-Internal-Token / X-Engine-Key",
+      error: "Invalid or missing X-Internal-Token",
     });
   }
 

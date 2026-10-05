@@ -30,16 +30,12 @@ function makeApp(db) {
 
 async function withToken(fn) {
   const oldToken = process.env.INTERNAL_API_TOKEN;
-  const oldEngineKey = process.env.ENGINE_KEY;
   process.env.INTERNAL_API_TOKEN = "test-token";
-  delete process.env.ENGINE_KEY;
   try {
     await fn();
   } finally {
     if (oldToken == null) delete process.env.INTERNAL_API_TOKEN;
     else process.env.INTERNAL_API_TOKEN = oldToken;
-    if (oldEngineKey == null) delete process.env.ENGINE_KEY;
-    else process.env.ENGINE_KEY = oldEngineKey;
   }
 }
 
