@@ -7,6 +7,7 @@ import { compressExerciseVideo } from "../services/exerciseMediaCompression.js";
 import { auditLog } from "../utils/auditLog.js";
 import { buildExerciseMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
+import { createMediaPromoter, promotionConfig, promotionEligibleSql } from "../services/exerciseMediaPromotion.js";
 
 const PLACEHOLDER_STILL_KEY = "exercise-media/_placeholder/still.jpg";
 function actorFromReq(req) {
@@ -35,6 +36,14 @@ function toSlug(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "warmup-exercise";
+}
+
+function isoOrNull(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value);
+  if (Number.isFinite(parsed.getTime())) return parsed.toISOString();
+  return String(value);
 }
 
 function mediaObjectKey(key) {
@@ -76,6 +85,10 @@ function mapWarmupRow(row) {
     posterFrameKey: row.poster_frame_key ?? null,
     videoUrl: status === "ready" ? buildExerciseMediaUrl(row.video_key) || null : null,
     posterImageUrl: status === "ready" ? buildExerciseMediaUrl(row.poster_frame_key) || null : null,
+    promoted_still_at: isoOrNull(row.promoted_still_at),
+    promotedStillAt: isoOrNull(row.promoted_still_at),
+    promoted_video_at: isoOrNull(row.promoted_video_at),
+    promotedVideoAt: isoOrNull(row.promoted_video_at),
     updated_at: row.updated_at ?? null,
     updatedAt: row.updated_at ?? null,
   };
@@ -108,9 +121,46 @@ export function createAdminWarmupExercisesRouter({
   getObjectFn = getObject,
   compressExerciseVideoFn = compressExerciseVideo,
   auditLogFn = auditLog,
+  fetchFn = (...args) => fetch(...args),
 } = {}) {
   const router = express.Router();
   router.use(requireInternalToken, requireTrustedAdminOrigin);
+
+  const promoteOne = createMediaPromoter({
+    db,
+    mediaTable: "warmup_exercise_media",
+    idColumn: "warmup_exercise_id",
+    routePrefix: "warmup-exercises",
+    getObjectFn,
+    fetchFn,
+  });
+
+  async function fetchPromotionRows({ id = null, eligibleOnly = false } = {}) {
+    const conditions = ["e.is_archived = FALSE"];
+    const params = [];
+    if (id) {
+      params.push(id);
+      conditions.push(`e.warmup_exercise_id = $${params.length}`);
+    }
+    if (eligibleOnly) conditions.push(promotionEligibleSql("m"));
+    const result = await db.query(
+      `SELECT
+         e.warmup_exercise_id,
+         e.name,
+         m.still_image_key,
+         m.still_image_is_placeholder,
+         m.video_key,
+         COALESCE(m.video_status, 'none') AS video_status,
+         m.promoted_still_at,
+         m.promoted_video_at
+       FROM warmup_exercise e
+       LEFT JOIN warmup_exercise_media m ON m.warmup_exercise_id = e.warmup_exercise_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY e.name ASC`,
+      params,
+    );
+    return result.rows;
+  }
 
   router.get("/warmup-exercises/list", async (_req, res) => {
     try {
@@ -124,13 +174,15 @@ export function createAdminWarmupExercisesRouter({
            wm.video_duration_sec,
            wm.video_source_filename,
            wm.poster_frame_key,
+           wm.promoted_still_at,
+           wm.promoted_video_at,
            COALESCE(wm.updated_at, we.updated_at) AS updated_at
          FROM warmup_exercise we
          LEFT JOIN warmup_exercise_media wm USING (warmup_exercise_id)
          ORDER BY we.is_archived ASC, we.name ASC`,
         [PLACEHOLDER_STILL_KEY],
       );
-      return res.json({ ok: true, warmupExercises: result.rows.map(mapWarmupRow) });
+      return res.json({ ok: true, promotionEnabled: promotionConfig().enabled, warmupExercises: result.rows.map(mapWarmupRow) });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
@@ -232,6 +284,7 @@ export function createAdminWarmupExercisesRouter({
          ON CONFLICT (warmup_exercise_id) DO UPDATE SET
            still_image_key = EXCLUDED.still_image_key,
            still_image_is_placeholder = false,
+           promoted_still_at = null,
            uploaded_by = EXCLUDED.uploaded_by,
            updated_at = now()
          RETURNING *`,
@@ -277,6 +330,7 @@ export function createAdminWarmupExercisesRouter({
              poster_frame_key = $3,
              video_duration_sec = $4,
              video_status = 'ready',
+             promoted_video_at = null,
              video_source_filename = $5,
              uploaded_by = $6,
              updated_at = now()
@@ -305,6 +359,7 @@ export function createAdminWarmupExercisesRouter({
         `UPDATE warmup_exercise_media
          SET still_image_key = $2,
              still_image_is_placeholder = false,
+             promoted_still_at = null,
              uploaded_by = $3,
              updated_at = now()
          WHERE warmup_exercise_id = $1
@@ -313,6 +368,72 @@ export function createAdminWarmupExercisesRouter({
       );
       await writeAudit(auditLogFn, req, id, "warmup_exercise.still.use_poster", { poster_frame_key: posterKey });
       return res.json({ ok: true, media: mapWarmupRow({ ...result.rows[0], warmup_exercise_id: id }) });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  router.delete("/warmup-exercises/:id/video", async (req, res) => {
+    const id = String(req.params.id ?? "").trim();
+    try {
+      if (!(await ensureWarmup(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
+      const result = await db.query(
+        `UPDATE warmup_exercise_media
+         SET video_key = null,
+             poster_frame_key = null,
+             video_duration_sec = null,
+             video_source_filename = null,
+             video_status = 'none',
+             promoted_video_at = null,
+             uploaded_by = $2,
+             updated_at = now()
+         WHERE warmup_exercise_id = $1
+         RETURNING *`,
+        [id, actorFromReq(req)],
+      );
+      await writeAudit(auditLogFn, req, id, "warmup_exercise.video.delete", {});
+      return res.json({ ok: true, media: result.rows[0] ? mapWarmupRow({ ...result.rows[0], warmup_exercise_id: id }) : null });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  router.post("/warmup-exercises/promote-all", async (_req, res) => {
+    if (!promotionConfig().enabled) {
+      return res.status(400).json({ ok: false, error: "Production promotion is not configured" });
+    }
+    try {
+      const rows = await fetchPromotionRows({ eligibleOnly: true });
+      const results = [];
+      for (const row of rows) {
+        const result = await promoteOne(row);
+        results.push({
+          exerciseId: row.warmup_exercise_id,
+          name: row.name,
+          promoted: result.promoted ?? { still: false, video: false },
+          ...(result.errors ? { errors: result.errors } : {}),
+        });
+      }
+      return res.json({ ok: true, results });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  router.post("/warmup-exercises/:id/promote", async (req, res) => {
+    if (!promotionConfig().enabled) {
+      return res.status(400).json({ ok: false, error: "Production promotion is not configured" });
+    }
+    const id = String(req.params.id ?? "").trim();
+    try {
+      const rows = await fetchPromotionRows({ id });
+      if (!rows.length) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
+      const result = await promoteOne(rows[0]);
+      return res.json({
+        ok: true,
+        promoted: result.promoted,
+        ...(result.errors ? { errors: result.errors } : {}),
+      });
     } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
