@@ -1,4 +1,4 @@
--- Sync program_exercise.exercise_name snapshots after the 2026-09-30 exercise naming cleanup.
+-- Sync program_exercise.exercise_name snapshots after the 2026-09-30 cleanup and round 2 (2026-10-07).
 -- Runs after R__exercise_catalogue_edits.sql (repeatables apply in description order).
 -- Only rows still carrying an exact pre-cleanup name are touched, so the update is idempotent
 -- and leaves blank or otherwise-customised names alone.
@@ -54,7 +54,34 @@ FROM exercise_catalogue ec,
     ('weighted_pushup', 'Weighted Push-Up'),
     ('farmer_carry_weighted', 'Farmer Carry (weighted)'),
     ('singleleg_bodyweight_rdl', 'Single-Leg Bodyweight RDL'),
-    ('standing_calf_raise_bodyweight', 'Standing Calf Raise (Bodyweight)')
+    ('standing_calf_raise_bodyweight', 'Standing Calf Raise (Bodyweight)'),
+    ('bb_tempo_back_squat', 'Barbell Tempo Back Squat'),
+    ('goblet_squat', 'Goblet Squat'),
+    ('tempo_goblet_squat', 'Tempo Goblet Squat'),
+    ('heelelevated_goblet_squat', 'Heel-Elevated Goblet Squat'),
+    ('assisted_pistol_squat', 'Assisted Pistol Squat'),
+    ('cyclist_squat_heels_elevated', 'Heel-Elevated Cyclist Squat'),
+    ('feetelevated_inverted_row', 'Feet-Elevated Inverted Row'),
+    ('feetelevated_pushup', 'Feet-Elevated Push-Up'),
+    ('kneeling_pushup', 'Kneeling Push-Up'),
+    ('closegrip_pushups', 'Close-Grip Push-Up'),
+    ('leg_press', 'Leg Press'),
+    ('leg_extension', 'Leg Extension'),
+    ('lying_leg_curl', 'Lying Leg Curl'),
+    ('seated_leg_curl', 'Seated Leg Curl'),
+    ('pec_deck_fly', 'Pec Deck Fly'),
+    ('lat_pulldown', 'Lat Pulldown'),
+    ('seated_cable_row', 'Seated Cable Row'),
+    ('db_shoulder_press', 'Dumbbell Shoulder Press'),
+    ('kb_shoulder_press', 'Kettlebell Shoulder Press'),
+    ('machine_shoulder_press', 'Machine Shoulder Press'),
+    ('sandbag_lunge', 'Sandbag Lunge'),
+    ('front_rack_carry', 'Barbell Front Rack Carry'),
+    ('medball_slam', 'Med Ball Slam'),
+    ('pike_shoulder_taps', 'Pike Shoulder Taps'),
+    ('db_pull_over', 'Dumbbell Pull Over'),
+    ('run_interval_outdoor_or_treadmill', 'Run Interval (Outdoor or Treadmill)'),
+    ('dead_tread', 'Dead Tread')
   ) AS renamed(exercise_id, old_name)
 WHERE pe.exercise_id = renamed.exercise_id
   AND pe.exercise_name = renamed.old_name
