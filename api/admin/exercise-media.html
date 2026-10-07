@@ -34,10 +34,15 @@
     .badge.success { background: #d1fae5; color: #065f46; }
     .badge.warn { background: #fef3c7; color: #92400e; }
     .badge.danger { background: #fee2e2; color: #991b1b; }
+    .actions input { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: inherit; width: 200px; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     #status { color: var(--muted); }
     #status.ok { color: var(--success); }
     #status.err { color: var(--danger); }
+    .tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
+    .tab { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: var(--muted); padding: 8px 16px; margin-bottom: -1px; font-weight: 600; }
+    .tab:hover { filter: none; color: var(--text); }
+    .tab.active { background: var(--panel); border-color: var(--border); color: var(--primary); }
     .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
     .kpi-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
     .kpi-card.alert { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); }
@@ -62,10 +67,17 @@
         <div id="status">Loading...</div>
       </div>
       <div class="actions">
+        <input id="token" type="password" placeholder="Internal token" autocomplete="off" />
+        <button id="save-token" class="secondary">Save token</button>
         <button id="promote-all" class="secondary" hidden>Promote all pending (0)</button>
         <button id="refresh" class="secondary">Refresh</button>
       </div>
     </header>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-tab="warmup">Warm-up</button>
+      <button class="tab" data-tab="main">Main workout</button>
+      <button class="tab" data-tab="cooldown">Cool-down</button>
+    </nav>
     <div class="kpi-grid" id="stats"></div>
     <section class="panel">
       <table>
@@ -95,12 +107,39 @@
   </div>
   <script src="/admin/nav.js"></script>
   <script>
-    const token = localStorage.getItem("internalToken") || localStorage.getItem("adminToken") || "";
+    const tokenInput = document.getElementById("token");
+    tokenInput.value = localStorage.getItem("internalToken") || localStorage.getItem("adminToken") || "";
     const rowsEl = document.getElementById("rows");
     const statsEl = document.getElementById("stats");
     const statusEl = document.getElementById("status");
     const stillInput = document.getElementById("still-input");
     const videoInput = document.getElementById("video-input");
+    // All three share one media pipeline (same compression, bucket, row shape and
+    // promotion flow); only the route prefix and list/id field names differ.
+    const TABS = {
+      warmup: {
+        base: "/admin/warmup-exercises",
+        listKey: "warmupExercises",
+        idKey: "warmupExerciseId",
+        noun: "warm-up exercises",
+      },
+      main: {
+        base: "/admin/exercise-media",
+        listKey: "exercises",
+        idKey: "exerciseId",
+        noun: "exercises",
+      },
+      cooldown: {
+        base: "/admin/cooldown-exercises",
+        listKey: "cooldownExercises",
+        idKey: "cooldownExerciseId",
+        noun: "cool-down exercises",
+      },
+    };
+    let activeTab = TABS[location.hash.slice(1)] ? location.hash.slice(1) : "main";
+    const tab = () => TABS[activeTab];
+    const mediaUrl = (exerciseId, suffix) => `${tab().base}/${encodeURIComponent(exerciseId)}/${suffix}`;
+    let loadSeq = 0;
     let selectedExerciseId = null;
     let rowsById = new Map();
     let promotionEnabled = false;
@@ -128,6 +167,7 @@
     }
 
     function headers() {
+      const token = tokenInput.value.trim();
       return token ? { "X-Internal-Token": token } : {};
     }
 
@@ -215,7 +255,7 @@
       const attention = processing + failed;
 
       const cards = [
-        { label: "Exercises", value: total, note: "active in the catalogue" },
+        { label: "Exercises", value: total, note: `active ${tab().noun}` },
         { label: "Real stills", value: realStills, note: `${total - realStills} still on the placeholder` },
         { label: "Videos ready", value: videosReady, note: `${total - videosReady} with no video yet` },
         {
@@ -265,22 +305,28 @@
     }
 
     async function load() {
+      const seq = ++loadSeq;
+      const config = tab();
       setStatus("Loading...");
-      const res = await fetch("/admin/exercise-media/list", { headers: headers() });
+      const res = await fetch(`${config.base}/list`, { headers: headers() });
       const body = await res.json();
-      if (!res.ok || !body.ok) throw new Error(body.error || "Could not load exercise media.");
+      if (seq !== loadSeq) return; // a newer tab switch superseded this request
+      if (!res.ok || !body.ok) throw new Error(body.error || `Could not load ${config.noun}.`);
       promotionEnabled = body.promotionEnabled === true;
-      const exercises = body.exercises || [];
+      // The main-workout list already excludes archived rows; warm-up/cool-down lists don't.
+      const exercises = (body[config.listKey] || [])
+        .filter((row) => !row.isArchived)
+        .map((row) => ({ ...row, exerciseId: row[config.idKey] }));
       renderStats(exercises);
       render(exercises);
-      setStatus(`${exercises.length} active exercises`, "ok");
+      setStatus(`${exercises.length} active ${config.noun}`, "ok");
     }
 
     async function upload(kind, file) {
       const form = new FormData();
       form.append(kind, file);
       setStatus(`Uploading ${kind}...`);
-      const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/${kind}`, {
+      const res = await fetch(mediaUrl(selectedExerciseId, kind), {
         method: "POST",
         headers: headers(),
         body: form,
@@ -291,7 +337,7 @@
     }
 
     async function usePosterAsStill(exerciseId) {
-      const res = await fetch(`/admin/exercise-media/${encodeURIComponent(exerciseId)}/use-poster-as-still`, { method: "POST", headers: headers() });
+      const res = await fetch(mediaUrl(exerciseId, "use-poster-as-still"), { method: "POST", headers: headers() });
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.error || "Could not use poster frame.");
     }
@@ -335,7 +381,7 @@
           if (row && row.posterFrameKey && confirm("Deleting this video will also remove its extracted frame. Use it as the still image before deleting?")) {
             await usePosterAsStill(selectedExerciseId);
           }
-          const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/video`, { method: "DELETE", headers: headers() });
+          const res = await fetch(mediaUrl(selectedExerciseId, "video"), { method: "DELETE", headers: headers() });
           const body = await res.json();
           if (!res.ok || !body.ok) throw new Error(body.error || "Could not delete video.");
           return load();
@@ -346,7 +392,7 @@
         }
         if (button.dataset.action === "promote") {
           setStatus("Promoting to production...");
-          const res = await fetch(`/admin/exercise-media/${encodeURIComponent(selectedExerciseId)}/promote`, { method: "POST", headers: headers() });
+          const res = await fetch(mediaUrl(selectedExerciseId, "promote"), { method: "POST", headers: headers() });
           const body = await res.json();
           if (!res.ok || !body.ok) throw new Error(body.error || "Could not promote exercise media.");
           const failures = promotionFailureSummary([{ ...body, exerciseId: selectedExerciseId, name: rowsById.get(selectedExerciseId)?.name }]);
@@ -372,21 +418,42 @@
     document.getElementById("promote-all").addEventListener("click", async () => {
       const pending = currentRows.filter(needsPromotion).length;
       if (!pending) return;
-      if (!confirm(`This will push ${pending} exercise(s)' still/video to PRODUCTION. Continue?`)) return;
+      if (!confirm(`This will push ${pending} ${tab().noun}' still/video to PRODUCTION. Continue?`)) return;
       try {
         setStatus("Promoting pending media to production...");
-        const res = await fetch("/admin/exercise-media/promote-all", { method: "POST", headers: headers() });
+        const res = await fetch(`${tab().base}/promote-all`, { method: "POST", headers: headers() });
         const body = await res.json();
         if (!res.ok || !body.ok) throw new Error(body.error || "Could not promote pending exercise media.");
         const failures = promotionFailureSummary(body.results || []);
         await load();
         if (failures.length) setStatus(`Bulk promotion finished with errors: ${failures.join(" | ")}`, "err");
-        else setStatus(`Bulk promotion complete for ${(body.results || []).length} exercise(s).`, "ok");
+        else setStatus(`Bulk promotion complete for ${(body.results || []).length} ${tab().noun}.`, "ok");
       } catch (err) {
         setStatus(err.message || "Bulk promotion failed.", "err");
       }
     });
-    load().catch((err) => setStatus(err.message, "err"));
+    const tabsEl = document.getElementById("tabs");
+    function syncTabs() {
+      tabsEl.querySelectorAll(".tab").forEach((el) => el.classList.toggle("active", el.dataset.tab === activeTab));
+    }
+    tabsEl.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-tab]");
+      if (!button || button.dataset.tab === activeTab) return;
+      activeTab = button.dataset.tab;
+      history.replaceState(null, "", `#${activeTab}`);
+      syncTabs();
+      rowsEl.innerHTML = "";
+      statsEl.innerHTML = "";
+      updatePromoteAll([]);
+      if (tokenInput.value) load().catch((err) => setStatus(err.message, "err"));
+    });
+    syncTabs();
+    document.getElementById("save-token").addEventListener("click", () => {
+      localStorage.setItem("internalToken", tokenInput.value.trim());
+      load().catch((err) => setStatus(err.message, "err"));
+    });
+    if (tokenInput.value) load().catch((err) => setStatus(err.message, "err"));
+    else setStatus("Enter your internal token and click Save token to load exercise media.");
   </script>
 </body>
 </html>
