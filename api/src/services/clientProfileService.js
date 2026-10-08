@@ -88,6 +88,25 @@ export function makeClientProfileService(db = defaultPool) {
     return toApiShape(result.rows[0]);
   }
 
+  async function getOwnedProfile(profileId, userId) {
+    const result = await db.query(
+      `
+      SELECT cp.*
+      FROM client_profile cp
+      WHERE cp.id::text = $1 AND cp.user_id = $2
+      LIMIT 1
+      `,
+      [profileId, userId],
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    return toApiShape(result.rows[0]);
+  }
+
+  // Internal use only: caller must have verified ownership.
   async function getProfileById(profileId) {
     const result = await db.query(
       `
@@ -106,7 +125,16 @@ export function makeClientProfileService(db = defaultPool) {
     return toApiShape(result.rows[0]);
   }
 
+  // Internal use only: caller must have verified ownership.
   async function patchProfile(profileId, fields) {
+    return patchProfileFields(profileId, fields);
+  }
+
+  async function patchOwnedProfile(profileId, userId, fields) {
+    return patchProfileFields(profileId, fields, userId, true);
+  }
+
+  async function patchProfileFields(profileId, fields, userId, owned = false) {
     const assignments = [];
     const values = [];
 
@@ -121,11 +149,13 @@ export function makeClientProfileService(db = defaultPool) {
     assignments.push("updated_at = now()");
 
     values.push(profileId);
+    const profileParam = values.length;
+    if (owned) values.push(userId);
     const result = await db.query(
       `
       UPDATE client_profile
       SET ${assignments.join(", ")}
-      WHERE id::text = $${values.length}
+      WHERE id::text = $${profileParam}${owned ? ` AND user_id = $${values.length}` : ""}
       RETURNING *
       `,
       values,
@@ -138,7 +168,7 @@ export function makeClientProfileService(db = defaultPool) {
     return toApiShape(result.rows[0]);
   }
 
-  return { upsertUser, upsertProfile, getProfileByUserId, getProfileById, patchProfile };
+  return { upsertUser, upsertProfile, getProfileByUserId, getProfileById, patchProfile, getOwnedProfile, patchOwnedProfile };
 }
 
 const _default = makeClientProfileService();
@@ -147,6 +177,8 @@ export const upsertProfile = _default.upsertProfile;
 export const getProfileByUserId = _default.getProfileByUserId;
 export const getProfileById = _default.getProfileById;
 export const patchProfile = _default.patchProfile;
+export const getOwnedProfile = _default.getOwnedProfile;
+export const patchOwnedProfile = _default.patchOwnedProfile;
 
 export function toApiShape(row) {
   return {
