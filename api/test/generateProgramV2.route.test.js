@@ -101,3 +101,45 @@ test("profile not found returns 404", async () => {
   assert.equal(res.statusCode, 404);
   assert.equal(res.body.code, "not_found");
 });
+
+test("supplied profile lookup uses JWT owner and rejects before DB setup", async () => {
+  const handler = createGenerateProgramV2Handler({
+    db: { connect() { assert.fail("no setup writes for a foreign profile"); } },
+    getOwnedProfile: async (profileId, userId) => {
+      assert.equal(profileId, "foreign-profile"); assert.equal(userId, "jwt-owner"); return null;
+    },
+    getProfile() { assert.fail("unscoped lookup must not run"); },
+  });
+  const res = mockRes();
+  await handler(mockReq({ client_profile_id: "foreign-profile", user_id: "other-user" }, { auth: { user_id: "jwt-owner" } }), res);
+  assert.equal(res.statusCode, 404); assert.equal(res.body.code, "not_found");
+});
+
+test("generation rolls back if ownership no longer matches at the profile update", async () => {
+  const queries = [];
+  let released = false;
+  const client = {
+    release() { released = true; },
+    async query(sql, params) {
+      queries.push(sql);
+      if (sql.includes("column_name = 'program_type'")) return { rowCount: 1, rows: [{}] };
+      if (sql.includes("SELECT column_name")) return { rowCount: 1, rows: [{ column_name: "injury_flags" }] };
+      if (sql.includes("UPDATE client_profile")) {
+        assert.match(sql, /WHERE id::text = \$13 AND user_id = \$1/);
+        assert.doesNotMatch(sql.split("WHERE")[0], /user_id\s*=/);
+        assert.equal(params[0], "jwt-owner"); return { rowCount: 0, rows: [] };
+      }
+      if (/INSERT|ALTER/.test(sql)) assert.fail(`unexpected write: ${sql}`);
+      return { rowCount: 0, rows: [] };
+    },
+  };
+  const handler = createGenerateProgramV2Handler({
+    db: { connect: async () => client },
+    getOwnedProfile: async () => minimalProfile,
+    getAllowed() { assert.fail("must not continue after lost ownership"); },
+  });
+  const res = mockRes();
+  await handler(mockReq({ client_profile_id: minimalProfile.id }, { auth: { user_id: "jwt-owner" } }), res);
+  assert.equal(res.statusCode, 404); assert.equal(res.body.code, "not_found");
+  assert.equal(queries.at(-1), "ROLLBACK"); assert.equal(released, true);
+});

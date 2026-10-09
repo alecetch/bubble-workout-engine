@@ -239,3 +239,35 @@ test("POST /generate-plan-v2 requires JWT entitlement and uses authenticated use
     await cleanupFixture(pool, fixture);
   }
 });
+
+
+test("generation rejects another owner's profile before writes and cannot reassign ownership", async t => {
+  if (!await ensureDb(t)) return;
+  const fixtures = [];
+  try {
+    const a = await seedUser(pool, { status: "active" }); fixtures.push(a);
+    const b = await seedUser(pool, { status: "active" }); fixtures.push(b);
+    const before = (await pool.query("SELECT * FROM client_profile WHERE id = $1", [a.profileId])).rows[0];
+    await withServer(async server => {
+      const rejected = await postGenerate(server, {
+        token: signToken(b.userId),
+        body: { client_profile_id: a.profileId, user_id: a.userId, bubble_user_id: a.subjectId, programType: "strength" },
+      });
+      assert.equal(rejected.response.status, 404);
+      assert.deepEqual(rejected.body, { ok: false, code: "not_found", error: "Client profile not found for user_id" });
+      assert.deepEqual((await pool.query("SELECT * FROM client_profile WHERE id = $1", [a.profileId])).rows[0], before);
+      assert.equal(await countPrograms(pool, [b.userId]), 0);
+      const owned = await postGenerate(server, {
+        token: signToken(a.userId),
+        body: { client_profile_id: a.profileId, user_id: b.userId, bubble_user_id: b.subjectId, programType: "strength" },
+      });
+      assert.equal(owned.response.status, 200);
+      assert.equal((await pool.query("SELECT user_id FROM program WHERE id = $1", [owned.body.program_id])).rows[0].user_id, a.userId);
+    });
+  } finally {
+    const ids = fixtures.map(f => f.userId);
+    await deleteProgramsForUsers(pool, ids);
+    await pool.query("DELETE FROM client_profile WHERE user_id = ANY($1::uuid[])", [ids]);
+    await pool.query("DELETE FROM app_user WHERE id = ANY($1::uuid[])", [ids]);
+  }
+});
