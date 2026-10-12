@@ -105,7 +105,7 @@
     $("add-equipment").onclick=(e)=>{e.preventDefault();addChip("equipment","equipment-input");};
     $("cancel").onclick=(e)=>{e.preventDefault();$("editor").close();};
     $("save").onclick=(e)=>{e.preventDefault();save().catch((err)=>setStatus(err.message));};
-    document.addEventListener("click",async(e)=>{const t=e.target;if(t.dataset?.edit)openEditor(state.rows.find((r)=>r.warmupExerciseId===t.dataset.edit)); if(t.dataset?.archive){const r=state.rows.find((x)=>x.warmupExerciseId===t.dataset.archive); if(r?.isArchived) await api(`/admin/warmup-exercises/${encodeURIComponent(r.warmupExerciseId)}`,{method:"PATCH",body:JSON.stringify({...r,isArchived:false})}); else await api(`/admin/warmup-exercises/${encodeURIComponent(t.dataset.archive)}`,{method:"DELETE"}); await load();} if(t.dataset?.chip){state[t.dataset.chip].splice(Number(t.dataset.index),1); renderChipEditor(t.dataset.chip);}});
+    document.addEventListener("click",async(e)=>{const t=e.target;if(t.dataset?.edit)openEditor(state.rows.find((r)=>r.warmupExerciseId===t.dataset.edit)); if(t.dataset?.archive){const r=state.rows.find((x)=>x.warmupExerciseId===t.dataset.archive); if(r?.isArchived) await api(`/admin/warmup-exercises/${encodeURIComponent(r.warmupExerciseId)}`,{method:"PATCH",body:JSON.stringify({...r,isArchived:false,is_archived:false})}); else await api(`/admin/warmup-exercises/${encodeURIComponent(t.dataset.archive)}`,{method:"DELETE"}); await load();} if(t.dataset?.chip){state[t.dataset.chip].splice(Number(t.dataset.index),1); renderChipEditor(t.dataset.chip);}});
     if ($("token").value) load().catch((e)=>setStatus(e.message));
   </script>
 </body>
