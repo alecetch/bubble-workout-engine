@@ -17,6 +17,15 @@ import {
 
 vi.unmock("@tanstack/react-query");
 
+vi.mock("../../components/program/HeroHeader", () => ({
+  HeroHeader: (props: any) => (
+    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""}>
+      <h1>{props.title}</h1>
+      <p>{props.summary}</p>
+    </div>
+  ),
+}));
+
 vi.mock("@react-navigation/native", async () => {
   const ReactActual = await import("react");
   return {
@@ -92,7 +101,7 @@ let queryClient: QueryClient;
 
 function data(overrides: Record<string, unknown> = {}) {
   return {
-    program: { id: "prog-1", title: "Strength Block", summary: "Build strength" },
+    program: { id: "prog-1", title: "Strength Block", summary: "Build strength", heroMedia: null },
     weeks: [{ weekNumber: 1 }],
     calendarDays: [
       {
@@ -185,6 +194,26 @@ describe("ProgramDashboardScreen", () => {
   it("renders the program title", () => {
     renderDashboard();
     expect(screen.getByText("Strength Block")).toBeInTheDocument();
+  });
+
+  it("passes the program's hero URL to the hero header", () => {
+    const heroMedia = "https://cdn.example.com/hero.jpg";
+    useProgramOverviewMock.mockReturnValue({
+      data: data({ program: { ...data().program, heroMedia } }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+    renderDashboard();
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", heroMedia);
+    expect(screen.getByText("Strength Block")).toBeInTheDocument();
+  });
+
+  it("passes no hero when the program has no image", () => {
+    renderDashboard();
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "");
+    expect(screen.getByText("Strength Block")).toBeInTheDocument();
+    expect(screen.getByText("Build strength")).toBeInTheDocument();
   });
 
   it("falls back to the active program id when the route omits programId", () => {
