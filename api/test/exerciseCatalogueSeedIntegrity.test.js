@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
-const readMigration = file => readFileSync(new URL(`../../migrations/${file}`, import.meta.url), "utf8");
+// Repo checkout (CI, host): <repo>/migrations. Docker Compose api container: mounted at /app/migrations.
+const MIGRATIONS_DIR = [new URL("../../migrations/", import.meta.url), new URL("../migrations/", import.meta.url)]
+  .find(dir => existsSync(dir));
+const readMigration = file => readFileSync(new URL(file, MIGRATIONS_DIR), "utf8");
 const catalogue = readMigration("R__exercise_catalogue_edits.sql");
 const backfill = readMigration("R__exercise_catalogue_zz_sync_program_exercise_names.sql");
 const equipment = readMigration("R__seed_equipment_items.sql");
