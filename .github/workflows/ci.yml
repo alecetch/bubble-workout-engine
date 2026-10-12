@@ -401,6 +401,36 @@ jobs:
       - name: Add Maestro to PATH
         run: echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      # android-emulator-runner always runs `sdkmanager --install emulator` and the
+      # system image itself, and those downloads intermittently fail on the runner
+      # ("Failed to download package!", "Error on ZipFile unknown archive"), after which
+      # the emulator never launches. Retrying the whole emulator step seconds later on
+      # the same runner hits the same broken download, so pre-install both packages here
+      # with backoff, clearing sdkmanager's partial-download temp dir between attempts.
+      # Once installed, the action's own install calls are no-ops.
+      - name: Pre-install Android emulator and system image (with retries)
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM=sdkmanager
+          yes | "$SDKM" --licenses > /dev/null || true
+          for attempt in 1 2 3 4 5; do
+            # sdkmanager can exit 0 after a failed download, so also check for its known
+            # failure messages and for the installed files.
+            if "$SDKM" --install emulator 'system-images;android-34;default;x86_64' --channel=0 > /tmp/sdkmanager.log 2>&1 \
+              && ! grep -qiE "an error occurred while preparing|failed to download" /tmp/sdkmanager.log \
+              && [ -x "$ANDROID_HOME/emulator/emulator" ] \
+              && [ -f "$ANDROID_HOME/system-images/android-34/default/x86_64/system.img" ]; then
+              echo "emulator and system image installed on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::SDK package install attempt $attempt failed:"
+            grep -iE "error|warning" /tmp/sdkmanager.log | head -5 || true
+            rm -rf "$ANDROID_HOME/.temp" "$HOME/.android/cache"
+            sleep $((attempt * 20))
+          done
+          echo "::error::Could not install the Android emulator/system image after 5 attempts"
+          exit 1
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
