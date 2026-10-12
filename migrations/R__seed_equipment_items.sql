@@ -36,7 +36,9 @@ WITH seed_rows AS (
       ('1771082757647x864989675382407200', 'Strength machine', 'quad extension machine', 'leg_extension', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "quad extension machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757647x864989675382407200", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "leg_extension", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
       ('1771082757654x425859392337180500', 'Strength machine', 'lat pulldown', 'lat_pulldown', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "lat pulldown", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757654x425859392337180500", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "lat_pulldown", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
       ('1771082757661x347316869190645200', 'Strength machine', 'shoulder press machine', 'shoulder_press', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "shoulder press machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757661x347316869190645200", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "shoulder_press", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
-      ('1771082757668x328813685294877950', 'Strength machine', 'hack squat machine', 'hack_squat', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "hack squat machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757668x328813685294877950", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "hack_squat", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}')
+      ('1771082757668x328813685294877950', 'Strength machine', 'hack squat machine', 'hack_squat', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-02-14 15:25:00+00', '2026-02-14 15:25:00+00', '{"name": "hack squat machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "1771082757668x328813685294877950", "no_equipment": "no", "creation_date": "Feb 14, 2026 3:25 pm", "exercise_slug": "hack_squat", "modified_date": "Feb 14, 2026 3:25 pm", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}'),
+      ('forma-resistance_band', 'Conditioning tools', 'resistance band', 'resistance_band', NULL, '(App admin)', 'True', 'True', 'True', 'True', 'False', '2026-10-07 00:00:00+00', '2026-10-07 00:00:00+00', '{"name": "resistance band", "slug": "", "creator": "(App admin)", "category": "Conditioning tools", "unique_id": "forma-resistance_band", "no_equipment": "no", "creation_date": "Oct 7, 2026 12:00 am", "exercise_slug": "resistance_band", "modified_date": "Oct 7, 2026 12:00 am", "commercial_gym": "yes", "decent_home_gym": "yes", "minimal_equipment": "yes", "crossfit_hyrox_gym": "yes"}'),
+      ('forma-row_machine', 'Strength machine', 'chest-supported row machine', 'row_machine', NULL, '(App admin)', 'True', 'False', 'False', 'False', 'False', '2026-10-07 00:00:00+00', '2026-10-07 00:00:00+00', '{"name": "chest-supported row machine", "slug": "", "creator": "(App admin)", "category": "Strength machine", "unique_id": "forma-row_machine", "no_equipment": "no", "creation_date": "Oct 7, 2026 12:00 am", "exercise_slug": "row_machine", "modified_date": "Oct 7, 2026 12:00 am", "commercial_gym": "yes", "decent_home_gym": "no", "minimal_equipment": "no", "crossfit_hyrox_gym": "no"}')
   ) AS t(
     external_id,
     category,
@@ -101,3 +103,23 @@ DO UPDATE SET
   created_at = EXCLUDED.created_at,
   updated_at = EXCLUDED.updated_at,
   raw_json = EXCLUDED.raw_json;
+
+-- Equipment items first created through the admin UI (2026-03) and never seeded, so a database built
+-- from migrations alone had no TRX or climbing rope and never generated the exercises that need them
+-- (Atomic Push-Up, Rope Climb, Rope Climb (Floor to Standing)). Keyed on exercise_slug, not external_id,
+-- so environments where the admin already created them under another id get no duplicate.
+INSERT INTO equipment_items (
+  external_id, category, name, exercise_slug, slug, creator,
+  commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment,
+  created_at, updated_at, raw_json
+)
+SELECT v.external_id, v.category, v.name, v.exercise_slug, NULL, '(App admin)',
+       v.commercial_gym, v.crossfit_hyrox_gym, v.decent_home_gym, v.minimal_equipment, v.no_equipment,
+       now(), now(), '{}'::jsonb
+FROM (VALUES
+  ('admin_1774902038647', 'Gymnastics / rig', 'TRX', 'trx', true, true, true, true, false),
+  ('admin_1774338650345', 'Gymnastics / rig', 'climbing rope', 'climbing_rope', false, true, false, false, false)
+) AS v(external_id, category, name, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment)
+WHERE NOT EXISTS (
+  SELECT 1 FROM equipment_items ei WHERE ei.exercise_slug = v.exercise_slug
+);
