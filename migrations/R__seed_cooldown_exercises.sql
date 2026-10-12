@@ -1,5 +1,5 @@
 -- Static holds only; bodyweight library sharing the existing placeholder asset.
--- Matches or exceeds active warm-up coverage for every muscle region as of 2026-09-18.
+-- Every muscle region keeps at least one active cool-down (see the 2026-10-12 archive block below).
 -- Cardio is intentionally excluded: it is not a muscle region for static stretching.
 INSERT INTO cooldown_exercise (
   cooldown_exercise_id, name, target_regions_json, equipment_items_slugs,
@@ -51,3 +51,34 @@ FROM cooldown_exercise ce
 WHERE NOT EXISTS (
   SELECT 1 FROM cooldown_exercise_media cm WHERE cm.cooldown_exercise_id = ce.cooldown_exercise_id
 );
+
+-- 2026-10-12: trim the first-implementation library to the 11 cool-downs that have videos plus the
+-- 6 queued for filming next (supine and staggered standing hamstring, wrist flexor and extensor,
+-- kneeling hip-flexor, thread-the-needle). Selection doesn't prefer rows with video, so the
+-- redundant no-video rows below were often picked over a videoed one for the same region.
+-- Archive, never delete: program history references these ids. This re-runs whenever the file's
+-- checksum changes and would re-archive any of these un-archived through the admin UI, so to bring
+-- one back permanently, remove its id from this list.
+UPDATE cooldown_exercise
+SET is_archived = true,
+    updated_at = now()
+WHERE is_archived = false
+  AND cooldown_exercise_id IN (
+    'cooldown-cross-chest-triceps-stretch',
+    'cooldown-doorway-pec-stretch',
+    'cooldown-supine-chest-stretch',
+    'cooldown-finger-extension-stretch',
+    'cooldown-overhead-shoulder-stretch',
+    'cooldown-wall-shoulder-flexion-stretch',
+    'cooldown-rounded-back-hold',
+    'cooldown-seated-upper-back-stretch',
+    'cooldown-seated-biceps-stretch',
+    'cooldown-standing-biceps-stretch',
+    'cooldown-seated-glute-stretch',
+    'cooldown-supine-knee-to-shoulder-stretch',
+    'cooldown-standing-quad-stretch',
+    'cooldown-straight-knee-calf-stretch',
+    'cooldown-side-lying-rear-shoulder-stretch',
+    'cooldown-supine-twist-hold',
+    'cooldown-seated-hamstring-stretch'
+  );
