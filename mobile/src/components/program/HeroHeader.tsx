@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -19,7 +19,12 @@ type HeroHeaderProps = {
 };
 
 export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): React.JSX.Element {
+  const [imageFailed, setImageFailed] = useState(false);
   const opacity = useSharedValue(heroMedia ? 0 : 1);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [heroMedia]);
 
   useEffect(() => {
     if (heroMedia) {
@@ -29,7 +34,7 @@ export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): Reac
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
-  if (!heroMedia) {
+  if (!heroMedia || imageFailed) {
     return (
       <View style={[styles.container, styles.containerNoMedia]}>
         <Text style={styles.title}>{title}</Text>
@@ -44,6 +49,7 @@ export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): Reac
         source={{ uri: heroMedia }}
         style={[StyleSheet.absoluteFill, styles.image]}
         resizeMode="cover"
+        onError={() => setImageFailed(true)}
       />
       <LinearGradient
         colors={["transparent", "rgba(15,23,42,0.55)", "rgba(15,23,42,0.90)"]}
