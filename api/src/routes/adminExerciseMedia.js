@@ -11,7 +11,7 @@ import { compressExerciseVideo } from "../services/exerciseMediaCompression.js";
 import { auditLog } from "../utils/auditLog.js";
 import { buildExerciseMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
-import logger from "../utils/logger.js";
+import { createMediaPromoter, promotionConfig, promotionEligibleSql } from "../services/exerciseMediaPromotion.js";
 
 function actorFromReq(req) {
   return String(req.headers["x-admin-actor"] || req.headers["x-internal-actor"] || "admin").trim() || "admin";
@@ -19,12 +19,6 @@ function actorFromReq(req) {
 
 function mediaUrl(key) {
   return buildExerciseMediaUrl(key) || "";
-}
-
-function promotionConfig() {
-  const baseUrl = String(process.env.PROD_ADMIN_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  const token = String(process.env.PROD_INTERNAL_API_TOKEN || "").trim();
-  return { baseUrl, token, enabled: Boolean(baseUrl && token) };
 }
 
 function isoOrNull(value) {
@@ -90,27 +84,6 @@ async function writeAudit(auditLogFn, req, exerciseId, action, detail) {
   });
 }
 
-function needsStillPromotion(row) {
-  return row?.still_image_is_placeholder === false && !row?.promoted_still_at;
-}
-
-function needsVideoPromotion(row) {
-  return row?.video_status === "ready" && !row?.promoted_video_at;
-}
-
-function errorMessageFromResponse(status, body) {
-  const bodyError = body && typeof body === "object" ? body.error || body.message : "";
-  return bodyError ? String(bodyError) : `Production upload failed with status ${status}`;
-}
-
-async function readJsonResponse(response) {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-}
-
 export function createAdminExerciseMediaRouter({
   db = pool,
   putObjectFn = putObject,
@@ -130,10 +103,7 @@ export function createAdminExerciseMediaRouter({
       conditions.push(`ec.exercise_id = $${params.length}`);
     }
     if (eligibleOnly) {
-      conditions.push(`(
-        (em.still_image_is_placeholder = false AND em.promoted_still_at IS NULL)
-        OR (em.video_status = 'ready' AND em.promoted_video_at IS NULL)
-      )`);
+      conditions.push(promotionEligibleSql("em"));
     }
     const result = await db.query(
       `SELECT
@@ -159,57 +129,14 @@ export function createAdminExerciseMediaRouter({
     return result.rows;
   }
 
-  async function promoteOne(row) {
-    const { baseUrl, token, enabled } = promotionConfig();
-    if (!enabled) {
-      return { ok: false, error: "Production promotion is not configured" };
-    }
-
-    const promoted = { still: false, video: false };
-    const errors = {};
-    const exerciseId = row.exercise_id;
-
-    async function promotePart(kind, key, contentType, fileName, timestampColumn) {
-      try {
-        const buffer = await getObjectFn(exerciseMediaObjectKey(key), EXERCISE_MEDIA_BUCKET);
-        const form = new FormData();
-        form.append(kind, new Blob([buffer], { type: contentType }), fileName);
-        const response = await fetchFn(`${baseUrl}/admin/exercise-media/${encodeURIComponent(exerciseId)}/${kind}`, {
-          method: "POST",
-          headers: { "X-Internal-Token": token },
-          body: form,
-        });
-        const body = await readJsonResponse(response);
-        if (!response.ok || !body?.ok) {
-          errors[kind] = errorMessageFromResponse(response.status, body);
-          return;
-        }
-        await db.query(
-          `UPDATE exercise_media SET ${timestampColumn} = now(), updated_at = now() WHERE exercise_id = $1`,
-          [exerciseId],
-        );
-        promoted[kind] = true;
-      } catch (err) {
-        logger.error({ err, exerciseId, kind }, "exercise-media promotion request failed locally");
-        errors[kind] = err?.message || String(err);
-      }
-    }
-
-    if (needsStillPromotion(row)) {
-      await promotePart("still", row.still_image_key, "image/jpeg", "still.jpg", "promoted_still_at");
-    }
-    if (needsVideoPromotion(row)) {
-      await promotePart("video", row.video_key, "video/mp4", "video.mp4", "promoted_video_at");
-    }
-
-    return {
-      ok: true,
-      exerciseId,
-      name: row.name,
-      promoted,
-      ...(Object.keys(errors).length ? { errors } : {}),
-    };
-  }
+  const promoteOne = createMediaPromoter({
+    db,
+    mediaTable: "exercise_media",
+    idColumn: "exercise_id",
+    routePrefix: "exercise-media",
+    getObjectFn,
+    fetchFn,
+  });
 
   router.get("/exercise-media/list", async (_req, res) => {
     try {

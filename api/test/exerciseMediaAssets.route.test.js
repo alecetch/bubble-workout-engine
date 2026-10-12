@@ -106,3 +106,49 @@ test("rejects path-traversal-shaped keys without ever touching the storage backe
   );
   assert.equal(called, false);
 });
+
+test("streams warm-up and cool-down library media stored under their key prefixes", async () => {
+  const keys = [];
+  await withServer(
+    async (key) => {
+      keys.push(key);
+      return { Body: streamOf("bytes"), ContentType: "image/jpeg" };
+    },
+    async (base) => {
+      for (const path of [
+        "warmup-exercise-media/warmup-cat-cow/still.jpg",
+        "cooldown-exercise-media/cooldown-child-pose/video.mp4",
+        "exercise-media/warmup-exercise-media/warmup-cat-cow/poster.jpg",
+      ]) {
+        const res = await fetch(`${base}/assets/exercise-media/${path}`);
+        assert.equal(res.status, 200, path);
+      }
+    },
+  );
+  assert.deepEqual(keys, [
+    "warmup-exercise-media/warmup-cat-cow/still.jpg",
+    "cooldown-exercise-media/cooldown-child-pose/video.mp4",
+    "warmup-exercise-media/warmup-cat-cow/poster.jpg",
+  ]);
+});
+
+test("rejects unknown prefixes and extra nesting without touching the storage backend", async () => {
+  let called = false;
+  await withServer(
+    async () => {
+      called = true;
+      return { Body: streamOf("nope") };
+    },
+    async (base) => {
+      for (const path of [
+        "other-media/sled_push/still.jpg",
+        "warmup-exercise-media/a/b/still.jpg",
+        "warmup-exercise-media/%2e%2e/still.jpg",
+      ]) {
+        const res = await fetch(`${base}/assets/exercise-media/${path}`);
+        assert.equal(res.status, 404, path);
+      }
+    },
+  );
+  assert.equal(called, false);
+});

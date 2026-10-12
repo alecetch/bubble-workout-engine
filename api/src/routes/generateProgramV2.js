@@ -6,7 +6,7 @@ import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
-import { getProfileById, getProfileByUserId } from "../services/clientProfileService.js";
+import { getProfileById, getProfileByUserId, getOwnedProfile as defaultGetOwnedProfile } from "../services/clientProfileService.js";
 import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { programCalendarDayHasUserIdColumn } from "../services/programCalendarDaySchema.js";
 import { programHasIsPrimaryColumn } from "../services/programSchema.js";
@@ -79,6 +79,7 @@ export function createGenerateProgramV2Handler({
   db = pool,
   getProfileByUser = getProfileByUserId,
   getProfile = getProfileById,
+  getOwnedProfile = defaultGetOwnedProfile,
   pipeline = runPipeline,
   getAllowed = getAllowedExerciseIds,
   buildInputs = buildInputsFromProfile,
@@ -170,7 +171,18 @@ export function createGenerateProgramV2Handler({
       return res.status(400).json({ ok: false, code: "validation_error", error: "anchor_date_ms must be a finite number" });
     }
 
-    const devProfile = client_profile_id ? await getProfile(client_profile_id) : await getProfileByResolvedUser(user_id);
+    let pg_user_id = s(req.auth?.user_id) || undefined;
+    if (client_profile_id && !pg_user_id) {
+      // Resolve legacy identities without creating or modifying a user.
+      const resolved = await db.query(
+        "SELECT id FROM app_user WHERE id::text = $1 OR subject_id = $1 LIMIT 1",
+        [user_id],
+      );
+      pg_user_id = resolved.rows[0]?.id;
+    }
+    const devProfile = client_profile_id
+      ? (pg_user_id ? await getOwnedProfile(client_profile_id, pg_user_id) : null)
+      : await getProfileByResolvedUser(user_id);
     if (!devProfile) {
       return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for user_id" });
     }
@@ -221,7 +233,6 @@ export function createGenerateProgramV2Handler({
   // generation_run rows. All in a single transaction so we get program_id
   // before the (slow) pipeline runs.
 
-    let pg_user_id;
     let created_program_id;
     let generation_run_id;
   let allowedIds = [];
@@ -238,7 +249,7 @@ export function createGenerateProgramV2Handler({
     // Legacy Bubble users send a subject_id string. Try the UUID lookup first;
     // fall back to the subject_id upsert for legacy compatibility.
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (UUID_RE.test(user_id)) {
+    if (!pg_user_id && UUID_RE.test(user_id)) {
       const directR = await setupClient.query(
         `SELECT id FROM app_user WHERE id = $1`,
         [user_id],
@@ -281,11 +292,10 @@ export function createGenerateProgramV2Handler({
 
     // Phase 1b: Refresh client_profile from the current API profile shape
     const injuryColumn = await resolveInjuryColumn(setupClient);
-    await setupClient.query(
+    const profileUpdate = await setupClient.query(
       `
       UPDATE client_profile
       SET
-        user_id = $1,
         fitness_rank = $2,
         equipment_items_slugs = $3::text[],
         ${injuryColumn} = $4::text[],
@@ -298,7 +308,7 @@ export function createGenerateProgramV2Handler({
         goal_notes = $11,
         schedule_constraints = $12,
         updated_at = now()
-      WHERE id::text = $13
+      WHERE id::text = $13 AND user_id = $1
       `,
       [
       pg_user_id,
@@ -315,6 +325,11 @@ export function createGenerateProgramV2Handler({
       mappedScheduleConstraints,
       devProfile.id,
     ]);
+
+    if (profileUpdate.rowCount === 0) {
+      await setupClient.query("ROLLBACK");
+      return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found for user_id" });
+    }
 
     // Phase 1c: Allowed exercise IDs + exercise catalogue
     allowedIds = await getAllowed(setupClient, {

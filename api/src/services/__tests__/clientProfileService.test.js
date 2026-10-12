@@ -219,3 +219,24 @@ test("patchProfile returns toApiShape of updated row", async () => {
   assert.equal(result.id, "profile-xyz");
   assert.equal(result.fitnessLevel, "advanced");
 });
+
+test("getOwnedProfile scopes its read by profile ID and user ID", async () => {
+  const db = { async query(sql, values) {
+    assert.match(sql, /WHERE cp.id::text = \$1 AND cp.user_id = \$2/);
+    assert.deepEqual(values, ["profile", "owner"]);
+    return { rowCount: 0, rows: [] };
+  } };
+  assert.equal(await makeClientProfileService(db).getOwnedProfile("profile", "owner"), null);
+});
+
+test("patchOwnedProfile scopes updates including empty patches and never assigns user_id", async () => {
+  for (const fields of [{}, { heightCm: 180, userId: "attacker" }]) {
+    const db = { async query(sql, values) {
+      assert.match(sql, /WHERE id::text = \$\d+ AND user_id = \$\d+/);
+      assert.doesNotMatch(sql.split("WHERE")[0], /user_id\s*=/);
+      assert.deepEqual(values.slice(-2), ["profile", "owner"]);
+      return { rowCount: 0, rows: [] };
+    } };
+    assert.equal(await makeClientProfileService(db).patchOwnedProfile("profile", "owner", fields), null);
+  }
+});

@@ -103,15 +103,8 @@ import { requireAuth } from "./src/middleware/requireAuth.js";
 import { adminOnly, userAuth, entitledUserAuth, premiumUserAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
-import {
-  makeClientProfileService,
-  upsertProfile,
-  getProfileById,
-  toApiShape,
-} from "./src/services/clientProfileService.js";
-import { makeAnchorLiftService } from "./src/services/anchorLiftService.js";
-import { RequestValidationError } from "./src/utils/validate.js";
-import { VALID_FOCUS_SLUGS } from "./src/utils/splitRecommender.js";
+import { createClientProfilesRouter } from "./src/routes/clientProfiles.js";
+import { createUsersMeRouter } from "./src/routes/usersMe.js";
 import {
   adminRateLimiter,
   generationRateLimiter,
@@ -553,210 +546,18 @@ app.get("/api/me", requireAuth, handleMe);
 // DEPRECATED — remove after Bubble client updates to /api/me
 app.get("/me", requireAuth, handleMe);
 
-// POST /client-profiles — upsert user + create profile if none exists.
-// Query: ?user_id=<id>
-const handleCreateClientProfile = async (req, res) => {
-  const userId = req.auth.user_id;
-  try {
-    await upsertProfile(userId);
-    const profileResult = await pool.query(
-      `
-      SELECT *
-      FROM client_profile
-      WHERE user_id = $1
-      LIMIT 1
-      `,
-      [userId],
-    );
-    const profile = profileResult.rows[0] ? toApiShape(profileResult.rows[0]) : null;
-    return res.status(200).json(profile);
-  } catch (err) {
-    req.log.error({ event: "profile.create.error", err: err?.message }, "POST /client-profiles error");
-    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
-  }
-};
+const clientProfilesRouter = createClientProfilesRouter();
+app.use("/api/client-profiles", clientProfilesRouter);
+// Deprecated alias: shares the same ownership checks.
+app.use("/client-profiles", clientProfilesRouter);
 
-// Canonical (new)
-app.post("/api/client-profiles", requireAuth, handleCreateClientProfile);
-// DEPRECATED — remove after Bubble client updates to /api/client-profiles
-app.post("/client-profiles", requireAuth, handleCreateClientProfile);
-
-// GET /client-profiles/:id — read profile by internal profile id.
-const handleGetClientProfile = async (req, res) => {
-  const profileId = req.params.id;
-  try {
-    const profile = await getProfileById(profileId);
-    if (!profile) {
-      return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
-    }
-    return res.status(200).json(profile);
-  } catch (err) {
-    req.log.error({ event: "profile.get.error", err: err?.message }, "GET /client-profiles/:id error");
-    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
-  }
-};
-
-// Canonical (new)
-app.get("/api/client-profiles/:id", requireAuth, handleGetClientProfile);
-// DEPRECATED — remove after Bubble client updates to /api/client-profiles/:id
-app.get("/client-profiles/:id", requireAuth, handleGetClientProfile);
-
-// PATCH /client-profiles/:id — patch profile fields.
-const handlePatchClientProfile = async (req, res) => {
-  const profileId = req.params.id;
-  const patch = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-  let client;
-  try {
-    const anchorLifts = Array.isArray(patch.anchorLifts) ? patch.anchorLifts : undefined;
-    const anchorLiftsSkipped = patch.anchorLiftsSkipped === undefined ? undefined : Boolean(patch.anchorLiftsSkipped);
-    const shouldStampAnchorCollection = anchorLifts !== undefined || anchorLiftsSkipped !== undefined;
-    const profilePatch = {
-      ...patch,
-      anchorLiftsSkipped,
-      anchorLiftsCollectedAt: shouldStampAnchorCollection ? new Date().toISOString() : patch.anchorLiftsCollectedAt,
-    };
-    delete profilePatch.anchorLifts;
-
-    if (profilePatch.preferredSplitJson !== undefined) {
-      const dayFocuses = profilePatch.preferredSplitJson?.day_focuses;
-      if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
-        return res.status(400).json({
-          ok: false,
-          request_id: req.request_id,
-          code: "validation_error",
-          error: "day_focuses must be a non-empty array",
-        });
-      }
-      for (const slug of dayFocuses) {
-        if (!VALID_FOCUS_SLUGS.has(slug)) {
-          return res.status(400).json({
-            ok: false,
-            request_id: req.request_id,
-            code: "validation_error",
-            error: `Unknown focus slug: ${slug}`,
-          });
-        }
-      }
-    }
-
-    client = await pool.connect();
-    await client.query("BEGIN");
-
-    const profileService = makeClientProfileService(client);
-    const anchorLiftService = makeAnchorLiftService(client);
-    const updated = await profileService.patchProfile(profileId, profilePatch);
-    if (!updated) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ ok: false, code: "not_found", error: "Profile not found" });
-    }
-
-    if (anchorLifts !== undefined) {
-      await anchorLiftService.upsertAnchorLifts(profileId, anchorLifts);
-    }
-
-    await client.query("COMMIT");
-    req.log.debug({ event: "profile.patch", id: profileId }, "profile patch applied");
-    const refreshed = await profileService.getProfileById(profileId);
-    return res.status(200).json(refreshed);
-  } catch (err) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {
-      // ignore rollback failures
-    }
-    req.log.error({ event: "profile.patch.error", err: err?.message }, "PATCH /client-profiles/:id error");
-    if (err instanceof RequestValidationError) {
-      return res.status(400).json({ ok: false, code: "validation_error", error: err.message, details: err.details });
-    }
-    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
-  } finally {
-    client?.release();
-  }
-};
-
-// Canonical (new)
-app.patch("/api/client-profiles/:id", requireAuth, handlePatchClientProfile);
-// DEPRECATED — remove after Bubble client updates to /api/client-profiles/:id
-app.patch("/client-profiles/:id", requireAuth, handlePatchClientProfile);
-
-// PATCH /users/me — associate a profile with a user; returns current identity.
-// Query/body: ?user_id=<id>
-const handleUsersMe = async (req, res) => {
-  const userId = req.auth.user_id;
-  try {
-    const clientProfileId = (req.body?.clientProfileId ?? "").toString().trim();
-    const preferredUnit = typeof req.body?.preferredUnit === "string" ? req.body.preferredUnit.trim().toLowerCase() : null;
-    const preferredHeightUnit = typeof req.body?.preferredHeightUnit === "string" ? req.body.preferredHeightUnit.trim().toLowerCase() : null;
-    if (clientProfileId) {
-      await pool.query(
-        `
-        UPDATE client_profile
-        SET user_id = $1, updated_at = now()
-        WHERE id::text = $2
-        `,
-        [userId, clientProfileId],
-      );
-    }
-    if (preferredUnit !== null) {
-      if (preferredUnit !== "kg" && preferredUnit !== "lbs") {
-        return res.status(400).json({
-          ok: false,
-          code: "validation_error",
-          error: "preferredUnit must be one of: kg, lbs",
-        });
-      }
-      await pool.query(
-        `
-        UPDATE client_profile
-        SET preferred_unit = $2, updated_at = now()
-        WHERE user_id = $1
-        `,
-        [userId, preferredUnit],
-      );
-    }
-    if (preferredHeightUnit !== null) {
-      if (preferredHeightUnit !== "cm" && preferredHeightUnit !== "ft") {
-        return res.status(400).json({
-          ok: false,
-          code: "validation_error",
-          error: "preferredHeightUnit must be one of: cm, ft",
-        });
-      }
-      await pool.query(
-        `
-        UPDATE client_profile
-        SET preferred_height_unit = $2, updated_at = now()
-        WHERE user_id = $1
-        `,
-        [userId, preferredHeightUnit],
-      );
-    }
-    const profileResult = await pool.query(
-      `
-      SELECT id, preferred_unit, preferred_height_unit
-      FROM client_profile
-      WHERE user_id = $1
-      LIMIT 1
-      `,
-      [userId],
-    );
-    return res.status(200).json({
-      id: userId,
-      clientProfileId: profileResult.rows[0]?.id ?? null,
-      preferredUnit: profileResult.rows[0]?.preferred_unit ?? "kg",
-      preferredHeightUnit: profileResult.rows[0]?.preferred_height_unit ?? "cm",
-    });
-  } catch (err) {
-    req.log.error({ event: "profile.users_me.error", err: err?.message }, "PATCH /users/me error");
-    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
-  }
-};
-
-// Canonical (new)
-app.patch("/api/users/me", requireAuth, handleUsersMe);
+const usersMeRouter = createUsersMeRouter();
+app.use("/api/users/me", usersMeRouter);
 app.use("/api/users/me/hyrox-prefill", createHyroxOnboardingPrefillRouter(pool));
-// DEPRECATED — remove after Bubble client updates to /api/users/me
-app.patch("/users/me", requireAuth, handleUsersMe);
+app.use("/users/me", usersMeRouter);
+
+// Retired public diagnostic endpoint: return 404 before broad /api JWT middleware.
+app.get("/api/client_profile/:id/allowed_exercises", (_req, res) => res.sendStatus(404));
 
 // Auth routes must be mounted before any /api router that applies requireAuth globally.
 app.use("/api/auth", authRouter);
@@ -835,7 +636,7 @@ logger.info({ event: "server.routes.equipment_regen.mounted" }, "Mounted equipme
 app.use("/api", programExerciseRouter);
 app.use("/api", programCompletionRouter);
 app.use("/api", programDayActionsRouter);
-app.use("/api", debugAllowedExercisesRouter);
+app.use("/admin/debug", ...adminOnly, debugAllowedExercisesRouter);
 app.use("/api", referralRouter);
 
 // Canonical /api-prefixed mounts (new).

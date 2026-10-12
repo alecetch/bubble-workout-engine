@@ -8,8 +8,9 @@ const ONE_DAY_SECONDS = 86400;
 // Allow-list, not a blocklist: the S3/MinIO key becomes a real filesystem path
 // under MinIO's storage backend, so an unsanitized ".." segment in the request
 // path could read files outside the exercise-media bucket. Every legitimate key
-// is either the shared placeholder or "<exerciseId>/<still|video|poster>.<ext>".
-const SAFE_KEY_PATTERN = /^[A-Za-z0-9_-]+\/(?:still\.jpg|video\.mp4|poster\.jpg)$/;
+// is either the shared placeholder, "<exerciseId>/<still|video|poster>.<ext>", or
+// the same shape under the warm-up/cool-down library prefix.
+const SAFE_KEY_PATTERN = /^(?:(?:warmup|cooldown)-exercise-media\/)?[A-Za-z0-9_-]+\/(?:still\.jpg|video\.mp4|poster\.jpg)$/;
 
 function normalizeObjectKey(path) {
   const key = String(path ?? "").replace(/^\/+/, "").replace(/^exercise-media\/+/, "");
