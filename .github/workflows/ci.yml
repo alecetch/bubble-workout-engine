@@ -201,7 +201,7 @@ jobs:
       matrix:
         include:
           - name: auth-workout-settings-paywall
-            timeout: 45
+            timeout: 60
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
@@ -224,7 +224,7 @@ jobs:
           # flow's account is fixed and re-logged-into each time (not a fresh
           # registration like 06/07), so a same-account retry is safe.
           - name: program-complete
-            timeout: 45
+            timeout: 60
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
@@ -251,7 +251,7 @@ jobs:
           # syntax error. Each retry chain below must stay on a single physical
           # line for that reason, however long that makes it.
           - name: onboarding-beginner
-            timeout: 45
+            timeout: 60
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
@@ -261,7 +261,7 @@ jobs:
               adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
               timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
           - name: onboarding-intermediate
-            timeout: 45
+            timeout: 60
             script: |
               adb reverse tcp:3000 tcp:3000
               cd mobile && NODE_ENV=development EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000 EXPO_PUBLIC_DISABLE_NETWORK_MONITORING=true npx expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
@@ -401,13 +401,71 @@ jobs:
       - name: Add Maestro to PATH
         run: echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      # android-emulator-runner always runs `sdkmanager --install emulator` and the
+      # system image itself, and those downloads intermittently fail on the runner
+      # ("Failed to download package!", "Error on ZipFile unknown archive"), after which
+      # the emulator never launches. Retrying the whole emulator step seconds later on
+      # the same runner hits the same broken download, so pre-install both packages here
+      # with backoff, clearing sdkmanager's partial-download temp dir between attempts.
+      # Once installed, the action's own install calls are no-ops.
+      - name: Pre-install Android emulator and system image (with retries)
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM=sdkmanager
+          yes | "$SDKM" --licenses > /dev/null || true
+          for attempt in 1 2 3 4 5; do
+            # sdkmanager can exit 0 after a failed download, so also check for its known
+            # failure messages and for the installed files.
+            if "$SDKM" --install emulator 'system-images;android-34;default;x86_64' --channel=0 > /tmp/sdkmanager.log 2>&1 \
+              && ! grep -qiE "an error occurred while preparing|failed to download" /tmp/sdkmanager.log \
+              && [ -x "$ANDROID_HOME/emulator/emulator" ] \
+              && [ -f "$ANDROID_HOME/system-images/android-34/default/x86_64/system.img" ]; then
+              echo "emulator and system image installed on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::SDK package install attempt $attempt failed:"
+            grep -iE "error|warning" /tmp/sdkmanager.log | head -5 || true
+            rm -rf "$ANDROID_HOME/.temp" "$HOME/.android/cache"
+            sleep $((attempt * 20))
+          done
+          echo "::error::Could not install the Android emulator/system image after 5 attempts"
+          exit 1
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # The emulator itself is the flakiest part of this job: the runner intermittently
+      # fails to download the emulator/system-image package ("Failed to download
+      # package!") or the emulator never finishes booting ("Timeout waiting for
+      # emulator to boot", then "could not connect to TCP port 5554"). Both happen
+      # before any flow runs. So attempt 1 may fail softly, and attempt 2 runs only
+      # if the flow script never started. The script's first line drops a marker
+      # file, and the action only reaches the script once the emulator has booted.
+      # A same-job retry after the script started is NOT safe: registration isn't
+      # idempotent and the job's Postgres keeps state, so real test failures go
+      # straight to the "Fail if" step below instead of being retried.
       - name: Run E2E flows
+        id: e2e_attempt1
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          avd-name: e2e-pixel6-api34
+          emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            touch e2e-script-started.marker
+            ${{ matrix.script }}
+
+      - name: Run E2E flows (retry after emulator start-up failure)
+        id: e2e_attempt2
+        if: steps.e2e_attempt1.outcome == 'failure' && hashFiles('e2e-script-started.marker') == ''
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -418,6 +476,12 @@ jobs:
           emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: ${{ matrix.script }}
+
+      - name: Fail if the E2E flows failed after the emulator started
+        if: steps.e2e_attempt1.outcome == 'failure' && hashFiles('e2e-script-started.marker') != ''
+        run: |
+          echo "::error::E2E flow failed after the emulator booted (attempt 1); not retried because registration isn't idempotent."
+          exit 1
 
       - name: Upload Maestro debug output
         if: failure()
