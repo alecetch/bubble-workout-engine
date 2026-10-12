@@ -103,3 +103,23 @@ DO UPDATE SET
   created_at = EXCLUDED.created_at,
   updated_at = EXCLUDED.updated_at,
   raw_json = EXCLUDED.raw_json;
+
+-- Equipment items first created through the admin UI (2026-03) and never seeded, so a database built
+-- from migrations alone had no TRX or climbing rope and never generated the exercises that need them
+-- (Atomic Push-Up, Rope Climb, Rope Climb (Floor to Standing)). Keyed on exercise_slug, not external_id,
+-- so environments where the admin already created them under another id get no duplicate.
+INSERT INTO equipment_items (
+  external_id, category, name, exercise_slug, slug, creator,
+  commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment,
+  created_at, updated_at, raw_json
+)
+SELECT v.external_id, v.category, v.name, v.exercise_slug, NULL, '(App admin)',
+       v.commercial_gym, v.crossfit_hyrox_gym, v.decent_home_gym, v.minimal_equipment, v.no_equipment,
+       now(), now(), '{}'::jsonb
+FROM (VALUES
+  ('admin_1774902038647', 'Gymnastics / rig', 'TRX', 'trx', true, true, true, true, false),
+  ('admin_1774338650345', 'Gymnastics / rig', 'climbing rope', 'climbing_rope', false, true, false, false, false)
+) AS v(external_id, category, name, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment)
+WHERE NOT EXISTS (
+  SELECT 1 FROM equipment_items ei WHERE ei.exercise_slug = v.exercise_slug
+);
