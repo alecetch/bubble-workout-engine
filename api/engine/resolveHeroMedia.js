@@ -38,7 +38,8 @@ export function dayFocusSlug(day) {
 }
 
 export function resolveHeroMediaRow(assets, usageScope, programType, focusType) {
-  const inScope = assets.filter((a) => a.usage_scope === usageScope);
+  // Exact focus → full body → no focus → any for type → generic → no hero.
+  const inScope = assets.filter((a) => a.usage_scope === usageScope && a.is_active !== false);
   if (!inScope.length) return null;
 
   if (focusType) {
@@ -59,7 +60,7 @@ export function resolveHeroMediaRow(assets, usageScope, programType, focusType) 
   if (typeAny) return typeAny;
   const generic = inScope.find((a) => a.day_type === "generic");
   if (generic) return generic;
-  return inScope[0] ?? null;
+  return null;
 }
 
 export function toHeroMediaObject(row) {

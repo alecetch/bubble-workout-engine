@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runPipeline } from "../engine/runPipeline.js";
+import { pool } from "../src/db.js";
 
 function makeCatalogBuild({ narrationJson = "[]" } = {}) {
   return {
@@ -255,6 +256,32 @@ function collectAllItems(program) {
     }
   }
   return items;
+}
+
+for (const [programType, expectedType] of [["strength", "strength"], ["hyrox", "generic"]]) {
+  test(`${programType} pipeline resolves program and day heroes from migrated ${expectedType} rows`, async (t) => {
+    try {
+      await pool.query("SELECT 1");
+    } catch (err) {
+      t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`);
+      return;
+    }
+    const { rows } = await pool.query("SELECT * FROM public.media_assets WHERE is_active = true ORDER BY sort_order, id");
+    const out = await runPipeline({
+      inputs: makeInputs({ daysPerWeek: 2 }),
+      programType,
+      request: makeBaseRequest(),
+      db: makeDb({ mediaRows: rows }),
+    });
+    assert.equal(rows.find(row => row.id === out.program.hero_media_id)?.day_type, expectedType);
+    assert.ok(out.program.days.length > 0, "expected generated days");
+    for (const day of out.program.days) {
+      const hero = rows.find(row => row.id === day.hero_media_id);
+      assert.equal(hero?.usage_scope, "program_day");
+      assert.equal(hero?.day_type, expectedType);
+      if (programType === "strength") assert.equal(hero.focus_type, day.day_focus_slug);
+    }
+  });
 }
 
 test("program.hero_media_id is set from DB and step1 source is db", async () => {
