@@ -51,6 +51,16 @@ function warmupItems(out, weekIndex = 0, dayIndex = 0) {
   return out.program.weeks[weekIndex].days[dayIndex].segments.find((seg) => seg.segment_type === "warmup").items;
 }
 
+test("movement patterns supply warm-ups when target regions are empty", async () => {
+  const out = await narrate({
+    catalog: [{ id: "bench", tr: [], mp: "push_horizontal" }, { id: "squat", tr: [], mp: "squat" }],
+    warmupCatalog: [warmup("chest-warmup", ["chest"]), warmup("quad-warmup", ["quads"])],
+    weeks: [{ week_index: 1, days: [{ week_index: 1, day_index: 1, segments: [segment("main", [ex("bench"), ex("squat")])] }] }],
+  });
+  assert.ok(warmupItems(out).length >= 1);
+  assert.ok(out.debug.adoption.total.bookend_region_fallbacks > 0);
+});
+
 test("applyNarration caps warm-up selections at five regions in segment priority order", async () => {
   const catalog = [
     { id: "main-a", tr: ["quads", "glutes", "hamstrings"] },

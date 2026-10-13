@@ -53,6 +53,16 @@ function cooldownItems(out, weekIndex = 0, dayIndex = 0) {
   return out.program.weeks[weekIndex].days[dayIndex].segments.find((seg) => seg.segment_type === "cooldown").items;
 }
 
+test("movement patterns supply cool-downs when target regions are empty", async () => {
+  const out = await narrate({
+    catalog: [{ id: "bench", tr: [], mp: "push_horizontal" }, { id: "squat", tr: [], mp: "squat" }],
+    cooldownCatalog: [cooldown("chest-cooldown", ["chest"]), cooldown("quad-cooldown", ["quads"])],
+    weeks: [{ week_index: 1, days: [{ week_index: 1, day_index: 1, segments: [segment("main", [ex("bench"), ex("squat")])] }] }],
+  });
+  assert.ok(cooldownItems(out).length >= 1);
+  assert.ok(out.debug.adoption.total.bookend_region_fallbacks > 0);
+});
+
 test("applyNarration caps cool-down selections at five regions in segment priority order", async () => {
   const catalog = [
     { id: "main-a", tr: ["quads", "glutes", "hamstrings"] },
