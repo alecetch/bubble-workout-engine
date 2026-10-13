@@ -1,3 +1,4 @@
+import { displayLabel } from "../utils/displayLabel";
 import { authGetJson, authPostJson } from "./client";
 
 export type ProgramCompletionPersonalRecord = {
@@ -37,6 +38,7 @@ export type ProgramCompletionSummary = {
   programId: string;
   programTitle: string;
   programType: string | null;
+  programTypeLabel: string;
   weeksCompleted: number;
   daysCompleted: number;
   daysTotal: number;
@@ -140,6 +142,8 @@ function normalizeProgramCompletionSummary(raw: unknown): ProgramCompletionSumma
     programId: asString(root.program_id ?? root.programId),
     programTitle: asString(root.program_title ?? root.programTitle, "Training Program"),
     programType: asNullableString(root.program_type ?? root.programType),
+    programTypeLabel: asNullableString(root.program_type_label ?? root.programTypeLabel) ??
+      displayLabel("programType", asNullableString(root.program_type ?? root.programType)),
     weeksCompleted: asNumber(root.weeks_completed ?? root.weeksCompleted, 0),
     daysCompleted: asNumber(root.days_completed ?? root.daysCompleted, 0),
     daysTotal: asNumber(root.days_total ?? root.daysTotal, 0),

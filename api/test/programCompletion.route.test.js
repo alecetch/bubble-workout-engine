@@ -157,6 +157,7 @@ test("completionSummary returns shaped response for owned program", async () => 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body?.ok, true);
   assert.equal(res.body?.program_type, "strength");
+  assert.equal(res.body?.program_type_label, "Strength");
   assert.equal(res.body?.days_completed, 2);
   assert.equal(res.body?.days_total, 3);
   assert.equal(res.body?.missed_workouts_count, 1);

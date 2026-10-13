@@ -30,6 +30,7 @@ const resetFromProfileMock = vi.fn();
 const summary = {
   programTitle: "Test Block",
   programType: "strength",
+  programTypeLabel: "Strength",
   completedMode: "as_scheduled",
   daysCompleted: 8,
   daysTotal: 9,
@@ -80,6 +81,11 @@ function renderScreen(
 }
 
 describe("ProgramCompleteScreen", () => {
+  it("renders the API program type label instead of the slug", () => {
+    renderScreen();
+    expect(screen.getByText("Strength")).toBeInTheDocument();
+    expect(screen.queryByText("strength")).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     resetFromProfileMock.mockReset();
     mockZustandSelector(useOnboardingStoreMock as any, { resetFromProfile: resetFromProfileMock });

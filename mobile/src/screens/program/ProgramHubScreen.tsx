@@ -55,7 +55,7 @@ function ProgramCard({
     >
       <View style={styles.cardHeader}>
         <View style={[styles.typeBadge, { backgroundColor: typeBadgeColor(program.program_type) }]}>
-          <Text style={styles.typeBadgeText}>{program.program_type.toUpperCase()}</Text>
+          <Text style={styles.typeBadgeText}>{program.programTypeLabel}</Text>
         </View>
         {program.is_primary ? (
           <View style={styles.primaryBadge}>
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   primaryCard: { borderColor: colors.accent },
   cardHeader: { flexDirection: "row", gap: 8, alignItems: "center" },
   typeBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  typeBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  typeBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   primaryBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: colors.accent },
   primaryBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   cardTitle: { fontSize: 17, fontWeight: "600", color: colors.textPrimary },
