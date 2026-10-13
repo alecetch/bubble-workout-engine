@@ -59,7 +59,9 @@ WHERE NOT EXISTS (
 -- redundant no-video rows below were often picked over a videoed one for the same region.
 -- Archive, never delete: program history references these ids. This re-runs whenever the file's
 -- checksum changes and would re-archive any of these un-archived through the admin UI, so to bring
--- one back permanently, remove its id from this list.
+-- one back permanently, remove its id from this list. Removing an id doesn't un-archive it; restore it
+-- with the Restore button on /admin/cooldown-exercises in each environment.
+-- 2026-10-12: cooldown-seated-glute-stretch removed from the list (restored).
 UPDATE cooldown_exercise
 SET is_archived = true,
     updated_at = now()
@@ -75,7 +77,6 @@ WHERE is_archived = false
     'cooldown-seated-upper-back-stretch',
     'cooldown-seated-biceps-stretch',
     'cooldown-standing-biceps-stretch',
-    'cooldown-seated-glute-stretch',
     'cooldown-supine-knee-to-shoulder-stretch',
     'cooldown-standing-quad-stretch',
     'cooldown-straight-knee-calf-stretch',
