@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, unlinkSync, mkdirSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import express from "express";
-import { adminSyncRouter, getSyncStatus, normalizeSnapshot, SYNC_TARGETS } from "../src/routes/adminSync.js";
+import { adminSyncRouter, generateMediaAssetsSnapshot, getSyncStatus, normalizeSnapshot, SYNC_TARGETS } from "../src/routes/adminSync.js";
 
 const snapshots = SYNC_TARGETS.map((file, i) => ({ file, rows: i + 1,
   content: `-- Generated: today\n-- Row count: ${i + 1}\nSELECT ${i};\n` }));
@@ -77,17 +77,27 @@ test("POST writes only two differing files and records audit", async t => {
   const f = fixture(t);
   for (const s of snapshots.slice(2)) writeFileSync(join(f.migrationsDir, s.file), "changed");
   const { status, body } = await request(t, f, "POST");
-  assert.equal(status, 200); assert.equal(body.ok, true); assert.equal(body.written_count, 2);
-  assert.deepEqual(body.files.map(s => s.written), [false, false, true, true]);
+  assert.equal(status, 200); assert.equal(body.ok, true); assert.equal(body.written_count, snapshots.length - 2);
+  assert.deepEqual(body.files.map(s => s.written), snapshots.map((_, i) => i >= 2));
   snapshots.forEach((s, i) => assert.equal(readFileSync(join(f.migrationsDir, s.file), "utf8"), i < 2 ? diskContent(s) : s.content));
   assert.equal(f.calls.length, 1); assert.equal(f.calls[0].action, "sync_all_to_flyway");
   assert.deepEqual(f.calls[0].detail.results, body.files);
 });
-test("POST creates all four missing files", async t => {
+test("POST creates all missing files", async t => {
   const f = fixture(t, false); const { status, body } = await request(t, f, "POST");
-  assert.equal(status, 200); assert.equal(body.written_count, 4);
+  assert.equal(status, 200); assert.equal(body.written_count, snapshots.length);
   assert.ok(body.files.every(s => s.ok && s.written && s.error === null));
   for (const s of snapshots) assert.equal(readFileSync(join(f.migrationsDir, s.file), "utf8"), s.content);
+});
+
+test("media assets snapshot is deterministic and upserts without deletes", async () => {
+  assert.ok(SYNC_TARGETS.includes("R__seed_media_assets.sql"));
+  const db = { query: async () => ({ rows: [{ asset_key: "program:a::a.png", usage_scope: "program", day_type: "a", focus_type: null, label: "A", sort_order: 1, is_active: false, image_key: "a.png", image_url: "" }] }) };
+  const first = await generateMediaAssetsSnapshot(db), second = await generateMediaAssetsSnapshot(db);
+  assert.equal(first.content, second.content);
+  assert.match(first.content, /ON CONFLICT \(asset_key\) DO UPDATE SET/);
+  assert.doesNotMatch(first.content, /\bDELETE\b/i);
+  assert.match(first.content, /is_active\s*=\s*EXCLUDED\.is_active/);
 });
 test("read errors take precedence over dirty status", async t => {
   const f = fixture(t); const path = join(f.migrationsDir, SYNC_TARGETS[0]); unlinkSync(path); mkdirSync(path);

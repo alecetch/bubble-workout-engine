@@ -5,6 +5,7 @@
       items: [
         { label: "Exercises",           href: "/admin/exercises" },
         { label: "Exercise Media",      href: "/admin/exercise-media" },
+        { label: "Hero Images",         href: "/admin/hero-media" },
         { label: "Warm-up Exercises",   href: "/admin/warmup-exercises" },
         { label: "Cool-down Exercises",   href: "/admin/cooldown-exercises" },
         { label: "Rep Rules",           href: "/admin/rep-rules" },

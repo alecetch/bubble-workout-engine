@@ -49,6 +49,7 @@ import { adminObservabilityRouter } from "./src/routes/adminObservability.js";
 import { createAdminHyroxObservabilityRouter } from "./src/routes/adminHyroxObservability.js";
 import { adminExerciseCatalogueRouter } from "./src/routes/adminExerciseCatalogue.js";
 import { adminExerciseMediaRouter } from "./src/routes/adminExerciseMedia.js";
+import { adminHeroMediaRouter } from "./src/routes/adminHeroMedia.js";
 import { adminWarmupExercisesRouter } from "./src/routes/adminWarmupExercises.js";
 import { adminCooldownExercisesRouter } from "./src/routes/adminCooldownExercises.js";
 import { adminNarrationRouter } from "./src/routes/adminNarration.js";
@@ -79,7 +80,7 @@ import {
   physiqueScanRouter,
   physiquePhotoRouter,
 } from "./src/routes/physiqueScan.js";
-import { buildPublicUrl } from "./src/utils/mediaUrl.js";
+import { resolveMediaUrl } from "./src/utils/mediaUrl.js";
 import { publicInternalError } from "./src/utils/publicError.js";
 import logger from "./src/utils/logger.js";
 import { pool } from "./src/db.js";
@@ -293,6 +294,7 @@ app.get("/admin/nav.js", (_req, res) => res.sendFile(join(__dirname, "admin/nav.
 app.get("/admin/coverage", adminCspMiddleware, (_req, res) => sendAdminPage(res, "coverage.html"));
 app.get("/admin/exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercises.html"));
 app.get("/admin/exercise-media", adminCspMiddleware, (_req, res) => sendAdminPage(res, "exercise-media.html"));
+app.get("/admin/hero-media", adminCspMiddleware, (_req, res) => sendAdminPage(res, "hero-media.html"));
 app.get("/admin/warmup-exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "warmup-exercises.html"));
 app.get("/admin/cooldown-exercises", adminCspMiddleware, (_req, res) => sendAdminPage(res, "cooldown-exercises.html"));
 app.get("/admin/health", adminCspMiddleware, (_req, res) => sendAdminPage(res, "health.html"));
@@ -463,7 +465,7 @@ const handleMediaAssets = async (req, res) => {
         imageKey: row.image_key,
         imageUrl: typeof row.image_url === "string" && row.image_url.trim()
           ? row.image_url
-          : buildPublicUrl(row.image_key),
+          : resolveMediaUrl(row),
       })),
     });
   } catch (err) {
@@ -664,6 +666,7 @@ app.use("/admin/api/observability", ...adminOnly, adminObservabilityRouter);
 app.use("/admin", ...adminOnly, adminConfigsRouter);
 app.use("/admin", ...adminOnly, adminExerciseCatalogueRouter);
 app.use("/admin", ...adminOnly, adminExerciseMediaRouter);
+app.use("/admin", ...adminOnly, adminHeroMediaRouter);
 app.use("/admin", ...adminOnly, adminWarmupExercisesRouter);
 app.use("/admin", ...adminOnly, adminCooldownExercisesRouter);
 app.use("/admin", ...adminOnly, adminNarrationRouter);
