@@ -15,6 +15,7 @@ import { promoteHeroMediaRow } from "../services/heroMediaPromotion.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const LEGACY_DIR = join(here, "../../assets/media-assets");
 const SCOPES = new Set(["program", "program_day"]);
+const IMPORT_IMAGE_KEY = /^hero-media\/(program|program_day)\/[a-z0-9_-]+\.(png|jpg|webp)$/;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 function camel(row) {
@@ -31,11 +32,12 @@ function camel(row) {
 
 function legacyFiles(dir) {
   const exact = new Set();
-  try {
-    for (const scope of ["program", "program_day"]) {
+  for (const scope of ["program", "program_day"]) {
+    // Per scope, so one missing directory doesn't make the other scope's files look missing too.
+    try {
       for (const file of readdirSync(join(dir, scope))) exact.add(`${scope}/${file}`);
-    }
-  } catch { /* unavailable directory is represented as missing */ }
+    } catch { /* unavailable directory: its files are represented as missing */ }
+  }
   const folded = new Set([...exact].map(v => v.toLowerCase()));
   return { exact, folded };
 }
@@ -194,6 +196,9 @@ export function createAdminHeroMediaRouter({
   router.post("/hero-media/import", receiveImage, async (req, res) => {
     try {
       const b = req.body || {}; if (!b.asset_key || !SCOPES.has(b.usage_scope)) return res.status(400).json({ ok: false, error: "Invalid import" });
+      // An uploaded image is written to the bucket at the posted key, so only accept keys in the
+      // shape the upload route generates.
+      if (req.file && !IMPORT_IMAGE_KEY.test(String(b.image_key || ""))) return res.status(400).json({ ok: false, error: "Invalid image key" });
       if (req.file) await putObjectFn(b.image_key, req.file.buffer, req.file.mimetype, EXERCISE_MEDIA_BUCKET);
       const q = await db.query(`INSERT INTO media_assets (asset_key,usage_scope,day_type,focus_type,label,sort_order,is_active,image_key,image_url)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (asset_key) DO UPDATE SET
