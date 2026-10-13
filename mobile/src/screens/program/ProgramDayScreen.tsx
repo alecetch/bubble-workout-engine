@@ -417,7 +417,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       >
         <HeroHeader
           title={loadedDay.label ?? "Workout Day"}
-          summary={`${loadedDay.type ?? "Session"}${loadedDay.sessionDuration ? ` • ${loadedDay.sessionDuration} min` : ""}`}
+          summary={`${loadedDay.typeLabel || "Session"}${loadedDay.sessionDuration ? ` • ${loadedDay.sessionDuration} min` : ""}`}
           heroMedia={loadedDay.heroMedia ?? null}
         />
 

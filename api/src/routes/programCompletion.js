@@ -1,3 +1,4 @@
+import { displayLabel } from "../utils/displayLabels.js";
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -320,6 +321,7 @@ export function createProgramCompletionHandlers(db = pool) {
         program_id: asString(row.program_id),
         program_title: asString(row.program_title),
         program_type: row.program_type ?? null,
+        program_type_label: displayLabel("programType", row.program_type),
         weeks_completed: toFiniteNumber(row.weeks_count, 0),
         days_completed: toFiniteNumber(row.completed_days, 0),
         days_total: toFiniteNumber(row.total_days, 0),

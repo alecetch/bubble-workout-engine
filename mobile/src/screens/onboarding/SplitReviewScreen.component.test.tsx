@@ -30,6 +30,7 @@ vi.mock("../../api/hooks", () => ({
 vi.mock("../../components/onboarding/OnboardingScaffold", () => ({
   OnboardingScaffold: ({
     children,
+    subtitle,
     onBack,
     onNext,
     nextLabel,
@@ -37,6 +38,7 @@ vi.mock("../../components/onboarding/OnboardingScaffold", () => ({
     nextTestID,
   }: {
     children: React.ReactNode;
+    subtitle: string;
     onBack: () => void;
     onNext: () => void;
     nextLabel: string;
@@ -44,6 +46,7 @@ vi.mock("../../components/onboarding/OnboardingScaffold", () => ({
     nextTestID?: string;
   }) => (
     <div>
+      <p>{subtitle}</p>
       {children}
       <button type="button" onClick={onBack}>
         Back
@@ -110,6 +113,15 @@ function renderScreen(routeParams?: Record<string, unknown>) {
 }
 
 describe("SplitReviewScreen", () => {
+  it("renders the API type label in the recommended split subtitle", () => {
+    useSplitRecommendationMock.mockReturnValue({
+      data: { programType: "hyrox", programTypeLabel: "HYROX", daysPerWeek: 3, recommendation: ["full_body", "full_body", "full_body"], existingPreference: null },
+      isLoading: false, isError: false,
+    });
+    renderScreen();
+    expect(screen.getByText(/3-day HYROX program/)).toBeInTheDocument();
+    expect(screen.queryByText(/3-day hyrox program/)).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     patchProgramSplitMock.mockReset();
     patchProgramSplitMock.mockResolvedValue({ ok: true, updatedCount: 4 });
@@ -126,6 +138,7 @@ describe("SplitReviewScreen", () => {
     useSplitRecommendationMock.mockReturnValue({
       data: {
         programType: "hypertrophy",
+        programTypeLabel: "Hypertrophy",
         daysPerWeek: 4,
         recommendation: ["upper_body", "lower_body", "upper_body", "lower_body"],
         existingPreference: null,

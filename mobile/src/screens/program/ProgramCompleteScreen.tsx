@@ -241,7 +241,7 @@ export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.E
             You finished all scheduled sessions. Ready for the next block?
           </Text>
           <Text style={styles.programTitle}>{summary.programTitle}</Text>
-          {summary.programType ? <Text style={styles.programType}>{summary.programType}</Text> : null}
+          {summary.programTypeLabel ? <Text style={styles.programType}>{summary.programTypeLabel}</Text> : null}
           {summary.completedMode === "with_skips" ? (
             <Text style={styles.skippedCopy}>
               Completed with {summary.skippedWorkoutsCount} skipped session{summary.skippedWorkoutsCount === 1 ? "" : "s"}

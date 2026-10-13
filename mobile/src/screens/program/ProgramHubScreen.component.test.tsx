@@ -97,6 +97,7 @@ function mockProgram(overrides: Record<string, unknown> = {}) {
     program_id: "prog-1",
     program_title: "Strength Builder",
     program_type: "strength",
+    programTypeLabel: "Strength",
     is_primary: true,
     status: "active",
     weeks_count: 8,
@@ -117,6 +118,13 @@ function renderScreen() {
 }
 
 describe("ProgramHubScreen", () => {
+  it("renders the API program type labels in the badges", () => {
+    renderScreen();
+    expect(screen.getByText("Strength")).toBeInTheDocument();
+    expect(screen.getByText("Hypertrophy")).toBeInTheDocument();
+    expect(screen.queryByText("strength")).not.toBeInTheDocument();
+    expect(screen.queryByText("hypertrophy")).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((message?: unknown, ...args: unknown[]) => {
       if (shouldSuppressNestedButtonWarning(message, ...args)) {
@@ -141,6 +149,7 @@ describe("ProgramHubScreen", () => {
             program_id: "prog-2",
             program_title: "Hypertrophy Block",
             program_type: "hypertrophy",
+            programTypeLabel: "Hypertrophy",
             is_primary: false,
           }),
         ],

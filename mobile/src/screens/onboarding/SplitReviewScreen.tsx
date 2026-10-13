@@ -64,6 +64,7 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
   const recommendation = splitQuery.data?.recommendation ?? [];
   const daysPerWeek = splitQuery.data?.daysPerWeek ?? recommendation.length;
   const programType = splitQuery.data?.programType ?? "hypertrophy";
+  const programTypeLabel = splitQuery.data?.programTypeLabel ?? "Hypertrophy";
 
   useEffect(() => {
     if (splitQuery.data) {
@@ -132,7 +133,7 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
       <OnboardingScaffold
         step={3}
         title="Your training split"
-        subtitle={`We've recommended a split for your ${daysPerWeek || ""}-day ${programType} program. Tap any day to adjust.`}
+        subtitle={`We've recommended a split for your ${daysPerWeek || ""}-day ${programTypeLabel} program. Tap any day to adjust.`}
         errorBannerVisible={Boolean(saveError || splitQuery.isError)}
         onBack={() => navigation.goBack()}
         onNext={() => void handleContinue()}

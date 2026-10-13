@@ -1,3 +1,4 @@
+import { displayLabel } from "../utils/displayLabels.js";
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -131,6 +132,7 @@ export function createSplitRecommendationHandlers(db) {
         ok: true,
         request_id,
         programType,
+        program_type_label: displayLabel("programType", programType),
         daysPerWeek,
         recommendation,
         splitNotApplicable,

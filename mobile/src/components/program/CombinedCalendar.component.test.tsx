@@ -1,6 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CalendarDay, CalendarSession } from "../../api/activePrograms";
+import { displayLabel } from "../../utils/displayLabel";
 import { CombinedCalendar } from "./CombinedCalendar";
 
 function makeSession(overrides: Partial<CalendarSession> = {}): CalendarSession {
@@ -8,6 +9,7 @@ function makeSession(overrides: Partial<CalendarSession> = {}): CalendarSession 
     program_id: "prog-1", program_day_id: "pd-1", program_type: "strength",
     program_title: "Strength Block", is_primary_program: true,
     day_label: "Week 1 Day 1", is_completed: false, ...overrides,
+    programTypeLabel: overrides.programTypeLabel ?? displayLabel("programType", overrides.program_type ?? "strength"),
   };
 }
 function makeDay(overrides: Partial<CalendarDay> = {}): CalendarDay {
@@ -26,7 +28,7 @@ describe("CombinedCalendar", () => {
     ["conditioning", "#F59E0B"], ["hyrox", "#EF4444"], ["unknown", "#6B7280"],
   ])("renders an accessible %s dot with its expected colour", (program_type, colour) => {
     render(<CombinedCalendar days={[makeDay({ sessions: [makeSession({ program_type })] })]} onDayPress={vi.fn()} />);
-    expect(screen.getByLabelText(`${program_type} session`)).toHaveStyle({ backgroundColor: colour });
+    expect(screen.getByLabelText(`${displayLabel("programType", program_type)} session`)).toHaveStyle({ backgroundColor: colour });
     expect(screen.getByRole("button", { name: "2026-04-21, 1 session" })).toBeInTheDocument();
     expect(screen.queryByText("1")).not.toBeInTheDocument();
   });
@@ -35,8 +37,8 @@ describe("CombinedCalendar", () => {
     render(<CombinedCalendar days={[makeDay({ sessions: [makeSession(), makeSession({ program_id: "prog-2", program_type: "hypertrophy" })] })]} onDayPress={vi.fn()} />);
     const day = within(screen.getByRole("button", { name: "2026-04-21, 2 sessions" }));
     expect(day.getAllByLabelText(/ session$/)).toHaveLength(2);
-    expect(day.getByLabelText("strength session")).toBeInTheDocument();
-    expect(day.getByLabelText("hypertrophy session")).toBeInTheDocument();
+    expect(day.getByLabelText("Strength session")).toBeInTheDocument();
+    expect(day.getByLabelText("Hypertrophy session")).toBeInTheDocument();
     expect(day.getByText("2")).toBeInTheDocument();
   });
 
@@ -45,7 +47,7 @@ describe("CombinedCalendar", () => {
     render(<CombinedCalendar days={[makeDay({ sessions })]} onDayPress={vi.fn()} />);
     const day = within(screen.getByRole("button", { name: "2026-04-21, 4 sessions" }));
     expect(day.getAllByLabelText(/ session$/)).toHaveLength(3);
-    expect(day.queryByLabelText("hyrox session")).not.toBeInTheDocument();
+    expect(day.queryByLabelText("HYROX session")).not.toBeInTheDocument();
     expect(day.getByText("4")).toBeInTheDocument();
   });
 

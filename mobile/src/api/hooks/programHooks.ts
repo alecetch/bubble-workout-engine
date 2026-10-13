@@ -62,9 +62,11 @@ import {
 import { getReferenceData, type ReferenceDataResponse } from "../referenceData";
 import type { EquipmentPreset } from "../../state/onboarding/types";
 import { queryKeys } from "./shared";
+import { displayLabel } from "../../utils/displayLabel";
 
 export type SplitRecommendationResponse = {
   programType: string;
+  programTypeLabel: string;
   daysPerWeek: number;
   recommendation: string[];
   existingPreference: string[] | null;
@@ -95,7 +97,13 @@ export function useSplitRecommendation(
   const url = search ? `/api/split-recommendation?${search}` : "/api/split-recommendation";
   return useQuery({
     queryKey: [...queryKeys.splitRecommendation, params?.daysPerWeek, params?.programType],
-    queryFn: () => authGetJson<SplitRecommendationResponse>(url),
+    queryFn: async () => {
+      const raw = await authGetJson<SplitRecommendationResponse & { program_type_label?: string }>(url);
+      return {
+        ...raw,
+        programTypeLabel: raw.program_type_label ?? raw.programTypeLabel ?? displayLabel("programType", raw.programType),
+      };
+    },
     staleTime: 0,
   });
 }

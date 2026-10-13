@@ -6,7 +6,7 @@ import { SessionPickerSheet } from "./SessionPickerSheet";
 function makeSession(overrides: Partial<SessionsByDateItem> = {}): SessionsByDateItem {
   return {
     program_id: "prog-1", program_day_id: "pd-1", program_title: "Strength Block",
-    program_type: "strength", is_primary_program: false, day_label: "Week 1 Day 1",
+    program_type: "strength", programTypeLabel: "Strength", is_primary_program: false, day_label: "Week 1 Day 1",
     session_duration_mins: null, is_completed: false, ...overrides,
   };
 }

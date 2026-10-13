@@ -37,6 +37,36 @@ function makeCatalogJson() {
   });
 }
 
+for (const [programType, focus, title] of [
+  ["strength", "full", "Day 1: Full Body Strength Session"],
+  ["hypertrophy", "upper_body", "Day 1: Upper Body Hypertrophy Session"],
+]) {
+  test(`applyNarration uses display labels and the scoped ${programType} title`, async () => {
+    const program = makeProgram();
+    program.program_type = programType;
+    program.days[0].day_focus = focus;
+    const out = await applyNarration({
+      program,
+      narrationTemplates: [
+        { template_id: "day_title_1", scope: "day", field: "DAY_TITLE", priority: 1, text_pool_json: ["Day {DAY_INDEX}: {DAY_FOCUS} Session"] },
+        { template_id: "day_title_strength_v1", scope: "day", field: "DAY_TITLE", priority: 5, applies_json: { program_type: "strength" }, text_pool_json: ["Day {DAY_INDEX}: {DAY_FOCUS} Strength Session"] },
+        { template_id: "day_title_hypertrophy_v1", scope: "day", field: "DAY_TITLE", priority: 5, applies_json: { program_type: "hypertrophy" }, text_pool_json: ["Day {DAY_INDEX}: {DAY_FOCUS} Hypertrophy Session"] },
+        { template_id: "day_goal", scope: "day", field: "DAY_GOAL", priority: 10, applies_json: { day_focus: focus }, text_pool_json: ["{PROGRAM_TYPE}: {DAY_FOCUS}"] },
+      ],
+      programGenerationConfigJson: makePgcJson(),
+      fitnessRank: 1,
+      programLength: 4,
+      catalogJson: makeCatalogJson(),
+      cooldownSeconds: 120,
+    });
+    assert.equal(out.debug.ok, true);
+    assert.equal(out.program.days[0].narration.day_title, title);
+    assert.equal(out.program.days[0].day_focus, focus, "matching retains the raw focus slug");
+    assert.equal(out.program.days[0].narration.day_goal, programType === "strength" ? "Strength: Full Body" : "Hypertrophy: Upper Body");
+    if (programType === "strength") assert.doesNotMatch(out.program.days[0].narration.day_title, /Hypertrophy/);
+  });
+}
+
 function makePgcJson() {
   return JSON.stringify({
     total_weeks_default: 4,

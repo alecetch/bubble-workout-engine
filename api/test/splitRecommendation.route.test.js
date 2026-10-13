@@ -98,6 +98,7 @@ test("GET /api/split-recommendation falls back when no config row is found", asy
 
     assert.equal(response.status, 200);
     assert.deepEqual(body.recommendation, ["full_body", "full_body", "full_body"]);
+    assert.equal(body.program_type_label, "Hypertrophy");
     assert.equal(body.splitNotApplicable, false);
     assert.equal(body.existingPreference, null);
     assert.deepEqual(calls[1].params, ["hypertrophy"]);

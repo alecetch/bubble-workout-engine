@@ -1,3 +1,4 @@
+import { displayLabel } from "../utils/displayLabels.js";
 import express from "express";
 import { pool } from "../db.js";
 import { userAuth } from "../middleware/chains.js";
@@ -95,6 +96,7 @@ export function createActiveProgramsHandlers(db = pool) {
           program_id: asString(row.program_id),
           program_title: asString(row.program_title),
           program_type: asString(row.program_type),
+          program_type_label: displayLabel("programType", row.program_type),
           is_primary: Boolean(row.is_primary),
           status: asString(row.status),
           weeks_count: toFinite(row.weeks_count),
@@ -109,6 +111,7 @@ export function createActiveProgramsHandlers(db = pool) {
           program_day_id: asString(row.program_day_id),
           program_title: asString(row.program_title),
           program_type: asString(row.program_type),
+          program_type_label: displayLabel("programType", row.program_type),
           day_label: asString(row.day_label),
           scheduled_date: asString(row.scheduled_date),
         })),
@@ -171,6 +174,7 @@ export function createActiveProgramsHandlers(db = pool) {
           program_id: asString(row.program_id),
           program_day_id: asString(row.program_day_id),
           program_type: asString(row.program_type),
+          program_type_label: displayLabel("programType", row.program_type),
           program_title: asString(row.program_title),
           is_primary_program: Boolean(row.is_primary_program),
           day_label: asString(row.day_label),
@@ -233,6 +237,7 @@ export function createActiveProgramsHandlers(db = pool) {
           program_day_id: asString(row.program_day_id),
           program_title: asString(row.program_title),
           program_type: asString(row.program_type),
+          program_type_label: displayLabel("programType", row.program_type),
           is_primary_program: Boolean(row.is_primary_program),
           day_label: asString(row.day_label),
           session_duration_mins:
