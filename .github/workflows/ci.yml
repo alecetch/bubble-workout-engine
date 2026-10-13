@@ -416,22 +416,26 @@ jobs:
           for attempt in 1 2 3 4 5; do
             # sdkmanager can exit 0 after a failed download, so also check for its known
             # failure messages and for the installed files. A partial extraction can leave the
-            # emulator binary present but missing a shared library ("error while loading shared
-            # libraries: libandroid-emu-curl.so"), which crashes it at launch and costs the full
-            # 600s boot timeout. `emulator -version` loads those libraries without starting a
-            # device, so a broken install fails here in seconds instead.
+            # emulator launcher present but missing one of its own bundled libraries ("emulator:
+            # error while loading shared libraries: libandroid-emu-curl.so"), which crashes it at
+            # launch and costs the full 600s boot timeout. `ldd` on the launcher reports a missing
+            # bundled library as "not found" in seconds. Only the emulator's own bundled libraries
+            # (libandroid-*) count: unresolved system libraries (e.g. libX11) are environment, not
+            # a broken download, and a reinstall can't fix them. Don't run `emulator -version`
+            # instead: it starts the qemu binary without -no-audio, which needs libpulse.so.0
+            # (absent on the runner), so it fails even on a healthy install.
             if "$SDKM" --install emulator 'system-images;android-34;default;x86_64' --channel=0 > /tmp/sdkmanager.log 2>&1 \
               && ! grep -qiE "an error occurred while preparing|failed to download" /tmp/sdkmanager.log \
               && [ -x "$ANDROID_HOME/emulator/emulator" ] \
               && [ -f "$ANDROID_HOME/system-images/android-34/default/x86_64/system.img" ] \
-              && "$ANDROID_HOME/emulator/emulator" -version > /tmp/emulator-version.log 2>&1; then
-              echo "emulator and system image installed and runnable on attempt $attempt"
-              head -1 /tmp/emulator-version.log || true
+              && { ldd "$ANDROID_HOME/emulator/emulator" > /tmp/emulator-ldd.log 2>&1 || true; } \
+              && ! grep "not found" /tmp/emulator-ldd.log | grep -q "libandroid-"; then
+              echo "emulator and system image installed, launcher libraries resolved, on attempt $attempt"
               exit 0
             fi
             echo "::warning::SDK package install attempt $attempt failed:"
             grep -iE "error|warning" /tmp/sdkmanager.log | head -5 || true
-            grep -iE "error" /tmp/emulator-version.log 2>/dev/null | head -3 || true
+            grep "not found" /tmp/emulator-ldd.log 2>/dev/null | head -3 || true
             # sdkmanager treats an already-installed (even broken) emulator as up to date, so
             # remove it before retrying or every attempt reuses the same broken files.
             "$SDKM" --uninstall emulator > /dev/null 2>&1 || true
