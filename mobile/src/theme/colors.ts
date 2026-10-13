@@ -12,6 +12,7 @@ export const colors = {
   warning: "#FACC15",
   border: "rgba(148,163,184,0.15)",
   focus: "#3B82F6",
+  heroImageTint: "rgba(15,23,42,0.45)",
 } as const;
 
 export type AppColors = typeof colors;

@@ -34,12 +34,14 @@ describe("HeroHeader", () => {
   it("renders the hero image with the title and summary", () => {
     const { container } = render(<HeroHeader {...textProps} heroMedia={heroMedia} />);
     expect(container.querySelector("img")).toHaveAttribute("src", heroMedia);
+    expect(screen.getByTestId("hero-image-tint")).toBeInTheDocument();
     expectText();
   });
 
   it("renders the title and summary without an image when media is absent", () => {
     const { container } = render(<HeroHeader {...textProps} heroMedia={null} />);
     expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hero-image-tint")).not.toBeInTheDocument();
     expectText();
   });
 
@@ -47,6 +49,7 @@ describe("HeroHeader", () => {
     const { container } = render(<HeroHeader {...textProps} heroMedia={heroMedia} />);
     fireEvent.error(container.querySelector("img")!);
     expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hero-image-tint")).not.toBeInTheDocument();
     expectText();
   });
 
