@@ -24,6 +24,11 @@ export function WelcomeLoginScreen({ navigation }: Props): React.JSX.Element {
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
           />
+          <View
+            testID="welcome-hero-tint"
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, styles.heroTint]}
+          />
           <LinearGradient
             colors={["transparent", "rgba(15,23,42,0.55)", "rgba(15,23,42,0.90)"]}
             locations={[0, 0.55, 1]}
@@ -61,6 +66,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  heroTint: {
+    backgroundColor: colors.heroImageTint,
   },
   title: {
     color: colors.textPrimary,

@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -84,6 +85,10 @@ export async function getObject(key, bucket = DEFAULT_BUCKET) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
+}
+
+export async function headObject(key, bucket = DEFAULT_BUCKET) {
+  return getClientForBucket(bucket).send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
 }
 
 export async function getObjectStream(key, bucket = DEFAULT_BUCKET, range = undefined) {

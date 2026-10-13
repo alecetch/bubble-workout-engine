@@ -83,3 +83,18 @@ test("buildExerciseMediaUrl honors explicit exercise media public base", () => {
 test("resolveMediaUrl returns null for null row", () => {
   assert.equal(resolveMediaUrl(null), null);
 });
+
+test("resolveMediaUrl uses exercise media for hero-media keys and static media for legacy keys", () => {
+  const oldBase = process.env.S3_PUBLIC_BASE_URL;
+  const oldExerciseBase = process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+  process.env.S3_PUBLIC_BASE_URL = "http://localhost:3000/assets/media-assets";
+  delete process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+  try {
+    assert.equal(resolveMediaUrl({ image_key: "hero-media/program/strength.jpg" }), "http://localhost:3000/assets/exercise-media/hero-media/program/strength.jpg");
+    assert.equal(resolveMediaUrl({ image_key: "program/strength.png" }), "http://localhost:3000/assets/media-assets/program/strength.png");
+  } finally {
+    process.env.S3_PUBLIC_BASE_URL = oldBase;
+    if (oldExerciseBase === undefined) delete process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+    else process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL = oldExerciseBase;
+  }
+});
