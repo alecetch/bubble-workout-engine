@@ -282,6 +282,32 @@ function readTargetRegionsForEx(byId, exId) {
   return arr.map((value) => s(value).trim()).filter(Boolean);
 }
 
+export const PATTERN_FALLBACK_REGIONS = Object.freeze({
+  anti_extension: Object.freeze(["core"]),
+  calf: Object.freeze(["calves"]),
+  carry: Object.freeze(["grip", "core"]),
+  cyclical_engine: Object.freeze(["cardio"]),
+  locomotion: Object.freeze(["cardio"]),
+  push_ballistic: Object.freeze(["cardio"]),
+  sled_pull: Object.freeze(["cardio"]),
+  sled_push: Object.freeze(["cardio"]),
+  hinge: Object.freeze(["hamstrings", "glutes"]),
+  lunge: Object.freeze(["quads", "glutes"]),
+  squat: Object.freeze(["quads", "glutes"]),
+  pull_horizontal: Object.freeze(["upper_back", "biceps"]),
+  pull_vertical: Object.freeze(["lats", "biceps"]),
+  push_horizontal: Object.freeze(["chest", "triceps", "shoulders"]),
+  push_vertical: Object.freeze(["shoulders", "triceps"]),
+});
+
+export function fallbackRegionsForEx(byId, exId) {
+  if (!byId || !exId) return [];
+  const ex = byId[String(exId)];
+  if (!ex) return [];
+  const regions = PATTERN_FALLBACK_REGIONS[s(ex.mp || ex.movement_pattern_primary).trim()];
+  return regions ? [...regions] : [];
+}
+
 function readCoachingCues(ex) {
   if (!ex) return "";
   const arr = safeJsonParse(ex.coaching_cues_json || ex.coaching_cues, null);
@@ -515,6 +541,7 @@ function makeCounters() {
     warmup_items_selected_days: 0,
     cooldown_segment_added_days: 0,
     cooldown_items_selected_days: 0,
+    bookend_region_fallbacks: 0,
   };
 }
 function addCounters(a, b) {
@@ -559,7 +586,7 @@ function normalizeBookendHistory(raw) {
   return out;
 }
 
-function requiredBookendRegionsForDay(day, catalogById) {
+export function requiredBookendRegionsForDay(day, catalogById) {
   const priority = { main: 0, secondary: 1, accessory: 2 };
   const rows = [];
   const segs = Array.isArray(day?.segments) ? day.segments : [];
@@ -582,16 +609,22 @@ function requiredBookendRegionsForDay(day, catalogById) {
 
   const seen = new Set();
   const out = [];
+  let fallbacks = 0;
   for (const row of rows) {
     const exId = s(row.item?.ex_id || row.item?.exercise_id);
-    for (const region of readTargetRegionsForEx(catalogById, exId)) {
+    let regions = readTargetRegionsForEx(catalogById, exId);
+    if (!regions.length) {
+      regions = fallbackRegionsForEx(catalogById, exId);
+      if (regions.length) fallbacks += 1;
+    }
+    for (const region of regions) {
       if (seen.has(region)) continue;
       seen.add(region);
       out.push(region);
-      if (out.length >= 5) return out;
+      if (out.length >= 5) return { regions: out, fallbacks };
     }
   }
-  return out;
+  return { regions: out, fallbacks };
 }
 
 function parseDurationOrRepsLabel(label) {
@@ -773,7 +806,9 @@ function enrichDays(days, templates, cfg, catalogById, context) {
       }
       if (purp === "secondary" && !secondaryName) secondaryName = nm;
     }
-    const requiredBookendRegions = requiredBookendRegionsForDay(day, catalogById);
+    const bookendRegions = requiredBookendRegionsForDay(day, catalogById);
+    const requiredBookendRegions = bookendRegions.regions;
+    debugCounters.bookend_region_fallbacks += bookendRegions.fallbacks;
 
     const dayFocus = dayFocusFromDay(day);
     const matchCtx = { ...matchBase, day_focus: dayFocus };
