@@ -51,6 +51,11 @@ export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): Reac
         resizeMode="cover"
         onError={() => setImageFailed(true)}
       />
+      <View
+        testID="hero-image-tint"
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, styles.tint]}
+      />
       <LinearGradient
         colors={["transparent", "rgba(15,23,42,0.55)", "rgba(15,23,42,0.90)"]}
         locations={[0, 0.55, 1]}
@@ -79,6 +84,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   image: {
+    borderRadius: radii.card,
+  },
+  tint: {
+    backgroundColor: colors.heroImageTint,
     borderRadius: radii.card,
   },
   content: {

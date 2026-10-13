@@ -45,6 +45,7 @@ describe("WelcomeLoginScreen", () => {
     config.WELCOME_HERO_URL = "https://cdn.example.com/welcome.jpg";
     const navigation = renderScreen();
     expect(document.querySelector('img[src="https://cdn.example.com/welcome.jpg"]')).toBeInTheDocument();
+    expect(screen.getByTestId("welcome-hero-tint")).toBeInTheDocument();
     expect(screen.getByText("Welcome")).toBeInTheDocument();
     expect(screen.getByText("Terms of Service")).toBeInTheDocument();
     expect(screen.getByText("Privacy Policy")).toBeInTheDocument();
@@ -57,6 +58,7 @@ describe("WelcomeLoginScreen", () => {
   it("renders no background image when the hero URL is unset", () => {
     renderScreen();
     expect(document.querySelector("img")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("welcome-hero-tint")).not.toBeInTheDocument();
     expect(screen.getByText("Welcome")).toBeInTheDocument();
   });
 
