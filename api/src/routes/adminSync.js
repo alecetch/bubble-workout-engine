@@ -217,6 +217,21 @@ ON CONFLICT (template_id) DO UPDATE SET
   };
 }
 
+export async function generateMediaAssetsSnapshot(db) {
+  const { rows } = await db.query(`
+    SELECT asset_key, usage_scope, day_type, focus_type, label, sort_order,
+           is_active, image_key, image_url
+    FROM public.media_assets
+    ORDER BY asset_key
+  `);
+  const values = rows.map(r => `(${textLit(r.asset_key)},${textLit(r.usage_scope)},${textLit(r.day_type)},${textLit(r.focus_type)},${textLit(r.label)},${intLit(r.sort_order)},${boolLit(r.is_active)},${textLit(r.image_key)},${textLit(r.image_url)})`);
+  const statement = rows.length ? `INSERT INTO public.media_assets (asset_key,usage_scope,day_type,focus_type,label,sort_order,is_active,image_key,image_url)
+VALUES
+${values.join(",\n")}
+ON CONFLICT (asset_key) DO UPDATE SET usage_scope=EXCLUDED.usage_scope,day_type=EXCLUDED.day_type,focus_type=EXCLUDED.focus_type,label=EXCLUDED.label,sort_order=EXCLUDED.sort_order,is_active=EXCLUDED.is_active,image_key=EXCLUDED.image_key,image_url=EXCLUDED.image_url,updated_at=now();` : "";
+  return { content: fileHeader("Hero Media Assets", rows.length) + statement + "\n", rows: rows.length };
+}
+
 // ── File writer ────────────────────────────────────────────────────────────
 
 function writeSnapshot(dir, filename, content) {
@@ -236,6 +251,7 @@ function toIsoOrNull(value) {
 
 export const SYNC_TARGETS = [
   "R__exercise_catalogue_edits.sql",
+  "R__seed_media_assets.sql",
   "R__seed_program_generation_config.sql",
   "R__seed_program_rep_rules.sql",
   "R__seed_narration_template.sql",
@@ -244,6 +260,7 @@ export const SYNC_TARGETS = [
 export async function buildSyncSnapshots(db = pool) {
   const snapshots = [
     await exportExerciseCatalogueSnapshot(),
+    await generateMediaAssetsSnapshot(db),
     await generatePgcSnapshot(db),
     await generateRepRulesSnapshot(db),
     await generateNarrationSnapshot(db),

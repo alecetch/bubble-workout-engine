@@ -44,5 +44,8 @@ export function resolveMediaUrl(row) {
   if (!row) return null;
   const { image_url, image_key } = row;
   if (image_url && /^https?:\/\//i.test(image_url)) return image_url;
+  if (String(image_key ?? "").startsWith("hero-media/")) {
+    return buildExerciseMediaUrl(image_key) || null;
+  }
   return buildPublicUrl(image_key) || null;
 }
