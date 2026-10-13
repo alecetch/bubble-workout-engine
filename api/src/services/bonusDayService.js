@@ -127,7 +127,16 @@ async function findOrCreateProgramWeek(client, { programId, startDate, targetDat
   return insertR.rows[0];
 }
 
-async function insertTemplateForDate(client, {
+// The pipeline assigns each generated day a hero (runPipeline step 5), but the emitter rows that
+// templateDay comes from don't carry it, so read it from the pipeline's program. A bonus run
+// generates a single one-day week.
+export function templateHeroMediaId(pipelineOut) {
+  const days = pipelineOut?.program?.weeks?.[0]?.days ?? pipelineOut?.program?.days ?? [];
+  return days[0]?.hero_media_id ?? null;
+}
+
+// Exported for tests.
+export async function insertTemplateForDate(client, {
   programId,
   userId,
   startDate,
@@ -137,6 +146,7 @@ async function insertTemplateForDate(client, {
   templateExs,
   programType,
   focusType,
+  heroMediaId = null,
   hasProgramCalendarDayUserId,
 }) {
   const date = toIsoDate(targetDate);
@@ -175,9 +185,9 @@ async function insertTemplateForDate(client, {
        session_duration_mins, day_format_text,
        block_format_main_text, block_format_secondary_text, block_format_finisher_text,
        scheduled_offset_days, scheduled_weekday, scheduled_date,
-       is_bonus
+       is_bonus, hero_media_id
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::date,true)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::date,true,$18)
      RETURNING id`,
     [
       programId,
@@ -197,6 +207,7 @@ async function insertTemplateForDate(client, {
       scheduledOffsetDays,
       scheduledWeekday,
       date,
+      heroMediaId,
     ],
   );
   const programDayId = dayR.rows[0].id;
@@ -440,6 +451,7 @@ export async function addBonusDay(db, {
         templateExs,
         programType: resolvedProgramType,
         focusType,
+        heroMediaId: templateHeroMediaId(pipelineOut),
         hasProgramCalendarDayUserId,
       });
       insertedDayIds.push(insertedId);
