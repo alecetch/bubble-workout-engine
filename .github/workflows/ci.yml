@@ -415,17 +415,27 @@ jobs:
           yes | "$SDKM" --licenses > /dev/null || true
           for attempt in 1 2 3 4 5; do
             # sdkmanager can exit 0 after a failed download, so also check for its known
-            # failure messages and for the installed files.
+            # failure messages and for the installed files. A partial extraction can leave the
+            # emulator binary present but missing a shared library ("error while loading shared
+            # libraries: libandroid-emu-curl.so"), which crashes it at launch and costs the full
+            # 600s boot timeout. `emulator -version` loads those libraries without starting a
+            # device, so a broken install fails here in seconds instead.
             if "$SDKM" --install emulator 'system-images;android-34;default;x86_64' --channel=0 > /tmp/sdkmanager.log 2>&1 \
               && ! grep -qiE "an error occurred while preparing|failed to download" /tmp/sdkmanager.log \
               && [ -x "$ANDROID_HOME/emulator/emulator" ] \
-              && [ -f "$ANDROID_HOME/system-images/android-34/default/x86_64/system.img" ]; then
-              echo "emulator and system image installed on attempt $attempt"
+              && [ -f "$ANDROID_HOME/system-images/android-34/default/x86_64/system.img" ] \
+              && "$ANDROID_HOME/emulator/emulator" -version > /tmp/emulator-version.log 2>&1; then
+              echo "emulator and system image installed and runnable on attempt $attempt"
+              head -1 /tmp/emulator-version.log || true
               exit 0
             fi
             echo "::warning::SDK package install attempt $attempt failed:"
             grep -iE "error|warning" /tmp/sdkmanager.log | head -5 || true
-            rm -rf "$ANDROID_HOME/.temp" "$HOME/.android/cache"
+            grep -iE "error" /tmp/emulator-version.log 2>/dev/null | head -3 || true
+            # sdkmanager treats an already-installed (even broken) emulator as up to date, so
+            # remove it before retrying or every attempt reuses the same broken files.
+            "$SDKM" --uninstall emulator > /dev/null 2>&1 || true
+            rm -rf "$ANDROID_HOME/emulator" "$ANDROID_HOME/.temp" "$HOME/.android/cache"
             sleep $((attempt * 20))
           done
           echo "::error::Could not install the Android emulator/system image after 5 attempts"
