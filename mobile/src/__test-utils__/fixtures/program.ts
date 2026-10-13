@@ -79,6 +79,8 @@ export function buildProgramDay(
       programId: "program-1",
       label: "Lower Body",
       type: "strength",
+      typeLabel: "Strength",
+      focusLabel: "Lower Body",
       sessionDuration: 45,
       equipmentOverridePresetSlug: null,
       equipmentOverrideItemSlugs: [],

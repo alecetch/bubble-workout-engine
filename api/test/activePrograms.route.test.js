@@ -101,6 +101,9 @@ test("getActivePrograms maps programs and today sessions with primary first", as
   assert.equal(res.body.primary_program_id, "program-a");
   assert.equal(res.body.programs.length, 2);
   assert.equal(res.body.programs[0].is_primary, true);
+  assert.equal(res.body.programs[0].program_type_label, "Strength");
+  assert.equal(res.body.programs[1].program_type_label, "Conditioning");
+  assert.equal(res.body.today_sessions[0].program_type_label, "Strength");
   assert.equal(res.body.today_sessions[0].program_day_id, "day-1");
 });
 
@@ -150,6 +153,8 @@ test("getCombinedCalendar validates date range and groups sessions", async () =>
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.days.length, 1);
   assert.equal(res.body.days[0].sessions.length, 2);
+  assert.equal(res.body.days[0].sessions[0].program_type_label, "Strength");
+  assert.equal(res.body.days[0].sessions[1].program_type_label, "Conditioning");
 });
 
 test("getSessionsByDate validates input and returns sessions", async () => {
@@ -184,6 +189,7 @@ test("getSessionsByDate validates input and returns sessions", async () => {
   );
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.sessions[0].session_duration_mins, 60);
+  assert.equal(res.body.sessions[0].program_type_label, "Strength");
 });
 
 test("setPrimaryProgram demotes old primary and promotes target", async () => {

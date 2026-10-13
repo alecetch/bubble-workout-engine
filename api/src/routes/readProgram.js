@@ -1,3 +1,4 @@
+import { displayLabel } from "../utils/displayLabels.js";
 // api/src/routes/readProgram.js
 import express from "express";
 import { pool } from "../db.js";
@@ -254,6 +255,7 @@ export function createReadProgramHandlers(options = pool) {
       const _prgRow = prgR.rows[0];
       const program = {
         ..._prgRow,
+        program_type_label: displayLabel("programType", _prgRow.program_type),
         hero_media: _prgRow.hero_image_key
           ? resolveMediaUrl({
               image_key: _prgRow.hero_image_key,
@@ -468,6 +470,7 @@ export function createReadProgramHandlers(options = pool) {
           d.global_day_index,
           d.day_label,
           d.day_type,
+          d.focus_type,
           d.session_duration_mins,
           d.day_format_text,
           d.block_format_main_text,
@@ -497,6 +500,8 @@ export function createReadProgramHandlers(options = pool) {
       const _dayRow = dayR.rows[0];
       const day = {
         ..._dayRow,
+        day_type_label: displayLabel("dayType", _dayRow.day_type),
+        day_focus_label: displayLabel("dayFocus", _dayRow.focus_type),
         equipmentOverridePresetSlug: _dayRow.equipment_override_preset_slug ?? null,
         equipmentOverrideItemSlugs: _dayRow.equipment_override_items_slugs ?? null,
         scheduledWeekday: _dayRow.scheduled_weekday ?? "",

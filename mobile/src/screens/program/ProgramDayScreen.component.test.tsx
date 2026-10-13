@@ -449,6 +449,18 @@ describe("ProgramDayScreen", () => {
     await waitForLocalStateLoad();
   });
 
+  it("renders the API type label and keeps the stored day title", async () => {
+    useProgramDayFullMock.mockReturnValue({
+      data: { ...mockDay, day: { ...mockDay.day, type: "strength", typeLabel: "Strength", sessionDuration: 60 } },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    } as any);
+    renderScreen();
+    expect(screen.getByText("Strength • 60 min")).toBeInTheDocument();
+    expect(screen.queryByText("strength • 60 min")).not.toBeInTheDocument();
+    expect(screen.getByText("Lower Body")).toBeInTheDocument();
+    await waitForLocalStateLoad();
+  });
+
   it("renders the day label", async () => {
     renderScreen();
 

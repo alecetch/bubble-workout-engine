@@ -1,9 +1,11 @@
+import { displayLabel } from "../utils/displayLabel";
 import { authGetJson, authPatchJson } from "./client";
 
 export interface ActiveProgramSummary {
   program_id: string;
   program_title: string;
   program_type: string;
+  programTypeLabel: string;
   is_primary: boolean;
   status: string;
   weeks_count: number;
@@ -19,6 +21,7 @@ export interface TodaySession {
   program_day_id: string;
   program_title: string;
   program_type: string;
+  programTypeLabel: string;
   day_label: string;
   scheduled_date: string;
 }
@@ -34,6 +37,7 @@ export interface CalendarSession {
   program_id: string;
   program_day_id: string;
   program_type: string;
+  programTypeLabel: string;
   program_title: string;
   is_primary_program: boolean;
   day_label: string;
@@ -55,6 +59,7 @@ export interface SessionsByDateItem {
   program_day_id: string;
   program_title: string;
   program_type: string;
+  programTypeLabel: string;
   is_primary_program: boolean;
   day_label: string;
   session_duration_mins: number | null;
@@ -103,6 +108,7 @@ function normalizeActivePrograms(raw: unknown): ActiveProgramsResponse {
         program_id: asString(row.program_id),
         program_title: asString(row.program_title),
         program_type: asString(row.program_type),
+        programTypeLabel: asNullableString(row.program_type_label ?? row.programTypeLabel) ?? displayLabel("programType", asString(row.program_type)),
         is_primary: asBoolean(row.is_primary),
         status: asString(row.status),
         weeks_count: asNumber(row.weeks_count),
@@ -120,6 +126,7 @@ function normalizeActivePrograms(raw: unknown): ActiveProgramsResponse {
         program_day_id: asString(row.program_day_id),
         program_title: asString(row.program_title),
         program_type: asString(row.program_type),
+        programTypeLabel: asNullableString(row.program_type_label ?? row.programTypeLabel) ?? displayLabel("programType", asString(row.program_type)),
         day_label: asString(row.day_label),
         scheduled_date: asString(row.scheduled_date),
       };
@@ -141,6 +148,8 @@ function normalizeCombinedCalendar(raw: unknown): CombinedCalendarResponse {
             program_id: asString(value.program_id),
             program_day_id: asString(value.program_day_id),
             program_type: asString(value.program_type),
+            programTypeLabel: asNullableString(value.program_type_label ?? value.programTypeLabel) ??
+              displayLabel("programType", asString(value.program_type)),
             program_title: asString(value.program_title),
             is_primary_program: asBoolean(value.is_primary_program),
             day_label: asString(value.day_label),
@@ -164,6 +173,7 @@ function normalizeSessionsByDate(raw: unknown): SessionsByDateResponse {
         program_day_id: asString(row.program_day_id),
         program_title: asString(row.program_title),
         program_type: asString(row.program_type),
+        programTypeLabel: asNullableString(row.program_type_label ?? row.programTypeLabel) ?? displayLabel("programType", asString(row.program_type)),
         is_primary_program: asBoolean(row.is_primary_program),
         day_label: asString(row.day_label),
         session_duration_mins: row.session_duration_mins == null ? null : asNumber(row.session_duration_mins),

@@ -161,9 +161,9 @@ function makeProgramWithNarration(dayTitle) {
   };
 }
 
-test("emitPlanRows humanises snake_case tokens in narration day_title", async () => {
+test("emitPlanRows preserves narration day_title verbatim, including snake tokens", async () => {
   const out = await emitPlanRows({ program: makeProgramWithNarration("upper_body Build Volume") });
-  assert.equal(parseDayLabel(out.rows), "Upper Body Build Volume");
+  assert.equal(parseDayLabel(out.rows), "upper_body Build Volume");
 });
 
 test("emitPlanRows leaves already-readable narration day_title unchanged", async () => {
@@ -171,9 +171,9 @@ test("emitPlanRows leaves already-readable narration day_title unchanged", async
   assert.equal(parseDayLabel(out.rows), "Day 1 - Strength");
 });
 
-test("emitPlanRows humanises a bare snake_case slug in narration day_title", async () => {
+test("emitPlanRows preserves a bare narration title instead of formatting it again", async () => {
   const out = await emitPlanRows({ program: makeProgramWithNarration("lower_body") });
-  assert.equal(parseDayLabel(out.rows), "Lower Body");
+  assert.equal(parseDayLabel(out.rows), "lower_body");
 });
 
 test("emitPlanRows falls back to 'Day N' label when narration is absent", async () => {

@@ -140,6 +140,7 @@ test("programOverview defaults selected day to the earliest incomplete day", asy
       rows: [{
         program_id: VALID_UUID,
         title: "Program",
+        program_type: "hyrox",
         summary: "Summary",
         hero_image_key: null,
         hero_image_url: null,
@@ -195,6 +196,7 @@ test("programOverview defaults selected day to the earliest incomplete day", asy
   await handlers.programOverview(req, res);
 
   assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.program?.program_type_label, "HYROX");
   assert.equal(res.body?.selected_day?.program_day_id, "44444444-4444-4444-8444-444444444444");
   assert.deepEqual(res.body?.selected_day?.equipment_names, ["Barbell", "Pull-up bar"]);
 });
@@ -423,6 +425,7 @@ test("dayFull attaches guideline loads when service returns them", async () => {
           program_day_id: VALID_UUID,
           day_label: "Day 1",
           day_type: "strength",
+          focus_type: "full",
           session_duration_mins: 50,
           hero_image_key: null,
           hero_image_url: null,
@@ -465,6 +468,9 @@ test("dayFull attaches guideline loads when service returns them", async () => {
   await handlers.dayFull(req, res);
 
   assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.day?.day_type_label, "Strength");
+  assert.equal(res.body?.day?.day_focus_label, "Full Body");
+  assert.equal(res.body?.day?.day_type, "strength");
   assert.equal(res.body?.segments?.[0]?.items?.[0]?.guideline_load?.value, 40);
 });
 

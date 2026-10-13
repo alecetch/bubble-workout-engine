@@ -18,7 +18,7 @@ function SessionDot({ session }: { session: CalendarSession }): React.JSX.Elemen
   return (
     <View
       style={[styles.dot, { backgroundColor: dotColor(session.program_type) }]}
-      accessibilityLabel={`${session.program_type} session`}
+      accessibilityLabel={`${session.programTypeLabel} session`}
     />
   );
 }

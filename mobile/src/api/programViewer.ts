@@ -1,4 +1,5 @@
 import { authGetJson, authPatchJson } from "./client";
+import { displayLabel } from "../utils/displayLabel";
 
 export type ViewerIdentityOptions = {
   userId?: string;
@@ -13,6 +14,7 @@ export type ProgramOverviewResponse = {
     id: string;
     title?: string;
     summary?: string;
+    programTypeLabel: string;
     heroMedia?: string | null;
   };
   weeks: Array<{
@@ -93,6 +95,8 @@ export type ProgramDayFullResponse = {
     type?: string;
     sessionDuration?: number;
     heroMedia?: string | null;
+    typeLabel: string;
+    focusLabel: string;
     equipmentOverridePresetSlug?: string | null;
     equipmentOverrideItemSlugs?: string[] | null;
     scheduledWeekday?: string;
@@ -349,6 +353,8 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       id: programId,
       title: asString(rawProgram.title),
       summary: asString(rawProgram.summary),
+      programTypeLabel: asString(rawProgram.program_type_label ?? rawProgram.programTypeLabel) ??
+        displayLabel("programType", asString(rawProgram.program_type ?? rawProgram.programType)),
       heroMedia: asNullableString(
         rawProgram.hero_media === null ? null : rawProgram.hero_media ?? rawProgram.heroMedia,
       ),
@@ -407,6 +413,10 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
       programId: asString(rawDay.program_id ?? rawDay.programId),
       label: asString(rawDay.day_label ?? rawDay.label),
       type: asString(rawDay.day_type ?? rawDay.type),
+      typeLabel: asString(rawDay.day_type_label ?? rawDay.typeLabel) ??
+        displayLabel("dayType", asString(rawDay.day_type ?? rawDay.type)),
+      focusLabel: asString(rawDay.day_focus_label ?? rawDay.focusLabel) ??
+        displayLabel("dayFocus", asString(rawDay.focus_type ?? rawDay.focusType)),
       sessionDuration: asNumber(
         rawDay.session_duration_mins ?? rawDay.session_duration ?? rawDay.sessionDuration,
       ),

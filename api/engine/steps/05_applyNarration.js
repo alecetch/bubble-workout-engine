@@ -1,3 +1,4 @@
+import { displayLabel } from "../../src/utils/displayLabels.js";
 // api/engine/steps/05_applyNarration.js
 //
 // DROP-IN REPLACEMENT (Node pipeline step)
@@ -780,8 +781,8 @@ function enrichDays(days, templates, cfg, catalogById, context) {
     const dayTokens = {
       ...baseTokens,
       DAY_INDEX: dayIdx,
-      DAY_FOCUS: dayFocus,
-      PROGRAM_TYPE: s(context.program_type),
+      DAY_FOCUS: displayLabel("dayFocus", dayFocus),
+      PROGRAM_TYPE: displayLabel("programType", context.program_type),
       MAIN_LIFT_NAME: mainName,
       SECONDARY_LIFT_NAME: secondaryName,
     };
