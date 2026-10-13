@@ -216,3 +216,71 @@ WHERE NOT EXISTS (
     AND focus_type = 'full_body'
 );
 
+-- Keep historical hero IDs intact; orphan mappings are archived, never deleted.
+UPDATE public.media_assets SET is_active = false, updated_at = now()
+WHERE is_active = true AND (
+  (usage_scope = 'program' AND day_type = 'mixed' AND focus_type = 'full_body') OR
+  (usage_scope = 'program_day' AND day_type = 'mixed' AND focus_type = 'full_body') OR
+  (usage_scope = 'program_day' AND day_type = 'skills' AND focus_type = 'lower_body')
+);
+
+-- Strength shares the existing hypertrophy images.
+INSERT INTO public.media_assets (
+  usage_scope, day_type, focus_type, label, sort_order, is_active, image_key, image_url
+)
+SELECT 'program', 'strength', NULL, 'Strength', 1, true, 'program/hypertrophy.png', ''
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.media_assets
+  WHERE usage_scope = 'program' AND day_type = 'strength' AND focus_type IS NULL
+);
+
+INSERT INTO public.media_assets (
+  usage_scope, day_type, focus_type, label, sort_order, is_active, image_key, image_url
+)
+SELECT 'program_day', 'strength', 'lower_body', 'Strength Lower Body', 1, true,
+  'program_day/hypertrophy_lower_body.png', ''
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.media_assets
+  WHERE usage_scope = 'program_day' AND day_type = 'strength' AND focus_type = 'lower_body'
+);
+
+INSERT INTO public.media_assets (
+  usage_scope, day_type, focus_type, label, sort_order, is_active, image_key, image_url
+)
+SELECT 'program_day', 'strength', 'upper_body', 'Strength Upper Body', 1, true,
+  'program_day/hypertrophy_upper_body.png', ''
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.media_assets
+  WHERE usage_scope = 'program_day' AND day_type = 'strength' AND focus_type = 'upper_body'
+);
+
+INSERT INTO public.media_assets (
+  usage_scope, day_type, focus_type, label, sort_order, is_active, image_key, image_url
+)
+SELECT 'program_day', 'strength', 'full_body', 'Strength Full Body', 1, true,
+  'program_day/hypertrophy_full_body.png', ''
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.media_assets
+  WHERE usage_scope = 'program_day' AND day_type = 'strength' AND focus_type = 'full_body'
+);
+
+-- Known-good fallback for HYROX and future program types.
+INSERT INTO public.media_assets (
+  usage_scope, day_type, focus_type, label, sort_order, is_active, image_key, image_url
+)
+SELECT 'program', 'generic', NULL, 'Generic', 99, true, 'program/hypertrophy.png', ''
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.media_assets
+  WHERE usage_scope = 'program' AND day_type = 'generic' AND focus_type IS NULL
+);
+
+INSERT INTO public.media_assets (
+  usage_scope, day_type, focus_type, label, sort_order, is_active, image_key, image_url
+)
+SELECT 'program_day', 'generic', NULL, 'Generic', 99, true,
+  'program_day/hypertrophy_full_body.png', ''
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.media_assets
+  WHERE usage_scope = 'program_day' AND day_type = 'generic' AND focus_type IS NULL
+);
+

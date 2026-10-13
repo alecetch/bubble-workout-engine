@@ -279,6 +279,7 @@ app.use("/api/generate-plan-v2", generationRateLimiter);
 // are public media assets, so mark them loadable cross-origin.
 const publicAssetCrossOrigin = helmet.crossOriginResourcePolicy({ policy: "cross-origin" });
 app.use("/assets/media-assets", publicAssetCrossOrigin, express.static(join(__dirname, "assets/media-assets")));
+app.use("/assets/media-assets", (_req, res) => res.status(404).end());
 app.use("/assets/exercise-media", publicAssetCrossOrigin, exerciseMediaAssetsRouter);
 app.use("/assets/exercise-media", publicAssetCrossOrigin, express.static(join(__dirname, "assets/exercise-media")));
 app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));

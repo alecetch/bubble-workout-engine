@@ -89,6 +89,43 @@ test("toHeroMediaObject returns null for null row", () => {
   assert.equal(toHeroMediaObject(null), null);
 });
 
+const strengthAssets = [
+  { id: "strength_program", usage_scope: "program", day_type: "strength", focus_type: null },
+  ...["lower_body", "upper_body", "full_body"].map(focus_type => ({
+    id: `strength_${focus_type}`, usage_scope: "program_day", day_type: "strength", focus_type,
+  })),
+  ...["program", "program_day"].map(usage_scope => ({
+    id: `generic_${usage_scope}`, usage_scope, day_type: "generic", focus_type: null,
+  })),
+];
+
+for (const focus of ["lower_body", "upper_body", "full_body"]) {
+  test(`strength ${focus} resolves to its matching strength row`, () => {
+    assert.equal(resolveHeroMediaRow(strengthAssets, "program_day", "strength", focus)?.id, `strength_${focus}`);
+  });
+}
+
+test("strength program resolves to its program row", () => {
+  assert.equal(resolveHeroMediaRow(strengthAssets, "program", "strength", null)?.id, "strength_program");
+});
+
+for (const scope of ["program", "program_day"]) {
+  test(`HYROX resolves to generic in ${scope} scope`, () => {
+    assert.equal(resolveHeroMediaRow(strengthAssets, scope, "hyrox", "lower_body")?.id, `generic_${scope}`);
+  });
+}
+
+test("unknown type without generic returns null rather than the first row", () => {
+  assert.equal(resolveHeroMediaRow(assets.filter(a => a.day_type !== "generic"), "program_day", "hyrox", "upper_body"), null);
+});
+
+test("inactive exact and generic rows are never returned", () => {
+  const inactive = strengthAssets.map(a => ({ ...a, is_active: false }));
+  assert.equal(resolveHeroMediaRow(inactive, "program_day", "strength", "lower_body"), null);
+  assert.equal(resolveHeroMediaRow(inactive, "program", "hyrox", null), null);
+  assert.equal(resolveHeroMediaRow([...inactive, assets[3]], "program_day", "strength", "lower_body")?.id, "4");
+});
+
 test("toHeroMediaObject returns id, image_key, image_url", () => {
   const oldBase = process.env.S3_PUBLIC_BASE_URL;
   process.env.S3_PUBLIC_BASE_URL = "https://cdn.example.com";
