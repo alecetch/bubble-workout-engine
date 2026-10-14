@@ -20,10 +20,105 @@ function exerciseValues(id) {
   const values = [`'${id}'`, ...blocks[0][2].trim().split(/\r?\n/).map(line => line.trim().replace(/,$/, ''))];
   assert.equal(values.length, columns.length, `Column/value mismatch for ${id}`);
   return {
+    fields: Object.fromEntries(columns.map((column, i) => [column, values[i]])),
     rank: Number(values[4]), archived: values[5] === 'true',
     hyroxRole: columns.includes('hyrox_role') ? values[columns.indexOf('hyrox_role')] : undefined,
   };
 }
+
+function equipmentRows(sql = equipment) {
+  // Both seed VALUES lists have one complete row per line. Quoted SQL tokens
+  // handle embedded commas in raw_json and doubled apostrophes in names.
+  return sql.split(/\r?\n/).filter(line => /^\s*\(\s*'/.test(line)).map(line => {
+    const strings = [...line.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1].replace(/''/g, "'"));
+    return { externalId: strings[0], category: strings[1], name: strings[2], slug: strings[3], raw: strings.length > 4 ? JSON.parse(strings.at(-1)) : null };
+  });
+}
+
+const sqlText = literal => literal === 'NULL' ? null : literal.slice(1, -1).replace(/''/g, "'");
+const equipmentSlugs = fields => fields.equipment_items_slugs === "'{}'::text[]" ? [] :
+  [...fields.equipment_items_slugs.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1]);
+const exerciseIds = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',/g)].map(match => match[1]);
+
+test('bodyweight calf raises have optional load and dead tread still requires a treadmill', () => {
+  const calf = exerciseValues('single_leg_standing_calf_raise').fields;
+  assert.deepEqual(equipmentSlugs(calf), []);
+  assert.equal(calf.equipment_json, "'[]'::jsonb");
+  assert.equal(sqlText(calf.load_guidance), 'Hold a dumbbell for extra load once 20 controlled reps per side is easy.');
+  assert.deepEqual(equipmentSlugs(exerciseValues('dead_tread').fields), ['treadmill']);
+});
+
+test('running space has an independent equipment code and battle rope spelling is corrected', () => {
+  const rows = equipmentRows();
+  const running = rows.find(row => row.externalId === '1771082757579x923243789917044700');
+  assert.equal(running.slug, 'running_space');
+  assert.equal(running.name, 'outdoor running space / track');
+  assert.equal(running.raw.exercise_slug, running.slug);
+  assert.equal(running.raw.name, running.name);
+  assert.ok(rows.every(row => row.name !== 'batte rope' && row.raw?.name !== 'batte rope'));
+  const rope = rows.find(row => row.slug === 'battle_rope');
+  assert.equal(rope.name, 'battle rope');
+  assert.equal(rope.raw.name, rope.name);
+  const treadmill = rows.find(row => row.slug === 'treadmill');
+  assert.equal(treadmill.category, 'Cardio machine');
+  assert.equal(treadmill.raw.crossfit_hyrox_gym, 'no');
+});
+
+test('partner and duplicate exercises are archived and their replacements are active', () => {
+  for (const id of ['wheelbarrow_pull', 'kb_swing_low']) assert.equal(exerciseValues(id).archived, true, id);
+  for (const id of ['backward_bear_crawl', 'prone_lat_pulldown', 'band_rowing_stroke', 'sandbag_backward_drag']) {
+    const row = exerciseValues(id);
+    assert.equal(row.archived, false, id);
+    assert.equal(row.rank, 0, id);
+    assert.equal(row.fields.contraindications_json, "'[]'::jsonb", id);
+    assert.equal(row.fields.contraindications_slugs, "'{}'::text[]", id);
+  }
+  assert.equal(exerciseValues('bear_crawl').rank, 0);
+  assert.equal(exerciseValues('kb_swing').archived, false);
+});
+
+test('table row is horizontal and household load carry provides practical setup', () => {
+  assert.equal(sqlText(exerciseValues('table_row').fields.movement_pattern_primary), 'pull_horizontal');
+  const carry = exerciseValues('farmer_carry_weighted').fields;
+  assert.equal(sqlText(carry.name), 'Household Load Carry');
+  assert.match(sqlText(carry.technique_setup), /backpack, two shopping bags or two water jugs/);
+  for (const oldName of ['Farmer Carry', 'Farmer Carry (weighted)']) {
+    assert.ok(backfill.includes(`('farmer_carry_weighted', '${oldName}')`));
+  }
+});
+
+test('active rower and ski stand-ins match their movement', () => {
+  const violations = [];
+  for (const id of exerciseIds) {
+    const { fields, archived } = exerciseValues(id); if (archived) continue;
+    const sw = sqlText(fields.swap_group_id_1), mp = sqlText(fields.movement_pattern_primary);
+    if (sw === 'row_erg' && (!['cyclical_engine', 'pull_horizontal'].includes(mp) || /upright row/i.test(sqlText(fields.name)))) violations.push(id);
+    if (sw === 'ski_erg' && ['anti_extension', 'push_horizontal'].includes(mp)) violations.push(id);
+  }
+  assert.deepEqual(violations, [], `Invalid erg stand-ins: ${violations.join(', ')}`);
+});
+
+test('active carries require equipment except the household load convention', () => {
+  const violations = exerciseIds.filter(id => {
+    const { fields, archived } = exerciseValues(id);
+    // catalogue-data-error-fixes decision 1: household loads are available without gym equipment.
+    return !archived && /carry/i.test(sqlText(fields.name)) && id !== 'farmer_carry_weighted' && !equipmentSlugs(fields).length;
+  });
+  assert.deepEqual(violations, [], `Carries without loads: ${violations.join(', ')}`);
+});
+
+test('sled-pull replacements accept distance while rowing complexes use time', () => {
+  const whitelist = readMigration('R__seed_exercise_catalogue_distance_whitelist.sql');
+  for (const id of ['backward_bear_crawl', 'sandbag_backward_drag', 'wheelbarrow_pull']) assert.ok(whitelist.includes(`'${id}'`));
+  for (const id of ['rdl_and_bent_over_row', 'band_rowing_stroke']) assert.ok(!whitelist.includes(`'${id}'`));
+});
+
+test('equipment items have unique exercise slugs', () => {
+  const counts = new Map();
+  for (const row of equipmentRows()) counts.set(row.slug, (counts.get(row.slug) || 0) + 1);
+  const duplicates = [...counts].filter(([, count]) => count > 1);
+  assert.deepEqual(duplicates, [], `Duplicate equipment codes: ${JSON.stringify(duplicates)}`);
+});
 
 test('catalogue fitness ranks match all confirmed corrections', () => {
   const expected = Object.fromEntries([
