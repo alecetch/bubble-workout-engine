@@ -1,6 +1,8 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../src/db.js";
+
+after(() => pool.end());
 
 async function ensureDb(t) {
   try {
@@ -58,4 +60,14 @@ test("at least one active warm-up exercise requires equipment", async (t) => {
     Number(result.rows[0].count) > 0,
     "expected at least one active warm-up exercise with a non-empty equipment_items_slugs",
   );
+});
+
+test('cardio has at least two low-impact no-equipment warm-ups', async t => {
+  if (!(await ensureDb(t))) return;
+  const { rows: [row] } = await pool.query(`SELECT count(*)::int AS count
+    FROM warmup_exercise
+    WHERE is_archived=false AND target_regions_json ? 'cardio'
+      AND equipment_items_slugs='{}'::text[] AND movement_class='cardio'
+      AND warmup_exercise_id NOT IN ('warmup-jumping-jacks', 'warmup-high-knees')`);
+  assert.ok(row.count >= 2, `Expected two low-impact cardio options, found ${row.count}`);
 });

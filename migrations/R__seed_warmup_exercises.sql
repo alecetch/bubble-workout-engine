@@ -57,6 +57,30 @@ SET target_regions_json = '["chest","lats"]'::jsonb
 WHERE warmup_exercise_id = 'warmup-thoracic-open-book'
   AND target_regions_json = '["chest","lats","upper_back"]'::jsonb;
 
+-- Launch expansion: idempotent additions, with placeholder media supplied below.
+INSERT INTO warmup_exercise (
+  warmup_exercise_id, name, target_regions_json, equipment_items_slugs,
+  cue_text, duration_or_reps_label, rounds, movement_class
+)
+SELECT * FROM (VALUES
+  ('warmup-leg-swings', 'Leg Swings', '["hamstrings","glutes","quads"]'::jsonb, '{}'::text[], 'Hold a wall for balance and swing one leg forward and back through a comfortable range. Do each side.', '10 reps', 2, 'mobility'),
+  ('warmup-hip-circles', 'Standing Hip Circles', '["glutes"]'::jsonb, '{}'::text[], 'Stand tall on one leg, lift the other knee, and draw slow circles at the hip. Do each side.', '8 reps', 2, 'mobility'),
+  ('warmup-90-90-switch', '90/90 Hip Switch', '["glutes","hamstrings"]'::jsonb, '{}'::text[], 'Sit with both knees bent to one side, then rotate both knees to the other side, using your hands only if you need them.', '6 reps', 1, 'mobility'),
+  ('warmup-knee-to-wall-ankle', 'Knee-to-Wall Ankle Rock', '["calves"]'::jsonb, '{}'::text[], 'Half-kneel facing a wall, keep the front heel down, and rock the knee forward toward the wall. Do each side.', '10 reps', 2, 'mobility'),
+  ('warmup-tiptoe-walk', 'Tiptoe Walk', '["calves"]'::jsonb, '{}'::text[], 'Walk tall on the balls of your feet with heels high and short steps.', '20 sec', 1, 'activation'),
+  ('warmup-inchworm', 'Inchworm', '["hamstrings","shoulders","core"]'::jsonb, '{}'::text[], 'Hinge to the floor, walk your hands out to a plank, then walk them back and stand tall.', '5 reps', 1, 'mobility'),
+  ('warmup-incline-push-up', 'Incline Push-up', '["chest","triceps","shoulders"]'::jsonb, '{}'::text[], 'Hands on a bench, table or wall with your body straight. Lower the chest under control and press away.', '8 reps', 1, 'activation'),
+  ('warmup-arm-swings-across-chest', 'Arm Swings Across Chest', '["chest","shoulders"]'::jsonb, '{}'::text[], 'Swing both arms wide open, then across the chest, letting the shoulders loosen.', '10 reps', 1, 'mobility'),
+  ('warmup-band-pull-apart', 'Band Pull-Apart', '["upper_back","rear_delts"]'::jsonb, '{resistance_band}'::text[], 'Hold the band at shoulder height with straight arms and pull it apart by squeezing the shoulder blades.', '15 reps', 1, 'activation'),
+  ('warmup-march-in-place', 'Marching in Place', '["cardio"]'::jsonb, '{}'::text[], 'March on the spot, lifting the knees to hip height and swinging the arms.', '60 sec', 1, 'cardio'),
+  ('warmup-easy-jog', 'Easy Jog or Brisk Walk', '["cardio"]'::jsonb, '{}'::text[], 'Jog easily or walk briskly, building to a pace where you can still talk.', '3 min', 1, 'cardio'),
+  ('warmup-ski-erg-easy-pull', 'Ski Erg Easy Pull', '["cardio"]'::jsonb, '{ski_erg}'::text[], 'Pull at an easy, conversational pace, hinging lightly with each stroke.', '3 min', 1, 'cardio'),
+  ('warmup-air-bike-easy-spin', 'Air Bike Easy Spin', '["cardio"]'::jsonb, '{assault_bike}'::text[], 'Pedal and push at an easy, conversational effort.', '3 min', 1, 'cardio')
+) AS rows(warmup_exercise_id, name, target_regions_json, equipment_items_slugs, cue_text, duration_or_reps_label, rounds, movement_class)
+WHERE NOT EXISTS (
+  SELECT 1 FROM warmup_exercise e WHERE e.warmup_exercise_id = rows.warmup_exercise_id
+);
+
 INSERT INTO warmup_exercise_media (warmup_exercise_id, still_image_key, still_image_is_placeholder)
 SELECT we.warmup_exercise_id, 'exercise-media/_placeholder/still.jpg', true
 FROM warmup_exercise we

@@ -1,6 +1,6 @@
--- Static holds only; bodyweight library sharing the existing placeholder asset.
--- Every muscle region keeps at least one active cool-down (see the 2026-10-12 archive block below).
--- Cardio is intentionally excluded: it is not a muscle region for static stretching.
+-- Cool-down library sharing the existing placeholder asset.
+-- Static stretches are complemented by cardio walk-down and breathing drills.
+-- Every live region has at least two bodyweight options after the launch expansion.
 INSERT INTO cooldown_exercise (
   cooldown_exercise_id, name, target_regions_json, equipment_items_slugs,
   cue_text, duration_or_reps_label, rounds, movement_class
@@ -46,6 +46,25 @@ WHERE NOT EXISTS (
   SELECT 1 FROM cooldown_exercise ce WHERE ce.cooldown_exercise_id = rows.cooldown_exercise_id
 );
 
+-- Launch expansion: idempotent additions, with placeholder media supplied below.
+INSERT INTO cooldown_exercise (
+  cooldown_exercise_id, name, target_regions_json, equipment_items_slugs,
+  cue_text, duration_or_reps_label, rounds, movement_class
+)
+SELECT * FROM (VALUES
+  ('cooldown-easy-walk', 'Easy Walk-down', '["cardio"]'::jsonb, '{}'::text[], 'Walk at an easy pace, breathing through the nose, until your breathing settles.', '2 min', 1, 'recovery'),
+  ('cooldown-box-breathing', 'Box Breathing', '["cardio"]'::jsonb, '{}'::text[], 'Sit or lie comfortably. Breathe in for 4, hold for 4, out for 4, hold for 4.', '1 min', 1, 'breathing'),
+  ('cooldown-supine-90-90-breathing', 'Supine 90/90 Breathing', '["cardio","core"]'::jsonb, '{}'::text[], 'Lie on your back with calves on a bench or chair, knees and hips at 90 degrees. Breathe slowly into your belly and ribs.', '1 min', 1, 'breathing'),
+  ('cooldown-couch-stretch', 'Couch Stretch', '["quads"]'::jsonb, '{}'::text[], 'Kneel with one shin up against a wall or sofa and the other foot forward. Tuck the pelvis and stay upright. Hold each side.', '30 sec', 2, 'stretch'),
+  ('cooldown-butterfly-stretch', 'Seated Butterfly Stretch', '["glutes"]'::jsonb, '{}'::text[], 'Sit with the soles of the feet together and knees falling out. Sit tall and let the knees relax toward the floor.', '30 sec', 1, 'stretch'),
+  ('cooldown-downward-dog-hold', 'Downward Dog Hold', '["calves","hamstrings","shoulders"]'::jsonb, '{}'::text[], 'From hands and feet, lift the hips high, press the chest toward the thighs, and let the heels sink toward the floor.', '30 sec', 1, 'stretch'),
+  ('cooldown-bench-lat-stretch', 'Bench Lat Stretch', '["lats","triceps"]'::jsonb, '{bench}'::text[], 'Kneel beside a bench, rest one elbow on it with the hand behind your head, and sit the hips back until the side of your back stretches. Hold each side.', '30 sec', 2, 'stretch'),
+  ('cooldown-cobra-hold', 'Cobra Hold', '["core","chest"]'::jsonb, '{}'::text[], 'Lie face down with hands under the shoulders and gently press the chest up, keeping the hips down and shoulders relaxed.', '30 sec', 1, 'stretch')
+) AS rows(cooldown_exercise_id, name, target_regions_json, equipment_items_slugs, cue_text, duration_or_reps_label, rounds, movement_class)
+WHERE NOT EXISTS (
+  SELECT 1 FROM cooldown_exercise e WHERE e.cooldown_exercise_id = rows.cooldown_exercise_id
+);
+
 INSERT INTO cooldown_exercise_media (cooldown_exercise_id, still_image_key, still_image_is_placeholder)
 SELECT ce.cooldown_exercise_id, 'exercise-media/_placeholder/still.jpg', true
 FROM cooldown_exercise ce
@@ -55,20 +74,19 @@ WHERE NOT EXISTS (
 
 -- 2026-10-12: trim the first-implementation library to the 11 cool-downs that have videos plus the
 -- 6 queued for filming next (supine and staggered standing hamstring, wrist flexor and extensor,
--- kneeling hip-flexor, thread-the-needle). Selection doesn't prefer rows with video, so the
+-- kneeling hip-flexor, thread-the-needle). At the time, selection did not prefer rows with video, so the
 -- redundant no-video rows below were often picked over a videoed one for the same region.
 -- Archive, never delete: program history references these ids. This re-runs whenever the file's
 -- checksum changes and would re-archive any of these un-archived through the admin UI, so to bring
 -- one back permanently, remove its id from this list. Removing an id doesn't un-archive it; restore it
 -- with the Restore button on /admin/cooldown-exercises in each environment.
 -- 2026-10-12: cooldown-seated-glute-stretch removed from the list (restored).
+-- 2026-10-14: 7 ids removed and restored by V139 (warmup-cooldown-launch-expansion); bookend selection now prefers rows with video.
 UPDATE cooldown_exercise
 SET is_archived = true,
     updated_at = now()
 WHERE is_archived = false
   AND cooldown_exercise_id IN (
-    'cooldown-cross-chest-triceps-stretch',
-    'cooldown-doorway-pec-stretch',
     'cooldown-supine-chest-stretch',
     'cooldown-finger-extension-stretch',
     'cooldown-overhead-shoulder-stretch',
@@ -76,11 +94,6 @@ WHERE is_archived = false
     'cooldown-rounded-back-hold',
     'cooldown-seated-upper-back-stretch',
     'cooldown-seated-biceps-stretch',
-    'cooldown-standing-biceps-stretch',
     'cooldown-supine-knee-to-shoulder-stretch',
-    'cooldown-standing-quad-stretch',
-    'cooldown-straight-knee-calf-stretch',
-    'cooldown-side-lying-rear-shoulder-stretch',
-    'cooldown-supine-twist-hold',
     'cooldown-seated-hamstring-stretch'
   );

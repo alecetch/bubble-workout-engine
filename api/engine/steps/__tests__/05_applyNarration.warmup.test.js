@@ -20,7 +20,7 @@ function segment(purpose, items) {
   return { purpose, segment_type: "single", rounds: 1, items };
 }
 
-function warmup(id, regions, equipment = [], rounds = 1) {
+function warmup(id, regions, equipment = [], rounds = 1, videoStatus) {
   return {
     warmup_exercise_id: id,
     name: id,
@@ -29,6 +29,7 @@ function warmup(id, regions, equipment = [], rounds = 1) {
     cue_text: `${id} cue`,
     duration_or_reps_label: "10 reps",
     rounds,
+    ...(videoStatus === undefined ? {} : { video_status: videoStatus }),
   };
 }
 
@@ -50,6 +51,64 @@ async function narrate({ weeks, catalog, warmupCatalog, warmupHistory = {}, effe
 function warmupItems(out, weekIndex = 0, dayIndex = 0) {
   return out.program.weeks[weekIndex].days[dayIndex].segments.find((seg) => seg.segment_type === "warmup").items;
 }
+
+function videoPreferenceFixture(warmupCatalog, overrides = {}) {
+  return {
+    catalog: [{ id: 'main', tr: ['glutes'] }],
+    warmupCatalog,
+    weeks: [{ week_index: 1, days: Array.from({ length: 8 }, (_, i) => ({
+      week_index: 1, day_index: i + 1, program_day_key: `W1D${i + 1}`,
+      segments: [segment('main', [ex('main')])],
+    })) }],
+    ...overrides,
+  };
+}
+
+test('warm-ups prefer a ready video across different day hashes', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    warmup('a', ['glutes'], [], 1, 'ready'), warmup('b', ['glutes']), warmup('c', ['glutes']),
+  ]));
+  for (let i = 0; i < 8; i++) assert.equal(warmupItems(out, 0, i)[0].exercise_id, 'a');
+  assert.equal(out.debug.adoption.total.warmup_video_preferred_regions, 8);
+});
+
+test('warm-ups fall back to unfilmed rows when no eligible video is ready', async () => {
+  const out = await narrate(videoPreferenceFixture([warmup('a', ['glutes']), warmup('b', ['glutes'])]));
+  for (let i = 0; i < 8; i++) assert.equal(warmupItems(out, 0, i).length, 1);
+  assert.equal(out.debug.adoption.total.warmup_video_preferred_regions, 0);
+});
+
+test('all-ready warm-up selection matches selection without video statuses', async () => {
+  const rows = ['a', 'b', 'c'].map(id => warmup(id, ['glutes']));
+  const unfilmed = await narrate(videoPreferenceFixture(rows));
+  const ready = await narrate(videoPreferenceFixture(rows.map(row => ({ ...row, video_status: 'ready' }))));
+  for (let i = 0; i < 8; i++) assert.deepEqual(warmupItems(ready, 0, i), warmupItems(unfilmed, 0, i));
+  assert.equal(ready.debug.adoption.total.warmup_video_preferred_regions, 0);
+});
+
+test('warm-up history repeats the ready row instead of selecting an unfilmed row', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    warmup('a', ['glutes'], [], 1, 'ready'), warmup('b', ['glutes']),
+  ], { warmupHistory: { glutes: ['a'] } }));
+  assert.equal(warmupItems(out)[0].exercise_id, 'a');
+  assert.ok(out.debug.adoption.total.warmup_video_preferred_regions > 0);
+});
+
+test('warm-up equipment eligibility is applied before video preference', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    warmup('a', ['glutes'], ['band'], 1, 'ready'), warmup('b', ['glutes']),
+  ]));
+  assert.equal(warmupItems(out)[0].exercise_id, 'b');
+  assert.equal(out.debug.adoption.total.warmup_video_preferred_regions, 0);
+});
+
+test('same-day warm-up reuse stays within the ready-video pool', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    warmup('a', ['glutes', 'hamstrings'], [], 1, 'ready'), warmup('b', ['glutes']), warmup('c', ['hamstrings']),
+  ], { catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }] }));
+  assert.deepEqual(warmupItems(out).map(item => [item.exercise_id, item.sets_prescribed]), [['a', 2]]);
+  assert.equal(out.debug.adoption.total.warmup_video_preferred_regions, 16);
+});
 
 test("movement patterns supply warm-ups when target regions are empty", async () => {
   const out = await narrate({

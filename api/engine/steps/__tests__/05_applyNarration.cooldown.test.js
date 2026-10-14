@@ -20,7 +20,7 @@ function segment(purpose, items) {
   return { purpose, segment_type: "single", rounds: 1, items };
 }
 
-function cooldown(id, regions, equipment = [], rounds = 1) {
+function cooldown(id, regions, equipment = [], rounds = 1, videoStatus) {
   return {
     cooldown_exercise_id: id,
     name: id,
@@ -29,6 +29,7 @@ function cooldown(id, regions, equipment = [], rounds = 1) {
     cue_text: `${id} cue`,
     duration_or_reps_label: "30 sec",
     rounds,
+    ...(videoStatus === undefined ? {} : { video_status: videoStatus }),
   };
 }
 
@@ -52,6 +53,72 @@ async function narrate({ weeks, catalog, cooldownCatalog, cooldownHistory = {}, 
 function cooldownItems(out, weekIndex = 0, dayIndex = 0) {
   return out.program.weeks[weekIndex].days[dayIndex].segments.find((seg) => seg.segment_type === "cooldown").items;
 }
+
+function videoPreferenceFixture(cooldownCatalog, overrides = {}) {
+  return {
+    catalog: [{ id: 'main', tr: ['glutes'] }],
+    cooldownCatalog,
+    weeks: [{ week_index: 1, days: Array.from({ length: 8 }, (_, i) => ({
+      week_index: 1, day_index: i + 1, program_day_key: `W1D${i + 1}`,
+      segments: [segment('main', [ex('main')])],
+    })) }],
+    ...overrides,
+  };
+}
+
+test('cool-downs prefer a ready video across different day hashes', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    cooldown('a', ['glutes'], [], 1, 'ready'), cooldown('b', ['glutes']), cooldown('c', ['glutes']),
+  ]));
+  for (let i = 0; i < 8; i++) assert.equal(cooldownItems(out, 0, i)[0].exercise_id, 'a');
+  assert.equal(out.debug.adoption.total.cooldown_video_preferred_regions, 8);
+});
+
+test('cool-downs fall back to unfilmed rows when no eligible video is ready', async () => {
+  const out = await narrate(videoPreferenceFixture([cooldown('a', ['glutes']), cooldown('b', ['glutes'])]));
+  for (let i = 0; i < 8; i++) assert.equal(cooldownItems(out, 0, i).length, 1);
+  assert.equal(out.debug.adoption.total.cooldown_video_preferred_regions, 0);
+});
+
+test('all-ready cool-down selection matches selection without video statuses', async () => {
+  const rows = ['a', 'b', 'c'].map(id => cooldown(id, ['glutes']));
+  const unfilmed = await narrate(videoPreferenceFixture(rows));
+  const ready = await narrate(videoPreferenceFixture(rows.map(row => ({ ...row, video_status: 'ready' }))));
+  for (let i = 0; i < 8; i++) assert.deepEqual(cooldownItems(ready, 0, i), cooldownItems(unfilmed, 0, i));
+  assert.equal(ready.debug.adoption.total.cooldown_video_preferred_regions, 0);
+});
+
+test('cool-down history repeats the ready row instead of selecting an unfilmed row', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    cooldown('a', ['glutes'], [], 1, 'ready'), cooldown('b', ['glutes']),
+  ], { cooldownHistory: { glutes: ['a'] } }));
+  assert.equal(cooldownItems(out)[0].exercise_id, 'a');
+  assert.ok(out.debug.adoption.total.cooldown_video_preferred_regions > 0);
+});
+
+test('cool-down equipment eligibility is applied before video preference', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    cooldown('a', ['glutes'], ['band'], 1, 'ready'), cooldown('b', ['glutes']),
+  ]));
+  assert.equal(cooldownItems(out)[0].exercise_id, 'b');
+  assert.equal(out.debug.adoption.total.cooldown_video_preferred_regions, 0);
+});
+
+test('same-day cool-down reuse stays within the ready-video pool', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    cooldown('a', ['glutes', 'hamstrings'], [], 1, 'ready'), cooldown('b', ['glutes']), cooldown('c', ['hamstrings']),
+  ], { catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }] }));
+  assert.deepEqual(cooldownItems(out).map(item => [item.exercise_id, item.sets_prescribed]), [['a', 2]]);
+  assert.equal(out.debug.adoption.total.cooldown_video_preferred_regions, 16);
+});
+
+test('a cardio-only day receives a cardio cool-down', async () => {
+  const out = await narrate(videoPreferenceFixture([cooldown('walk-down', ['cardio'])], {
+    catalog: [{ id: 'main', tr: ['cardio'] }],
+  }));
+  assert.ok(cooldownItems(out).length >= 1);
+  assert.equal(cooldownItems(out)[0].exercise_id, 'walk-down');
+});
 
 test("movement patterns supply cool-downs when target regions are empty", async () => {
   const out = await narrate({
