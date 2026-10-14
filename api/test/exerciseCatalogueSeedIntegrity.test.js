@@ -177,3 +177,21 @@ test("equipment seed has exactly one resistance band and row machine slug", () =
     assert.equal(slugs.filter(value => value === slug).length, 1, `expected exactly one equipment row for ${slug}`);
   }
 });
+
+test("snapshot orders exercises with the same class and name by exercise_id", () => {
+  // Mirrors the generator's ORDER BY movement_class, name, exercise_id COLLATE "C".
+  // Without the tie-break, Postgres returns tied rows in physical order and
+  // /admin/sync-status flips between clean and dirty after a Flyway re-run.
+  const blocks = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',\r?\n  '((?:''|[^'])*)',\r?\n  '([^']*)',/g)]
+    .map(([, id, name, movementClass]) => ({ id, name, movementClass }));
+  assert.ok(blocks.length > 0, "expected catalogue blocks");
+  const misordered = blocks.slice(1).flatMap((block, i) => {
+    const prev = blocks[i];
+    return prev.movementClass === block.movementClass && prev.name === block.name && prev.id > block.id
+      ? [`${prev.id} before ${block.id} (${block.movementClass} / ${block.name})`] : [];
+  });
+  assert.deepEqual(misordered, [], `Tied catalogue rows out of exercise_id order:\n${misordered.join("\n")}`);
+  const deletion = catalogue.match(/NOT\s+IN\s*\(([\s\S]*?)\)\s*;/i);
+  const listed = [...deletion[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+  assert.deepEqual(listed, blocks.map(block => block.id), "Step 1 NOT IN list should follow block order");
+});
