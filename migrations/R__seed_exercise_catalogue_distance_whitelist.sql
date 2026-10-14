@@ -31,6 +31,8 @@ WHERE exercise_id IN (
   'walking_lunges',
   'weighted_walking_lunge',
   -- sled pull
+  'backward_bear_crawl',
+  'sandbag_backward_drag',
   'sled_pull',
   'sled_pull_rope',
   'wheelbarrow_pull',

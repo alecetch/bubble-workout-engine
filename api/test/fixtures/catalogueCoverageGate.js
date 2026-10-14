@@ -16,6 +16,15 @@ export const KNOWN_EMPTY = emptySlots.flatMap(parts =>
 
 export const MIN_COUNTS = [
   ...[
+    ['hypertrophy_default_v1', 'pull_day', 'B:pull_vertical', 'no_equipment', 1, 'Prone Lat Pulldown replaces Table Row'],
+    ['hyrox_default_v1', 'hyrox_simulation', 'C:sled_pull', 'no_equipment', 1, 'Backward Bear Crawl replaces Wheelbarrow Pull'],
+    ['hyrox_default_v1', 'hyrox_simulation', 'F:carry', 'no_equipment', 1, 'Household Load Carry kept'],
+    ['hyrox_default_v1', 'hyrox_simulation', 'C:sled_pull', 'decent_home_gym', 2, 'Sandbag Backward Drag'],
+    ['hyrox_default_v1', 'hyrox_simulation', 'E:row', 'minimal_equipment', 2, 'Band Rowing Stroke'],
+  ].map(([config_key, day_key, slot, preset, min, reason]) => ({
+    config_key, day_key, slot, preset, rank: 0, min, reason,
+  })),
+  ...[
     ['hypertrophy_default_v1', 'day3', 'C:hamstring_iso', 3],
     ['hypertrophy_default_v1', 'legs_day', 'C:hamstring_iso', 3],
     ['hypertrophy_default_v1', 'pull_day', 'B:pull_vertical', 3],
