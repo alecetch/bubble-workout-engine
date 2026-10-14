@@ -102,6 +102,54 @@ test("program_type mismatch excludes rule", async () => {
   assert.equal(firstItem(result).rep_rule_id, undefined);
 });
 
+for (const [programType, ruleId, low, high, rest] of [
+  ['hypertrophy', 'hyp_accessory_core_isometric_v1', 30, 45, 45],
+  ['strength', 'str_accessory_core_isometric_v1', 20, 40, 60],
+  ['conditioning', 'cond_accessory_core_isometric_v1', 20, 30, 30],
+]) {
+  for (const segmentType of ['single', 'giant_set']) {
+    test(`${programType} core holds use seconds in ${segmentType} accessory segments`, async () => {
+      const program = makeProgram({ dayType: programType, prefilled: { segment: { purpose: 'accessory', segment_type: segmentType } } });
+      program.program_type = programType;
+      const result = await applyRepRules({
+        program,
+        catalogJson: makeCatalogJson({ mp: 'anti_extension', sw2: 'core_isometric', mc: 'core', tr: ['core'], eq: [] }),
+        repRules: [
+          ...[
+            ...(programType === 'hypertrophy' ? [
+              { segment_type: 'single', rule_id: 'hyp_accessory_default_v1', priority: 5 },
+              { segment_type: 'giant_set', rule_id: 'hyp_giant_accessory_v1', priority: 7 },
+            ] : []),
+            ...(programType === 'strength' ? [{ segment_type: 'single', rule_id: 'str_accessory_single_v1', priority: 8 }] : []),
+            ...(programType === 'conditioning' ? [{ segment_type: null, rule_id: 'cond_carry_v1', priority: 11, movement_pattern: 'carry' }] : []),
+          ].map(rule => makeRule({ program_type: programType, purpose: 'accessory', ...rule })),
+          makeRule({ program_type: programType, purpose: 'accessory', segment_type: null, rule_id: ruleId, swap_group_id_2: 'core_isometric',
+            priority: 12, rep_low: low, rep_high: high, reps_unit: 'seconds', rest_after_set_sec: rest,
+            rir_target: null, rir_min: null, rir_max: null, tempo_eccentric: null, tempo_pause_bottom: null, tempo_concentric: null, tempo_pause_top: null }),
+        ],
+      });
+      assert.equal(firstItem(result).rep_rule_id, ruleId);
+      assert.equal(firstItem(result).reps_unit, 'seconds');
+      assert.equal(firstItem(result).reps_prescribed, `${low}-${high} seconds`);
+      assert.equal(firstSegment(result).rest_after_set_sec, rest);
+    });
+  }
+}
+
+test('HYROX metre rules convert bodyweight cyclical engines to their time equivalent', async () => {
+  const program = makeProgram({ dayType: 'hyrox', prefilled: { segment: { purpose: 'main', segment_type: 'amrap' } } });
+  program.program_type = 'hyrox';
+  const result = await applyRepRules({
+    program,
+    catalogJson: { ex: [{ id: 'ex1', mp: 'cyclical_engine', sw: 'engine', mc: 'engine', tr: ['cardio'], eq: [], accepts_distance_unit: false }] },
+    repRules: [makeRule({ rule_id: 'hyrx_amrap_cyclical_generic', program_type: 'hyrox', purpose: null, segment_type: 'amrap', movement_pattern: 'cyclical_engine',
+      reps_unit: 'm', rep_low: 200, rep_high: 300, time_equivalent_low_sec: 60, time_equivalent_high_sec: 90 })],
+  });
+  assert.equal(firstItem(result).rep_rule_id, 'hyrx_amrap_cyclical_generic');
+  assert.equal(firstItem(result).reps_unit, 'seconds');
+  assert.equal(firstItem(result).reps_prescribed, '60-90 seconds');
+});
+
 test("null optional fields act as wildcards", async () => {
   const result = await applyRepRules({
     program: makeProgram(),
