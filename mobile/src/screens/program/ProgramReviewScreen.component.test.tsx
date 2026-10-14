@@ -216,7 +216,7 @@ describe("ProgramReviewScreen", () => {
     });
   });
 
-  it("navigates to TodayTab through the parent navigator after generation", async () => {
+  it("navigates to the Programs tab dashboard through the parent navigator after generation", async () => {
     const parentNavigation = { navigate: vi.fn() };
     const navigation = renderScreen();
     navigation.getParent.mockReturnValue(parentNavigation as any);
@@ -225,9 +225,45 @@ describe("ProgramReviewScreen", () => {
 
     await waitFor(() => {
       expect(setActiveProgramIdMock).toHaveBeenCalledWith("prog-1");
-      expect(parentNavigation.navigate).toHaveBeenCalledWith("TodayTab");
+      expect(parentNavigation.navigate).toHaveBeenCalledWith("ProgramsTab", {
+        screen: "ProgramDashboard",
+        params: { programId: "prog-1" },
+      });
     });
+    expect(parentNavigation.navigate).not.toHaveBeenCalledWith("TodayTab");
     expect(navigation.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
+  });
+
+  it("navigates to the new program's dashboard when regenerating with an active program", async () => {
+    useActiveProgramsMock.mockReturnValueOnce({
+      data: { programs: [{ id: "old-prog" }] },
+      isLoading: false,
+    } as any);
+    const parentNavigation = { navigate: vi.fn() };
+    const navigation = renderScreen();
+    navigation.getParent.mockReturnValue(parentNavigation as any);
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate a new program" }));
+
+    await waitFor(() => expect(parentNavigation.navigate).toHaveBeenCalledWith("ProgramsTab", {
+      screen: "ProgramDashboard",
+      params: { programId: "prog-1" },
+    }));
+  });
+
+  it("View Today's Workout navigates to TodayTab without generating", () => {
+    useActiveProgramsMock.mockReturnValueOnce({
+      data: { programs: [{ id: "old-prog" }] },
+      isLoading: false,
+    } as any);
+    const parentNavigation = { navigate: vi.fn() };
+    const navigation = renderScreen();
+    navigation.getParent.mockReturnValue(parentNavigation as any);
+
+    fireEvent.click(screen.getByRole("button", { name: "View Today's Workout" }));
+
+    expect(parentNavigation.navigate).toHaveBeenCalledWith("TodayTab");
+    expect(generateProgramMock).not.toHaveBeenCalled();
   });
 
   it("preserveDraft skips resetFromProfile", () => {
