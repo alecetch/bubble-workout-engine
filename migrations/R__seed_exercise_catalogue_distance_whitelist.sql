@@ -4,6 +4,7 @@ UPDATE exercise_catalogue
 SET accepts_distance_unit = true
 WHERE exercise_id IN (
   -- carry
+  'db_suitcase_carry',
   'db_farmer_carry',
   'farmer_carry_dumbbells',
   'farmer_carry_handles',
