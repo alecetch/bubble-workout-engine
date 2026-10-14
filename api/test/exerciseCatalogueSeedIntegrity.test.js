@@ -10,6 +10,40 @@ const catalogue = readMigration("R__exercise_catalogue_edits.sql");
 const backfill = readMigration("R__exercise_catalogue_zz_sync_program_exercise_names.sql");
 const equipment = readMigration("R__seed_equipment_items.sql");
 
+function exerciseValues(id) {
+  const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const blocks = [...catalogue.matchAll(new RegExp(`INSERT INTO (?:public\\.)?exercise_catalogue \\(\\s*([^)]*)\\) VALUES \\(\\r?\\n  '${escapedId}',([\\s\\S]*?)\\r?\\n\\)\\r?\\nON CONFLICT`, 'g'))];
+  assert.equal(blocks.length, 1, `Expected one INSERT block for ${id}`);
+  const columns = blocks[0][1].split(',').map(column => column.trim());
+  // Each SQL value occupies its own line. Never split on commas, which may
+  // occur inside quoted names, ARRAY[...] expressions, or JSON values.
+  const values = [`'${id}'`, ...blocks[0][2].trim().split(/\r?\n/).map(line => line.trim().replace(/,$/, ''))];
+  assert.equal(values.length, columns.length, `Column/value mismatch for ${id}`);
+  return {
+    rank: Number(values[4]), archived: values[5] === 'true',
+    hyroxRole: columns.includes('hyrox_role') ? values[columns.indexOf('hyrox_role')] : undefined,
+  };
+}
+
+test('catalogue fitness ranks match all confirmed corrections', () => {
+  const expected = Object.fromEntries([
+    ...'lat_pulldown leg_press machine_chest_press machine_shoulder_press lying_leg_curl seated_leg_curl seated_calf_raise standing_calf_raise cable_curl pushdown face_pull cable_lateral_raise cable_fly row_erg ski_erg bike_erg air_bike_sprint sled_push sled_pull wall_ball sandbag_lunge sandbag_frontrack_lunge medball_slam pushup trap_bar_deadlift burpee pike_shoulder_taps kb_swing'.split(' ').map(id => [id, 0]),
+    ['feetelevated_pushup', 1], ['pike_push_up', 1], ['weighted_pushup', 2], ['nordic_hamstring_curl', 2],
+  ]);
+  const mismatches = Object.entries(expected).flatMap(([id, rank]) => {
+    const actual = exerciseValues(id).rank;
+    return actual === rank ? [] : [`${id}: expected ${rank}, got ${actual}`];
+  });
+  assert.deepEqual(mismatches, [], `Fitness-rank mismatches:\n${mismatches.join('\n')}`);
+});
+
+test('HYROX race stations and ergs are beginner-eligible', () => {
+  // hyrox_role is assigned by other seeds, so check the agreed station IDs directly.
+  const ids = 'row_erg ski_erg bike_erg air_bike_sprint sled_push sled_pull wall_ball sandbag_lunge sandbag_frontrack_lunge medball_slam'.split(' ');
+  const mismatches = ids.filter(id => exerciseValues(id).rank !== 0);
+  assert.deepEqual(mismatches, [], `Stations not eligible at rank 0: ${mismatches.join(', ')}`);
+});
+
 function missingProtectedIds(sql) {
   const deletion = sql.match(/DELETE\s+FROM\s+(?:public\.)?exercise_catalogue\s+WHERE\s+exercise_id\s+NOT\s+IN\s*\(([\s\S]*?)\)\s*;/i);
   assert.ok(deletion, "expected the snapshot's Step 1 NOT IN deletion safeguard");
