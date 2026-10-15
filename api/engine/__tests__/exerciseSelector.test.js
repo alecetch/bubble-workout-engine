@@ -70,6 +70,42 @@ function makeStats() {
   };
 }
 
+test('a real exercise beats an otherwise identical substitute by exactly two points', () => {
+  const rows = [makeExercise({ id: 'sub', mp: 'squat', pref: ['hypertrophy_accessory'] }), makeExercise({ id: 'real', mp: 'squat', pref: ['hypertrophy_accessory'] })];
+  rows[0].is_substitute = true;
+  const { byId, allowedSet } = makeSelectorPool(rows);
+  const ranked = rankBest(allowedSet, byId, { mp: 'squat', requirePref: 'hypertrophy_accessory', prefMode: 'soft', rankValue: 0 }, null, null, null);
+  assert.equal(ranked[0].ex.id, 'real');
+  assert.equal(ranked[0].score - ranked[1].score, 2);
+});
+
+test('a substitute with a stronger structural match still beats a real exercise', () => {
+  const { byId, allowedSet } = makeSelectorPool([
+    { ...makeExercise({ id: 'sub', sw: 'target', mp: 'hinge' }), is_substitute: true },
+    makeExercise({ id: 'real', sw: 'other', mp: 'squat' }),
+  ]);
+  const ranked = rankBest(allowedSet, byId, { sw: 'target', mp: 'squat', rankValue: 0 }, null, null, null);
+  assert.equal(ranked[0].ex.id, 'sub');
+});
+
+test('the only substitute stays selectable when its penalty reduces its score to zero', () => {
+  const { byId, allowedSet } = makeSelectorPool([
+    { ...makeExercise({ id: 'sub', mp: 'squat', pref: ['accessory'] }), density_rating: 0, complexity_rank: 0, is_substitute: true },
+  ]);
+  const selector = { mp: 'squat', requirePref: 'accessory', prefMode: 'soft', prefBonus: -2, rankValue: 0 };
+  const ranked = rankBest(allowedSet, byId, selector, null, null, null);
+  assert.equal(ranked[0].ex.id, 'sub');
+  assert.equal(ranked[0].score, 0);
+  assert.equal(pickWithFallback(allowedSet, byId, selector, new Set(), makeStats(), new Set(), new Set(), new Set()).id, 'sub');
+});
+
+test('substitute flags survive catalogue conversion for boolean and string inputs', () => {
+  for (const value of [true, 'true', false, 'false', undefined]) {
+    const { byId } = makeSelectorPool([{ ...makeExercise({ id: 'ex' }), is_substitute: value }]);
+    assert.equal(byId.ex.is_substitute, value === true || value === 'true');
+  }
+});
+
 test('bodyweight biceps slot ranks a curl above rows', () => {
   const exercises = [
     makeExercise({ id: 'towel_biceps_curl', mc: 'isolation', mp: 'pull_horizontal', sw: 'arms', sw2: 'arms_accessory', pref: ['hypertrophy_accessory', 'strength_accessory'] }),

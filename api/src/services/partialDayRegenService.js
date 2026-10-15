@@ -166,7 +166,7 @@ export async function regenerateDaysWithEquipment(
        movement_class,
        movement_pattern_primary,
        is_loadable,
-       strength_equivalent,
+       strength_equivalent, is_substitute,
        min_fitness_rank,
        complexity_rank,
        density_rating,

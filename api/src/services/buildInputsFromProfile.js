@@ -39,7 +39,7 @@ function toPreferredDayCode(value) {
   return map[compressed] || map[raw] || null;
 }
 
-function mapFitnessRank(fitnessLevel) {
+export function mapFitnessRank(fitnessLevel) {
   const v = String(fitnessLevel ?? "").trim().toLowerCase();
   if (v === "intermediate") return 1;
   if (v === "advanced") return 2;
@@ -61,6 +61,7 @@ function mapExerciseRowsToResults(exerciseRows) {
     complexity_rank: row.complexity_rank ?? 0,
     is_loadable: row.is_loadable ?? false,
     strength_equivalent: row.strength_equivalent ?? false,
+    is_substitute: row.is_substitute === true || row.is_substitute === "true",
     min_fitness_rank: row.min_fitness_rank ?? 0,
     movement_class: row.movement_class,
     target_regions_json: row.target_regions_json ?? [],
@@ -80,6 +81,7 @@ function mapExerciseRowsToCatalogEx(exerciseRows) {
     den: row.density_rating ?? 0,
     cx: row.complexity_rank ?? 0,
     load: Boolean(row.is_loadable),
+    is_substitute: row.is_substitute === true || row.is_substitute === "true",
     mc: row.movement_class || "",
     tr: row.target_regions_json ?? [],
     wh: row.warmup_hooks ?? [],

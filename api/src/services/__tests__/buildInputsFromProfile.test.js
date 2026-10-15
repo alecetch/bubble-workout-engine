@@ -2,6 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildInputsFromProfile } from "../buildInputsFromProfile.js";
 
+test('both engine catalogue representations retain substitute flags', () => {
+  for (const is_substitute of [true, 'true', false, undefined]) {
+    const inputs = buildInputsFromProfile({}, [{ exercise_id: 'station', is_substitute }]);
+    const expected = is_substitute === true || is_substitute === 'true';
+    assert.equal(inputs.exercises.response.results[0].is_substitute, expected);
+    assert.equal(inputs.configs.catalogBuilds.response.results[0].catalog_json.ex[0].is_substitute, expected);
+  }
+});
+
 function makeProfile(overrides = {}) {
   return {
     preferredDays: ["Mon", "Wed", "Fri"],

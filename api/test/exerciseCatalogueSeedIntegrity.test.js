@@ -41,6 +41,31 @@ const equipmentSlugs = fields => fields.equipment_items_slugs === "'{}'::text[]"
   [...fields.equipment_items_slugs.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1]);
 const exerciseIds = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',/g)].map(match => match[1]);
 
+test('selector flags reset first, reference active exercises and preserve injury-safe regressions', () => {
+  const sql = readMigration('R__seed_exercise_catalogue_selector_flags.sql').replace(/--[^\n]*/g, '').trim();
+  assert.match(sql.split(';')[0], /^UPDATE exercise_catalogue SET max_fitness_rank = NULL, is_substitute = false\s+WHERE max_fitness_rank IS NOT NULL OR is_substitute$/);
+  const ids = [...sql.matchAll(/'([^']+)'/g)].map(match => match[1]);
+  for (const id of ids) assert.equal(exerciseValues(id).archived, false, id);
+  const capped = [...sql.matchAll(/SET max_fitness_rank = (\d+)\s+WHERE exercise_id IN \(([^)]*)\)/g)];
+  assert.equal(capped.length, 2);
+  const safe = new Set(['air_squat', 'bodyweight_box_squat', 'squat_to_overhead_reach', 'step_back_burpee']);
+  const cappedIds = capped.flatMap(([, cap, group]) => [...group.matchAll(/'([^']+)'/g)].map(([, id]) => {
+    assert.ok(!safe.has(id), `${id} must not be capped`);
+    assert.ok(Number(cap) >= exerciseValues(id).rank, `${id} cap is below its minimum rank`);
+    return id;
+  }));
+  assert.equal(cappedIds.length, 6);
+  const substitutes = sql.match(/SET is_substitute = true\s+WHERE exercise_id IN \(([^)]*)\)/)[1];
+  assert.equal([...substitutes.matchAll(/'([^']+)'/g)].length, 14);
+});
+
+test('catalogue snapshots deliberately omit seed-owned selector flags', () => {
+  const sourceUrl = new URL('../src/routes/adminExerciseCatalogue.js', import.meta.url);
+  const source = readFileSync(sourceUrl, 'utf8');
+  const cols = source.match(/function buildInsertSql\(exercise\)\s*\{\s*const COLS = \[([\s\S]*?)\];/)[1];
+  assert.doesNotMatch(cols, /max_fitness_rank|is_substitute/);
+});
+
 const stapleIds = ['glute_bridge', 'split_squat', 'towel_hamstring_curl', 'incline_pushup', 'bench_dip', 'diamond_pushup', 'towel_biceps_curl',
   'db_biceps_curl', 'db_hammer_curl', 'db_overhead_triceps_extension', 'db_fly', 'db_hip_thrust', 'landmine_press',
   'band_assisted_pullup', 'negative_pullup', 'scapular_pullup', 'chin_up', 'parallel_bar_dip', 'ring_dip', 'ghd_back_extension', 'dball_over_shoulder'];

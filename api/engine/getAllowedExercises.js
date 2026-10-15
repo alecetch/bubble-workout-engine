@@ -16,6 +16,7 @@ export async function getAllowedExerciseIds(client, { fitness_rank, injury_flags
     FROM exercise_catalogue
     WHERE is_archived = false
       AND min_fitness_rank <= $1
+      AND (max_fitness_rank IS NULL OR max_fitness_rank >= $1)
       AND NOT (contraindications_slugs && $2::text[])
       AND equipment_items_slugs <@ $3::text[]
     ORDER BY exercise_id

@@ -115,6 +115,20 @@ function makeRepRules() {
   ];
 }
 
+test('rule health respects the ceiling while null, absent and empty ceilings stay unbounded', () => {
+  const reportFor = max_fitness_rank => buildCatalogueRuleHealthReport({
+    exercises: [{ ...makeExercises()[0], max_fitness_rank }],
+    repRules: makeRepRules(), configRows: makeConfigRows(), equipmentItems: makeEquipmentItems(),
+  });
+  const count = (report, rank) => report.slot_coverage.rows.find(row => row.slot === 'A:main' && row.preset === 'commercial_gym' && row.rank === rank).count;
+  const capped = reportFor(1);
+  assert.equal(count(capped, 0), 1);
+  assert.equal(count(capped, 1), 1);
+  assert.equal(count(capped, 2), 0);
+  assert.equal(count(capped, 3), 0);
+  for (const value of [null, undefined, '']) assert.equal(count(reportFor(value), 3), 1);
+});
+
 test("health report flags orphaned rule dimensions from live catalogue drift", () => {
   const report = buildCatalogueRuleHealthReport({
     exercises: makeExercises(),

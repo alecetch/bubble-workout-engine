@@ -82,6 +82,7 @@ export function buildIndex(cat) {
       engine_role: raw.engine_role || "",
       load: raw.load,
       strength_equivalent: raw.strength_equivalent === true,
+      is_substitute: raw.is_substitute === true,
       rank: Number(raw.rank ?? 0),
       hyrox_role: toStr(raw.hyrox_role || raw.hyroxRole || "").trim(),
       hyrox_station_index: Number.parseInt(toStr(raw.hyrox_station_index || raw.hyroxStationIndex).trim(), 10) || null,
@@ -279,6 +280,8 @@ export function rankBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCn
         sel.condThresholds ?? {},
       );
     }
+
+    if (ex.is_substitute === true) score -= 2;
 
     ranked.push({ ex, score });
   }
@@ -828,6 +831,7 @@ export function buildCatalogJsonFromBubble(exercises) {
         ? r.strength_equivalent
         : toStr(r.strength_equivalent).toLowerCase() === "true";
 
+    const is_substitute = r.is_substitute === true || toStr(r.is_substitute).toLowerCase() === "true";
     const mc = toStr(r.movement_class || r.mc || "").trim();
     const rank = Number(r.min_fitness_rank ?? r.rank ?? 0);
 
@@ -855,6 +859,7 @@ export function buildCatalogJsonFromBubble(exercises) {
       engine_role,
       load,
       strength_equivalent,
+      is_substitute,
       rank,
       hyrox_role,
       hyrox_station_index,

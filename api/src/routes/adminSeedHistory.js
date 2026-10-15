@@ -828,7 +828,7 @@ export function createAdminSeedHistoryHandler({
       const exercisesR = await db.query(`
         SELECT
           exercise_id, name, movement_class, movement_pattern_primary, is_loadable,
-          strength_equivalent, min_fitness_rank, complexity_rank, density_rating,
+          strength_equivalent, is_substitute, min_fitness_rank, complexity_rank, density_rating,
           equipment_json, coaching_cues_json, load_guidance, logging_guidance,
           preferred_in_json, swap_group_id_1, swap_group_id_2, target_regions_json,
           warmup_hooks, accepts_distance_unit, strength_primary_region

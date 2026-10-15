@@ -1,7 +1,10 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { createProgramExerciseHandlers, programExerciseRouter } from "../src/routes/programExercise.js";
+import { pool } from '../src/db.js';
+
+after(() => pool.end());
 
 function mockRes() {
   const res = { statusCode: 200, body: null };
@@ -36,6 +39,34 @@ function mockPool(responses, calls = []) {
 
 const VALID_UUID = "11111111-1111-4111-8111-111111111111";
 const USER_UUID = "22222222-2222-4222-8222-222222222222";
+
+for (const [label, currentId, rank, equipment] of [
+  ['real sled before substitutes', 'towel_push', 1, ['bodyweight', 'sled', 'treadmill']],
+  ['rank ceilings exclude regressions', 'pushup', 2, ['bodyweight', 'pullup_bar', 'resistance_band']],
+]) {
+  test(`swap options use live catalogue eligibility: ${label}`, async t => {
+    try { await pool.query('SELECT 1'); }
+    catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
+    const client = { release() {}, async query(sql, params) {
+      if (sql.includes('pe.id AS program_exercise_id')) return { rowCount: 1, rows: [{ exercise_id: currentId, program_day_id: VALID_UUID }] };
+      if (/FROM client_profile\s+WHERE/.test(sql)) return { rowCount: 1, rows: [{ fitness_rank: rank, injury_flags_slugs: [], equipment_items_slugs: equipment }] };
+      if (/SELECT exercise_id\s+FROM program_exercise/.test(sql)) return { rowCount: 0, rows: [] };
+      return pool.query(sql, params);
+    } };
+    const handlers = createProgramExerciseHandlers({ db: { connect: async () => client } });
+    const res = mockRes();
+    await handlers.swapOptions({ request_id: label, params: { program_exercise_id: VALID_UUID }, auth: { user_id: USER_UUID } }, res);
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+    const ids = res.body.options.map(row => row.exercise_id);
+    assert.ok(ids.length > 0);
+    if (currentId === 'towel_push') {
+      assert.ok(ids.includes('dead_tread'), 'Expected an eligible substitute for comparison');
+      assert.ok(ids.indexOf('sled_push') >= 0 && ids.indexOf('sled_push') < ids.indexOf('dead_tread'), JSON.stringify(ids));
+    } else {
+      for (const id of ['kneeling_pushup', 'incline_pushup']) assert.ok(!ids.includes(id), id);
+    }
+  });
+}
 
 test("swapOptions returns candidates and excludes current or already-used exercises", async () => {
   const handlers = createProgramExerciseHandlers({
