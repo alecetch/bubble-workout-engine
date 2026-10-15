@@ -41,6 +41,47 @@ const equipmentSlugs = fields => fields.equipment_items_slugs === "'{}'::text[]"
   [...fields.equipment_items_slugs.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1]);
 const exerciseIds = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',/g)].map(match => match[1]);
 
+const stapleIds = ['glute_bridge', 'split_squat', 'towel_hamstring_curl', 'incline_pushup', 'bench_dip', 'diamond_pushup', 'towel_biceps_curl',
+  'db_biceps_curl', 'db_hammer_curl', 'db_overhead_triceps_extension', 'db_fly', 'db_hip_thrust', 'landmine_press',
+  'band_assisted_pullup', 'negative_pullup', 'scapular_pullup', 'chin_up', 'parallel_bar_dip', 'ring_dip', 'ghd_back_extension', 'dball_over_shoulder'];
+
+test('all 21 missing staples are active, coached and below high impact', () => {
+  for (const id of stapleIds) {
+    const { fields, archived } = exerciseValues(id);
+    assert.equal(archived, false, id);
+    assert.notEqual(Number(fields.impact_level), 3, id);
+    assert.ok(sqlText(fields.technique_cue), id);
+    assert.ok(sqlText(fields.technique_setup), id);
+    assert.equal(JSON.parse(sqlText(fields.coaching_cues_json.replace(/::jsonb$/, ''))).length, 3, id);
+    assert.equal(fields.load_estimation_metadata, 'NULL', id);
+  }
+});
+
+test('staple equipment follows the household bench and corner landmine conventions', () => {
+  assert.deepEqual(equipmentSlugs(exerciseValues('bench_dip').fields), []);
+  assert.deepEqual(equipmentSlugs(exerciseValues('landmine_press').fields), ['barbell']);
+});
+
+test('all six contraindicated staples carry exactly their reviewed flags', () => {
+  const expected = { bench_dip: ['shoulder_issues', 'wrist_elbow'], diamond_pushup: ['wrist_elbow'],
+    db_overhead_triceps_extension: ['shoulder_issues'], parallel_bar_dip: ['shoulder_issues'],
+    ring_dip: ['shoulder_issues', 'wrist_elbow'], dball_over_shoulder: ['lower_back_spine'] };
+  for (const id of stapleIds) {
+    const fields = exerciseValues(id).fields;
+    const slugs = fields.contraindications_slugs === "'{}'::text[]" ? [] : [...fields.contraindications_slugs.matchAll(/'([^']+)'/g)].map(match => match[1]);
+    assert.deepEqual(slugs, expected[id] || [], id);
+  }
+});
+
+test('every equipment slug used by an active catalogue exercise is seeded', () => {
+  const seeded = new Set(equipmentRows().map(row => row.slug));
+  const missing = [...new Set(exerciseIds.flatMap(id => {
+    const { fields, archived } = exerciseValues(id);
+    return archived ? [] : equipmentSlugs(fields).filter(slug => !seeded.has(slug));
+  }))].sort();
+  assert.deepEqual(missing, [], `Missing equipment seed slugs: ${missing.join(', ')}`);
+});
+
 const injuryFlags = new Set(['shoulder_issues', 'knee_issues', 'lower_back_spine', 'ankle_foot', 'wrist_elbow', 'cardiovascular_limitations']);
 const contraindications = fields => JSON.parse(sqlText(fields.contraindications_json.replace(/::jsonb$/, '')));
 

@@ -119,7 +119,8 @@ SELECT v.external_id, v.category, v.name, v.exercise_slug, NULL, '(App admin)',
 FROM (VALUES
   ('admin_1774902038647', 'Gymnastics / rig', 'TRX', 'trx', true, true, true, true, false),
   ('admin_1774338650345', 'Gymnastics / rig', 'climbing rope', 'climbing_rope', false, true, false, false, false),
-  ('admin_1774305574675', 'Strength machine', 'GHD', 'ghd', true, true, false, false, false)
+  ('admin_1774305574675', 'Strength machine', 'GHD', 'ghd', true, true, false, false, false),
+  ('admin_1774426459579', 'Gymnastics / rig', 'rig', 'rig', true, true, true, false, false)
 ) AS v(external_id, category, name, exercise_slug, commercial_gym, crossfit_hyrox_gym, decent_home_gym, minimal_equipment, no_equipment)
 WHERE NOT EXISTS (
   SELECT 1 FROM equipment_items ei WHERE ei.exercise_slug = v.exercise_slug

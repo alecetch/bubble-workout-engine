@@ -7,6 +7,15 @@ export const KNOWN_EMPTY = emptySlots.flatMap(parts =>
 
 export const MIN_COUNTS = [
   ...[
+    ['push_day', 'D:triceps', 'no_equipment', [0], 3, 'Bodyweight triceps staples'],
+    ['pull_day', 'D:biceps', 'no_equipment', [0], 7, 'Towel curl adds a real bodyweight biceps option'],
+    ['legs_day', 'C:hamstring_iso', 'no_equipment', [0, 1, 2, 3], 2, 'Towel curl expands hamstring isolation'],
+    ['day3', 'C:glute', 'no_equipment', [0], 2, 'Glute Bridge adds a bilateral regression'],
+    ['pull_day', 'B:pull_vertical', 'decent_home_gym', [0], 4, 'Beginner pull-up progressions'],
+  ].flatMap(([day_key, slot, preset, ranks, min, reason]) => ranks.map(rank => ({
+    config_key: 'hypertrophy_default_v1', day_key, slot, preset, rank, min, reason,
+  }))),
+  ...[
     ['conditioning_default_v1', 'day1', 'A:engine', 5, 'Bodyweight engine options cover conditioning days'],
     ['conditioning_default_v1', 'day2', 'B:engine', 5, 'Bodyweight engine options cover conditioning days'],
     ['conditioning_default_v1', 'day3', 'A:engine', 5, 'Bodyweight engine options cover conditioning days'],
