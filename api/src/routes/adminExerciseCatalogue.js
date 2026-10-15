@@ -518,7 +518,8 @@ async function getFullState(forceRefresh = false) {
   const client = await pool.connect();
   try {
     const [exRes, eqRes, cfgRes] = await Promise.all([
-      client.query("SELECT * FROM exercise_catalogue ORDER BY movement_class, name"),
+      // exercise_id breaks ties so the Flyway snapshot order is deterministic.
+      client.query('SELECT * FROM exercise_catalogue ORDER BY movement_class, name, exercise_id COLLATE "C"'),
       client.query(`
         SELECT DISTINCT exercise_slug, name, category,
           no_equipment, minimal_equipment, decent_home_gym, commercial_gym, crossfit_hyrox_gym

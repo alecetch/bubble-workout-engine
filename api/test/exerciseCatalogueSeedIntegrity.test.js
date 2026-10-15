@@ -40,6 +40,39 @@ const equipmentSlugs = fields => fields.equipment_items_slugs === "'{}'::text[]"
   [...fields.equipment_items_slugs.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1]);
 const exerciseIds = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',/g)].map(match => match[1]);
 
+const bodyweightEngineIds = ['squat_thrust', 'bodyweight_ski_hinge', 'shadow_boxing', 'jumping_jack', 'plank_jack', 'high_knee_run', 'skater_hop'];
+const expandedCoreIds = ['side_plank', 'hollow_hold', 'bird_dog', 'reverse_crunch', 'plank_shoulder_tap', 'cable_pallof_press', 'band_pallof_press', 'cable_crunch', 'barbell_rollout', 'hanging_leg_raise', 'ghd_sit_up', 'db_suitcase_carry'];
+
+test('all 19 bodyweight engine and core additions are active and have coaching guidance', () => {
+  for (const id of [...bodyweightEngineIds, ...expandedCoreIds]) {
+    const { archived, fields } = exerciseValues(id);
+    assert.equal(archived, false, id);
+    assert.ok(sqlText(fields.technique_setup), `${id} needs setup guidance`);
+    assert.ok(sqlText(fields.technique_cue), `${id} needs a short cue`);
+    assert.equal(JSON.parse(sqlText(fields.coaching_cues_json.replace(/::jsonb$/, ''))).length, 3, id);
+  }
+});
+
+test('plank holds are tagged core_isometric and cable core moves take selectable loads', () => {
+  for (const id of ['hardstyle_plank', 'side_plank', 'hollow_hold']) {
+    assert.equal(sqlText(exerciseValues(id).fields.swap_group_id_2), 'core_isometric', id);
+  }
+  for (const id of ['cable_crunch', 'cable_pallof_press']) assert.equal(exerciseValues(id).fields.is_loadable, 'true', id);
+});
+
+test('bodyweight engine substitutes omit real-erg preferences and swap groups', () => {
+  const whitelist = readMigration('R__seed_exercise_catalogue_distance_whitelist.sql');
+  for (const id of bodyweightEngineIds) {
+    const { fields } = exerciseValues(id);
+    const prefs = JSON.parse(sqlText(fields.preferred_in_json.replace(/::jsonb$/, '')));
+    assert.ok(!prefs.includes('conditioning_main'), id);
+    assert.ok(!prefs.includes('hyrox_buy_in'), id);
+    assert.equal(fields.swap_group_id_2, 'NULL', id);
+    assert.ok(!whitelist.includes(`'${id}'`), `${id} must convert distance prescriptions to time`);
+  }
+  assert.ok(whitelist.includes("'db_suitcase_carry'"));
+});
+
 test('bodyweight calf raises have optional load and dead tread still requires a treadmill', () => {
   const calf = exerciseValues('single_leg_standing_calf_raise').fields;
   assert.deepEqual(equipmentSlugs(calf), []);
@@ -176,4 +209,22 @@ test("equipment seed has exactly one resistance band and row machine slug", () =
   for (const slug of ["resistance_band", "row_machine"]) {
     assert.equal(slugs.filter(value => value === slug).length, 1, `expected exactly one equipment row for ${slug}`);
   }
+});
+
+test("snapshot orders exercises with the same class and name by exercise_id", () => {
+  // Mirrors the generator's ORDER BY movement_class, name, exercise_id COLLATE "C".
+  // Without the tie-break, Postgres returns tied rows in physical order and
+  // /admin/sync-status flips between clean and dirty after a Flyway re-run.
+  const blocks = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',\r?\n  '((?:''|[^'])*)',\r?\n  '([^']*)',/g)]
+    .map(([, id, name, movementClass]) => ({ id, name, movementClass }));
+  assert.ok(blocks.length > 0, "expected catalogue blocks");
+  const misordered = blocks.slice(1).flatMap((block, i) => {
+    const prev = blocks[i];
+    return prev.movementClass === block.movementClass && prev.name === block.name && prev.id > block.id
+      ? [`${prev.id} before ${block.id} (${block.movementClass} / ${block.name})`] : [];
+  });
+  assert.deepEqual(misordered, [], `Tied catalogue rows out of exercise_id order:\n${misordered.join("\n")}`);
+  const deletion = catalogue.match(/NOT\s+IN\s*\(([\s\S]*?)\)\s*;/i);
+  const listed = [...deletion[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+  assert.deepEqual(listed, blocks.map(block => block.id), "Step 1 NOT IN list should follow block order");
 });
