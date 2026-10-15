@@ -33,7 +33,7 @@ function cooldown(id, regions, equipment = [], rounds = 1, videoStatus) {
   };
 }
 
-async function narrate({ weeks, catalog, cooldownCatalog, cooldownHistory = {}, warmupCatalog = [], warmupHistory = {}, effectiveEquipment = [] }) {
+async function narrate({ weeks, catalog, cooldownCatalog, cooldownHistory = {}, warmupCatalog = [], warmupHistory = {}, effectiveEquipment = [], injuryFlags = [] }) {
   return applyNarration({
     program: { program_type: "hypertrophy", duration_mins: 50, days_per_week: 1, weeks },
     narrationTemplates: templates,
@@ -47,6 +47,7 @@ async function narrate({ weeks, catalog, cooldownCatalog, cooldownHistory = {}, 
     warmupCatalog,
     warmupHistory,
     effectiveEquipment,
+    injuryFlags,
   });
 }
 
@@ -267,4 +268,48 @@ test("warm-up and cool-down selection histories remain independent", async () =>
   assert.deepEqual([...sharedHistory.get("glutes")], ["cool-a", "warm-a"]);
   assert.equal(cooldownItems(both)[0].reps_prescribed, "30");
   assert.equal(cooldownItems(both)[0].reps_unit, "sec");
+});
+
+
+test('cooldown injury filtering precedes video preference and preserves region coverage', async () => {
+  const rows = [
+    { ...cooldown('unsafe-ready', ['glutes', 'hamstrings'], [], 1, 'ready'), contraindications_slugs: ['wrist_elbow'] },
+    cooldown('safe-glutes', ['glutes']),
+    { ...cooldown('safe-hamstrings', ['hamstrings']), contraindications_slugs: '["knee_issues"]' },
+  ];
+  const fixture = videoPreferenceFixture(rows, {
+    catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }],
+    injuryFlags: ['wrist_elbow'],
+    cooldownHistory: { glutes: ['safe-glutes'], hamstrings: ['safe-hamstrings'] },
+  });
+  const before = await narrate({ ...fixture, injuryFlags: [] });
+  const out = await narrate(fixture);
+  assert.ok(cooldownItems(before).some(item => item.exercise_id === 'unsafe-ready'));
+  for (let i = 0; i < 8; i++) {
+    assert.deepEqual(new Set(cooldownItems(out, 0, i).map(item => item.exercise_id)), new Set(['safe-glutes', 'safe-hamstrings']));
+  }
+});
+
+test('cooldown never reintroduces contraindicated rows when no eligible alternative exists', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    { ...cooldown('unsafe', ['glutes'], [], 1, 'ready'), contraindications_slugs: '["wrist_elbow"]' },
+  ], { injuryFlags: ['knee_issues', 'wrist_elbow'] }));
+  for (const day of out.program.weeks[0].days) {
+    assert.ok(!day.segments.some(segment => segment.segment_type === 'cooldown' && segment.items.length));
+  }
+});
+
+test('cooldown injury flag no_known_issues behaves exactly like no flags', async () => {
+  // A row tagged no_known_issues would be dropped if the flag were not ignored.
+  const fixture = videoPreferenceFixture([
+    { ...cooldown('tagged-odd', ['glutes'], [], 1, 'ready'), contraindications_slugs: ['no_known_issues'] },
+    cooldown('plain', ['glutes']),
+    { ...cooldown('wrist', ['hamstrings']), contraindications_slugs: ['wrist_elbow'] },
+  ], { catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }] });
+  const none = await narrate({ ...fixture, injuryFlags: [] });
+  const noKnown = await narrate({ ...fixture, injuryFlags: ['no_known_issues', ''] });
+  for (let i = 0; i < 4; i++) {
+    assert.deepEqual(cooldownItems(noKnown, 0, i), cooldownItems(none, 0, i));
+  }
+  assert.ok(cooldownItems(noKnown).some(item => item.exercise_id === 'tagged-odd'));
 });

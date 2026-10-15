@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { REVIEWED_EXERCISE_IDS } from './fixtures/contraindicationReview.js';
 
 // Repo checkout (CI, host): <repo>/migrations. Docker Compose api container: mounted at /app/migrations.
 const MIGRATIONS_DIR = [new URL("../../migrations/", import.meta.url), new URL("../migrations/", import.meta.url)]
@@ -39,6 +40,60 @@ const sqlText = literal => literal === 'NULL' ? null : literal.slice(1, -1).repl
 const equipmentSlugs = fields => fields.equipment_items_slugs === "'{}'::text[]" ? [] :
   [...fields.equipment_items_slugs.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1]);
 const exerciseIds = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',/g)].map(match => match[1]);
+
+const injuryFlags = new Set(['shoulder_issues', 'knee_issues', 'lower_back_spine', 'ankle_foot', 'wrist_elbow', 'cardiovascular_limitations']);
+const contraindications = fields => JSON.parse(sqlText(fields.contraindications_json.replace(/::jsonb$/, '')));
+
+test('injury tags use reference codes and keep JSON and slug arrays identical', () => {
+  for (const id of exerciseIds) {
+    const { fields } = exerciseValues(id);
+    const flags = contraindications(fields);
+    const slugs = fields.contraindications_slugs === "'{}'::text[]" ? [] : [...fields.contraindications_slugs.matchAll(/'([^']+)'/g)].map(match => match[1]);
+    assert.deepEqual(slugs, flags, id);
+    assert.equal(new Set(flags).size, flags.length, id);
+    for (const flag of flags) assert.ok(injuryFlags.has(flag), `${id}: unknown contraindication ${flag}`);
+  }
+});
+
+test('high-impact exercises carry knee and ankle flags and step-ups stay low impact', () => {
+  for (const id of exerciseIds) {
+    const { fields, archived } = exerciseValues(id);
+    if (archived || Number(fields.impact_level) !== 3) continue;
+    assert.ok(contraindications(fields).includes('knee_issues'), id);
+    assert.ok(contraindications(fields).includes('ankle_foot'), id);
+  }
+  assert.equal(exerciseValues('box_step_up').fields.impact_level, '1');
+});
+
+test('reviewed injury tags cover key risks while preserving agreed regressions', () => {
+  for (const [id, flags] of Object.entries({ box_jump: ['knee_issues', 'ankle_foot'], bb_back_squat: ['lower_back_spine'], bb_overhead_press: ['shoulder_issues'], devils_press: [...injuryFlags].filter(flag => flag !== 'shoulder_issues') })) {
+    for (const flag of flags) assert.ok(contraindications(exerciseValues(id).fields).includes(flag), `${id}: ${flag}`);
+  }
+  for (const id of ['run_interval_outdoor_or_treadmill', 'goblet_squat', 'leg_press', 'trap_bar_deadlift']) {
+    assert.deepEqual(contraindications(exerciseValues(id).fields), [], id);
+  }
+});
+
+test('every active exercise has an explicit contraindication review', () => {
+  const reviewed = new Set(REVIEWED_EXERCISE_IDS);
+  assert.equal(reviewed.size, REVIEWED_EXERCISE_IDS.length, 'Duplicate reviewed ids');
+  const missing = exerciseIds.filter(id => !exerciseValues(id).archived && !reviewed.has(id));
+  assert.deepEqual(missing, [], `Review contraindications for new exercises: ${missing.join(', ')}`);
+  assert.deepEqual(REVIEWED_EXERCISE_IDS.filter(id => !exerciseIds.includes(id)), [], 'Unknown reviewed ids');
+});
+
+test('four low-impact bodyweight regressions are active, beginner-eligible and coached', () => {
+  for (const id of ['air_squat', 'bodyweight_box_squat', 'squat_to_overhead_reach', 'step_back_burpee']) {
+    const { fields, archived, rank } = exerciseValues(id);
+    assert.equal(archived, false, id);
+    assert.equal(rank, 0, id);
+    assert.deepEqual(equipmentSlugs(fields), [], id);
+    assert.deepEqual(contraindications(fields), [], id);
+    assert.equal(fields.impact_level, '1', id);
+    assert.ok(sqlText(fields.technique_setup), id);
+    assert.ok(sqlText(fields.technique_cue), id);
+  }
+});
 
 const bodyweightEngineIds = ['squat_thrust', 'bodyweight_ski_hinge', 'shadow_boxing', 'jumping_jack', 'plank_jack', 'high_knee_run', 'skater_hop'];
 const expandedCoreIds = ['side_plank', 'hollow_hold', 'bird_dog', 'reverse_crunch', 'plank_shoulder_tap', 'cable_pallof_press', 'band_pallof_press', 'cable_crunch', 'barbell_rollout', 'hanging_leg_raise', 'ghd_sit_up', 'db_suitcase_carry'];

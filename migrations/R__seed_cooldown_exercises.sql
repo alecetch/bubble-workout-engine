@@ -97,3 +97,12 @@ WHERE is_archived = false
     'cooldown-supine-knee-to-shoulder-stretch',
     'cooldown-seated-hamstring-stretch'
   );
+
+
+-- Reviewed injury exclusions; update existing rows as well as fresh inserts.
+UPDATE cooldown_exercise e
+SET contraindications_slugs = tags.flags
+FROM (VALUES
+  ('cooldown-pigeon-stretch', ARRAY['knee_issues']::text[])
+) AS tags(id, flags)
+WHERE e.cooldown_exercise_id = tags.id;

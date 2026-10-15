@@ -104,7 +104,7 @@ function buildPresetValuesSql(presets, startParam = 1) {
   };
 }
 
-export async function fetchSlotCounts(client, presets, slot, excludedClasses) {
+export async function fetchSlotCounts(client, presets, slot, excludedClasses, injuryFlags = []) {
   const sw = safeString(slot.sw) || null;
   const sw2 = safeString(slot.sw2) || null;
   const swAny = asArray(slot.swAny)
@@ -128,6 +128,7 @@ export async function fetchSlotCounts(client, presets, slot, excludedClasses) {
   const requirePrefParam = swParam + 5;
   const unconstrainedParam = swParam + 6;
   const excludedClassesParam = swParam + 7;
+  const injuryFlagsParam = swParam + 8;
 
   const sql = `
     WITH preset_values(preset_code, preset_slugs) AS (
@@ -148,6 +149,7 @@ export async function fetchSlotCounts(client, presets, slot, excludedClasses) {
     FROM combinations c
     LEFT JOIN exercise_catalogue ec
       ON ec.is_archived = false
+      AND NOT (COALESCE(ec.contraindications_slugs, '{}'::text[]) && $${injuryFlagsParam}::text[])
       AND COALESCE(ec.min_fitness_rank, 0) <= c.rank_value
       AND (
         cardinality($${excludedClassesParam}::text[]) = 0
@@ -191,6 +193,7 @@ export async function fetchSlotCounts(client, presets, slot, excludedClasses) {
     requirePref,
     unconstrained,
     excluded,
+    asTextArray(injuryFlags),
   ];
 
   const result = await client.query(sql, params);
@@ -208,6 +211,7 @@ export async function fetchSlotCounts(client, presets, slot, excludedClasses) {
 
 export async function fetchCoverageReport({
   db = pool,
+  injury_flags = [],
   config_key: requestedConfigKey = "",
   program_type: requestedProgramType = "",
 } = {}) {
@@ -286,7 +290,7 @@ export async function fetchCoverageReport({
             resolvedSummary.variant_matched = resolvedSlot !== slot;
             resolvedSummary.equipment_profile = preset.equipment_profile;
             resolvedByPreset[preset.code] = resolvedSummary;
-            const presetCounts = await fetchSlotCounts(db, [preset], resolvedSlot, effectiveExcludedClasses);
+            const presetCounts = await fetchSlotCounts(db, [preset], resolvedSlot, effectiveExcludedClasses, injury_flags);
             for (const rank of RANKS) {
               counts[`${preset.code}_${rank.value}`] = presetCounts[`${preset.code}_${rank.value}`] ?? 0;
             }
@@ -314,7 +318,7 @@ export async function fetchCoverageReport({
       }
     }
 
-    return { presets, ranks: RANKS, rows };
+    return { presets, ranks: RANKS, rows, injury_flags: asTextArray(injury_flags) };
 }
 
 adminCoverageRouter.get("/coverage-report", async (req, res) => {
@@ -323,6 +327,7 @@ adminCoverageRouter.get("/coverage-report", async (req, res) => {
       db: pool,
       config_key: req.query?.config_key,
       program_type: req.query?.program_type,
+      injury_flags: Array.isArray(req.query?.injury_flags) ? req.query.injury_flags : String(req.query?.injury_flags || "").split(",").map(v => v.trim()).filter(Boolean),
     });
     return res.json(report);
   } catch (err) {

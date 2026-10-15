@@ -30,6 +30,26 @@ function normalizeArray(value) {
   return [];
 }
 
+const INJURY_CODES = new Set([
+  "shoulder_issues", "knee_issues", "lower_back_spine", "ankle_foot", "wrist_elbow", "cardiovascular_limitations",
+]);
+
+// Returns null when the body omits contraindications (patch leaves the column unchanged).
+function contraindicationsFromBody(body) {
+  const raw = body?.contraindications_slugs ?? body?.contraindicationsSlugs;
+  if (raw == null) return null;
+  const values = normalizeArray(raw);
+  return { values, invalid: values.filter((value) => !INJURY_CODES.has(value)) };
+}
+
+function invalidContraindicationsResponse(res, invalid) {
+  return res.status(400).json({
+    ok: false,
+    code: "validation_error",
+    error: `Unknown contraindication code(s): ${invalid.join(", ")}. Use: ${[...INJURY_CODES].join(", ")}.`,
+  });
+}
+
 function toSlug(value) {
   return String(value ?? "")
     .trim()
@@ -60,6 +80,8 @@ function mapWarmupRow(row) {
     targetRegions: normalizeArray(row.target_regions_json),
     equipment_items_slugs: normalizeArray(row.equipment_items_slugs),
     equipmentItemsSlugs: normalizeArray(row.equipment_items_slugs),
+    contraindications_slugs: normalizeArray(row.contraindications_slugs),
+    contraindicationsSlugs: normalizeArray(row.contraindications_slugs),
     cue_text: row.cue_text ?? "",
     cueText: row.cue_text ?? "",
     duration_or_reps_label: row.duration_or_reps_label ?? "",
@@ -192,13 +214,15 @@ export function createAdminWarmupExercisesRouter({
     try {
       const name = String(req.body?.name ?? "").trim();
       if (!name) return res.status(400).json({ ok: false, code: "validation_error", error: "name is required" });
+      const contraindications = contraindicationsFromBody(req.body);
+      if (contraindications?.invalid.length) return invalidContraindicationsResponse(res, contraindications.invalid);
       const id = await allocateSlug(db, name);
       const result = await db.query(
         `INSERT INTO warmup_exercise (
            warmup_exercise_id, name, target_regions_json, equipment_items_slugs,
-           cue_text, duration_or_reps_label, rounds, updated_at
+           cue_text, duration_or_reps_label, rounds, contraindications_slugs, updated_at
          )
-         VALUES ($1,$2,$3::jsonb,$4::text[],$5,$6,$7,now())
+         VALUES ($1,$2,$3::jsonb,$4::text[],$5,$6,$7,$8::text[],now())
          RETURNING *`,
         [
           id,
@@ -208,6 +232,7 @@ export function createAdminWarmupExercisesRouter({
           String(req.body?.cue_text ?? req.body?.cueText ?? "").trim(),
           String(req.body?.duration_or_reps_label ?? req.body?.durationOrRepsLabel ?? "").trim(),
           req.body?.rounds == null || req.body.rounds === "" ? null : Number(req.body.rounds),
+          contraindications?.values ?? [],
         ],
       );
       await db.query(
@@ -224,6 +249,8 @@ export function createAdminWarmupExercisesRouter({
 
   router.patch("/warmup-exercises/:id", async (req, res) => {
     const id = String(req.params.id ?? "").trim();
+    const contraindications = contraindicationsFromBody(req.body);
+    if (contraindications?.invalid.length) return invalidContraindicationsResponse(res, contraindications.invalid);
     try {
       const result = await db.query(
         `UPDATE warmup_exercise
@@ -234,6 +261,7 @@ export function createAdminWarmupExercisesRouter({
              duration_or_reps_label = $6,
              rounds = $7,
              is_archived = COALESCE($8, is_archived),
+             contraindications_slugs = COALESCE($9::text[], contraindications_slugs),
              updated_at = now()
          WHERE warmup_exercise_id = $1
          RETURNING *`,
@@ -246,6 +274,7 @@ export function createAdminWarmupExercisesRouter({
           String(req.body?.duration_or_reps_label ?? req.body?.durationOrRepsLabel ?? "").trim(),
           req.body?.rounds == null || req.body.rounds === "" ? null : Number(req.body.rounds),
           req.body?.is_archived ?? req.body?.isArchived ?? null,
+          contraindications?.values ?? null,
         ],
       );
       if (result.rowCount === 0) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
