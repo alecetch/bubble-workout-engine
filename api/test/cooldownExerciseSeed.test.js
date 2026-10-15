@@ -45,3 +45,31 @@ test('every active cool-down has a media row', async t => {
     WHERE ce.is_archived=false AND cm.cooldown_exercise_id IS NULL`);
   assert.deepEqual(rows, [], `Active cool-downs missing media: ${JSON.stringify(rows)}`);
 });
+
+test('every live region keeps a no-equipment cool-down for each injury flag', async t => {
+  if (!(await ensureDb(t))) return;
+  // Injury filtering must never leave a region without a safe bodyweight option.
+  const shortfalls = [];
+  for (const flag of ['shoulder_issues', 'knee_issues', 'lower_back_spine', 'ankle_foot', 'wrist_elbow', 'cardiovascular_limitations']) {
+    const { rows } = await pool.query(`WITH regions AS (
+      SELECT DISTINCT region FROM exercise_catalogue, jsonb_array_elements_text(target_regions_json) AS region
+      WHERE is_archived=false
+    ), coverage AS (
+      SELECT region, count(*)::int AS count FROM cooldown_exercise, jsonb_array_elements_text(target_regions_json) AS region
+      WHERE is_archived=false AND equipment_items_slugs='{}'::text[] AND NOT ($1 = ANY(contraindications_slugs))
+      GROUP BY region
+    ) SELECT regions.region FROM regions LEFT JOIN coverage USING (region) WHERE COALESCE(coverage.count, 0) < 1`, [flag]);
+    for (const row of rows) shortfalls.push(`${flag}: ${row.region}`);
+  }
+  assert.deepEqual(shortfalls, [], `Regions without a safe no-equipment cool-down:\n${shortfalls.join('\n')}`);
+});
+
+test('reviewed cool-down injury tags match the seed exactly', async t => {
+  if (!(await ensureDb(t))) return;
+  const expected = {
+    'cooldown-pigeon-stretch': ['knee_issues'],
+  };
+  const { rows } = await pool.query('SELECT cooldown_exercise_id AS id, contraindications_slugs FROM cooldown_exercise WHERE cooldown_exercise_id = ANY($1)', [Object.keys(expected)]);
+  assert.equal(rows.length, Object.keys(expected).length, 'Expected every tagged id to exist');
+  for (const row of rows) assert.deepEqual([...row.contraindications_slugs].sort(), expected[row.id], row.id);
+});

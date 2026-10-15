@@ -318,7 +318,7 @@ export async function fetchCoverageReport({
       }
     }
 
-    return { presets, ranks: RANKS, rows };
+    return { presets, ranks: RANKS, rows, injury_flags: asTextArray(injury_flags) };
 }
 
 adminCoverageRouter.get("/coverage-report", async (req, res) => {

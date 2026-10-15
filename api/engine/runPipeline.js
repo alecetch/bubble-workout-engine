@@ -298,7 +298,11 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
     inputs?.clientProfile?.response?.equipment_items_slugs,
   );
 
-  const injuryFlags = normalizeArray(request?.injury_flags_slugs ?? inputs?.clientProfile?.response?.injury_flags_slugs);
+  const injuryFlags = normalizeArray(
+    request?.injury_flags_slugs ??
+    request?.injuryFlagsSlugs ??
+    inputs?.clientProfile?.response?.injury_flags_slugs,
+  );
 
   const requestNarrationTemplatesRaw = request?.narration_templates_json;
   const hasRequestNarrationOverride =

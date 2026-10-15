@@ -230,3 +230,23 @@ test('contraindication chips round-trip through create, patch, list, preserve an
     assert.deepEqual((await patch({ contraindications_slugs: [] })).contraindications_slugs, []);
   });
 });
+
+test('unknown contraindication codes are rejected with 400 before any write', async () => {
+  process.env.INTERNAL_API_TOKEN = TOKEN;
+  const db = createDb();
+  await withServer(db, { auditLogFn: async () => {} }, async base => {
+    const create = await fetch(`${base}/admin/cooldown-exercises`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ name: 'Typo drill', contraindications_slugs: ['knee_issue'] }),
+    });
+    assert.equal(create.status, 400);
+    assert.match((await create.json()).error, /knee_issue/);
+    const patch = await fetch(`${base}/admin/cooldown-exercises/typo-drill`, {
+      method: 'PATCH', headers: headers(),
+      body: JSON.stringify({ name: 'Typo drill', contraindicationsSlugs: ['wrist_elbow', 'no_known_issues'] }),
+    });
+    assert.equal(patch.status, 400);
+    const listed = await (await fetch(`${base}/admin/cooldown-exercises/list`, { headers: headers() })).json();
+    assert.deepEqual(listed.cooldownExercises, []);
+  });
+});

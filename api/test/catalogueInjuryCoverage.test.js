@@ -37,3 +37,23 @@ test('knee flags exclude box jumps while keeping Air Squat available', async t =
   assert.ok(!allowed.includes('box_jump'));
   assert.ok(allowed.includes('air_squat'));
 });
+
+test('a bodyweight-and-box knee profile loses jumps and pistols but keeps both squat regressions', async t => {
+  if (!(await ensureDb(t))) return;
+  const profile = { fitness_rank: 3, equipment_items_slugs: ['bodyweight', 'box'] };
+  const baseline = await getAllowedExerciseIds(pool, { ...profile, injury_flags_slugs: [] });
+  assert.ok(baseline.includes('box_jump'), 'Box Jump must be eligible without a flag');
+  const allowed = await getAllowedExerciseIds(pool, { ...profile, injury_flags_slugs: ['knee_issues'] });
+  for (const id of ['box_jump', 'pistol_squat']) assert.ok(!allowed.includes(id), `${id} must be excluded`);
+  for (const id of ['air_squat', 'bodyweight_box_squat']) assert.ok(allowed.includes(id), `${id} must stay available`);
+});
+
+test('the injury-aware coverage report actually applies the flag', async t => {
+  if (!(await ensureDb(t))) return;
+  const counts = report => new Map(report.rows.flatMap(row => Object.entries(row.counts)
+    .map(([cell, count]) => [`${row.config_key}|${row.day_key}|${row.slot}|${cell}`, count])));
+  const base = counts(await fetchCoverageReport({ db: pool }));
+  const knee = counts(await fetchCoverageReport({ db: pool, injury_flags: ['knee_issues'] }));
+  const lowered = [...knee].filter(([key, count]) => count < base.get(key));
+  assert.ok(lowered.length > 0, 'Expected knee_issues to lower at least one coverage cell');
+});

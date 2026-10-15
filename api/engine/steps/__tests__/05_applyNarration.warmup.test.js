@@ -265,3 +265,18 @@ test('warmup never reintroduces contraindicated rows when no eligible alternativ
     assert.ok(!day.segments.some(segment => segment.segment_type === 'warmup' && segment.items.length));
   }
 });
+
+test('warmup injury flag no_known_issues behaves exactly like no flags', async () => {
+  // A row tagged no_known_issues would be dropped if the flag were not ignored.
+  const fixture = videoPreferenceFixture([
+    { ...warmup('tagged-odd', ['glutes'], [], 1, 'ready'), contraindications_slugs: ['no_known_issues'] },
+    warmup('plain', ['glutes']),
+    { ...warmup('wrist', ['hamstrings']), contraindications_slugs: ['wrist_elbow'] },
+  ], { catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }] });
+  const none = await narrate({ ...fixture, injuryFlags: [] });
+  const noKnown = await narrate({ ...fixture, injuryFlags: ['no_known_issues', ''] });
+  for (let i = 0; i < 4; i++) {
+    assert.deepEqual(warmupItems(noKnown, 0, i), warmupItems(none, 0, i));
+  }
+  assert.ok(warmupItems(noKnown).some(item => item.exercise_id === 'tagged-odd'));
+});

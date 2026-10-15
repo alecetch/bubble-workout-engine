@@ -298,3 +298,18 @@ test('cooldown never reintroduces contraindicated rows when no eligible alternat
     assert.ok(!day.segments.some(segment => segment.segment_type === 'cooldown' && segment.items.length));
   }
 });
+
+test('cooldown injury flag no_known_issues behaves exactly like no flags', async () => {
+  // A row tagged no_known_issues would be dropped if the flag were not ignored.
+  const fixture = videoPreferenceFixture([
+    { ...cooldown('tagged-odd', ['glutes'], [], 1, 'ready'), contraindications_slugs: ['no_known_issues'] },
+    cooldown('plain', ['glutes']),
+    { ...cooldown('wrist', ['hamstrings']), contraindications_slugs: ['wrist_elbow'] },
+  ], { catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }] });
+  const none = await narrate({ ...fixture, injuryFlags: [] });
+  const noKnown = await narrate({ ...fixture, injuryFlags: ['no_known_issues', ''] });
+  for (let i = 0; i < 4; i++) {
+    assert.deepEqual(cooldownItems(noKnown, 0, i), cooldownItems(none, 0, i));
+  }
+  assert.ok(cooldownItems(noKnown).some(item => item.exercise_id === 'tagged-odd'));
+});

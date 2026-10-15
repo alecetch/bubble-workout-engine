@@ -1256,7 +1256,7 @@ export async function applyNarration({
     ? effectiveEquipment.map((value) => s(value)).filter(Boolean)
     : [];
   const normalizedInjuryFlags = Array.isArray(injuryFlags)
-    ? injuryFlags.map((value) => s(value)).filter(Boolean)
+    ? injuryFlags.map((value) => s(value)).filter((value) => value && value !== "no_known_issues")
     : [];
 
   // Split adoption into template vs weeks, plus totals (and mirror Step 4 week-by-week stats)

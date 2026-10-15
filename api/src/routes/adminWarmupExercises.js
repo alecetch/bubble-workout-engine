@@ -30,6 +30,26 @@ function normalizeArray(value) {
   return [];
 }
 
+const INJURY_CODES = new Set([
+  "shoulder_issues", "knee_issues", "lower_back_spine", "ankle_foot", "wrist_elbow", "cardiovascular_limitations",
+]);
+
+// Returns null when the body omits contraindications (patch leaves the column unchanged).
+function contraindicationsFromBody(body) {
+  const raw = body?.contraindications_slugs ?? body?.contraindicationsSlugs;
+  if (raw == null) return null;
+  const values = normalizeArray(raw);
+  return { values, invalid: values.filter((value) => !INJURY_CODES.has(value)) };
+}
+
+function invalidContraindicationsResponse(res, invalid) {
+  return res.status(400).json({
+    ok: false,
+    code: "validation_error",
+    error: `Unknown contraindication code(s): ${invalid.join(", ")}. Use: ${[...INJURY_CODES].join(", ")}.`,
+  });
+}
+
 function toSlug(value) {
   return String(value ?? "")
     .trim()
@@ -194,6 +214,8 @@ export function createAdminWarmupExercisesRouter({
     try {
       const name = String(req.body?.name ?? "").trim();
       if (!name) return res.status(400).json({ ok: false, code: "validation_error", error: "name is required" });
+      const contraindications = contraindicationsFromBody(req.body);
+      if (contraindications?.invalid.length) return invalidContraindicationsResponse(res, contraindications.invalid);
       const id = await allocateSlug(db, name);
       const result = await db.query(
         `INSERT INTO warmup_exercise (
@@ -210,7 +232,7 @@ export function createAdminWarmupExercisesRouter({
           String(req.body?.cue_text ?? req.body?.cueText ?? "").trim(),
           String(req.body?.duration_or_reps_label ?? req.body?.durationOrRepsLabel ?? "").trim(),
           req.body?.rounds == null || req.body.rounds === "" ? null : Number(req.body.rounds),
-          normalizeArray(req.body?.contraindications_slugs ?? req.body?.contraindicationsSlugs),
+          contraindications?.values ?? [],
         ],
       );
       await db.query(
@@ -227,6 +249,8 @@ export function createAdminWarmupExercisesRouter({
 
   router.patch("/warmup-exercises/:id", async (req, res) => {
     const id = String(req.params.id ?? "").trim();
+    const contraindications = contraindicationsFromBody(req.body);
+    if (contraindications?.invalid.length) return invalidContraindicationsResponse(res, contraindications.invalid);
     try {
       const result = await db.query(
         `UPDATE warmup_exercise
@@ -250,8 +274,7 @@ export function createAdminWarmupExercisesRouter({
           String(req.body?.duration_or_reps_label ?? req.body?.durationOrRepsLabel ?? "").trim(),
           req.body?.rounds == null || req.body.rounds === "" ? null : Number(req.body.rounds),
           req.body?.is_archived ?? req.body?.isArchived ?? null,
-          req.body?.contraindications_slugs == null && req.body?.contraindicationsSlugs == null
-            ? null : normalizeArray(req.body?.contraindications_slugs ?? req.body?.contraindicationsSlugs),
+          contraindications?.values ?? null,
         ],
       );
       if (result.rowCount === 0) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
