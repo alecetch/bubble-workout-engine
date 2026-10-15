@@ -33,7 +33,7 @@ function warmup(id, regions, equipment = [], rounds = 1, videoStatus) {
   };
 }
 
-async function narrate({ weeks, catalog, warmupCatalog, warmupHistory = {}, effectiveEquipment = [] }) {
+async function narrate({ weeks, catalog, warmupCatalog, warmupHistory = {}, effectiveEquipment = [], injuryFlags = [] }) {
   return applyNarration({
     program: { program_type: "hypertrophy", duration_mins: 50, days_per_week: 1, weeks },
     narrationTemplates: templates,
@@ -45,6 +45,7 @@ async function narrate({ weeks, catalog, warmupCatalog, warmupHistory = {}, effe
     warmupCatalog,
     warmupHistory,
     effectiveEquipment,
+    injuryFlags,
   });
 }
 
@@ -234,4 +235,33 @@ test("applyNarration caps folded same-day warm-up duplicate rounds at four", asy
   assert.equal(items.length, 1);
   assert.equal(items[0].exercise_id, "single-multi-region");
   assert.equal(items[0].sets_prescribed, 4);
+});
+
+
+test('warmup injury filtering precedes video preference and preserves region coverage', async () => {
+  const rows = [
+    { ...warmup('unsafe-ready', ['glutes', 'hamstrings'], [], 1, 'ready'), contraindications_slugs: ['wrist_elbow'] },
+    warmup('safe-glutes', ['glutes']),
+    { ...warmup('safe-hamstrings', ['hamstrings']), contraindications_slugs: '["knee_issues"]' },
+  ];
+  const fixture = videoPreferenceFixture(rows, {
+    catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }],
+    injuryFlags: ['wrist_elbow'],
+    warmupHistory: { glutes: ['safe-glutes'], hamstrings: ['safe-hamstrings'] },
+  });
+  const before = await narrate({ ...fixture, injuryFlags: [] });
+  const out = await narrate(fixture);
+  assert.ok(warmupItems(before).some(item => item.exercise_id === 'unsafe-ready'));
+  for (let i = 0; i < 8; i++) {
+    assert.deepEqual(new Set(warmupItems(out, 0, i).map(item => item.exercise_id)), new Set(['safe-glutes', 'safe-hamstrings']));
+  }
+});
+
+test('warmup never reintroduces contraindicated rows when no eligible alternative exists', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    { ...warmup('unsafe', ['glutes'], [], 1, 'ready'), contraindications_slugs: '["wrist_elbow"]' },
+  ], { injuryFlags: ['knee_issues', 'wrist_elbow'] }));
+  for (const day of out.program.weeks[0].days) {
+    assert.ok(!day.segments.some(segment => segment.segment_type === 'warmup' && segment.items.length));
+  }
 });

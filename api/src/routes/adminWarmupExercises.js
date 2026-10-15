@@ -60,6 +60,8 @@ function mapWarmupRow(row) {
     targetRegions: normalizeArray(row.target_regions_json),
     equipment_items_slugs: normalizeArray(row.equipment_items_slugs),
     equipmentItemsSlugs: normalizeArray(row.equipment_items_slugs),
+    contraindications_slugs: normalizeArray(row.contraindications_slugs),
+    contraindicationsSlugs: normalizeArray(row.contraindications_slugs),
     cue_text: row.cue_text ?? "",
     cueText: row.cue_text ?? "",
     duration_or_reps_label: row.duration_or_reps_label ?? "",
@@ -196,9 +198,9 @@ export function createAdminWarmupExercisesRouter({
       const result = await db.query(
         `INSERT INTO warmup_exercise (
            warmup_exercise_id, name, target_regions_json, equipment_items_slugs,
-           cue_text, duration_or_reps_label, rounds, updated_at
+           cue_text, duration_or_reps_label, rounds, contraindications_slugs, updated_at
          )
-         VALUES ($1,$2,$3::jsonb,$4::text[],$5,$6,$7,now())
+         VALUES ($1,$2,$3::jsonb,$4::text[],$5,$6,$7,$8::text[],now())
          RETURNING *`,
         [
           id,
@@ -208,6 +210,7 @@ export function createAdminWarmupExercisesRouter({
           String(req.body?.cue_text ?? req.body?.cueText ?? "").trim(),
           String(req.body?.duration_or_reps_label ?? req.body?.durationOrRepsLabel ?? "").trim(),
           req.body?.rounds == null || req.body.rounds === "" ? null : Number(req.body.rounds),
+          normalizeArray(req.body?.contraindications_slugs ?? req.body?.contraindicationsSlugs),
         ],
       );
       await db.query(
@@ -234,6 +237,7 @@ export function createAdminWarmupExercisesRouter({
              duration_or_reps_label = $6,
              rounds = $7,
              is_archived = COALESCE($8, is_archived),
+             contraindications_slugs = COALESCE($9::text[], contraindications_slugs),
              updated_at = now()
          WHERE warmup_exercise_id = $1
          RETURNING *`,
@@ -246,6 +250,8 @@ export function createAdminWarmupExercisesRouter({
           String(req.body?.duration_or_reps_label ?? req.body?.durationOrRepsLabel ?? "").trim(),
           req.body?.rounds == null || req.body.rounds === "" ? null : Number(req.body.rounds),
           req.body?.is_archived ?? req.body?.isArchived ?? null,
+          req.body?.contraindications_slugs == null && req.body?.contraindicationsSlugs == null
+            ? null : normalizeArray(req.body?.contraindications_slugs ?? req.body?.contraindicationsSlugs),
         ],
       );
       if (result.rowCount === 0) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });

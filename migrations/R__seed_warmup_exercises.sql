@@ -87,3 +87,23 @@ FROM warmup_exercise we
 WHERE NOT EXISTS (
   SELECT 1 FROM warmup_exercise_media wm WHERE wm.warmup_exercise_id = we.warmup_exercise_id
 );
+
+
+-- Reviewed injury exclusions; update existing rows as well as fresh inserts.
+UPDATE warmup_exercise e
+SET contraindications_slugs = tags.flags
+FROM (VALUES
+  ('warmup-ankle-bounces', ARRAY['ankle_foot']::text[]),
+  ('warmup-cossack-squat', ARRAY['knee_issues']::text[]),
+  ('warmup-dead-hang', ARRAY['shoulder_issues']::text[]),
+  ('warmup-floor-triceps-dip', ARRAY['wrist_elbow','shoulder_issues']::text[]),
+  ('warmup-high-knees', ARRAY['knee_issues','ankle_foot']::text[]),
+  ('warmup-incline-push-up', ARRAY['wrist_elbow']::text[]),
+  ('warmup-jumping-jacks', ARRAY['knee_issues','ankle_foot']::text[]),
+  ('warmup-kb-cossack-squat', ARRAY['knee_issues']::text[]),
+  ('warmup-plank-up-down', ARRAY['wrist_elbow']::text[]),
+  ('warmup-push-up-plus', ARRAY['wrist_elbow']::text[]),
+  ('warmup-scap-push-up', ARRAY['wrist_elbow']::text[]),
+  ('warmup-walkout-shoulder-tap', ARRAY['wrist_elbow']::text[])
+) AS tags(id, flags)
+WHERE e.warmup_exercise_id = tags.id;

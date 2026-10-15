@@ -39,3 +39,37 @@ test("pipeline adds bookends from movement patterns when catalogue regions are e
   }
   assert.ok(out.debug.step5.adoption.total.bookend_region_fallbacks > 0);
 });
+
+for (const [name, requestFlags, expectedId] of [
+  ['profile fallback', undefined, 'safe'],
+  ['request overrides profile', ['wrist_elbow'], 'safe'],
+  ['explicit empty request overrides profile', [], 'unsafe'],
+]) {
+  test(`pipeline propagates bookend injury flags: ${name}`, async () => {
+    const localInputs = structuredClone(inputs);
+    localInputs.clientProfile.response.injury_flags_slugs = requestFlags?.length ? [] : ['wrist_elbow'];
+    const localDb = { async query(sql, params) {
+      for (const [kind, base] of [['warmup', warmup], ['cooldown', cooldown]]) {
+        if (sql.includes(`FROM ${kind}_exercise ${kind === 'warmup' ? 'we' : 'ce'}`)) {
+          return { rows: [
+            { ...base, [`${kind}_exercise_id`]: 'unsafe', video_status: 'ready', contraindications_slugs: ['wrist_elbow'] },
+            { ...base, [`${kind}_exercise_id`]: 'safe', contraindications_slugs: [] },
+          ] };
+        }
+      }
+      return db.query(sql, params);
+    } };
+    const out = await runPipeline({ inputs: localInputs, programType: 'hypertrophy', request: {
+      program_generation_config_json: JSON.stringify(pgc), program_length: 2,
+      injury_flags_slugs: requestFlags,
+      narration_templates_json: JSON.stringify([{ template_id: 'title', scope: 'program', field: 'PROGRAM_TITLE', priority: 1, text_pool_json: ['Program'] }]),
+    }, db: localDb });
+    for (const week of out.program.weeks) for (const day of week.days) {
+      for (const kind of ['warmup', 'cooldown']) {
+        const items = day.segments.find(segment => segment.segment_type === kind)?.items;
+        assert.ok(items?.length > 0, `${name}: ${kind}`);
+        assert.ok(items.every(item => item.exercise_id === expectedId), JSON.stringify(items));
+      }
+    }
+  });
+}

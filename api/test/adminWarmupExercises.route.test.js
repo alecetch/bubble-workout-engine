@@ -28,6 +28,7 @@ function createDb() {
           duration_or_reps_label: params[5],
           rounds: params[6],
           is_archived: false,
+          contraindications_slugs: params[7],
         };
         state.warmups.set(row.warmup_exercise_id, row);
         return { rows: [row], rowCount: 1 };
@@ -49,6 +50,7 @@ function createDb() {
           duration_or_reps_label: params[5],
           rounds: params[6],
           is_archived: params[7] ?? current.is_archived,
+          contraindications_slugs: params[8] ?? current.contraindications_slugs,
         };
         state.warmups.set(params[0], row);
         return { rows: [row], rowCount: 1 };
@@ -176,4 +178,29 @@ test("create, patch, archive, still upload, and video upload mutate rows and aud
     "warmup_exercise",
     "warmup_exercise",
   ]);
+});
+
+
+test('contraindication chips round-trip through create, patch, list, preserve and clear', async () => {
+  process.env.INTERNAL_API_TOKEN = TOKEN;
+  const db = createDb();
+  await withServer(db, { auditLogFn: async () => {} }, async base => {
+    const create = await fetch(`${base}/admin/warmup-exercises`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ name: 'Tagged drill', contraindications_slugs: ['wrist_elbow', 'shoulder_issues'] }),
+    });
+    assert.equal(create.status, 200);
+    const created = (await create.json()).warmupExercise;
+    assert.deepEqual(created.contraindications_slugs, ['wrist_elbow', 'shoulder_issues']);
+    const patch = async body => {
+      const response = await fetch(`${base}/admin/warmup-exercises/tagged-drill`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ name: 'Tagged drill', ...body }) });
+      assert.equal(response.status, 200);
+      return (await response.json()).warmupExercise;
+    };
+    assert.deepEqual((await patch({ contraindicationsSlugs: ['knee_issues'] })).contraindicationsSlugs, ['knee_issues']);
+    assert.deepEqual((await patch({ isArchived: true })).contraindications_slugs, ['knee_issues']);
+    const listed = await (await fetch(`${base}/admin/warmup-exercises/list`, { headers: headers() })).json();
+    assert.deepEqual(listed.warmupExercises[0].contraindications_slugs, ['knee_issues']);
+    assert.deepEqual((await patch({ contraindications_slugs: [] })).contraindications_slugs, []);
+  });
 });

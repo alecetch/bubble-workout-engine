@@ -562,8 +562,10 @@ function normalizeBookendCatalog(raw, type) {
       const equipment = Array.isArray(row.equipment_items_slugs)
         ? row.equipment_items_slugs
         : safeJsonParse(row.equipment_items_slugs ?? row.equipmentItemsSlugs, []);
+      const contraindications = safeJsonParse(row.contraindications_slugs ?? row.contraindicationsSlugs, []);
       return {
         ...row,
+        contraindications_slugs: Array.isArray(contraindications) ? contraindications.map((v) => s(v)).filter(Boolean) : [],
         [`${type}_exercise_id`]: id,
         target_regions_json: Array.isArray(targetRegions) ? targetRegions.map((v) => s(v)).filter(Boolean) : [],
         equipment_items_slugs: Array.isArray(equipment) ? equipment.map((v) => s(v)).filter(Boolean) : [],
@@ -638,6 +640,7 @@ function parseDurationOrRepsLabel(label) {
 
 function selectWarmupItemsForDay(day, requiredRegions, context) {
   const catalog = context.warmupCatalog || [];
+  const injuryFlags = new Set(context.injuryFlags || []);
   const effectiveEquipment = new Set((context.effectiveEquipment || []).map((value) => s(value)).filter(Boolean));
   const history = context.warmupHistory;
   const items = [];
@@ -648,7 +651,8 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
     let equipmentEligible = catalog.filter((row) => {
       const targetRegions = Array.isArray(row.target_regions_json) ? row.target_regions_json : [];
       const requiredEquipment = Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [];
-      return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug));
+      return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug))
+        && !row.contraindications_slugs.some((slug) => injuryFlags.has(slug));
     });
     if (!equipmentEligible.length) continue;
 
@@ -704,6 +708,7 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
 
 function selectCooldownItemsForDay(day, requiredRegions, context) {
   const catalog = context.cooldownCatalog || [];
+  const injuryFlags = new Set(context.injuryFlags || []);
   const effectiveEquipment = new Set((context.effectiveEquipment || []).map((value) => s(value)).filter(Boolean));
   const history = context.cooldownHistory;
   const items = [];
@@ -714,7 +719,8 @@ function selectCooldownItemsForDay(day, requiredRegions, context) {
     let equipmentEligible = catalog.filter((row) => {
       const targetRegions = Array.isArray(row.target_regions_json) ? row.target_regions_json : [];
       const requiredEquipment = Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [];
-      return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug));
+      return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug))
+        && !row.contraindications_slugs.some((slug) => injuryFlags.has(slug));
     });
     if (!equipmentEligible.length) continue;
 
@@ -1178,6 +1184,7 @@ export async function applyNarration({
   cooldownCatalog,
   cooldownHistory,
   effectiveEquipment,
+  injuryFlags,
   cooldownSeconds, // copy only for future; not used in engine right now
 }) {
   if (!program) throw new Error("applyNarration: missing program");
@@ -1248,6 +1255,9 @@ export async function applyNarration({
   const normalizedEffectiveEquipment = Array.isArray(effectiveEquipment)
     ? effectiveEquipment.map((value) => s(value)).filter(Boolean)
     : [];
+  const normalizedInjuryFlags = Array.isArray(injuryFlags)
+    ? injuryFlags.map((value) => s(value)).filter(Boolean)
+    : [];
 
   // Split adoption into template vs weeks, plus totals (and mirror Step 4 week-by-week stats)
   const adoption = {
@@ -1278,6 +1288,7 @@ export async function applyNarration({
       cooldownCatalog: normalizedCooldownCatalog,
       cooldownHistory: cooldownHistoryByRegion,
       effectiveEquipment: normalizedEffectiveEquipment,
+      injuryFlags: normalizedInjuryFlags,
     });
   }
 
@@ -1303,6 +1314,7 @@ export async function applyNarration({
         cooldownCatalog: normalizedCooldownCatalog,
         cooldownHistory: cooldownHistoryByRegion,
         effectiveEquipment: normalizedEffectiveEquipment,
+        injuryFlags: normalizedInjuryFlags,
       });
 
       // Aggregate into overall weeks bucket
