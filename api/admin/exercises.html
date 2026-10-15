@@ -516,6 +516,9 @@
           <span class="sw-new-warning" id="sw2-new-warning" hidden>New swap group - not in existing catalogue. Make sure this is intentional.</span>
         </div>
         <div class="f"><label for="f-min_fitness_rank">Min Fitness Rank</label><input id="f-min_fitness_rank" type="number" min="0" max="3" step="1" /></div>
+        <div class="f"><label>Rank ceiling</label><output id="selector-max-rank">—</output></div>
+        <div class="f"><label>Substitute</label><output id="selector-substitute">no</output></div>
+        <p>Managed in <code>R__seed_exercise_catalogue_selector_flags.sql</code>.</p>
       </div>
       <div class="row2">
         <div class="f"><label for="f-complexity_rank">Complexity Rank</label><input id="f-complexity_rank" type="number" min="0" max="5" /></div>
@@ -1366,6 +1369,8 @@ function getFV(id) {
   return el.type === "checkbox" ? el.checked : el.value;
 }
 function clearForm() {
+  document.getElementById("selector-max-rank").textContent = "—";
+  document.getElementById("selector-substitute").textContent = "no";
   FIELDS.forEach(id => {
     if (id === "preferred_in_json") { setPrefTags([]); return; }
     if (id === "equipment_items_slugs") { setEqSlugs([]); return; }
@@ -1430,6 +1435,8 @@ function openEditDrawer(id) {
   fEl("exercise_id").style.opacity = "0.6";
   fEl("exercise_id").style.cursor = "not-allowed";
   FIELDS.forEach(key => setFV(key, ex[key] ?? null));
+  document.getElementById("selector-max-rank").textContent = ex.max_fitness_rank ?? "—";
+  document.getElementById("selector-substitute").textContent = ex.is_substitute ? "yes" : "no";
   setFV("equipment_items_slugs", ex.equipment_items_slugs ?? []);
   setFV("contraindications_slugs", (ex.contraindications_slugs ?? []).join(", "));
   updateIdWasIndicator();

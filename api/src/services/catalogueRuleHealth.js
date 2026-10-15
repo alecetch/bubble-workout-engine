@@ -151,6 +151,8 @@ function slotStructurallyMatchesExercise(ex, slot, options = {}) {
 
   const minRank = Number(ex?.min_fitness_rank ?? ex?.rank ?? 0);
   if (rankValue !== null && minRank > rankValue) return false;
+  const maxRank = ex?.max_fitness_rank;
+  if (rankValue !== null && maxRank != null && maxRank !== "" && Number(maxRank) < rankValue) return false;
 
   if (presetSlugsSet) {
     const eqSlugs = asTextArray(ex?.equipment_items_slugs ?? ex?.equipment_items_slugs_csv ?? ex?.eq ?? []);
@@ -712,6 +714,7 @@ export async function fetchCatalogueRuleHealthReport(db) {
         swap_group_id_1,
         swap_group_id_2,
         min_fitness_rank,
+        max_fitness_rank,
         is_archived,
         preferred_in_json,
         equipment_items_slugs

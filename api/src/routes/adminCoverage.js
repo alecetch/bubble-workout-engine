@@ -151,6 +151,7 @@ export async function fetchSlotCounts(client, presets, slot, excludedClasses, in
       ON ec.is_archived = false
       AND NOT (COALESCE(ec.contraindications_slugs, '{}'::text[]) && $${injuryFlagsParam}::text[])
       AND COALESCE(ec.min_fitness_rank, 0) <= c.rank_value
+      AND (ec.max_fitness_rank IS NULL OR ec.max_fitness_rank >= c.rank_value)
       AND (
         cardinality($${excludedClassesParam}::text[]) = 0
         OR ec.movement_class IS NULL

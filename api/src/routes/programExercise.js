@@ -243,6 +243,7 @@ export function createProgramExerciseHandlers(options = pool) {
           FROM exercise_catalogue ec
           WHERE ec.is_archived = false
             AND ec.min_fitness_rank <= $3
+            AND (ec.max_fitness_rank IS NULL OR ec.max_fitness_rank >= $3)
             AND NOT (ec.contraindications_slugs && $4::text[])
             AND ec.equipment_items_slugs <@ $5::text[]
             AND ec.exercise_id != $6
@@ -259,6 +260,7 @@ export function createProgramExerciseHandlers(options = pool) {
               WHEN ec.swap_group_id_1 = $2 AND $2 IS NOT NULL AND $2 != '' THEN 2
               ELSE 3
             END,
+            ec.is_substitute ASC,
             ec.min_fitness_rank DESC,
             ec.complexity_rank ASC,
             ec.name ASC

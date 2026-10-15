@@ -20,6 +20,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Three levels up from api/src/routes/ → repo root → migrations/
 const MIGRATIONS_DIR = join(__dirname, "../../migrations");
 const MIGRATION_FILE = "R__exercise_catalogue_edits.sql";
+const SELECTOR_FLAG_FIELDS = ["max_fitness_rank", "is_substitute"];
+const SELECTOR_FLAG_ERROR = "max_fitness_rank and is_substitute are managed in R__seed_exercise_catalogue_selector_flags.sql";
 
 export const adminExerciseCatalogueRouter = express.Router();
 adminExerciseCatalogueRouter.use(requireInternalToken, requireTrustedAdminOrigin);
@@ -192,6 +194,7 @@ function preferredTags(ex) {
 function isEligible(ex, presetSlugsSet, rankValue, slot) {
   if (ex.is_archived) return false;
   if ((ex.min_fitness_rank ?? 0) > rankValue) return false;
+  if (ex.max_fitness_rank != null && ex.max_fitness_rank !== "" && Number(ex.max_fitness_rank) < rankValue) return false;
   if (ex.movement_class && EXCLUDED_MOVEMENT_CLASSES.has(ex.movement_class)) return false;
 
   const eqSlugs = ex.equipment_items_slugs ?? [];
@@ -298,6 +301,10 @@ function runRecommendations(exercises, presets, gapRows) {
         // 2. Rank gate
         if ((ex.min_fitness_rank ?? 0) > gap.rank) {
           fails.push({ gate: "rank", changes: { min_fitness_rank: gap.rank } });
+        }
+
+        if (ex.max_fitness_rank != null && ex.max_fitness_rank !== "" && Number(ex.max_fitness_rank) < gap.rank) {
+          fails.push({ gate: "max_rank", changes: { max_fitness_rank: null } });
         }
 
         // 3. Equipment gate (near-miss only: exactly 1 slug blocking)
@@ -921,6 +928,7 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
 
     for (const row of rows) {
       const lineErrors = [];
+      if (SELECTOR_FLAG_FIELDS.some(field => Object.hasOwn(row, field))) lineErrors.push(SELECTOR_FLAG_ERROR);
 
       // Required fields
       if (!row.exercise_id) lineErrors.push("exercise_id is required");
@@ -1066,6 +1074,9 @@ adminExerciseCatalogueRouter.post("/exercise-catalogue/csv-import-dry-run", asyn
 adminExerciseCatalogueRouter.post("/exercise-catalogue/session/queue-change", async (req, res) => {
   try {
     const { action, exercise_id, changes = {}, sql: sqlOverride } = req.body ?? {};
+    if (SELECTOR_FLAG_FIELDS.some(field => Object.hasOwn(changes, field))) {
+      return res.status(400).json({ ok: false, error: SELECTOR_FLAG_ERROR });
+    }
     if (!action || !exercise_id) {
       return res.status(400).json({ ok: false, error: "action and exercise_id are required" });
     }

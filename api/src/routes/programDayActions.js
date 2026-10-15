@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
+import { mapFitnessRank } from "../services/buildInputsFromProfile.js";
 import { VALID_FOCUS_SLUGS } from "../utils/splitRecommender.js";
 
 export const programDayActionsRouter = express.Router();
@@ -335,6 +336,21 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
         });
       }
 
+      const injuryColumns = await db.query(`SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'client_profile'
+          AND column_name IN ('injury_flags_slugs', 'injury_flags')`);
+      const columns = new Set(injuryColumns.rows.map(row => row.column_name));
+      const injuryColumn = columns.has("injury_flags_slugs") ? "injury_flags_slugs" : columns.has("injury_flags") ? "injury_flags" : null;
+      if (!injuryColumn) throw new Error("client_profile missing injury flags column");
+      const profileResult = await db.query(
+        `SELECT fitness_level_slug, ${injuryColumn} AS injury_flags FROM client_profile WHERE user_id = $1 LIMIT 1`,
+        [userId],
+      );
+      const profile = profileResult.rows[0];
+      if (!profile) return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found" });
+      const fitnessRank = mapFitnessRank(profile.fitness_level_slug);
+      const injuryFlags = Array.isArray(profile.injury_flags) ? profile.injury_flags : [];
+
       const jobId = randomUUID();
       jobs.set(jobId, {
         programId,
@@ -390,6 +406,9 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
                   ON replacement.is_archived = FALSE
                  AND replacement.exercise_id != current.exercise_id
                  AND replacement.equipment_items_slugs <@ $2::text[]
+                 AND replacement.min_fitness_rank <= $4
+                 AND (replacement.max_fitness_rank IS NULL OR replacement.max_fitness_rank >= $4)
+                 AND NOT (COALESCE(replacement.contraindications_slugs, '{}'::text[]) && $5::text[])
                  AND (
                    (replacement.swap_group_id_2 = current.swap_group_id_2 AND current.swap_group_id_2 IS NOT NULL AND current.swap_group_id_2 != '')
                    OR (replacement.swap_group_id_1 = current.swap_group_id_1 AND current.swap_group_id_1 IS NOT NULL AND current.swap_group_id_1 != '')
@@ -408,12 +427,13 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
                     WHEN replacement.swap_group_id_1 = current.swap_group_id_1 AND current.swap_group_id_1 IS NOT NULL AND current.swap_group_id_1 != '' THEN 2
                     ELSE 3
                   END,
+                  replacement.is_substitute ASC,
                   replacement.min_fitness_rank DESC,
                   replacement.complexity_rank ASC,
                   replacement.name ASC
                 LIMIT 1
                 `,
-                [row.exercise_id, availableEquipmentCodes, row.program_day_id],
+                [row.exercise_id, availableEquipmentCodes, row.program_day_id, fitnessRank, injuryFlags],
               );
               const replacement = candidateResult.rows?.[0];
               if (!replacement) {
