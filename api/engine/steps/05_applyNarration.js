@@ -542,6 +542,8 @@ function makeCounters() {
     cooldown_segment_added_days: 0,
     cooldown_items_selected_days: 0,
     bookend_region_fallbacks: 0,
+    warmup_video_preferred_regions: 0,
+    cooldown_video_preferred_regions: 0,
   };
 }
 function addCounters(a, b) {
@@ -643,12 +645,18 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
   const dayKey = s(day?.program_day_key) || `${toInt(day?.week_index, 0)}|${toInt(day?.day_index, 0)}`;
 
   for (const region of requiredRegions) {
-    const equipmentEligible = catalog.filter((row) => {
+    let equipmentEligible = catalog.filter((row) => {
       const targetRegions = Array.isArray(row.target_regions_json) ? row.target_regions_json : [];
       const requiredEquipment = Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [];
       return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug));
     });
     if (!equipmentEligible.length) continue;
+
+    const videoReady = equipmentEligible.filter((row) => s(row.video_status) === 'ready');
+    if (videoReady.length > 0 && videoReady.length < equipmentEligible.length) {
+      equipmentEligible = videoReady;
+      context.debugCounters.warmup_video_preferred_regions += 1;
+    }
 
     let recentSet = history.get(region);
     if (!recentSet) {
@@ -703,12 +711,18 @@ function selectCooldownItemsForDay(day, requiredRegions, context) {
   const dayKey = s(day?.program_day_key) || `${toInt(day?.week_index, 0)}|${toInt(day?.day_index, 0)}`;
 
   for (const region of requiredRegions) {
-    const equipmentEligible = catalog.filter((row) => {
+    let equipmentEligible = catalog.filter((row) => {
       const targetRegions = Array.isArray(row.target_regions_json) ? row.target_regions_json : [];
       const requiredEquipment = Array.isArray(row.equipment_items_slugs) ? row.equipment_items_slugs : [];
       return targetRegions.includes(region) && requiredEquipment.every((slug) => effectiveEquipment.has(slug));
     });
     if (!equipmentEligible.length) continue;
+
+    const videoReady = equipmentEligible.filter((row) => s(row.video_status) === 'ready');
+    if (videoReady.length > 0 && videoReady.length < equipmentEligible.length) {
+      equipmentEligible = videoReady;
+      context.debugCounters.cooldown_video_preferred_regions += 1;
+    }
 
     let recentSet = history.get(region);
     if (!recentSet) {
