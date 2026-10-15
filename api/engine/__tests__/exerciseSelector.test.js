@@ -9,6 +9,7 @@ import {
   isLoadable,
   dayHasRealExercise,
   pickBest,
+  rankBest,
   pickWithFallback,
   pickSeedExerciseForSlot,
 } from "../exerciseSelector.js";
@@ -68,6 +69,21 @@ function makeStats() {
     fill_failed: 0,
   };
 }
+
+test('bodyweight biceps slot ranks a curl above rows', () => {
+  const exercises = [
+    makeExercise({ id: 'towel_biceps_curl', mc: 'isolation', mp: 'pull_horizontal', sw: 'arms', sw2: 'arms_accessory', pref: ['hypertrophy_accessory', 'strength_accessory'] }),
+    makeExercise({ id: 'inverted_row', mp: 'pull_horizontal', sw: 'pull_horizontal_pattern', sw2: 'pull_horizontal_any', pref: ['strength_main', 'hypertrophy_secondary', 'strength_accessory'] }),
+    makeExercise({ id: 'towel_row', mp: 'pull_horizontal', sw: 'pull_horizontal_pattern', sw2: 'pull_horizontal_any', pref: ['hypertrophy_secondary', 'strength_accessory'] }),
+    makeExercise({ id: 'table_row', mc: 'engine', mp: 'pull_horizontal', sw: 'row_erg', sw2: 'UL', pref: ['conditioning_main', 'hyrox_station', 'hyrox_buy_in'] }),
+    makeExercise({ id: 'reverse_plank_scapular_retraction', mc: 'isolation', mp: 'pull_horizontal', sw: 'shoulder_iso', sw2: 'rear_delt_accessory', pref: ['hypertrophy_accessory', 'strength_accessory'] }),
+  ];
+  const { byId, allowedSet } = makeSelectorPool(exercises);
+  const ranked = rankBest(allowedSet, byId, { sw: 'arms', mp: 'pull_horizontal', requirePref: 'hypertrophy_accessory', prefMode: 'soft', rankValue: 0 }, null, null, null);
+  assert.equal(ranked.length, exercises.length);
+  assert.equal(ranked[0].ex.id, 'towel_biceps_curl');
+  for (const row of ranked.slice(1)) assert.ok(ranked[0].score > row.score, `Curl must outrank ${row.ex.id}`);
+});
 
 test("maps all fields from Bubble format to catalog format", () => {
   const input = [
