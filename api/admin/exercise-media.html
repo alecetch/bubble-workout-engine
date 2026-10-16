@@ -50,6 +50,10 @@
     .kpi-value { font-size: 26px; font-weight: 700; margin-top: 2px; }
     .kpi-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
     @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .filters { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .filters label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .filters select { border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; background: var(--panel); }
+    .empty-row td { text-align: center; color: var(--muted); padding: 24px 8px; }
     .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; align-items: center; justify-content: center; }
     .modal-bg.open { display: flex; }
     .modal { background: var(--panel); border-radius: 10px; padding: 20px; width: 640px; max-width: 95vw; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border); }
@@ -79,6 +83,15 @@
       <button class="tab" data-tab="cooldown">Cool-down</button>
     </nav>
     <div class="kpi-grid" id="stats"></div>
+    <div class="filters">
+      <label for="video-filter">Show</label>
+      <select id="video-filter">
+        <option value="all">All exercises</option>
+        <option value="missing">Without a video</option>
+        <option value="ready">With a video</option>
+      </select>
+      <span id="filter-count" class="muted"></span>
+    </div>
     <section class="panel">
       <table>
         <thead>
@@ -144,6 +157,23 @@
     let rowsById = new Map();
     let promotionEnabled = false;
     let currentRows = [];
+    // Shared across all three tabs and remembered per browser. Storage can be
+    // unavailable (private mode, blocked site data), so fall back to "all".
+    const VIDEO_FILTER_KEY = "exerciseMediaVideoFilter";
+    const VIDEO_FILTERS = {
+      all: () => true,
+      // Anything without a usable video: never uploaded, still processing, or failed.
+      missing: (row) => row.videoStatus !== "ready",
+      ready: (row) => row.videoStatus === "ready",
+    };
+    const videoFilterEl = document.getElementById("video-filter");
+    const filterCountEl = document.getElementById("filter-count");
+    let videoFilter = "all";
+    try {
+      const saved = localStorage.getItem(VIDEO_FILTER_KEY);
+      if (VIDEO_FILTERS[saved]) videoFilter = saved;
+    } catch {}
+    videoFilterEl.value = videoFilter;
     const mediaModal = document.getElementById("media-modal");
     const mediaModalTitle = document.getElementById("media-modal-title");
     const mediaModalContent = document.getElementById("media-modal-content");
@@ -276,10 +306,17 @@
     }
 
     function render(rows) {
+      // Promotion and stats always use every row; the filter only narrows the table.
       currentRows = rows;
       rowsById = new Map(rows.map((row) => [row.exerciseId, row]));
       updatePromoteAll(rows);
-      rowsEl.innerHTML = rows.map((row) => `
+      const visible = rows.filter(VIDEO_FILTERS[videoFilter]);
+      filterCountEl.textContent = videoFilter === "all" ? "" : `${visible.length} of ${rows.length}`;
+      if (!visible.length) {
+        rowsEl.innerHTML = `<tr class="empty-row"><td colspan="5">${rows.length ? `No ${tab().noun} match this filter.` : `No ${tab().noun}.`}</td></tr>`;
+        return;
+      }
+      rowsEl.innerHTML = visible.map((row) => `
         <tr>
           <td><img class="thumb" data-action="view-still" data-id="${row.exerciseId}" src="${mediaPreviewUrl(row.stillImageUrl, row.updatedAt)}" alt="" title="Click to view full size"></td>
           <td><div class="name">${row.name}</div><div class="muted">${row.exerciseId}</div></td>
@@ -415,6 +452,11 @@
       videoInput.value = "";
     });
     document.getElementById("refresh").addEventListener("click", () => load().catch((err) => setStatus(err.message, "err")));
+    videoFilterEl.addEventListener("change", () => {
+      videoFilter = VIDEO_FILTERS[videoFilterEl.value] ? videoFilterEl.value : "all";
+      try { localStorage.setItem(VIDEO_FILTER_KEY, videoFilter); } catch {}
+      render(currentRows);
+    });
     document.getElementById("promote-all").addEventListener("click", async () => {
       const pending = currentRows.filter(needsPromotion).length;
       if (!pending) return;
@@ -444,6 +486,7 @@
       syncTabs();
       rowsEl.innerHTML = "";
       statsEl.innerHTML = "";
+      filterCountEl.textContent = "";
       updatePromoteAll([]);
       if (tokenInput.value) load().catch((err) => setStatus(err.message, "err"));
     });
