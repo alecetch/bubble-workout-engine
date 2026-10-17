@@ -1,4 +1,6 @@
 import express from "express";
+import { normalizeStillImage } from "../utils/normalizeStillImage.js";
+import { exerciseMediaObjectKey } from "../utils/exerciseMediaObjectKey.js";
 import { uploadStillMiddleware as uploadStill, uploadVideoMiddleware as uploadVideo } from "../utils/mediaUploadMiddleware.js";
 import { pool } from "../db.js";
 import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
@@ -27,10 +29,6 @@ function isoOrNull(value) {
   const parsed = new Date(value);
   if (Number.isFinite(parsed.getTime())) return parsed.toISOString();
   return String(value);
-}
-
-function exerciseMediaObjectKey(key) {
-  return String(key ?? "").trim().replace(/^\/+/, "").replace(/^exercise-media\/+/, "");
 }
 
 function mapMediaRow(row) {
@@ -177,11 +175,12 @@ export function createAdminExerciseMediaRouter({
       return res.status(400).json({ ok: false, code: "missing_file", error: "Still image file is required." });
     }
     try {
+      const normalized = await normalizeStillImage(req.file.buffer);
       if (!(await ensureExercise(db, exerciseId))) {
         return res.status(404).json({ ok: false, code: "not_found", error: "Exercise not found." });
       }
       const key = `exercise-media/${exerciseId}/still.jpg`;
-      await putObjectFn(exerciseMediaObjectKey(key), req.file.buffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
+      await putObjectFn(exerciseMediaObjectKey(key), normalized.buffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
       const result = await db.query(
         `INSERT INTO exercise_media (exercise_id, still_image_key, still_image_is_placeholder, uploaded_by, updated_at)
          VALUES ($1, $2, false, $3, now())
@@ -197,6 +196,9 @@ export function createAdminExerciseMediaRouter({
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.still.upload", { still_image_key: key });
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
     } catch (err) {
+      if (err.code === "invalid_image") {
+        return res.status(400).json({ ok: false, code: "invalid_image", error: "Could not read the image file." });
+      }
       req.log?.error({ err, exerciseId }, "exercise-media still upload failed");
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }

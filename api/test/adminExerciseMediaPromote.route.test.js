@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import sharp from "sharp";
 import { createAdminExerciseMediaRouter } from "../src/routes/adminExerciseMedia.js";
 
 const TOKEN = "test-internal-token";
@@ -216,6 +217,7 @@ test("promote does not resend unchanged media after a successful promotion", asy
 });
 
 test("still re-upload resets promotedStillAt in list response", async () => {
+  const jpeg = await sharp({ create: { width: 40, height: 20, channels: 3, background: "red" } }).jpeg().toBuffer();
   await withEnv({ PROD_ADMIN_API_BASE_URL: PROD_BASE, PROD_INTERNAL_API_TOKEN: "prod-token" }, async () => {
     const db = createDb();
     seedExercise(db, "row", {
@@ -234,7 +236,7 @@ test("still re-upload resets promotedStillAt in list response", async () => {
       const upload = await fetch(`${base}/admin/exercise-media/row/still`, {
         method: "POST",
         headers: headers(),
-        body: form("still", new Blob(["jpg"], { type: "image/jpeg" }), "still.jpg"),
+        body: form("still", new Blob([jpeg], { type: "image/jpeg" }), "still.jpg"),
       });
       assert.equal(upload.status, 200);
 
