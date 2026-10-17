@@ -249,6 +249,11 @@ export function rankBest(allowedSet, byId, sel, usedSet, usedRegionsSet, avoidCn
     if (preferLoadable) {
       if (isLoadable(ex)) score += 1.0;
       else score -= 0.1;
+    } else if (isLoadable(ex)) {
+      // Tie-break only (smaller than every other bonus): when the user owns real
+      // loadable kit, its version beats an otherwise equal band/TRX/bodyweight one
+      // instead of the alphabetically first id winning.
+      score += 0.1;
     }
 
     if (usedRegionsSet && usedRegionsSet.size) {

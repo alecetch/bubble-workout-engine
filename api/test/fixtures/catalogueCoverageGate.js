@@ -7,6 +7,15 @@ export const KNOWN_EMPTY = emptySlots.flatMap(parts =>
 
 export const MIN_COUNTS = [
   ...[
+    ['pull_day', 'A:pull_horizontal', 10, 'Band and TRX rows expand horizontal pulling'],
+    ['pull_day', 'D:biceps', 12, 'Band and TRX curls expand Minimal arm choices'],
+    ['push_day', 'D:triceps', 6, 'Band pushdowns expand Minimal triceps choices'],
+    ['push_day', 'B:push_vertical', 4, 'Band overhead presses expand Minimal pressing'],
+    ['pull_day', 'B:pull_vertical', 2, 'Anchored band pulldowns add a Minimal vertical pull'],
+  ].map(([day_key, slot, min, reason]) => ({
+    config_key: 'hypertrophy_default_v1', day_key, slot, preset: 'minimal_equipment', rank: 0, min, reason,
+  })),
+  ...[
     ['push_day', 'D:triceps', 'no_equipment', [0], 3, 'Bodyweight triceps staples'],
     ['pull_day', 'D:biceps', 'no_equipment', [0], 7, 'Towel curl adds a real bodyweight biceps option'],
     ['legs_day', 'C:hamstring_iso', 'no_equipment', [0, 1, 2, 3], 2, 'Towel curl expands hamstring isolation'],
