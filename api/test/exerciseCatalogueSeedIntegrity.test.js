@@ -41,6 +41,48 @@ const equipmentSlugs = fields => fields.equipment_items_slugs === "'{}'::text[]"
   [...fields.equipment_items_slugs.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1]);
 const exerciseIds = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',/g)].map(match => match[1]);
 
+const bandTrxIds = ['band_row', 'band_pull_apart', 'band_face_pull', 'band_biceps_curl', 'band_triceps_pushdown', 'band_lat_pulldown',
+  'band_lateral_raise', 'band_overhead_press', 'band_chest_press', 'band_good_morning', 'banded_glute_bridge', 'band_squat',
+  'trx_row', 'trx_chest_press', 'trx_biceps_curl', 'trx_triceps_extension', 'trx_y_raise', 'trx_hamstring_curl', 'trx_split_squat'];
+
+test('all 19 band and TRX additions are active, not loadable and coached', () => {
+  for (const id of bandTrxIds) {
+    const { fields, archived } = exerciseValues(id);
+    assert.equal(archived, false, id);
+    assert.equal(fields.is_loadable, 'false', id);
+    assert.deepEqual(equipmentSlugs(fields), [id.startsWith('trx_') ? 'trx' : 'resistance_band'], id);
+    assert.ok(sqlText(fields.technique_setup), id);
+    assert.ok(sqlText(fields.technique_cue), id);
+    assert.equal(JSON.parse(sqlText(fields.coaching_cues_json.replace(/::jsonb$/, ''))).length, 3, id);
+    assert.notEqual(Number(fields.impact_level), 3, id);
+    assert.equal(fields.load_estimation_metadata, 'NULL', id);
+  }
+});
+
+test('active band and TRX libraries retain their minimum sizes', () => {
+  const active = exerciseIds.map(id => exerciseValues(id)).filter(row => !row.archived);
+  for (const [slug, min] of [['resistance_band', 11], ['trx', 5]]) {
+    const count = active.filter(row => equipmentSlugs(row.fields).includes(slug)).length;
+    assert.ok(count >= min, `${slug}: ${count} active exercises; expected at least ${min}`);
+  }
+});
+
+test('band and TRX additions carry exactly the reviewed contraindications', () => {
+  const flags = { trx_triceps_extension: ['wrist_elbow'], trx_chest_press: ['shoulder_issues'] };
+  for (const id of bandTrxIds) {
+    const fields = exerciseValues(id).fields;
+    const slugs = fields.contraindications_slugs === "'{}'::text[]" ? [] : [...fields.contraindications_slugs.matchAll(/'([^']+)'/g)].map(match => match[1]);
+    assert.deepEqual(slugs, flags[id] || [], id);
+  }
+});
+
+test('door-anchor coaching only appears on exercises requiring a resistance band', () => {
+  for (const id of exerciseIds) {
+    const fields = exerciseValues(id).fields;
+    if (/door anchor/i.test(sqlText(fields.technique_setup) || '')) assert.ok(equipmentSlugs(fields).includes('resistance_band'), id);
+  }
+});
+
 test('selector flags reset first, reference active exercises and preserve injury-safe regressions', () => {
   const sql = readMigration('R__seed_exercise_catalogue_selector_flags.sql').replace(/--[^\n]*/g, '').trim();
   assert.match(sql.split(';')[0], /^UPDATE exercise_catalogue SET max_fitness_rank = NULL, is_substitute = false\s+WHERE max_fitness_rank IS NOT NULL OR is_substitute$/);
