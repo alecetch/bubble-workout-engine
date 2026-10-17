@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import sharp from "sharp";
 import { createAdminCooldownExercisesRouter } from "../src/routes/adminCooldownExercises.js";
 
 const TOKEN = "test-internal-token";
@@ -135,9 +136,10 @@ test("create, patch, archive, still upload, and video upload mutate rows and aud
   process.env.INTERNAL_API_TOKEN = TOKEN;
   const db = createDb();
   const audits = [];
+  const png = await sharp({ create: { width: 40, height: 20, channels: 3, background: "red" } }).png().toBuffer();
   const uploads = [];
   await withServer(db, {
-    putObjectFn: async (key, _buffer, _type, bucket) => { uploads.push({ key, bucket }); return key; },
+    putObjectFn: async (key, buffer, type, bucket) => { uploads.push({ key, buffer, type, bucket }); return key; },
     getObjectFn: async () => Buffer.from("poster"),
     auditLogFn: async (_req, entry) => audits.push(entry),
     compressExerciseVideoFn: async () => ({ compressedBuffer: Buffer.from("mp4"), posterBuffer: Buffer.from("jpg"), durationSec: 1.5 }),
@@ -168,9 +170,11 @@ test("create, patch, archive, still upload, and video upload mutate rows and aud
     const still = await fetch(`${base}/admin/cooldown-exercises/glute-bridge/still`, {
       method: "POST",
       headers: { "X-Internal-Token": TOKEN },
-      body: form("still", new Blob(["jpg"], { type: "image/jpeg" }), "still.jpg"),
+      body: form("still", new Blob([png], { type: "image/png" }), "still.png"),
     });
     assert.equal(still.status, 200);
+    assert.deepEqual([...uploads[0].buffer.subarray(0, 3)], [0xff, 0xd8, 0xff]);
+    assert.equal(uploads[0].type, "image/jpeg");
     assert.ok((await still.json()).media.stillImageUrl.includes("cooldown-exercise-media/glute-bridge/still.jpg"));
     assert.equal(db.state.media.get("glute-bridge").still_image_key, "cooldown-exercise-media/glute-bridge/still.jpg");
 
