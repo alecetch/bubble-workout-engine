@@ -7,6 +7,59 @@ import {
   parseTimelineCursor,
 } from "../src/routes/historyTimeline.js";
 
+test("history hero URL resolves program_day/hypertrophy_lower_body.png", async () => {
+  const previous = process.env.S3_PUBLIC_BASE_URL;
+  process.env.S3_PUBLIC_BASE_URL = "https://cdn.example.test/media";
+  try {
+    const row = { program_day_id: "day-1", program_id: "program-1",
+      hero_media_id: "media-id", hero_image_key: "program_day/hypertrophy_lower_body.png", hero_image_url: null };
+    const db = { query: async (sql) => ({ rows: sql.includes("segment_exercise_log") ? [] : [row] }) };
+    const res = createMockRes();
+    await createHistoryTimelineHandler(db)({ auth: { user_id: "user-1" }, query: {} }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.items[0].heroMediaUrl, "https://cdn.example.test/media/program_day/hypertrophy_lower_body.png");
+    assert.equal(res.body.items[0].heroMediaId, "media-id");
+  } finally {
+    if (previous === undefined) delete process.env.S3_PUBLIC_BASE_URL;
+    else process.env.S3_PUBLIC_BASE_URL = previous;
+  }
+});
+
+test("history hero URL resolves hero-media/program_day/x.webp", async () => {
+  const previous = process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+  process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL = "https://cdn.example.test/media";
+  try {
+    const row = { program_day_id: "day-1", program_id: "program-1",
+      hero_media_id: "media-id", hero_image_key: "hero-media/program_day/x.webp", hero_image_url: null };
+    const db = { query: async (sql) => ({ rows: sql.includes("segment_exercise_log") ? [] : [row] }) };
+    const res = createMockRes();
+    await createHistoryTimelineHandler(db)({ auth: { user_id: "user-1" }, query: {} }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.items[0].heroMediaUrl, "https://cdn.example.test/media/hero-media/program_day/x.webp");
+    assert.equal(res.body.items[0].heroMediaId, "media-id");
+  } finally {
+    if (previous === undefined) delete process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL;
+    else process.env.S3_EXERCISE_MEDIA_PUBLIC_BASE_URL = previous;
+  }
+});
+
+test("history hero URL resolves null key to placeholder", async () => {
+  const previous = process.env.S3_PUBLIC_BASE_URL;
+  process.env.S3_PUBLIC_BASE_URL = "https://cdn.example.test/media";
+  try {
+    const row = { program_day_id: "day-1", program_id: "program-1",
+      hero_media_id: null, hero_image_key: null, hero_image_url: null };
+    const db = { query: async (sql) => ({ rows: sql.includes("segment_exercise_log") ? [] : [row] }) };
+    const res = createMockRes();
+    await createHistoryTimelineHandler(db)({ auth: { user_id: "user-1" }, query: {} }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.items[0].heroMediaUrl, null);
+    assert.equal(res.body.items[0].heroMediaId, null);
+  } finally {
+    if (previous === undefined) delete process.env.S3_PUBLIC_BASE_URL;
+    else process.env.S3_PUBLIC_BASE_URL = previous;
+  }
+});
 function createMockRes() {
   return {
     statusCode: 200,
@@ -28,6 +81,16 @@ test("clampTimelineLimit defaults and clamps to 1..100", () => {
   assert.equal(clampTimelineLimit("1"), 1);
   assert.equal(clampTimelineLimit("40"), 40);
   assert.equal(clampTimelineLimit("999"), 100);
+});
+
+test("timeline handler rejects requests without authenticated user context", async () => {
+  let queried = false;
+  const handler = createHistoryTimelineHandler({ query: async () => { queried = true; return { rows: [] }; } });
+  const res = createMockRes();
+  await handler({ auth: {}, query: {} }, res);
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, "unauthorized");
+  assert.equal(queried, false);
 });
 
 test("parseTimelineCursor validates tuple cursor", () => {
@@ -71,6 +134,7 @@ test("mapTimelineItem maps nullable hero and optional highlight", () => {
     dayType: "hypertrophy",
     durationMins: 60,
     heroMediaId: null,
+    heroMediaUrl: null,
     highlight: null,
   });
 });
@@ -177,6 +241,8 @@ test("timeline handler uses completed-only query and ignores draft logs in highl
   assert.equal(queries.length, 2);
   assert.ok(queries[0].text.includes("pd.is_completed = TRUE"));
   assert.ok(queries[0].text.includes("WHERE p.user_id = $1"));
+  assert.ok(queries[0].text.includes("LEFT JOIN media_assets ma ON ma.id = pd.hero_media_id"));
+  assert.equal(queries[0].text.includes("ma.is_active"), false);
   assert.ok(queries[1].text.includes("l.is_draft = FALSE"));
   assert.ok(queries[1].text.includes("l.weight_kg IS NOT NULL"));
   assert.deepEqual(queries[0].params, ["user-123", 2, null, null]);
