@@ -1,4 +1,5 @@
 import express from "express";
+import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { pool } from "../db.js";
 import { userAuth } from "../middleware/chains.js";
 import { clampInt, requireUuid, safeString } from "../utils/validate.js";
@@ -11,9 +12,12 @@ SELECT
   pd.day_label,
   pd.day_type,
   pd.session_duration_mins,
-  pd.hero_media_id
+  pd.hero_media_id,
+  ma.image_key AS hero_image_key,
+  ma.image_url AS hero_image_url
 FROM program_day pd
 JOIN program p ON p.id = pd.program_id
+LEFT JOIN media_assets ma ON ma.id = pd.hero_media_id
 WHERE p.user_id = $1
   AND pd.is_completed = TRUE
   AND (
@@ -109,6 +113,9 @@ export function mapTimelineItem(row, highlightByProgramDayId) {
     dayType: asString(row.day_type),
     durationMins: toFiniteNumber(row.session_duration_mins, 0),
     heroMediaId: asNullableString(row.hero_media_id),
+    heroMediaUrl: row.hero_image_key
+      ? resolveMediaUrl({ image_key: row.hero_image_key, image_url: row.hero_image_url })
+      : null,
     highlight: mapHighlight(highlightRow),
   };
 }
