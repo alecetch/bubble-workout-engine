@@ -153,6 +153,9 @@ test("rejects unknown prefixes and extra nesting without touching the storage ba
     },
     async (base) => {
       for (const path of [
+        "sled_push/source.mp4",
+        "sled_push/source.mov",
+        "sled_push/video.pre-540p.mp4",
         "other-media/sled_push/still.jpg",
         "warmup-exercise-media/a/b/still.jpg",
         "warmup-exercise-media/%2e%2e/still.jpg",

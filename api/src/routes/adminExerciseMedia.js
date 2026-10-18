@@ -1,3 +1,4 @@
+import { processVideoUpload, deleteVideoSource } from "../services/exerciseVideoUpload.js";
 import express from "express";
 import { normalizeStillImage } from "../utils/normalizeStillImage.js";
 import { exerciseMediaObjectKey } from "../utils/exerciseMediaObjectKey.js";
@@ -7,9 +8,10 @@ import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/a
 import {
   EXERCISE_MEDIA_BUCKET,
   getObject,
+  deleteObject,
   putObject,
 } from "../services/s3Service.js";
-import { compressExerciseVideo } from "../services/exerciseMediaCompression.js";
+import { compressExerciseVideo, probeVideo, remuxFaststart } from "../services/exerciseMediaCompression.js";
 import { auditLog } from "../utils/auditLog.js";
 import { buildExerciseMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -87,6 +89,9 @@ export function createAdminExerciseMediaRouter({
   putObjectFn = putObject,
   getObjectFn = getObject,
   compressExerciseVideoFn = compressExerciseVideo,
+  probeVideoFn = probeVideo,
+  remuxFaststartFn = remuxFaststart,
+  deleteObjectFn = deleteObject,
   auditLogFn = auditLog,
   fetchFn = (...args) => fetch(...args),
 } = {}) {
@@ -111,6 +116,7 @@ export function createAdminExerciseMediaRouter({
          em.still_image_key,
          em.still_image_is_placeholder,
          em.video_key,
+         em.video_source_key,
          COALESCE(em.video_status, 'none') AS video_status,
          em.video_duration_sec,
          em.video_source_filename,
@@ -146,6 +152,7 @@ export function createAdminExerciseMediaRouter({
            COALESCE(em.still_image_key, 'exercise-media/_placeholder/still.jpg') AS still_image_key,
            COALESCE(em.still_image_is_placeholder, true) AS still_image_is_placeholder,
            em.video_key,
+           em.video_source_key,
            COALESCE(em.video_status, 'none') AS video_status,
            em.video_duration_sec,
            em.video_source_filename,
@@ -226,7 +233,10 @@ export function createAdminExerciseMediaRouter({
 
       let compressed;
       try {
-        compressed = await compressExerciseVideoFn(req.file.buffer);
+        compressed = await processVideoUpload({
+          file: req.file, prefix: `exercise-media/${exerciseId}`, precompressed: req.query.precompressed === "1",
+          putObjectFn, compressExerciseVideoFn, probeVideoFn, remuxFaststartFn,
+        });
       } catch (err) {
         req.log?.error({ err, exerciseId }, "exercise-media video compression failed");
         await db.query(
@@ -235,6 +245,7 @@ export function createAdminExerciseMediaRouter({
            WHERE exercise_id = $1`,
           [exerciseId],
         );
+        if (err.code === "video_source_storage_failed") return res.status(500).json({ ok: false, error: publicInternalError(err) });
         return res.status(422).json({ ok: false, code: "video_processing_failed", error: publicInternalError(err) });
       }
 
@@ -247,6 +258,7 @@ export function createAdminExerciseMediaRouter({
         result = await db.query(
           `UPDATE exercise_media
            SET video_key = $2,
+               video_source_key = $7,
                poster_frame_key = $3,
                video_duration_sec = $4,
                video_status = 'ready',
@@ -256,7 +268,7 @@ export function createAdminExerciseMediaRouter({
                updated_at = now()
            WHERE exercise_id = $1
            RETURNING *`,
-          [exerciseId, videoKey, posterKey, compressed.durationSec, req.file.originalname ?? null, actorFromReq(req)],
+          [exerciseId, videoKey, posterKey, compressed.durationSec, req.file.originalname ?? null, actorFromReq(req), compressed.sourceKey],
         );
       } catch (err) {
         // Compression succeeded but storage/DB write after it failed - without this,
@@ -288,9 +300,11 @@ export function createAdminExerciseMediaRouter({
       if (!(await ensureExercise(db, exerciseId))) {
         return res.status(404).json({ ok: false, code: "not_found", error: "Exercise not found." });
       }
+      await deleteVideoSource({ db, table: "exercise_media", idColumn: "exercise_id", id: exerciseId, deleteObjectFn });
       const result = await db.query(
         `UPDATE exercise_media
          SET video_key = null,
+             video_source_key = null,
              poster_frame_key = null,
              video_duration_sec = null,
              video_source_filename = null,

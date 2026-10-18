@@ -5,6 +5,32 @@ import sharp from "sharp";
 import { createAdminExerciseMediaRouter } from "../src/routes/adminExerciseMedia.js";
 
 const TOKEN = "test-internal-token";
+
+for (const [ext, mime] of [["mov", "video/quicktime"], ["mp4", "video/mp4"]]) {
+  test(`promotion sends the original ${ext} once without the precompressed flag`, async () => {
+    await withEnv({ PROD_ADMIN_API_BASE_URL: PROD_BASE, PROD_INTERNAL_API_TOKEN: "prod-token" }, async () => {
+      const db = createDb();
+      seedExercise(db, "source_clip", { video_key: "exercise-media/source_clip/video.mp4", video_source_key: `exercise-media/source_clip/source.${ext}`, video_status: "ready" });
+      let sent = false;
+      await withServer(db, {
+        getObjectFn: async key => { assert.equal(key, `source_clip/source.${ext}`); return Buffer.from("original"); },
+        fetchFn: async (url, options) => {
+          assert.equal(url, `${PROD_BASE}/admin/exercise-media/source_clip/video`);
+          const file = options.body.get("video");
+          assert.equal(file.name, `source.${ext}`);
+          assert.equal(file.type, mime);
+          assert.equal(await file.text(), "original");
+          sent = true;
+          return { ok: true, status: 200, json: async () => ({ ok: true }) };
+        },
+      }, async base => {
+        const response = await fetch(`${base}/admin/exercise-media/source_clip/promote`, { method: "POST", headers: headers() });
+        assert.deepEqual((await response.json()).promoted, { still: false, video: true });
+      });
+      assert.equal(sent, true);
+    });
+  });
+}
 const PROD_BASE = "https://prod.example.test";
 
 function createDb() {
@@ -160,7 +186,7 @@ test("promote sends still and video to production and marks both promoted", asyn
 
     assert.deepEqual(fetchCalls.map((call) => call.url), [
       `${PROD_BASE}/admin/exercise-media/sled_push/still`,
-      `${PROD_BASE}/admin/exercise-media/sled_push/video`,
+      `${PROD_BASE}/admin/exercise-media/sled_push/video?precompressed=1`,
     ]);
     assert.equal(fetchCalls.every((call) => call.options.headers["X-Internal-Token"] === "prod-token"), true);
     assert.ok(db.state.media.get("sled_push").promoted_still_at);

@@ -1,11 +1,12 @@
+import { processVideoUpload, deleteVideoSource } from "../services/exerciseVideoUpload.js";
 import express from "express";
 import { normalizeStillImage } from "../utils/normalizeStillImage.js";
 import { exerciseMediaObjectKey as mediaObjectKey } from "../utils/exerciseMediaObjectKey.js";
 import { uploadStillMiddleware as uploadStill, uploadVideoMiddleware as uploadVideo } from "../utils/mediaUploadMiddleware.js";
 import { pool } from "../db.js";
 import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
-import { EXERCISE_MEDIA_BUCKET, getObject, putObject } from "../services/s3Service.js";
-import { compressExerciseVideo } from "../services/exerciseMediaCompression.js";
+import { EXERCISE_MEDIA_BUCKET, getObject, putObject, deleteObject } from "../services/s3Service.js";
+import { compressExerciseVideo, probeVideo, remuxFaststart } from "../services/exerciseMediaCompression.js";
 import { auditLog } from "../utils/auditLog.js";
 import { buildExerciseMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -140,6 +141,9 @@ export function createAdminWarmupExercisesRouter({
   putObjectFn = putObject,
   getObjectFn = getObject,
   compressExerciseVideoFn = compressExerciseVideo,
+  probeVideoFn = probeVideo,
+  remuxFaststartFn = remuxFaststart,
+  deleteObjectFn = deleteObject,
   auditLogFn = auditLog,
   fetchFn = (...args) => fetch(...args),
 } = {}) {
@@ -170,6 +174,7 @@ export function createAdminWarmupExercisesRouter({
          m.still_image_key,
          m.still_image_is_placeholder,
          m.video_key,
+         m.video_source_key,
          COALESCE(m.video_status, 'none') AS video_status,
          m.promoted_still_at,
          m.promoted_video_at
@@ -190,6 +195,7 @@ export function createAdminWarmupExercisesRouter({
            COALESCE(wm.still_image_key, $1) AS still_image_key,
            COALESCE(wm.still_image_is_placeholder, true) AS still_image_is_placeholder,
            wm.video_key,
+           wm.video_source_key,
            COALESCE(wm.video_status, 'none') AS video_status,
            wm.video_duration_sec,
            wm.video_source_filename,
@@ -345,9 +351,13 @@ export function createAdminWarmupExercisesRouter({
 
       let compressed;
       try {
-        compressed = await compressExerciseVideoFn(req.file.buffer);
+        compressed = await processVideoUpload({
+          file: req.file, prefix: `warmup-exercise-media/${id}`, precompressed: req.query.precompressed === "1",
+          putObjectFn, compressExerciseVideoFn, probeVideoFn, remuxFaststartFn,
+        });
       } catch (err) {
         await db.query(`UPDATE warmup_exercise_media SET video_status = 'failed', updated_at = now() WHERE warmup_exercise_id = $1`, [id]);
+        if (err.code === "video_source_storage_failed") return res.status(500).json({ ok: false, error: publicInternalError(err) });
         return res.status(422).json({ ok: false, code: "video_processing_failed", error: publicInternalError(err) });
       }
 
@@ -358,6 +368,7 @@ export function createAdminWarmupExercisesRouter({
       const result = await db.query(
         `UPDATE warmup_exercise_media
          SET video_key = $2,
+             video_source_key = $7,
              poster_frame_key = $3,
              video_duration_sec = $4,
              video_status = 'ready',
@@ -367,7 +378,7 @@ export function createAdminWarmupExercisesRouter({
              updated_at = now()
          WHERE warmup_exercise_id = $1
          RETURNING *`,
-        [id, videoKey, posterKey, compressed.durationSec, req.file.originalname ?? null, actorFromReq(req)],
+        [id, videoKey, posterKey, compressed.durationSec, req.file.originalname ?? null, actorFromReq(req), compressed.sourceKey],
       );
       await writeAudit(auditLogFn, req, id, "warmup_exercise.video.upload", { video_key: videoKey, poster_frame_key: posterKey });
       return res.json({ ok: true, media: mapWarmupRow({ ...result.rows[0], warmup_exercise_id: id }) });
@@ -408,9 +419,11 @@ export function createAdminWarmupExercisesRouter({
     const id = String(req.params.id ?? "").trim();
     try {
       if (!(await ensureWarmup(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
+      await deleteVideoSource({ db, table: "warmup_exercise_media", idColumn: "warmup_exercise_id", id: id, deleteObjectFn });
       const result = await db.query(
         `UPDATE warmup_exercise_media
          SET video_key = null,
+             video_source_key = null,
              poster_frame_key = null,
              video_duration_sec = null,
              video_source_filename = null,

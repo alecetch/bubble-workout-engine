@@ -20,6 +20,7 @@ function createDb() {
         video_status: "none",
         video_duration_sec: null,
         video_source_filename: null,
+          video_source_key: null,
         poster_frame_key: null,
       }],
     ]),
@@ -73,6 +74,7 @@ function createDb() {
           video_duration_sec: params[3],
           video_status: "ready",
           video_source_filename: params[4],
+          video_source_key: params[6],
           uploaded_by: params[5],
         };
         state.media.set(params[0], row);
@@ -86,6 +88,7 @@ function createDb() {
           poster_frame_key: null,
           video_duration_sec: null,
           video_source_filename: null,
+          video_source_key: null,
           video_status: "none",
         };
         state.media.set(params[0], row);
@@ -101,6 +104,10 @@ function createDb() {
         state.media.set(params[0], row);
         return { rows: [row], rowCount: 1 };
       }
+      if (/SELECT video_source_key FROM/i.test(sql)) {
+        const row = state.media.get(params[0]);
+        return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+      }
       throw new Error(`Unexpected SQL: ${sql}`);
     },
   };
@@ -109,7 +116,7 @@ function createDb() {
 
 async function withServer(db, deps, fn) {
   const app = express();
-  app.use("/admin", createAdminExerciseMediaRouter({ db, ...deps }));
+  app.use("/admin", createAdminExerciseMediaRouter({ db, deleteObjectFn: async () => {}, ...deps }));
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
   });
@@ -265,7 +272,8 @@ test("video upload marks status failed (not stuck at processing) when storage wr
   process.env.INTERNAL_API_TOKEN = TOKEN;
   const db = createDb();
   await withServer(db, {
-    putObjectFn: async () => {
+    putObjectFn: async (key) => {
+      if (key.endsWith("source.mp4")) return;
       throw new Error("storage unavailable");
     },
     compressExerciseVideoFn: async () => ({

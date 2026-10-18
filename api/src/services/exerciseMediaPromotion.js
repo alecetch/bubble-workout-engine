@@ -1,10 +1,12 @@
 import { EXERCISE_MEDIA_BUCKET, getObject } from "./s3Service.js";
 import logger from "../utils/logger.js";
+import { exerciseMediaObjectKey as mediaObjectKey } from "../utils/exerciseMediaObjectKey.js";
+import { videoSourceExtension } from "./exerciseVideoUpload.js";
 
 // Dev-to-production promotion for exercise media, shared by the main-workout,
 // warm-up and cool-down admin routers. Promotion re-uploads the dev still/video
-// to the matching production admin upload route, which re-runs compression and
-// overwrites the same object keys there, then stamps promoted_*_at locally.
+// to the matching production admin upload route. Originals encode once there;
+// legacy outputs use a validated remux hint. Success stamps promoted_*_at locally.
 
 export function promotionConfig() {
   const baseUrl = String(process.env.PROD_ADMIN_API_BASE_URL || "").trim().replace(/\/+$/, "");
@@ -26,10 +28,6 @@ export function promotionEligibleSql(alias) {
         (${alias}.still_image_is_placeholder = false AND ${alias}.promoted_still_at IS NULL)
         OR (${alias}.video_status = 'ready' AND ${alias}.promoted_video_at IS NULL)
       )`;
-}
-
-function mediaObjectKey(key) {
-  return String(key ?? "").trim().replace(/^\/+/, "").replace(/^exercise-media\/+/, "");
 }
 
 function errorMessageFromResponse(status, body) {
@@ -69,12 +67,12 @@ export function createMediaPromoter({
     const errors = {};
     const id = row[idColumn];
 
-    async function promotePart(kind, key, contentType, fileName, timestampColumn) {
+    async function promotePart(kind, key, contentType, fileName, timestampColumn, query = "") {
       try {
         const buffer = await getObjectFn(mediaObjectKey(key), EXERCISE_MEDIA_BUCKET);
         const form = new FormData();
         form.append(kind, new Blob([buffer], { type: contentType }), fileName);
-        const response = await fetchFn(`${baseUrl}/admin/${routePrefix}/${encodeURIComponent(id)}/${kind}`, {
+        const response = await fetchFn(`${baseUrl}/admin/${routePrefix}/${encodeURIComponent(id)}/${kind}${query}`, {
           method: "POST",
           headers: { "X-Internal-Token": token },
           body: form,
@@ -99,7 +97,12 @@ export function createMediaPromoter({
       await promotePart("still", row.still_image_key, "image/jpeg", "still.jpg", "promoted_still_at");
     }
     if (needsVideoPromotion(row)) {
-      await promotePart("video", row.video_key, "video/mp4", "video.mp4", "promoted_video_at");
+      if (row.video_source_key) {
+        const ext = videoSourceExtension(row.video_source_key);
+        await promotePart("video", row.video_source_key, ext === "mov" ? "video/quicktime" : "video/mp4", `source.${ext}`, "promoted_video_at");
+      } else {
+        await promotePart("video", row.video_key, "video/mp4", "video.mp4", "promoted_video_at", "?precompressed=1");
+      }
     }
 
     return {
