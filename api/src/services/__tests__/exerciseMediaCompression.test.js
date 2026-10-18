@@ -76,6 +76,33 @@ test("compressExerciseVideo outputs muted H.264 video capped at 720p", { skip: !
   }
 });
 
+test("compressExerciseVideo keeps dimensions even for ultra-wide input", { skip: !(await hasBinary("ffmpeg")) || !(await hasBinary("ffprobe")) }, async () => {
+  // 2520x1080 (7:3) scales to 1280x548.57; without rounding to an even height
+  // libx264 rejects it ("height not divisible by 2").
+  const dir = await mkdtemp(join(tmpdir(), "exercise-media-fixture-"));
+  const inputPath = join(dir, "input.mp4");
+  const outputPath = join(dir, "out.mp4");
+  try {
+    await execFileAsync("ffmpeg", [
+      "-y", "-f", "lavfi", "-i", "testsrc=size=2520x1080:rate=24", "-t", "1", "-c:v", "libx264", inputPath,
+    ]);
+    const input = await import("node:fs/promises").then((fs) => fs.readFile(inputPath));
+    const result = await compressExerciseVideo(input);
+    await writeFile(outputPath, result.compressedBuffer);
+
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", outputPath,
+    ]);
+    const [video] = JSON.parse(stdout).streams;
+    assert.equal(video.width, 1280);
+    assert.ok(video.height <= 720);
+    assert.equal(video.width % 2, 0);
+    assert.equal(video.height % 2, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("compressExerciseVideo rejects corrupt input and leaves no temp exercise-media dirs", { skip: !(await hasBinary("ffmpeg")) }, async () => {
   const before = new Set((await readdir(tmpdir())).filter((name) => name.startsWith("exercise-media-")));
   await assert.rejects(() => compressExerciseVideo(Buffer.from("not a video")));
