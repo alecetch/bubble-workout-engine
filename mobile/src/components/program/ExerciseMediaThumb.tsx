@@ -42,6 +42,23 @@ export function ExerciseMediaThumb({
     };
   }, []);
 
+  // replaceAsync resolves once the source is set, not once it has loaded, so a
+  // network failure only surfaces later as an "error" status. Treat that as an
+  // unloaded source so the next tap retries instead of replaying a dead player.
+  // Clearing the source also stops the native view briefly showing its
+  // "cannot play" glyph when the retry expands the player.
+  useEffect(() => {
+    const subscription = player.addListener("statusChange", ({ status }) => {
+      if (status !== "error" || !mountedRef.current) return;
+      sourceLoadedRef.current = false;
+      playbackRequestedRef.current = false;
+      setHasFirstFrame(false);
+      setMode("mini");
+      player.replaceAsync(null).catch(() => undefined);
+    });
+    return () => subscription.remove();
+  }, [player]);
+
   useEffect(() => {
     if (sourceUrlRef.current === playableVideoUrl) return;
     sourceUrlRef.current = playableVideoUrl;

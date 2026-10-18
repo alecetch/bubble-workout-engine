@@ -134,7 +134,16 @@ vi.mock("expo-video", () => ({
   ) => {
     const playerRef = React.useRef<MockVideoPlayer | null>(null);
     if (!playerRef.current) {
+      const listeners = new Map<string, Set<(payload: unknown) => void>>();
       playerRef.current = {
+        addListener: vi.fn((event: string, listener: (payload: unknown) => void) => {
+          if (!listeners.has(event)) listeners.set(event, new Set());
+          listeners.get(event)!.add(listener);
+          return { remove: () => listeners.get(event)?.delete(listener) };
+        }),
+        emit: (event: string, payload: unknown) => {
+          listeners.get(event)?.forEach((listener) => listener(payload));
+        },
         initialSource: source,
         loop: false,
         muted: false,

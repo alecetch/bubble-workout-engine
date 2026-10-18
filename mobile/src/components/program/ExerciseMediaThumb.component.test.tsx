@@ -77,6 +77,36 @@ describe("ExerciseMediaThumb", () => {
     expect(player.pause).not.toHaveBeenCalled();
   });
 
+  it("treats a load error reported after replaceAsync resolves as unloaded and reloads on the next tap", async () => {
+    render(<ExerciseMediaThumb {...baseProps} />);
+    const player = lastVideoPlayer.current!;
+    fireEvent.click(screen.getByLabelText("Play exercise video"));
+    await waitFor(() => expect(player.play).toHaveBeenCalledTimes(1));
+
+    // Offline: the source was accepted but the download fails afterwards.
+    act(() => player.emit("statusChange", { status: "error", oldStatus: "loading" }));
+    expect(screen.getByTestId("exercise-media-thumb")).toBeInTheDocument();
+    expect(screen.getByTestId("exercise-media-play-badge")).toBeInTheDocument();
+    // The failed source is cleared so the retry starts from an empty player.
+    expect(player.replaceAsync).toHaveBeenLastCalledWith(null);
+
+    fireEvent.click(screen.getByLabelText("Play exercise video"));
+    await waitFor(() => expect(player.replaceAsync).toHaveBeenCalledTimes(3));
+    expect(player.replaceAsync).toHaveBeenLastCalledWith(baseProps.videoUrl);
+    await waitFor(() => expect(player.play).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("exercise-media-expanded")).toBeInTheDocument();
+  });
+
+  it("ignores non-error status changes", async () => {
+    render(<ExerciseMediaThumb {...baseProps} />);
+    const player = lastVideoPlayer.current!;
+    fireEvent.click(screen.getByLabelText("Play exercise video"));
+    await waitFor(() => expect(player.play).toHaveBeenCalledTimes(1));
+
+    act(() => player.emit("statusChange", { status: "readyToPlay", oldStatus: "loading" }));
+    expect(screen.getByTestId("exercise-media-expanded")).toBeInTheDocument();
+  });
+
   it("restores the playable thumbnail after a failed load and retries on the next tap", async () => {
     render(<ExerciseMediaThumb {...baseProps} />);
     const player = lastVideoPlayer.current!;
