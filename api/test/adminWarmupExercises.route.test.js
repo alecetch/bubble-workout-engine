@@ -74,9 +74,13 @@ function createDb() {
         return { rows: [], rowCount: 1 };
       }
       if (/UPDATE warmup_exercise_media/i.test(sql) && /video_status = 'ready'/i.test(sql)) {
-        const row = { ...(state.media.get(params[0]) ?? {}), warmup_exercise_id: params[0], video_key: params[1], poster_frame_key: params[2], video_duration_sec: params[3], video_status: "ready", video_source_filename: params[4] };
+        const row = { ...(state.media.get(params[0]) ?? {}), warmup_exercise_id: params[0], video_key: params[1], poster_frame_key: params[2], video_duration_sec: params[3], video_status: "ready", video_source_filename: params[4], video_source_key: params[6] };
         state.media.set(params[0], row);
         return { rows: [row], rowCount: 1 };
+      }
+      if (/SELECT video_source_key FROM/i.test(sql)) {
+        const row = state.media.get(params[0]);
+        return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
       }
       throw new Error(`Unexpected SQL: ${sql}`);
     },
@@ -87,7 +91,7 @@ function createDb() {
 async function withServer(db, deps, fn) {
   const app = express();
   app.use(express.json());
-  app.use("/admin", createAdminWarmupExercisesRouter({ db, ...deps }));
+  app.use("/admin", createAdminWarmupExercisesRouter({ db, deleteObjectFn: async () => {}, ...deps }));
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
   });

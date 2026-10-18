@@ -3,8 +3,70 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createAdminWarmupExercisesRouter } from "../src/routes/adminWarmupExercises.js";
 import { createAdminCooldownExercisesRouter } from "../src/routes/adminCooldownExercises.js";
+import { createAdminExerciseMediaRouter } from "../src/routes/adminExerciseMedia.js";
 
 const TOKEN = "test-internal-token";
+
+for (const { kind, createRouter, route, prefix } of [
+  { kind: "exercise", createRouter: createAdminExerciseMediaRouter, route: "exercise-media", prefix: "exercise-media" },
+  { kind: "warmup", createRouter: createAdminWarmupExercisesRouter, route: "warmup-exercises", prefix: "warmup-exercise-media" },
+  { kind: "cooldown", createRouter: createAdminCooldownExercisesRouter, route: "cooldown-exercises", prefix: "cooldown-exercise-media" },
+]) {
+  for (const mode of ["original", "conforming", "oversized", "audio"]) {
+    test(`${kind}: ${mode} video preserves sources or validates the precompressed hint`, async () => {
+      await withEnv({}, async () => {
+        const puts = [];
+        const deletes = [];
+        let compressed = 0;
+        let remuxed = 0;
+        let sourceKey = null;
+        let deleted = false;
+        const db = { query: async (sql, params = []) => {
+          if (/SET video_key = \$2/.test(sql)) {
+            assert.match(sql, /video_source_key = \$7/);
+            sourceKey = params[6];
+          }
+          if (/SET video_key = null/.test(sql)) {
+            assert.match(sql, /video_source_key = null/);
+            sourceKey = null; deleted = true;
+          }
+          return { rowCount: 1, rows: [{ video_source_key: sourceKey }] };
+        } };
+        const result = { compressedBuffer: Buffer.from("mp4"), posterBuffer: Buffer.from("jpg"), durationSec: 1 };
+        await withServer(createRouter, db, {
+          putObjectFn: async (...args) => { puts.push(args); },
+          deleteObjectFn: async (...args) => { deletes.push(args); throw Object.assign(new Error("gone"), { name: "NoSuchKey" }); },
+          compressExerciseVideoFn: async () => {
+            if (mode === "original") {
+              assert.equal(puts[0][0], `${prefix}/a/source.mov`.replace(/^exercise-media\//, ""));
+              assert.equal(puts[0][1].toString(), "original bytes");
+              assert.equal(puts[0][2], "video/quicktime");
+            }
+            compressed++; return result;
+          },
+          probeVideoFn: async () => ({ codec: "h264", pixFmt: "yuv420p", width: mode === "oversized" ? 1280 : 960, height: 540, hasAudio: mode === "audio" }),
+          remuxFaststartFn: async () => { remuxed++; return result; },
+        }, async url => {
+          const form = new FormData();
+          form.append("video", new Blob(["original bytes"], { type: "video/quicktime" }), "Phone.MOV");
+          const response = await fetch(`${url}/admin/${route}/a/video${mode === "original" ? "" : "?precompressed=1"}`, {
+            method: "POST", headers: auth, body: form,
+          });
+          assert.equal(response.status, 200, await response.text());
+          assert.equal(compressed, mode === "conforming" ? 0 : 1);
+          assert.equal(remuxed, mode === "conforming" ? 1 : 0);
+          assert.equal(sourceKey, mode === "original" ? `${prefix}/a/source.mov` : null);
+          assert.equal(puts.length, mode === "original" ? 3 : 2);
+          const responseDelete = await fetch(`${url}/admin/${route}/a/video`, { method: "DELETE", headers: auth });
+          assert.equal(responseDelete.status, 200);
+          assert.equal(sourceKey, null);
+          assert.equal(deleted, true);
+          assert.deepEqual(deletes.map(call => call[0]), mode === "original" ? [`${prefix}/a/source.mov`.replace(/^exercise-media\//, "")] : []);
+        });
+      });
+    });
+  }
+}
 const PROD_BASE = "https://prod.example.test";
 
 // Warm-up and cool-down routers are structurally identical, so every case runs against both.
@@ -55,12 +117,17 @@ function createDb(kind) {
           poster_frame_key: null,
           video_duration_sec: null,
           video_source_filename: null,
+          video_source_key: null,
           video_status: "none",
           promoted_video_at: null,
           uploaded_by: params[1],
         };
         state.media.set(params[0], row);
         return { rows: [row], rowCount: 1 };
+      }
+      if (/SELECT video_source_key FROM/i.test(sql)) {
+        const row = state.media.get(params[0]);
+        return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
       }
       throw new Error(`Unexpected SQL: ${sql}`);
     },
@@ -105,7 +172,7 @@ const PROD_ENV = { PROD_ADMIN_API_BASE_URL: PROD_BASE, PROD_INTERNAL_API_TOKEN: 
 
 async function withServer(createRouter, db, deps, fn) {
   const app = express();
-  app.use("/admin", createRouter({ db, auditLogFn: async () => {}, ...deps }));
+  app.use("/admin", createRouter({ db, deleteObjectFn: async () => {}, auditLogFn: async () => {}, ...deps }));
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
   });
@@ -194,7 +261,7 @@ for (const { kind, createRouter } of KINDS) {
       });
       assert.deepEqual(calls.map((c) => c.url), [
         `${PROD_BASE}/admin/${kind}-exercises/a/still`,
-        `${PROD_BASE}/admin/${kind}-exercises/a/video`,
+        `${PROD_BASE}/admin/${kind}-exercises/a/video?precompressed=1`,
       ]);
       assert.ok(calls.every((c) => c.token === "prod-token"));
       assert.ok(db.state.media.get("a").promoted_still_at);
