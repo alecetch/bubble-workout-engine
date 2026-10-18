@@ -19,7 +19,7 @@ export async function compressExerciseVideo(inputBuffer) {
       "-i",
       inputPath,
       "-vf",
-      "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease",
+      "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
       "-c:v",
       "libx264",
       "-b:v",
