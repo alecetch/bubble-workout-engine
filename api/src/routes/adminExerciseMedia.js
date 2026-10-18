@@ -1,3 +1,4 @@
+import { generateRenditions, storeImageRenditions } from "../services/imageRenditions.js";
 import { processVideoUpload, deleteVideoSource } from "../services/exerciseVideoUpload.js";
 import express from "express";
 import { normalizeStillImage } from "../utils/normalizeStillImage.js";
@@ -13,7 +14,7 @@ import {
 } from "../services/s3Service.js";
 import { compressExerciseVideo, probeVideo, remuxFaststart } from "../services/exerciseMediaCompression.js";
 import { auditLog } from "../utils/auditLog.js";
-import { buildExerciseMediaUrl } from "../utils/mediaUrl.js";
+import { buildExerciseMediaUrl, exerciseRenditionFields } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { createMediaPromoter, promotionConfig, promotionEligibleSql } from "../services/exerciseMediaPromotion.js";
 
@@ -56,6 +57,7 @@ function mapMediaRow(row) {
     videoSourceFilename: row.video_source_filename ?? null,
     poster_frame_key: row.poster_frame_key ?? null,
     posterFrameKey: row.poster_frame_key ?? null,
+    ...exerciseRenditionFields(row),
     videoUrl: status === "ready" ? mediaUrl(row.video_key) || null : null,
     posterImageUrl: status === "ready" ? mediaUrl(row.poster_frame_key) || null : null,
     promoted_still_at: isoOrNull(row.promoted_still_at),
@@ -87,6 +89,7 @@ async function writeAudit(auditLogFn, req, exerciseId, action, detail) {
 export function createAdminExerciseMediaRouter({
   db = pool,
   putObjectFn = putObject,
+  generateRenditionsFn = generateRenditions,
   getObjectFn = getObject,
   compressExerciseVideoFn = compressExerciseVideo,
   probeVideoFn = probeVideo,
@@ -114,7 +117,11 @@ export function createAdminExerciseMediaRouter({
          ec.name,
          ec.is_archived,
          em.still_image_key,
-         em.still_image_is_placeholder,
+          em.still_image_is_placeholder,
+          em.still_renditions_at,
+          em.still_thumbhash,
+          em.poster_renditions_at,
+
          em.video_key,
          em.video_source_key,
          COALESCE(em.video_status, 'none') AS video_status,
@@ -151,6 +158,7 @@ export function createAdminExerciseMediaRouter({
            ec.is_archived,
            COALESCE(em.still_image_key, 'exercise-media/_placeholder/still.jpg') AS still_image_key,
            COALESCE(em.still_image_is_placeholder, true) AS still_image_is_placeholder,
+           em.still_renditions_at, em.still_thumbhash, em.poster_renditions_at,
            em.video_key,
            em.video_source_key,
            COALESCE(em.video_status, 'none') AS video_status,
@@ -194,12 +202,15 @@ export function createAdminExerciseMediaRouter({
          ON CONFLICT (exercise_id) DO UPDATE SET
            still_image_key = EXCLUDED.still_image_key,
            still_image_is_placeholder = false,
+           still_renditions_at = null, still_thumbhash = null,
            uploaded_by = EXCLUDED.uploaded_by,
            promoted_still_at = null,
            updated_at = now()
          RETURNING *`,
         [exerciseId, key, actorFromReq(req)],
       );
+      const derived = await storeImageRenditions({ db, table: "exercise_media", idColumn: "exercise_id", id: exerciseId, kind: "still", key: key, buffer: normalized.buffer, putObjectFn, generateRenditionsFn, log: req.log });
+      if (derived?.fields) Object.assign(result.rows[0], derived.fields);
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.still.upload", { still_image_key: key });
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
     } catch (err) {
@@ -262,6 +273,7 @@ export function createAdminExerciseMediaRouter({
                poster_frame_key = $3,
                video_duration_sec = $4,
                video_status = 'ready',
+               poster_renditions_at = null,
                video_source_filename = $5,
                uploaded_by = $6,
                promoted_video_at = null,
@@ -283,6 +295,8 @@ export function createAdminExerciseMediaRouter({
         );
         return res.status(500).json({ ok: false, error: publicInternalError(err) });
       }
+      const derived = await storeImageRenditions({ db, table: "exercise_media", idColumn: "exercise_id", id: exerciseId, kind: "poster", key: posterKey, buffer: compressed.posterBuffer, putObjectFn, generateRenditionsFn, log: req.log });
+      if (derived?.fields) Object.assign(result.rows[0], derived.fields);
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.video.upload", {
         video_key: videoKey,
         poster_frame_key: posterKey,
@@ -345,6 +359,7 @@ export function createAdminExerciseMediaRouter({
         `UPDATE exercise_media
          SET still_image_key = $2,
              still_image_is_placeholder = false,
+           still_renditions_at = null, still_thumbhash = null,
              promoted_still_at = null,
              uploaded_by = $3,
              updated_at = now()
@@ -352,6 +367,8 @@ export function createAdminExerciseMediaRouter({
          RETURNING *`,
         [exerciseId, stillKey, actorFromReq(req)],
       );
+      const derived = await storeImageRenditions({ db, table: "exercise_media", idColumn: "exercise_id", id: exerciseId, kind: "still", key: stillKey, buffer: posterBuffer, putObjectFn, generateRenditionsFn, log: req.log });
+      if (derived?.fields) Object.assign(result.rows[0], derived.fields);
       await writeAudit(auditLogFn, req, exerciseId, "exercise_media.still.use_poster", { poster_frame_key: posterKey });
       return res.json({ ok: true, media: mapMediaRow({ ...result.rows[0], name: null, is_archived: false }) });
     } catch (err) {

@@ -1,3 +1,4 @@
+import { exerciseRenditionFields, heroRenditionFields } from "../utils/mediaUrl.js";
 import express from "express";
 import { pool } from "../db.js";
 import { buildExerciseMediaUrl } from "../utils/mediaUrl.js";
@@ -27,6 +28,10 @@ exerciseGuidanceRouter.get("/:exerciseId/guidance", async (req, res) => {
          ec.target_regions_json,
          ec.movement_pattern_primary,
          em.still_image_key,
+          em.still_image_is_placeholder,
+          em.still_renditions_at,
+          em.still_thumbhash,
+          em.poster_renditions_at,
          em.video_key,
          COALESCE(em.video_status, 'none') AS video_status,
          em.poster_frame_key
@@ -60,6 +65,7 @@ exerciseGuidanceRouter.get("/:exerciseId/guidance", async (req, res) => {
       loggingGuidance: row.logging_guidance ?? null,
       targetRegions: Array.isArray(row.target_regions_json) ? row.target_regions_json : [],
       movementPattern: row.movement_pattern_primary ?? null,
+      ...exerciseRenditionFields(row),
       stillImageUrl: buildExerciseMediaUrl(row.still_image_key ?? "exercise-media/_placeholder/still.jpg"),
       videoUrl: videoStatus === "ready" ? buildExerciseMediaUrl(row.video_key) || null : null,
       posterImageUrl: videoStatus === "ready" ? buildExerciseMediaUrl(row.poster_frame_key) || null : null,

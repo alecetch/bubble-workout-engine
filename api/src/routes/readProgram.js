@@ -1,3 +1,4 @@
+import { exerciseRenditionFields, heroRenditionFields } from "../utils/mediaUrl.js";
 import { displayLabel } from "../utils/displayLabels.js";
 // api/src/routes/readProgram.js
 import express from "express";
@@ -240,7 +241,8 @@ export function createReadProgramHandlers(options = pool) {
           p.status,
           p.hero_media_id,
           ma.image_key     AS hero_image_key,
-          ma.image_url     AS hero_image_url
+          ma.image_url     AS hero_image_url,
+          ma.renditions_at AS hero_renditions_at, ma.thumbhash AS hero_thumbhash
         FROM program p
         LEFT JOIN media_assets ma ON ma.id = p.hero_media_id
         WHERE p.id = $1 AND p.user_id = $2
@@ -256,6 +258,8 @@ export function createReadProgramHandlers(options = pool) {
       const program = {
         ..._prgRow,
         program_type_label: displayLabel("programType", _prgRow.program_type),
+        hero_media_card: heroRenditionFields(_prgRow.hero_image_key, _prgRow.hero_renditions_at, _prgRow.hero_thumbhash).heroMediaCardUrl,
+        hero_media_thumbhash: heroRenditionFields(_prgRow.hero_image_key, _prgRow.hero_renditions_at, _prgRow.hero_thumbhash).heroMediaThumbhash,
         hero_media: _prgRow.hero_image_key
           ? resolveMediaUrl({
               image_key: _prgRow.hero_image_key,
@@ -483,7 +487,8 @@ export function createReadProgramHandlers(options = pool) {
           p.client_profile_id,
           d.hero_media_id,
           ma.image_key  AS hero_image_key,
-          ma.image_url  AS hero_image_url
+          ma.image_url  AS hero_image_url,
+          ma.renditions_at AS hero_renditions_at, ma.thumbhash AS hero_thumbhash
         FROM program_day d
         JOIN program p
           ON p.id = d.program_id
@@ -506,6 +511,8 @@ export function createReadProgramHandlers(options = pool) {
         equipmentOverrideItemSlugs: _dayRow.equipment_override_items_slugs ?? null,
         scheduledWeekday: _dayRow.scheduled_weekday ?? "",
         weekNumber: _dayRow.week_number ?? 1,
+        hero_media_card: heroRenditionFields(_dayRow.hero_image_key, _dayRow.hero_renditions_at, _dayRow.hero_thumbhash).heroMediaCardUrl,
+        hero_media_thumbhash: heroRenditionFields(_dayRow.hero_image_key, _dayRow.hero_renditions_at, _dayRow.hero_thumbhash).heroMediaThumbhash,
         hero_media: _dayRow.hero_image_key
           ? resolveMediaUrl({
               image_key: _dayRow.hero_image_key,
@@ -579,18 +586,30 @@ export function createReadProgramHandlers(options = pool) {
           pe.load_hint,
           pe.log_prompt,
           em.still_image_key,
+          em.still_image_is_placeholder,
+          em.still_renditions_at,
+          em.still_thumbhash,
+          em.poster_renditions_at,
           em.video_key,
           COALESCE(em.video_status, 'none') AS video_status,
           em.poster_frame_key,
           we.name AS warmup_name,
           we.rounds AS warmup_rounds,
           wm.still_image_key AS warmup_still_image_key,
+          wm.still_image_is_placeholder AS warmup_still_image_is_placeholder,
+          wm.still_renditions_at AS warmup_still_renditions_at,
+          wm.still_thumbhash AS warmup_still_thumbhash,
+          wm.poster_renditions_at AS warmup_poster_renditions_at,
           wm.video_key AS warmup_video_key,
           COALESCE(wm.video_status, 'none') AS warmup_video_status,
           wm.poster_frame_key AS warmup_poster_frame_key,
           ce.name AS cooldown_name,
           ce.rounds AS cooldown_rounds,
           cm.still_image_key AS cooldown_still_image_key,
+          cm.still_image_is_placeholder AS cooldown_still_image_is_placeholder,
+          cm.still_renditions_at AS cooldown_still_renditions_at,
+          cm.still_thumbhash AS cooldown_still_thumbhash,
+          cm.poster_renditions_at AS cooldown_poster_renditions_at,
           cm.video_key AS cooldown_video_key,
           COALESCE(cm.video_status, 'none') AS cooldown_video_status,
           cm.poster_frame_key AS cooldown_poster_frame_key,
@@ -734,6 +753,7 @@ export function createReadProgramHandlers(options = pool) {
             rounds: isWarmup ? warmup_rounds : isCooldown ? cooldown_rounds : undefined,
             durationOrRepsLabel: isBookend ? durationOrRepsLabel : undefined,
             cueText: isBookend ? rest.notes ?? "" : undefined,
+            ...exerciseRenditionFields(item, isWarmup ? "warmup_" : isCooldown ? "cooldown_" : ""),
             stillImageUrl: buildExerciseMediaUrl(mediaStillKey ?? "exercise-media/_placeholder/still.jpg"),
             videoUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(mediaVideoKey) || null : null,
             posterImageUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(mediaPosterKey) || null : null,
@@ -783,6 +803,7 @@ export function createReadProgramHandlers(options = pool) {
           const resolvedVideoStatus = video_status ?? "none";
           return {
             ...rest,
+            ...exerciseRenditionFields(item),
             stillImageUrl: buildExerciseMediaUrl(still_image_key ?? "exercise-media/_placeholder/still.jpg"),
             videoUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(video_key) || null : null,
             posterImageUrl: resolvedVideoStatus === "ready" ? buildExerciseMediaUrl(poster_frame_key) || null : null,

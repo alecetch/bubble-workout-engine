@@ -135,6 +135,8 @@ test("mapTimelineItem maps nullable hero and optional highlight", () => {
     durationMins: 60,
     heroMediaId: null,
     heroMediaUrl: null,
+    heroMediaCardUrl: null,
+    heroMediaThumbhash: null,
     highlight: null,
   });
 });
@@ -351,3 +353,11 @@ test("timeline cursor pagination passes tuple cursor and avoids duplicates betwe
   assert.equal(page2Ids.some((id) => page1Ids.has(id)), false);
 });
 
+
+
+test("history exposes ready hero cards and keeps legacy heroes on originals", () => {
+  const modern = mapTimelineItem({ hero_image_key: "hero-media/program/a.png", hero_renditions_at: "now", hero_thumbhash: "hash" }, new Map());
+  assert.ok(modern.heroMediaCardUrl.endsWith("hero-media/program/a-card.webp"));
+  assert.equal(modern.heroMediaThumbhash, "hash");
+  assert.equal(mapTimelineItem({ hero_image_key: "program/a.png", hero_renditions_at: "now" }, new Map()).heroMediaCardUrl, null);
+});

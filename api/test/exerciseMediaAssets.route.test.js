@@ -167,3 +167,18 @@ test("rejects unknown prefixes and extra nesting without touching the storage ba
   );
   assert.equal(called, false);
 });
+
+
+test("serves only known WebP rendition key shapes", async () => {
+  const allowed = ["a/still-thumb.webp", "warmup-exercise-media/a/still-card.webp", "cooldown-exercise-media/a/poster-card.webp", "hero-media/program_day/a-card.webp"];
+  await withServer(async () => ({ Body: streamOf("webp"), ContentType: "image/webp" }), async base => {
+    for (const key of allowed) {
+      const response = await fetch(`${base}/assets/exercise-media/${key}`);
+      assert.equal(response.status, 200); assert.equal(response.headers.get("content-type"), "image/webp");
+    }
+    assert.equal((await fetch(`${base}/assets/exercise-media/a/still-foo.webp`)).status, 404);
+    const { hostname, port } = new URL(base);
+    const status = await new Promise((resolve, reject) => get({ hostname, port, path: "/assets/exercise-media/a/../still-card.webp" }, res => { res.resume(); resolve(res.statusCode); }).on("error", reject));
+    assert.equal(status, 404);
+  });
+});

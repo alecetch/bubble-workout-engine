@@ -92,11 +92,12 @@ test("POST creates all missing files", async t => {
 
 test("media assets snapshot is deterministic and upserts without deletes", async () => {
   assert.ok(SYNC_TARGETS.includes("R__seed_media_assets.sql"));
-  const db = { query: async () => ({ rows: [{ asset_key: "program:a::a.png", usage_scope: "program", day_type: "a", focus_type: null, label: "A", sort_order: 1, is_active: false, image_key: "a.png", image_url: "" }] }) };
+  const db = { query: async () => ({ rows: [{ asset_key: "program:a::a.png", usage_scope: "program", day_type: "a", focus_type: null, label: "A", sort_order: 1, is_active: false, image_key: "a.png", image_url: "", renditions_at: "now", thumbhash: "derived-only" }] }) };
   const first = await generateMediaAssetsSnapshot(db), second = await generateMediaAssetsSnapshot(db);
   assert.equal(first.content, second.content);
   assert.match(first.content, /ON CONFLICT \(asset_key\) DO UPDATE SET/);
   assert.doesNotMatch(first.content, /\bDELETE\b/i);
+  assert.doesNotMatch(first.content, /renditions_at|thumbhash/);
   assert.match(first.content, /is_active\s*=\s*EXCLUDED\.is_active/);
 });
 test("read errors take precedence over dirty status", async t => {

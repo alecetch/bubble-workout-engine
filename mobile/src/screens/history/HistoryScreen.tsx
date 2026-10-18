@@ -80,7 +80,7 @@ function TimelineRow({
 }): React.JSX.Element {
   return (
     <View style={styles.timelineCard}>
-      <HeroMediaThumb uri={item.heroMediaUrl} compact />
+      <HeroMediaThumb uri={item.heroMediaCardUrl ?? item.heroMediaUrl} compact />
       <View style={styles.timelineContent}>
         <Text style={styles.timelineDate}>{formatDateLabel(item.scheduledDate)}</Text>
         <Text style={styles.timelineLabel}>{item.dayLabel || "Session"}</Text>
@@ -351,7 +351,7 @@ export function HistoryScreen(): React.JSX.Element {
           contentContainerStyle={styles.programsList}
           renderItem={({ item }) => (
             <View style={styles.programCard}>
-              <HeroMediaThumb uri={item.heroMediaUrl} />
+              <HeroMediaThumb uri={item.heroMediaCardUrl ?? item.heroMediaUrl} />
               <Text style={styles.programTitle} numberOfLines={2}>
                 {item.programTitle}
               </Text>

@@ -24,6 +24,8 @@ export type HistoryProgramItem = {
   completionRatio: number;
   heroMediaId: string | null;
   heroMediaUrl: string | null;
+  heroMediaCardUrl?: string | null;
+  heroMediaThumbhash?: string | null;
 };
 
 export type HistoryTimelineCursor = {
@@ -38,6 +40,8 @@ export type HistoryTimelineItem = {
   durationMins: number;
   heroMediaId: string | null;
   heroMediaUrl: string | null;
+  heroMediaCardUrl?: string | null;
+  heroMediaThumbhash?: string | null;
   highlight:
     | {
         value: number;
@@ -249,6 +253,8 @@ export function normalizePrograms(raw: unknown): HistoryProgramItem[] {
       programTitle: asString(program.programTitle, "Training Program"),
       startDate: toDateOnly(program.startDate),
       completionRatio: asNumber(program.completionRatio, 0),
+      heroMediaCardUrl: asNullableString(program.heroMediaCardUrl ?? program.hero_media_card_url),
+      heroMediaThumbhash: asNullableString(program.heroMediaThumbhash ?? program.hero_media_thumbhash),
       heroMediaId: asNullableString(program.heroMediaId),
       heroMediaUrl: asNullableString(program.heroMediaUrl),
     };
@@ -268,6 +274,8 @@ export function normalizeTimeline(raw: unknown): HistoryTimelineResponse {
       scheduledDate: toDateOnly(row.scheduledDate ?? row.scheduled_date),
       dayLabel: asString(row.dayLabel ?? row.day_label),
       durationMins: asNumber(row.durationMins ?? row.duration_mins, 0),
+      heroMediaCardUrl: asNullableString(row.heroMediaCardUrl ?? row.hero_media_card_url),
+      heroMediaThumbhash: asNullableString(row.heroMediaThumbhash ?? row.hero_media_thumbhash),
       heroMediaId: asNullableString(row.heroMediaId ?? row.hero_media_id),
       heroMediaUrl: asNullableString(row.heroMediaUrl ?? row.hero_media_url),
       highlight:

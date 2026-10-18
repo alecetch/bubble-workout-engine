@@ -17,6 +17,18 @@ const baseProps = {
 };
 
 describe("ExerciseMediaThumb", () => {
+  it("prefers the thumb rendition and uses a card poster after expansion", () => {
+    const { container } = render(<ExerciseMediaThumb {...baseProps} stillThumbUrl="https://cdn.test/thumb.webp" posterCardUrl="https://cdn.test/poster-card.webp" />);
+    expect(container.querySelector('img[src="https://cdn.test/thumb.webp"]')).not.toBeNull();
+    fireEvent.click(screen.getByLabelText("Play exercise video"));
+    expect(container.querySelector('img[src="https://cdn.test/poster-card.webp"]')).not.toBeNull();
+  });
+
+  it("falls back to the original still without a thumbnail rendition", () => {
+    const { container } = render(<ExerciseMediaThumb {...baseProps} />);
+    expect(container.querySelector(`img[src="${baseProps.stillImageUrl}"]`)).not.toBeNull();
+  });
+
   it("creates an empty muted looping player without loading or playing a video", () => {
     render(<ExerciseMediaThumb {...baseProps} />);
     const player = lastVideoPlayer.current!;

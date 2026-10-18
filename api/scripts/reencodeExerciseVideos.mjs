@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { exerciseMediaObjectKey } from "../src/utils/exerciseMediaObjectKey.js";
 import { TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT } from "../src/services/exerciseMediaCompression.js";
+import { storeImageRenditions } from "../src/services/imageRenditions.js";
 
 const TABLES = {
   exercise: ["exercise_media", "exercise_id"],
@@ -47,7 +48,7 @@ export function parseOptions(args) {
   return options;
 }
 
-export async function reencodeExerciseVideos({ db, bucket, getObjectFn, putObjectFn, deleteObjectFn, listBackupKeysFn, probeVideoFn, compressExerciseVideoFn }, options = {}) {
+export async function reencodeExerciseVideos({ db, bucket, getObjectFn, putObjectFn, deleteObjectFn, listBackupKeysFn, probeVideoFn, compressExerciseVideoFn, storeImageRenditionsFn = storeImageRenditions }, options = {}) {
   const report = [];
   if (options.cleanupBackups) {
     // List storage rather than DB rows: deleted exercises can leave backups
@@ -102,6 +103,7 @@ export async function reencodeExerciseVideos({ db, bucket, getObjectFn, putObjec
           await putObjectFn(posterKey, result.posterBuffer, "image/jpeg", bucket);
           await db.query(`UPDATE ${table} SET video_duration_sec = $2, poster_frame_key = $3 WHERE ${idColumn} = $1`,
             [row.id, result.durationSec, row.poster_frame_key || row.video_key.replace(/video\.mp4$/, "poster.jpg")]);
+          await storeImageRenditionsFn({ db, table, idColumn, id: row.id, kind: "poster", key: posterKey, buffer: result.posterBuffer, putObjectFn });
         }
         report.push({ ...item, status: options.dryRun ? "dry_run" : "encoded", afterBytes: result.compressedBuffer.length,
           width: outputProbe.width, height: outputProbe.height, durationSec: result.durationSec });

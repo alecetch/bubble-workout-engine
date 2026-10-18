@@ -16,6 +16,8 @@ export type ProgramOverviewResponse = {
     summary?: string;
     programTypeLabel: string;
     heroMedia?: string | null;
+    heroMediaCard?: string | null;
+    heroMediaThumbhash?: string | null;
   };
   weeks: Array<{
     id?: string;
@@ -95,6 +97,8 @@ export type ProgramDayFullResponse = {
     type?: string;
     sessionDuration?: number;
     heroMedia?: string | null;
+    heroMediaCard?: string | null;
+    heroMediaThumbhash?: string | null;
     typeLabel: string;
     focusLabel: string;
     equipmentOverridePresetSlug?: string | null;
@@ -126,6 +130,10 @@ export type ProgramDayFullResponse = {
       tempo?: string | null;
       restSeconds?: number | null;
       stillImageUrl?: string;
+      stillThumbUrl?: string | null;
+      stillCardUrl?: string | null;
+      posterCardUrl?: string | null;
+      stillThumbhash?: string | null;
       videoUrl?: string | null;
       posterImageUrl?: string | null;
       videoStatus?: "none" | "processing" | "ready" | "failed";
@@ -283,7 +291,7 @@ function buildIdentityQuery(opts: ViewerIdentityOptions): URLSearchParams {
   return params;
 }
 
-function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
+export function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
   const root = asObject(raw);
   const rawProgram = asObject(root.program);
   const rawWeeks = asArray(root.weeks);
@@ -355,6 +363,8 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
       summary: asString(rawProgram.summary),
       programTypeLabel: asString(rawProgram.program_type_label ?? rawProgram.programTypeLabel) ??
         displayLabel("programType", asString(rawProgram.program_type ?? rawProgram.programType)),
+      heroMediaCard: asNullableString(rawProgram.hero_media_card ?? rawProgram.heroMediaCard) ?? null,
+      heroMediaThumbhash: asNullableString(rawProgram.hero_media_thumbhash ?? rawProgram.heroMediaThumbhash) ?? null,
       heroMedia: asNullableString(
         rawProgram.hero_media === null ? null : rawProgram.hero_media ?? rawProgram.heroMedia,
       ),
@@ -395,7 +405,7 @@ function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse {
   };
 }
 
-function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
+export function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
   const root = asObject(raw);
   const rawDay = asObject(root.day);
   const rawSegments = asArray(root.segments);
@@ -420,6 +430,8 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
       sessionDuration: asNumber(
         rawDay.session_duration_mins ?? rawDay.session_duration ?? rawDay.sessionDuration,
       ),
+      heroMediaCard: asNullableString(rawDay.hero_media_card ?? rawDay.heroMediaCard) ?? null,
+      heroMediaThumbhash: asNullableString(rawDay.hero_media_thumbhash ?? rawDay.heroMediaThumbhash) ?? null,
       heroMedia: asNullableString(rawDay.hero_media ?? rawDay.heroMedia),
       equipmentOverridePresetSlug: asNullableString(
         rawDay.equipmentOverridePresetSlug ?? rawDay.equipment_override_preset_slug,
@@ -478,6 +490,10 @@ function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
             intensity: asNullableString(rawExercise.intensity_prescription ?? rawExercise.intensity),
             tempo: asNullableString(rawExercise.tempo),
             restSeconds: asNullableNumber(rawExercise.rest_seconds ?? rawExercise.restSeconds),
+            stillThumbUrl: asNullableString(rawExercise.still_thumb_url ?? rawExercise.stillThumbUrl) ?? null,
+            stillCardUrl: asNullableString(rawExercise.still_card_url ?? rawExercise.stillCardUrl) ?? null,
+            posterCardUrl: asNullableString(rawExercise.poster_card_url ?? rawExercise.posterCardUrl) ?? null,
+            stillThumbhash: asNullableString(rawExercise.still_thumbhash ?? rawExercise.stillThumbhash) ?? null,
             stillImageUrl: asString(rawExercise.still_image_url ?? rawExercise.stillImageUrl) ?? "",
             videoUrl: rawExercise.video_url === undefined && rawExercise.videoUrl === undefined
               ? undefined

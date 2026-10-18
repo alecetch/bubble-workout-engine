@@ -1,3 +1,4 @@
+import { generateRenditions, storeImageRenditions } from "../services/imageRenditions.js";
 import express from "express";
 import multer from "multer";
 import sharp from "sharp";
@@ -86,6 +87,7 @@ function parseBool(value) { return value === true || value === "true" || value =
 export function createAdminHeroMediaRouter({
   db = pool, putObjectFn = putObject, getObjectFn = getObject, headObjectFn = headObject,
   fetchFn = (...args) => fetch(...args), auditLogFn = auditLog, legacyAssetsDir = LEGACY_DIR,
+  generateRenditionsFn = generateRenditions,
   promotionConfig,
 } = {}) {
   const router = express.Router();
@@ -144,7 +146,8 @@ export function createAdminHeroMediaRouter({
       if (req.body.imageKey !== undefined && await statusForKey(req.body.imageKey, headObjectFn, legacyAssetsDir) !== "found") return res.status(400).json({ ok: false, error: "Image was not found" });
       const params = entries.map(([key]) => req.body[key] === "" && key === "focusType" ? null : req.body[key]);
       params.push(req.params.id);
-      const set = entries.map(([, col], i) => `${col} = $${i + 1}`).join(", ");
+      const set = entries.map(([, col], i) => `${col} = $${i + 1}`).join(", ")
+        + (Object.hasOwn(req.body, "imageKey") ? ", renditions_at = NULL, thumbhash = NULL" : "");
       const q = await db.query(`UPDATE media_assets SET ${set}, updated_at = now() WHERE id = $${params.length} RETURNING *`, params);
       if (!q.rows[0]) return res.status(404).json({ ok: false, error: "Mapping not found" });
       await audit(req, "update", q.rows[0], { fields: entries.map(([k]) => k) });
@@ -163,7 +166,9 @@ export function createAdminHeroMediaRouter({
       const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
       const key = `hero-media/${row.usage_scope}/${slug(req.body?.label || row.label || req.file.originalname)}.${ext}`;
       await putObjectFn(key, req.file.buffer, req.file.mimetype, EXERCISE_MEDIA_BUCKET);
-      const q = await db.query("UPDATE media_assets SET image_key = $1, image_url = '', updated_at = now() WHERE id = $2 RETURNING *", [key, row.id]);
+      const q = await db.query("UPDATE media_assets SET image_key = $1, image_url = '', renditions_at = null, thumbhash = null, updated_at = now() WHERE id = $2 RETURNING *", [key, row.id]);
+      const derived = await storeImageRenditions({ db, table: "media_assets", idColumn: "id", id: row.id, kind: "hero", key, buffer: req.file.buffer, putObjectFn, generateRenditionsFn, log: req.log });
+      if (derived?.fields) Object.assign(q.rows[0], derived.fields);
       await audit(req, "upload", q.rows[0], { imageKey: key });
       res.json({ ok: true, row: camel(q.rows[0]) });
     } catch (err) { res.status(400).json({ ok: false, error: err?.message || "Invalid image" }); }
@@ -203,8 +208,12 @@ export function createAdminHeroMediaRouter({
       const q = await db.query(`INSERT INTO media_assets (asset_key,usage_scope,day_type,focus_type,label,sort_order,is_active,image_key,image_url)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (asset_key) DO UPDATE SET
         usage_scope=EXCLUDED.usage_scope,day_type=EXCLUDED.day_type,focus_type=EXCLUDED.focus_type,label=EXCLUDED.label,
-        sort_order=EXCLUDED.sort_order,is_active=EXCLUDED.is_active,image_key=EXCLUDED.image_key,image_url=EXCLUDED.image_url,updated_at=now() RETURNING *`,
-      [b.asset_key,b.usage_scope,b.day_type||null,b.focus_type||null,b.label||"",Number(b.sort_order)||0,parseBool(b.is_active),b.image_key,b.image_url||""]);
+        sort_order=EXCLUDED.sort_order,is_active=EXCLUDED.is_active,image_key=EXCLUDED.image_key,image_url=EXCLUDED.image_url,renditions_at=CASE WHEN $10 OR media_assets.image_key IS DISTINCT FROM EXCLUDED.image_key THEN NULL ELSE media_assets.renditions_at END,thumbhash=CASE WHEN $10 OR media_assets.image_key IS DISTINCT FROM EXCLUDED.image_key THEN NULL ELSE media_assets.thumbhash END,updated_at=now() RETURNING *`,
+      [b.asset_key,b.usage_scope,b.day_type||null,b.focus_type||null,b.label||"",Number(b.sort_order)||0,parseBool(b.is_active),b.image_key,b.image_url||"",Boolean(req.file)]);
+      if (req.file) {
+        const derived = await storeImageRenditions({ db, table: "media_assets", idColumn: "id", id: q.rows[0].id, kind: "hero", key: b.image_key, buffer: req.file.buffer, putObjectFn, generateRenditionsFn, log: req.log });
+        if (derived?.fields) Object.assign(q.rows[0], derived.fields);
+      }
       await audit(req, "import", q.rows[0], { assetKey: b.asset_key }); res.json({ ok: true, row: camel(q.rows[0]) });
     } catch (err) { res.status(500).json({ ok: false, error: publicInternalError(err) }); }
   });
