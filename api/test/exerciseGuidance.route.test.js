@@ -33,6 +33,7 @@ test("GET /api/exercise/:id/guidance returns guidance object for known exercise"
     rowCount: 1,
     rows: [{
       exercise_id: "bb_back_squat",
+      still_image_key: "exercise-media/bb_back_squat/still.jpg", still_image_is_placeholder: false, still_renditions_at: "now", still_thumbhash: "hash",
       name: "Back Squat",
       coaching_cues_json: ["Brace hard", "Drive through mid-foot"],
       technique_cue: "Brace before you break",
@@ -55,6 +56,8 @@ test("GET /api/exercise/:id/guidance returns guidance object for known exercise"
 
       assert.equal(response.status, 200);
       assert.equal(body?.ok, true);
+      assert.ok(body.guidance.stillThumbUrl.endsWith("bb_back_squat/still-thumb.webp"));
+      assert.equal(body.guidance.stillThumbhash, "hash");
       assert.equal(body?.guidance?.exerciseId, "bb_back_squat");
       assert.deepEqual(body?.guidance?.coachingCues, ["Brace hard", "Drive through mid-foot"]);
       assert.deepEqual(body?.guidance?.techniqueExecution, ["Breathe and brace", "Sit down between the hips"]);

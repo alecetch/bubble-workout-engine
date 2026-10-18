@@ -8,6 +8,8 @@ import { spacing } from "../../theme/spacing";
 
 type ExerciseMediaThumbProps = {
   stillImageUrl: string;
+  stillThumbUrl?: string | null;
+  posterCardUrl?: string | null;
   videoUrl: string | null;
   posterImageUrl: string | null;
   videoStatus: string;
@@ -17,6 +19,8 @@ type Mode = "mini" | "expanded" | "fullscreen";
 
 export function ExerciseMediaThumb({
   stillImageUrl,
+  stillThumbUrl,
+  posterCardUrl,
   videoUrl,
   posterImageUrl,
   videoStatus,
@@ -28,7 +32,7 @@ export function ExerciseMediaThumb({
   const playbackRequestedRef = useRef(false);
   const playableVideoUrl = videoStatus === "ready" && videoUrl ? videoUrl : null;
   const sourceUrlRef = useRef(playableVideoUrl);
-  const posterSource = posterImageUrl || stillImageUrl;
+  const posterSource = posterCardUrl || posterImageUrl || stillImageUrl;
   const player = useVideoPlayer(null, (instance) => {
     instance.loop = true;
     instance.muted = true;
@@ -92,7 +96,7 @@ export function ExerciseMediaThumb({
   if (!playableVideoUrl || mode === "mini") {
     const image = (
       <View style={styles.miniFrame} testID="exercise-media-thumb">
-        <Image source={{ uri: stillImageUrl }} style={styles.miniImage} resizeMode="cover" />
+        <Image source={{ uri: stillThumbUrl || stillImageUrl }} style={styles.miniImage} resizeMode="cover" />
         {playableVideoUrl ? (
           <View style={styles.playOverlay} pointerEvents="none" testID="exercise-media-play-overlay">
             <View style={styles.playBadge} testID="exercise-media-play-badge">

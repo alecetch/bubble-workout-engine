@@ -9,6 +9,33 @@ import { requireInternalToken } from "../src/middleware/auth.js";
 import { createAdminHeroMediaRouter, selectCell, statusForKey } from "../src/routes/adminHeroMedia.js";
 
 const row = { id: 1, asset_key: "program_day:hypertrophy:upper_body:program_day/x.png", usage_scope: "program_day", day_type: "hypertrophy", focus_type: "upper_body", label: "Upper", sort_order: 1, is_active: true, image_key: "program_day/x.png", image_url: "", updated_at: new Date(), promoted_at: null };
+
+for (const action of ["image", "import"]) for (const fail of [false, true]) {
+  test(`hero ${action}: ${fail ? "rendition failure preserves upload success" : "stores a WebP card and thumbhash"}`, async t => {
+    const state = { ...row, image_key: "hero-media/program_day/upper.png", renditions_at: "old", thumbhash: "old" };
+    const puts = [];
+    const db = { query: async sql => {
+      if (/renditions_at = null|renditions_at = NULL|INSERT INTO media_assets/.test(sql)) { state.renditions_at = null; state.thumbhash = null; }
+      if (/renditions_at = now\(\)/.test(sql)) { state.renditions_at = "now"; state.thumbhash = "hash"; }
+      return { rows: [{ ...state }] };
+    } };
+    const base = await server(t, db, { putObjectFn: async (...args) => { puts.push(args); },
+      generateRenditionsFn: async () => {
+        if (fail) throw new Error("rendition failed");
+        return { renditions: [{ name: "card", buffer: Buffer.from("webp") }], thumbhash: "hash" };
+      } });
+    const form = new FormData();
+    form.append("image", new Blob([await pngOfWidth(1200)], { type: "image/png" }), "upper.png");
+    if (action === "import") {
+      for (const [key, value] of Object.entries({ asset_key: "test-asset", usage_scope: "program_day", image_key: state.image_key, is_active: "true" })) form.append(key, value);
+    }
+    const response = await fetch(`${base}/hero-media/${action === "import" ? "import" : "1/image"}`, { method: "POST", body: form });
+    assert.equal(response.status, 200);
+    assert.equal(state.renditions_at, fail ? null : "now");
+    assert.equal(state.thumbhash, fail ? null : "hash");
+    assert.deepEqual(puts.filter(call => call[2] === "image/webp").map(call => call[0]), fail ? [] : ["hero-media/program_day/upper-card.webp"]);
+  });
+}
 async function server(t, db, deps = {}) {
   const app = express(); app.use("/admin", createAdminHeroMediaRouter({ db, auditLogFn: async () => {}, ...deps }));
   const instance = await new Promise(resolve => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
@@ -93,13 +120,13 @@ test("GET list returns active and inactive rows with a file status each", async 
 
 test("upload stores a normalised lowercase key and rejects bad images", async t => {
   const puts = [];
-  const db = { query: async (sql, params) => sql.startsWith("SELECT") ? { rows: [row] } : { rows: [{ ...row, image_key: params[0] }] } };
+  const db = { query: async (sql, params) => sql.startsWith("SELECT") ? { rows: [row] } : { rows: [{ ...row, image_key: "hero-media/program_day/upper.png", renditions_at: sql.includes("renditions_at = now()") ? "now" : null }] } };
   const base = await server(t, db, { putObjectFn: async (key, _buf, type) => { puts.push({ key, type }); } });
 
   let response = await uploadImage(base, 1, await pngOfWidth(1200));
   assert.equal(response.status, 200);
-  assert.equal(puts.at(-1).key, "hero-media/program_day/upper.png");
-  assert.match(puts.at(-1).key, /^hero-media\/program_day\/[a-z0-9_-]+\.png$/);
+  assert.equal(puts[0].key, "hero-media/program_day/upper.png");
+  assert.match(puts[0].key, /^hero-media\/program_day\/[a-z0-9_-]+\.png$/);
   assert.equal((await response.json()).row.imageKey, "hero-media/program_day/upper.png");
 
   response = await uploadImage(base, 1, await pngOfWidth(800));
@@ -111,7 +138,9 @@ test("upload stores a normalised lowercase key and rejects bad images", async t 
 
   response = await uploadImage(base, 1, Buffer.alloc(6 * 1024 * 1024), "image/png", "huge.png");
   assert.equal(response.status, 413);
-  assert.equal(puts.length, 1, "only the valid upload reaches storage");
+  assert.equal(puts.length, 2, "only the valid upload and its card reach storage");
+  assert.equal(puts[1].key, "hero-media/program_day/upper-card.webp");
+  assert.equal(puts[1].type, "image/webp");
 });
 
 test("promote posts the asset_key and image to production and stamps promoted_at", async t => {

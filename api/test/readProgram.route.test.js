@@ -142,7 +142,7 @@ test("programOverview defaults selected day to the earliest incomplete day", asy
         title: "Program",
         program_type: "hyrox",
         summary: "Summary",
-        hero_image_key: null,
+        hero_image_key: "hero-media/program/a.png", hero_renditions_at: "now", hero_thumbhash: "hash",
         hero_image_url: null,
       }],
     },
@@ -196,6 +196,8 @@ test("programOverview defaults selected day to the earliest incomplete day", asy
   await handlers.programOverview(req, res);
 
   assert.equal(res.statusCode, 200);
+  assert.ok(res.body.program.hero_media_card.endsWith("hero-media/program/a-card.webp"));
+  assert.equal(res.body.program.hero_media_thumbhash, "hash");
   assert.equal(res.body?.program?.program_type_label, "HYROX");
   assert.equal(res.body?.selected_day?.program_day_id, "44444444-4444-4444-8444-444444444444");
   assert.deepEqual(res.body?.selected_day?.equipment_names, ["Barbell", "Pull-up bar"]);
@@ -728,7 +730,7 @@ test("dayFull always exposes a non-empty stillImageUrl with placeholder fallback
           day_label: "Day 1",
           day_type: "strength",
           session_duration_mins: 50,
-          hero_image_key: null,
+          hero_image_key: "hero-media/program_day/test.png", hero_renditions_at: "now", hero_thumbhash: "hero-hash",
           hero_image_url: null,
           client_profile_id: VALID_UUID,
         }],
@@ -757,6 +759,7 @@ test("dayFull always exposes a non-empty stillImageUrl with placeholder fallback
             is_new_exercise: false,
             progression_outcome: null,
             still_image_key: "exercise-media/bb_back_squat/still.jpg",
+            still_image_is_placeholder: false, still_renditions_at: "now", still_thumbhash: "still-hash",
             video_status: "none",
           },
           {
@@ -794,6 +797,11 @@ test("dayFull always exposes a non-empty stillImageUrl with placeholder fallback
 
   const items = res.body?.segments?.[0]?.items ?? [];
   assert.equal(res.statusCode, 200);
+  assert.ok(res.body.day.hero_media_card.endsWith("hero-media/program_day/test-card.webp"));
+  assert.equal(res.body.day.hero_media_thumbhash, "hero-hash");
+  assert.ok(items[0].stillThumbUrl.endsWith("bb_back_squat/still-thumb.webp"));
+  assert.equal(items[0].stillThumbhash, "still-hash");
+  assert.equal(items[1].stillThumbUrl, null);
   assert.ok(items[0].stillImageUrl.includes("exercise-media/bb_back_squat/still.jpg"));
   assert.ok(items[1].stillImageUrl.includes("exercise-media/_placeholder/still.jpg"));
 });

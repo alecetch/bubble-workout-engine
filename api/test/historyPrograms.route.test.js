@@ -85,6 +85,8 @@ test("mapHistoryProgramRow maps nullable heroMediaId and numeric fields", () => 
     completionRatio: 0.75,
     heroMediaId: null,
     heroMediaUrl: null,
+    heroMediaCardUrl: null,
+    heroMediaThumbhash: null,
   });
 });
 
@@ -160,3 +162,11 @@ test("history handler rejects requests without auth user id", async () => {
   assert.equal(res.body?.code, "unauthorized");
 });
 
+
+
+test("history exposes ready hero cards and keeps legacy heroes on originals", () => {
+  const modern = mapHistoryProgramRow({ hero_image_key: "hero-media/program/a.png", hero_renditions_at: "now", hero_thumbhash: "hash" });
+  assert.ok(modern.heroMediaCardUrl.endsWith("hero-media/program/a-card.webp"));
+  assert.equal(modern.heroMediaThumbhash, "hash");
+  assert.equal(mapHistoryProgramRow({ hero_image_key: "program/a.png", hero_renditions_at: "now" }).heroMediaCardUrl, null);
+});

@@ -1,3 +1,5 @@
+import { stillThumbKey, stillCardKey, posterCardKey, heroCardKey } from "./mediaRenditionKeys.js";
+
 /**
  * Build a public media URL from an S3 key.
  * @param {string | null | undefined} imageKey
@@ -48,4 +50,24 @@ export function resolveMediaUrl(row) {
     return buildExerciseMediaUrl(image_key) || null;
   }
   return buildPublicUrl(image_key) || null;
+}
+
+export function renditionUrl(key, readyAt) {
+  return key && readyAt ? buildExerciseMediaUrl(key) : null;
+}
+
+export function exerciseRenditionFields(row, prefix = "") {
+  if (prefix) row = Object.fromEntries(["still_image_key", "still_image_is_placeholder", "still_renditions_at", "still_thumbhash", "poster_frame_key", "poster_renditions_at", "video_status"].map(key => [key, row[prefix + key]]));
+  const ready = row.still_image_is_placeholder === false ? row.still_renditions_at : null;
+  return {
+    stillThumbUrl: renditionUrl(stillThumbKey(row.still_image_key), ready),
+    stillCardUrl: renditionUrl(stillCardKey(row.still_image_key), ready),
+    stillThumbhash: ready ? row.still_thumbhash ?? null : null,
+    posterCardUrl: renditionUrl(posterCardKey(row.poster_frame_key), row.video_status === "ready" ? row.poster_renditions_at : null),
+  };
+}
+
+export function heroRenditionFields(key, readyAt, thumbhash) {
+  const card = renditionUrl(heroCardKey(key), readyAt);
+  return { heroMediaCardUrl: card, heroMediaThumbhash: card ? thumbhash ?? null : null };
 }

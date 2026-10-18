@@ -196,6 +196,12 @@ describe("ProgramDashboardScreen", () => {
     expect(screen.getByText("Strength Block")).toBeInTheDocument();
   });
 
+  it("prefers the program hero card rendition", () => {
+    useProgramOverviewMock.mockReturnValue({ data: data({ program: { ...data().program, heroMedia: "https://cdn.test/original.png", heroMediaCard: "https://cdn.test/card.webp" } }), isLoading: false, isError: false, refetch: vi.fn() } as any);
+    renderDashboard();
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "https://cdn.test/card.webp");
+  });
+
   it("passes the program's hero URL to the hero header", () => {
     const heroMedia = "https://cdn.example.com/hero.jpg";
     useProgramOverviewMock.mockReturnValue({

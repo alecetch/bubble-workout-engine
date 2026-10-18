@@ -65,6 +65,8 @@ export function SessionExerciseSegmentSection({ items, title }: SessionExerciseS
             return (
               <View style={styles.itemCard} key={item.id ?? item.warmupExerciseId ?? item.exerciseId ?? index}>
                 <ExerciseMediaThumb
+                  stillThumbUrl={item.stillThumbUrl}
+                  posterCardUrl={item.posterCardUrl}
                   stillImageUrl={item.stillImageUrl || ""}
                   videoUrl={item.videoUrl ?? null}
                   posterImageUrl={item.posterImageUrl ?? null}

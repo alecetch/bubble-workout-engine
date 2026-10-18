@@ -426,6 +426,13 @@ describe("ProgramDayScreen", () => {
     await waitForLocalStateLoad();
   });
 
+  it("prefers the day hero card rendition", async () => {
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, heroMedia: "https://cdn.test/original.png", heroMediaCard: "https://cdn.test/card.webp" } }, isLoading: false, isError: false, refetch: vi.fn() } as any);
+    renderScreen();
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "https://cdn.test/card.webp");
+    await waitForLocalStateLoad();
+  });
+
   it("passes the resolved day image to HeroHeader", async () => {
     const heroMedia = "https://cdn.example.com/day-hero.jpg";
     useProgramDayFullMock.mockReturnValue({

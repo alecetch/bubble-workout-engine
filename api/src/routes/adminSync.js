@@ -218,6 +218,8 @@ ON CONFLICT (template_id) DO UPDATE SET
 }
 
 export async function generateMediaAssetsSnapshot(db) {
+  // Rendition readiness and thumbhash are derived independently per environment.
+  // Keep this explicit column list free of those fields so backfills cannot dirty Sync.
   const { rows } = await db.query(`
     SELECT asset_key, usage_scope, day_type, focus_type, label, sort_order,
            is_active, image_key, image_url

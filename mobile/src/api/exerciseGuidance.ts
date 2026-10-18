@@ -10,6 +10,10 @@ export type ExerciseGuidance = {
   techniqueMistakes: string[];
   techniqueVideoUrl: string | null;
   stillImageUrl: string;
+  stillThumbUrl?: string | null;
+  stillCardUrl?: string | null;
+  posterCardUrl?: string | null;
+  stillThumbhash?: string | null;
   videoUrl: string | null;
   posterImageUrl: string | null;
   videoStatus: "none" | "processing" | "ready" | "failed";
@@ -28,7 +32,7 @@ function asStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
-function normalizeGuidance(raw: unknown): ExerciseGuidance {
+export function normalizeGuidance(raw: unknown): ExerciseGuidance {
   const g = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   return {
     exerciseId: asString(g.exerciseId) ?? "",
@@ -39,6 +43,10 @@ function normalizeGuidance(raw: unknown): ExerciseGuidance {
     techniqueExecution: asStringArray(g.techniqueExecution),
     techniqueMistakes: asStringArray(g.techniqueMistakes),
     techniqueVideoUrl: asString(g.techniqueVideoUrl),
+    stillThumbUrl: asString(g.stillThumbUrl ?? g.still_thumb_url),
+    stillCardUrl: asString(g.stillCardUrl ?? g.still_card_url),
+    posterCardUrl: asString(g.posterCardUrl ?? g.poster_card_url),
+    stillThumbhash: asString(g.stillThumbhash ?? g.still_thumbhash),
     stillImageUrl: asString(g.stillImageUrl ?? g.still_image_url) ?? "",
     videoUrl: asString(g.videoUrl ?? g.video_url),
     posterImageUrl: asString(g.posterImageUrl ?? g.poster_image_url),

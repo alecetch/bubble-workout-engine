@@ -1,3 +1,4 @@
+import { heroRenditionFields } from "../utils/mediaUrl.js";
 import express from "express";
 import { resolveMediaUrl } from "../utils/mediaUrl.js";
 import { pool } from "../db.js";
@@ -14,6 +15,7 @@ SELECT
   p.hero_media_id,
   ma.image_key AS hero_image_key,
   ma.image_url AS hero_image_url,
+  ma.renditions_at AS hero_renditions_at, ma.thumbhash AS hero_thumbhash,
   COUNT(pd.id) AS total_sessions,
   COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE) AS completed_sessions,
   CASE WHEN COUNT(pd.id)=0 THEN 0
@@ -24,7 +26,7 @@ LEFT JOIN program_day pd ON pd.program_id = p.id
 LEFT JOIN media_assets ma ON ma.id = p.hero_media_id
 WHERE p.user_id = $1
   AND p.is_ready = TRUE
-GROUP BY p.id, ma.image_key, ma.image_url
+GROUP BY p.id, ma.image_key, ma.image_url, ma.renditions_at, ma.thumbhash
 ORDER BY p.start_date DESC, p.created_at DESC
 LIMIT $2;
 `;
@@ -61,6 +63,7 @@ export function mapHistoryProgramRow(row) {
     completedSessions: toFiniteNumber(row.completed_sessions, 0),
     completionRatio: toFiniteNumber(row.completion_ratio, 0),
     heroMediaId: row.hero_media_id == null ? null : asString(row.hero_media_id),
+    ...heroRenditionFields(row.hero_image_key, row.hero_renditions_at, row.hero_thumbhash),
     heroMediaUrl: row.hero_image_key
       ? resolveMediaUrl({ image_key: row.hero_image_key, image_url: row.hero_image_url })
       : null,
