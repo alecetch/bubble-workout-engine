@@ -38,6 +38,20 @@ test('known empty coverage cells still exist and remain empty', async t => {
   assert.deepEqual(obsolete, [], `Remove filled or missing entries from KNOWN_EMPTY:\n${obsolete.map(key => `${key}: ${counts.get(key) ?? 'missing'}`).join('\n')}`);
 });
 
+test('Minimal differs from No Equipment in at least 85% of strength and hypertrophy slots', async t => {
+  if (!(await cells(t))) return;
+  const report = await reportPromise;
+  const rows = [...new Map(report.rows
+    .filter(row => ['hypertrophy_default_v1', 'strength_default_v1'].includes(row.config_key))
+    .map(row => [[row.config_key, row.day_key, row.slot].join('|'), row])).entries()];
+  assert.ok(rows.length > 0, 'Expected strength and hypertrophy coverage slots');
+  const ties = rows.filter(([, row]) => !(row.counts.minimal_equipment_0 > row.counts.no_equipment_0));
+  const improved = rows.length - ties.length;
+  assert.ok(improved / rows.length >= 0.85,
+    `Minimal beats No Equipment in ${improved}/${rows.length} slots (${(100 * improved / rows.length).toFixed(1)}%); expected at least 85%.\n` +
+    `Slots without an improvement:\n${ties.map(([key, row]) => `${key}: Minimal ${row.counts.minimal_equipment_0}, No Equipment ${row.counts.no_equipment_0}`).join('\n')}`);
+});
+
 test('catalogue coverage meets minimum candidate counts', async t => {
   const counts = await cells(t); if (!counts) return;
   const failures = MIN_COUNTS.flatMap(entry => {

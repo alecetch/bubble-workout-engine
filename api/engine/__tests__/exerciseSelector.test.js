@@ -79,6 +79,35 @@ test('a real exercise beats an otherwise identical substitute by exactly two poi
   assert.equal(ranked[0].score - ranked[1].score, 2);
 });
 
+test('a loadable exercise wins an otherwise exact tie, even when its id sorts later', () => {
+  // band_/trx_ ids sort before cable_/db_ ids, so without the tie-break the band won.
+  const { byId, allowedSet } = makeSelectorPool([
+    makeExercise({ id: 'band_curl', mp: 'pull_horizontal', sw: 'arms', pref: ['hypertrophy_accessory'] }),
+    makeExercise({ id: 'db_curl', mp: 'pull_horizontal', sw: 'arms', pref: ['hypertrophy_accessory'], loadable: true }),
+  ]);
+  const ranked = rankBest(allowedSet, byId, { sw: 'arms', requirePref: 'hypertrophy_accessory', prefMode: 'soft', rankValue: 0 }, null, null, null);
+  assert.deepEqual(ranked.map(({ ex }) => ex.id), ['db_curl', 'band_curl']);
+  assert.ok(Math.abs(ranked[0].score - ranked[1].score - 0.1) < 1e-9, 'tie-break should be exactly 0.1');
+});
+
+test('the loadable tie-break never outweighs a real scoring difference or stacks with preferLoadable', () => {
+  const { byId, allowedSet } = makeSelectorPool([
+    makeExercise({ id: 'band_row', mp: 'pull_horizontal', sw: 'target', pref: ['hypertrophy_secondary'] }),
+    makeExercise({ id: 'db_row', mp: 'pull_horizontal', sw: 'other', pref: ['hypertrophy_secondary'], loadable: true }),
+  ]);
+  // An sw match (+10) still beats an mp-only loadable match.
+  const ranked = rankBest(allowedSet, byId, { sw: 'target', mp: 'pull_horizontal', rankValue: 0 }, null, null, null);
+  assert.equal(ranked[0].ex.id, 'band_row');
+  // With preferLoadable the existing +1 / -0.1 applies on its own, so the gap stays 1.1.
+  const pool = makeSelectorPool([
+    makeExercise({ id: 'band_row', mp: 'pull_horizontal', sw: 'target' }),
+    makeExercise({ id: 'db_row', mp: 'pull_horizontal', sw: 'target', loadable: true }),
+  ]);
+  const preferred = rankBest(pool.allowedSet, pool.byId, { sw: 'target', preferLoadable: true, rankValue: 0 }, null, null, null);
+  assert.equal(preferred[0].ex.id, 'db_row');
+  assert.ok(Math.abs(preferred[0].score - preferred[1].score - 1.1) < 1e-9);
+});
+
 test('a substitute with a stronger structural match still beats a real exercise', () => {
   const { byId, allowedSet } = makeSelectorPool([
     { ...makeExercise({ id: 'sub', sw: 'target', mp: 'hinge' }), is_substitute: true },
