@@ -122,6 +122,19 @@ const auth = { "X-Internal-Token": TOKEN };
 for (const { kind, createRouter } of KINDS) {
   const base = `/admin/${kind}-exercises`;
 
+  test(`${kind}: invalid still bytes cause no storage, DB or audit calls`, async () => {
+    await withEnv({}, async () => {
+      const unexpected = async () => assert.fail("Invalid images must not reach dependencies");
+      await withServer(createRouter, { query: unexpected }, { putObjectFn: unexpected, auditLogFn: unexpected }, async url => {
+        const data = new FormData();
+        data.append("still", new Blob(["not an image"], { type: "image/jpeg" }), "x.jpg");
+        const response = await fetch(`${url}${base}/a/still`, { method: "POST", headers: auth, body: data });
+        assert.equal(response.status, 400);
+        assert.deepEqual(await response.json(), { ok: false, code: "invalid_image", error: "Could not read the image file." });
+      });
+    });
+  });
+
   test(`${kind}: new media routes require the internal token`, async () => {
     await withEnv(PROD_ENV, async () => {
       const db = createDb(kind);

@@ -1,4 +1,6 @@
 import express from "express";
+import { normalizeStillImage } from "../utils/normalizeStillImage.js";
+import { exerciseMediaObjectKey as mediaObjectKey } from "../utils/exerciseMediaObjectKey.js";
 import { uploadStillMiddleware as uploadStill, uploadVideoMiddleware as uploadVideo } from "../utils/mediaUploadMiddleware.js";
 import { pool } from "../db.js";
 import { requireInternalToken, requireTrustedAdminOrigin } from "../middleware/auth.js";
@@ -64,10 +66,6 @@ function isoOrNull(value) {
   const parsed = new Date(value);
   if (Number.isFinite(parsed.getTime())) return parsed.toISOString();
   return String(value);
-}
-
-function mediaObjectKey(key) {
-  return String(key ?? "").trim().replace(/^\/+/, "").replace(/^exercise-media\/+/, "");
 }
 
 function mapWarmupRow(row) {
@@ -304,9 +302,10 @@ export function createAdminWarmupExercisesRouter({
     const id = String(req.params.id ?? "").trim();
     if (!req.file) return res.status(400).json({ ok: false, code: "missing_file", error: "Still image file is required." });
     try {
+      const normalized = await normalizeStillImage(req.file.buffer);
       if (!(await ensureWarmup(db, id))) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
       const key = `warmup-exercise-media/${id}/still.jpg`;
-      await putObjectFn(mediaObjectKey(key), req.file.buffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
+      await putObjectFn(mediaObjectKey(key), normalized.buffer, "image/jpeg", EXERCISE_MEDIA_BUCKET);
       const result = await db.query(
         `INSERT INTO warmup_exercise_media (warmup_exercise_id, still_image_key, still_image_is_placeholder, uploaded_by, updated_at)
          VALUES ($1, $2, false, $3, now())
@@ -322,6 +321,9 @@ export function createAdminWarmupExercisesRouter({
       await writeAudit(auditLogFn, req, id, "warmup_exercise.still.upload", { still_image_key: key });
       return res.json({ ok: true, media: mapWarmupRow({ ...result.rows[0], warmup_exercise_id: id }) });
     } catch (err) {
+      if (err.code === "invalid_image") {
+        return res.status(400).json({ ok: false, code: "invalid_image", error: "Could not read the image file." });
+      }
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
