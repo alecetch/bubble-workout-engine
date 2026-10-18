@@ -23,6 +23,7 @@ export type HistoryProgramItem = {
   startDate: string;
   completionRatio: number;
   heroMediaId: string | null;
+  heroMediaUrl: string | null;
 };
 
 export type HistoryTimelineCursor = {
@@ -36,6 +37,7 @@ export type HistoryTimelineItem = {
   dayLabel: string;
   durationMins: number;
   heroMediaId: string | null;
+  heroMediaUrl: string | null;
   highlight:
     | {
         value: number;
@@ -248,6 +250,7 @@ export function normalizePrograms(raw: unknown): HistoryProgramItem[] {
       startDate: toDateOnly(program.startDate),
       completionRatio: asNumber(program.completionRatio, 0),
       heroMediaId: asNullableString(program.heroMediaId),
+      heroMediaUrl: asNullableString(program.heroMediaUrl),
     };
   });
 }
@@ -266,6 +269,7 @@ export function normalizeTimeline(raw: unknown): HistoryTimelineResponse {
       dayLabel: asString(row.dayLabel ?? row.day_label),
       durationMins: asNumber(row.durationMins ?? row.duration_mins, 0),
       heroMediaId: asNullableString(row.heroMediaId ?? row.hero_media_id),
+      heroMediaUrl: asNullableString(row.heroMediaUrl ?? row.hero_media_url),
       highlight:
         highlightRaw == null
           ? null

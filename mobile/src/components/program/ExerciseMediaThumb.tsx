@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
@@ -23,13 +23,71 @@ export function ExerciseMediaThumb({
 }: ExerciseMediaThumbProps): React.JSX.Element {
   const [mode, setMode] = useState<Mode>("mini");
   const [hasFirstFrame, setHasFirstFrame] = useState(false);
+  const sourceLoadedRef = useRef(false);
+  const mountedRef = useRef(false);
+  const playbackRequestedRef = useRef(false);
   const playableVideoUrl = videoStatus === "ready" && videoUrl ? videoUrl : null;
+  const sourceUrlRef = useRef(playableVideoUrl);
   const posterSource = posterImageUrl || stillImageUrl;
-  const player = useVideoPlayer(playableVideoUrl, (instance) => {
+  const player = useVideoPlayer(null, (instance) => {
     instance.loop = true;
     instance.muted = true;
-    if (playableVideoUrl) instance.play();
   });
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      playbackRequestedRef.current = false;
+    };
+  }, []);
+
+  // replaceAsync resolves once the source is set, not once it has loaded, so a
+  // network failure only surfaces later as an "error" status. Treat that as an
+  // unloaded source so the next tap retries instead of replaying a dead player.
+  // Clearing the source also stops the native view briefly showing its
+  // "cannot play" glyph when the retry expands the player.
+  useEffect(() => {
+    const subscription = player.addListener("statusChange", ({ status }) => {
+      if (status !== "error" || !mountedRef.current) return;
+      sourceLoadedRef.current = false;
+      playbackRequestedRef.current = false;
+      setHasFirstFrame(false);
+      setMode("mini");
+      player.replaceAsync(null).catch(() => undefined);
+    });
+    return () => subscription.remove();
+  }, [player]);
+
+  useEffect(() => {
+    if (sourceUrlRef.current === playableVideoUrl) return;
+    sourceUrlRef.current = playableVideoUrl;
+    sourceLoadedRef.current = false;
+    playbackRequestedRef.current = false;
+    player.pause();
+    setHasFirstFrame(false);
+    setMode("mini");
+  }, [playableVideoUrl, player]);
+
+  async function playVideo() {
+    if (!playableVideoUrl) return;
+    playbackRequestedRef.current = true;
+    setHasFirstFrame(false);
+    setMode("expanded");
+    try {
+      if (!sourceLoadedRef.current) {
+        await player.replaceAsync(playableVideoUrl);
+        if (!mountedRef.current || sourceUrlRef.current !== playableVideoUrl) return;
+        sourceLoadedRef.current = true;
+      }
+      if (mountedRef.current && playbackRequestedRef.current) player.play();
+    } catch {
+      if (!mountedRef.current || sourceUrlRef.current !== playableVideoUrl) return;
+      sourceLoadedRef.current = false;
+      playbackRequestedRef.current = false;
+      setMode("mini");
+    }
+  }
 
   if (!playableVideoUrl || mode === "mini") {
     const image = (
@@ -49,10 +107,7 @@ export function ExerciseMediaThumb({
 
     return (
       <Pressable
-        onPress={() => {
-          setHasFirstFrame(false);
-          setMode("expanded");
-        }}
+        onPress={playVideo}
         accessibilityRole="button"
         accessibilityLabel="Play exercise video"
       >
@@ -76,7 +131,11 @@ export function ExerciseMediaThumb({
       />
       <Pressable
         style={[styles.control, styles.minimizeControl]}
-        onPress={() => setMode("mini")}
+        onPress={() => {
+          playbackRequestedRef.current = false;
+          player.pause();
+          setMode("mini");
+        }}
         accessibilityRole="button"
         accessibilityLabel="Minimize exercise video"
       >

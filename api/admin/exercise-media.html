@@ -166,8 +166,16 @@
       missing: (row) => row.videoStatus !== "ready",
       ready: (row) => row.videoStatus === "ready",
     };
+    const VIDEO_FILTER_LABELS = { all: "All exercises", missing: "Without a video", ready: "With a video" };
     const videoFilterEl = document.getElementById("video-filter");
     const filterCountEl = document.getElementById("filter-count");
+    // Pass rows to show per-option counts; omit to reset the labels while a tab loads.
+    function updateFilterOptions(rows) {
+      for (const option of videoFilterEl.options) {
+        const label = VIDEO_FILTER_LABELS[option.value];
+        option.textContent = rows ? `${label} (${rows.filter(VIDEO_FILTERS[option.value]).length})` : label;
+      }
+    }
     let videoFilter = "all";
     try {
       const saved = localStorage.getItem(VIDEO_FILTER_KEY);
@@ -311,7 +319,10 @@
       rowsById = new Map(rows.map((row) => [row.exerciseId, row]));
       updatePromoteAll(rows);
       const visible = rows.filter(VIDEO_FILTERS[videoFilter]);
-      filterCountEl.textContent = videoFilter === "all" ? "" : `${visible.length} of ${rows.length}`;
+      updateFilterOptions(rows);
+      filterCountEl.textContent = videoFilter === "all"
+        ? `${rows.filter(VIDEO_FILTERS.missing).length} without a video`
+        : `${visible.length} of ${rows.length}`;
       if (!visible.length) {
         rowsEl.innerHTML = `<tr class="empty-row"><td colspan="5">${rows.length ? `No ${tab().noun} match this filter.` : `No ${tab().noun}.`}</td></tr>`;
         return;
@@ -487,6 +498,7 @@
       rowsEl.innerHTML = "";
       statsEl.innerHTML = "";
       filterCountEl.textContent = "";
+      updateFilterOptions();
       updatePromoteAll([]);
       if (tokenInput.value) load().catch((err) => setStatus(err.message, "err"));
     });

@@ -19,6 +19,18 @@ import { mockZustandSelector, renderWithProviders } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
 
+// React Native Web loads images outside the DOM; expose the native error callback
+// on an img so fireEvent.error exercises the screen's fallback behavior.
+vi.mock("react-native", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-native")>();
+  return {
+    ...actual,
+    Image: ({ source, onError }: { source: { uri: string }; onError?: () => void }) => (
+      <img src={source.uri} onError={onError} alt="" />
+    ),
+  };
+});
+
 const navigationNavigateMock = vi.fn();
 const parentNavigateMock = vi.fn();
 
@@ -94,6 +106,7 @@ const timelineItem = {
   dayLabel: "Lower Body",
   durationMins: 45,
   heroMediaId: null,
+  heroMediaUrl: null,
   highlight: { value: 120, exerciseName: "Back Squat", exerciseId: "squat" },
 };
 
@@ -228,6 +241,55 @@ describe("HistoryScreen", () => {
 
     expect(screen.getByText("Lower Body")).toBeInTheDocument();
     expect(screen.getByText("45 mins")).toBeInTheDocument();
+  });
+
+  it("renders timeline and program hero URLs instead of media IDs", () => {
+    useHistoryTimelineMock.mockReturnValue({
+      data: { pages: [{ items: [{ ...timelineItem, heroMediaId: "day-media-id", heroMediaUrl: "https://cdn.test/day.png" }] }] },
+    } as any);
+    useHistoryProgramsMock.mockReturnValue({
+      data: [{ programId: "program-1", programTitle: "Strength", startDate: "2026-05-01", completionRatio: 1,
+        heroMediaId: "program-media-id", heroMediaUrl: "https://cdn.test/program.png" }],
+    } as any);
+    const { container } = renderScreen();
+    expect(Array.from(container.querySelectorAll("img")).map((image) => image.getAttribute("src")))
+      .toEqual(expect.arrayContaining(["https://cdn.test/day.png", "https://cdn.test/program.png"]));
+    expect(container.querySelector('img[src="day-media-id"]')).toBeNull();
+    expect(container.querySelector('img[src="program-media-id"]')).toBeNull();
+  });
+
+  it("shows No Media when the hero URL is null even if the ID exists", () => {
+    useHistoryTimelineMock.mockReturnValue({
+      data: { pages: [{ items: [{ ...timelineItem, heroMediaId: "media-id", heroMediaUrl: null }] }] },
+    } as any);
+    renderScreen();
+    expect(screen.getByText("No Media")).toBeInTheDocument();
+  });
+
+  it.each(["timeline", "program"])("replaces a failed %s hero with No Media and retries when its URL changes", async (kind) => {
+    const setUrl = (url: string) => {
+      if (kind === "timeline") {
+        useHistoryTimelineMock.mockReturnValue({
+          data: { pages: [{ items: [{ ...timelineItem, heroMediaUrl: url }] }] },
+        } as any);
+      } else {
+        useHistoryTimelineMock.mockReturnValue({ data: { pages: [{ items: [] }] } } as any);
+        useHistoryProgramsMock.mockReturnValue({
+          data: [{ programId: "program-1", programTitle: "Strength", startDate: "2026-05-01",
+            completionRatio: 1, heroMediaId: "media-id", heroMediaUrl: url }],
+        } as any);
+      }
+    };
+    setUrl("https://cdn.test/missing.png");
+    const { container, rerender } = renderScreen();
+    fireEvent.error(container.querySelector('img[src="https://cdn.test/missing.png"]')!);
+    expect(screen.getByText("No Media")).toBeInTheDocument();
+    expect(container.querySelector('img[src="https://cdn.test/missing.png"]')).toBeNull();
+
+    setUrl("https://cdn.test/replacement.png");
+    rerender(<HistoryScreen />);
+    await waitFor(() => expect(container.querySelector('img[src="https://cdn.test/replacement.png"]')).not.toBeNull());
+    expect(screen.queryByText("No Media")).not.toBeInTheDocument();
   });
 
   it("shows the Timeline section before the Programs and metrics sections", () => {

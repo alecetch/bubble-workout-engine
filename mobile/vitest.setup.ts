@@ -2,6 +2,7 @@ import "@testing-library/jest-dom";
 import { cleanup } from "@testing-library/react";
 import { configureAxe, toHaveNoViolations } from "jest-axe";
 import React from "react";
+import { lastVideoPlayer, type MockVideoPlayer } from "./src/test/videoPlayerMock";
 
 expect.extend(toHaveNoViolations);
 configureAxe({ rules: [{ id: "color-contrast", enabled: false }] });
@@ -128,12 +129,33 @@ vi.mock("expo-asset", () => ({
 // load unless it's mocked here, not just in the files that exercise it directly.
 vi.mock("expo-video", () => ({
   useVideoPlayer: (
-    _source: unknown,
-    setup?: (player: { loop: boolean; muted: boolean; play: () => void }) => void,
+    source: unknown,
+    setup?: (player: MockVideoPlayer) => void,
   ) => {
-    const player = { loop: false, muted: false, play: vi.fn() };
-    setup?.(player);
-    return player;
+    const playerRef = React.useRef<MockVideoPlayer | null>(null);
+    if (!playerRef.current) {
+      const listeners = new Map<string, Set<(payload: unknown) => void>>();
+      playerRef.current = {
+        addListener: vi.fn((event: string, listener: (payload: unknown) => void) => {
+          if (!listeners.has(event)) listeners.set(event, new Set());
+          listeners.get(event)!.add(listener);
+          return { remove: () => listeners.get(event)?.delete(listener) };
+        }),
+        emit: (event: string, payload: unknown) => {
+          listeners.get(event)?.forEach((listener) => listener(payload));
+        },
+        initialSource: source,
+        loop: false,
+        muted: false,
+        play: vi.fn(),
+        pause: vi.fn(),
+        replace: vi.fn(),
+        replaceAsync: vi.fn().mockResolvedValue(undefined),
+      };
+      lastVideoPlayer.current = playerRef.current;
+      setup?.(playerRef.current);
+    }
+    return playerRef.current;
   },
   VideoView: ({ testID }: { testID?: string }) =>
     React.createElement("div", { "data-testid": testID || "video-view" }),
