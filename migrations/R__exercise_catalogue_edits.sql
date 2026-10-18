@@ -12242,7 +12242,7 @@ INSERT INTO exercise_catalogue (
   exercise_id, name, movement_class, movement_pattern_primary, min_fitness_rank, is_archived, is_loadable, complexity_rank, contraindications_json, contraindications_slugs, density_rating, engine_anchor, engine_role, equipment_items_slugs, equipment_json, coaching_cues_json, impact_level, lift_class, preferred_in_json, load_guidance, logging_guidance, swap_group_id_1, swap_group_id_2, target_regions_json, warmup_hooks, slug, creator, strength_primary_region, strength_equivalent, technique_cue, technique_setup, technique_execution_json, technique_mistakes_json, technique_video_url, load_estimation_metadata
 ) VALUES (
   'band_triceps_pushdown',
-  'Band Triceps Pushdown',
+  'Band Overhead Tricep Extension',
   'isolation',
   'push_vertical',
   0,
@@ -12256,7 +12256,7 @@ INSERT INTO exercise_catalogue (
   NULL,
   ARRAY['resistance_band']::text[],
   '["resistance_band"]'::jsonb,
-  '["Elbows stay tucked","Straighten the arms fully","Control the return"]'::jsonb,
+  '["Elbows point forward","Straighten the arms fully overhead","Control the stretch"]'::jsonb,
   0,
   NULL,
   '["hypertrophy_accessory","strength_accessory"]'::jsonb,
@@ -12270,8 +12270,8 @@ INSERT INTO exercise_catalogue (
   '(App admin)',
   'upper',
   false,
-  'Press down, lock out',
-  'Anchor the band high to a door anchor or a sturdy post. Hold it with elbows tucked at your sides and press down until the arms are straight.',
+  'Reach up, lock out',
+  'Anchor the band low or stand on it, facing away. Hold it behind your head with elbows bent and pointing forward, then extend the arms overhead until straight.',
   '[]'::jsonb,
   '[]'::jsonb,
   NULL,
