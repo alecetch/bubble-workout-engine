@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { Readable } from "node:stream";
+import { get } from "node:http";
 import { createExerciseMediaAssetsRouter } from "../src/routes/exerciseMediaAssets.js";
 
 function streamOf(text) {
@@ -11,6 +12,8 @@ function streamOf(text) {
 async function withServer(getObjectStreamFn, fn) {
   const app = express();
   app.use("/assets/exercise-media", createExerciseMediaAssetsRouter({ getObjectStreamFn }));
+  app.use("/assets/exercise-media", (_req, res) => res.status(404).end());
+  app.use((_req, res) => res.type("html").send("<html>App</html>"));
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
   });
@@ -79,6 +82,8 @@ test("missing object falls through to a 404", async () => {
     async (base) => {
       const res = await fetch(`${base}/assets/exercise-media/unknown_exercise/still.jpg`);
       assert.equal(res.status, 404);
+      assert.equal(await res.text(), "");
+      assert.doesNotMatch(res.headers.get("content-type") ?? "", /html/);
     },
   );
 });
@@ -91,17 +96,24 @@ test("rejects path-traversal-shaped keys without ever touching the storage backe
       return { Body: streamOf("nope") };
     },
     async (base) => {
-      // %2e%2e (not a literal "..") so the fetch/WHATWG URL parser doesn't
-      // collapse the dot-segments itself before the request ever reaches the
-      // server — this exercises the same encoded-traversal shape a real
-      // attacker would send, past any client-side normalization.
-      const traversal = await fetch(
-        `${base}/assets/exercise-media/%2e%2e/%2e%2e/etc/passwd`,
-      );
-      assert.equal(traversal.status, 404);
+      // Send raw paths: fetch normalizes literal and encoded dot segments
+      // before they reach Express, which would not exercise the asset mount.
+      for (const path of ["/assets/exercise-media/../secret", "/assets/exercise-media/%2e%2e/%2e%2e/etc/passwd"]) {
+        const { hostname, port } = new URL(base);
+        const response = await new Promise((resolve, reject) => {
+          get({ hostname, port, path }, res => {
+            let body = "";
+            res.on("data", chunk => { body += chunk; });
+            res.on("end", () => resolve({ status: res.statusCode, body }));
+          }).on("error", reject);
+        });
+        assert.equal(response.status, 404);
+        assert.equal(response.body, "");
+      }
 
-      const unexpectedShape = await fetch(`${base}/assets/exercise-media/sled_push/video.mp4.exe`);
+      const unexpectedShape = await fetch(`${base}/assets/exercise-media/foo/bar.exe`);
       assert.equal(unexpectedShape.status, 404);
+      assert.equal(await unexpectedShape.text(), "");
     },
   );
   assert.equal(called, false);

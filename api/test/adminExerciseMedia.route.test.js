@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import sharp from "sharp";
 import { createAdminExerciseMediaRouter } from "../src/routes/adminExerciseMedia.js";
 
 const TOKEN = "test-internal-token";
@@ -149,8 +150,10 @@ test("still upload validates type, exercise existence, writes media, and audits"
   process.env.INTERNAL_API_TOKEN = TOKEN;
   const db = createDb();
   const audits = [];
+  const png = await sharp({ create: { width: 40, height: 20, channels: 3, background: "red" } }).png().toBuffer();
+  const uploads = [];
   await withServer(db, {
-    putObjectFn: async (key) => key,
+    putObjectFn: async (...args) => { uploads.push(args); },
     auditLogFn: async (_req, entry) => audits.push(entry),
   }, async (base) => {
     const bad = await fetch(`${base}/admin/exercise-media/sled_push/still`, {
@@ -163,14 +166,14 @@ test("still upload validates type, exercise existence, writes media, and audits"
     const missing = await fetch(`${base}/admin/exercise-media/unknown/still`, {
       method: "POST",
       headers: headers(),
-      body: form("still", new Blob(["jpg"], { type: "image/jpeg" }), "still.jpg"),
+      body: form("still", new Blob([png], { type: "image/png" }), "still.png"),
     });
     assert.equal(missing.status, 404);
 
     const ok = await fetch(`${base}/admin/exercise-media/sled_push/still`, {
       method: "POST",
       headers: headers(),
-      body: form("still", new Blob(["jpg"], { type: "image/jpeg" }), "still.jpg"),
+      body: form("still", new Blob([png], { type: "image/png" }), "still.png"),
     });
     const body = await ok.json();
     assert.equal(ok.status, 200);
@@ -178,8 +181,24 @@ test("still upload validates type, exercise existence, writes media, and audits"
     assert.equal(body.media.stillImageUrl.includes("exercise-media/sled_push/still.jpg"), true);
   });
   assert.equal(audits.length, 1);
+  assert.equal(uploads.length, 1);
+  assert.deepEqual([...uploads[0][1].subarray(0, 3)], [0xff, 0xd8, 0xff]);
+  assert.equal(uploads[0][2], "image/jpeg");
   assert.equal(audits[0].entity, "exercise_media");
   assert.equal(audits[0].entityId, "sled_push");
+});
+
+test("garbage named jpg is rejected before storage, DB or audit calls", async () => {
+  process.env.INTERNAL_API_TOKEN = TOKEN;
+  const unexpected = async () => { assert.fail("Invalid images must not reach dependencies"); };
+  await withServer({ query: unexpected }, { putObjectFn: unexpected, auditLogFn: unexpected }, async base => {
+    const response = await fetch(`${base}/admin/exercise-media/sled_push/still`, {
+      method: "POST", headers: headers(),
+      body: form("still", new Blob(["not an image"], { type: "image/jpeg" }), "x.jpg"),
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { ok: false, code: "invalid_image", error: "Could not read the image file." });
+  });
 });
 
 test("video upload ready path, corrupt failure, delete, and poster-as-still behave correctly", async () => {

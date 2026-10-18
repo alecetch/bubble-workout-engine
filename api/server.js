@@ -283,6 +283,7 @@ app.use("/assets/media-assets", publicAssetCrossOrigin, express.static(join(__di
 app.use("/assets/media-assets", (_req, res) => res.status(404).end());
 app.use("/assets/exercise-media", publicAssetCrossOrigin, exerciseMediaAssetsRouter);
 app.use("/assets/exercise-media", publicAssetCrossOrigin, express.static(join(__dirname, "assets/exercise-media")));
+app.use("/assets/exercise-media", (_req, res) => res.status(404).end());
 app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));
 app.use("/images", express.static(join(__dirname, "public/images")));
 app.use("/downloads", express.static(join(__dirname, "public/downloads")));

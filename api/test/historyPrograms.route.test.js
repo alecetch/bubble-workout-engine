@@ -2,6 +2,41 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { clampLimit, createHistoryProgramsHandler, mapHistoryProgramRow } from "../src/routes/historyPrograms.js";
 
+test("history hero URL resolves program/strength.png", async () => {
+  const previous = process.env.S3_PUBLIC_BASE_URL;
+  process.env.S3_PUBLIC_BASE_URL = "https://cdn.example.test/media";
+  try {
+    const row = { program_day_id: "day-1", program_id: "program-1",
+      hero_media_id: "media-id", hero_image_key: "program/strength.png", hero_image_url: null };
+    const db = { query: async (sql) => ({ rows: sql.includes("segment_exercise_log") ? [] : [row] }) };
+    const res = createMockRes();
+    await createHistoryProgramsHandler(db)({ auth: { user_id: "user-1" }, query: {} }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body[0].heroMediaUrl, "https://cdn.example.test/media/program/strength.png");
+    assert.equal(res.body[0].heroMediaId, "media-id");
+  } finally {
+    if (previous === undefined) delete process.env.S3_PUBLIC_BASE_URL;
+    else process.env.S3_PUBLIC_BASE_URL = previous;
+  }
+});
+
+test("history hero URL resolves null key to placeholder", async () => {
+  const previous = process.env.S3_PUBLIC_BASE_URL;
+  process.env.S3_PUBLIC_BASE_URL = "https://cdn.example.test/media";
+  try {
+    const row = { program_day_id: "day-1", program_id: "program-1",
+      hero_media_id: null, hero_image_key: null, hero_image_url: null };
+    const db = { query: async (sql) => ({ rows: sql.includes("segment_exercise_log") ? [] : [row] }) };
+    const res = createMockRes();
+    await createHistoryProgramsHandler(db)({ auth: { user_id: "user-1" }, query: {} }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body[0].heroMediaUrl, null);
+    assert.equal(res.body[0].heroMediaId, null);
+  } finally {
+    if (previous === undefined) delete process.env.S3_PUBLIC_BASE_URL;
+    else process.env.S3_PUBLIC_BASE_URL = previous;
+  }
+});
 function createMockRes() {
   return {
     statusCode: 200,
@@ -49,6 +84,7 @@ test("mapHistoryProgramRow maps nullable heroMediaId and numeric fields", () => 
     completedSessions: 6,
     completionRatio: 0.75,
     heroMediaId: null,
+    heroMediaUrl: null,
   });
 });
 
@@ -100,6 +136,9 @@ test("history handler scopes by auth user and returns mapped rows", async () => 
 
   assert.equal(res.statusCode, 200);
   assert.ok(capturedQuery.includes("WHERE p.user_id = $1"));
+  assert.ok(capturedQuery.includes("LEFT JOIN media_assets ma ON ma.id = p.hero_media_id"));
+  assert.ok(capturedQuery.includes("GROUP BY p.id, ma.image_key, ma.image_url"));
+  assert.equal(capturedQuery.includes("ma.is_active"), false);
   assert.ok(capturedQuery.includes("COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE)"));
   assert.deepEqual(capturedParams, ["user-123", 50]);
 

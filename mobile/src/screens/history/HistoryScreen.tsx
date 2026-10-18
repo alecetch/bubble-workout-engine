@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -57,8 +57,10 @@ function HeroMediaThumb({
   compact?: boolean;
 }): React.JSX.Element {
   const thumbStyle = compact ? styles.mediaThumbCompact : styles.mediaThumbLarge;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
 
-  if (!uri) {
+  if (!uri || failed) {
     return (
       <View style={[thumbStyle, styles.mediaThumbPlaceholder]}>
         <Text style={styles.mediaPlaceholderLabel}>No Media</Text>
@@ -66,7 +68,7 @@ function HeroMediaThumb({
     );
   }
 
-  return <Image source={{ uri }} style={thumbStyle} />;
+  return <Image source={{ uri }} style={thumbStyle} onError={() => setFailed(true)} />;
 }
 
 function TimelineRow({
@@ -78,7 +80,7 @@ function TimelineRow({
 }): React.JSX.Element {
   return (
     <View style={styles.timelineCard}>
-      <HeroMediaThumb uri={item.heroMediaId} compact />
+      <HeroMediaThumb uri={item.heroMediaUrl} compact />
       <View style={styles.timelineContent}>
         <Text style={styles.timelineDate}>{formatDateLabel(item.scheduledDate)}</Text>
         <Text style={styles.timelineLabel}>{item.dayLabel || "Session"}</Text>
@@ -349,7 +351,7 @@ export function HistoryScreen(): React.JSX.Element {
           contentContainerStyle={styles.programsList}
           renderItem={({ item }) => (
             <View style={styles.programCard}>
-              <HeroMediaThumb uri={item.heroMediaId} />
+              <HeroMediaThumb uri={item.heroMediaUrl} />
               <Text style={styles.programTitle} numberOfLines={2}>
                 {item.programTitle}
               </Text>
