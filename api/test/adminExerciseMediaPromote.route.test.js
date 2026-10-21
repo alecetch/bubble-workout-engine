@@ -25,7 +25,7 @@ for (const [ext, mime] of [["mov", "video/quicktime"], ["mp4", "video/mp4"]]) {
         },
       }, async base => {
         const response = await fetch(`${base}/admin/exercise-media/source_clip/promote`, { method: "POST", headers: headers() });
-        assert.deepEqual((await response.json()).promoted, { still: false, video: true });
+        assert.deepEqual((await response.json()).promoted, { still: false, video: true, videoNotNeeded: false });
       });
       assert.equal(sent, true);
     });
@@ -48,7 +48,8 @@ function createDb() {
         if (!eligibleOnly) return true;
         return (
           (row.still_image_is_placeholder === false && !row.promoted_still_at) ||
-          (row.video_status === "ready" && !row.promoted_video_at)
+          (row.video_status === "ready" && !row.promoted_video_at) ||
+          row.video_not_needed_pending_promotion === true
         );
       })
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -60,12 +61,19 @@ function createDb() {
       if (/FROM exercise_catalogue ec/i.test(sql)) {
         const exerciseId = /ec\.exercise_id = \$1/i.test(sql) ? params[0] : null;
         const eligibleOnly = /promoted_still_at IS NULL/i.test(sql) || /promoted_video_at IS NULL/i.test(sql);
+        if (eligibleOnly) assert.match(sql, /OR em\.video_not_needed_pending_promotion = true/);
+        assert.match(sql, /em\.video_not_needed, em\.video_not_needed_pending_promotion/);
         const rows = joinedRows({ exerciseId, eligibleOnly });
         return { rows, rowCount: rows.length };
       }
       if (/SELECT exercise_id FROM exercise_catalogue/i.test(sql)) {
         const row = state.exercises.get(params[0]);
         return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+      }
+      if (/UPDATE exercise_media SET video_not_needed_pending_promotion = false/i.test(sql)) {
+        const current = state.media.get(params[0]);
+        state.media.set(params[0], { ...current, video_not_needed_pending_promotion: false });
+        return { rows: [], rowCount: current ? 1 : 0 };
       }
       if (/UPDATE exercise_media SET promoted_still_at = now\(\)/i.test(sql)) {
         const current = state.media.get(params[0]);
@@ -181,7 +189,7 @@ test("promote sends still and video to production and marks both promoted", asyn
       const res = await fetch(`${base}/admin/exercise-media/sled_push/promote`, { method: "POST", headers: headers() });
       const body = await res.json();
       assert.equal(res.status, 200);
-      assert.deepEqual(body.promoted, { still: true, video: true });
+      assert.deepEqual(body.promoted, { still: true, video: true, videoNotNeeded: false });
     });
 
     assert.deepEqual(fetchCalls.map((call) => call.url), [
@@ -208,7 +216,7 @@ test("promote skips placeholder stills and absent videos", async () => {
       const res = await fetch(`${base}/admin/exercise-media/air_squat/promote`, { method: "POST", headers: headers() });
       const body = await res.json();
       assert.equal(res.status, 200);
-      assert.deepEqual(body.promoted, { still: false, video: false });
+      assert.deepEqual(body.promoted, { still: false, video: false, videoNotNeeded: false });
     });
     assert.equal(fetchCount, 0);
   });
@@ -236,7 +244,7 @@ test("promote does not resend unchanged media after a successful promotion", asy
       res = await fetch(`${base}/admin/exercise-media/bench_press/promote`, { method: "POST", headers: headers() });
       const body = await res.json();
       assert.equal(res.status, 200);
-      assert.deepEqual(body.promoted, { still: false, video: false });
+      assert.deepEqual(body.promoted, { still: false, video: false, videoNotNeeded: false });
       assert.equal(fetchCount, 1);
     });
   });
@@ -312,7 +320,7 @@ test("promote-all continues after a partial failure", async () => {
       assert.equal(res.status, 200);
       assert.equal(body.results.length, 2);
       assert.equal(body.results[0].errors.still, "bad token");
-      assert.deepEqual(body.results[1].promoted, { still: true, video: false });
+      assert.deepEqual(body.results[1].promoted, { still: true, video: false, videoNotNeeded: false });
       assert.equal(db.state.media.get("a_first").promoted_still_at, null);
       assert.ok(db.state.media.get("b_second").promoted_still_at);
     });
@@ -351,6 +359,66 @@ test("promotion routes require the internal token", async () => {
     await withServer(db, {}, async (base) => {
       assert.equal((await fetch(`${base}/admin/exercise-media/press/promote`, { method: "POST" })).status, 401);
       assert.equal((await fetch(`${base}/admin/exercise-media/promote-all`, { method: "POST" })).status, 401);
+    });
+  });
+});
+
+
+for (const notNeeded of [true, false]) {
+  test(`flag-only promotion sends ${notNeeded} and clears pending, including promote-all`, async () => {
+    await withEnv({ PROD_ADMIN_API_BASE_URL: PROD_BASE, PROD_INTERNAL_API_TOKEN: "prod-token" }, async () => {
+      const db = createDb();
+      seedExercise(db, "still_only", { video_not_needed: notNeeded, video_not_needed_pending_promotion: true });
+      const requests = [];
+      await withServer(db, {
+        getObjectFn: async () => assert.fail("Flag-only promotion must not read objects"),
+        fetchFn: async (url, options) => {
+          requests.push(url);
+          assert.equal(url, `${PROD_BASE}/admin/exercise-media/still_only/video-not-needed`);
+          assert.equal(options.method, "PUT");
+          assert.deepEqual(options.headers, { "X-Internal-Token": "prod-token", "Content-Type": "application/json" });
+          assert.deepEqual(JSON.parse(options.body), { notNeeded });
+          return { ok: true, status: 204, json: async () => { throw new Error("no content"); } };
+        },
+      }, async url => {
+        const response = await fetch(`${url}/admin/exercise-media/${notNeeded ? "promote-all" : "still_only/promote"}`, { method: "POST", headers: headers() });
+        assert.equal(response.status, 200);
+        const body = await response.json();
+        assert.deepEqual((notNeeded ? body.results[0] : body).promoted, { still: false, video: false, videoNotNeeded: true });
+        assert.equal(db.state.media.get("still_only").video_not_needed_pending_promotion, false);
+        assert.equal(requests.length, 1);
+        const again = await fetch(`${url}/admin/exercise-media/still_only/promote`, { method: "POST", headers: headers() });
+        assert.equal(again.status, 200);
+        assert.equal(requests.length, 1);
+      });
+    });
+  });
+}
+
+test("flag promotion failure retains pending and still continues with media promotion", async () => {
+  await withEnv({ PROD_ADMIN_API_BASE_URL: PROD_BASE, PROD_INTERNAL_API_TOKEN: "prod-token" }, async () => {
+    const db = createDb();
+    seedExercise(db, "hold", { video_not_needed: true, video_not_needed_pending_promotion: true,
+      still_image_is_placeholder: false, still_image_key: "exercise-media/hold/still.jpg",
+      video_status: "ready", video_key: "exercise-media/hold/video.mp4" });
+    const requests = [];
+    await withServer(db, {
+      getObjectFn: async () => Buffer.from("media"),
+      fetchFn: async (url) => {
+        requests.push(url);
+        return url.endsWith("video-not-needed")
+          ? { ok: false, status: 500, json: async () => ({ error: "Flag rejected" }) }
+          : { ok: true, status: 200, json: async () => ({ ok: true }) };
+      },
+    }, async url => {
+      const response = await fetch(`${url}/admin/exercise-media/hold/promote`, { method: "POST", headers: headers() });
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.deepEqual(body.promoted, { still: true, video: true, videoNotNeeded: false });
+      assert.equal(body.errors.videoNotNeeded, "Flag rejected");
+      assert.equal(db.state.media.get("hold").video_not_needed_pending_promotion, true);
+      assert.equal(requests.length, 3);
+      assert.ok(requests[0].endsWith("video-not-needed"));
     });
   });
 });

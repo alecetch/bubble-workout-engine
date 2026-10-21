@@ -21,16 +21,20 @@ for (const { kind, createRouter, route, prefix } of [
         let remuxed = 0;
         let sourceKey = null;
         let deleted = false;
+        let videoNotNeeded = true;
         const db = { query: async (sql, params = []) => {
           if (/SET video_key = \$2/.test(sql)) {
             assert.match(sql, /video_source_key = \$7/);
+            assert.match(sql, /video_not_needed = false/);
+            assert.doesNotMatch(sql, /video_not_needed_pending_promotion\s*=/);
             sourceKey = params[6];
+            videoNotNeeded = false;
           }
           if (/SET video_key = null/.test(sql)) {
             assert.match(sql, /video_source_key = null/);
             sourceKey = null; deleted = true;
           }
-          return { rowCount: 1, rows: [{ video_source_key: sourceKey }] };
+          return { rowCount: 1, rows: [{ video_source_key: sourceKey, video_not_needed: videoNotNeeded }] };
         } };
         const result = { compressedBuffer: Buffer.from("mp4"), posterBuffer: Buffer.from("jpg"), durationSec: 1 };
         await withServer(createRouter, db, {
@@ -53,6 +57,7 @@ for (const { kind, createRouter, route, prefix } of [
             method: "POST", headers: auth, body: form,
           });
           assert.equal(response.status, 200, await response.text());
+          assert.equal(videoNotNeeded, false);
           assert.equal(compressed, mode === "conforming" ? 0 : 1);
           assert.equal(remuxed, mode === "conforming" ? 1 : 0);
           assert.equal(sourceKey, mode === "original" ? `${prefix}/a/source.mov` : null);
@@ -86,7 +91,8 @@ function createDb(kind) {
       .map((row) => ({ ...row, ...(state.media.get(row[idCol]) ?? {}) }))
       .filter((row) => !eligibleOnly
         || (row.still_image_is_placeholder === false && !row.promoted_still_at)
-        || (row.video_status === "ready" && !row.promoted_video_at));
+        || (row.video_status === "ready" && !row.promoted_video_at)
+        || row.video_not_needed_pending_promotion === true);
   }
 
   const db = {
@@ -101,6 +107,11 @@ function createDb(kind) {
       if (new RegExp(`SELECT ${idCol} FROM ${kind}_exercise WHERE`, "i").test(sql)) {
         const row = state.exercises.get(params[0]);
         return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+      }
+      if (/SET video_not_needed_pending_promotion = false/i.test(sql)) {
+        const current = state.media.get(params[0]);
+        state.media.set(params[0], { ...current, video_not_needed_pending_promotion: false });
+        return { rows: [], rowCount: current ? 1 : 0 };
       }
       const stamp = sql.match(new RegExp(`UPDATE ${kind}_exercise_media SET (promoted_still_at|promoted_video_at) = now\\(\\)`, "i"));
       if (stamp) {
@@ -172,6 +183,7 @@ const PROD_ENV = { PROD_ADMIN_API_BASE_URL: PROD_BASE, PROD_INTERNAL_API_TOKEN: 
 
 async function withServer(createRouter, db, deps, fn) {
   const app = express();
+  app.use(express.json());
   app.use("/admin", createRouter({ db, deleteObjectFn: async () => {}, auditLogFn: async () => {}, ...deps }));
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
@@ -185,6 +197,75 @@ async function withServer(createRouter, db, deps, fn) {
 }
 
 const auth = { "X-Internal-Token": TOKEN };
+
+for (const [kind, createRouter, route, idColumn, listKey, auditAction] of [
+  ["exercise", createAdminExerciseMediaRouter, "exercise-media", "exercise_id", "exercises", "exercise_media"],
+  ["warmup", createAdminWarmupExercisesRouter, "warmup-exercises", "warmup_exercise_id", "warmupExercises", "warmup_exercise"],
+  ["cooldown", createAdminCooldownExercisesRouter, "cooldown-exercises", "cooldown_exercise_id", "cooldownExercises", "cooldown_exercise"],
+]) {
+  test(`${kind}: video-not-needed validates auth/body/active ID and upserts both flag values`, async () => {
+    await withEnv({}, async () => {
+      const audits = [];
+      let media = null;
+      const db = { query: async (sql, params = []) => {
+        if (/^SELECT /.test(sql)) {
+          assert.match(sql, /AND is_archived = FALSE/);
+          return { rows: [], rowCount: params[0] === "a" ? 1 : 0 };
+        }
+        if (/INSERT INTO/.test(sql)) {
+          assert.match(sql, new RegExp(`ON CONFLICT \\(${idColumn}\\) DO UPDATE`));
+          assert.match(sql, /video_not_needed = EXCLUDED.video_not_needed/);
+          assert.match(sql, /video_not_needed_pending_promotion = true/);
+          assert.match(sql, /updated_at = now\(\)/);
+          assert.equal(params[1], "exercise-media/_placeholder/still.jpg");
+          media = { [idColumn]: params[0], still_image_key: params[1], video_status: "ready",
+            video_not_needed: params[2], video_not_needed_pending_promotion: true };
+          return { rows: [media], rowCount: 1 };
+        }
+        assert.match(sql, /\.video_not_needed, \w+\.video_not_needed_pending_promotion/);
+        return { rows: [media, { [idColumn]: "no-media" }], rowCount: 2 };
+      } };
+      await withServer(createRouter, db, { auditLogFn: async (_req, entry) => audits.push(entry) }, async url => {
+        const endpoint = `${url}/admin/${route}/a/video-not-needed`;
+        const send = (notNeeded, path = endpoint, authenticated = true) => fetch(path, {
+          method: "PUT", headers: { ...(authenticated ? auth : {}), "Content-Type": "application/json" },
+          body: JSON.stringify({ notNeeded }),
+        });
+        assert.equal((await send(true, endpoint, false)).status, 401);
+        for (const value of ["yes", null, 1, undefined]) {
+          const response = await send(value);
+          assert.equal(response.status, 400);
+          assert.deepEqual(await response.json(), { ok: false, code: "invalid_body", error: "notNeeded must be a boolean." });
+        }
+        for (const id of ["unknown", "archived"]) {
+          const response = await send(true, `${url}/admin/${route}/${id}/video-not-needed`);
+          assert.equal(response.status, 404);
+          assert.equal((await response.json()).code, "not_found");
+        }
+        for (const notNeeded of [true, false]) {
+          const response = await send(notNeeded);
+          assert.equal(response.status, 200);
+          const body = await response.json();
+          assert.equal(body.media.videoNotNeeded, notNeeded);
+          assert.equal(body.media.video_not_needed, notNeeded);
+          assert.equal(body.media.videoNotNeededPendingPromotion, true);
+          assert.equal(body.media.video_not_needed_pending_promotion, true);
+          assert.equal(audits.at(-1).action, `${auditAction}.video_not_needed.set`);
+          assert.deepEqual(audits.at(-1).detail, { notNeeded });
+          assert.equal(audits.at(-1).entityId, "a");
+        }
+        const list = await fetch(`${url}/admin/${route}/list`, { headers: auth });
+        assert.equal(list.status, 200);
+        const rows = (await list.json())[listKey];
+        assert.equal(rows[0].videoNotNeededPendingPromotion, true);
+        assert.equal(rows[0].videoNotNeeded, false);
+        assert.equal(rows[1].videoNotNeeded, false);
+        assert.equal(rows[1].videoNotNeededPendingPromotion, false);
+        assert.equal(audits.length, 2);
+      });
+    });
+  });
+}
 
 for (const { kind, createRouter } of KINDS) {
   const base = `/admin/${kind}-exercises`;
@@ -257,7 +338,7 @@ for (const { kind, createRouter } of KINDS) {
       await withServer(createRouter, db, { fetchFn, getObjectFn: async () => Buffer.from("x") }, async (url) => {
         const res = await fetch(`${url}${base}/a/promote`, { method: "POST", headers: auth });
         assert.equal(res.status, 200);
-        assert.deepEqual((await res.json()).promoted, { still: true, video: true });
+        assert.deepEqual((await res.json()).promoted, { still: true, video: true, videoNotNeeded: false });
       });
       assert.deepEqual(calls.map((c) => c.url), [
         `${PROD_BASE}/admin/${kind}-exercises/a/still`,
@@ -278,7 +359,7 @@ for (const { kind, createRouter } of KINDS) {
         const res = await fetch(`${url}${base}/a/promote`, { method: "POST", headers: auth });
         const body = await res.json();
         assert.equal(res.status, 200);
-        assert.deepEqual(body.promoted, { still: false, video: false });
+        assert.deepEqual(body.promoted, { still: false, video: false, videoNotNeeded: false });
         assert.equal(body.errors.still, "not found in prod");
       });
       assert.equal(db.state.media.get("a").promoted_still_at, null);
@@ -319,4 +400,37 @@ for (const { kind, createRouter } of KINDS) {
       });
     });
   });
+}
+
+
+for (const { kind, createRouter } of KINDS) {
+  for (const notNeeded of [true, false]) {
+    test(`${kind}: promote-all includes a flag-only change to ${notNeeded}`, async () => {
+      await withEnv(PROD_ENV, async () => {
+        const db = createDb(kind);
+        seed(db, kind, "a", { video_not_needed: notNeeded, video_not_needed_pending_promotion: true });
+        let calls = 0;
+        await withServer(createRouter, db, {
+          getObjectFn: async () => assert.fail("No objects needed for flag promotion"),
+          fetchFn: async (url, options) => {
+            calls++;
+            assert.equal(url, `${PROD_BASE}/admin/${kind}-exercises/a/video-not-needed`);
+            assert.equal(options.method, "PUT");
+            assert.equal(options.headers["X-Internal-Token"], "prod-token");
+            assert.deepEqual(JSON.parse(options.body), { notNeeded });
+            return { ok: true, status: 200, json: async () => ({ ok: true }) };
+          },
+        }, async url => {
+          const response = await fetch(`${url}/admin/${kind}-exercises/promote-all`, { method: "POST", headers: auth });
+          assert.equal(response.status, 200);
+          assert.deepEqual((await response.json()).results[0].promoted, { still: false, video: false, videoNotNeeded: true });
+          assert.equal(calls, 1);
+          assert.equal(db.state.media.get("a").video_not_needed_pending_promotion, false);
+          const select = db.state.queries.find(sql => /FROM .*_exercise e/.test(sql));
+          assert.match(select, /OR m\.video_not_needed_pending_promotion = true/);
+          assert.match(select, /m\.video_not_needed, m\.video_not_needed_pending_promotion/);
+        });
+      });
+    });
+  }
 }

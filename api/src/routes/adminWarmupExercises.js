@@ -99,6 +99,10 @@ function mapWarmupRow(row) {
     videoKey: row.video_key ?? null,
     video_status: status,
     videoStatus: status,
+    video_not_needed: row.video_not_needed === true,
+    videoNotNeeded: row.video_not_needed === true,
+    video_not_needed_pending_promotion: row.video_not_needed_pending_promotion === true,
+    videoNotNeededPendingPromotion: row.video_not_needed_pending_promotion === true,
     video_duration_sec: row.video_duration_sec == null ? null : Number(row.video_duration_sec),
     videoDurationSec: row.video_duration_sec == null ? null : Number(row.video_duration_sec),
     video_source_filename: row.video_source_filename ?? null,
@@ -117,9 +121,9 @@ function mapWarmupRow(row) {
   };
 }
 
-async function ensureWarmup(db, warmupExerciseId) {
+async function ensureWarmup(db, warmupExerciseId, activeOnly = false) {
   const result = await db.query(
-    `SELECT warmup_exercise_id FROM warmup_exercise WHERE warmup_exercise_id = $1`,
+    `SELECT warmup_exercise_id FROM warmup_exercise WHERE warmup_exercise_id = $1${activeOnly ? " AND is_archived = FALSE" : ""}`,
     [warmupExerciseId],
   );
   return result.rowCount > 0;
@@ -183,6 +187,7 @@ export function createAdminWarmupExercisesRouter({
          m.video_key,
          m.video_source_key,
          COALESCE(m.video_status, 'none') AS video_status,
+         m.video_not_needed, m.video_not_needed_pending_promotion,
          m.promoted_still_at,
          m.promoted_video_at
        FROM warmup_exercise e
@@ -205,6 +210,7 @@ export function createAdminWarmupExercisesRouter({
            wm.video_key,
            wm.video_source_key,
            COALESCE(wm.video_status, 'none') AS video_status,
+           wm.video_not_needed, wm.video_not_needed_pending_promotion,
            wm.video_duration_sec,
            wm.video_source_filename,
            wm.poster_frame_key,
@@ -312,6 +318,30 @@ export function createAdminWarmupExercisesRouter({
     }
   });
 
+  router.put("/warmup-exercises/:id/video-not-needed", async (req, res) => {
+    const id = String(req.params.id ?? "").trim();
+    if (typeof req.body?.notNeeded !== "boolean") {
+      return res.status(400).json({ ok: false, code: "invalid_body", error: "notNeeded must be a boolean." });
+    }
+    try {
+      if (!(await ensureWarmup(db, id, true))) return res.status(404).json({ ok: false, code: "not_found", error: "Warm-up exercise not found." });
+      const result = await db.query(
+        `INSERT INTO warmup_exercise_media (warmup_exercise_id, still_image_key, video_not_needed, video_not_needed_pending_promotion, updated_at)
+         VALUES ($1, $2, $3, true, now())
+         ON CONFLICT (warmup_exercise_id) DO UPDATE SET
+           video_not_needed = EXCLUDED.video_not_needed,
+           video_not_needed_pending_promotion = true,
+           updated_at = now()
+         RETURNING *`,
+        [id, PLACEHOLDER_STILL_KEY, req.body.notNeeded],
+      );
+      await writeAudit(auditLogFn, req, id, "warmup_exercise.video_not_needed.set", { notNeeded: req.body.notNeeded });
+      return res.json({ ok: true, media: mapWarmupRow(result.rows[0]) });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
   router.post("/warmup-exercises/:id/still", uploadStill, async (req, res) => {
     const id = String(req.params.id ?? "").trim();
     if (!req.file) return res.status(400).json({ ok: false, code: "missing_file", error: "Still image file is required." });
@@ -383,6 +413,7 @@ export function createAdminWarmupExercisesRouter({
              poster_frame_key = $3,
              video_duration_sec = $4,
              video_status = 'ready',
+             video_not_needed = false,
              poster_renditions_at = null,
              promoted_video_at = null,
              video_source_filename = $5,
@@ -471,7 +502,7 @@ export function createAdminWarmupExercisesRouter({
         results.push({
           exerciseId: row.warmup_exercise_id,
           name: row.name,
-          promoted: result.promoted ?? { still: false, video: false },
+          promoted: result.promoted ?? { still: false, video: false, videoNotNeeded: false },
           ...(result.errors ? { errors: result.errors } : {}),
         });
       }

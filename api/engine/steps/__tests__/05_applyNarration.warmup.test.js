@@ -280,3 +280,16 @@ test('warmup injury flag no_known_issues behaves exactly like no flags', async (
   }
   assert.ok(warmupItems(noKnown).some(item => item.exercise_id === 'tagged-odd'));
 });
+
+
+test('warmup selects flagged still-only exercises alongside ready videos, excluding unfinished rows', async () => {
+  const out = await narrate(videoPreferenceFixture([
+    warmup('ready', ['glutes'], [], 1, 'ready'),
+    { ...warmup('still-only', ['glutes']), video_not_needed: true },
+    warmup('unfinished', ['glutes']),
+  ]));
+  const selected = out.program.weeks[0].days.flatMap((_, i) => warmupItems(out, 0, i).map(item => item.exercise_id));
+  assert.ok(selected.includes('still-only'));
+  assert.ok(selected.includes('ready'));
+  assert.ok(!selected.includes('unfinished'));
+});
