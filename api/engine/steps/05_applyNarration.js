@@ -656,7 +656,7 @@ function selectWarmupItemsForDay(day, requiredRegions, context) {
     });
     if (!equipmentEligible.length) continue;
 
-    const videoReady = equipmentEligible.filter((row) => s(row.video_status) === 'ready');
+    const videoReady = equipmentEligible.filter((row) => s(row.video_status) === 'ready' || row.video_not_needed === true);
     if (videoReady.length > 0 && videoReady.length < equipmentEligible.length) {
       equipmentEligible = videoReady;
       context.debugCounters.warmup_video_preferred_regions += 1;
@@ -724,7 +724,7 @@ function selectCooldownItemsForDay(day, requiredRegions, context) {
     });
     if (!equipmentEligible.length) continue;
 
-    const videoReady = equipmentEligible.filter((row) => s(row.video_status) === 'ready');
+    const videoReady = equipmentEligible.filter((row) => s(row.video_status) === 'ready' || row.video_not_needed === true);
     if (videoReady.length > 0 && videoReady.length < equipmentEligible.length) {
       equipmentEligible = videoReady;
       context.debugCounters.cooldown_video_preferred_regions += 1;

@@ -51,6 +51,10 @@ function mapMediaRow(row) {
     videoKey: row.video_key ?? null,
     video_status: status,
     videoStatus: status,
+    video_not_needed: row.video_not_needed === true,
+    videoNotNeeded: row.video_not_needed === true,
+    video_not_needed_pending_promotion: row.video_not_needed_pending_promotion === true,
+    videoNotNeededPendingPromotion: row.video_not_needed_pending_promotion === true,
     video_duration_sec: row.video_duration_sec == null ? null : Number(row.video_duration_sec),
     videoDurationSec: row.video_duration_sec == null ? null : Number(row.video_duration_sec),
     video_source_filename: row.video_source_filename ?? null,
@@ -69,9 +73,9 @@ function mapMediaRow(row) {
   };
 }
 
-async function ensureExercise(db, exerciseId) {
+async function ensureExercise(db, exerciseId, activeOnly = false) {
   const result = await db.query(
-    `SELECT exercise_id FROM exercise_catalogue WHERE exercise_id = $1`,
+    `SELECT exercise_id FROM exercise_catalogue WHERE exercise_id = $1${activeOnly ? " AND is_archived = FALSE" : ""}`,
     [exerciseId],
   );
   return result.rowCount > 0;
@@ -125,6 +129,7 @@ export function createAdminExerciseMediaRouter({
          em.video_key,
          em.video_source_key,
          COALESCE(em.video_status, 'none') AS video_status,
+         em.video_not_needed, em.video_not_needed_pending_promotion,
          em.video_duration_sec,
          em.video_source_filename,
          em.poster_frame_key,
@@ -162,6 +167,7 @@ export function createAdminExerciseMediaRouter({
            em.video_key,
            em.video_source_key,
            COALESCE(em.video_status, 'none') AS video_status,
+           em.video_not_needed, em.video_not_needed_pending_promotion,
            em.video_duration_sec,
            em.video_source_filename,
            em.poster_frame_key,
@@ -180,6 +186,30 @@ export function createAdminExerciseMediaRouter({
       });
     } catch (err) {
       req.log?.error({ err }, "exercise-media list failed");
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  router.put("/exercise-media/:exerciseId/video-not-needed", async (req, res) => {
+    const id = String(req.params.exerciseId ?? "").trim();
+    if (typeof req.body?.notNeeded !== "boolean") {
+      return res.status(400).json({ ok: false, code: "invalid_body", error: "notNeeded must be a boolean." });
+    }
+    try {
+      if (!(await ensureExercise(db, id, true))) return res.status(404).json({ ok: false, code: "not_found", error: "Exercise not found." });
+      const result = await db.query(
+        `INSERT INTO exercise_media (exercise_id, still_image_key, video_not_needed, video_not_needed_pending_promotion, updated_at)
+         VALUES ($1, $2, $3, true, now())
+         ON CONFLICT (exercise_id) DO UPDATE SET
+           video_not_needed = EXCLUDED.video_not_needed,
+           video_not_needed_pending_promotion = true,
+           updated_at = now()
+         RETURNING *`,
+        [id, "exercise-media/_placeholder/still.jpg", req.body.notNeeded],
+      );
+      await writeAudit(auditLogFn, req, id, "exercise_media.video_not_needed.set", { notNeeded: req.body.notNeeded });
+      return res.json({ ok: true, media: mapMediaRow(result.rows[0]) });
+    } catch (err) {
       return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
   });
@@ -273,6 +303,7 @@ export function createAdminExerciseMediaRouter({
                poster_frame_key = $3,
                video_duration_sec = $4,
                video_status = 'ready',
+               video_not_needed = false,
                poster_renditions_at = null,
                video_source_filename = $5,
                uploaded_by = $6,
@@ -415,7 +446,7 @@ export function createAdminExerciseMediaRouter({
         results.push({
           exerciseId: row.exercise_id,
           name: row.name,
-          promoted: result.promoted ?? { still: false, video: false },
+          promoted: result.promoted ?? { still: false, video: false, videoNotNeeded: false },
           ...(result.errors ? { errors: result.errors } : {}),
         });
       }

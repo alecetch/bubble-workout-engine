@@ -346,6 +346,7 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
          wm.still_image_key,
          wm.video_key,
          wm.video_status,
+         wm.video_not_needed,
          wm.poster_frame_key
        FROM warmup_exercise we
        LEFT JOIN warmup_exercise_media wm USING (warmup_exercise_id)
@@ -365,6 +366,7 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
          cm.still_image_key,
          cm.video_key,
          cm.video_status,
+         cm.video_not_needed,
          cm.poster_frame_key
        FROM cooldown_exercise ce
        LEFT JOIN cooldown_exercise_media cm USING (cooldown_exercise_id)

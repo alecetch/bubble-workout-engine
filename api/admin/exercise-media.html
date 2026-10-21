@@ -89,6 +89,7 @@
         <option value="all">All exercises</option>
         <option value="missing">Without a video</option>
         <option value="ready">With a video</option>
+        <option value="notNeeded">Video not needed</option>
       </select>
       <span id="filter-count" class="muted"></span>
     </div>
@@ -162,11 +163,12 @@
     const VIDEO_FILTER_KEY = "exerciseMediaVideoFilter";
     const VIDEO_FILTERS = {
       all: () => true,
-      // Anything without a usable video: never uploaded, still processing, or failed.
-      missing: (row) => row.videoStatus !== "ready",
+      // Unfinished rows exclude exercises deliberately demonstrated by a still.
+      missing: (row) => row.videoStatus !== "ready" && !row.videoNotNeeded,
+      notNeeded: (row) => row.videoStatus !== "ready" && !!row.videoNotNeeded,
       ready: (row) => row.videoStatus === "ready",
     };
-    const VIDEO_FILTER_LABELS = { all: "All exercises", missing: "Without a video", ready: "With a video" };
+    const VIDEO_FILTER_LABELS = { all: "All exercises", missing: "Without a video", ready: "With a video", notNeeded: "Video not needed" };
     const videoFilterEl = document.getElementById("video-filter");
     const filterCountEl = document.getElementById("filter-count");
     // Pass rows to show per-option counts; omit to reset the labels while a tab loads.
@@ -237,6 +239,7 @@
       }
       if (row.videoStatus === "processing") return '<span class="badge warn">Processing...</span>';
       if (row.videoStatus === "failed") return '<span class="badge danger">Failed</span>';
+      if (row.videoNotNeeded) return '<span class="badge">Not needed</span>';
       return '<span class="badge">No video</span>';
     }
 
@@ -249,13 +252,14 @@
     }
 
     function needsPromotion(row) {
-      return needsStillPromotion(row) || needsVideoPromotion(row);
+      return needsStillPromotion(row) || needsVideoPromotion(row) || !!row?.videoNotNeededPendingPromotion;
     }
 
     function promotionLabel(row) {
       const parts = [];
       if (needsStillPromotion(row)) parts.push("still");
       if (needsVideoPromotion(row)) parts.push("video");
+      if (row.videoNotNeededPendingPromotion) parts.push("flag");
       if (!parts.length) return "Promoted";
       return `Promote ${parts.join(" + ")}`;
     }
@@ -267,6 +271,7 @@
         const parts = [];
         if (errors.still) parts.push(`still: ${errors.still}`);
         if (errors.video) parts.push(`video: ${errors.video}`);
+        if (errors.videoNotNeeded) parts.push(`flag: ${errors.videoNotNeeded}`);
         if (parts.length) failed.push(`${result.name || result.exerciseId}: ${parts.join("; ")}`);
       });
       return failed;
@@ -288,6 +293,8 @@
       const total = rows.length;
       const realStills = rows.filter((r) => !r.stillImageIsPlaceholder).length;
       const videosReady = rows.filter((r) => r.videoStatus === "ready").length;
+      const missingCount = rows.filter(VIDEO_FILTERS.missing).length;
+      const notNeededCount = rows.filter(VIDEO_FILTERS.notNeeded).length;
       const processing = rows.filter((r) => r.videoStatus === "processing").length;
       const failed = rows.filter((r) => r.videoStatus === "failed").length;
       const attention = processing + failed;
@@ -295,7 +302,7 @@
       const cards = [
         { label: "Exercises", value: total, note: `active ${tab().noun}` },
         { label: "Real stills", value: realStills, note: `${total - realStills} still on the placeholder` },
-        { label: "Videos ready", value: videosReady, note: `${total - videosReady} with no video yet` },
+        { label: "Videos ready", value: videosReady, note: `${missingCount} still needed · ${notNeededCount} not needed` },
         {
           label: "Needs attention",
           value: attention,
@@ -337,12 +344,14 @@
           </td>
           <td>
             ${videoBadge(row)}
+            ${row.videoStatus !== "ready" && row.videoNotNeeded && row.stillImageIsPlaceholder ? '<span class="badge warn">Needs still</span>' : ""}
             ${row.videoStatus === "ready" ? `<div><button class="link-btn sm" data-action="view-video" data-id="${row.exerciseId}">View</button></div>` : ""}
           </td>
           <td>
             <div class="actions">
               <button class="sm secondary" data-action="still" data-id="${row.exerciseId}">${row.stillImageIsPlaceholder ? "Upload still" : "Replace still"}</button>
               <button class="sm secondary" data-action="video" data-id="${row.exerciseId}">${row.videoStatus === "ready" ? "Replace video" : "Upload video"}</button>
+              ${row.videoStatus !== "ready" ? `<button class="sm secondary" data-action="toggle-video-not-needed" data-id="${row.exerciseId}">${row.videoNotNeeded ? "Video needed" : "No video needed"}</button>` : ""}
               ${promotionEnabled ? `<button class="sm secondary" data-action="promote" data-id="${row.exerciseId}" ${needsPromotion(row) ? "" : "disabled"}>${promotionLabel(row)}</button>` : ""}
               ${row.videoStatus === "ready" ? `<button class="sm danger" data-action="delete-video" data-id="${row.exerciseId}">Delete video</button>` : ""}
               ${row.posterFrameKey ? `<button class="sm secondary" data-action="poster" data-id="${row.exerciseId}">Use frame as still</button>` : ""}
@@ -422,6 +431,21 @@
         }
         if (button.dataset.action === "still") return stillInput.click();
         if (button.dataset.action === "video") return videoInput.click();
+        if (button.dataset.action === "toggle-video-not-needed") {
+          const row = rowsById.get(selectedExerciseId);
+          if (!row) return;
+          setStatus("Saving video requirement...");
+          const res = await fetch(mediaUrl(selectedExerciseId, "video-not-needed"), {
+            method: "PUT",
+            headers: { ...headers(), "Content-Type": "application/json" },
+            body: JSON.stringify({ notNeeded: !row.videoNotNeeded }),
+          });
+          const body = await res.json();
+          if (!res.ok || !body.ok) throw new Error(body.error || "Could not save video requirement.");
+          await load();
+          setStatus("Video requirement saved.", "ok");
+          return;
+        }
         if (button.dataset.action === "delete-video") {
           const row = rowsById.get(selectedExerciseId);
           // Deleting clears the poster frame along with the video, so this is the
@@ -471,7 +495,7 @@
     document.getElementById("promote-all").addEventListener("click", async () => {
       const pending = currentRows.filter(needsPromotion).length;
       if (!pending) return;
-      if (!confirm(`This will push ${pending} ${tab().noun}' still/video to PRODUCTION. Continue?`)) return;
+      if (!confirm(`This will push ${pending} ${tab().noun}' media and video requirements to PRODUCTION. Continue?`)) return;
       try {
         setStatus("Promoting pending media to production...");
         const res = await fetch(`${tab().base}/promote-all`, { method: "POST", headers: headers() });

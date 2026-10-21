@@ -22,11 +22,16 @@ export function needsVideoPromotion(row) {
   return row?.video_status === "ready" && !row?.promoted_video_at;
 }
 
+export function needsVideoNotNeededPromotion(row) {
+  return row?.video_not_needed_pending_promotion === true;
+}
+
 // SQL fragment matching rows with anything left to promote; `alias` is the media table alias.
 export function promotionEligibleSql(alias) {
   return `(
         (${alias}.still_image_is_placeholder = false AND ${alias}.promoted_still_at IS NULL)
         OR (${alias}.video_status = 'ready' AND ${alias}.promoted_video_at IS NULL)
+        OR ${alias}.video_not_needed_pending_promotion = true
       )`;
 }
 
@@ -63,7 +68,7 @@ export function createMediaPromoter({
       return { ok: false, error: "Production promotion is not configured" };
     }
 
-    const promoted = { still: false, video: false };
+    const promoted = { still: false, video: false, videoNotNeeded: false };
     const errors = {};
     const id = row[idColumn];
 
@@ -90,6 +95,26 @@ export function createMediaPromoter({
       } catch (err) {
         logger.error({ err, id, mediaTable, kind }, "exercise-media promotion request failed locally");
         errors[kind] = err?.message || String(err);
+      }
+    }
+
+    if (needsVideoNotNeededPromotion(row)) {
+      try {
+        const response = await fetchFn(`${baseUrl}/admin/${routePrefix}/${encodeURIComponent(id)}/video-not-needed`, {
+          method: "PUT",
+          headers: { "X-Internal-Token": token, "Content-Type": "application/json" },
+          body: JSON.stringify({ notNeeded: row.video_not_needed === true }),
+        });
+        const body = await readJsonResponse(response);
+        if (response.ok) {
+          await db.query(`UPDATE ${mediaTable} SET video_not_needed_pending_promotion = false WHERE ${idColumn} = $1`, [id]);
+          promoted.videoNotNeeded = true;
+        } else {
+          errors.videoNotNeeded = errorMessageFromResponse(response.status, body);
+        }
+      } catch (err) {
+        logger.error({ err, id, mediaTable }, "exercise-media flag promotion failed locally");
+        errors.videoNotNeeded = err?.message || String(err);
       }
     }
 
