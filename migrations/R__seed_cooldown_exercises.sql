@@ -59,7 +59,7 @@ SELECT * FROM (VALUES
   ('cooldown-butterfly-stretch', 'Seated Butterfly Stretch', '["glutes"]'::jsonb, '{}'::text[], 'Sit with the soles of the feet together and knees falling out. Sit tall and let the knees relax toward the floor.', '30 sec', 1, 'stretch'),
   ('cooldown-downward-dog-hold', 'Downward Dog Hold', '["calves","hamstrings","shoulders"]'::jsonb, '{}'::text[], 'From hands and feet, lift the hips high, press the chest toward the thighs, and let the heels sink toward the floor.', '30 sec', 1, 'stretch'),
   ('cooldown-bench-lat-stretch', 'Bench Lat Stretch', '["lats","triceps"]'::jsonb, '{bench}'::text[], 'Kneel beside a bench, rest one elbow on it with the hand behind your head, and sit the hips back until the side of your back stretches. Hold each side.', '30 sec', 2, 'stretch'),
-  ('cooldown-cobra-hold', 'Cobra Hold', '["core","chest"]'::jsonb, '{}'::text[], 'Lie face down with hands under the shoulders and gently press the chest up, keeping the hips down and shoulders relaxed.', '30 sec', 1, 'stretch')
+  ('cooldown-cobra-hold', 'Cobra to Child''s Pose', '["core","chest"]'::jsonb, '{}'::text[], 'Lie face down with hands under the shoulders and gently press the chest up, hips down. Hold briefly, then push the hips back to your heels into child''s pose. Move slowly between the two.', '5 slow reps', 1, 'stretch')
 ) AS rows(cooldown_exercise_id, name, target_regions_json, equipment_items_slugs, cue_text, duration_or_reps_label, rounds, movement_class)
 WHERE NOT EXISTS (
   SELECT 1 FROM cooldown_exercise e WHERE e.cooldown_exercise_id = rows.cooldown_exercise_id
