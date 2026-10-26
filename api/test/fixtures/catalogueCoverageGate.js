@@ -17,7 +17,7 @@ export const MIN_COUNTS = [
   })),
   ...[
     ['push_day', 'D:triceps', 'no_equipment', [0], 3, 'Bodyweight triceps staples'],
-    ['pull_day', 'D:biceps', 'no_equipment', [0], 7, 'Towel curl adds a real bodyweight biceps option'],
+    ['pull_day', 'D:biceps', 'no_equipment', [0], 6, 'Towel curl adds a real bodyweight biceps option (7 -> 6 when non-biceps Reverse Plank Scapular Retraction was archived)'],
     ['legs_day', 'C:hamstring_iso', 'no_equipment', [0, 1, 2, 3], 2, 'Towel curl expands hamstring isolation'],
     ['day3', 'C:glute', 'no_equipment', [0], 2, 'Glute Bridge adds a bilateral regression'],
     ['pull_day', 'B:pull_vertical', 'decent_home_gym', [0], 4, 'Beginner pull-up progressions'],
