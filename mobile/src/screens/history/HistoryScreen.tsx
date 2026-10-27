@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Keyboard,
   RefreshControl,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { CachedImage } from "../../components/media/CachedImage";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -51,9 +51,11 @@ function formatKg(value: number | null | undefined): string {
 
 function HeroMediaThumb({
   uri,
+  thumbhash,
   compact = false,
 }: {
   uri: string | null;
+  thumbhash?: string | null;
   compact?: boolean;
 }): React.JSX.Element {
   const thumbStyle = compact ? styles.mediaThumbCompact : styles.mediaThumbLarge;
@@ -68,7 +70,7 @@ function HeroMediaThumb({
     );
   }
 
-  return <Image source={{ uri }} style={thumbStyle} onError={() => setFailed(true)} />;
+  return <CachedImage uri={uri} thumbhash={thumbhash} recyclingKey={uri} style={thumbStyle} onError={() => setFailed(true)} />;
 }
 
 function TimelineRow({
@@ -80,7 +82,7 @@ function TimelineRow({
 }): React.JSX.Element {
   return (
     <View style={styles.timelineCard}>
-      <HeroMediaThumb uri={item.heroMediaCardUrl ?? item.heroMediaUrl} compact />
+      <HeroMediaThumb uri={item.heroMediaCardUrl ?? item.heroMediaUrl} thumbhash={item.heroMediaThumbhash} compact />
       <View style={styles.timelineContent}>
         <Text style={styles.timelineDate}>{formatDateLabel(item.scheduledDate)}</Text>
         <Text style={styles.timelineLabel}>{item.dayLabel || "Session"}</Text>
@@ -351,7 +353,7 @@ export function HistoryScreen(): React.JSX.Element {
           contentContainerStyle={styles.programsList}
           renderItem={({ item }) => (
             <View style={styles.programCard}>
-              <HeroMediaThumb uri={item.heroMediaCardUrl ?? item.heroMediaUrl} />
+              <HeroMediaThumb uri={item.heroMediaCardUrl ?? item.heroMediaUrl} thumbhash={item.heroMediaThumbhash} />
               <Text style={styles.programTitle} numberOfLines={2}>
                 {item.programTitle}
               </Text>

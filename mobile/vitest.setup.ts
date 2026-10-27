@@ -123,6 +123,22 @@ vi.mock("expo-asset", () => ({
   },
 }));
 
+vi.mock("expo-image", () => ({
+  Image: ({ source, placeholder, cachePolicy, recyclingKey, testID, onLoad, onError,
+    contentFit, placeholderContentFit, transition, style }: any) => React.createElement("img", {
+    src: source?.uri,
+    "data-thumbhash": placeholder?.thumbhash ?? undefined,
+    "data-cache-policy": cachePolicy,
+    "data-recycling-key": recyclingKey,
+    "data-testid": testID,
+    "data-content-fit": contentFit,
+    "data-placeholder-content-fit": placeholderContentFit,
+    "data-transition": transition,
+    style: Array.isArray(style) ? Object.assign({}, ...style) : style,
+    onLoad, onError,
+  }),
+}));
+
 // expo-video's real module resolves through expo-modules-core, which reads the
 // React Native __DEV__ global at import time — undefined under jsdom, so any
 // test that transitively imports it (via ExerciseMediaThumb) crashes at module

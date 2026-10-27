@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { CachedImage } from "../media/CachedImage";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
@@ -16,23 +11,15 @@ type HeroHeaderProps = {
   title: string;
   summary?: string;
   heroMedia?: string | null;
+  heroMediaThumbhash?: string | null;
 };
 
-export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): React.JSX.Element {
+export function HeroHeader({ title, summary, heroMedia, heroMediaThumbhash }: HeroHeaderProps): React.JSX.Element {
   const [imageFailed, setImageFailed] = useState(false);
-  const opacity = useSharedValue(heroMedia ? 0 : 1);
 
   useEffect(() => {
     setImageFailed(false);
   }, [heroMedia]);
-
-  useEffect(() => {
-    if (heroMedia) {
-      opacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.quad) });
-    }
-  }, [heroMedia, opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   if (!heroMedia || imageFailed) {
     return (
@@ -44,11 +31,12 @@ export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): Reac
   }
 
   return (
-    <Animated.View style={[styles.container, animatedStyle]}>
-      <Animated.Image
-        source={{ uri: heroMedia }}
+    <View style={styles.container}>
+      <CachedImage
+        uri={heroMedia}
+        thumbhash={heroMediaThumbhash}
+        transitionMs={300}
         style={[StyleSheet.absoluteFill, styles.image]}
-        resizeMode="cover"
         onError={() => setImageFailed(true)}
       />
       <View
@@ -65,7 +53,7 @@ export function HeroHeader({ title, summary, heroMedia }: HeroHeaderProps): Reac
         <Text style={styles.title}>{title}</Text>
         {summary ? <Text style={styles.summary}>{summary}</Text> : null}
       </View>
-    </Animated.View>
+    </View>
   );
 }
 

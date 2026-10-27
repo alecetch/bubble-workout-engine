@@ -19,7 +19,7 @@ vi.unmock("@tanstack/react-query");
 
 vi.mock("../../components/program/HeroHeader", () => ({
   HeroHeader: (props: any) => (
-    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""}>
+    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""} data-hero-thumbhash={props.heroMediaThumbhash ?? ""}>
       <h1>{props.title}</h1>
       <p>{props.summary}</p>
     </div>
@@ -197,9 +197,10 @@ describe("ProgramDashboardScreen", () => {
   });
 
   it("prefers the program hero card rendition", () => {
-    useProgramOverviewMock.mockReturnValue({ data: data({ program: { ...data().program, heroMedia: "https://cdn.test/original.png", heroMediaCard: "https://cdn.test/card.webp" } }), isLoading: false, isError: false, refetch: vi.fn() } as any);
+    useProgramOverviewMock.mockReturnValue({ data: data({ program: { ...data().program, heroMedia: "https://cdn.test/original.png", heroMediaCard: "https://cdn.test/card.webp", heroMediaThumbhash: "hero-hash" } }), isLoading: false, isError: false, refetch: vi.fn() } as any);
     renderDashboard();
     expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "https://cdn.test/card.webp");
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-thumbhash", "hero-hash");
   });
 
   it("passes the program's hero URL to the hero header", () => {

@@ -30,7 +30,7 @@ vi.unmock("@tanstack/react-query");
 
 vi.mock("../../components/program/HeroHeader", () => ({
   HeroHeader: (props: any) => (
-    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""}>
+    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""} data-hero-thumbhash={props.heroMediaThumbhash ?? ""}>
       <h1>{props.title}</h1>
       <p>{props.summary}</p>
     </div>
@@ -427,9 +427,10 @@ describe("ProgramDayScreen", () => {
   });
 
   it("prefers the day hero card rendition", async () => {
-    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, heroMedia: "https://cdn.test/original.png", heroMediaCard: "https://cdn.test/card.webp" } }, isLoading: false, isError: false, refetch: vi.fn() } as any);
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, heroMedia: "https://cdn.test/original.png", heroMediaCard: "https://cdn.test/card.webp", heroMediaThumbhash: "hero-hash" } }, isLoading: false, isError: false, refetch: vi.fn() } as any);
     renderScreen();
     expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "https://cdn.test/card.webp");
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-thumbhash", "hero-hash");
     await waitForLocalStateLoad();
   });
 

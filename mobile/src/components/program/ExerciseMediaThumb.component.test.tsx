@@ -18,15 +18,16 @@ const baseProps = {
 
 describe("ExerciseMediaThumb", () => {
   it("prefers the thumb rendition and uses a card poster after expansion", () => {
-    const { container } = render(<ExerciseMediaThumb {...baseProps} stillThumbUrl="https://cdn.test/thumb.webp" posterCardUrl="https://cdn.test/poster-card.webp" />);
-    expect(container.querySelector('img[src="https://cdn.test/thumb.webp"]')).not.toBeNull();
+    const { container } = render(<ExerciseMediaThumb {...baseProps} stillThumbUrl="https://cdn.test/thumb.webp" posterCardUrl="https://cdn.test/poster-card.webp" stillThumbhash="still-hash" />);
+    expect(container.querySelector('img[src="https://cdn.test/thumb.webp"]')).toHaveAttribute("data-thumbhash", "still-hash");
+    expect(container.querySelector('img[src="https://cdn.test/thumb.webp"]')).toHaveAttribute("data-recycling-key", "https://cdn.test/thumb.webp");
     fireEvent.click(screen.getByLabelText("Play exercise video"));
-    expect(container.querySelector('img[src="https://cdn.test/poster-card.webp"]')).not.toBeNull();
+    expect(container.querySelector('img[src="https://cdn.test/poster-card.webp"]')).toHaveAttribute("data-thumbhash", "still-hash");
   });
 
   it("falls back to the original still without a thumbnail rendition", () => {
     const { container } = render(<ExerciseMediaThumb {...baseProps} />);
-    expect(container.querySelector(`img[src="${baseProps.stillImageUrl}"]`)).not.toBeNull();
+    expect(container.querySelector(`img[src="${baseProps.stillImageUrl}"]`)).toHaveAttribute("data-recycling-key", baseProps.stillImageUrl);
   });
 
   it("creates an empty muted looping player without loading or playing a video", () => {

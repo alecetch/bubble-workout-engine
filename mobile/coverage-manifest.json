@@ -955,6 +955,16 @@
         "today"
       ],
       "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/media/CachedImage.tsx",
+      "test": "src/components/media/CachedImage.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "media"
+      ],
+      "reason": ""
     }
   ]
 }
