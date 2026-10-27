@@ -45,6 +45,37 @@ function mockPool(responses) {
 const VALID_UUID = "11111111-1111-4111-8111-111111111111";
 const USER_UUID = "22222222-2222-4222-8222-222222222222";
 
+for (const dayType of ["hypertrophy", "conditioning"]) {
+  test(`dayFull resolves the current swapped exercise at read time for ${dayType}`, async () => {
+    const handlers = createReadProgramHandlers({
+      db: mockPool([
+        { rowCount: 1, rows: [{ program_day_id: VALID_UUID, day_type: dayType, week_number: 1,
+          client_profile_id: VALID_UUID, hero_image_key: "hero-media/program_day/curated.png",
+          hero_renditions_at: "now", hero_thumbhash: "curated-hash" }] },
+        { rowCount: 1, rows: [{ workout_segment_id: VALID_UUID, segment_type: "single", purpose: "main" }] },
+        { rowCount: 1, rows: [{ workout_segment_id: VALID_UUID, program_exercise_id: VALID_UUID,
+          exercise_id: "db_goblet_squat", original_exercise_id: "bb_back_squat", exercise_name: "Goblet Squat",
+          segment_type: "single", purpose: "main", order_in_day: 1,
+          still_image_key: "exercise-media/db_goblet_squat/still.jpg", still_image_is_placeholder: false,
+          still_renditions_at: "now", still_thumbhash: "exercise-hash" }] },
+        { rowCount: 0, rows: [] },
+      ]),
+      guidelineLoadService: { annotateExercisesWithGuidelineLoads: async ({ exercises }) => exercises },
+    });
+    const res = mockRes();
+    await handlers.dayFull({ params: { program_day_id: VALID_UUID }, auth: { user_id: USER_UUID }, log: { error() {}, warn() {} } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.body.day.hero_media.endsWith("hero-media/program_day/curated.png"));
+    assert.ok(res.body.day.hero_media_card.endsWith("hero-media/program_day/curated-card.webp"));
+    assert.equal(res.body.day.hero_media_thumbhash, "curated-hash");
+    if (dayType === "conditioning") assert.equal(res.body.day.hero_exercise_media, null);
+    else assert.deepEqual(res.body.day.hero_exercise_media, {
+      exercise_id: "db_goblet_squat", exercise_name: "Goblet Squat",
+      url: res.body.segments[0].items[0].stillCardUrl, thumbhash: "exercise-hash",
+    });
+  });
+}
+
 test("parseEquipmentSlugs returns empty array for empty rows", () => {
   assert.deepEqual(parseEquipmentSlugs([]), []);
 });

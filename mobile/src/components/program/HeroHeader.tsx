@@ -12,9 +12,10 @@ type HeroHeaderProps = {
   summary?: string;
   heroMedia?: string | null;
   heroMediaThumbhash?: string | null;
+  eyebrow?: string;
 };
 
-export function HeroHeader({ title, summary, heroMedia, heroMediaThumbhash }: HeroHeaderProps): React.JSX.Element {
+export function HeroHeader({ title, summary, heroMedia, heroMediaThumbhash, eyebrow }: HeroHeaderProps): React.JSX.Element {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export function HeroHeader({ title, summary, heroMedia, heroMediaThumbhash }: He
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.content}>
+        {eyebrow ? <Text style={styles.eyebrow} accessibilityLabel={eyebrow.replace(" · ", ": ")}>{eyebrow}</Text> : null}
         <Text style={styles.title}>{title}</Text>
         {summary ? <Text style={styles.summary}>{summary}</Text> : null}
       </View>
@@ -82,6 +84,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     gap: spacing.xs,
+  },
+  eyebrow: {
+    ...typography.small,
+    color: colors.textSecondary,
+    letterSpacing: 0.8,
   },
   title: {
     color: colors.textPrimary,

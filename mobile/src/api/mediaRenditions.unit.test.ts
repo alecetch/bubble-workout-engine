@@ -5,6 +5,21 @@ import { normalizeGuidance } from "./exerciseGuidance";
 import { normalizePrograms, normalizeTimeline } from "./historyNormalizers";
 
 describe("rendition normalization", () => {
+  it.each(["snake", "camel"])("normalizes %s exercise heroes without changing curated fields", style => {
+    const hero = style === "snake" ? { hero_exercise_media: { exercise_id: "squat", exercise_name: "Back Squat", url: "exercise-card", thumbhash: "exercise-hash" } }
+      : { heroExerciseMedia: { exerciseId: "squat", exerciseName: "Back Squat", url: "exercise-card", thumbhash: "exercise-hash" } };
+    const day = normalizeProgramDayFull({ day: { ...hero, hero_media: "curated", hero_media_card: "curated-card" } }).day;
+    expect(day.heroExerciseMedia).toEqual({ exerciseId: "squat", exerciseName: "Back Squat", url: "exercise-card", thumbhash: "exercise-hash" });
+    expect(day.heroMedia).toBe("curated");
+    expect(day.heroMediaCard).toBe("curated-card");
+  });
+
+  it("defaults missing or unusable exercise heroes to null and missing hashes to null", () => {
+    for (const hero of [undefined, null, {}, { url: null }, { url: "" }]) {
+      expect(normalizeProgramDayFull({ day: { hero_exercise_media: hero } }).day.heroExerciseMedia).toBeNull();
+    }
+    expect(normalizeProgramDayFull({ day: { heroExerciseMedia: { url: "card" } } }).day.heroExerciseMedia?.thumbhash).toBeNull();
+  });
   it.each(["camel", "snake"])("maps %s exercise and hero fields", style => {
     const exercise = style === "camel"
       ? { stillThumbUrl: "thumb", stillCardUrl: "card", posterCardUrl: "poster", stillThumbhash: "hash" }

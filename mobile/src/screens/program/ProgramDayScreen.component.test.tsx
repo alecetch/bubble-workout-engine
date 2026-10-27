@@ -30,7 +30,7 @@ vi.unmock("@tanstack/react-query");
 
 vi.mock("../../components/program/HeroHeader", () => ({
   HeroHeader: (props: any) => (
-    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""} data-hero-thumbhash={props.heroMediaThumbhash ?? ""}>
+    <div data-testid="hero-header" data-hero-media={props.heroMedia ?? ""} data-hero-thumbhash={props.heroMediaThumbhash ?? ""} data-eyebrow={props.eyebrow}>
       <h1>{props.title}</h1>
       <p>{props.summary}</p>
     </div>
@@ -426,11 +426,24 @@ describe("ProgramDayScreen", () => {
     await waitForLocalStateLoad();
   });
 
+  it.each(["exercise-hash", null])("prefers the exercise hero and its own hash %s", async thumbhash => {
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day,
+      heroMediaCard: "curated-card", heroMediaThumbhash: "curated-hash",
+      heroExerciseMedia: { exerciseId: "bb_back_squat", exerciseName: "Barbell Back Squat", url: "exercise-card", thumbhash },
+    } }, isLoading: false, isError: false, refetch: vi.fn() } as any);
+    renderScreen();
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "exercise-card");
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-thumbhash", thumbhash ?? "");
+    expect(screen.getByTestId("hero-header")).toHaveAttribute("data-eyebrow", "Today's focus · Barbell Back Squat");
+    await waitForLocalStateLoad();
+  });
+
   it("prefers the day hero card rendition", async () => {
     useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, heroMedia: "https://cdn.test/original.png", heroMediaCard: "https://cdn.test/card.webp", heroMediaThumbhash: "hero-hash" } }, isLoading: false, isError: false, refetch: vi.fn() } as any);
     renderScreen();
     expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-media", "https://cdn.test/card.webp");
     expect(screen.getByTestId("hero-header")).toHaveAttribute("data-hero-thumbhash", "hero-hash");
+    expect(screen.getByTestId("hero-header")).not.toHaveAttribute("data-eyebrow");
     await waitForLocalStateLoad();
   });
 
