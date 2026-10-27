@@ -160,6 +160,14 @@ describe("PhysiqueIntelligenceScreen", () => {
   });
 
 
+  it("keeps paid-through cancelled subscribers in the premium picker", () => {
+    useEntitlementMock.mockReturnValue({ data: { subscription_status: "cancelled", is_active: true, is_premium: true }, isSuccess: true } as any);
+    const { mockParentNavigate } = renderScreen();
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeInTheDocument();
+    expect(mockParentNavigate).not.toHaveBeenCalled();
+    expect(screen.queryByText("Upgrade to Premium")).not.toBeInTheDocument();
+  });
+
   it("renders picker phase initially with camera and library buttons", () => {
     renderScreen();
 

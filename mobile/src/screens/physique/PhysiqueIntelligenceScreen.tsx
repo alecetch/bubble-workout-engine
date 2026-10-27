@@ -68,7 +68,7 @@ export function PhysiqueIntelligenceScreen({ navigation }: Props): React.JSX.Ele
   const [state, setState] = React.useState<ScreenState>({ phase: "picker" });
   const lastResultRef = React.useRef<ScanResult | null>(null);
 
-  const isPremium = entitlementQuery.data?.subscription_status === "active";
+  const isPremium = entitlementQuery.data?.is_premium ?? entitlementQuery.data?.subscription_status === "active";
   React.useEffect(() => {
     if (entitlementQuery.isSuccess && !isPremium) {
       setState({ phase: "upgrade" });

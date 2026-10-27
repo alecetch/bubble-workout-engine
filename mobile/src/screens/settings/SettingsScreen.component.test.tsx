@@ -2,7 +2,7 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Linking, Share } from "react-native";
+import { Alert, Linking, Platform, Share } from "react-native";
 import { API_BASE_URL } from "../../api/config";
 import { useEntitlement } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -375,6 +375,26 @@ describe("notification toggles", () => {
 describe("subscription section", () => {
   beforeEach(() => {
     resetSettingsMocks();
+  });
+
+  it("keeps cancellation access until its formatted paid-through date", () => {
+    const expires = "2030-11-02T12:00:00Z";
+    vi.mocked(useEntitlement).mockReturnValue({ data: { subscription_status: "cancelled", is_active: true, is_premium: true, subscription_expires_at: expires } } as any);
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    expect(screen.getByText(`Cancelled · access until ${new Date(expires).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Subscribe" })).not.toBeInTheDocument();
+  });
+
+  it.each(["ios", "android"])("shows the payment issue store for %s", os => {
+    const original = Platform.OS;
+    Object.defineProperty(Platform, "OS", { configurable: true, value: os });
+    try {
+      vi.mocked(useEntitlement).mockReturnValue({ data: { subscription_status: "active", is_active: true, billing_issue: true } } as any);
+      render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+      expect(screen.getByText(`Payment issue · update your payment method in ${os === "ios" ? "App Store" : "Google Play"}`)).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(Platform, "OS", { configurable: true, value: original });
+    }
   });
 
   it("renders trial status when subscription_status is trialing", () => {

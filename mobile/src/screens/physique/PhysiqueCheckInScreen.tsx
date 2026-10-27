@@ -42,7 +42,7 @@ export function PhysiqueCheckInScreen(): React.JSX.Element {
   const entitlementQuery = useEntitlement();
   const hasConsented = entitlementQuery.data?.physique_consent_given === true;
   const [state, setState] = useState<ScreenState>({ phase: "consent" });
-  const showPremiumUpsell = entitlementQuery.data?.subscription_status !== "active";
+  const showPremiumUpsell = !(entitlementQuery.data?.is_premium ?? entitlementQuery.data?.subscription_status === "active");
 
   useEffect(() => {
     if (hasConsented && state.phase === "consent") {

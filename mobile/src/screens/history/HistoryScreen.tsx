@@ -134,7 +134,7 @@ export function HistoryScreen(): React.JSX.Element {
   const checkInsQuery = usePhysiqueCheckIns(1);
   const entitlementQuery = useEntitlement();
   const lastCheckIn = checkInsQuery.data?.check_ins[0] ?? null;
-  const isPremium = entitlementQuery.data?.subscription_status === "active";
+  const isPremium = entitlementQuery.data?.is_premium ?? entitlementQuery.data?.subscription_status === "active";
   const isActive = entitlementQuery.data?.is_active ?? true;
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");

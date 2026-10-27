@@ -229,6 +229,12 @@ describe("HistoryScreen", () => {
     expect(screen.getByText("5")).toBeInTheDocument();
   });
 
+  it("keeps premium history for a cancelled but paid-through subscriber", () => {
+    useEntitlementMock.mockReturnValue({ data: { subscription_status: "cancelled", is_active: true, is_premium: true }, isSuccess: true } as any);
+    renderScreen();
+    expect(screen.queryByText("PREMIUM")).not.toBeInTheDocument();
+  });
+
   it("renders PR feed items", () => {
     renderScreen();
 
