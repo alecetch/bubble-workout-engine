@@ -769,7 +769,8 @@
           }
         } catch (err) {
           const msg = err.status === 403 ? "Access denied - this athlete may not be linked to your account." : err.message;
-          body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px" onclick="loadSessions('${esc(clientId)}')">Retry</button></div>`;
+          body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px">Retry</button></div>`;
+          body.querySelector("button").addEventListener("click", () => loadSessions(clientId)); // no inline onclick: blocked by the admin CSP
         } finally {
           loading.style.display = "none";
         }
@@ -815,7 +816,8 @@
           renderDecisionsTable(rows, body);
         } catch (err) {
           const msg = err.status === 403 ? "Access denied - this athlete may not be linked to your account." : err.message;
-          body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px" onclick="loadDecisions('${esc(clientId)}')">Retry</button></div>`;
+          body.innerHTML = `<div class="empty">${esc(msg)} <button class="secondary-btn" style="font-size:12px;padding:3px 8px;margin-left:8px">Retry</button></div>`;
+          body.querySelector("button").addEventListener("click", () => loadDecisions(clientId)); // no inline onclick: blocked by the admin CSP
         } finally {
           loading.style.display = "none";
         }
