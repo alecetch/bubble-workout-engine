@@ -71,6 +71,7 @@ export function SegmentExerciseListItem({
       {exercise.stillImageUrl ? (
         <ExerciseMediaThumb
           stillThumbUrl={exercise.stillThumbUrl}
+          stillThumbhash={exercise.stillThumbhash}
           posterCardUrl={exercise.posterCardUrl}
           stillImageUrl={exercise.stillImageUrl}
           videoUrl={exercise.videoUrl ?? null}

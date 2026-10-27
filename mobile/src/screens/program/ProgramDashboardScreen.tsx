@@ -453,6 +453,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
           title={overview.program.title ?? "Training Program"}
           summary={overview.program.summary || undefined}
           heroMedia={overview.program.heroMediaCard ?? overview.program.heroMedia ?? null}
+          heroMediaThumbhash={overview.program.heroMediaThumbhash ?? null}
         />
 
       {showCompletionBanner ? (

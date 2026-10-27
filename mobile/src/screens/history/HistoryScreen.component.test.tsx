@@ -237,11 +237,12 @@ describe("HistoryScreen", () => {
   });
 
   it("prefers hero card renditions for timeline and programs", () => {
-    useHistoryTimelineMock.mockReturnValue({ data: { pages: [{ items: [{ ...timelineItem, heroMediaUrl: "https://cdn.test/original.png", heroMediaCardUrl: "https://cdn.test/day-card.webp" }] }] } } as any);
-    useHistoryProgramsMock.mockReturnValue({ data: [{ programId: "a", programTitle: "Strength", startDate: "2026-05-01", completionRatio: 1, heroMediaUrl: "https://cdn.test/original.png", heroMediaCardUrl: "https://cdn.test/program-card.webp" }] } as any);
+    useHistoryTimelineMock.mockReturnValue({ data: { pages: [{ items: [{ ...timelineItem, heroMediaUrl: "https://cdn.test/original.png", heroMediaCardUrl: "https://cdn.test/day-card.webp", heroMediaThumbhash: "day-hash" }] }] } } as any);
+    useHistoryProgramsMock.mockReturnValue({ data: [{ programId: "a", programTitle: "Strength", startDate: "2026-05-01", completionRatio: 1, heroMediaUrl: "https://cdn.test/original.png", heroMediaCardUrl: "https://cdn.test/program-card.webp", heroMediaThumbhash: "program-hash" }] } as any);
     const { container } = renderScreen();
-    expect(container.querySelector('img[src="https://cdn.test/day-card.webp"]')).not.toBeNull();
-    expect(container.querySelector('img[src="https://cdn.test/program-card.webp"]')).not.toBeNull();
+    expect(container.querySelector('img[src="https://cdn.test/day-card.webp"]')).toHaveAttribute("data-thumbhash", "day-hash");
+    expect(container.querySelector('img[src="https://cdn.test/day-card.webp"]')).toHaveAttribute("data-recycling-key", "https://cdn.test/day-card.webp");
+    expect(container.querySelector('img[src="https://cdn.test/program-card.webp"]')).toHaveAttribute("data-thumbhash", "program-hash");
     fireEvent.error(container.querySelector('img[src="https://cdn.test/day-card.webp"]')!);
     expect(screen.getByText("No Media")).toBeInTheDocument();
   });

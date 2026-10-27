@@ -3,21 +3,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { HeroHeader } from "./HeroHeader";
 
-// The global Animated.Image stub drops source and onError. Preserve those
-// props here so DOM error events exercise the component's fallback behavior.
-vi.mock("react-native-reanimated", () => ({
-  default: {
-    View: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    Image: ({ source, onError }: { source: { uri: string }; onError?: () => void }) => (
-      <img src={source.uri} onError={onError} />
-    ),
-  },
-  useSharedValue: (value: number) => ({ value }),
-  useAnimatedStyle: (fn: () => unknown) => fn(),
-  withTiming: (value: number) => value,
-  Easing: { out: (easing: unknown) => easing, quad: vi.fn() },
-}));
-
 vi.mock("expo-linear-gradient", () => ({
   LinearGradient: ({ children }: any) => <>{children}</>,
 }));
@@ -32,8 +17,11 @@ function expectText() {
 
 describe("HeroHeader", () => {
   it("renders the hero image with the title and summary", () => {
-    const { container } = render(<HeroHeader {...textProps} heroMedia={heroMedia} />);
+    const { container } = render(<HeroHeader {...textProps} heroMedia={heroMedia} heroMediaThumbhash="hero-hash" />);
     expect(container.querySelector("img")).toHaveAttribute("src", heroMedia);
+    expect(container.querySelector("img")).toHaveAttribute("data-thumbhash", "hero-hash");
+    expect(container.querySelector("img")).toHaveAttribute("data-transition", "300");
+    expect(screen.getByText(textProps.title).closest("div")?.parentElement).not.toHaveStyle({ opacity: "0" });
     expect(screen.getByTestId("hero-image-tint")).toBeInTheDocument();
     expectText();
   });

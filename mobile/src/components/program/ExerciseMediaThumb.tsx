@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { VideoView, useVideoPlayer } from "expo-video";
-import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { CachedImage } from "../media/CachedImage";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -9,6 +10,7 @@ import { spacing } from "../../theme/spacing";
 type ExerciseMediaThumbProps = {
   stillImageUrl: string;
   stillThumbUrl?: string | null;
+  stillThumbhash?: string | null;
   posterCardUrl?: string | null;
   videoUrl: string | null;
   posterImageUrl: string | null;
@@ -20,6 +22,7 @@ type Mode = "mini" | "expanded" | "fullscreen";
 export function ExerciseMediaThumb({
   stillImageUrl,
   stillThumbUrl,
+  stillThumbhash,
   posterCardUrl,
   videoUrl,
   posterImageUrl,
@@ -96,7 +99,8 @@ export function ExerciseMediaThumb({
   if (!playableVideoUrl || mode === "mini") {
     const image = (
       <View style={styles.miniFrame} testID="exercise-media-thumb">
-        <Image source={{ uri: stillThumbUrl || stillImageUrl }} style={styles.miniImage} resizeMode="cover" />
+        <CachedImage uri={stillThumbUrl || stillImageUrl} thumbhash={stillThumbhash}
+          recyclingKey={stillThumbUrl || stillImageUrl} style={styles.miniImage} />
         {playableVideoUrl ? (
           <View style={styles.playOverlay} pointerEvents="none" testID="exercise-media-play-overlay">
             <View style={styles.playBadge} testID="exercise-media-play-badge">
@@ -123,7 +127,7 @@ export function ExerciseMediaThumb({
   const playerView = (
     <View style={styles.playerShell} testID={mode === "fullscreen" ? "exercise-media-fullscreen" : "exercise-media-expanded"}>
       {!hasFirstFrame && posterSource ? (
-        <Image source={{ uri: posterSource }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <CachedImage uri={posterSource} thumbhash={stillThumbhash} style={StyleSheet.absoluteFill} />
       ) : null}
       <VideoView
         player={player}
