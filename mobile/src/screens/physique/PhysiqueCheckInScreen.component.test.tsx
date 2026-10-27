@@ -104,6 +104,19 @@ async function renderConsentedScreenWithPreview() {
 }
 
 describe("PhysiqueCheckInScreen", () => {
+  it.each([
+    ["cancelled", true], ["active", false],
+  ])("honours is_premium over legacy %s status (%s)", async (status, premium) => {
+    useEntitlementMock.mockReturnValue({ data: { subscription_status: status, is_premium: premium, physique_consent_given: true } } as any);
+    launchImageLibraryAsyncMock.mockResolvedValue({ canceled: false, assets: [{ uri: "file:///tmp/entitlement.jpg" }] } as any);
+    render(<PhysiqueCheckInScreen />);
+    fireEvent.click(await screen.findByText("Choose from library"));
+    fireEvent.click(await screen.findByText("Analyse this photo"));
+    await screen.findByText("Improved posture");
+    if (premium) expect(screen.queryByText("Upgrade to Premium")).not.toBeInTheDocument();
+    else expect(screen.getByText("Upgrade to Premium")).toBeInTheDocument();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     alertSpy.mockImplementation(() => {});

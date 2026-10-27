@@ -1,4 +1,5 @@
 import { pool } from "../db.js";
+import { computeEntitlement } from "../services/entitlement.js";
 
 export function makeRequireEntitlement(db = pool) {
   return async function requireEntitlement(req, res, next) {
@@ -9,7 +10,7 @@ export function makeRequireEntitlement(db = pool) {
 
     try {
       const { rows } = await db.query(
-        `SELECT subscription_status, trial_expires_at FROM app_user WHERE id = $1`,
+        `SELECT subscription_status, trial_expires_at, subscription_expires_at FROM app_user WHERE id = $1`,
         [userId],
       );
 
@@ -17,14 +18,7 @@ export function makeRequireEntitlement(db = pool) {
         return res.status(404).json({ ok: false, code: "user_not_found", error: "User not found." });
       }
 
-      const { subscription_status, trial_expires_at } = rows[0];
-      const now = new Date();
-
-      const isActive =
-        subscription_status === "active" ||
-        (subscription_status === "trialing" && new Date(trial_expires_at) >= now);
-
-      if (!isActive) {
+      if (!computeEntitlement(rows[0]).isEntitled) {
         return res.status(402).json({
           ok: false,
           code: "subscription_required",

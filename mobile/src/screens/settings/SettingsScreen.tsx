@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   Share,
@@ -281,12 +282,16 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
             <View style={settingsStyles.subscriptionCard}>
               <Text style={settingsStyles.subscriptionLabel}>Subscription</Text>
               <Text style={settingsStyles.subscriptionStatus}>
-                {ent.subscription_status === "trialing"
+                {ent.billing_issue
+                  ? `Payment issue · update your payment method in ${Platform.OS === "ios" ? "App Store" : "Google Play"}`
+                  : ent.subscription_status === "trialing"
                   ? `Free trial - ${ent.trial_days_remaining ?? 0} day${ent.trial_days_remaining !== 1 ? "s" : ""} remaining`
                   : ent.subscription_status === "active"
                     ? "Active subscription"
                     : ent.subscription_status === "cancelled"
-                      ? "Cancelled - active until expiry"
+                      ? ent.is_active
+                        ? `Cancelled · access until ${ent.subscription_expires_at ? new Date(ent.subscription_expires_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "period end"}`
+                        : "Cancelled"
                       : "Trial ended"}
               </Text>
               {!ent.is_active ? (

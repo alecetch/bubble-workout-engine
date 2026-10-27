@@ -72,3 +72,17 @@ test("user not found returns 404", async () => {
   await mw(makeReq("u1"), res, () => {});
   assert.equal(res._status, 404);
 });
+
+
+for (const status of ["cancelled", "billing_issue"]) {
+  for (const future of [true, false]) {
+    test(`${status} with ${future ? "future" : "past"} expiry uses paid-through access`, async () => {
+      const mw = makeRequireEntitlement(makeMockDb([{ subscription_status: status, subscription_expires_at: new Date(Date.now() + (future ? 100000 : -100000)) }]));
+      const res = makeRes();
+      let allowed = false;
+      await mw(makeReq("u1"), res, () => { allowed = true; });
+      assert.equal(allowed, future);
+      if (!future) assert.equal(res._status, 402);
+    });
+  }
+}

@@ -2,6 +2,17 @@ import rateLimit from "express-rate-limit";
 
 const isDev = process.env.NODE_ENV !== "production";
 
+export function createEntitlementSyncRateLimiter() {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    limit: 5,
+    keyGenerator: req => req.auth.user_id,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, code: "rate_limited", error: "Too many entitlement sync requests. Please try again shortly." },
+  });
+}
+
 function buildLimiter(windowMs, max, message) {
   return rateLimit({
     windowMs,

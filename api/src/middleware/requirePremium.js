@@ -1,4 +1,5 @@
 import { pool } from "../db.js";
+import { computeEntitlement } from "../services/entitlement.js";
 
 export function makeRequirePremium(db = pool) {
   return async function requirePremium(req, res, next) {
@@ -8,13 +9,14 @@ export function makeRequirePremium(db = pool) {
     }
     try {
       const { rows } = await db.query(
-        `SELECT subscription_status FROM app_user WHERE id = $1`,
+        `SELECT subscription_status, trial_expires_at, subscription_expires_at FROM app_user WHERE id = $1`,
         [userId],
       );
       if (rows.length === 0) {
         return res.status(404).json({ ok: false, code: "user_not_found", error: "User not found." });
       }
-      if (rows[0].subscription_status !== "active") {
+      const entitlement = computeEntitlement(rows[0]);
+      if (!(entitlement.isEntitled && entitlement.isPaid)) {
         return res.status(402).json({
           ok: false,
           code: "premium_required",

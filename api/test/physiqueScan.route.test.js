@@ -30,7 +30,7 @@ function createDb() {
   return {
     state,
     async query(sql, params) {
-      if (/SELECT subscription_status FROM app_user/i.test(sql)) {
+      if (/SELECT subscription_status, trial_expires_at, subscription_expires_at FROM app_user/i.test(sql)) {
         const user = state.users.get(params[0]);
         return { rowCount: user ? 1 : 0, rows: user ? [user] : [] };
       }

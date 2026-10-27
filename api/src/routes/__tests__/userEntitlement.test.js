@@ -4,6 +4,38 @@ import { createUserEntitlementHandler } from "../userEntitlement.js";
 
 const USER_ID = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
 
+for (const status of ["cancelled", "billing_issue"]) {
+  test(`${status} retains paid access and exposes additive fields`, async () => {
+    const row = { subscription_status: status, subscription_expires_at: futureDate(5), trial_expires_at: pastDate(5) };
+    const res = mockRes();
+    await createUserEntitlementHandler({ query: async () => ({ rows: [row] }) })({ auth: { user_id: USER_ID } }, res);
+    assert.equal(res.body.is_active, true);
+    assert.equal(res.body.is_premium, true);
+    assert.equal(res.body.will_renew, status === "billing_issue");
+    assert.equal(res.body.billing_issue, status === "billing_issue");
+    assert.equal(res.body.subscription_status, status === "billing_issue" ? "active" : "cancelled");
+  });
+}
+
+test("lapsed cancelled state is lazily expired with a guarded write", async () => {
+  const row = { subscription_status: "cancelled", subscription_expires_at: pastDate(5) };
+  let updates = 0;
+  const res = mockRes();
+  await createUserEntitlementHandler({ query: async (sql, params) => {
+    if (sql.startsWith("UPDATE")) {
+      updates++;
+      assert.match(sql, /subscription_status = \$2/);
+      assert.match(sql, /subscription_expires_at <= \$3/);
+      assert.equal(params[1], "cancelled");
+      return { rowCount: 1 };
+    }
+    return { rows: [row] };
+  } })({ auth: { user_id: USER_ID } }, res);
+  assert.equal(updates, 1);
+  assert.equal(res.body.subscription_status, "expired");
+  assert.equal(res.body.is_premium, false);
+});
+
 function mockRes() {
   const res = { statusCode: 200, body: null };
   res.status = (code) => {
