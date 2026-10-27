@@ -91,18 +91,26 @@ WITH checks AS (
 
   UNION ALL SELECT
     'media_assets_seed_rows_present',
-    (SELECT COUNT(*) FROM public.media_assets WHERE image_key IN (
-      'program_day/mixed_full_body.png',
-      'program_day/recovery_recovery.png',
-      'program_day/conditioning_conditioning.png',
-      'program/mixed_full_body.png',
-      'program_day/skills_lower_body.png',
-      'program_day/hypertrophy_upper_body.png',
-      'program/hypertrophy.png',
-      'program_day/hypertrophy_lower_body.png',
-      'program_day/hypertrophy_full_body.png'
-    ))::int,
-    9
+    -- The 12 hero mappings the resolver needs, by (scope, day type, focus) rather than file name:
+    -- image_key changes whenever a hero is re-uploaded (legacy repo paths -> hero-media/ bucket keys),
+    -- but these mappings must stay active. A blanked day_type also fails here.
+    (SELECT COUNT(*) FROM public.media_assets
+      WHERE is_active = true
+        AND (usage_scope, day_type, COALESCE(focus_type, '')) IN (
+          ('program', 'generic', ''),
+          ('program', 'hypertrophy', ''),
+          ('program', 'strength', ''),
+          ('program_day', 'generic', ''),
+          ('program_day', 'recovery', 'recovery'),
+          ('program_day', 'conditioning', 'conditioning'),
+          ('program_day', 'hypertrophy', 'full_body'),
+          ('program_day', 'hypertrophy', 'lower_body'),
+          ('program_day', 'hypertrophy', 'upper_body'),
+          ('program_day', 'strength', 'full_body'),
+          ('program_day', 'strength', 'lower_body'),
+          ('program_day', 'strength', 'upper_body')
+        ))::int,
+    12
 
   UNION ALL SELECT
     'program_rep_rules_seed_rows_present',
