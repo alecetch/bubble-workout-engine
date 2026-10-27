@@ -1,4 +1,5 @@
 import { exerciseRenditionFields, heroRenditionFields } from "../utils/mediaUrl.js";
+import { resolveExerciseLedHero } from "../services/exerciseLedHero.js";
 import { displayLabel } from "../utils/displayLabels.js";
 // api/src/routes/readProgram.js
 import express from "express";
@@ -849,6 +850,12 @@ export function createReadProgramHandlers(options = pool) {
           items: unassigned,
         });
       }
+
+      day.hero_exercise_media = resolveExerciseLedHero({
+        dayType: day.day_type,
+        weekNumber: day.weekNumber,
+        items: segments.flatMap(segment => segment.items),
+      });
 
         return res.json({
           ok: true,

@@ -16,6 +16,18 @@ function expectText() {
 }
 
 describe("HeroHeader", () => {
+  it("shows the focus label above the title only with a successful image", () => {
+    const eyebrow = "Today's focus · Barbell Back Squat";
+    const { container, rerender } = render(<HeroHeader {...textProps} heroMedia={heroMedia} eyebrow={eyebrow} />);
+    const label = screen.getByLabelText("Today's focus: Barbell Back Squat");
+    expect(label).toHaveTextContent(eyebrow);
+    expect(label.nextElementSibling).toHaveTextContent(textProps.title);
+    fireEvent.error(container.querySelector("img")!);
+    expect(screen.queryByText(eyebrow)).not.toBeInTheDocument();
+    expectText();
+    rerender(<HeroHeader {...textProps} heroMedia={null} eyebrow={eyebrow} />);
+    expect(screen.queryByText(eyebrow)).not.toBeInTheDocument();
+  });
   it("renders the hero image with the title and summary", () => {
     const { container } = render(<HeroHeader {...textProps} heroMedia={heroMedia} heroMediaThumbhash="hero-hash" />);
     expect(container.querySelector("img")).toHaveAttribute("src", heroMedia);

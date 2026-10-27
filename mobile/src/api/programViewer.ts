@@ -99,6 +99,12 @@ export type ProgramDayFullResponse = {
     heroMedia?: string | null;
     heroMediaCard?: string | null;
     heroMediaThumbhash?: string | null;
+    heroExerciseMedia?: {
+      exerciseId: string;
+      exerciseName: string;
+      url: string;
+      thumbhash: string | null;
+    } | null;
     typeLabel: string;
     focusLabel: string;
     equipmentOverridePresetSlug?: string | null;
@@ -408,6 +414,8 @@ export function normalizeProgramOverview(raw: unknown): ProgramOverviewResponse 
 export function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
   const root = asObject(raw);
   const rawDay = asObject(root.day);
+  const rawExerciseHero = asObject(rawDay.hero_exercise_media ?? rawDay.heroExerciseMedia);
+  const exerciseHeroUrl = asString(rawExerciseHero.url);
   const rawSegments = asArray(root.segments);
 
   // Backend sends the raw DB row: program_day_id (not id), day_label, day_type, session_duration_mins
@@ -433,6 +441,12 @@ export function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
       heroMediaCard: asNullableString(rawDay.hero_media_card ?? rawDay.heroMediaCard) ?? null,
       heroMediaThumbhash: asNullableString(rawDay.hero_media_thumbhash ?? rawDay.heroMediaThumbhash) ?? null,
       heroMedia: asNullableString(rawDay.hero_media ?? rawDay.heroMedia),
+      heroExerciseMedia: exerciseHeroUrl ? {
+        exerciseId: asString(rawExerciseHero.exercise_id ?? rawExerciseHero.exerciseId) ?? "",
+        exerciseName: asString(rawExerciseHero.exercise_name ?? rawExerciseHero.exerciseName) ?? "",
+        url: exerciseHeroUrl,
+        thumbhash: asNullableString(rawExerciseHero.thumbhash) ?? null,
+      } : null,
       equipmentOverridePresetSlug: asNullableString(
         rawDay.equipmentOverridePresetSlug ?? rawDay.equipment_override_preset_slug,
       ) ?? null,

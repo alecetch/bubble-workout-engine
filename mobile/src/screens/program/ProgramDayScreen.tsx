@@ -363,6 +363,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }
 
   const loadedDay = dayQuery.data.day;
+  const exerciseHero = loadedDay.heroExerciseMedia;
   const scheduledWeekday = loadedDay.scheduledWeekday ?? "";
   const scheduledWeekdayLabel = toWeekdayPlural(scheduledWeekday);
   const weekNumber = loadedDay.weekNumber ?? 1;
@@ -418,8 +419,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         <HeroHeader
           title={loadedDay.label ?? "Workout Day"}
           summary={`${loadedDay.typeLabel || "Session"}${loadedDay.sessionDuration ? ` • ${loadedDay.sessionDuration} min` : ""}`}
-          heroMedia={loadedDay.heroMediaCard ?? loadedDay.heroMedia ?? null}
-          heroMediaThumbhash={loadedDay.heroMediaThumbhash ?? null}
+          heroMedia={exerciseHero?.url ?? loadedDay.heroMediaCard ?? loadedDay.heroMedia ?? null}
+          heroMediaThumbhash={exerciseHero ? exerciseHero.thumbhash : loadedDay.heroMediaThumbhash ?? null}
+          eyebrow={exerciseHero ? `Today's focus · ${exerciseHero.exerciseName}` : undefined}
         />
 
         <PressableScale
