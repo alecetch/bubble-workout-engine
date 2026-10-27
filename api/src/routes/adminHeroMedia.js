@@ -143,6 +143,9 @@ export function createAdminHeroMediaRouter({
     if (!entries.length) return res.status(400).json({ ok: false, error: "No fields to update" });
     try {
       if (req.body.usageScope !== undefined && !SCOPES.has(req.body.usageScope)) return res.status(400).json({ ok: false, error: "Unknown usage scope" });
+      // A blank day type silently unmaps the row (e.g. Recovery lost "recovery" when the edit
+      // dialog's dropdown didn't offer it), so never accept one.
+      if (req.body.dayType !== undefined && !String(req.body.dayType ?? "").trim()) return res.status(400).json({ ok: false, error: "Day type is required" });
       if (req.body.imageKey !== undefined && await statusForKey(req.body.imageKey, headObjectFn, legacyAssetsDir) !== "found") return res.status(400).json({ ok: false, error: "Image was not found" });
       const params = entries.map(([key]) => req.body[key] === "" && key === "focusType" ? null : req.body[key]);
       params.push(req.params.id);
