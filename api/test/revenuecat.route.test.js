@@ -274,15 +274,15 @@ test("transfer target aliases are deduplicated case-insensitively and destinatio
   });
 });
 
-test("transfer upstream failure is acknowledged without changing local state", { skip: DATABASE_SKIP }, async () => {
+test("transfer upstream failure returns 503 so RevenueCat retries, without changing local state", { skip: DATABASE_SKIP }, async () => {
   await withUsers(async (db, [user]) => {
     const before = (await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0];
     const res = mockRes();
     await makeHandler(db, { syncDeps: { apiKey: "key", fetchImpl: async () => ({ ok: false, status: 503 }) } })(validReq("TRANSFER", {
       app_user_id: undefined, transferred_from: [], transferred_to: [user],
     }), res);
-    assert.equal(res.statusCode, 200);
-    assert.equal(res.body.reason, "sync_failed");
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.code, "transfer_sync_failed");
     assert.deepEqual((await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0], before);
   });
 });

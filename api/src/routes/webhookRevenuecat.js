@@ -45,6 +45,7 @@ export function createWebhookRevenuecatHandler(db, { syncUserEntitlementFn = syn
         : type === "CANCELLATION" ? "cancelled" : type === "BILLING_ISSUE" ? "billing_issue" : "expired"]]);
     let handled = false;
     let reason;
+    let syncFailed = false;
     try {
       for (const [id, status] of targets) {
         if (typeof id !== "string" || !UUID.test(id)) {
@@ -62,7 +63,7 @@ export function createWebhookRevenuecatHandler(db, { syncUserEntitlementFn = syn
           } catch (err) {
             if (err.code !== "entitlement_sync_failed" && err.code !== "entitlement_sync_unavailable") throw err;
             req.log?.warn?.({ event: "revenuecat.webhook.sync_failed", type, userId: id }, "RevenueCat transfer sync unavailable");
-            reason ??= "sync_failed";
+            syncFailed = true;
           }
           continue;
         }
@@ -83,6 +84,11 @@ export function createWebhookRevenuecatHandler(db, { syncUserEntitlementFn = syn
           reason ??= exists ? "stale_event" : "unknown_user";
           if (!exists) req.log?.warn?.({ event: "revenuecat.webhook.unknown_user", userId: id, type }, "Unknown RevenueCat user");
         }
+      }
+      // A transient upstream failure must not be acknowledged, or RevenueCat drops the transfer.
+      // Retries are safe: targets already synced for this event are skipped as stale.
+      if (syncFailed) {
+        return res.status(503).json({ ok: false, code: "transfer_sync_failed", error: "RevenueCat transfer sync failed; retry later." });
       }
       return res.json({ ok: true, handled, type,
         ...(handled && type !== "TRANSFER" ? { new_status: targets.get(event.app_user_id.toLowerCase()) } : {}),
