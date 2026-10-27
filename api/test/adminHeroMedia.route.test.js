@@ -69,6 +69,21 @@ test("PATCH is partial-safe and DELETE only deactivates", async t => {
   assert.match(calls.at(-1).sql, /^UPDATE media_assets SET is_active/); assert.doesNotMatch(calls.at(-1).sql, /^DELETE/i);
 });
 
+test("PATCH rejects a blank day type instead of unmapping the row", async t => {
+  const calls = [];
+  const db = { query: async (sql, params) => { calls.push({ sql, params }); return { rows: sql.includes("RETURNING") ? [row] : [] }; } };
+  const base = await server(t, db);
+  for (const dayType of ["", "   "]) {
+    const response = await fetch(`${base}/hero-media/1`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayType, label: "Recovery" }) });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, "Day type is required");
+  }
+  assert.equal(calls.filter(c => /^UPDATE media_assets/.test(c.sql)).length, 0);
+  const ok = await fetch(`${base}/hero-media/1`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayType: "recovery" }) });
+  assert.equal(ok.status, 200);
+  assert.match(calls.at(-1).sql, /day_type = \$1/);
+});
+
 test("POST validates scope and derives a stable asset key", async t => {
   const calls = [];
   const db = { query: async (sql, params) => {
