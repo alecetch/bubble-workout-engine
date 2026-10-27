@@ -1935,13 +1935,18 @@ function renderRecos(recos) {
       <div class="reco-changes">${renderChangePills(r.changes)}</div>
       ${r.explanation ? `<div class="reco-explanation">${esc(r.explanation)}</div>` : ""}
       <div class="reco-actions">
-        <button class="ghost sm" onclick="window.applyReco(${i})">Edit</button>
-        <button class="ghost sm" onclick="window.toggleRecoSql(${i})">Show SQL</button>
+        <button class="ghost sm" data-reco-action="apply" data-reco-index="${i}">Edit</button>
+        <button class="ghost sm" data-reco-action="sql" data-reco-index="${i}">Show SQL</button>
       </div>
       <pre class="reco-sql" id="reco-sql-${i}">${esc(r.sql_preview ?? r.sql ?? "-- No SQL generated")}</pre>
     </div>
   `;
   }).join("");
+  // Bound here, not inline: the admin CSP (script-src-attr 'none') blocks onclick attributes.
+  document.querySelectorAll("#recos-content [data-reco-action]").forEach((btn) => {
+    const i = Number(btn.dataset.recoIndex);
+    btn.addEventListener("click", () => (btn.dataset.recoAction === "apply" ? window.applyReco(i) : window.toggleRecoSql(i)));
+  });
 
   window._recos = recos;
 }
