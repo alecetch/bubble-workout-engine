@@ -1,4 +1,4 @@
-appId: com.bubbleworkout.mobile
+appId: fit.getforma.app
 ---
 # All 10s assertion timeouts in this flow were widened to 30s after the CI-only
 # investigation for the equipment-preset step (see the comment further down)

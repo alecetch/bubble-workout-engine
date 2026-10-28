@@ -1,4 +1,4 @@
-appId: com.bubbleworkout.mobile
+appId: fit.getforma.app
 ---
 # Precondition: test account must be logged in with an active "Strength Block" program.
 # Run 01-auth-login.yaml first, or log in manually.

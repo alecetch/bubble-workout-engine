@@ -1,4 +1,4 @@
-appId: com.bubbleworkout.mobile
+appId: fit.getforma.app
 ---
 # Standalone flow: logs in with TEST_EMAIL / TEST_PASSWORD for a one-day program account.
 # Precondition: any user may be logged in; this flow logs them out first.

@@ -1,6 +1,6 @@
-appId: com.bubbleworkout.mobile
+appId: fit.getforma.app
 ---
-- openLink: "formai://ref/ABCD2345"
+- openLink: "forma://ref/ABCD2345"
 - extendedWaitUntil:
     visible: "Welcome"
     timeout: 30000

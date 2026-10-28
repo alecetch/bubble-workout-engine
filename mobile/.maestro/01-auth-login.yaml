@@ -1,4 +1,4 @@
-appId: com.bubbleworkout.mobile
+appId: fit.getforma.app
 ---
 # Do NOT use clearState — pm clear invalidates the Maestro instrumentation context.
 

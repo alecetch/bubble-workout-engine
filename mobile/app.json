@@ -3,7 +3,7 @@
     "name": "Forma",
     "slug": "bubble-workout-mobile",
     "version": "1.0.0",
-    "scheme": "formai",
+    "scheme": "forma",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -14,7 +14,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bubbleworkout.mobile",
+      "bundleIdentifier": "fit.getforma.app",
       "associatedDomains": [
         "applinks:getforma.fit"
       ],
@@ -23,7 +23,7 @@
       }
     },
     "android": {
-      "package": "com.bubbleworkout.mobile",
+      "package": "fit.getforma.app",
       "intentFilters": [
         {
           "action": "VIEW",

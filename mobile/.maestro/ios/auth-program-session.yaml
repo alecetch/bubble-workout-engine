@@ -1,4 +1,4 @@
-appId: com.bubbleworkout.mobile
+appId: fit.getforma.app
 ---
 - launchApp:
     permissions:
@@ -40,7 +40,7 @@ appId: com.bubbleworkout.mobile
 - assertVisible: "Settings"
 # Force quit without clearing app data or logging in again.
 - stopApp
-- openLink: "formai://"
+- openLink: "forma://"
 - extendedWaitUntil:
     visible: "Program Review"
     timeout: 30000

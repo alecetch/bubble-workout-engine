@@ -52,7 +52,7 @@ test("GET /ref/VALIDCODE renders the referrer name and code", async () => {
     assert.match(body, /Forma Invite/);
     assert.match(body, /invited you to try Forma/);
     assert.match(body, /Open Forma/);
-    assert.match(body, /href="formai:\/\/"/);
+    assert.match(body, /href="forma:\/\/"/);
     assert.doesNotMatch(body, /Formai/);
     assert.match(body, /VALIDCODE/);
   });

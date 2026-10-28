@@ -1,4 +1,4 @@
-package com.bubbleworkout.mobile
+package fit.getforma.app
 
 import android.os.Build
 import android.os.Bundle
