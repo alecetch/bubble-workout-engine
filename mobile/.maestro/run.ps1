@@ -93,7 +93,7 @@ Write-Host "Driver APKs installed. Starting Maestro..."
 # Clear app state before onboarding flows so stale auth/navigation state from a
 # failed run cannot leave the next run mid-onboarding or on a dirty register form.
 if ($flowName -match '^0[67]') {
-    Invoke-BestEffort { adb shell pm clear com.bubbleworkout.mobile }
+    Invoke-BestEffort { adb shell pm clear fit.getforma.app }
 }
 
 # 6. Load maestro.env and pass all key=value pairs as --env flags.

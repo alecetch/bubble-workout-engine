@@ -59,7 +59,7 @@ test("detects forbidden brand strings in source files", () => {
   assert.match(result.message, /src\/screens\/Home\.tsx:1 matched "Formai"/);
 });
 
-test("allows retained native identifiers in app.json", () => {
+test("allows Forma native identifiers in app.json", () => {
   const rootDir = makeFixture();
   writeFile(
     rootDir,
@@ -68,10 +68,10 @@ test("allows retained native identifiers in app.json", () => {
       {
         expo: {
           name: "Forma",
-          slug: "forma",
-          scheme: "formai",
-          ios: { bundleIdentifier: "com.bubbleworkout.mobile" },
-          android: { package: "com.bubbleworkout.mobile" },
+          slug: "bubble-workout-mobile",
+          scheme: "forma",
+          ios: { bundleIdentifier: "fit.getforma.app" },
+          android: { package: "fit.getforma.app" },
         },
       },
       null,
@@ -83,4 +83,27 @@ test("allows retained native identifiers in app.json", () => {
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.violations, []);
+});
+
+test("flags the retired bubbleworkout app ID and formai scheme in app.json", () => {
+  const rootDir = makeFixture();
+  writeFile(
+    rootDir,
+    "app.json",
+    JSON.stringify(
+      {
+        expo: {
+          name: "Forma",
+          scheme: "formai",
+          ios: { bundleIdentifier: "com.bubbleworkout.mobile" },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  const result = checkBrandStrings(rootDir);
+
+  assert.equal(result.ok, false);
 });

@@ -382,7 +382,7 @@ if ($sdk -ne "34") {
 Write-Host "Emulator ready: Android $release / API $sdk"
 
 Step "Ensuring Expo dev client is installed"
-$package = (& adb shell pm list packages com.bubbleworkout.mobile 2>&1 | Select-String "com.bubbleworkout.mobile")
+$package = (& adb shell pm list packages fit.getforma.app 2>&1 | Select-String "fit.getforma.app")
 if (-not $package) {
     $apk = Join-Path $mobileDir "android\app\build\outputs\apk\debug\app-debug.apk"
     if (-not (Test-Path $apk)) {

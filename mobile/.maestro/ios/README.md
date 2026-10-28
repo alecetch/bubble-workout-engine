@@ -21,8 +21,8 @@ Each case gets a newly created simulator, not just `clearState` or an uninstall 
 | --- | --- |
 | Allow | Fresh notification dialog, tap Allow, authenticated program loaded, dashboard navigation, force quit/relaunch without a second login |
 | Deny | Separate fresh notification dialog, tap Don't Allow, same authenticated navigation and persistence assertions |
-| Cold link | Open `formai://ref/ABCD2345` before the first launch; registration displays that referral code |
-| Warm link | Launch to Welcome first, then open `formai://ref/WXYZ6789`; registration displays the new code |
+| Cold link | Open `forma://ref/ABCD2345` before the first launch; registration displays that referral code |
+| Warm link | Launch to Welcome first, then open `forma://ref/WXYZ6789`; registration displays the new code |
 
 Permissions begin `unset`, and the prompt assertion is mandatory. No optional assertion can hide a missing prompt or failed login. Referral tests verify URL handling and referral data reaching registration, not automatic navigation to registration or associated-domain delivery.
 

@@ -1,4 +1,4 @@
-appId: com.bubbleworkout.mobile
+appId: fit.getforma.app
 ---
 # See the matching comment in 06-onboarding-beginner.yaml - all 10s assertion
 # timeouts in this flow were widened to 30s for the same reason (a systemic,

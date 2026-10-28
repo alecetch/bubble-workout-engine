@@ -41,7 +41,7 @@ test('permission cases require actual fresh prompts and test session persistence
   assert.match(text, /login-submit-button/);
   assert.match(text, /EXPECTED_PROGRAM/);
   assert.ok(commands.some(command => command === 'stopApp'));
-  assert.ok(commands.some(command => command.openLink === 'formai://'));
+  assert.ok(commands.some(command => command.openLink === 'forma://'));
   assert.ok(commands.some(command => command.assertNotVisible === 'Sign in'));
   assert.doesNotMatch(text, /optional|10\.0\.2\.2|Development Build/);
 });
@@ -49,7 +49,7 @@ test('cold and warm links assert referral data in the destination UI', () => {
   for (const name of ['cold-link', 'warm-link']) {
     const [, commands] = yaml(`mobile/.maestro/ios/${name}.yaml`);
     assert.equal(Boolean(commands[0].launchApp), name === 'warm-link');
-    assert.ok(commands.some(command => command.openLink?.startsWith('formai://ref/')));
+    assert.ok(commands.some(command => command.openLink?.startsWith('forma://ref/')));
     assert.equal(commands.at(-1).assertVisible.id, 'referral-code-input');
     assert.match(commands.at(-1).assertVisible.text, /^[A-Z2-9]{8}$/);
   }

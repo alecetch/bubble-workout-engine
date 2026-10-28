@@ -89,9 +89,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.bubbleworkout.mobile'
+    namespace 'fit.getforma.app'
     defaultConfig {
-        applicationId 'com.bubbleworkout.mobile'
+        applicationId 'fit.getforma.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
