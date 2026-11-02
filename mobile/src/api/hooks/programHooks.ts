@@ -297,12 +297,12 @@ export function useSetPrimaryProgram(): UseMutationResult<
 export function useMarkDayComplete(): UseMutationResult<
   void,
   Error,
-  { programDayId: string; isCompleted: boolean; userId?: string }
+  { programDayId: string; isCompleted: boolean; userId?: string; localDate?: string }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ programDayId, isCompleted, userId }) =>
-      markProgramDayComplete(programDayId, isCompleted, { userId }),
+    mutationFn: ({ programDayId, isCompleted, userId, localDate }) =>
+      markProgramDayComplete(programDayId, isCompleted, { userId, ...(localDate ? { localDate } : {}) }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["programOverview"] });
       void queryClient.invalidateQueries({ queryKey: ["dayPreview"] });

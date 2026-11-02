@@ -9,7 +9,9 @@ function defaultProps(overrides: Partial<React.ComponentProps<typeof SessionSumm
     totalSets: 12,
     exerciseCount: 4,
     prHits: [],
-    streakDays: 3,
+    yearCountAfterSession: 88,
+    yearTarget: 200,
+    year: 2026,
     adaptedExercises: [],
     onDismiss: vi.fn(),
     ...overrides,
@@ -17,6 +19,13 @@ function defaultProps(overrides: Partial<React.ComponentProps<typeof SessionSumm
 }
 
 describe("SessionSummaryModal", () => {
+  it("shows the yearly count and hides it when unavailable", () => {
+    const { rerender } = render(<SessionSummaryModal {...defaultProps()} />);
+    expect(screen.getByText("That's 88. 112 to go.")).toBeInTheDocument();
+    rerender(<SessionSummaryModal {...defaultProps({ yearCountAfterSession: null })} />);
+    expect(screen.queryByText(/That's/)).not.toBeInTheDocument();
+  });
+
   it("renders core session content", () => {
     render(<SessionSummaryModal {...defaultProps()} />);
 

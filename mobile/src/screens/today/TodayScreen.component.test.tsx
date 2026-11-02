@@ -3,7 +3,7 @@ import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TodayScreen } from "./TodayScreen";
-import { useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
+import { useYearProgress, useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
 import { mockZustandSelector } from "../../__test-utils__";
@@ -23,6 +23,8 @@ vi.mock("@react-navigation/native", async () => {
 });
 
 vi.mock("../../api/hooks", () => ({
+  queryKeys: { yearProgress: ["yearProgress"] },
+  useYearProgress: vi.fn(),
   useActivePrograms: vi.fn(),
   useEntitlement: vi.fn(),
   useProgramOverview: vi.fn(),
@@ -37,8 +39,8 @@ vi.mock("../../utils/localWorkoutLog", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
-    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
+  PressableScale: ({ accessibilityLabel, children, disabled, onPress, style }: any) => (
+    <button type="button" data-background={style?.backgroundColor} aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
       {children}
     </button>
   ),
@@ -68,6 +70,7 @@ describe("TodayScreen", () => {
     navigationMocks.navigate.mockReset();
     sessionState = { userId: "user-1", activeProgramId: "prog-1" };
     mockZustandSelector(useSessionStoreMock as any, sessionState);
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2026, count: 88, target: 200, pace_status: "ahead", pace_delta: 3, projected_year_end: 212, pro_rated: false }, refetch: vi.fn() } as any);
     useActiveProgramsMock.mockReturnValue({ data: undefined, isLoading: false } as any);
     useEntitlementMock.mockReturnValue({ data: { is_active: true } } as any);
     useProgramOverviewMock.mockReturnValue({
@@ -102,6 +105,7 @@ describe("TodayScreen", () => {
     sessionState = { userId: "user-1", activeProgramId: null as any };
     mockZustandSelector(useSessionStoreMock as any, sessionState);
     render(<TodayScreen />);
+    expect(screen.queryByText("of 200")).not.toBeInTheDocument();
     expect(screen.getByText("No Active Program")).toBeInTheDocument();
     expect(screen.getByText("Go To Program Review")).toBeInTheDocument();
   });
@@ -119,6 +123,9 @@ describe("TodayScreen", () => {
     await flushEffects();
     expect(screen.getByText("Start Workout")).toBeInTheDocument();
     expect(screen.getByText("Lower Body")).toBeInTheDocument();
+    expect(screen.getByText("of 200").compareDocumentPosition(screen.getByText("Week 1 of 1")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /88 of 200 training days/ }));
+    expect(navigationMocks.navigate).toHaveBeenCalledWith("HistoryTab");
   });
 
   it("renders a resume action for a started workout", async () => {
@@ -160,7 +167,7 @@ describe("TodayScreen", () => {
     } as any);
     render(<TodayScreen />);
     await flushEffects();
-    expect(screen.getByText("Today's workout is done.")).toBeInTheDocument();
+    expect(screen.getByText("Day 88 is in.")).toBeInTheDocument();
   });
 
   it("does not render a missed-session warning on the Today screen", () => {
@@ -190,6 +197,26 @@ describe("TodayScreen", () => {
     expect(screen.getByText("Program complete!")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Generate New Program"));
     expect(navigationMocks.navigate).toHaveBeenCalledWith("HomeTab", { screen: "ProgramReview" });
+  });
+
+  it.each([["behind", -2, "#3B82F6", "You're 2 behind. A bonus session today closes the gap."],
+    ["ahead", 3, "#1E293B", "You're ahead. Rest is training too."],
+    ["on_pace", 0, "#1E293B", "On pace. Rest is training too."]])("emphasises bonus workouts for %s pace", (pace_status, pace_delta, background, copy) => {
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2026, count: 88, target: 200, pace_status, pace_delta, projected_year_end: 200 }, refetch: vi.fn() } as any);
+    render(<TodayScreen />);
+    expect(screen.getByText(copy)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a bonus workout today" })).toHaveAttribute("data-background", background);
+  });
+
+  it("keeps the workout usable when year progress fails and retries independently", async () => {
+    const refetch = vi.fn();
+    vi.mocked(useYearProgress).mockReturnValue({ isError: true, refetch } as any);
+    useProgramOverviewMock.mockReturnValue({ data: overview([{ calendarDate: "2026-05-01", isTrainingDay: true, programDayId: "day-1" }]) } as any);
+    render(<TodayScreen />);
+    await flushEffects();
+    expect(screen.getByText("Start Workout")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading your year" }));
+    expect(refetch).toHaveBeenCalledOnce();
   });
 
   it("renders loading state", () => {
