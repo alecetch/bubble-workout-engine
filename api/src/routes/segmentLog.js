@@ -1,3 +1,5 @@
+import { firstValidTimezone } from "../utils/timezone.js";
+import { resolveLocalDate, rememberTimezone, recordProgramDaySession, userTrainingContext, ValidationError } from "../services/trainingDayLedger.js";
 import express from "express";
 import { pool } from "../db.js";
 import { requireEntitlement } from "../middleware/requireEntitlement.js";
@@ -21,6 +23,7 @@ class NotFoundError extends Error {
 }
 
 function mapError(err) {
+  if (err instanceof ValidationError) return { status: 400, code: err.code, message: err.message };
   if (err instanceof RequestValidationError || err instanceof NotFoundError) {
     return { status: err.status ?? 400, code: err instanceof NotFoundError ? "not_found" : "validation_error", message: err.message, details: err.details };
   }
@@ -191,6 +194,14 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
       try {
         const user_id = resolveUserId(req);
         await client.query("BEGIN");
+        const owned = await client.query(`SELECT pd.id FROM program_day pd JOIN program p ON p.id = pd.program_id
+          WHERE pd.id = $1 AND p.id = $2 AND p.user_id = $3 FOR UPDATE OF pd`, [program_day_id, program_id, user_id]);
+        if (!owned.rowCount) throw new NotFoundError("Day not found or access denied");
+        const context = await userTrainingContext(client, user_id);
+        const { localDate } = resolveLocalDate({ requestedLocalDate: req.body?.local_date,
+          requestedTimeZone: req.body?.timezone,
+          fallbackTimeZone: firstValidTimezone(context?.timezone, context?.reminder_timezone) });
+
 
         const programExerciseIds = [...new Set(rows.map((row) => row.program_exercise_id))];
         const regionResult = await client.query(
@@ -198,10 +209,13 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
           SELECT pe.id AS program_exercise_id, pe.segment_type, ec.strength_primary_region
           FROM program_exercise pe
           LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
-          WHERE pe.id = ANY($1::uuid[])
+          JOIN program p ON p.id = pe.program_id
+          WHERE pe.id = ANY($1::uuid[]) AND p.user_id = $2 AND p.id = $3
+            AND pe.program_day_id = $4 AND pe.workout_segment_id = $5
           `,
-          [programExerciseIds],
+          [programExerciseIds, user_id, program_id, program_day_id, workout_segment_id],
         );
+        if (regionResult.rows.length !== programExerciseIds.length) throw new NotFoundError("Exercise not found or access denied");
         const regionByProgramExerciseId = new Map(
           regionResult.rows.map((r) => [r.program_exercise_id, r.strength_primary_region]),
         );
@@ -260,6 +274,8 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
           );
         }
 
+        await rememberTimezone(client, user_id, req.body?.timezone);
+        await recordProgramDaySession(client, { userId: user_id, programDayId: program_day_id, localDate });
         const prs = await checkPrs(client, user_id, program_day_id, programExerciseIds);
         await client.query("COMMIT");
         res.json({

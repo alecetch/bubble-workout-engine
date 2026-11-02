@@ -29,6 +29,7 @@ import { sessionHistoryMetricsRouter } from "./src/routes/sessionHistoryMetrics.
 import { activeProgramsRouter } from "./src/routes/activePrograms.js";
 import { notificationPreferencesRouter } from "./src/routes/notificationPreferences.js";
 import { accountSettingsRouter } from "./src/routes/accountSettings.js";
+import { yearProgressRouter } from "./src/routes/yearProgress.js";
 import { userEntitlementRouter } from "./src/routes/userEntitlement.js";
 import { webhookRevenuecatRouter } from "./src/routes/webhookRevenuecat.js";
 import { prsFeedRouter } from "./src/routes/prsFeed.js";
@@ -590,6 +591,7 @@ app.use(historyPersonalRecordsRouter); // → GET /v1/history/personal-records
 app.use(historyExerciseRouter); // → GET /v1/history/exercise/:exerciseId
 
 app.use("/api", ...userAuth, userEntitlementRouter);
+app.use("/api", ...userAuth, yearProgressRouter);
 app.use("/api", sessionHistoryMetricsRouter);
 app.use("/api", prsFeedRouter);
 app.use("/api", loggedExercisesRouter);

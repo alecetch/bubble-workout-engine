@@ -1,3 +1,4 @@
+import { isValidTimezone } from "../utils/timezone.js";
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -23,14 +24,7 @@ function mapError(err) {
   return { status: 500, code: "internal_error", message: publicInternalError(err) };
 }
 
-export function isValidTimezone(tz) {
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
-}
+export { isValidTimezone } from "../utils/timezone.js";
 
 export function isValidHhmm(value) {
   if (!HHMM_RE.test(value)) return false;

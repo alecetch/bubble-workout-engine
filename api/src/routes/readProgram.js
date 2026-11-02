@@ -1,3 +1,6 @@
+import { firstValidTimezone } from "../utils/timezone.js";
+import { resolveLocalDate, rememberTimezone, recordProgramDaySession, removeProgramDaySessionIfUnqualified, userTrainingContext, ValidationError } from "../services/trainingDayLedger.js";
+import { getYearProgress } from "../services/yearProgress.js";
 import { exerciseRenditionFields, heroRenditionFields } from "../utils/mediaUrl.js";
 import { resolveExerciseLedHero } from "../services/exerciseLedHero.js";
 import { displayLabel } from "../utils/displayLabels.js";
@@ -171,6 +174,7 @@ function buildDecisionHistoryItem(row) {
 }
 
 function mapError(err) {
+  if (err instanceof ValidationError) return { status: 400, code: err.code, message: err.message };
   if (err instanceof RequestValidationError || err instanceof NotFoundError) {
     return { status: err.status ?? 400, code: err instanceof NotFoundError ? "not_found" : "validation_error", message: err.message, details: err.details };
   }
@@ -885,35 +889,35 @@ export function createReadProgramHandlers(options = pool) {
     try {
       requireUuid(program_day_id, "program_day_id");
 
-      let user_id = "";
+      const user_id = resolveUserId(req);
       let wasCompleted = false;
+      let yearProgress;
       const client = await db.connect();
       try {
-        // Accept identity from body (PATCH) or query (fallback).
-        user_id = resolveUserId(req);
-
-        const r = await client.query(
-          `
-          WITH old AS (
-            SELECT pd.id, pd.is_completed AS was_completed
-            FROM program_day pd
-            JOIN program p ON p.id = pd.program_id
-            WHERE pd.id = $1 AND p.user_id = $2
-          )
-          UPDATE program_day pd
-          SET is_completed = $3
-          FROM program p, old
-          WHERE pd.id = $1
-            AND p.id = pd.program_id
-            AND p.user_id = $2
-            AND pd.id = old.id
-          RETURNING pd.id, old.was_completed
-          `,
-          [program_day_id, user_id, Boolean(is_completed)],
-        );
-
-        if (r.rowCount === 0) throw new NotFoundError("Day not found or access denied");
-        wasCompleted = Boolean(r.rows[0]?.was_completed);
+        await client.query("BEGIN");
+        const owned = await client.query(`SELECT pd.id, pd.is_completed AS was_completed
+          FROM program_day pd JOIN program p ON p.id = pd.program_id
+          WHERE pd.id = $1 AND p.user_id = $2 FOR UPDATE OF pd`, [program_day_id, user_id]);
+        if (!owned.rowCount) throw new NotFoundError("Day not found or access denied");
+        wasCompleted = Boolean(owned.rows[0]?.was_completed);
+        const context = await userTrainingContext(client, user_id);
+        const { localDate, timeZone } = resolveLocalDate({
+          requestedLocalDate: req.body?.local_date, requestedTimeZone: req.body?.timezone,
+          fallbackTimeZone: firstValidTimezone(context?.timezone, context?.reminder_timezone),
+        });
+        await client.query(`UPDATE program_day pd SET is_completed = $3,
+          completed_at = CASE WHEN $3 THEN COALESCE(pd.completed_at, now()) ELSE NULL END
+          FROM program p WHERE pd.id = $1 AND p.id = pd.program_id AND p.user_id = $2`,
+        [program_day_id, user_id, Boolean(is_completed)]);
+        await rememberTimezone(client, user_id, req.body?.timezone);
+        if (is_completed) await recordProgramDaySession(client, { userId: user_id, programDayId: program_day_id, localDate });
+        else await removeProgramDaySessionIfUnqualified(client, { userId: user_id, programDayId: program_day_id });
+        const progress = await getYearProgress(client, user_id, { context, timeZone });
+        yearProgress = { year: progress.year, count: progress.count, target: progress.target };
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
       } finally {
         client.release();
       }
@@ -983,7 +987,7 @@ export function createReadProgramHandlers(options = pool) {
           });
       }
 
-      return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed) });
+      return res.json({ ok: true, programDayId: program_day_id, isCompleted: Boolean(is_completed), year_progress: yearProgress });
     } catch (err) {
       const mapped = mapError(err);
       return res.status(mapped.status).json({

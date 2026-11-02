@@ -190,6 +190,9 @@ test("postSegmentLog accepts rir_actual of 0", async () => {
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
@@ -233,6 +236,9 @@ test("postSegmentLog rejects warmup program exercises without writing logs", asy
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return {
@@ -274,6 +280,9 @@ test("postSegmentLog rejects cooldown program exercises without writing logs", a
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return {
@@ -315,6 +324,9 @@ test("postSegmentLog accepts rir_actual of 3", async () => {
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
@@ -419,6 +431,9 @@ test("postSegmentLog persists rir_actual when provided", async () => {
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
@@ -462,6 +477,9 @@ test("postSegmentLog stores null rir_actual when omitted", async () => {
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
@@ -505,6 +523,9 @@ test("postSegmentLog stores null weight for non-positive loads", async () => {
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
@@ -550,6 +571,9 @@ test("postSegmentLog accepts null weight and stores null estimated 1rm", async (
       return {
         async query(sql, params) {
           queries.push({ sql, params });
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
@@ -597,6 +621,9 @@ test("postSegmentLog does not send PR notification for null weight rows", async 
     async connect() {
       return {
         async query(sql) {
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
             return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
