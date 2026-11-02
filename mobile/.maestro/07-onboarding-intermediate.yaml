@@ -176,18 +176,21 @@ appId: fit.getforma.app
     element:
       text: "Choose duration"
     direction: DOWN
+    centerElement: true
 - tapOn: "Choose duration"
 - tapOn: "50 min"
 - scrollUntilVisible:
     element:
       text: "Select sex"
     direction: DOWN
+    centerElement: true
 - tapOn: "Select sex"
 - tapOn: "Male"
 - scrollUntilVisible:
     element:
       text: "Select age range"
     direction: DOWN
+    centerElement: true
 - tapOn: "Select age range"
 - tapOn: "25-34"
 # See the matching comment in 06-onboarding-beginner.yaml - height/weight
