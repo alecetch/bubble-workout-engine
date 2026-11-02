@@ -21,7 +21,7 @@ describe("year copy", () => {
   it("describes rest, completion and a pro-rated target", () => {
     expect(restDayCopy({ pace_status: "behind", pace_delta: -1.5 })).toBe("You're 2 behind. A bonus session today closes the gap.");
     expect(restDayCopy({ pace_status: "ahead", pace_delta: 3 })).toBe("You're ahead. Rest is training too.");
-    expect(restDayCopy({ pace_status: "on_pace", pace_delta: -0.3 })).toBe("On pace. Rest is training too.");
+    expect(restDayCopy({ pace_status: "on_pace", pace_delta: -1 })).toBe("On pace. Rest is training too.");
     expect(doneCopy(88)).toBe("Day 88 is in.");
     expect(proRatedNote({ pro_rated: true, target: 50, year: 2026 })).toBe("Your 2026 target: 50 days. Next year it's 200.");
     expect(proRatedNote({ pro_rated: false, target: 200, year: 2026 })).toBeNull();

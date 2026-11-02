@@ -20,7 +20,7 @@ export function summaryCountCopy(countAfterSession: number, target: number, year
 }
 
 export function restDayCopy(p: Pick<Pace, "pace_delta" | "pace_status">): string {
-  if (p.pace_delta <= -1) return `You're ${Math.ceil(-p.pace_delta)} behind. A bonus session today closes the gap.`;
+  if (p.pace_status === "behind" && p.pace_delta <= -1) return `You're ${Math.ceil(-p.pace_delta)} behind. A bonus session today closes the gap.`;
   return p.pace_status === "ahead" ? "You're ahead. Rest is training too." : "On pace. Rest is training too.";
 }
 

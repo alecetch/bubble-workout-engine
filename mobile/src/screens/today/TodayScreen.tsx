@@ -334,7 +334,7 @@ export function TodayScreen(): React.JSX.Element {
         />
         {yearQuery.data?.ok ? <Text style={styles.subtitle}>{restDayCopy(yearQuery.data)}</Text> : null}
         <PressableScale
-          style={yearQuery.data?.ok && yearQuery.data.pace_delta <= -1 ? styles.primaryButton : styles.secondaryButton}
+          style={yearQuery.data?.ok && yearQuery.data.pace_status === "behind" && yearQuery.data.pace_delta <= -1 ? styles.primaryButton : styles.secondaryButton}
           onPress={() => {
             if (!isActive) {
               navigation.navigate("HomeTab", { screen: "Paywall" } as never);
