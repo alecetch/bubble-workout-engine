@@ -306,7 +306,7 @@ export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Elem
         preferredUnit: unit,
       });
       setDraft({ anchorLifts: [], anchorLiftsSkipped: true, preferredUnit: unit });
-      navigation.replace("Step3Schedule");
+      navigation.replace("YearGoal");
     } catch {
       setSaveError("Unable to save this step. Please try again.");
       await hapticHeavy();
@@ -360,7 +360,7 @@ export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Elem
         anchorLiftsSkipped: allSkipped,
         preferredUnit: unit,
       });
-      navigation.replace("Step3Schedule");
+      navigation.replace("YearGoal");
     } catch {
       setSaveError("Unable to save this step. Please try again.");
       await hapticHeavy();

@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  View,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
@@ -26,6 +27,7 @@ import {
   type Sex,
 } from "../../state/onboarding/types";
 import { validateStep } from "../../state/onboarding/validators";
+import { projectedDays } from "../../utils/yearTarget";
 import { normalizeText } from "../../utils/normalizeText";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
@@ -86,6 +88,12 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
     () => AGE_RANGES.map((value) => ({ label: value, value })),
     [],
   );
+
+  const daysPerWeek = draft.preferredDays.length;
+  const projection = daysPerWeek >= 4
+    ? `${daysPerWeek} days a week gets you to ${projectedDays(daysPerWeek)} this year.`
+    : daysPerWeek === 3 ? "3 days a week is 156. Add a bonus session most fortnights to reach 200."
+    : daysPerWeek === 2 ? "2 days a week builds the habit — Club 100 is your first target." : null;
 
   const under18Selected = draft.ageRange === "Under 18";
 
@@ -222,6 +230,9 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
       <Animated.View onLayout={recordSectionLayout("preferredDays")} style={preferredDaysPulse.animatedStyle}>
         <SectionCard title="Preferred training days" subtitle="Select at least one day.">
           <DayChipRow days={dayOptions} selectedValues={draft.preferredDays} onToggle={togglePreferredDay} />
+          <View style={styles.projectionSlot} testID="schedule-projection-slot">
+            {projection ? <Text style={styles.projection} accessibilityLiveRegion="polite">{projection}</Text> : null}
+          </View>
           {fieldErrors.preferredDays ? <Text style={styles.amberErrorText}>{fieldErrors.preferredDays}</Text> : null}
         </SectionCard>
       </Animated.View>
@@ -266,6 +277,8 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
 }
 
 const styles = StyleSheet.create({
+  projectionSlot: { minHeight: typography.small.lineHeight * 3 },
+  projection: { ...typography.small, color: colors.textSecondary },
   amberErrorText: {
     marginTop: spacing.xs,
     color: colors.warning,

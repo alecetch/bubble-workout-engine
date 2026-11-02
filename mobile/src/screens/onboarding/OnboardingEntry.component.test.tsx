@@ -181,6 +181,19 @@ describe("OnboardingEntry", () => {
     });
   });
 
+  it("resumes directly at Schedule without replaying the year goal", async () => {
+    getOnboardingDraftMock.mockReturnValueOnce({
+      ...completeDraft,
+      preferredDays: [],
+      minutesPerSession: null,
+      onboardingCompletedAt: null,
+      onboardingStepCompleted: 2,
+    } as any);
+    const navigation = renderScreen();
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule"));
+    expect(navigation.replace).not.toHaveBeenCalledWith("YearGoal");
+  });
+
   it("routes partially-onboarded user to their next incomplete step", async () => {
     const profile = { ...completeProfile, onboardingStepCompleted: 1, onboardingCompletedAt: null };
     useClientProfileMock.mockReturnValueOnce({

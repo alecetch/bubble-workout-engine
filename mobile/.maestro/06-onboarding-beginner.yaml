@@ -163,13 +163,32 @@ appId: fit.getforma.app
 - tapOn: "Next"
 
 - extendedWaitUntil:
+    visible:
+      id: "year-goal-continue"
+    timeout: 30000
+- tapOn:
+    id: "year-goal-continue"
+
+- extendedWaitUntil:
     visible: "Schedule"
     timeout: 30000
 - tapOn: "Mon"
+- scrollUntilVisible:
+    element:
+      text: "Choose duration"
+    direction: DOWN
 - tapOn: "Choose duration"
 - tapOn: "50 min"
+- scrollUntilVisible:
+    element:
+      text: "Select sex"
+    direction: DOWN
 - tapOn: "Select sex"
 - tapOn: "Male"
+- scrollUntilVisible:
+    element:
+      text: "Select age range"
+    direction: DOWN
 - tapOn: "Select age range"
 - tapOn: "25-34"
 # Height/weight are NOT on this screen - they moved to a separate

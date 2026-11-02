@@ -186,7 +186,7 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
       if (isNonBeginner) {
         navigation.replace("Step2bBaselineLoads");
       } else {
-        navigation.replace("Step3Schedule");
+        navigation.replace("YearGoal");
       }
     } catch {
       setPrefillError("Unable to save this step. Please try again.");

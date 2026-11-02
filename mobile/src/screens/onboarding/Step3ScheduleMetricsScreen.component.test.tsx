@@ -39,7 +39,11 @@ vi.mock("../../components/onboarding/OnboardingScaffold", () => ({
   ),
 }));
 
-vi.mock("../../components/onboarding/DayChipRow", () => ({ DayChipRow: () => null }));
+vi.mock("../../components/onboarding/DayChipRow", () => ({
+  DayChipRow: ({ days, selectedValues, onToggle }: any) => <div>{days.map((day: any) => (
+    <button type="button" key={day.value} aria-pressed={selectedValues.includes(day.value)} onClick={() => onToggle(day.value)}>{day.label}</button>
+  ))}</div>,
+}));
 vi.mock("../../components/onboarding/SelectField", () => ({ SelectField: () => null }));
 vi.mock("../../components/onboarding/NumericField", () => ({ NumericField: () => null }));
 vi.mock("../../components/onboarding/MultilineField", () => ({ MultilineField: () => null }));
@@ -117,6 +121,32 @@ describe("Step3ScheduleMetricsScreen", () => {
     expect(await axe(document.body)).toHaveNoViolations();
   });
 
+
+  it("updates the projection as weekdays are added and removed without changing the reserved slot", () => {
+    function Harness() {
+      const [draft, setDraft] = React.useState(buildDraft({ ...validDraft, preferredDays: [] }));
+      mockStore(draft);
+      setDraftMock.mockImplementation(patch => setDraft(current => ({ ...current, ...patch })));
+      return <Step3ScheduleMetricsScreen navigation={{ replace: vi.fn(), navigate: vi.fn() } as any} route={{} as any} />;
+    }
+    render(<Harness />);
+    const slot = screen.getByTestId("schedule-projection-slot");
+    expect(slot).toBeEmptyDOMElement();
+    expect(slot).toHaveStyle({ minHeight: "60px" });
+    fireEvent.click(screen.getByRole("button", { name: "Mon" }));
+    expect(slot).toBeEmptyDOMElement();
+    fireEvent.click(screen.getByRole("button", { name: "Tues" }));
+    expect(screen.getByText("2 days a week builds the habit — Club 100 is your first target.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Wed" }));
+    expect(screen.getByText("3 days a week is 156. Add a bonus session most fortnights to reach 200.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Thurs" }));
+    expect(screen.getByText("4 days a week gets you to 208 this year.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Fri" }));
+    expect(screen.getByText("5 days a week gets you to 260 this year.")).toBeInTheDocument();
+    for (const day of ["Fri", "Thurs", "Wed", "Tues"]) fireEvent.click(screen.getByRole("button", { name: day }));
+    expect(slot).toBeEmptyDOMElement();
+    expect(slot).toHaveStyle({ minHeight: "60px" });
+  });
 
   it("renders schedule headings without body metrics fields", () => {
     renderScreen();

@@ -269,6 +269,13 @@ describe("Step2EquipmentScreen", () => {
     });
   });
 
+  it("routes beginners through the year goal before their schedule", async () => {
+    mockStore(buildDraft({ selectedEquipmentCodes: ["barbell", "bench"], fitnessLevel: "Beginner" }));
+    const navigation = renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("YearGoal"));
+  });
+
   it("Next button is disabled while the onboarding store is saving", () => {
     mockStore(buildDraft(), { isSaving: true });
 
