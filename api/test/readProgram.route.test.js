@@ -21,7 +21,12 @@ function mockRes() {
 
 function mockPool(responses) {
   let i = 0;
-  function nextResponse() {
+  function nextResponse(sql) {
+    if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [], rowCount: 0 };
+    if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+    if (sql.includes("UPDATE program_day pd SET") || sql.includes("INSERT INTO training_session") || sql.includes("DELETE FROM training_session")) return { rows: [], rowCount: 1 };
+    if (sql.includes("SELECT DISTINCT local_date")) return { rows: [], rowCount: 0 };
+
     const response = responses[i++];
     if (!response) throw new Error(`Unexpected DB call at index ${i - 1}`);
     if (response instanceof Error) throw response;
@@ -29,12 +34,12 @@ function mockPool(responses) {
   }
   return {
     async query(_sql, _params) {
-      return nextResponse();
+      return nextResponse(_sql);
     },
     async connect() {
       return {
         async query(_sql, _params) {
-          return nextResponse();
+          return nextResponse(_sql);
         },
         release() {},
       };

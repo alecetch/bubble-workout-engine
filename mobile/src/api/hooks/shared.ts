@@ -14,6 +14,7 @@ export const queryKeys = {
     ["dayPreview", programId, programDayId, opts.userId ?? null] as const,
   programDayFull: (programDayId: string, opts: ViewerIdentityOptions) =>
     ["programDayFull", programDayId, opts.userId ?? null] as const,
+  yearProgress: ["yearProgress"] as const,
   historyOverview: ["historyOverview"] as const,
   historyPrograms: ["historyPrograms"] as const,
   activePrograms: ["activePrograms"] as const,

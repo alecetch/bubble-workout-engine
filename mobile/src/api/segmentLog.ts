@@ -1,3 +1,4 @@
+import { localTrainingFields } from "../utils/localDate";
 import { authGetJson, authPostJson } from "./client";
 
 export type SegmentLogRow = {
@@ -60,6 +61,7 @@ export async function saveSegmentExerciseLogs(
   const raw = await authPostJson<unknown, Record<string, unknown>>("/api/segment-log", {
       user_id: payload.userId,
       program_id: payload.programId,
+      ...localTrainingFields(),
       program_day_id: payload.programDayId,
       workout_segment_id: payload.workoutSegmentId,
       rows: payload.rows.map((r) => ({

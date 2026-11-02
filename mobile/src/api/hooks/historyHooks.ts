@@ -1,3 +1,6 @@
+import { useSessionStore } from "../../state/session/sessionStore";
+import { getYearProgress, type YearProgressResponse } from "../yearProgress";
+import { toLocalIsoDate, deviceTimeZone } from "../../utils/localDate";
 import {
   useInfiniteQuery,
   useQuery,
@@ -82,6 +85,16 @@ export function usePrsFeed(userId?: string): UseQueryResult<PrsFeedResponse> {
   return useQuery({
     queryKey: ["prsFeed", userId ?? null],
     queryFn: () => getPrsFeed(userId),
+    enabled: Boolean(userId),
+    staleTime: HISTORY_STALE_MS,
+  });
+}
+
+export function useYearProgress(year?: number): UseQueryResult<YearProgressResponse> {
+  const userId = useSessionStore(state => state.userId);
+  return useQuery({
+    queryKey: [...queryKeys.yearProgress, userId ?? null, year ?? null, toLocalIsoDate(), deviceTimeZone()],
+    queryFn: () => getYearProgress(year),
     enabled: Boolean(userId),
     staleTime: HISTORY_STALE_MS,
   });

@@ -1,3 +1,4 @@
+import { localTrainingFields } from "../utils/localDate";
 import { authGetJson, authPatchJson } from "./client";
 import { displayLabel } from "../utils/displayLabel";
 
@@ -627,6 +628,7 @@ export async function markProgramDayComplete(
 ): Promise<void> {
   await authPatchJson<unknown, Record<string, unknown>>(`/api/day/${encodeURIComponent(programDayId)}/complete`, {
       is_completed: isCompleted,
+      ...localTrainingFields(),
       ...(opts.userId ? { user_id: opts.userId } : {}),
   });
 }

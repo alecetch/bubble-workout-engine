@@ -310,6 +310,7 @@ export function useMarkDayComplete(): UseMutationResult<
       void queryClient.invalidateQueries({ queryKey: ["programCompletionSummary"] });
       void queryClient.invalidateQueries({ queryKey: ["programEndCheck"] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyOverview });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyTimeline });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPrograms });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyPersonalRecords });
@@ -401,6 +402,8 @@ export function useSaveSegmentLogs(): UseMutationResult<SaveSegmentLogResult, Er
   return useMutation({
     mutationFn: saveSegmentExerciseLogs,
     onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.historyOverview });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.segmentExerciseLogs(
           variables.workoutSegmentId,
