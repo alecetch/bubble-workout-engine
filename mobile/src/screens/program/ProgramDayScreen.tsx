@@ -1,10 +1,11 @@
+import { toLocalIsoDate } from "../../utils/localDate";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
-import { queryKeys, useCompleteProgram, useEntitlement, useHistoryOverview, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { queryKeys, useCompleteProgram, useEntitlement, useYearProgress, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/segmentLog";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import { SkeletonBlock } from "../../components/feedback/SkeletonBlock";
@@ -77,11 +78,19 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const entitlementQuery = useEntitlement();
   const markDayComplete = useMarkDayComplete();
   const completeProgram = useCompleteProgram();
-  const historyOverviewQuery = useHistoryOverview(userId);
+  const [completionLocalDate, setCompletionLocalDate] = useState<string>();
+  const todayLocal = toLocalIsoDate();
+  const summaryLocalDate = completionLocalDate ?? todayLocal;
+  const summaryYear = Number(summaryLocalDate.slice(0, 4));
+  const yearQuery = useYearProgress(summaryYear === Number(todayLocal.slice(0, 4)) ? undefined : summaryYear);
+  const yearProgress = yearQuery.data;
+  const yearCountAfterSession = yearProgress?.ok && yearProgress.year === summaryYear && !yearQuery.isFetching && !yearQuery.isError
+    ? yearProgress.count + (yearProgress.training_dates.includes(summaryLocalDate) ? 0 : 1) : null;
   const queryClient = useQueryClient();
   const [confirmationText, setConfirmationText] = useState<string | null>(null);
   const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
+  useEffect(() => { setCompletionLocalDate(undefined); }, [programDayId]);
   const [segmentDoneSetCounts, setSegmentDoneSetCounts] = useState<Record<string, number>>({});
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -188,6 +197,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     handlePrsDetected,
     handleSummaryDismiss,
   } = useDayCompletionFlow({
+    localDate: completionLocalDate,
     programDayId,
     programId,
     userId,
@@ -317,6 +327,26 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     scrollViewRef.current?.scrollTo({ y: Math.max(0, newScrollY), animated: true });
   }, []);
 
+  const openSummary = useCallback(() => {
+    const today = toLocalIsoDate();
+    const show = (date?: string) => {
+      setCompletionLocalDate(date);
+      setSummaryVisible(true);
+    };
+    if (completionLocalDate) {
+      setSummaryVisible(true);
+    } else if (day?.scheduledDate && day.scheduledDate < today) {
+      Alert.alert("When did you train?", undefined, [
+        { text: "Today", onPress: () => show(today) },
+        { text: "Yesterday", onPress: () => {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          show(toLocalIsoDate(yesterday));
+        } },
+      ], { cancelable: false });
+    } else show();
+  }, [day?.scheduledDate, completionLocalDate]);
+
   const handleCompletePress = useCallback(() => {
     if (completedExerciseCount < totalExercises) {
       const remaining = totalExercises - completedExerciseCount;
@@ -325,13 +355,13 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         `You still have ${remaining} exercise${remaining === 1 ? "" : "s"} left to log. Finish anyway?`,
         [
           { text: "Keep logging", style: "cancel" },
-          { text: "Finish anyway", onPress: () => setSummaryVisible(true) },
+          { text: "Finish anyway", onPress: openSummary },
         ],
       );
       return;
     }
-    setSummaryVisible(true);
-  }, [completedExerciseCount, totalExercises]);
+    openSummary();
+  }, [completedExerciseCount, totalExercises, openSummary]);
 
   if (dayQuery.isLoading) {
     return (
@@ -505,7 +535,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         exerciseCount={sessionStats.exerciseCount}
         prHits={prHits}
         prE1rmKg={prE1rmKg}
-        streakDays={historyOverviewQuery.data?.currentStreakDays ?? 0}
+        yearCountAfterSession={yearCountAfterSession}
+        yearTarget={yearProgress?.target ?? 200}
+        year={summaryYear}
         adaptedExercises={adaptedExercisesForSummary}
         isSubmitting={markDayComplete.isPending}
         onDismiss={() => {

@@ -45,6 +45,7 @@ function getCompletedWeekShareData(
 }
 
 export function useDayCompletionFlow(params: {
+  localDate?: string;
   programDayId: string;
   programId: string;
   userId: string | undefined;
@@ -64,6 +65,7 @@ export function useDayCompletionFlow(params: {
   handleSummaryDismiss: () => Promise<void>;
 } {
   const {
+    localDate,
     programDayId,
     programId,
     userId,
@@ -103,7 +105,7 @@ export function useDayCompletionFlow(params: {
     if (markDayComplete.isPending) return;
     setSummaryVisible(false);
     try {
-      await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId });
+      await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId, ...(localDate ? { localDate } : {}) });
       await setWorkoutComplete(programDayId, true);
       setWorkoutCompleteState(true);
       setConfirmationText(null);
@@ -195,6 +197,7 @@ export function useDayCompletionFlow(params: {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
     }
   }, [
+    localDate,
     completeProgram,
     computeSessionStats,
     day?.weekNumber,

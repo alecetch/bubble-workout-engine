@@ -3,6 +3,14 @@
   "entries": [
     {
       "type": "component",
+      "source": "src/components/today/YearProgressCard.tsx",
+      "test": "src/components/today/YearProgressCard.component.test.tsx",
+      "status": "covered",
+      "tags": ["today"],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/feedback/SkeletonBlock.tsx",
       "test": "src/components/feedback/SkeletonBlock.component.test.tsx",
       "status": "covered",

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TodayScreen } from "../today/TodayScreen";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import {
+  useYearProgress,
   useActivePrograms,
   useEntitlement,
   useProgramOverview,
@@ -30,6 +31,8 @@ vi.mock("@react-navigation/native", async () => {
 });
 
 vi.mock("../../api/hooks", () => ({
+  queryKeys: { yearProgress: ["yearProgress"] },
+  useYearProgress: vi.fn(),
   useActivePrograms: vi.fn(),
   useEntitlement: vi.fn(),
   useProgramOverview: vi.fn(),
@@ -126,6 +129,7 @@ describe("critical path smoke", () => {
       stopRest: vi.fn(),
     });
 
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2026, count: 87, target: 200, pace_status: "on_pace", projected_year_end: 201 }, refetch: vi.fn() } as any);
     useActiveProgramsMock.mockReturnValue({ data: undefined, isLoading: false } as any);
     useEntitlementMock.mockReturnValue({ data: { is_active: true } } as any);
     useProgramOverviewMock.mockReturnValue({

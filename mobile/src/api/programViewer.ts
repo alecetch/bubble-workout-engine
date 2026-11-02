@@ -110,6 +110,7 @@ export type ProgramDayFullResponse = {
     focusLabel: string;
     equipmentOverridePresetSlug?: string | null;
     equipmentOverrideItemSlugs?: string[] | null;
+    scheduledDate?: string;
     scheduledWeekday?: string;
     weekNumber?: number;
     isCompleted: boolean;
@@ -459,6 +460,7 @@ export function normalizeProgramDayFull(raw: unknown): ProgramDayFullResponse {
           )
             .map(asString)
             .filter((value): value is string => Boolean(value)),
+      scheduledDate: toIsoDate(rawDay.scheduled_date ?? rawDay.scheduledDate) ?? undefined,
       scheduledWeekday: asString(rawDay.scheduledWeekday ?? rawDay.scheduled_weekday) ?? "",
       weekNumber: asNumber(rawDay.weekNumber ?? rawDay.week_number) ?? 1,
       isCompleted: Boolean(rawDay.is_completed ?? rawDay.isCompleted),
@@ -624,11 +626,12 @@ export async function getProgramOverview(
 export async function markProgramDayComplete(
   programDayId: string,
   isCompleted: boolean,
-  opts: ViewerIdentityOptions,
+  opts: ViewerIdentityOptions & { localDate?: string },
 ): Promise<void> {
   await authPatchJson<unknown, Record<string, unknown>>(`/api/day/${encodeURIComponent(programDayId)}/complete`, {
       is_completed: isCompleted,
       ...localTrainingFields(),
+      ...(opts.localDate ? { local_date: opts.localDate } : {}),
       ...(opts.userId ? { user_id: opts.userId } : {}),
   });
 }

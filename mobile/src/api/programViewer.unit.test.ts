@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getProgramOverview } from "./programViewer";
-import { authGetJson } from "./client";
+import { markProgramDayComplete, normalizeProgramDayFull, getProgramOverview } from "./programViewer";
+import { authPatchJson, authGetJson } from "./client";
 
 vi.mock("./client", () => ({
   authGetJson: vi.fn(),
@@ -127,4 +127,12 @@ describe("programViewer overview normalization", () => {
     const overview = await getProgramOverview("prog-1", {});
     expect(overview.selectedDayPreview?.sessionDuration).toBe(45);
   });
+});
+
+it("sends an explicit yesterday choice without replacing the device timezone", async () => {
+  await markProgramDayComplete("day-1", true, { userId: "user-1", localDate: "2026-04-30" });
+  expect(authPatchJson).toHaveBeenCalledWith("/api/day/day-1/complete", expect.objectContaining({ local_date: "2026-04-30", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+});
+it("retains the existing API scheduled date for late-completion choices", () => {
+  expect(normalizeProgramDayFull({ day: { scheduled_date: "2026-04-30T00:00:00Z" } }).day.scheduledDate).toBe("2026-04-30");
 });

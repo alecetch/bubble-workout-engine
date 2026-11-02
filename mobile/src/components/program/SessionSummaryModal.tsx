@@ -14,7 +14,7 @@ import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { captureAndShare } from "../../utils/shareCard";
-import { streakCopy } from "../../utils/streakCopy";
+import { summaryCountCopy } from "../../utils/yearCopy";
 
 type SessionSummaryModalProps = {
   visible: boolean;
@@ -23,7 +23,9 @@ type SessionSummaryModalProps = {
   exerciseCount: number;
   prHits: string[];
   prE1rmKg?: number | null;
-  streakDays: number;
+  yearCountAfterSession: number | null;
+  yearTarget: number;
+  year: number;
   adaptedExercises?: Array<{ name: string; displayChip: string }>;
   isSubmitting?: boolean;
   onDismiss: () => void;
@@ -36,7 +38,9 @@ export function SessionSummaryModal({
   exerciseCount,
   prHits,
   prE1rmKg,
-  streakDays,
+  yearCountAfterSession,
+  yearTarget,
+  year,
   adaptedExercises = [],
   isSubmitting = false,
   onDismiss,
@@ -126,7 +130,7 @@ export function SessionSummaryModal({
               </View>
             </View>
 
-            <Text style={styles.streakText}>{streakCopy(streakDays)}</Text>
+            {yearCountAfterSession !== null ? <Text style={styles.yearText}>{summaryCountCopy(yearCountAfterSession, yearTarget, year)}</Text> : null}
 
             <PressableScale style={styles.doneButton} onPress={onDismiss} disabled={isSubmitting}>
               <Text style={styles.doneLabel}>Done</Text>
@@ -268,7 +272,7 @@ const styles = StyleSheet.create({
     ...typography.small,
     textAlign: "center",
   },
-  streakText: {
+  yearText: {
     color: colors.textSecondary,
     ...typography.small,
     textAlign: "center",

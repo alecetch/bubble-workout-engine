@@ -1,3 +1,5 @@
+import { toLocalIsoDate } from "../../utils/localDate";
+import { summaryCountCopy } from "../../utils/yearCopy";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -5,7 +7,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Alert } from "react-native";
 import { ProgramDayScreen } from "./ProgramDayScreen";
-import { useCompleteProgram, useEntitlement, useHistoryOverview, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
+import { useCompleteProgram, useEntitlement, useYearProgress, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getPrsFeed } from "../../api/history";
 import { getProgramEndCheck } from "../../api/programCompletion";
 import { getProgramOverview } from "../../api/programViewer";
@@ -97,7 +99,7 @@ vi.mock("../../api/hooks", () => ({
   },
   useCompleteProgram: vi.fn(),
   useEntitlement: vi.fn(),
-  useHistoryOverview: vi.fn(),
+  useYearProgress: vi.fn(),
   useMarkDayComplete: vi.fn(),
   useProgramDayFull: vi.fn(),
 }));
@@ -198,11 +200,11 @@ vi.mock("./hooks/useExerciseSwapSheet", () => ({
 }));
 
 vi.mock("../../components/program/SessionSummaryModal", () => ({
-  SessionSummaryModal: ({ onDismiss, streakDays, totalSets, totalVolumeKg, visible }: any) =>
+  SessionSummaryModal: ({ onDismiss, yearCountAfterSession, yearTarget, year, totalSets, totalVolumeKg, visible }: any) =>
     visible ? (
       <div role="dialog" aria-label="Session summary">
         <p>Great work</p>
-        <p>{streakDays} day streak</p>
+        {yearCountAfterSession !== null ? <p>{summaryCountCopy(yearCountAfterSession, yearTarget, year)}</p> : null}
         <p>{totalSets} sets</p>
         <p>{totalVolumeKg} kg</p>
         <button type="button" onClick={() => onDismiss?.()}>
@@ -214,7 +216,7 @@ vi.mock("../../components/program/SessionSummaryModal", () => ({
 
 const useProgramDayFullMock = vi.mocked(useProgramDayFull);
 const useEntitlementMock = vi.mocked(useEntitlement);
-const useHistoryOverviewMock = vi.mocked(useHistoryOverview);
+const useYearProgressMock = vi.mocked(useYearProgress);
 const useMarkDayCompleteMock = vi.mocked(useMarkDayComplete);
 const useCompleteProgramMock = vi.mocked(useCompleteProgram);
 const useOnboardingStoreMock = vi.mocked(useOnboardingStore);
@@ -366,8 +368,8 @@ describe("ProgramDayScreen", () => {
       data: { is_active: true },
       isSuccess: true,
     } as any);
-    useHistoryOverviewMock.mockReturnValue({
-      data: { currentStreakDays: 7 },
+    useYearProgressMock.mockReturnValue({
+      data: { ok: true, year: new Date().getFullYear(), count: 87, target: 200, training_dates: [] },
     } as any);
     useMarkDayCompleteMock.mockReturnValue({
       mutateAsync: markDayMutateMock,
@@ -711,26 +713,90 @@ describe("ProgramDayScreen", () => {
     expect(screen.getByText("Great work")).toBeInTheDocument();
   });
 
-  it("passes current streak days into the session summary", async () => {
-    useHistoryOverviewMock.mockReturnValue({
-      data: { currentStreakDays: 12 },
+  it("does not add a day already counted in the year", async () => {
+    useYearProgressMock.mockReturnValue({
+      data: { ok: true, year: new Date().getFullYear(), count: 88, target: 200, training_dates: [toLocalIsoDate()] },
     } as any);
     renderScreen();
 
     await openWorkoutSummary();
 
-    expect(await screen.findByText("12 day streak")).toBeInTheDocument();
+    expect(await screen.findByText("That's 88. 112 to go.")).toBeInTheDocument();
   });
 
-  it("falls back to zero streak days when history overview has no data", async () => {
-    useHistoryOverviewMock.mockReturnValue({
+  it("hides the yearly count when no progress is available", async () => {
+    useYearProgressMock.mockReturnValue({
       data: undefined,
     } as any);
     renderScreen();
 
     await openWorkoutSummary();
 
-    expect(await screen.findByText("0 day streak")).toBeInTheDocument();
+    expect(screen.queryByText(/That's/)).not.toBeInTheDocument();
+  });
+
+  it("adds one when the selected day has not yet been counted", async () => {
+    renderScreen();
+    await openWorkoutSummary();
+    expect(screen.getByText("That's 88. 112 to go.")).toBeInTheDocument();
+    expect(alertSpy).not.toHaveBeenCalledWith("When did you train?", expect.anything(), expect.anything(), expect.anything());
+  });
+
+  it("asks once for a past scheduled day and sends yesterday after the summary", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 4, 1, 12));
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, scheduledDate: "2026-04-20" } } } as any);
+    useYearProgressMock.mockReturnValue({ data: { ok: true, year: 2026, count: 87, target: 200, training_dates: ["2026-05-01"] } } as any);
+    renderScreen();
+    await openWorkoutSummary();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const choice = alertSpy.mock.calls.find(call => call[0] === "When did you train?");
+    expect(choice).toBeDefined();
+    expect(choice![2]?.map(button => button.text)).toEqual(["Today", "Yesterday"]);
+    await act(async () => choice![2]?.find(button => button.text === "Yesterday")?.onPress?.());
+    expect(screen.getByText("That's 88. 112 to go.")).toBeInTheDocument();
+    expect(markDayMutateMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    await waitFor(() => expect(markDayMutateMock).toHaveBeenCalledWith({ programDayId: "day-1", userId: "user-1", isCompleted: true, localDate: "2026-04-30" }));
+    expect(alertSpy.mock.calls.filter(call => call[0] === "When did you train?")).toHaveLength(1);
+  });
+
+  it("keeps the chosen date when completion fails and the summary is reopened", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 4, 1, 12));
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, scheduledDate: "2026-04-20" } } } as any);
+    markDayMutateMock.mockRejectedValueOnce(new Error("Could not save"));
+    renderScreen();
+    await openWorkoutSummary();
+    const choice = alertSpy.mock.calls.find(call => call[0] === "When did you train?");
+    await act(async () => choice![2]?.find(button => button.text === "Today")?.onPress?.());
+    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    await screen.findByText("Could not save");
+    expect(markDayMutateMock).toHaveBeenCalledWith({ programDayId: "day-1", userId: "user-1", isCompleted: true, localDate: "2026-05-01" });
+    await openWorkoutSummary();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(alertSpy.mock.calls.filter(call => call[0] === "When did you train?")).toHaveLength(1);
+  });
+
+  it("does not ask when the scheduled date is today", async () => {
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, scheduledDate: toLocalIsoDate() } } } as any);
+    renderScreen();
+    await openWorkoutSummary();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(alertSpy.mock.calls.some(call => call[0] === "When did you train?")).toBe(false);
+  });
+
+  it("uses the previous year's query when yesterday crosses New Year", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2027, 0, 1, 12));
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, scheduledDate: "2026-12-20" } } } as any);
+    useYearProgressMock.mockImplementation((year?: number) => ({ data: { ok: true, year: year ?? 2027, count: year === 2026 ? 199 : 0, target: 200, training_dates: [] } } as any));
+    renderScreen();
+    await openWorkoutSummary();
+    const choice = alertSpy.mock.calls.find(call => call[0] === "When did you train?");
+    await act(async () => choice![2]?.find(button => button.text === "Yesterday")?.onPress?.());
+    expect(useYearProgressMock).toHaveBeenLastCalledWith(2026);
+    expect(screen.getByText("That's 200. You're in for 2026.")).toBeInTheDocument();
   });
 
   it("checks each exercise completion state on mount with the day's exercise IDs", async () => {

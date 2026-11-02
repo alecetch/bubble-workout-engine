@@ -4,11 +4,14 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-nat
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { RootTabParamList } from "../../navigation/AppTabs";
+import { YearProgressCard } from "../../components/today/YearProgressCard";
+import { toLocalIsoDate } from "../../utils/localDate";
+import { doneCopy, restDayCopy } from "../../utils/yearCopy";
 import { TodayWorkoutCard } from "../../components/today/TodayWorkoutCard";
 import { WeekProgressBadge } from "../../components/today/WeekProgressBadge";
 import { BonusWorkoutSheet } from "../../components/today/BonusWorkoutSheet";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
+import { queryKeys, useYearProgress, useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
 import { type ProgramDayStatus } from "../../components/program/CalendarDayPillRow";
@@ -17,11 +20,6 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
-
-function toLocalIsoDate(date: Date): string {
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
-}
 
 function shallowEqualRecord(
   a: Record<string, ProgramDayStatus>,
@@ -69,12 +67,13 @@ export function TodayScreen(): React.JSX.Element {
   const activeProgramId = useSessionStore((state) => state.activeProgramId);
   const activeProgramsQuery = useActivePrograms();
   const entitlementQuery = useEntitlement();
+  const yearQuery = useYearProgress();
   const isActive = entitlementQuery.data?.is_active ?? true;
   const resolvedProgramId = activeProgramId ?? activeProgramsQuery.data?.primary_program_id ?? null;
 
   const overviewQuery = useProgramOverview(resolvedProgramId ?? "", { userId });
   const calendarDays = overviewQuery.data?.calendarDays ?? [];
-  const todayIso = useMemo(() => toLocalIsoDate(new Date()), []);
+  const [todayIso, setTodayIso] = useState(() => toLocalIsoDate());
   const [sheetOpen, setSheetOpen] = useState(false);
   const todayWeekday = useMemo(() => {
     const d = new Date(`${todayIso}T00:00:00Z`);
@@ -130,6 +129,8 @@ export function TodayScreen(): React.JSX.Element {
   useFocusEffect(
     useCallback(() => {
       void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
+      setTodayIso(toLocalIsoDate());
+      void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress });
       void refreshDayStatuses();
       return undefined;
     }, [queryClient, refreshDayStatuses]),
@@ -202,6 +203,10 @@ export function TodayScreen(): React.JSX.Element {
     );
   }, [calendarDays, todayIso, dayStatusByProgramDayId]);
 
+  const yearCard = <YearProgressCard progress={yearQuery.data} isLoading={yearQuery.isLoading}
+    isError={yearQuery.isError} onRetry={() => { void yearQuery.refetch(); }}
+    onPress={() => navigation.navigate("HistoryTab")} />;
+
   if (!resolvedProgramId && activeProgramsQuery.isLoading) {
     return (
       <View style={styles.centered}>
@@ -228,16 +233,18 @@ export function TodayScreen(): React.JSX.Element {
 
   if (overviewQuery.isLoading) {
     return (
-      <View style={styles.centered}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {yearCard}
         <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.subtitle}>Loading today&apos;s workout...</Text>
-      </View>
+      </ScrollView>
     );
   }
 
   if (overviewQuery.isError) {
     return (
-      <View style={styles.centered}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {yearCard}
         <Text style={styles.title}>Today Is Unavailable</Text>
         <Text style={styles.subtitle}>{overviewQuery.error?.message ?? "No workout day found."}</Text>
         <PressableScale
@@ -251,13 +258,14 @@ export function TodayScreen(): React.JSX.Element {
         >
           <Text style={styles.primaryLabel}>Open Programs</Text>
         </PressableScale>
-      </View>
+      </ScrollView>
     );
   }
 
   if (lifecycleState === "today_scheduled" || lifecycleState === "today_started") {
     return (
       <ScrollView contentContainerStyle={styles.content}>
+        {yearCard}
         <Text style={styles.greeting}>{greetingText()}</Text>
         <WeekProgressBadge
           weekNumber={currentWeekNumber}
@@ -288,8 +296,9 @@ export function TodayScreen(): React.JSX.Element {
 
   if (lifecycleState === "today_complete") {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.title}>Today&apos;s workout is done.</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        {yearCard}
+        <Text style={styles.title}>{yearQuery.data?.ok ? doneCopy(yearQuery.data.count) : "Today's workout is done."}</Text>
         <Text style={styles.subtitle}>
           {nextScheduledDay
             ? `Next: ${formatNextSessionLabel(nextScheduledDay, overviewQuery.data?.calendarDays)}`
@@ -301,7 +310,7 @@ export function TodayScreen(): React.JSX.Element {
           completedDaysThisWeek={completedDaysThisWeek}
           totalDaysThisWeek={totalDaysThisWeek}
         />
-      </View>
+      </ScrollView>
     );
   }
 
@@ -309,7 +318,8 @@ export function TodayScreen(): React.JSX.Element {
     const rec = overviewQuery.data?.bonusDayRecommendation;
 
     return (
-      <View style={styles.centered}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {yearCard}
         <Text style={styles.title}>Rest day.</Text>
         <Text style={styles.subtitle}>
           {nextScheduledDay
@@ -322,8 +332,9 @@ export function TodayScreen(): React.JSX.Element {
           completedDaysThisWeek={completedDaysThisWeek}
           totalDaysThisWeek={totalDaysThisWeek}
         />
+        {yearQuery.data?.ok ? <Text style={styles.subtitle}>{restDayCopy(yearQuery.data)}</Text> : null}
         <PressableScale
-          style={styles.primaryButton}
+          style={yearQuery.data?.ok && yearQuery.data.pace_status === "behind" && yearQuery.data.pace_delta <= -1 ? styles.primaryButton : styles.secondaryButton}
           onPress={() => {
             if (!isActive) {
               navigation.navigate("HomeTab", { screen: "Paywall" } as never);
@@ -332,7 +343,7 @@ export function TodayScreen(): React.JSX.Element {
             setSheetOpen(true);
           }}
         >
-          <Text style={styles.primaryLabel}>Add a bonus workout today</Text>
+          <Text style={styles.secondaryLabel}>Add a bonus workout today</Text>
         </PressableScale>
         <BonusWorkoutSheet
           visible={sheetOpen}
@@ -349,12 +360,13 @@ export function TodayScreen(): React.JSX.Element {
           currentFocusTypes={rec?.programFocusTypes ?? []}
           recommendedFocusType={rec?.recommendedFocusType}
         />
-      </View>
+      </ScrollView>
     );
   }
 
   return (
-    <View style={styles.centered}>
+    <ScrollView contentContainerStyle={styles.content}>
+      {yearCard}
       <Text style={styles.title}>Program complete!</Text>
       <Text style={styles.subtitle}>
         You finished all scheduled sessions. Ready for the next block?
@@ -365,7 +377,7 @@ export function TodayScreen(): React.JSX.Element {
       >
         <Text style={styles.primaryLabel}>Generate New Program</Text>
       </PressableScale>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -403,6 +415,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   content: {
+    flexGrow: 1,
+    backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
