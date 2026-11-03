@@ -9,6 +9,10 @@ import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
 import { mockZustandSelector } from "../../__test-utils__";
 
+vi.mock("../../components/today/LogOutsideSessionSheet", () => ({
+  LogOutsideSessionSheet: ({ onClose }: any) => <button onClick={onClose}>Outside session sheet</button>,
+}));
+
 const navigationMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
@@ -176,6 +180,10 @@ describe("TodayScreen", () => {
     } as any);
     render(<TodayScreen />);
     expect(screen.getByText("Rest day.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Trained elsewhere today? Log it"));
+    expect(screen.getByText("Outside session sheet")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Outside session sheet"));
+    expect(screen.queryByText("Outside session sheet")).not.toBeInTheDocument();
   });
 
   it("renders today's complete state", async () => {
@@ -188,6 +196,25 @@ describe("TodayScreen", () => {
     render(<TodayScreen />);
     await flushEffects();
     expect(screen.getByText("Day 88 is in.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Trained elsewhere today? Log it"));
+    expect(screen.getByText("Outside session sheet")).toBeInTheDocument();
+  });
+
+  it("waits until the outside sheet closes before claiming its new milestone", async () => {
+    useProgramOverviewMock.mockReturnValue({ data: overview([{ calendarDate: "2026-05-01", isTrainingDay: false, weekNumber: 1 }]) } as any);
+    vi.mocked(claimYearMilestone).mockClear();
+    const view = render(<TodayScreen />);
+    fireEvent.click(screen.getByText("Trained elsewhere today? Log it"));
+    const earned = { id: "outside-day1", slug: "day_1", threshold: 1, year: 2026 };
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2026, count: 1, target: 200, unseen_milestones: [earned] } } as any);
+    vi.mocked(claimYearMilestone).mockResolvedValue({ milestone: earned, coalesced_ids: [] });
+    view.rerender(<TodayScreen />);
+    await flushEffects();
+    expect(claimYearMilestone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Outside session sheet"));
+    await flushEffects();
+    expect(claimYearMilestone).toHaveBeenCalledWith(2026);
+    expect(screen.getByText("Day 1. The year starts here.")).toBeInTheDocument();
   });
 
   it("does not render a missed-session warning on the Today screen", () => {

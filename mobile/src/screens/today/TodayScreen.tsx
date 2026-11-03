@@ -22,6 +22,7 @@ import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { MilestoneCelebration } from "../../components/celebrations/MilestoneCelebration";
 import { useMilestoneCelebration } from "../../hooks/useMilestoneCelebration";
+import { LogOutsideSessionSheet } from "../../components/today/LogOutsideSessionSheet";
 import { highestMilestone } from "../../utils/yearMilestones";
 
 function shallowEqualRecord(
@@ -71,8 +72,9 @@ export function TodayScreen(): React.JSX.Element {
   const activeProgramsQuery = useActivePrograms();
   const entitlementQuery = useEntitlement();
   const yearQuery = useYearProgress();
+  const [outsideSheetOpen, setOutsideSheetOpen] = useState(false);
   const highest = highestMilestone(yearQuery.data?.unseen_milestones ?? []);
-  const milestone = useMilestoneCelebration(highest && yearQuery.data?.ok ? { ...highest, target: yearQuery.data.target, count: yearQuery.data.count } : undefined,
+  const milestone = useMilestoneCelebration(!outsideSheetOpen && highest && yearQuery.data?.ok ? { ...highest, target: yearQuery.data.target, count: yearQuery.data.count } : undefined,
     userId, useCallback(() => { void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress }); }, [queryClient]));
   const milestoneOverlay = <MilestoneCelebration milestone={milestone.moment} onDismiss={() => void milestone.dismiss()}
     isDismissing={milestone.isDismissing} error={milestone.error} />;
@@ -211,6 +213,13 @@ export function TodayScreen(): React.JSX.Element {
     );
   }, [calendarDays, todayIso, dayStatusByProgramDayId]);
 
+  const outsideEntry = <>
+    <PressableScale style={styles.secondaryButton} onPress={() => setOutsideSheetOpen(true)}>
+      <Text style={styles.secondaryLabel}>Trained elsewhere today? Log it</Text>
+    </PressableScale>
+    {outsideSheetOpen ? <LogOutsideSessionSheet onClose={() => setOutsideSheetOpen(false)} /> : null}
+  </>;
+
   const yearCard = <>{milestoneOverlay}<YearProgressCard progress={yearQuery.data} isLoading={yearQuery.isLoading}
     isError={yearQuery.isError} onRetry={() => { void yearQuery.refetch(); }}
     onPress={() => navigation.navigate("HistoryTab")} /></>;
@@ -308,6 +317,7 @@ export function TodayScreen(): React.JSX.Element {
     return (
       <ScrollView contentContainerStyle={styles.content}>
         {yearCard}
+        {outsideEntry}
         <Text style={styles.title}>{yearQuery.data?.ok ? doneCopy(yearQuery.data.count) : "Today's workout is done."}</Text>
         <Text style={styles.subtitle}>
           {nextScheduledDay
@@ -355,6 +365,7 @@ export function TodayScreen(): React.JSX.Element {
         >
           <Text style={styles.secondaryLabel}>Add a bonus workout today</Text>
         </PressableScale>
+        {outsideEntry}
         <BonusWorkoutSheet
           visible={sheetOpen}
           onClose={() => setSheetOpen(false)}

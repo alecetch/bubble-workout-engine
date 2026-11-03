@@ -3,13 +3,19 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
+  Modal,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
+import { LogOutsideSessionSheet } from "../../components/today/LogOutsideSessionSheet";
+import { useOutsideSessions, useDeleteOutsideSession, outsideSessionsKey } from "../../api/hooks/trainingSessionHooks";
+import { OUTSIDE_ACTIVITIES, type OutsideSession } from "../../api/trainingSessions";
 import { CachedImage } from "../../components/media/CachedImage";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQueryClient } from "@tanstack/react-query";
@@ -134,6 +140,23 @@ export function HistoryScreen(): React.JSX.Element {
   const sessionUserId = useSessionStore((state) => state.userId);
   const userId = sessionUserId ?? onboardingUserId ?? undefined;
 
+  const [outsideSheetOpen, setOutsideSheetOpen] = useState(false);
+  const [deleteSession, setDeleteSession] = useState<OutsideSession>();
+  const [deleteError, setDeleteError] = useState<string>();
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = React.useRef(false);
+  const outsideQuery = useOutsideSessions(undefined, userId);
+  const deleteOutside = useDeleteOutsideSession();
+  async function confirmDeleteOutside() {
+    if (!deleteSession || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setDeleteError(undefined);
+    try { await deleteOutside.mutateAsync(deleteSession.id); setDeleteSession(undefined); }
+    catch (err) { setDeleteError(err instanceof Error ? err.message : "Couldn't delete this session. Try again."); }
+    finally { deletingRef.current = false; setDeleting(false); }
+  }
+
   const metricsQuery = useSessionHistoryMetrics(userId);
   const sharing = useShareCard();
   const [selectedYear, setSelectedYear] = useState<number>();
@@ -160,15 +183,9 @@ export function HistoryScreen(): React.JSX.Element {
   useFocusEffect(
     React.useCallback(() => {
       void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
+      void queryClient.invalidateQueries({ queryKey: outsideSessionsKey });
     }, [queryClient]),
   );
-
-  React.useEffect(() => {
-    if (entitlementQuery.isSuccess && !isActive) {
-      const parent = navigation.getParent() as any;
-      parent?.navigate?.("HomeTab", { screen: "Paywall" });
-    }
-  }, [entitlementQuery.isSuccess, isActive, navigation]);
 
   React.useEffect(() => {
     const timeout = setTimeout(() => {
@@ -204,12 +221,13 @@ export function HistoryScreen(): React.JSX.Element {
         metricsQuery.refetch(),
         programsQuery.refetch(),
         prsFeedQuery.refetch(),
+        outsideQuery.refetch(),
         yearQuery.refetch(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [metricsQuery, programsQuery, prsFeedQuery, yearQuery, queryClient]);
+  }, [metricsQuery, programsQuery, prsFeedQuery, outsideQuery, yearQuery, queryClient]);
 
   const onEndReached = React.useCallback(() => {
     if (!timelineQuery.hasNextPage || timelineQuery.isFetchingNextPage) return;
@@ -232,9 +250,56 @@ export function HistoryScreen(): React.JSX.Element {
           ? "Heaviest Lifts - last 28 days"
           : "Personal Records";
 
+  const outsideSection = <View style={styles.emptyCard}>
+    <Text style={styles.sectionTitle}>Outside sessions</Text>
+    <PressableScale style={styles.progressCard} onPress={() => setOutsideSheetOpen(true)}>
+      <Text style={styles.progressCardTitle}>Log outside session</Text>
+    </PressableScale>
+    {outsideQuery.isLoading ? <Text style={styles.subtitle}>Loading outside sessions...</Text>
+      : outsideQuery.isError ? <>
+        <Text style={styles.subtitle}>Unable to load outside sessions.</Text>
+        <PressableScale onPress={() => void outsideQuery.refetch()}><Text style={styles.progressCardTitle}>Retry outside sessions</Text></PressableScale>
+      </> : !outsideQuery.data?.length ? <Text style={styles.subtitle}>No outside sessions yet.</Text>
+      : outsideQuery.data.map(session => {
+        const activity = OUTSIDE_ACTIVITIES.find(item => item.value === session.activity_type);
+        const label = activity?.label ?? "Other";
+        return <View key={session.id} style={styles.timelineCard}>
+          <Ionicons name={activity?.icon ?? "body-outline"} size={24} color={colors.textPrimary} />
+          <View style={styles.timelineContent}>
+            <Text style={styles.timelineLabel}>{label}</Text>
+            <Text style={styles.timelineMeta}>{session.local_date} - {session.duration_min} minutes</Text>
+            <PressableScale accessibilityLabel={`Delete ${label} session on ${session.local_date}`} onPress={() => { setDeleteError(undefined); setDeleteSession(session); }}>
+              <Text style={styles.progressCardTitle}>Delete</Text>
+            </PressableScale>
+          </View>
+        </View>;
+      })}
+    {outsideSheetOpen ? <LogOutsideSessionSheet onClose={() => setOutsideSheetOpen(false)} /> : null}
+    {deleteSession ? <Modal visible transparent animationType="fade" onRequestClose={deleting ? undefined : () => setDeleteSession(undefined)}>
+      <View style={styles.centered}><View style={styles.emptyCard} accessibilityViewIsModal>
+        <Text style={styles.title}>Delete outside session?</Text>
+        <Text style={styles.subtitle}>This day still counts if you also trained in the app.</Text>
+        {deleteError ? <Text style={styles.subtitle} accessibilityLiveRegion="polite">{deleteError}</Text> : null}
+        <PressableScale disabled={deleting} onPress={() => void confirmDeleteOutside()}><Text style={styles.progressCardTitle}>{deleting ? "Deleting..." : "Delete session"}</Text></PressableScale>
+        <PressableScale disabled={deleting} onPress={() => setDeleteSession(undefined)}><Text style={styles.progressCardTitle}>Cancel</Text></PressableScale>
+      </View></View>
+    </Modal> : null}
+  </View>;
+
+  if (entitlementQuery.isSuccess && !isActive) {
+    return <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+      <Text style={styles.screenTitle}>Training History</Text>
+      {outsideSection}
+      <PressableScale style={styles.progressCard} onPress={() => (navigation.getParent() as any)?.navigate?.("HomeTab", { screen: "Paywall" })}>
+        <Text style={styles.progressCardTitle}>Unlock program history</Text>
+      </PressableScale>
+    </ScrollView>;
+  }
+
   const listHeader = (
     <View style={styles.listHeader}>
       <Text style={styles.screenTitle}>Training History</Text>
+      {outsideSection}
 
       <View style={styles.heroCard}>
         <View style={styles.heroStatBlock} testID="history-year-stat">
@@ -568,6 +633,7 @@ export function HistoryScreen(): React.JSX.Element {
         <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.subtitle}>Loading history...</Text>
         {sharing.shareView}
+        {outsideSection}
       </View>
     );
   }
@@ -578,6 +644,7 @@ export function HistoryScreen(): React.JSX.Element {
         <Text style={styles.title}>Unable to load history</Text>
         <Text style={styles.subtitle}>Pull to refresh or try again.</Text>
         {sharing.shareView}
+        {outsideSection}
       </View>
     );
   }

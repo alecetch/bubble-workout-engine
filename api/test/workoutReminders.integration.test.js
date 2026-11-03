@@ -47,10 +47,10 @@ test("real reminder SQL combines once, stamps both dates, and suppresses repeats
       SELECT program_id, $2, program_week_id, 1, 0, 'mon', CURRENT_DATE, 1, program_day_key, TRUE, id
       FROM program_day WHERE id = $1`, [p.days[0], ids[0]]);
     await db.query(`INSERT INTO training_session (user_id, local_date, source)
-      VALUES ($1, '2026-01-01', 'manual'), ($1, '2026-01-01', 'manual')`, [ids[0]]);
+      VALUES ($1, '2026-01-01', 'apple_health'), ($1, '2026-01-01', 'apple_health')`, [ids[0]]);
     // The other active program is a rest day. It is ahead and should hear nothing.
     await db.query(`INSERT INTO training_session (user_id, local_date, source)
-      SELECT $1, '2026-01-01'::date + n, 'manual' FROM generate_series(0,119) n`, [ids[1]]);
+      SELECT $1, '2026-01-01'::date + n, 'apple_health' FROM generate_series(0,119) n`, [ids[1]]);
     const handler = createWorkoutRemindersHandler(scopedDatabase(db, ids), makeNotificationService(db, { now }), { now });
     const first = res();
     await handler({}, first);
