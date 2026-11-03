@@ -1,6 +1,9 @@
 import { localTrainingFields } from "../utils/localDate";
 import { authGetJson, authPatchJson } from "./client";
 import { displayLabel } from "../utils/displayLabel";
+import { normalizeMilestones, type YearMilestone } from "./yearProgress";
+
+export type DayCompletionResult = { year_progress?: { year: number; count: number; target: number; new_milestones: YearMilestone[]; unseen_milestones: YearMilestone[] } };
 
 export type ViewerIdentityOptions = {
   userId?: string;
@@ -627,13 +630,17 @@ export async function markProgramDayComplete(
   programDayId: string,
   isCompleted: boolean,
   opts: ViewerIdentityOptions & { localDate?: string },
-): Promise<void> {
-  await authPatchJson<unknown, Record<string, unknown>>(`/api/day/${encodeURIComponent(programDayId)}/complete`, {
+): Promise<DayCompletionResult> {
+  const raw = asObject(await authPatchJson<unknown, Record<string, unknown>>(`/api/day/${encodeURIComponent(programDayId)}/complete`, {
       is_completed: isCompleted,
       ...localTrainingFields(),
       ...(opts.localDate ? { local_date: opts.localDate } : {}),
       ...(opts.userId ? { user_id: opts.userId } : {}),
-  });
+  }));
+  const progress = asObject(raw.year_progress);
+  return typeof progress.year === "number" ? { year_progress: { year: progress.year, count: asNumber(progress.count) ?? 0,
+    target: asNumber(progress.target) ?? 200, new_milestones: normalizeMilestones(progress.new_milestones),
+    unseen_milestones: normalizeMilestones(progress.unseen_milestones) } } : {};
 }
 
 export async function getProgramDayFull(

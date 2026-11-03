@@ -3,6 +3,7 @@ import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TodayScreen } from "./TodayScreen";
+import { claimYearMilestone, markYearMilestoneSeen } from "../../api/yearProgress";
 import { useYearProgress, useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
@@ -11,6 +12,7 @@ import { mockZustandSelector } from "../../__test-utils__";
 const navigationMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
+vi.mock("../../api/yearProgress", () => ({ claimYearMilestone: vi.fn(), markYearMilestoneSeen: vi.fn().mockResolvedValue(undefined) }));
 
 vi.mock("@react-navigation/native", async () => {
   const ReactActual = await import("react");
@@ -92,6 +94,24 @@ describe("TodayScreen", () => {
       await Promise.resolve();
     });
   }
+  it("claims the highest unseen milestone once and acknowledges the whole group on dismissal", async () => {
+    const milestone = { id: "day100", slug: "day_100", threshold: 100, year: 2026 };
+    const older = { id: "day50", slug: "day_50", threshold: 50, year: 2026 };
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2026, target: 200,
+      unseen_milestones: [older, milestone] }, refetch: vi.fn() } as any);
+    vi.mocked(claimYearMilestone).mockClear();
+    vi.mocked(claimYearMilestone).mockResolvedValue({ milestone, coalesced_ids: [older.id] });
+    const view = render(<TodayScreen />);
+    await flushEffects();
+    expect(screen.getByText("Day 100. Half way to 200.")).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Let's go" })); });
+    expect(markYearMilestoneSeen).toHaveBeenCalledWith("day100");
+    expect(markYearMilestoneSeen).toHaveBeenCalledWith("day50");
+    view.rerender(<TodayScreen />);
+    await flushEffects();
+    expect(screen.queryByText("Day 100. Half way to 200.")).not.toBeInTheDocument();
+    expect(claimYearMilestone).toHaveBeenCalledTimes(1);
+  });
   it("has no accessibility violations in the default render state", async () => {
     vi.useRealTimers();
     render(<TodayScreen />);

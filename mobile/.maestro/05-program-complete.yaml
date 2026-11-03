@@ -84,6 +84,17 @@ appId: fit.getforma.app
     timeout: 10000
 - tapOn:
     text: "Done"
+# The account's first training day earns the "Day 1" year milestone, whose celebration
+# is shown on the dashboard before navigating on to ProgramComplete.
+- extendedWaitUntil:
+    visible: "Let's go"
+    timeout: 10000
+    optional: true
+- runFlow:
+    when:
+      visible: "Let's go"
+    commands:
+      - tapOn: "Let's go"
 - extendedWaitUntil:
     visible: "Program complete!"
     timeout: 15000

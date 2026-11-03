@@ -1,10 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeYearProgress, getYearProgress } from "./yearProgress";
-import { authGetJson } from "./client";
+import { normalizeYearProgress, getYearProgress, claimYearMilestone, markYearMilestoneSeen } from "./yearProgress";
+import { authGetJson, authPostJson } from "./client";
 
-vi.mock("./client", () => ({ authGetJson: vi.fn() }));
+vi.mock("./client", () => ({ authGetJson: vi.fn(), authPostJson: vi.fn() }));
 
 describe("year progress transport", () => {
+  it("normalizes milestone history and claims/acknowledges through authenticated endpoints", async () => {
+    const milestone = { id: "m1", slug: "day_25", threshold: 25, year: 2026 };
+    const progress = normalizeYearProgress({ unseen_milestones: [milestone, null], milestones: [{ slug: "day_25", threshold: 25, reached_on: "2026-03-01" }] });
+    expect(progress.unseen_milestones).toEqual([milestone]);
+    expect(progress.milestones).toEqual([{ slug: "day_25", threshold: 25, reached_on: "2026-03-01" }]);
+    vi.mocked(authPostJson).mockResolvedValueOnce({ milestone, coalesced_ids: ["older", null] });
+    expect(await claimYearMilestone(2026)).toEqual({ milestone, coalesced_ids: ["older"] });
+    expect(authPostJson).toHaveBeenCalledWith("/api/users/me/year-milestones/claim", { year: 2026 });
+    vi.mocked(authPostJson).mockResolvedValueOnce(undefined);
+    await markYearMilestoneSeen("m1");
+    expect(authPostJson).toHaveBeenCalledWith("/api/users/me/year-milestones/m1/seen", {});
+  });
   it("normalizes missing and malformed fields without throwing", () => {
     for (const value of [null, undefined, [], "bad", {}]) {
       expect(normalizeYearProgress(value)).toMatchObject({ count: 0, target: 0, clubs: [], years: [], training_dates: [], next_milestone: null });

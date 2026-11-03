@@ -136,3 +136,15 @@ it("sends an explicit yesterday choice without replacing the device timezone", a
 it("retains the existing API scheduled date for late-completion choices", () => {
   expect(normalizeProgramDayFull({ day: { scheduled_date: "2026-04-30T00:00:00Z" } }).day.scheduledDate).toBe("2026-04-30");
 });
+
+it("retains newly earned and pending milestones from completion, with an older-server fallback", async () => {
+  const milestone = { id: "m1", slug: "day_25", threshold: 25, year: 2026 };
+  vi.mocked(authPatchJson).mockResolvedValueOnce({ year_progress: {
+    year: 2026, count: 25, target: 200, new_milestones: [milestone], unseen_milestones: [milestone],
+  } });
+  expect(await markProgramDayComplete("day-1", true, {})).toEqual({ year_progress: {
+    year: 2026, count: 25, target: 200, new_milestones: [milestone], unseen_milestones: [milestone],
+  } });
+  vi.mocked(authPatchJson).mockResolvedValueOnce({ ok: true });
+  expect(await markProgramDayComplete("day-1", true, {})).toEqual({});
+});

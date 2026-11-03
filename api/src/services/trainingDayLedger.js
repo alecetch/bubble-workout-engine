@@ -1,5 +1,6 @@
 import { firstValidTimezone, isValidTimezone } from "../utils/timezone.js";
 import { localDateInZone, offsetLocalDate } from "./trainingYear.js";
+import { detectAndRecordMilestones } from "./yearMilestones.js";
 
 export class ValidationError extends Error {
   constructor(message = "local_date must be today or yesterday in your timezone.") {
@@ -21,13 +22,16 @@ export function resolveLocalDate({ requestedLocalDate, requestedTimeZone, fallba
 }
 
 export async function recordProgramDaySession(db, { userId, programDayId, localDate }) {
-  return db.query(`INSERT INTO training_session (user_id, program_day_id, local_date, source)
+  await db.query("SELECT id FROM app_user WHERE id = $1 FOR UPDATE", [userId]);
+  const result = await db.query(`INSERT INTO training_session (user_id, program_day_id, local_date, source)
     SELECT p.user_id, pd.id, $3::date, 'program_day'
     FROM program_day pd JOIN program p ON p.id = pd.program_id
     WHERE pd.id = $2 AND p.user_id = $1
       AND (pd.is_completed OR EXISTS (SELECT 1 FROM segment_exercise_log sel
         WHERE sel.program_day_id = pd.id AND sel.user_id = $1 AND sel.is_draft = false))
-    ON CONFLICT (program_day_id) WHERE program_day_id IS NOT NULL DO NOTHING`, [userId, programDayId, localDate]);
+    ON CONFLICT (program_day_id) WHERE program_day_id IS NOT NULL DO NOTHING RETURNING id, local_date::text`, [userId, programDayId, localDate]);
+  result.newMilestones = result.rows?.length ? await detectAndRecordMilestones(db, { userId, localDate }) : [];
+  return result;
 }
 
 export async function removeProgramDaySessionIfUnqualified(db, { userId, programDayId }) {

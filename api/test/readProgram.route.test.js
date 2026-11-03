@@ -23,6 +23,7 @@ function mockPool(responses) {
   let i = 0;
   function nextResponse(sql) {
     if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [], rowCount: 0 };
+    if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE" || sql.includes("FROM year_milestone")) return { rows: [], rowCount: 0 };
     if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
     if (sql.includes("UPDATE program_day pd SET") || sql.includes("INSERT INTO training_session") || sql.includes("DELETE FROM training_session")) return { rows: [], rowCount: 1 };
     if (sql.includes("SELECT DISTINCT local_date")) return { rows: [], rowCount: 0 };
