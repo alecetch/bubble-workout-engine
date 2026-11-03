@@ -2,13 +2,14 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useSessionHistoryMetrics } from "../../api/hooks";
+import { useSessionHistoryMetrics, useYearProgress } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { ProgressOverviewScreen } from "./ProgressOverviewScreen";
 import { mockZustandSelector } from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
   useSessionHistoryMetrics: vi.fn(),
+  useYearProgress: vi.fn(),
 }));
 
 vi.mock("../../state/session/sessionStore", () => ({
@@ -62,6 +63,7 @@ function renderScreen() {
 
 describe("ProgressOverviewScreen", () => {
   beforeEach(() => {
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, count: 87, target: 200 }, isLoading: false, refetch: vi.fn() } as any);
     mockNavigate.mockReset();
     mockRefetch.mockReset();
     mockZustandSelector(useSessionStoreMock as any, { userId: "user-123" });
@@ -125,15 +127,39 @@ describe("ProgressOverviewScreen", () => {
     expect(screen.getByText("No volume data for this region yet.")).toBeInTheDocument();
   });
 
-  it("renders day streak, session count, and consistency from fixture", () => {
+  it("renders days this year, session count, and consistency without day streak", () => {
     renderScreen();
 
-    expect(screen.getByText("Day streak")).toBeInTheDocument();
+    expect(screen.getByText("Days this year")).toBeInTheDocument();
+    expect(screen.getByText("of 200")).toBeInTheDocument();
+    expect(screen.queryByText(/Day streak/i)).not.toBeInTheDocument();
     expect(screen.getByText("Sessions (28d)")).toBeInTheDocument();
     expect(screen.getByText("Consistency")).toBeInTheDocument();
-    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("87")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("83%")).toBeInTheDocument();
+  });
+
+  it("uses the pro-rated target and retries year errors without blocking volume data", () => {
+    const retry = vi.fn();
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, count: 24, target: 50 }, refetch: retry } as any);
+    const view = render(<ProgressOverviewScreen navigation={{} as any} route={{} as any} />);
+    expect(screen.getByText("of 50")).toBeInTheDocument();
+    vi.mocked(useYearProgress).mockReturnValue({ data: undefined, isError: true, refetch: retry } as any);
+    view.rerender(<ProgressOverviewScreen navigation={{} as any} route={{} as any} />);
+    expect(screen.getByText("Days this year")).toBeInTheDocument();
+    expect(screen.getByText("Sessions (28d)")).toBeInTheDocument();
+    expect(screen.queryByText("24")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading training year" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("does not invent a zero while year progress loads", () => {
+    vi.mocked(useYearProgress).mockReturnValue({ data: undefined, isLoading: true, refetch: vi.fn() } as any);
+    renderScreen();
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    expect(screen.getByText("Days this year")).toBeInTheDocument();
+    expect(screen.queryByText("of 200")).not.toBeInTheDocument();
   });
 
   it("region pills update the active region without error", () => {

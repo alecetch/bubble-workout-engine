@@ -2,6 +2,26 @@
   "version": "1",
   "entries": [
     {
+      "type": "component",
+      "source": "src/components/history/YearHeatmap.tsx",
+      "test": "src/components/history/YearHeatmap.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "history"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/history/PastYearsList.tsx",
+      "test": "src/components/history/PastYearsList.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "history"
+      ],
+      "reason": ""
+    },
+    {
       "type": "screen",
       "source": "src/screens/onboarding/YearGoalScreen.tsx",
       "test": "src/screens/onboarding/YearGoalScreen.component.test.tsx",
