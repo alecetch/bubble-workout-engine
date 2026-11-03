@@ -9,7 +9,7 @@ test("year progress: auth, additive shape, distinct dates, clubs, year history, 
   await withUsers(async (db, [user, other]) => {
     await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC' WHERE id = ANY($1::uuid[])", [[user, other]]);
     for (const [id, dates] of [[user, ["2026-01-01", "2026-01-01", "2026-01-02", "2025-12-31"]], [other, ["2026-01-03"]]]) {
-      for (const date of dates) await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,$2,'manual')", [id, date]);
+      for (const date of dates) await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,$2,'apple_health')", [id, date]);
     }
     await withApp(app => { app.use(auth); app.get("/progress", createYearProgressHandler(db, { now: () => new Date("2026-11-02T12:00Z") })); }, async url => {
       assert.equal((await fetch(`${url}/progress`)).status, 401);
@@ -33,7 +33,7 @@ test("first-year target and club reached dates use distinct dates; include empty
     await db.query("UPDATE app_user SET timezone = 'UTC' WHERE id = $1", [user]);
     await db.query("INSERT INTO client_profile (user_id, onboarding_completed_at) VALUES ($1, '2026-10-01T12:00Z')", [user]);
     await db.query(`INSERT INTO training_session (user_id,local_date,source)
-      SELECT $1, '2026-10-01'::date + n, 'manual' FROM generate_series(0,49) n`, [user]);
+      SELECT $1, '2026-10-01'::date + n, 'apple_health' FROM generate_series(0,49) n`, [user]);
     await withApp(app => { app.use(auth); app.get("/progress", createYearProgressHandler(db, { now: () => new Date("2027-01-01T12:00Z") })); }, async url => {
       const body = await (await fetch(`${url}/progress?year=2026`, { headers: { Authorization: `Bearer ${token(user)}` } })).json();
       assert.equal(body.target, 50);
@@ -49,7 +49,7 @@ test("read uses three caller-scoped queries; projection uses only the last 28 di
   await withUsers(async (db, [user]) => {
     await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC' WHERE id = $1", [user]);
     for (const date of ["2026-01-01", "2026-10-05", "2026-10-06", "2026-10-07", "2026-11-01", "2026-11-02", "2026-11-02"]) {
-      await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,$2,'manual')", [user, date]);
+      await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,$2,'apple_health')", [user, date]);
     }
     let queries = 0;
     const progress = await getYearProgress({ query: (sql, params) => { queries++; assert.equal(params[0], user); return db.query(sql, params); } }, user, { now: new Date("2026-11-02T12:00Z") });

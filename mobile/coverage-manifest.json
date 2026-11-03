@@ -1011,6 +1011,16 @@
         "celebrations"
       ],
       "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/today/LogOutsideSessionSheet.tsx",
+      "test": "src/components/today/LogOutsideSessionSheet.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "today"
+      ],
+      "reason": ""
     }
   ]
 }
