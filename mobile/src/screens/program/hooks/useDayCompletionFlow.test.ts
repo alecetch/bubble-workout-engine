@@ -129,6 +129,16 @@ describe("useDayCompletionFlow", () => {
       completionDestination: "ProgramComplete", yearMilestone: { ...rows[1], target: 200 },
     }));
   });
+  it("skips the week banner and review when a milestone precedes the terminal destination", async () => {
+    const milestone = { id: "day1", slug: "day_1", threshold: 1, year: 2026 };
+    const markDayComplete = { isPending: false, mutateAsync: vi.fn().mockResolvedValue({ year_progress: { target: 200, new_milestones: [milestone] } }) } as any;
+    const flow = renderFlow({ programId: "prog-1", markDayComplete });
+    flow.queryClient.fetchQuery.mockResolvedValueOnce(overview()).mockResolvedValueOnce(endCheck({ lifecycleStatus: "completed" }));
+    await act(async () => { await flow.result.current.handleSummaryDismiss(); });
+    expect(flow.nav.navigate).toHaveBeenCalledWith("ProgramDashboard", {
+      programId: "prog-1", yearMilestone: { ...milestone, target: 200 }, completionDestination: "ProgramComplete",
+    });
+  });
   it("marks the day complete and persists local completion", async () => {
     const { result, markDayComplete, params } = renderFlow();
 

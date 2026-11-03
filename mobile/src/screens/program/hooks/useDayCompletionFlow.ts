@@ -180,6 +180,12 @@ export function useDayCompletionFlow(params: {
         nav.navigate(completionDestination, { programId });
         return;
       }
+      // A finished program skips the week banner and review prompt, as it does without a
+      // milestone; only the milestone is shown before the terminal destination.
+      if (completionDestination && yearMilestone) {
+        nav.navigate("ProgramDashboard", { programId, yearMilestone, completionDestination });
+        return;
+      }
 
       const hasCelebration = shouldShowReview || weekCompleteNumber != null || Boolean(yearMilestone);
       if (hasCelebration) {
