@@ -28,7 +28,13 @@ import {
   usePhysiqueCheckIns,
   usePrsFeed,
   useSessionHistoryMetrics,
+  useYearProgress,
 } from "../../api/hooks";
+import type { YearProgressResponse } from "../../api/yearProgress";
+import { YearHeatmap } from "../../components/history/YearHeatmap";
+import { PastYearsList } from "../../components/history/PastYearsList";
+import { paceLine } from "../../utils/yearCopy";
+import { toLocalIsoDate } from "../../utils/localDate";
 import type { HistoryTimelineItem, LoggedExerciseItem } from "../../api/history";
 import type { HistoryStackParamList } from "../../navigation/HistoryStackNavigator";
 import { PressableScale } from "../../components/interaction/PressableScale";
@@ -151,6 +157,15 @@ export function HistoryScreen(): React.JSX.Element {
   }
 
   const metricsQuery = useSessionHistoryMetrics(userId);
+  const [selectedYear, setSelectedYear] = useState<number>();
+  const [yearPickerOpen, setYearPickerOpen] = useState(false);
+  const [knownYears, setKnownYears] = useState<YearProgressResponse["years"]>([]);
+  const yearQuery = useYearProgress(selectedYear);
+  const displayedYear = selectedYear ?? yearQuery.data?.year ?? Number(toLocalIsoDate().slice(0, 4));
+  const yearProgress = !yearQuery.isError && yearQuery.data?.ok && yearQuery.data.year === displayedYear ? yearQuery.data : undefined;
+  useEffect(() => { if (yearProgress) setKnownYears(yearProgress.years); }, [yearProgress]);
+  const years = yearProgress?.years ?? knownYears;
+  const currentYear = Number((yearProgress?.today_local || toLocalIsoDate()).slice(0, 4));
   const prsFeedQuery = usePrsFeed(userId);
   const programsQuery = useHistoryPrograms(10, userId);
   const timelineQuery = useHistoryTimeline(40, userId);
@@ -205,11 +220,12 @@ export function HistoryScreen(): React.JSX.Element {
         programsQuery.refetch(),
         prsFeedQuery.refetch(),
         outsideQuery.refetch(),
+        yearQuery.refetch(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [metricsQuery, programsQuery, prsFeedQuery, outsideQuery, queryClient]);
+  }, [metricsQuery, programsQuery, prsFeedQuery, outsideQuery, yearQuery, queryClient]);
 
   const onEndReached = React.useCallback(() => {
     if (!timelineQuery.hasNextPage || timelineQuery.isFetchingNextPage) return;
@@ -284,20 +300,48 @@ export function HistoryScreen(): React.JSX.Element {
       {outsideSection}
 
       <View style={styles.heroCard}>
-        <View style={styles.heroStatBlock}>
-          <Text style={styles.heroStatValue}>{metrics?.sessionsCount ?? 0}</Text>
-          <Text style={styles.heroStatLabel}>Sessions Completed</Text>
+        <View style={styles.heroStatBlock} testID="history-year-stat">
+          {yearQuery.isLoading ? <ActivityIndicator color={colors.accent} />
+            : <Text style={styles.heroStatValue}>{yearProgress?.count ?? metrics?.sessionsCount ?? 0}</Text>}
+          <Text style={styles.heroStatLabel}>{yearProgress || yearQuery.isLoading ? `Training days in ${displayedYear}` : "Sessions Completed"}</Text>
+          {yearProgress ? <Text style={styles.heroStatLabel}>{paceLine(yearProgress)}</Text> : null}
         </View>
         <View style={styles.heroStatRow}>
           <View style={styles.heroStatMini}>
-            <Text style={styles.heroStatMiniValue}>{metrics?.dayStreak ?? 0}</Text>
-            <Text style={styles.heroStatMiniLabel}>Day Streak</Text>
+            <Text style={styles.heroStatMiniValue}>{metrics?.sessionsCount ?? 0}</Text>
+            <Text style={styles.heroStatMiniLabel}>Sessions Completed</Text>
           </View>
           <View style={styles.heroStatMini}>
             <Text style={styles.heroStatMiniValue}>{metrics?.programmesCompleted ?? 0}</Text>
             <Text style={styles.heroStatMiniLabel}>Programmes Completed</Text>
           </View>
         </View>
+      </View>
+
+      <View style={styles.yearSection}>
+        <Text style={styles.sectionTitle}>Your year</Text>
+        <PressableScale style={styles.yearChoice} onPress={() => setYearPickerOpen(open => !open)}
+          accessibilityLabel="Choose training year" accessibilityState={{ expanded: yearPickerOpen }}>
+          <Text style={styles.yearChoiceLabel}>{displayedYear} ▾</Text>
+        </PressableScale>
+        {yearPickerOpen ? <View style={styles.yearOptions}>
+          {[...new Set([currentYear, displayedYear, ...years.map(row => row.year)])].sort((a, b) => b - a).map(year => (
+            <PressableScale key={year} style={styles.yearChoice} accessibilityLabel={`View ${year} training year`}
+              accessibilityState={{ selected: year === displayedYear }} onPress={() => { setSelectedYear(year); setYearPickerOpen(false); }}>
+              <Text style={styles.yearChoiceLabel}>{year}</Text>
+            </PressableScale>
+          ))}
+        </View> : null}
+        {yearQuery.isLoading ? <ActivityIndicator color={colors.accent} accessibilityLabel="Loading training year" />
+          : yearProgress ? <YearHeatmap year={yearProgress.year} trainingDates={yearProgress.training_dates}
+            todayLocal={yearProgress.today_local} windowStart={yearProgress.pro_rated ? yearProgress.window_start : undefined} />
+          : <View style={styles.yearSection}>
+            <Text style={styles.subtitle}>Couldn&apos;t load your year</Text>
+            <PressableScale style={styles.yearChoice} accessibilityLabel="Retry loading training year" onPress={() => void yearQuery.refetch()}>
+              <Text style={styles.yearChoiceLabel}>Retry</Text>
+            </PressableScale>
+          </View>}
+        <PastYearsList years={years} currentYear={currentYear} />
       </View>
 
       <View style={styles.sectionHeaderWrap}>
@@ -622,6 +666,11 @@ export function HistoryScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  yearSection: { gap: spacing.sm },
+  yearOptions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  yearChoice: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start", paddingHorizontal: spacing.md,
+    borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  yearChoiceLabel: { ...typography.body, color: colors.textPrimary },
   root: {
     flex: 1,
     backgroundColor: colors.background,

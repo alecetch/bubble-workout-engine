@@ -11,6 +11,7 @@ vi.mock("react-native", async () => {
     ...actual,
     Pressable: ({
       accessibilityLabel,
+      accessibilityState,
       children,
       disabled,
       onLongPress,
@@ -23,6 +24,7 @@ vi.mock("react-native", async () => {
         "button",
         {
           "aria-label": accessibilityLabel,
+          "aria-expanded": accessibilityState?.expanded,
           "data-testid": testID,
           disabled,
           onClick: () => onPress?.({} as any),
@@ -71,6 +73,13 @@ describe("PressableScale", () => {
     fireEvent.click(screen.getByText("Tap me"));
 
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards expanded accessibility state for the year picker", () => {
+    const view = render(<PressableScale accessibilityLabel="Choose year" accessibilityState={{ expanded: false }}>Year</PressableScale>);
+    expect(screen.getByRole("button", { name: "Choose year" })).toHaveAttribute("aria-expanded", "false");
+    view.rerender(<PressableScale accessibilityLabel="Choose year" accessibilityState={{ expanded: true }}>Year</PressableScale>);
+    expect(screen.getByRole("button", { name: "Choose year" })).toHaveAttribute("aria-expanded", "true");
   });
 
   it("wires the pressed-state handlers from usePressScale", () => {
