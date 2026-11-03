@@ -9,10 +9,12 @@ import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { radii } from "../../theme/components";
+import { useShareCard } from "../share/useShareCard";
 
 type Props = { milestone: MilestoneMoment | null; onDismiss: () => void; showShare?: boolean; onShare?: () => void; isDismissing?: boolean; error?: string };
 
-export function MilestoneCelebration({ milestone, onDismiss, showShare = false, onShare, isDismissing, error }: Props): React.JSX.Element | null {
+export function MilestoneCelebration({ milestone, onDismiss, showShare = true, onShare, isDismissing, error }: Props): React.JSX.Element | null {
+  const sharing = useShareCard();
   const scale = useSharedValue(1);
   const played = useRef<string | undefined>(undefined);
   const pulse = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -39,15 +41,26 @@ export function MilestoneCelebration({ milestone, onDismiss, showShare = false, 
     : threshold === 1 ? "Day 1. The year starts here."
     : threshold === 100 && target === 200 ? "Day 100. Half way to 200."
     : `Day ${threshold}. ${target > threshold ? `${target - threshold} to go for ${target}.` : "Keep building your year."}`;
-  return <Modal visible transparent={!fullScreen} animationType="none" onRequestClose={isDismissing ? undefined : onDismiss}>
+  const count = milestone.count ?? threshold;
+  const busy = isDismissing || sharing.isSharing;
+  function share() {
+    if (onShare) { onShare(); return; }
+    if (slug.startsWith("club_") && slug !== "club_200") {
+      void sharing.shareCard({ type: "club", tier: Number(slug.slice(5)), year, count });
+    } else {
+      void sharing.shareCard({ type: "milestone", year, count: threshold, isTarget: slug === "club_200" });
+    }
+  }
+  return <Modal visible transparent={!fullScreen} animationType="none" onRequestClose={busy ? undefined : onDismiss}>
     <View style={[styles.backdrop, fullScreen && styles.fullScreen]} testID={fullScreen ? "milestone-full-screen" : "milestone-card"}>
+      {sharing.shareView}
       <ScrollView contentContainerStyle={styles.content}>
         <Animated.View style={[styles.card, fullScreen && styles.fullCard, pulse]} accessibilityViewIsModal>
           <Text style={styles.year}>{year}</Text>
           <Text style={styles.title}>{title}</Text>
           {error ? <Text style={styles.body} accessibilityLiveRegion="polite">{error}</Text> : null}
-          {showShare && onShare ? <PressableScale style={styles.button} onPress={onShare} disabled={isDismissing}><Text style={styles.label}>Share</Text></PressableScale> : null}
-          <PressableScale style={styles.button} onPress={onDismiss} disabled={isDismissing}>
+          {showShare ? <PressableScale style={styles.button} onPress={share} disabled={busy}><Text style={styles.label}>{sharing.isSharing ? "Sharing..." : "Share"}</Text></PressableScale> : null}
+          <PressableScale style={styles.button} onPress={onDismiss} disabled={busy}>
             <Text style={styles.label}>{slug === "club_200" ? "Go for Club 250" : "Let's go"}</Text>
           </PressableScale>
         </Animated.View>

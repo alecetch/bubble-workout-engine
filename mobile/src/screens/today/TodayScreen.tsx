@@ -74,7 +74,7 @@ export function TodayScreen(): React.JSX.Element {
   const yearQuery = useYearProgress();
   const [outsideSheetOpen, setOutsideSheetOpen] = useState(false);
   const highest = highestMilestone(yearQuery.data?.unseen_milestones ?? []);
-  const milestone = useMilestoneCelebration(!outsideSheetOpen && highest && yearQuery.data?.ok ? { ...highest, target: yearQuery.data.target } : undefined,
+  const milestone = useMilestoneCelebration(!outsideSheetOpen && highest && yearQuery.data?.ok ? { ...highest, target: yearQuery.data.target, count: yearQuery.data.count } : undefined,
     userId, useCallback(() => { void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress }); }, [queryClient]));
   const milestoneOverlay = <MilestoneCelebration milestone={milestone.moment} onDismiss={() => void milestone.dismiss()}
     isDismissing={milestone.isDismissing} error={milestone.error} />;

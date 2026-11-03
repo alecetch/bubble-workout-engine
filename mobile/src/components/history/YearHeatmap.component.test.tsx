@@ -28,6 +28,16 @@ vi.mock("react-native-svg", () => ({
 
 const props = { year: 2026, trainingDates: ["2026-10-01", "2026-10-02", "2026-08-01"], todayLocal: "2026-10-15" };
 describe("YearHeatmap", () => {
+  it("exports a whole leap year in larger static cells without scrolling or day interactions", () => {
+    const press = vi.fn();
+    render(<YearHeatmap year={2024} trainingDates={["2024-02-29"]} todayLocal="2024-12-31" presentation="share" onDayPress={press} />);
+    expect(screen.queryByTestId("heatmap-scroll")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId(/^year-day-/)).toHaveLength(366);
+    expect(screen.getByTestId("year-day-2024-02-29")).toHaveAttribute("width", "10");
+    fireEvent.click(screen.getByTestId("year-day-2024-02-29"));
+    expect(press).not.toHaveBeenCalled();
+    expect(screen.getByTestId("year-day-2024-12-31")).toBeInTheDocument();
+  });
   beforeEach(() => { native.scrollTo.mockClear(); });
 
   it.each([[2026, 53, 365], [2028, 53, 366], [2012, 54, 366]])("renders every date of %i in Monday-first weeks", (year, weeks, days) => {

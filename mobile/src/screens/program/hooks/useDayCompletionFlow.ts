@@ -110,7 +110,8 @@ export function useDayCompletionFlow(params: {
       // Confirmed sets may have earned the milestone before the completion request.
       const milestone = highestMilestone([...(completion?.year_progress?.new_milestones ?? []),
         ...(completion?.year_progress?.unseen_milestones ?? [])]);
-      const yearMilestone = milestone ? { ...milestone, target: completion!.year_progress!.target } : undefined;
+      const yearMilestone = milestone ? { ...milestone, target: completion!.year_progress!.target,
+        ...(typeof completion!.year_progress!.count === "number" ? { count: completion!.year_progress!.count } : {}) } : undefined;
       await setWorkoutComplete(programDayId, true);
       setWorkoutCompleteState(true);
       setConfirmationText(null);
