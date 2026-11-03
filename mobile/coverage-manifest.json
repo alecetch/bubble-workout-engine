@@ -2,6 +2,14 @@
   "version": "1",
   "entries": [
     {
+      "type": "screen",
+      "source": "src/screens/onboarding/YearGoalScreen.tsx",
+      "test": "src/screens/onboarding/YearGoalScreen.component.test.tsx",
+      "status": "covered",
+      "tags": ["onboarding"],
+      "reason": ""
+    },
+    {
       "type": "component",
       "source": "src/components/today/YearProgressCard.tsx",
       "test": "src/components/today/YearProgressCard.component.test.tsx",

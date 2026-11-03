@@ -9,6 +9,7 @@ import { Step1GoalsScreen } from "../screens/onboarding/Step1GoalsScreen";
 import { Step2EquipmentScreen } from "../screens/onboarding/Step2EquipmentScreen";
 import { Step2EquipmentDetailScreen } from "../screens/onboarding/Step2EquipmentDetailScreen";
 import { Step2bBaselineLoadsScreen } from "../screens/onboarding/Step2bBaselineLoadsScreen";
+import { YearGoalScreen } from "../screens/onboarding/YearGoalScreen";
 import { Step3ScheduleMetricsScreen } from "../screens/onboarding/Step3ScheduleMetricsScreen";
 import { Step4BodyMetricsScreen } from "../screens/onboarding/Step4BodyMetricsScreen";
 import { SplitReviewScreen } from "../screens/onboarding/SplitReviewScreen";
@@ -37,6 +38,7 @@ export type OnboardingStackParamList = {
   Step2Equipment: undefined;
   Step2EquipmentDetail: undefined;
   Step2bBaselineLoads: undefined;
+  YearGoal: undefined;
   Step3Schedule: undefined;
   Step4BodyMetrics: undefined;
   SplitReview: {
@@ -130,6 +132,7 @@ export function OnboardingNavigator({ initialRouteName = "OnboardingEntry" }: On
       <Stack.Screen name="Step2Equipment" component={Step2EquipmentScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step2EquipmentDetail" component={Step2EquipmentDetailScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step2bBaselineLoads" component={Step2bBaselineLoadsScreen} options={stepTransitionOptions} />
+      <Stack.Screen name="YearGoal" component={YearGoalScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step3Schedule" component={Step3ScheduleMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="Step4BodyMetrics" component={Step4BodyMetricsScreen} options={stepTransitionOptions} />
       <Stack.Screen name="SplitReview" component={SplitReviewScreen} options={stepTransitionOptions} />

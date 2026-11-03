@@ -207,7 +207,7 @@ describe("Step2bBaselineLoadsScreen", () => {
         anchorLiftsSkipped: true,
         preferredUnit: "kg",
       });
-      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+      expect(navigation.replace).toHaveBeenCalledWith("YearGoal");
     });
   });
 
@@ -222,7 +222,7 @@ describe("Step2bBaselineLoadsScreen", () => {
         anchorLiftsSkipped: true,
         preferredUnit: "kg",
       });
-      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+      expect(navigation.replace).toHaveBeenCalledWith("YearGoal");
     });
   });
 
@@ -272,7 +272,7 @@ describe("Step2bBaselineLoadsScreen", () => {
         anchorLiftsSkipped: false,
         preferredUnit: "kg",
       });
-      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+      expect(navigation.replace).toHaveBeenCalledWith("YearGoal");
     });
   });
 
@@ -416,7 +416,7 @@ describe("Step2bBaselineLoadsScreen", () => {
           ]),
         }),
       );
-      expect(navigation.replace).toHaveBeenCalledWith("Step3Schedule");
+      expect(navigation.replace).toHaveBeenCalledWith("YearGoal");
     });
   });
 });
