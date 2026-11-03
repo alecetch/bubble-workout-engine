@@ -3,6 +3,7 @@ import { axe } from "jest-axe";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useOutsideSessions, useDeleteOutsideSession } from "../../api/hooks/trainingSessionHooks";
 import { HistoryScreen } from "./HistoryScreen";
 import {
   useEntitlement,
@@ -18,6 +19,14 @@ import { useSessionStore } from "../../state/session/sessionStore";
 import { mockZustandSelector, renderWithProviders } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
+vi.mock("../../components/today/LogOutsideSessionSheet", () => ({
+  LogOutsideSessionSheet: ({ onClose }: any) => <button onClick={onClose}>Outside session sheet</button>,
+}));
+
+vi.mock("../../api/hooks/trainingSessionHooks", () => ({
+  outsideSessionsKey: ["outsideSessions"], useOutsideSessions: vi.fn(), useDeleteOutsideSession: vi.fn(),
+}));
+
 
 // React Native Web loads images outside the DOM; expose the native error callback
 // on an img so fireEvent.error exercises the screen's fallback behavior.
@@ -134,6 +143,8 @@ function setAllHooksLoading() {
 
 describe("HistoryScreen", () => {
   beforeEach(() => {
+    vi.mocked(useOutsideSessions).mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() } as any);
+    vi.mocked(useDeleteOutsideSession).mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue(undefined) } as any);
     navigationNavigateMock.mockReset();
     parentNavigateMock.mockReset();
     mockZustandSelector(useSessionStoreMock as any, { userId: "user-1" });
@@ -373,4 +384,59 @@ describe("HistoryScreen", () => {
 
     expect(screen.getByText("Unable to load history")).toBeInTheDocument();
   });
+  it("lists outside sessions and deletes only after confirmation", async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useDeleteOutsideSession).mockReturnValue({ mutateAsync: remove } as any);
+    vi.mocked(useOutsideSessions).mockReturnValue({ data: [{ id: "outside-1", activity_type: "run", local_date: "2026-11-03", duration_min: 40 }] } as any);
+    renderScreen();
+    expect(screen.getByText("Run")).toBeInTheDocument();
+    expect(screen.getByText(/2026-11-03.*40 minutes/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Log outside session"));
+    expect(screen.getByText("Outside session sheet")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Outside session sheet"));
+    fireEvent.click(screen.getByText("Delete"));
+    expect(remove).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(remove).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByText("Delete session"));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("outside-1"));
+    await waitFor(() => expect(screen.queryByText("Delete outside session?")).not.toBeInTheDocument());
+  });
+
+  it("retains the confirmation on a failed deletion and allows retry", async () => {
+    const remove = vi.fn().mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce(undefined);
+    vi.mocked(useDeleteOutsideSession).mockReturnValue({ mutateAsync: remove } as any);
+    vi.mocked(useOutsideSessions).mockReturnValue({ data: [{ id: "outside-1", activity_type: "swim", local_date: "2026-11-02", duration_min: 45 }] } as any);
+    renderScreen();
+    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByText("Delete session"));
+    await screen.findByText("Offline");
+    fireEvent.click(screen.getByText("Delete session"));
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText("Delete outside session?")).not.toBeInTheDocument());
+  });
+
+  it("shows an outside-list error with retry while leaving logging available", () => {
+    const retry = vi.fn();
+    vi.mocked(useOutsideSessions).mockReturnValue({ isError: true, refetch: retry } as any);
+    renderScreen();
+    expect(screen.getByText("Unable to load outside sessions.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Retry outside sessions"));
+    expect(retry).toHaveBeenCalledOnce();
+    expect(screen.getByText("Log outside session")).toBeInTheDocument();
+  });
+
+  it("allows an expired user to log outside training while keeping program history locked", () => {
+    useEntitlementMock.mockReturnValue({ data: { is_active: false, subscription_status: "expired" }, isSuccess: true } as any);
+    renderScreen();
+    expect(parentNavigateMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Sessions Completed")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Log outside session"));
+    expect(screen.getByText("Outside session sheet")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Outside session sheet"));
+    fireEvent.click(screen.getByText("Unlock program history"));
+    expect(parentNavigateMock).toHaveBeenCalledWith("HomeTab", { screen: "Paywall" });
+  });
+
 });

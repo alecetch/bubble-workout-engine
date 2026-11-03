@@ -12,14 +12,14 @@ after(closeDb);
 async function seed(db, user, count, start = "2026-01-01") {
   await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC' WHERE id = $1", [user]);
   await db.query(`INSERT INTO training_session (user_id,local_date,source)
-    SELECT $1, $2::date + n, 'manual' FROM generate_series(0,$3::int - 1) n`, [user, start, count]);
+    SELECT $1, $2::date + n, 'apple_health' FROM generate_series(0,$3::int - 1) n`, [user, start, count]);
 }
 
 test("day one is recorded once; a second session on the same date earns nothing", { skip: DATABASE_SKIP }, () => withUsers(async (db, [user]) => {
   await seed(db, user, 1);
   const rows = await detectAndRecordMilestones(db, { userId: user, localDate: "2026-01-01" });
   assert.deepEqual(rows.map(row => row.slug), ["day_1"]);
-  await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,'2026-01-01','manual')", [user]);
+  await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,'2026-01-01','apple_health')", [user]);
   assert.deepEqual(await detectAndRecordMilestones(db, { userId: user, localDate: "2026-01-01" }), []);
 }));
 
