@@ -25,6 +25,7 @@ type SessionSummaryModalProps = {
   prE1rmKg?: number | null;
   yearCountAfterSession: number | null;
   yearTarget: number;
+  yearClubs?: Array<{ tier: number; threshold: number }>;
   year: number;
   adaptedExercises?: Array<{ name: string; displayChip: string }>;
   isSubmitting?: boolean;
@@ -40,6 +41,7 @@ export function SessionSummaryModal({
   prE1rmKg,
   yearCountAfterSession,
   yearTarget,
+  yearClubs,
   year,
   adaptedExercises = [],
   isSubmitting = false,
@@ -130,7 +132,7 @@ export function SessionSummaryModal({
               </View>
             </View>
 
-            {yearCountAfterSession !== null ? <Text style={styles.yearText}>{summaryCountCopy(yearCountAfterSession, yearTarget, year)}</Text> : null}
+            {yearCountAfterSession !== null ? <Text style={styles.yearText}>{summaryCountCopy(yearCountAfterSession, yearTarget, year, yearClubs)}</Text> : null}
 
             <PressableScale style={styles.doneButton} onPress={onDismiss} disabled={isSubmitting}>
               <Text style={styles.doneLabel}>Done</Text>

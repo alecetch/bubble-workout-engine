@@ -199,7 +199,8 @@ describe("TodayScreen", () => {
     expect(navigationMocks.navigate).toHaveBeenCalledWith("HomeTab", { screen: "ProgramReview" });
   });
 
-  it.each([["behind", -2, "#3B82F6", "You're 2 behind. A bonus session today closes the gap."],
+  it.each([["behind", -2, "#3B82F6", "You're 2 behind. A bonus session today makes it 1."],
+    ["behind", -80, "#3B82F6", "You're 80 behind. A bonus session today makes it 79."],
     ["ahead", 3, "#1E293B", "You're ahead. Rest is training too."],
     ["on_pace", -1, "#1E293B", "On pace. Rest is training too."]])("emphasises bonus workouts for %s pace", (pace_status, pace_delta, background, copy) => {
     vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2026, count: 88, target: 200, pace_status, pace_delta, projected_year_end: 200 }, refetch: vi.fn() } as any);
