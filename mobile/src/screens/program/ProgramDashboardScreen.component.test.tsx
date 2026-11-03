@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDashboardScreen } from "./ProgramDashboardScreen";
 import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
 import { getProgramOverview } from "../../api/programViewer";
+import { claimYearMilestone, markYearMilestoneSeen } from "../../api/yearProgress";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
@@ -16,6 +17,7 @@ import {
 } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
+vi.mock("../../api/yearProgress", () => ({ claimYearMilestone: vi.fn(), markYearMilestoneSeen: vi.fn().mockResolvedValue(undefined) }));
 
 vi.mock("../../components/program/HeroHeader", () => ({
   HeroHeader: (props: any) => (
@@ -270,6 +272,46 @@ describe("ProgramDashboardScreen", () => {
     expect(screen.getByText("Week 2 complete!")).toBeInTheDocument();
     expect(screen.getByText("3 sessions completed")).toBeInTheDocument();
     expect(screen.getByText("Week share volume 4321")).toBeInTheDocument();
+  });
+
+  it("queues milestone before week completion and review, acknowledging all coalesced milestones", async () => {
+    const milestone = { id: "club200", slug: "club_200", year: 2026, threshold: 200, target: 200 };
+    vi.mocked(claimYearMilestone).mockResolvedValue({ milestone, coalesced_ids: ["day150"] });
+    renderDashboard(undefined, { programId: "prog-1", yearMilestone: milestone, weekCompleteNumber: 2,
+      weekCompleteSessions: 3, weekCompleteVolumeKg: 4321, showReviewPrompt: true });
+    await act(async () => {});
+    expect(screen.getByText("200. You're in for 2026.")).toBeInTheDocument();
+    expect(screen.queryByText("Week 2 complete!")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nice PR.")).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Go for Club 250" })); });
+    expect(markYearMilestoneSeen).toHaveBeenCalledWith("club200");
+    expect(markYearMilestoneSeen).toHaveBeenCalledWith("day150");
+    expect(screen.getByText("Week 2 complete!")).toBeInTheDocument();
+    expect(screen.queryByText("Nice PR.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Dismiss week complete banner"));
+    expect(screen.getByText("Nice PR.")).toBeInTheDocument();
+  });
+
+  it("continues the week queue when another device already claimed the milestone", async () => {
+    vi.mocked(claimYearMilestone).mockResolvedValue({ milestone: null, coalesced_ids: [] });
+    renderDashboard(undefined, { programId: "prog-1", yearMilestone: { id: "day1", slug: "day_1", threshold: 1, year: 2026, target: 200 }, weekCompleteNumber: 1 });
+    await act(async () => {});
+    expect(screen.getByText("Week 1 complete!")).toBeInTheDocument();
+    expect(screen.queryByText("Day 1. The year starts here.")).not.toBeInTheDocument();
+  });
+
+  it("retries acknowledgement before advancing and preserves the terminal destination", async () => {
+    const milestone = { id: "terminal", slug: "club_200", threshold: 200, year: 2026, target: 200 };
+    vi.mocked(claimYearMilestone).mockResolvedValue({ milestone, coalesced_ids: [] });
+    vi.mocked(markYearMilestoneSeen).mockRejectedValueOnce(new Error("offline"));
+    const nav = renderDashboard(undefined, { programId: "prog-1", yearMilestone: milestone, completionDestination: "ProgramComplete" });
+    await act(async () => {});
+    expect(nav.navigate).not.toHaveBeenCalledWith("ProgramComplete", expect.anything());
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Go for Club 250" })); });
+    expect(screen.getByText("Couldn't save this celebration. Try again.")).toBeInTheDocument();
+    expect(nav.navigate).not.toHaveBeenCalledWith("ProgramComplete", expect.anything());
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Go for Club 250" })); });
+    expect(nav.navigate).toHaveBeenCalledWith("ProgramComplete", { programId: "prog-1" });
   });
 
   it("shows only the week-complete banner, not the review prompt, when both trigger in the same navigation", () => {

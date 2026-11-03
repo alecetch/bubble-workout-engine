@@ -31,10 +31,15 @@ async function fixture(fn) {
 }
 
 test("multiple completions including bonus day count once on actual date, and uncomplete retains other sessions", { skip: DATABASE_SKIP }, () => fixture(async ({ db, program, user, patch, today }) => {
+  let completionIndex = 0;
   for (const day of [program.days[0], program.days[2]]) {
     const res = await patch(day, { local_date: today });
     assert.equal(res.status, 200);
-    assert.deepEqual((await res.json()).year_progress, { year: Number(today.slice(0, 4)), count: 1, target: 200 });
+    const { new_milestones, unseen_milestones, ...progress } = (await res.json()).year_progress;
+    assert.deepEqual(progress, { year: Number(today.slice(0, 4)), count: 1, target: 200 });
+    assert.equal(new_milestones.length, completionIndex++ === 0 ? 1 : 0);
+    if (new_milestones.length) assert.equal(new_milestones[0].slug, "day_1");
+    assert.equal(unseen_milestones[0].slug, "day_1");
   }
   const completedAt = (await db.query("SELECT completed_at FROM program_day WHERE id = $1", [program.days[0]])).rows[0].completed_at;
   assert.ok(completedAt);

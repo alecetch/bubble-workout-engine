@@ -910,10 +910,12 @@ export function createReadProgramHandlers(options = pool) {
           FROM program p WHERE pd.id = $1 AND p.id = pd.program_id AND p.user_id = $2`,
         [program_day_id, user_id, Boolean(is_completed)]);
         await rememberTimezone(client, user_id, req.body?.timezone);
-        if (is_completed) await recordProgramDaySession(client, { userId: user_id, programDayId: program_day_id, localDate });
+        let newMilestones = [];
+        if (is_completed) newMilestones = (await recordProgramDaySession(client, { userId: user_id, programDayId: program_day_id, localDate })).newMilestones;
         else await removeProgramDaySessionIfUnqualified(client, { userId: user_id, programDayId: program_day_id });
-        const progress = await getYearProgress(client, user_id, { context, timeZone });
-        yearProgress = { year: progress.year, count: progress.count, target: progress.target };
+        const progress = await getYearProgress(client, user_id, { context, timeZone, year: Number(localDate.slice(0, 4)) });
+        yearProgress = { year: progress.year, count: progress.count, target: progress.target,
+          new_milestones: newMilestones, unseen_milestones: progress.unseen_milestones };
         await client.query("COMMIT");
       } catch (err) {
         await client.query("ROLLBACK");

@@ -31,6 +31,7 @@ import {
   markProgramDayComplete,
   type ProgramDayFullResponse,
   type ProgramOverviewResponse,
+  type DayCompletionResult,
 } from "../programViewer";
 import { fetchExerciseGuidance, type ExerciseGuidance } from "../exerciseGuidance";
 import {
@@ -295,7 +296,7 @@ export function useSetPrimaryProgram(): UseMutationResult<
 }
 
 export function useMarkDayComplete(): UseMutationResult<
-  void,
+  DayCompletionResult,
   Error,
   { programDayId: string; isCompleted: boolean; userId?: string; localDate?: string }
 > {

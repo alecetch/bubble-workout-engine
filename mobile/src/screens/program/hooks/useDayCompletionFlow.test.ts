@@ -95,6 +95,50 @@ afterEach(() => {
 });
 
 describe("useDayCompletionFlow", () => {
+  it("queues milestones earned by confirmed logs before the completion request", async () => {
+    const row = { id: "logged", slug: "day_25", threshold: 25, year: 2026 };
+    const markDayComplete = { isPending: false, mutateAsync: vi.fn().mockResolvedValue({ year_progress: {
+      target: 200, new_milestones: [], unseen_milestones: [row],
+    } }) } as any;
+    const flow = renderFlow({ programId: "prog-1", markDayComplete });
+    flow.queryClient.fetchQuery.mockResolvedValueOnce(overview()).mockResolvedValueOnce(endCheck({}));
+    await act(async () => { await flow.result.current.handleSummaryDismiss(); });
+    expect(flow.nav.navigate).toHaveBeenCalledWith("ProgramDashboard", expect.objectContaining({ yearMilestone: { ...row, target: 200 } }));
+  });
+  it("routes a milestone alone through the dashboard instead of Today", async () => {
+    const milestone = { id: "day1", slug: "day_1", threshold: 1, year: 2026 };
+    const markDayComplete = { isPending: false, mutateAsync: vi.fn().mockResolvedValue({ year_progress: {
+      year: 2026, count: 1, target: 200, new_milestones: [milestone],
+    } }) } as any;
+    const flow = renderFlow({ programId: "prog-1", markDayComplete });
+    flow.queryClient.fetchQuery.mockResolvedValueOnce(overview()).mockResolvedValueOnce(endCheck({}));
+    await act(async () => { await flow.result.current.handleSummaryDismiss(); });
+    expect(flow.nav.navigate).toHaveBeenCalledWith("ProgramDashboard", expect.objectContaining({
+      yearMilestone: { ...milestone, target: 200 },
+    }));
+    expect(flow.parentNav.navigate).not.toHaveBeenCalled();
+  });
+
+  it("celebrates the highest milestone before the terminal program destination", async () => {
+    const rows = [{ id: "day100", slug: "day_100", threshold: 100, year: 2026 }, { id: "club200", slug: "club_200", threshold: 200, year: 2026 }];
+    const markDayComplete = { isPending: false, mutateAsync: vi.fn().mockResolvedValue({ year_progress: { target: 200, new_milestones: rows } }) } as any;
+    const flow = renderFlow({ programId: "prog-1", markDayComplete });
+    flow.queryClient.fetchQuery.mockResolvedValueOnce(overview()).mockResolvedValueOnce(endCheck({ lifecycleStatus: "completed" }));
+    await act(async () => { await flow.result.current.handleSummaryDismiss(); });
+    expect(flow.nav.navigate).toHaveBeenCalledWith("ProgramDashboard", expect.objectContaining({
+      completionDestination: "ProgramComplete", yearMilestone: { ...rows[1], target: 200 },
+    }));
+  });
+  it("skips the week banner and review when a milestone precedes the terminal destination", async () => {
+    const milestone = { id: "day1", slug: "day_1", threshold: 1, year: 2026 };
+    const markDayComplete = { isPending: false, mutateAsync: vi.fn().mockResolvedValue({ year_progress: { target: 200, new_milestones: [milestone] } }) } as any;
+    const flow = renderFlow({ programId: "prog-1", markDayComplete });
+    flow.queryClient.fetchQuery.mockResolvedValueOnce(overview()).mockResolvedValueOnce(endCheck({ lifecycleStatus: "completed" }));
+    await act(async () => { await flow.result.current.handleSummaryDismiss(); });
+    expect(flow.nav.navigate).toHaveBeenCalledWith("ProgramDashboard", {
+      programId: "prog-1", yearMilestone: { ...milestone, target: 200 }, completionDestination: "ProgramComplete",
+    });
+  });
   it("marks the day complete and persists local completion", async () => {
     const { result, markDayComplete, params } = renderFlow();
 

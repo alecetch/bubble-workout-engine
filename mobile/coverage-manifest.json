@@ -1001,6 +1001,16 @@
         "media"
       ],
       "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/celebrations/MilestoneCelebration.tsx",
+      "test": "src/components/celebrations/MilestoneCelebration.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "celebrations"
+      ],
+      "reason": ""
     }
   ]
 }

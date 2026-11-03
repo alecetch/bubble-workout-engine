@@ -20,6 +20,9 @@ import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
+import { MilestoneCelebration } from "../../components/celebrations/MilestoneCelebration";
+import { useMilestoneCelebration } from "../../hooks/useMilestoneCelebration";
+import { highestMilestone } from "../../utils/yearMilestones";
 
 function shallowEqualRecord(
   a: Record<string, ProgramDayStatus>,
@@ -68,6 +71,11 @@ export function TodayScreen(): React.JSX.Element {
   const activeProgramsQuery = useActivePrograms();
   const entitlementQuery = useEntitlement();
   const yearQuery = useYearProgress();
+  const highest = highestMilestone(yearQuery.data?.unseen_milestones ?? []);
+  const milestone = useMilestoneCelebration(highest && yearQuery.data?.ok ? { ...highest, target: yearQuery.data.target } : undefined,
+    userId, useCallback(() => { void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress }); }, [queryClient]));
+  const milestoneOverlay = <MilestoneCelebration milestone={milestone.moment} onDismiss={() => void milestone.dismiss()}
+    isDismissing={milestone.isDismissing} error={milestone.error} />;
   const isActive = entitlementQuery.data?.is_active ?? true;
   const resolvedProgramId = activeProgramId ?? activeProgramsQuery.data?.primary_program_id ?? null;
 
@@ -203,13 +211,14 @@ export function TodayScreen(): React.JSX.Element {
     );
   }, [calendarDays, todayIso, dayStatusByProgramDayId]);
 
-  const yearCard = <YearProgressCard progress={yearQuery.data} isLoading={yearQuery.isLoading}
+  const yearCard = <>{milestoneOverlay}<YearProgressCard progress={yearQuery.data} isLoading={yearQuery.isLoading}
     isError={yearQuery.isError} onRetry={() => { void yearQuery.refetch(); }}
-    onPress={() => navigation.navigate("HistoryTab")} />;
+    onPress={() => navigation.navigate("HistoryTab")} /></>;
 
   if (!resolvedProgramId && activeProgramsQuery.isLoading) {
     return (
       <View style={styles.centered}>
+        {milestoneOverlay}
         <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.subtitle}>Loading today&apos;s workout...</Text>
       </View>
@@ -219,6 +228,7 @@ export function TodayScreen(): React.JSX.Element {
   if (!resolvedProgramId) {
     return (
       <View style={styles.centered}>
+        {milestoneOverlay}
         <Text style={styles.title}>No Active Program</Text>
         <Text style={styles.subtitle}>Generate a program to unlock your Today workout.</Text>
         <PressableScale
