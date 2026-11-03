@@ -19,6 +19,13 @@ function defaultProps(overrides: Partial<React.ComponentProps<typeof SessionSumm
 }
 
 describe("SessionSummaryModal", () => {
+  it("uses the pro-rated club thresholds in the yearly line", () => {
+    render(<SessionSummaryModal {...defaultProps({ yearCountAfterSession: 51, yearTarget: 50,
+      yearClubs: [{ tier: 100, threshold: 25 }, { tier: 200, threshold: 50 }, { tier: 250, threshold: 63 }, { tier: 300, threshold: 75 }],
+    })} />);
+    expect(screen.getByText("That's 51. Club 250 is 12 away.")).toBeInTheDocument();
+  });
+
   it("shows the yearly count and hides it when unavailable", () => {
     const { rerender } = render(<SessionSummaryModal {...defaultProps()} />);
     expect(screen.getByText("That's 88. 112 to go.")).toBeInTheDocument();
