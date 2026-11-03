@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useSessionHistoryMetrics } from "../../api/hooks";
+import { useSessionHistoryMetrics, useYearProgress } from "../../api/hooks";
 import type { SessionHistoryStrengthRegion, WeeklyVolumePoint } from "../../api/history";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { HistoryStackParamList } from "../../navigation/HistoryStackNavigator";
@@ -116,6 +116,8 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
   const [region, setRegion] = useState<RegionKey>("upper");
   const chartWidth = Dimensions.get("window").width - spacing.lg * 2;
   const { data: metrics, isLoading, isError, refetch } = useSessionHistoryMetrics(userId);
+  const yearQuery = useYearProgress();
+  const year = !yearQuery.isError && yearQuery.data?.ok ? yearQuery.data : undefined;
   const seriesData = metrics?.weeklyVolumeByRegion8w?.[region] ?? [];
   const activeWeeksCount = useMemo(
     () => seriesData.filter((point) => point.volumeLoad > 0).length,
@@ -248,8 +250,13 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
         <Text style={styles.sectionTitle}>Activity Stats</Text>
         <View style={styles.streakRow}>
           <View style={styles.streakChip}>
-            <Text style={styles.streakValue}>{metrics?.dayStreak ?? 0}</Text>
-            <Text style={styles.streakLabel}>Day streak</Text>
+            {yearQuery.isLoading ? <ActivityIndicator color={colors.accent} /> : <Text style={styles.streakValue}>{year?.count ?? "—"}</Text>}
+            <Text style={styles.streakLabel}>Days this year</Text>
+            {year ? <Text style={styles.streakLabel}>of {year.target}</Text> : !yearQuery.isLoading ? (
+              <PressableScale accessibilityLabel="Retry loading training year" onPress={() => void yearQuery.refetch()}>
+                <Text style={styles.streakLabel}>Retry</Text>
+              </PressableScale>
+            ) : null}
           </View>
           <View style={styles.streakChip}>
             <Text style={styles.streakValue}>{metrics?.sessionsCount28d ?? 0}</Text>

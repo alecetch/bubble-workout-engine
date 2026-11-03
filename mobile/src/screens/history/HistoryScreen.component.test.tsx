@@ -1,6 +1,6 @@
 import React from "react";
 import { axe } from "jest-axe";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryScreen } from "./HistoryScreen";
@@ -12,7 +12,9 @@ import {
   usePhysiqueCheckIns,
   usePrsFeed,
   useSessionHistoryMetrics,
+  useYearProgress,
 } from "../../api/hooks";
+import { normalizeYearProgress } from "../../api/yearProgress";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { mockZustandSelector, renderWithProviders } from "../../__test-utils__";
@@ -58,6 +60,7 @@ vi.mock("../../api/hooks", () => ({
   usePhysiqueCheckIns: vi.fn(),
   useEntitlement: vi.fn(),
   useLoggedExercisesSearch: vi.fn(),
+  useYearProgress: vi.fn(),
 }));
 
 vi.mock("../../state/session/sessionStore", () => ({
@@ -69,14 +72,19 @@ vi.mock("../../state/onboarding/onboardingStore", () => ({
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ children, disabled, onPress, style }: any) => (
-    <button type="button" disabled={disabled} onClick={() => onPress?.()} style={style}>
+  PressableScale: ({ children, disabled, onPress, style, accessibilityLabel }: any) => (
+    <button type="button" disabled={disabled} onClick={() => onPress?.()} style={style} aria-label={accessibilityLabel}>
       {children}
     </button>
   ),
 }));
 
 const useSessionHistoryMetricsMock = vi.mocked(useSessionHistoryMetrics);
+const useYearProgressMock = vi.mocked(useYearProgress);
+const yearFixture = normalizeYearProgress({ ok: true, year: 2026, count: 87, target: 200,
+  today_local: "2026-11-03", window_start: "2026-01-01", window_end: "2026-12-31",
+  pace_status: "ahead", pace_delta: 3.3, projected_year_end: 212, training_dates: ["2026-10-01"],
+  years: [{ year: 2026, count: 87, target: 200, best_club: null }, { year: 2025, count: 214, target: 200, best_club: 200 }] });
 const usePrsFeedMock = vi.mocked(usePrsFeed);
 const useHistoryProgramsMock = vi.mocked(useHistoryPrograms);
 const useHistoryTimelineMock = vi.mocked(useHistoryTimeline);
@@ -134,6 +142,7 @@ function setAllHooksLoading() {
 
 describe("HistoryScreen", () => {
   beforeEach(() => {
+    useYearProgressMock.mockReturnValue({ data: yearFixture, isLoading: false, isError: false, refetch: vi.fn() } as any);
     navigationNavigateMock.mockReset();
     parentNavigateMock.mockReset();
     mockZustandSelector(useSessionStoreMock as any, { userId: "user-1" });
@@ -220,13 +229,66 @@ describe("HistoryScreen", () => {
     expect(screen.getByText("Training History")).toBeInTheDocument();
   });
 
-  it("renders sessions-completed and streak stats", () => {
+  it("renders the yearly hero, pace and sessions mini stat without Day Streak", () => {
     renderScreen();
 
     expect(screen.getByText("Sessions Completed")).toBeInTheDocument();
-    expect(screen.getByText("Day Streak")).toBeInTheDocument();
+    expect(screen.getByText("Training days in 2026")).toBeInTheDocument();
+    expect(screen.getByText("3 ahead · on track for ~212")).toBeInTheDocument();
+    expect(screen.queryByText(/Day Streak/i)).not.toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.getByText("87")).toBeInTheDocument();
+  });
+
+  it("switches years and redraws the hero and heatmap with the selected response", () => {
+    const past = { ...yearFixture, year: 2025, count: 214, window_start: "2025-01-01", window_end: "2025-12-31", training_dates: ["2025-10-01"] };
+    useYearProgressMock.mockImplementation(year => ({ data: year === 2025 ? past : yearFixture, refetch: vi.fn() } as any));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Choose training year" }));
+    fireEvent.click(screen.getByRole("button", { name: "View 2025 training year" }));
+    expect(useYearProgressMock).toHaveBeenLastCalledWith(2025);
+    expect(screen.getByText("Training days in 2025")).toBeInTheDocument();
+    expect(within(screen.getByTestId("history-year-stat")).getByText("214")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "1 training day in 2025; best month October with 1" })).toBeInTheDocument();
+    expect(screen.getByText("2025 · 214 · 200")).toBeInTheDocument();
+  });
+
+  it("falls back to sessions and independently retries a year-progress failure", () => {
+    const retry = vi.fn();
+    useYearProgressMock.mockReturnValue({ data: yearFixture, isError: true, refetch: retry } as any);
+    renderScreen();
+    const hero = within(screen.getByTestId("history-year-stat"));
+    expect(hero.getByText("12")).toBeInTheDocument();
+    expect(hero.getByText("Sessions Completed")).toBeInTheDocument();
+    expect(screen.queryByText("87")).not.toBeInTheDocument();
+    expect(screen.getByText("Timeline")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading training year" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("keeps history visible while the yearly hero loads", () => {
+    useYearProgressMock.mockReturnValue({ data: undefined, isLoading: true, refetch: vi.fn() } as any);
+    renderScreen();
+    expect(within(screen.getByTestId("history-year-stat")).getByRole("progressbar")).toBeInTheDocument();
+    expect(screen.getByText("Timeline")).toBeInTheDocument();
+    expect(screen.queryByTestId("year-heatmap")).not.toBeInTheDocument();
+  });
+
+  it("keeps the year choices during loading and never labels old data with the new year", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 3, 12));
+    useYearProgressMock.mockImplementation(year => year === 2025
+      ? ({ data: undefined, isLoading: true, refetch: vi.fn() } as any)
+      : ({ data: yearFixture, refetch: vi.fn() } as any));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Choose training year" }));
+    fireEvent.click(screen.getByRole("button", { name: "View 2025 training year" }));
+    expect(screen.getByText("Training days in 2025")).toBeInTheDocument();
+    expect(screen.queryByText("87")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("year-heatmap")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose training year" }));
+    fireEvent.click(screen.getByRole("button", { name: "View 2026 training year" }));
+    expect(screen.getByText("87")).toBeInTheDocument();
   });
 
   it("keeps premium history for a cancelled but paid-through subscriber", () => {
