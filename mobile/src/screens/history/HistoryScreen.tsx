@@ -286,10 +286,22 @@ export function HistoryScreen(): React.JSX.Element {
     </Modal> : null}
   </View>;
 
+  const recapToday = toLocalIsoDate();
+  const recapYear = Number(recapToday.slice(0, 4));
+  const currentRecap = recapToday >= `${recapYear}-12-28` ? <PressableScale style={styles.yearChoice}
+    disabled={sharing.isSharing} onPress={() => navigation.navigate("YearRecap", { year: recapYear })}>
+    <Text style={styles.yearChoiceLabel}>{recapYear} recap</Text>
+  </PressableScale> : null;
+  const recapAccess = <View style={styles.yearSection}>
+    {currentRecap}
+    <PastYearsList years={years} currentYear={recapYear} onRecap={year => navigation.navigate("YearRecap", { year })} />
+  </View>;
+
   if (entitlementQuery.isSuccess && !isActive) {
     return <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.screenTitle}>Training History</Text>
       {outsideSection}
+      {recapAccess}
       <PressableScale style={styles.progressCard} onPress={() => (navigation.getParent() as any)?.navigate?.("HomeTab", { screen: "Paywall" })}>
         <Text style={styles.progressCardTitle}>Unlock program history</Text>
       </PressableScale>
@@ -322,6 +334,7 @@ export function HistoryScreen(): React.JSX.Element {
 
       <View style={styles.yearSection}>
         <Text style={styles.sectionTitle}>Your year</Text>
+        {currentRecap}
         <View style={styles.yearOptions}>
         <PressableScale style={styles.yearChoice} disabled={sharing.isSharing} onPress={() => setYearPickerOpen(open => !open)}
           accessibilityLabel="Choose training year" accessibilityState={{ expanded: yearPickerOpen }}>
@@ -351,7 +364,7 @@ export function HistoryScreen(): React.JSX.Element {
               <Text style={styles.yearChoiceLabel}>Retry</Text>
             </PressableScale>
           </View>}
-        <PastYearsList years={years} currentYear={currentYear} isSharing={sharing.isSharing}
+        <PastYearsList years={years} currentYear={currentYear} isSharing={sharing.isSharing} onRecap={year => navigation.navigate("YearRecap", { year })}
           onShare={row => { if (row.best_club) void sharing.shareCard({ type: "club", year: row.year, tier: row.best_club, count: row.count }); }} />
       </View>
 
@@ -632,6 +645,7 @@ export function HistoryScreen(): React.JSX.Element {
       <View style={styles.centered}>
         <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.subtitle}>Loading history...</Text>
+        {recapAccess}
         {sharing.shareView}
         {outsideSection}
       </View>
@@ -643,6 +657,7 @@ export function HistoryScreen(): React.JSX.Element {
       <View style={styles.centered}>
         <Text style={styles.title}>Unable to load history</Text>
         <Text style={styles.subtitle}>Pull to refresh or try again.</Text>
+        {recapAccess}
         {sharing.shareView}
         {outsideSection}
       </View>

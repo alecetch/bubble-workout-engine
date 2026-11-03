@@ -35,10 +35,14 @@ export function clubThresholds(ratio) {
   return CLUB_TIERS.map(tier => ({ tier, threshold: Math.max(1, Math.round(tier * ratio)) }));
 }
 
-export function paceSummary({ count, window, todayLocal, last28DaysCount }) {
+export function expectedCountAtDate(window, todayLocal) {
   const length = Math.max(0, dayNumber(window.end) - dayNumber(window.start) + 1);
   const elapsed = Math.max(0, Math.min(length, dayNumber(todayLocal) - dayNumber(window.start) + 1));
-  const expected = length ? window.target * elapsed / length : 0;
+  return length ? window.target * elapsed / length : 0;
+}
+
+export function paceSummary({ count, window, todayLocal, last28DaysCount }) {
+  const expected = expectedCountAtDate(window, todayLocal);
   const delta = count - expected;
   const daysLeft = Math.max(0, dayNumber(window.end) - Math.max(dayNumber(todayLocal), dayNumber(window.start) - 1));
   return {

@@ -1061,6 +1061,26 @@
         "today"
       ],
       "reason": ""
+    },
+    {
+      "type": "screen",
+      "source": "src/screens/history/YearRecapScreen.tsx",
+      "test": "src/screens/history/YearRecapScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "year-recap"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/today/YearMomentCards.tsx",
+      "test": "src/components/today/YearMomentCards.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "year-recap"
+      ],
+      "reason": ""
     }
   ]
 }

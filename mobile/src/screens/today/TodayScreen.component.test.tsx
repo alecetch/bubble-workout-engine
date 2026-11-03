@@ -2,6 +2,8 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState } from "react-native";
 import { TodayScreen } from "./TodayScreen";
 import { claimYearMilestone, markYearMilestoneSeen } from "../../api/yearProgress";
 import { useYearProgress, useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
@@ -9,6 +11,8 @@ import { useSessionStore } from "../../state/session/sessionStore";
 import { getDayStatus } from "../../utils/localWorkoutLog";
 import { mockZustandSelector } from "../../__test-utils__";
 
+const storage = vi.hoisted(() => new Map<string, string>());
+vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: vi.fn(), setItem: vi.fn() } }));
 vi.mock("../../components/today/LogOutsideSessionSheet", () => ({
   LogOutsideSessionSheet: ({ onClose }: any) => <button onClick={onClose}>Outside session sheet</button>,
 }));
@@ -71,6 +75,10 @@ function overview(calendarDays: any[], selectedDayPreview: any = undefined) {
 
 describe("TodayScreen", () => {
   beforeEach(() => {
+    vi.spyOn(AppState, "addEventListener").mockReturnValue({ remove: vi.fn() });
+    storage.clear();
+    vi.mocked(AsyncStorage.getItem).mockReset().mockImplementation(async key => storage.get(key) ?? null);
+    vi.mocked(AsyncStorage.setItem).mockReset().mockImplementation(async (key, value) => { storage.set(key, value); });
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
     navigationMocks.navigate.mockReset();
@@ -90,6 +98,7 @@ describe("TodayScreen", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   async function flushEffects(): Promise<void> {
@@ -288,4 +297,52 @@ describe("TodayScreen", () => {
     expect(screen.getByText("Network error")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Programs" })).toBeInTheDocument();
   });
+  it.each([27, 28])("shows the recap banner only from local December 28 (day %s)", async day => {
+    vi.setSystemTime(new Date(2026, 11, day, 12));
+    render(<TodayScreen />); await flushEffects();
+    if (day === 28) {
+      fireEvent.click(screen.getByText("Your 2026 recap is ready"));
+      expect(navigationMocks.navigate).toHaveBeenCalledWith("HistoryTab", { screen: "YearRecap", params: { year: 2026 } });
+    } else expect(screen.queryByText("Your 2026 recap is ready")).not.toBeInTheDocument();
+  });
+  it("remembers recap dismissal on another open in the same year", async () => {
+    vi.setSystemTime(new Date(2026, 11, 28, 12));
+    const view = render(<TodayScreen />); await flushEffects();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss 2026 recap banner" })); await flushEffects();
+    expect(screen.queryByText("Your 2026 recap is ready")).not.toBeInTheDocument();
+    view.unmount(); render(<TodayScreen />); await flushEffects();
+    expect(screen.queryByText("Your 2026 recap is ready")).not.toBeInTheDocument();
+  });
+  it("shows the January reset once and rolls the year card over to zero", async () => {
+    vi.setSystemTime(new Date(2027, 0, 1, 12));
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2027, today_local: "2027-01-01", count: 0, target: 200,
+      pace_status: "on_pace", pace_delta: 0, projected_year_end: 0, years: [{ year: 2026, count: 214, best_club: 200 }] } } as any);
+    const view = render(<TodayScreen />); await flushEffects();
+    expect(screen.getByText("2027 starts now. Last year: 214. Day 1 is today.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /0 of 200 training days this year/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("See your 2026 recap"));
+    expect(navigationMocks.navigate).toHaveBeenCalledWith("HistoryTab", { screen: "YearRecap", params: { year: 2026 } });
+    view.unmount(); render(<TodayScreen />); await flushEffects();
+    expect(screen.queryByText(/2027 starts now/)).not.toBeInTheDocument();
+  });
+  it("refreshes the local year and reset when the app resumes across midnight", async () => {
+    vi.setSystemTime(new Date(2026, 11, 31, 23, 50));
+    render(<TodayScreen />); await flushEffects();
+    vi.setSystemTime(new Date(2027, 0, 1, 0, 10));
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2027, count: 0, target: 200, pace_status: "on_pace", pace_delta: 0,
+      years: [{ year: 2026, count: 214, best_club: 200 }] } } as any);
+    await act(async () => { vi.mocked(AppState.addEventListener).mock.calls.at(-1)![1]("active"); });
+    await flushEffects();
+    expect(screen.getByText("2027 starts now. Last year: 214. Day 1 is today.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /0 of 200 training days this year/ })).toBeInTheDocument();
+    expect(screen.queryByText("Your 2026 recap is ready")).not.toBeInTheDocument();
+  });
+  it.each([{ day: 1, count: 0 }, { day: 15, count: 214 }])("does not show a January card outside its audience/window ($day, $count)", async ({ day, count }) => {
+    vi.setSystemTime(new Date(2027, 0, day, 12));
+    vi.mocked(useYearProgress).mockReturnValue({ data: { ok: true, year: 2027, count: 0, target: 200, pace_status: "on_pace", pace_delta: 0,
+      years: [{ year: 2026, count }] } } as any);
+    render(<TodayScreen />); await flushEffects();
+    expect(screen.queryByText(/2027 starts now/)).not.toBeInTheDocument();
+  });
+
 });
