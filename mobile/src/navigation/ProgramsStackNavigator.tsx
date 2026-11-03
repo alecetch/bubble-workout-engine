@@ -4,10 +4,13 @@ import { ProgramHubScreen } from "../screens/program/ProgramHubScreen";
 import { PaywallScreen } from "../screens/paywall/PaywallScreen";
 import type { ExerciseDetailParams } from "../screens/program/ExerciseDetailScreen";
 import { logger } from "../utils/logger";
+import type { MilestoneMoment } from "../api/yearProgress";
 
 export type ProgramsStackParamList = {
   ProgramHub: undefined;
   ProgramDashboard: {
+    yearMilestone?: MilestoneMoment;
+    completionDestination?: "ProgramComplete" | "ProgramEndCheck";
     programId?: string;
     showReviewPrompt?: boolean;
     weekCompleteNumber?: number;

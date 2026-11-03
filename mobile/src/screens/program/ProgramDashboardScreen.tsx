@@ -25,6 +25,8 @@ import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { captureAndShare } from "../../utils/shareCard";
 import { markStoreReviewRequested } from "../../utils/storeReview";
+import { MilestoneCelebration } from "../../components/celebrations/MilestoneCelebration";
+import { useMilestoneCelebration } from "../../hooks/useMilestoneCelebration";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "ProgramDashboard">;
 
@@ -50,6 +52,12 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
   const userId = sessionUserId ?? onboardingUserId ?? undefined;
   const queryClient = useQueryClient();
+  const [milestoneRequest, setMilestoneRequest] = useState(route.params?.yearMilestone);
+  const completionDestination = useRef(route.params?.completionDestination);
+  const milestone = useMilestoneCelebration(milestoneRequest, userId,
+    useCallback(() => { void queryClient.invalidateQueries({ queryKey: ["yearProgress"] }); }, [queryClient]));
+  const milestoneOverlay = <MilestoneCelebration milestone={milestone.moment} onDismiss={() => void milestone.dismiss()}
+    isDismissing={milestone.isDismissing} error={milestone.error} />;
 
   useEffect(() => {
     if (routeProgramId) {
@@ -288,6 +296,9 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
       const p = route.params;
       const hasWeekComplete = p?.weekCompleteNumber != null;
       const hasReviewPrompt = Boolean(p?.showReviewPrompt);
+      const hasMilestone = Boolean(p?.yearMilestone);
+      if (p?.yearMilestone) setMilestoneRequest(p.yearMilestone);
+      if (p?.completionDestination) completionDestination.current = p.completionDestination;
 
       if (hasWeekComplete) {
         setWeekBannerData({
@@ -304,12 +315,13 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         setReviewPromptVisible(true);
       }
 
-      if (hasReviewPrompt || hasWeekComplete) {
+      if (hasReviewPrompt || hasWeekComplete || hasMilestone) {
         navigation.setParams?.({
           showReviewPrompt: undefined,
           weekCompleteNumber: undefined,
           weekCompleteSessions: undefined,
           weekCompleteVolumeKg: undefined,
+          ...(hasMilestone ? { yearMilestone: undefined, completionDestination: undefined } : {}),
         });
       }
     }, [
@@ -318,8 +330,18 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
       route.params?.weekCompleteNumber,
       route.params?.weekCompleteSessions,
       route.params?.weekCompleteVolumeKg,
+      route.params?.yearMilestone,
+      route.params?.completionDestination,
     ]),
   );
+
+  useEffect(() => {
+    const destination = completionDestination.current;
+    if (destination && programId && !milestone.isBlocking && !weekBannerVisible && !reviewPromptVisible && !pendingReviewPrompt) {
+      completionDestination.current = undefined;
+      navigation.navigate(destination, { programId });
+    }
+  }, [milestone.isBlocking, weekBannerVisible, reviewPromptVisible, pendingReviewPrompt, programId, navigation]);
 
   async function handleShareWeek(): Promise<void> {
     if (isSharingWeek) return;
@@ -402,6 +424,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   if (!programId) {
     return (
       <View style={styles.centered}>
+        {milestoneOverlay}
         <Text style={styles.errorTitle}>Missing program</Text>
         <Text style={styles.errorText}>No program id was provided for this dashboard view.</Text>
       </View>
@@ -411,6 +434,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   if (overviewQuery.isLoading) {
     return (
       <View style={styles.root}>
+        {milestoneOverlay}
         <ScrollView contentContainerStyle={styles.content}>
           <SkeletonBlock height={164} style={styles.skeletonBlockLarge} />
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
@@ -432,6 +456,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   if (overviewQuery.isError || !overview) {
     return (
       <View style={styles.centered}>
+        {milestoneOverlay}
         <Text style={styles.errorTitle}>Unable to load dashboard</Text>
         <Text style={styles.errorText}>{overviewQuery.error?.message ?? "Please try again."}</Text>
         <PressableScale style={styles.retryButton} onPress={() => void overviewQuery.refetch()}>
@@ -448,6 +473,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
 
   return (
     <View style={styles.root}>
+      {milestoneOverlay}
       <ScrollView contentContainerStyle={styles.content}>
         <HeroHeader
           title={overview.program.title ?? "Training Program"}
@@ -545,7 +571,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         />
       ) : null}
 
-      {weekBannerVisible && weekBannerData ? (
+      {!milestone.isBlocking && weekBannerVisible && weekBannerData ? (
         <View style={styles.weekCompleteBanner}>
           <View style={styles.weekCompleteContent}>
             <Text style={styles.weekCompleteTitle}>Week {weekBannerData.weekNumber} complete!</Text>
@@ -570,7 +596,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
         </View>
       ) : null}
 
-      {reviewPromptVisible ? (
+      {!milestone.isBlocking && reviewPromptVisible ? (
         <View style={styles.reviewPrompt}>
           <View style={styles.reviewPromptContent}>
             <Text style={styles.reviewPromptTitle}>{reviewPromptMessage ? "Thanks" : "Nice PR."}</Text>

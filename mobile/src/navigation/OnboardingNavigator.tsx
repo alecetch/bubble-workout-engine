@@ -66,6 +66,8 @@ export type OnboardingStackParamList = {
     jobId: string;
   };
   ProgramDashboard: {
+    yearMilestone?: import("../api/yearProgress").MilestoneMoment;
+    completionDestination?: "ProgramComplete" | "ProgramEndCheck";
     programId?: string;
     showReviewPrompt?: boolean;
     weekCompleteNumber?: number;

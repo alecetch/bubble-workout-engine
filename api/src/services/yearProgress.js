@@ -19,18 +19,27 @@ export async function getYearProgress(db, userId, { year, timeZone, now = new Da
   const windowFor = value => targetWindow({ year: value, joinLocalDate });
   const window = windowFor(selectedYear);
   const trainingDates = datesFor(selectedYear);
-  const clubs = clubThresholds(window.ratio).map(club => ({ ...club, reached_on: trainingDates[club.threshold - 1] ?? null }));
+  const recorded = (await db.query(`SELECT id, slug, threshold, year, reached_on::text, seen_at, claimed_at
+    FROM year_milestone WHERE user_id = $1 ORDER BY year DESC, threshold, slug`, [userId])).rows;
+  const milestones = recorded.filter(row => row.year === selectedYear);
+  const clubs = clubThresholds(window.ratio).map(club => {
+    const earned = milestones.find(row => row.slug === `club_${club.tier}`);
+    return { ...club, threshold: earned?.threshold ?? club.threshold, reached_on: earned?.reached_on ?? trainingDates[club.threshold - 1] ?? null };
+  });
   const recentStart = offsetLocalDate(today, -27);
   const last28DaysCount = dates.filter(date => date >= recentStart && date <= today).length;
-  const years = [...new Set([currentYear, ...dates.map(date => Number(date.slice(0, 4)))])]
+  const years = [...new Set([currentYear, ...dates.map(date => Number(date.slice(0, 4))), ...recorded.map(row => row.year)])]
     .sort((a, b) => b - a).map(value => {
       const count = datesFor(value).length;
       const yearlyWindow = windowFor(value);
       return { year: value, count, target: yearlyWindow.target,
-        best_club: clubThresholds(yearlyWindow.ratio).filter(club => count >= club.threshold).at(-1)?.tier ?? null };
+        best_club: Math.max(0, ...recorded.filter(row => row.year === value && row.slug.startsWith("club_")).map(row => Number(row.slug.slice(5))),
+          ...clubThresholds(yearlyWindow.ratio).filter(club => count >= club.threshold).map(club => club.tier)) || null };
     });
   return { ok: true, year: selectedYear, today_local: today, count: trainingDates.length,
     target: window.target, pro_rated: window.proRated, window_start: window.start, window_end: window.end,
     ...paceSummary({ count: trainingDates.length, window, todayLocal: today, last28DaysCount }),
-    clubs, next_milestone: nextMilestone(trainingDates.length), training_dates: trainingDates, years };
+    clubs, next_milestone: nextMilestone(trainingDates.length), training_dates: trainingDates, years,
+    unseen_milestones: milestones.filter(row => !row.seen_at && !row.claimed_at).map(({ id, slug, threshold, year }) => ({ id, slug, threshold, year })),
+    milestones: milestones.map(({ slug, threshold, reached_on }) => ({ slug, threshold, reached_on })) };
 }

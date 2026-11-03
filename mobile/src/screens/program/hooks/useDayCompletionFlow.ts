@@ -8,6 +8,7 @@ import { getProgramOverview, type ProgramOverviewResponse } from "../../../api/p
 import type { ProgramsStackParamList } from "../../../navigation/ProgramsStackNavigator";
 import { setWorkoutComplete } from "../../../utils/localWorkoutLog";
 import { hasRequestedStoreReview } from "../../../utils/storeReview";
+import { highestMilestone } from "../../../utils/yearMilestones";
 
 type WeekShareData = {
   weekNumber: number;
@@ -105,7 +106,11 @@ export function useDayCompletionFlow(params: {
     if (markDayComplete.isPending) return;
     setSummaryVisible(false);
     try {
-      await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId, ...(localDate ? { localDate } : {}) });
+      const completion = await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId, ...(localDate ? { localDate } : {}) });
+      // Confirmed sets may have earned the milestone before the completion request.
+      const milestone = highestMilestone([...(completion?.year_progress?.new_milestones ?? []),
+        ...(completion?.year_progress?.unseen_milestones ?? [])]);
+      const yearMilestone = milestone ? { ...milestone, target: completion!.year_progress!.target } : undefined;
       await setWorkoutComplete(programDayId, true);
       setWorkoutCompleteState(true);
       setConfirmationText(null);
@@ -164,23 +169,19 @@ export function useDayCompletionFlow(params: {
         queryFn: () => getProgramEndCheck(programId),
       });
 
-      if (endCheck.lifecycleStatus === "completed") {
-        nav.navigate("ProgramComplete", { programId });
-        return;
-      }
-
-      if (endCheck.isLastScheduledDayComplete && endCheck.missedWorkoutsCount === 0) {
+      let completionDestination: "ProgramComplete" | "ProgramEndCheck" | undefined;
+      if (endCheck.lifecycleStatus === "completed") completionDestination = "ProgramComplete";
+      else if (endCheck.isLastScheduledDayComplete && endCheck.missedWorkoutsCount === 0) {
         await completeProgram.mutateAsync({ programId, mode: "as_scheduled" });
-        nav.navigate("ProgramComplete", { programId });
+        completionDestination = "ProgramComplete";
+      }
+      else if (endCheck.canCompleteWithSkips) completionDestination = "ProgramEndCheck";
+      if (completionDestination && !yearMilestone) {
+        nav.navigate(completionDestination, { programId });
         return;
       }
 
-      if (endCheck.canCompleteWithSkips) {
-        nav.navigate("ProgramEndCheck", { programId });
-        return;
-      }
-
-      const hasCelebration = shouldShowReview || weekCompleteNumber != null;
+      const hasCelebration = shouldShowReview || weekCompleteNumber != null || Boolean(yearMilestone);
       if (hasCelebration) {
         nav.navigate("ProgramDashboard", {
           programId,
@@ -188,6 +189,7 @@ export function useDayCompletionFlow(params: {
           weekCompleteNumber,
           weekCompleteSessions,
           weekCompleteVolumeKg,
+          ...(yearMilestone ? { yearMilestone, ...(completionDestination ? { completionDestination } : {}) } : {}),
         });
         return;
       }

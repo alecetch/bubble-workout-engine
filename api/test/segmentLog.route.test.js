@@ -192,6 +192,7 @@ test("postSegmentLog accepts rir_actual of 0", async () => {
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -238,6 +239,7 @@ test("postSegmentLog rejects warmup program exercises without writing logs", asy
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -282,6 +284,7 @@ test("postSegmentLog rejects cooldown program exercises without writing logs", a
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -326,6 +329,7 @@ test("postSegmentLog accepts rir_actual of 3", async () => {
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -433,6 +437,7 @@ test("postSegmentLog persists rir_actual when provided", async () => {
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -479,6 +484,7 @@ test("postSegmentLog stores null rir_actual when omitted", async () => {
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -525,6 +531,7 @@ test("postSegmentLog stores null weight for non-positive loads", async () => {
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -573,6 +580,7 @@ test("postSegmentLog accepts null weight and stores null estimated 1rm", async (
           queries.push({ sql, params });
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {
@@ -623,6 +631,7 @@ test("postSegmentLog does not send PR notification for null weight rows", async 
         async query(sql) {
           if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
           if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
           if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
           if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
           if (sql.includes("SELECT pe.id AS program_exercise_id")) {

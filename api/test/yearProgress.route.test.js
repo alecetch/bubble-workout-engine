@@ -16,7 +16,7 @@ test("year progress: auth, additive shape, distinct dates, clubs, year history, 
       const res = await fetch(`${url}/progress?user_id=${other}`, { headers: { Authorization: `Bearer ${token(user)}` } });
       assert.equal(res.status, 200);
       const body = await res.json();
-      assert.deepEqual(Object.keys(body).sort(), ["ok", "year", "today_local", "count", "target", "pro_rated", "window_start", "window_end", "expected_to_date", "pace_delta", "pace_status", "projected_year_end", "clubs", "next_milestone", "training_dates", "years"].sort());
+      assert.deepEqual(Object.keys(body).sort(), ["ok", "year", "today_local", "count", "target", "pro_rated", "window_start", "window_end", "expected_to_date", "pace_delta", "pace_status", "projected_year_end", "clubs", "next_milestone", "training_dates", "years", "milestones", "unseen_milestones"].sort());
       assert.equal(body.count, 2);
       assert.equal(body.target, 200);
       assert.deepEqual(body.training_dates, ["2026-01-01", "2026-01-02"]);
@@ -45,7 +45,7 @@ test("first-year target and club reached dates use distinct dates; include empty
   });
 });
 
-test("read uses two caller-scoped queries; projection uses only the last 28 distinct dates", { skip: DATABASE_SKIP }, async () => {
+test("read uses three caller-scoped queries; projection uses only the last 28 distinct dates", { skip: DATABASE_SKIP }, async () => {
   await withUsers(async (db, [user]) => {
     await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC' WHERE id = $1", [user]);
     for (const date of ["2026-01-01", "2026-10-05", "2026-10-06", "2026-10-07", "2026-11-01", "2026-11-02", "2026-11-02"]) {
@@ -53,7 +53,7 @@ test("read uses two caller-scoped queries; projection uses only the last 28 dist
     }
     let queries = 0;
     const progress = await getYearProgress({ query: (sql, params) => { queries++; assert.equal(params[0], user); return db.query(sql, params); } }, user, { now: new Date("2026-11-02T12:00Z") });
-    assert.equal(queries, 2);
+    assert.equal(queries, 3);
     assert.equal(progress.count, 6);
     assert.equal(progress.projected_year_end, 14);
   });

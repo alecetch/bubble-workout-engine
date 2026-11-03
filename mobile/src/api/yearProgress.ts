@@ -1,5 +1,8 @@
-import { authGetJson } from "./client";
+import { authGetJson, authPostJson } from "./client";
 import { deviceTimeZone } from "../utils/localDate";
+
+export type YearMilestone = { id: string; slug: string; threshold: number; year: number };
+export type MilestoneMoment = YearMilestone & { target: number };
 
 export type YearProgressResponse = {
   ok: boolean;
@@ -18,12 +21,20 @@ export type YearProgressResponse = {
   next_milestone: number | null;
   training_dates: string[];
   years: Array<{ year: number; count: number; target: number; best_club: number | null }>;
+  unseen_milestones: YearMilestone[];
+  milestones: Array<{ slug: string; threshold: number; reached_on: string }>;
 };
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const number = (value: unknown, fallback = 0): number => typeof value === "number" && Number.isFinite(value) ? value : fallback;
 const string = (value: unknown): string => typeof value === "string" ? value : "";
 const array = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
+
+export function normalizeMilestones(raw: unknown): YearMilestone[] {
+  return array(raw).map(value => { const row = object(value); return {
+    id: string(row.id), slug: string(row.slug), threshold: number(row.threshold), year: number(row.year),
+  }; }).filter(row => row.id && row.slug && row.threshold > 0 && row.year >= 2000);
+}
 
 export function normalizeYearProgress(raw: unknown): YearProgressResponse {
   const root = object(raw);
@@ -43,7 +54,21 @@ export function normalizeYearProgress(raw: unknown): YearProgressResponse {
       year: number(row.year), count: number(row.count), target: number(row.target),
       best_club: typeof row.best_club === "number" ? number(row.best_club) : null,
     }; }),
+    unseen_milestones: normalizeMilestones(root.unseen_milestones),
+    milestones: array(root.milestones).map(value => { const row = object(value); return {
+      slug: string(row.slug), threshold: number(row.threshold), reached_on: string(row.reached_on),
+    }; }),
   };
+}
+
+export async function claimYearMilestone(year: number): Promise<{ milestone: YearMilestone | null; coalesced_ids: string[] }> {
+  const raw = object(await authPostJson<unknown>("/api/users/me/year-milestones/claim", { year }));
+  return { milestone: normalizeMilestones(raw.milestone ? [raw.milestone] : [])[0] ?? null,
+    coalesced_ids: array(raw.coalesced_ids).filter((id): id is string => typeof id === "string") };
+}
+
+export async function markYearMilestoneSeen(id: string): Promise<void> {
+  await authPostJson<void>(`/api/users/me/year-milestones/${encodeURIComponent(id)}/seen`, {});
 }
 
 export async function getYearProgress(year?: number): Promise<YearProgressResponse> {
