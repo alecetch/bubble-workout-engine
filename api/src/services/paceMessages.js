@@ -4,7 +4,8 @@ const words = ["zero", "one", "two", "three"];
 // nextMilestone is { threshold, displayName, club100Threshold? } (or a day number).
 export function choosePaceMessage({ count, target, paceDelta, todayLocal, windowEnd, nextMilestone, reachedTarget }) {
   // All variants are reminders for users behind pace, including the December run-in.
-  if (paceDelta > -1) return null;
+  // Rounded deltas at -1 can still be inside the server's on-pace tolerance.
+  if (paceDelta >= -1) return null;
   const daysLeft = Math.max(0, (Date.parse(windowEnd) - Date.parse(todayLocal)) / DAY_MS + 1);
   const message = (kind, body) => ({ kind, title: body, body });
   if (todayLocal.slice(5, 7) === "12" && !reachedTarget && count < target) {

@@ -18,6 +18,8 @@ const cases = [
   ["club display name", { count: 61, nextMilestone: { threshold: 63, displayName: "Club 250" } }, "milestone", "Day 61. Club 250 is 2 away."],
   ["two behind without nearby milestone", { nextMilestone: null }, null],
   ["ahead even near milestone", { paceDelta: 3 }, null],
+  ["within on-pace tolerance", { paceDelta: -0.9 }, null],
+  ["rounded on-pace boundary", { paceDelta: -1 }, null],
   ["on pace even in December", { paceDelta: 0, todayLocal: "2026-12-07" }, null],
   ["reached target", { count: 200, reachedTarget: true, paceDelta: 0, todayLocal: "2026-12-07" }, null],
 ];
