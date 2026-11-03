@@ -51,6 +51,7 @@ test("send() clears token on DeviceNotRegistered", async () => {
       if (sql.includes("SELECT")) {
         return { rows: [{ device_push_token: "ExponentPushToken[abc]", email: null }] };
       }
+      if (sql.includes("INSERT INTO notification_preference")) return { rows: [{ user_id: "u1" }] };
       updates.push(params);
       return { rows: [] };
     },

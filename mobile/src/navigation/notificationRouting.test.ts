@@ -25,6 +25,11 @@ const isReadyMock = navigationRef.isReady as Mock;
 const navigateMock = navigationRef.navigate as Mock;
 
 describe("navigateFromNotificationResponse", () => {
+  it("routes pace nudges to Today even if a program day is supplied", () => {
+    expect(navigateFromNotificationResponse(makeResponse({ event: "pace_nudge", programDayId: "abc" }))).toBe(true);
+    expect(navigateMock).toHaveBeenCalledWith("TodayTab");
+  });
+
   beforeEach(() => {
     isReadyMock.mockReset();
     isReadyMock.mockReturnValue(true);

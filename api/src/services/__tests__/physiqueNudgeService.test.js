@@ -38,7 +38,7 @@ test("physique nudge email text uses Forma brand copy", async () => {
 
   const db = {
     async query(sql) {
-      if (/SELECT device_push_token, email FROM app_user/.test(sql)) {
+      if (/SELECT au.device_push_token, au.email/.test(sql)) {
         return { rows: [{ device_push_token: null, email: "alec@example.com" }] };
       }
       return {

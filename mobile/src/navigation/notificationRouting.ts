@@ -10,6 +10,11 @@ export function navigateFromNotificationResponse(
   const event = typeof data.event === "string" ? data.event : null;
   if (!event) return true;
 
+  if (event === "pace_nudge") {
+    navigationRef.navigate("TodayTab");
+    return true;
+  }
+
   if (event === "pr" || event === "pr_multi") {
     navigationRef.navigate("HistoryTab", { screen: "HistoryMain" });
     return true;
