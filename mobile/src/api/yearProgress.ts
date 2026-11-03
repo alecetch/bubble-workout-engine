@@ -2,7 +2,7 @@ import { authGetJson, authPostJson } from "./client";
 import { deviceTimeZone } from "../utils/localDate";
 
 export type YearMilestone = { id: string; slug: string; threshold: number; year: number };
-export type MilestoneMoment = YearMilestone & { target: number };
+export type MilestoneMoment = YearMilestone & { target: number; count?: number };
 
 export type YearProgressResponse = {
   ok: boolean;

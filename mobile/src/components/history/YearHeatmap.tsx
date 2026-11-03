@@ -10,6 +10,7 @@ type Props = {
   todayLocal: string;
   windowStart?: string;
   onDayPress?: (date: string) => void;
+  presentation?: "screen" | "share";
 };
 const DAY_MS = 86_400_000;
 const GAP = 2;
@@ -17,7 +18,7 @@ const MIN_CELL = 4;
 const LABEL_HEIGHT = 18;
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export const YearHeatmap = React.memo(function YearHeatmap({ year, trainingDates, todayLocal, windowStart, onDayPress }: Props): React.JSX.Element {
+export const YearHeatmap = React.memo(function YearHeatmap({ year, trainingDates, todayLocal, windowStart, onDayPress, presentation = "screen" }: Props): React.JSX.Element {
   const window = useWindowDimensions();
   const [measuredWidth, setMeasuredWidth] = useState(0);
   const availableWidth = measuredWidth || Math.max(1, (window.width || 360) - spacing.lg * 2);
@@ -54,7 +55,29 @@ export const YearHeatmap = React.memo(function YearHeatmap({ year, trainingDates
     const column = Math.floor((day + calendar.offset) / 7);
     scrollRef.current?.scrollTo({ x: Math.max(0, Math.min(width - availableWidth, column * step - availableWidth / 2)), animated: false });
   }, [measuredWidth, width, availableWidth, calendar, todayLocal, step]);
-  useEffect(scrollToCurrentWeek, [scrollToCurrentWeek]);
+  useEffect(() => { if (presentation === "screen") scrollToCurrentWeek(); }, [scrollToCurrentWeek, presentation]);
+
+  if (presentation === "share") {
+    // Three static rows retain every week without a clipped horizontal scroll view.
+    const columns = 18;
+    const size = 10;
+    const stride = size + GAP;
+    const panelHeight = LABEL_HEIGHT + 7 * stride + 12;
+    const rows = Math.ceil(calendar.columns / columns);
+    return <View accessible accessibilityRole="image" accessibilityLabel={calendar.summary} testID="year-heatmap">
+      <Svg width={columns * stride - GAP} height={rows * panelHeight - 12} accessible={false}>
+        {calendar.months.map(month => <SvgText key={month.name} x={(month.column % columns) * stride}
+          y={Math.floor(month.column / columns) * panelHeight + 12} fontSize={9} fill={colors.textSecondary}>{month.name.slice(0, 3)}</SvgText>)}
+        {calendar.weeks.map((week, column) => <G key={column} testID={`year-week-${column}`}
+          transform={`translate(${(column % columns) * stride},${Math.floor(column / columns) * panelHeight})`}>
+          {week.map(day => <Rect key={day.date} testID={`year-day-${day.date}`} x={0} y={LABEL_HEIGHT + day.row * stride}
+            width={size} height={size} rx={1} accessible={false}
+            fill={day.state === "future" ? "none" : day.state === "trained" ? colors.accent : colors.border}
+            stroke={day.state === "future" ? colors.textSecondary : "none"} strokeWidth={0.7} />)}
+        </G>)}
+      </Svg>
+    </View>;
+  }
 
   return (
     <View accessible accessibilityRole="image" accessibilityLabel={calendar.summary} testID="year-heatmap"

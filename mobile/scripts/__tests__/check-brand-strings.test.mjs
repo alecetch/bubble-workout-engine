@@ -59,6 +59,15 @@ test("detects forbidden brand strings in source files", () => {
   assert.match(result.message, /src\/screens\/Home\.tsx:1 matched "Formai"/);
 });
 
+test("scans the central share-card brand module without an exemption", () => {
+  const rootDir = makeFixture();
+  writeCleanAppJson(rootDir);
+  writeFile(rootDir, "src/config/brand.ts", 'export const BRAND_WORDMARK = "Formai";\n');
+  const result = checkBrandStrings(rootDir);
+  assert.equal(result.ok, false);
+  assert.equal(result.violations[0].file, "src/config/brand.ts");
+});
+
 test("allows Forma native identifiers in app.json", () => {
   const rootDir = makeFixture();
   writeFile(

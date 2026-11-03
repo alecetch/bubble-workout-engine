@@ -343,6 +343,7 @@ vi.mock("react-native-screens", () => ({
 
 vi.mock("react-native-view-shot", () => ({
   captureRef: vi.fn().mockResolvedValue("/tmp/test-capture.png"),
+  releaseCapture: vi.fn(),
   default: ({ children }: { children?: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children ?? null),
 }));

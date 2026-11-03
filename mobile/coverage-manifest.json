@@ -1011,6 +1011,46 @@
         "celebrations"
       ],
       "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/share/YearShareFrame.tsx",
+      "test": "src/components/share/YearShareFrame.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "share"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/share/MilestoneShareCard.tsx",
+      "test": "src/components/share/MilestoneShareCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "share"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/share/ClubShareCard.tsx",
+      "test": "src/components/share/ClubShareCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "share"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/share/YearHeatmapShareCard.tsx",
+      "test": "src/components/share/YearHeatmapShareCard.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "share"
+      ],
+      "reason": ""
     }
   ]
 }

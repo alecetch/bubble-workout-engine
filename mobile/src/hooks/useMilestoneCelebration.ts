@@ -15,6 +15,7 @@ export function useMilestoneCelebration(candidate: MilestoneMoment | undefined, 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const year = candidate?.year;
   const target = candidate?.target;
+  const count = candidate?.count;
   const key = candidate && userId ? `${userId}:${candidate.year}:${candidate.id}` : "";
 
   useFocusEffect(useCallback(() => {
@@ -26,12 +27,12 @@ export function useMilestoneCelebration(candidate: MilestoneMoment | undefined, 
         if (!mounted.current) return;
         if (result.milestone) {
           claimedIds.current = [result.milestone.id, ...result.coalesced_ids];
-          setMoment({ ...result.milestone, target });
+          setMoment({ ...result.milestone, target, count: Math.max(count ?? 0, result.milestone.threshold) });
         }
       }).catch(() => { attempts.current.delete(key); }).finally(() => { if (mounted.current) setSettledKey(key); });
     }
     return () => { setFocused(false); };
-  }, [key, year, target]));
+  }, [key, year, target, count]));
 
   const dismiss = useCallback(async () => {
     if (!moment || dismissing.current) return;

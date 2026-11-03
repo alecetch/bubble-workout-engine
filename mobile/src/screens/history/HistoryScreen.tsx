@@ -26,6 +26,7 @@ import {
 } from "../../api/hooks";
 import type { YearProgressResponse } from "../../api/yearProgress";
 import { YearHeatmap } from "../../components/history/YearHeatmap";
+import { useShareCard } from "../../components/share/useShareCard";
 import { PastYearsList } from "../../components/history/PastYearsList";
 import { paceLine } from "../../utils/yearCopy";
 import { toLocalIsoDate } from "../../utils/localDate";
@@ -134,6 +135,7 @@ export function HistoryScreen(): React.JSX.Element {
   const userId = sessionUserId ?? onboardingUserId ?? undefined;
 
   const metricsQuery = useSessionHistoryMetrics(userId);
+  const sharing = useShareCard();
   const [selectedYear, setSelectedYear] = useState<number>();
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
   const [knownYears, setKnownYears] = useState<YearProgressResponse["years"]>([]);
@@ -255,14 +257,22 @@ export function HistoryScreen(): React.JSX.Element {
 
       <View style={styles.yearSection}>
         <Text style={styles.sectionTitle}>Your year</Text>
-        <PressableScale style={styles.yearChoice} onPress={() => setYearPickerOpen(open => !open)}
+        <View style={styles.yearOptions}>
+        <PressableScale style={styles.yearChoice} disabled={sharing.isSharing} onPress={() => setYearPickerOpen(open => !open)}
           accessibilityLabel="Choose training year" accessibilityState={{ expanded: yearPickerOpen }}>
           <Text style={styles.yearChoiceLabel}>{displayedYear} ▾</Text>
         </PressableScale>
+        {yearProgress && !yearQuery.isLoading ? <PressableScale style={styles.yearChoice} disabled={sharing.isSharing}
+          onPress={() => void sharing.shareCard({ type: "year", year: yearProgress.year, count: yearProgress.count,
+            trainingDates: yearProgress.training_dates, todayLocal: yearProgress.today_local,
+            windowStart: yearProgress.pro_rated ? yearProgress.window_start : undefined })}>
+          <Text style={styles.yearChoiceLabel}>{sharing.isSharing ? "Sharing..." : "Share your year"}</Text>
+        </PressableScale> : null}
+        </View>
         {yearPickerOpen ? <View style={styles.yearOptions}>
           {[...new Set([currentYear, displayedYear, ...years.map(row => row.year)])].sort((a, b) => b - a).map(year => (
             <PressableScale key={year} style={styles.yearChoice} accessibilityLabel={`View ${year} training year`}
-              accessibilityState={{ selected: year === displayedYear }} onPress={() => { setSelectedYear(year); setYearPickerOpen(false); }}>
+              accessibilityState={{ selected: year === displayedYear }} disabled={sharing.isSharing} onPress={() => { setSelectedYear(year); setYearPickerOpen(false); }}>
               <Text style={styles.yearChoiceLabel}>{year}</Text>
             </PressableScale>
           ))}
@@ -276,7 +286,8 @@ export function HistoryScreen(): React.JSX.Element {
               <Text style={styles.yearChoiceLabel}>Retry</Text>
             </PressableScale>
           </View>}
-        <PastYearsList years={years} currentYear={currentYear} />
+        <PastYearsList years={years} currentYear={currentYear} isSharing={sharing.isSharing}
+          onShare={row => { if (row.best_club) void sharing.shareCard({ type: "club", year: row.year, tier: row.best_club, count: row.count }); }} />
       </View>
 
       <View style={styles.sectionHeaderWrap}>
@@ -556,6 +567,7 @@ export function HistoryScreen(): React.JSX.Element {
       <View style={styles.centered}>
         <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.subtitle}>Loading history...</Text>
+        {sharing.shareView}
       </View>
     );
   }
@@ -565,11 +577,14 @@ export function HistoryScreen(): React.JSX.Element {
       <View style={styles.centered}>
         <Text style={styles.title}>Unable to load history</Text>
         <Text style={styles.subtitle}>Pull to refresh or try again.</Text>
+        {sharing.shareView}
       </View>
     );
   }
 
   return (
+    <View style={styles.root}>
+    {sharing.shareView}
     <FlatList
       style={styles.root}
       contentContainerStyle={styles.content}
@@ -595,6 +610,7 @@ export function HistoryScreen(): React.JSX.Element {
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => void onRefresh()} tintColor={colors.accent} />}
       ListFooterComponentStyle={styles.footerSpacing}
     />
+    </View>
   );
 }
 

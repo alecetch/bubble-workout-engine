@@ -7,10 +7,12 @@ import { MilestoneCelebration } from "./MilestoneCelebration";
 import { shouldReduceMotion } from "../../utils/reduceMotion";
 import type { MilestoneMoment } from "../../api/yearProgress";
 
+const sharing = vi.hoisted(() => ({ shareCard: vi.fn().mockResolvedValue(undefined), isSharing: false }));
+vi.mock("../share/useShareCard", () => ({ useShareCard: () => ({ ...sharing, shareView: null }) }));
 vi.mock("../../utils/reduceMotion", () => ({ shouldReduceMotion: vi.fn().mockResolvedValue(false) }));
 const moment = (slug: string, threshold: number, target = 200): MilestoneMoment => ({ id: slug, slug, threshold, target, year: 2026 });
 describe("MilestoneCelebration", () => {
-  beforeEach(() => { vi.mocked(withSequence).mockClear(); vi.mocked(Haptics.notificationAsync).mockClear(); vi.mocked(shouldReduceMotion).mockResolvedValue(false); });
+  beforeEach(() => { sharing.shareCard.mockClear(); sharing.isSharing = false; vi.mocked(withSequence).mockClear(); vi.mocked(Haptics.notificationAsync).mockClear(); vi.mocked(shouldReduceMotion).mockResolvedValue(false); });
   it.each([
     ["day_1", 1, "Day 1. The year starts here."],
     ["day_25", 25, "Day 25. 175 to go for 200."],
@@ -22,7 +24,7 @@ describe("MilestoneCelebration", () => {
     render(<MilestoneCelebration milestone={moment(slug as string, threshold as number)} onDismiss={vi.fn()} />);
     expect(screen.getByText(copy)).toBeInTheDocument();
     expect(screen.getByTestId("milestone-card")).toBeInTheDocument();
-    expect(screen.queryByText("Share")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
     await act(async () => {});
   });
   it.each([
@@ -46,7 +48,7 @@ describe("MilestoneCelebration", () => {
     expect(screen.queryByText(/Half way/)).not.toBeInTheDocument();
     await act(async () => {});
   });
-  it("only offers Share behind the prop and handles acknowledgement errors", async () => {
+  it("disables sharing while acknowledging and handles acknowledgement errors", async () => {
     const onShare = vi.fn();
     render(<MilestoneCelebration milestone={moment("club_200", 200)} onDismiss={vi.fn()} showShare onShare={onShare}
       error="Couldn't save this celebration. Try again." isDismissing />);
@@ -68,4 +70,25 @@ describe("MilestoneCelebration", () => {
     const { container } = render(<MilestoneCelebration milestone={null} onDismiss={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
   });
+  it.each([
+    ["day_100", 100, { type: "milestone", count: 100, year: 2026, isTarget: false }],
+    ["club_200", 50, { type: "milestone", count: 50, year: 2026, isTarget: true }],
+    ["club_250", 250, { type: "club", tier: 250, count: 263, year: 2026 }],
+  ])("shares the matching %s card", async (slug, threshold, expected) => {
+    render(<MilestoneCelebration milestone={{ ...moment(slug as string, threshold as number), count: 263 }} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(sharing.shareCard).toHaveBeenCalledWith(expected);
+    await act(async () => {});
+  });
+  it("can hide sharing explicitly", () => {
+    render(<MilestoneCelebration milestone={moment("day_1", 1)} onDismiss={vi.fn()} showShare={false} />);
+    expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+  });
+  it("keeps dismissal disabled until sharing finishes", () => {
+    sharing.isSharing = true;
+    render(<MilestoneCelebration milestone={moment("day_1", 1)} onDismiss={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Sharing..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Let's go" })).toBeDisabled();
+  });
+
 });

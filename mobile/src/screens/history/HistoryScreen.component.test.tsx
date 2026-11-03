@@ -20,6 +20,8 @@ import { useSessionStore } from "../../state/session/sessionStore";
 import { mockZustandSelector, renderWithProviders } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
+const sharing = vi.hoisted(() => ({ shareCard: vi.fn().mockResolvedValue(undefined), isSharing: false }));
+vi.mock("../../components/share/useShareCard", () => ({ useShareCard: () => ({ ...sharing, shareView: null }) }));
 
 // React Native Web loads images outside the DOM; expose the native error callback
 // on an img so fireEvent.error exercises the screen's fallback behavior.
@@ -142,6 +144,7 @@ function setAllHooksLoading() {
 
 describe("HistoryScreen", () => {
   beforeEach(() => {
+    sharing.shareCard.mockClear(); sharing.isSharing = false;
     useYearProgressMock.mockReturnValue({ data: yearFixture, isLoading: false, isError: false, refetch: vi.fn() } as any);
     navigationNavigateMock.mockReset();
     parentNavigateMock.mockReset();
@@ -435,4 +438,25 @@ describe("HistoryScreen", () => {
 
     expect(screen.getByText("Unable to load history")).toBeInTheDocument();
   });
+  it("shares the selected year rather than the current year", () => {
+    const past = { ...yearFixture, year: 2025, count: 214, training_dates: ["2025-10-01"] };
+    useYearProgressMock.mockImplementation(year => ({ data: year === 2025 ? past : yearFixture, refetch: vi.fn() } as any));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Choose training year" }));
+    fireEvent.click(screen.getByRole("button", { name: "View 2025 training year" }));
+    fireEvent.click(screen.getByText("Share your year"));
+    expect(sharing.shareCard).toHaveBeenCalledWith({ type: "year", year: 2025, count: 214,
+      trainingDates: past.training_dates, todayLocal: past.today_local, windowStart: undefined });
+  });
+  it("shares a past year's earned club with its actual day count", () => {
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Share 2025 club" }));
+    expect(sharing.shareCard).toHaveBeenCalledWith({ type: "club", tier: 200, count: 214, year: 2025 });
+  });
+  it("does not share stale data while another year is loading", () => {
+    useYearProgressMock.mockReturnValue({ data: yearFixture, isLoading: true } as any);
+    renderScreen();
+    expect(screen.queryByText("Share your year")).not.toBeInTheDocument();
+  });
+
 });

@@ -114,7 +114,7 @@ describe("useDayCompletionFlow", () => {
     flow.queryClient.fetchQuery.mockResolvedValueOnce(overview()).mockResolvedValueOnce(endCheck({}));
     await act(async () => { await flow.result.current.handleSummaryDismiss(); });
     expect(flow.nav.navigate).toHaveBeenCalledWith("ProgramDashboard", expect.objectContaining({
-      yearMilestone: { ...milestone, target: 200 },
+      yearMilestone: { ...milestone, target: 200, count: 1 },
     }));
     expect(flow.parentNav.navigate).not.toHaveBeenCalled();
   });
