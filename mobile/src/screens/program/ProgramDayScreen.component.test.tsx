@@ -200,11 +200,11 @@ vi.mock("./hooks/useExerciseSwapSheet", () => ({
 }));
 
 vi.mock("../../components/program/SessionSummaryModal", () => ({
-  SessionSummaryModal: ({ onDismiss, yearCountAfterSession, yearTarget, year, totalSets, totalVolumeKg, visible }: any) =>
+  SessionSummaryModal: ({ onDismiss, yearCountAfterSession, yearTarget, yearClubs, year, totalSets, totalVolumeKg, visible }: any) =>
     visible ? (
       <div role="dialog" aria-label="Session summary">
         <p>Great work</p>
-        {yearCountAfterSession !== null ? <p>{summaryCountCopy(yearCountAfterSession, yearTarget, year)}</p> : null}
+        {yearCountAfterSession !== null ? <p>{summaryCountCopy(yearCountAfterSession, yearTarget, year, yearClubs)}</p> : null}
         <p>{totalSets} sets</p>
         <p>{totalVolumeKg} kg</p>
         <button type="button" onClick={() => onDismiss?.()}>
@@ -790,13 +790,18 @@ describe("ProgramDayScreen", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2027, 0, 1, 12));
     useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, day: { ...mockDay.day, scheduledDate: "2026-12-20" } } } as any);
-    useYearProgressMock.mockImplementation((year?: number) => ({ data: { ok: true, year: year ?? 2027, count: year === 2026 ? 199 : 0, target: 200, training_dates: [] } } as any));
+    useYearProgressMock.mockImplementation((year?: number) => ({ data: {
+      ok: true, year: year ?? 2027, count: year === 2026 ? 50 : 0, target: year === 2026 ? 50 : 200, training_dates: [],
+      clubs: year === 2026
+        ? [{ tier: 100, threshold: 25 }, { tier: 200, threshold: 50 }, { tier: 250, threshold: 63 }, { tier: 300, threshold: 75 }]
+        : [{ tier: 100, threshold: 100 }, { tier: 200, threshold: 200 }, { tier: 250, threshold: 250 }, { tier: 300, threshold: 300 }],
+    } } as any));
     renderScreen();
     await openWorkoutSummary();
     const choice = alertSpy.mock.calls.find(call => call[0] === "When did you train?");
     await act(async () => choice![2]?.find(button => button.text === "Yesterday")?.onPress?.());
     expect(useYearProgressMock).toHaveBeenLastCalledWith(2026);
-    expect(screen.getByText("That's 200. You're in for 2026.")).toBeInTheDocument();
+    expect(screen.getByText("That's 51. Club 250 is 12 away.")).toBeInTheDocument();
   });
 
   it("checks each exercise completion state on mount with the day's exercise IDs", async () => {

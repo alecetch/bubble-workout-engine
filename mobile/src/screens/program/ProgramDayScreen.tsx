@@ -537,6 +537,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         prE1rmKg={prE1rmKg}
         yearCountAfterSession={yearCountAfterSession}
         yearTarget={yearProgress?.target ?? 200}
+        yearClubs={yearProgress?.clubs}
         year={summaryYear}
         adaptedExercises={adaptedExercisesForSummary}
         isSubmitting={markDayComplete.isPending}
