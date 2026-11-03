@@ -525,4 +525,24 @@ describe("HistoryScreen", () => {
     expect(parentNavigateMock).toHaveBeenCalledWith("HomeTab", { screen: "Paywall" });
   });
 
+  it("opens past-year recaps while retaining the earned club badge", () => {
+    renderScreen();
+    expect(screen.getByText("2025 \u00b7 214 \u00b7 200")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("2025 recap"));
+    expect(navigationNavigateMock).toHaveBeenCalledWith("YearRecap", { year: 2025 });
+  });
+  it.each([27, 28])("offers the current recap only from December 28 in History (%s)", day => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 11, day, 12));
+    renderScreen();
+    if (day === 28) {
+      fireEvent.click(screen.getByText("2026 recap"));
+      expect(navigationNavigateMock).toHaveBeenCalledWith("YearRecap", { year: 2026 });
+    } else expect(screen.queryByText("2026 recap")).not.toBeInTheDocument();
+  });
+  it("keeps recap access available for expired users", () => {
+    useEntitlementMock.mockReturnValue({ data: { is_active: false }, isSuccess: true } as any);
+    renderScreen(); fireEvent.click(screen.getByText("2025 recap"));
+    expect(navigationNavigateMock).toHaveBeenCalledWith("YearRecap", { year: 2025 });
+  });
+
 });

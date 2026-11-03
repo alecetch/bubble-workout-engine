@@ -4,6 +4,7 @@ import { HistoryScreen } from "../screens/history/HistoryScreen";
 
 export type HistoryStackParamList = {
   HistoryMain: undefined;
+  YearRecap: { year: number };
   ExerciseTrend: { exerciseId: string; exerciseName: string };
   ProgressOverview: undefined;
   PhysiqueCheckIn: undefined;
@@ -24,6 +25,7 @@ export function HistoryStackNavigator(): React.JSX.Element {
       }}
     >
       <Stack.Screen name="HistoryMain" component={HistoryScreen} />
+      <Stack.Screen name="YearRecap" getComponent={() => require("../screens/history/YearRecapScreen").YearRecapScreen} />
       <Stack.Screen
         name="ExerciseTrend"
         getComponent={() => require("../screens/history/ExerciseTrendScreen").ExerciseTrendScreen}

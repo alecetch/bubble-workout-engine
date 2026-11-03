@@ -1,6 +1,6 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { PastYearsList } from "./PastYearsList";
 
 describe("PastYearsList", () => {
@@ -23,4 +23,11 @@ describe("PastYearsList", () => {
     const { container } = render(<PastYearsList years={years} currentYear={2026} />);
     expect(container).toBeEmptyDOMElement();
   });
+  it("retains last year's club after January rollover and opens its recap", () => {
+    const open = vi.fn();
+    render(<PastYearsList currentYear={2027} years={[{ year: 2026, count: 214, target: 200, best_club: 200 }]} onRecap={open} />);
+    expect(screen.getByText("2026 \u00b7 214 \u00b7 200")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("2026 recap")); expect(open).toHaveBeenCalledWith(2026);
+  });
+
 });

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { RootTabParamList } from "../../navigation/AppTabs";
+import { YearMomentCards } from "../../components/today/YearMomentCards";
 import { YearProgressCard } from "../../components/today/YearProgressCard";
 import { toLocalIsoDate } from "../../utils/localDate";
 import { doneCopy, restDayCopy } from "../../utils/yearCopy";
@@ -138,11 +139,15 @@ export function TodayScreen(): React.JSX.Element {
 
   useFocusEffect(
     useCallback(() => {
-      void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
-      setTodayIso(toLocalIsoDate());
-      void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress });
-      void refreshDayStatuses();
-      return undefined;
+      const refreshToday = () => {
+        void queryClient.invalidateQueries({ queryKey: ["entitlement"] });
+        setTodayIso(toLocalIsoDate());
+        void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress });
+        void refreshDayStatuses();
+      };
+      refreshToday();
+      const subscription = AppState.addEventListener("change", state => { if (state === "active") refreshToday(); });
+      return () => subscription.remove();
     }, [queryClient, refreshDayStatuses]),
   );
 
@@ -220,7 +225,11 @@ export function TodayScreen(): React.JSX.Element {
     {outsideSheetOpen ? <LogOutsideSessionSheet onClose={() => setOutsideSheetOpen(false)} /> : null}
   </>;
 
-  const yearCard = <>{milestoneOverlay}<YearProgressCard progress={yearQuery.data} isLoading={yearQuery.isLoading}
+  const previousYear = Number(todayIso.slice(0, 4)) - 1;
+  const yearMoments = <YearMomentCards userId={userId} todayLocal={todayIso}
+    previousCount={yearQuery.data?.years?.find(row => row.year === previousYear)?.count ?? 0}
+    onOpenRecap={year => navigation.navigate("HistoryTab", { screen: "YearRecap", params: { year } })} />;
+  const yearCard = <>{milestoneOverlay}{yearMoments}<YearProgressCard progress={yearQuery.data} isLoading={yearQuery.isLoading}
     isError={yearQuery.isError} onRetry={() => { void yearQuery.refetch(); }}
     onPress={() => navigation.navigate("HistoryTab")} /></>;
 
@@ -228,6 +237,7 @@ export function TodayScreen(): React.JSX.Element {
     return (
       <View style={styles.centered}>
         {milestoneOverlay}
+        {yearMoments}
         <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.subtitle}>Loading today&apos;s workout...</Text>
       </View>
@@ -238,6 +248,7 @@ export function TodayScreen(): React.JSX.Element {
     return (
       <View style={styles.centered}>
         {milestoneOverlay}
+        {yearMoments}
         <Text style={styles.title}>No Active Program</Text>
         <Text style={styles.subtitle}>Generate a program to unlock your Today workout.</Text>
         <PressableScale
