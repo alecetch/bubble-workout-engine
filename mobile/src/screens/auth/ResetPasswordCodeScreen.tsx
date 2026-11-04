@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import type { TextInputInstance } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { ApiError, apiFetch } from "../../api/client";
@@ -23,8 +24,8 @@ export function ResetPasswordCodeScreen({ navigation, route }: Props): React.JSX
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
   const prevPasswordLenRef = useRef(0);
   const prevConfirmLenRef = useRef(0);
 

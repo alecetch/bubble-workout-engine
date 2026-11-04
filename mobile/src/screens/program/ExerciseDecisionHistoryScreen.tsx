@@ -175,7 +175,7 @@ export function ExerciseDecisionHistoryScreen({ route, navigation }: Props): Rea
               <PressableScale onPress={loadMore} style={styles.loadMoreButton}>
                 <Text style={styles.loadMoreText}>Load more</Text>
               </PressableScale>
-            ) : null
+            ) : undefined
           }
         />
       )}

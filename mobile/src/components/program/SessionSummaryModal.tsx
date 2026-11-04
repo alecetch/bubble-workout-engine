@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from "react-native";
+import type { ViewInstance } from "react-native";
 import { PressableScale } from "../interaction/PressableScale";
 import { hapticMedium } from "../interaction/haptics";
 import { PRShareCard } from "../sharing/PRShareCard";
@@ -47,7 +48,7 @@ export function SessionSummaryModal({
   isSubmitting = false,
   onDismiss,
 }: SessionSummaryModalProps): React.JSX.Element {
-  const prCardRef = useRef<View>(null);
+  const prCardRef = useRef<ViewInstance>(null);
   const [isSharing, setIsSharing] = useState(false);
   const roundedVolume = Math.round(totalVolumeKg);
   const volumeDisplay =

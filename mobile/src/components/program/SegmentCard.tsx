@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { type LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
+import type { ViewInstance } from "react-native";
 import { ApiError } from "../../api/client";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import type { SaveSegmentLogPayload, SaveSegmentLogResult } from "../../api/segmentLog";
@@ -218,8 +219,8 @@ export const SegmentCard = React.memo(function SegmentCard({
     loggableExercises.every((ex) => (ex.id ? completedExerciseIds.has(ex.id) : false));
   const showResumeButton = !inlineLoggingOpen && allExercisesMarkedComplete;
   const panelScrolledRef = useRef(false);
-  const inlinePanelRef = useRef<View>(null);
-  const cardRootRef = useRef<View>(null);
+  const inlinePanelRef = useRef<ViewInstance>(null);
+  const cardRootRef = useRef<ViewInstance>(null);
   const prevRestRunning = useRef(false);
 
   const segmentTypeBadgeLabel =

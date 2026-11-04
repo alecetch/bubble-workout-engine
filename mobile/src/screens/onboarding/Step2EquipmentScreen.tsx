@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { ScrollViewInstance } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { SectionCard } from "../../components/onboarding/SectionCard";
@@ -76,7 +77,7 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
   const [prefillError, setPrefillError] = useState<string | null>(null);
   const sectionPulse = useErrorPulse();
   const pendingPrefillPresetRef = useRef<string | null>(null);
-  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
 
   const selectedPresetCode = draft.equipmentPresetCode;
   const equipmentItemsQuery = useEquipmentItems(selectedPresetCode);

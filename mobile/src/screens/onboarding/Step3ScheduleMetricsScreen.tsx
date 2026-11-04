@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import type { ScrollViewInstance } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { SectionCard } from "../../components/onboarding/SectionCard";
@@ -49,7 +50,7 @@ const SECTION_ERROR_KEYS: Record<SectionKey, string[]> = {
 };
 
 export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Element {
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
   const sectionOffsetsRef = useRef<Record<SectionKey, number>>({
     preferredDays: 0,
     sessionSettings: 0,

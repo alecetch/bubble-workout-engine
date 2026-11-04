@@ -54,7 +54,15 @@
       "@react-native-community/datetimepicker",
       "@sentry/react-native/expo",
       "expo-video",
-      "expo-image"
+      "expo-image",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": false
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {

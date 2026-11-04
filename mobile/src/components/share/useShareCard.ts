@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Platform, ToastAndroid, View } from "react-native";
+import type { ViewInstance } from "react-native";
 import { captureRef, releaseCapture } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { MilestoneShareCard, type MilestoneShareCardProps } from "./MilestoneShareCard";
@@ -18,7 +19,7 @@ function notify(message: string) {
 export function useShareCard() {
   const [card, setCard] = useState<ShareCardData | null>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const viewRef = useRef<View>(null);
+  const viewRef = useRef<ViewInstance>(null);
   const busy = useRef(false);
   const mounted = useRef(true);
   const ready = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);

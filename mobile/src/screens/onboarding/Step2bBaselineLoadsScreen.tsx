@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import type { ScrollViewInstance } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
 import type { ReferenceDataResponse } from "../../api/referenceData";
@@ -235,7 +236,7 @@ function AnchorFamilyRow({
 }
 
 export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Element {
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
   const meQuery = useMe();
   const referenceDataQuery = useReferenceData();
   const profileId = meQuery.data?.clientProfileId ?? "";

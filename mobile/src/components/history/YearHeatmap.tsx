@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, View, useWindowDimensions } from "react-native";
+import type { ScrollViewInstance } from "react-native";
 import Svg, { G, Rect, Text as SvgText } from "react-native-svg";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
@@ -22,7 +23,7 @@ export const YearHeatmap = React.memo(function YearHeatmap({ year, trainingDates
   const window = useWindowDimensions();
   const [measuredWidth, setMeasuredWidth] = useState(0);
   const availableWidth = measuredWidth || Math.max(1, (window.width || 360) - spacing.lg * 2);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const calendar = useMemo(() => {
     const start = Date.UTC(year, 0, 1);
     const days = (Date.UTC(year + 1, 0, 1) - start) / DAY_MS;

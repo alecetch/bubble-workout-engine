@@ -1,11 +1,12 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import type { ViewInstance } from "react-native";
 
 type PRShareCardProps = {
   exerciseName: string;
   e1rmKg: number;
   dateLabel: string;
-  cardRef: React.RefObject<View | null>;
+  cardRef: React.RefObject<ViewInstance | null>;
 };
 
 const CARD_SIZE = 1080;

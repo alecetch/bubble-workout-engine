@@ -77,7 +77,7 @@ vi.mock("../../components/interaction/PressableScale", () => ({
 import { SettingsScreen } from "./SettingsScreen";
 
 const nav = { navigate: vi.fn() };
-const openURLSpy = vi.spyOn(Linking, "openURL").mockResolvedValue(true);
+const openURLSpy = vi.spyOn(Linking, "openURL").mockResolvedValue(undefined);
 const canOpenURLSpy = vi.spyOn(Linking, "canOpenURL").mockResolvedValue(true);
 const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 

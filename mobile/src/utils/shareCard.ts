@@ -2,9 +2,10 @@ import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import type React from "react";
 import type { View } from "react-native";
+import type { ViewInstance } from "react-native";
 
 export async function captureAndShare(
-  viewRef: React.RefObject<View | null>,
+  viewRef: React.RefObject<ViewInstance | null>,
 ): Promise<void> {
   const uri = await captureRef(viewRef, {
     format: "png",
