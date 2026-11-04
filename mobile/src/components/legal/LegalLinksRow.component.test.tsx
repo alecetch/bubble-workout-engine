@@ -6,14 +6,14 @@ import { API_BASE_URL } from "../../api/config";
 import { LegalLinksRow } from "./LegalLinksRow";
 
 const canOpenURLSpy = vi.spyOn(Linking, "canOpenURL").mockResolvedValue(true);
-const openURLSpy = vi.spyOn(Linking, "openURL").mockResolvedValue(true);
+const openURLSpy = vi.spyOn(Linking, "openURL").mockResolvedValue(undefined);
 const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 
 describe("LegalLinksRow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     canOpenURLSpy.mockResolvedValue(true);
-    openURLSpy.mockResolvedValue(true);
+    openURLSpy.mockResolvedValue(undefined);
   });
 
   it("renders Terms of Service and Privacy Policy links", () => {

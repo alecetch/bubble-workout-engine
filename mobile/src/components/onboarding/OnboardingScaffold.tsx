@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import type { ScrollViewInstance } from "react-native";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
@@ -26,7 +27,7 @@ type OnboardingScaffoldProps = {
   nextLabel: string;
   nextDisabled: boolean;
   isSaving: boolean;
-  scrollViewRef?: RefObject<ScrollView | null>;
+  scrollViewRef?: RefObject<ScrollViewInstance | null>;
   scrollViewTestID?: string;
   nextTestID?: string;
 };

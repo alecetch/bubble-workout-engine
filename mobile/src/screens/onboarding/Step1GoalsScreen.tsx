@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
 } from "react-native";
+import type { ScrollViewInstance } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { SectionCard } from "../../components/onboarding/SectionCard";
@@ -36,7 +37,7 @@ type SectionKey = "goals" | "fitnessLevel" | "injuryFlags";
 const SECTION_ORDER: SectionKey[] = ["goals", "fitnessLevel", "injuryFlags"];
 
 export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Element {
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
   const sectionOffsetsRef = useRef<Record<SectionKey, number>>({
     goals: 0,
     fitnessLevel: 0,

@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { ScrollViewInstance } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import { queryKeys, useCompleteProgram, useEntitlement, useYearProgress, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getSegmentExerciseLogs, type SaveSegmentLogPayload } from "../../api/segmentLog";
@@ -93,7 +94,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   useEffect(() => { setCompletionLocalDate(undefined); }, [programDayId]);
   const [segmentDoneSetCounts, setSegmentDoneSetCounts] = useState<Record<string, number>>({});
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
   const scrollOffsetY = useRef(0);
   const segmentOffsetsRef = useRef<Record<string, number>>({});
   const headerHeightRef = useRef(0);

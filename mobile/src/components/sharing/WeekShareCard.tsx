@@ -1,11 +1,12 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import type { ViewInstance } from "react-native";
 
 type WeekShareCardProps = {
   weekNumber: number;
   sessionsCompleted: number;
   totalVolumeKg: number;
-  cardRef: React.RefObject<View | null>;
+  cardRef: React.RefObject<ViewInstance | null>;
   onReady?: () => void;
 };
 

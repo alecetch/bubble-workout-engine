@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import type { TextInputInstance } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,8 +42,8 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
   const [showPassword, setShowPassword] = useState(false);
   const [showReferralField, setShowReferralField] = useState(false);
   const [referralCodeInput, setReferralCodeInput] = useState("");
-  const passwordRef = useRef<TextInput>(null);
-  const confirmPasswordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmPasswordRef = useRef<TextInputInstance>(null);
   const prevPasswordLenRef = useRef(0);
   const prevConfirmLenRef = useRef(0);
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as StoreReview from "expo-store-review";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { ViewInstance } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -89,7 +90,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const [weekBannerData, setWeekBannerData] = useState<{ weekNumber: number; sessions: number; totalVolumeKg: number } | null>(null);
   const [weekShareCardReady, setWeekShareCardReady] = useState(false);
   const [isSharingWeek, setIsSharingWeek] = useState(false);
-  const weekCardRef = useRef<View>(null);
+  const weekCardRef = useRef<ViewInstance>(null);
 
   // ── Data layer ────────────────────────────────────────────────────────────
   //
