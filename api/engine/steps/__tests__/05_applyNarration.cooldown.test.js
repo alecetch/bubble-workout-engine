@@ -307,7 +307,7 @@ test('cooldown injury flag no_known_issues behaves exactly like no flags', async
     { ...cooldown('wrist', ['hamstrings']), contraindications_slugs: ['wrist_elbow'] },
   ], { catalog: [{ id: 'main', tr: ['glutes', 'hamstrings'] }] });
   const none = await narrate({ ...fixture, injuryFlags: [] });
-  const noKnown = await narrate({ ...fixture, injuryFlags: ['no_known_issues', ''] });
+  const noKnown = await narrate({ ...fixture, injuryFlags: ['no_known_issues'] });
   for (let i = 0; i < 4; i++) {
     assert.deepEqual(cooldownItems(noKnown, 0, i), cooldownItems(none, 0, i));
   }

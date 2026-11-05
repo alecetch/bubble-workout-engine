@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../../utils/injuryFlags.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { pool } from '../../db.js';
@@ -14,6 +15,7 @@ const USER_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_USER_ID = "44444444-4444-4444-8444-444444444444";
 
 for (const [label, fitnessLevel, rank, injuries, currentId, equipment] of [
+  ['wrist label', 'elite', 3, ['Wrist / Elbow'], 'bb_bench_press', ['bodyweight']],
   ['knee injuries', 'elite', 3, ['knee_issues'], 'bb_back_squat', ['bodyweight']],
   ['beginner minimum rank', 'beginner', 0, [], 'bb_bench_press', ['bodyweight']],
   ['advanced rank ceiling', 'advanced', 2, [], 'bb_bench_press', ['bodyweight']],
@@ -33,6 +35,7 @@ for (const [label, fitnessLevel, rank, injuries, currentId, equipment] of [
       }
       if (sql.includes('FROM program_exercise pe') && sql.includes('JOIN program_day pd')) return { rowCount: 1, rows: [{ id: PROGRAM_DAY_ID, program_day_id: PROGRAM_DAY_ID, exercise_id: currentId, equipment_items_slugs_csv: 'unavailable' }] };
       if (sql.includes('UPDATE program_exercise')) { updates.push(params[0]); return { rowCount: 1, rows: [] }; }
+      if (label === 'wrist label' && sql.includes('replacement.contraindications_slugs')) assert.deepEqual(params[4], ['wrist_elbow'], 'Substitution query must filter the stored label as a canonical code');
       return pool.query(sql, params);
     } };
     const handlers = createProgramDayActionHandlers(db, jobs);
@@ -53,7 +56,7 @@ for (const [label, fitnessLevel, rank, injuries, currentId, equipment] of [
     const selected = (await pool.query('SELECT * FROM exercise_catalogue WHERE exercise_id=$1', [updates[0]])).rows[0];
     assert.ok(selected.min_fitness_rank <= rank);
     assert.ok(selected.max_fitness_rank == null || selected.max_fitness_rank >= rank);
-    assert.ok(!selected.contraindications_slugs.some(flag => injuries.includes(flag)));
+    assert.ok(!selected.contraindications_slugs.some(flag => normalizeInjuryFlags(injuries).includes(flag)));
     if (label === 'real equipment before substitute') assert.equal(selected.exercise_id, 'sled_push');
   });
 }

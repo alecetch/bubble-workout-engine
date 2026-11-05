@@ -1,3 +1,4 @@
+import { INJURY_FLAG_OPTIONS } from "../src/utils/injuryFlags.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -6,7 +7,8 @@ import { createGenerateProgramV2Handler } from '../src/routes/generateProgramV2.
 
 after(() => pool.end());
 
-test('generation for a knee-injury profile persists no contraindicated exercise or bookend', async t => {
+for (const { code, label } of INJURY_FLAG_OPTIONS.filter(x => x.code !== 'no_known_issues')) {
+test(`generation for ${label} persists no contraindicated exercise or bookend`, async t => {
   try { await pool.query('SELECT 1'); }
   catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
   const subject = `injury-test-${randomUUID()}`;
@@ -17,7 +19,7 @@ test('generation for a knee-injury profile persists no contraindicated exercise 
     const handler = createGenerateProgramV2Handler({
       db: pool,
       getProfileByUser: async () => ({
-        id: profile.id, goals: ['conditioning'], fitnessLevel: 'elite', injuryFlags: ['knee_issues'],
+        id: profile.id, goals: ['conditioning'], fitnessLevel: 'elite', injuryFlags: [label],
         equipmentPreset: 'commercial_gym', equipmentItemCodes: equipment,
         preferredDays: ['mon', 'wed', 'fri'], minutesPerSession: 60,
       }),
@@ -31,6 +33,7 @@ test('generation for a knee-injury profile persists no contraindicated exercise 
     }, res);
     assert.equal(res.statusCode, 200, JSON.stringify({ body: res.body, errors }));
     assert.equal(res.body.ok, true);
+    assert.deepEqual((await pool.query("SELECT injury_flags FROM client_profile WHERE id=$1", [profile.id])).rows[0].injury_flags, [code]);
     const { rows } = await pool.query(`SELECT pe.exercise_id, pe.segment_type,
       CASE WHEN pe.segment_type='warmup' THEN we.contraindications_slugs
            WHEN pe.segment_type='cooldown' THEN ce.contraindications_slugs
@@ -43,10 +46,12 @@ test('generation for a knee-injury profile persists no contraindicated exercise 
     assert.ok(rows.some(row => !['warmup', 'cooldown'].includes(row.segment_type)), 'Expected main work');
     assert.ok(rows.some(row => row.segment_type === 'warmup'), 'Expected warm-ups');
     assert.ok(rows.some(row => row.segment_type === 'cooldown'), 'Expected cool-downs');
-    assert.deepEqual(rows.filter(row => !Array.isArray(row.flags) || row.flags.includes('knee_issues')), []);
+    assert.deepEqual(rows.filter(row => !Array.isArray(row.flags) || row.flags.includes(code)), []);
   } finally {
     await pool.query('DELETE FROM generation_run WHERE program_id IN (SELECT id FROM program WHERE user_id=$1)', [user.id]);
     await pool.query('DELETE FROM program WHERE user_id=$1', [user.id]);
     await pool.query('DELETE FROM app_user WHERE id=$1', [user.id]);
   }
 });
+
+}

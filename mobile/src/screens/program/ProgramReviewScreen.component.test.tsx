@@ -61,7 +61,7 @@ const mockProfile = buildClientProfile({
   goals: ["Strength"],
   goalNotes: "Build muscle",
   fitnessLevel: "Intermediate",
-  injuryFlags: [],
+  injuryFlags: ["wrist_elbow"],
   equipmentPreset: "commercial_gym",
   equipmentItemCodes: ["barbell", "dumbbell"],
   preferredDays: ["Mon", "Wed"],
@@ -144,6 +144,11 @@ describe("ProgramReviewScreen", () => {
       setActiveProgramId: setActiveProgramIdMock,
     });
     generateProgramMock.mockResolvedValue({ program_id: "prog-1" });
+  });
+  it("shows injury labels instead of codes", () => {
+    renderScreen();
+    expect(screen.getByText("Wrist / Elbow")).toBeInTheDocument();
+    expect(screen.queryByText("wrist_elbow")).not.toBeInTheDocument();
   });
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();

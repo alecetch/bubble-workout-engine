@@ -1,3 +1,4 @@
+import { INJURY_FLAG_LABELS } from "../../state/onboarding/types";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -116,8 +117,8 @@ describe("Step1GoalsScreen", () => {
     useReferenceDataMock.mockReturnValue({
       data: {
         injuryFlags: [
-          { label: "No known issues", code: "none" },
-          { label: "Shoulder issues", code: "shoulder" },
+          { label: "No known issues", code: "no_known_issues" },
+          { label: "Shoulder issues", code: "shoulder_issues" },
         ],
       },
       isLoading: false,
@@ -129,6 +130,14 @@ describe("Step1GoalsScreen", () => {
     } as any);
     mockStore(buildDraft());
   });
+  for (const [code, label] of Object.entries(INJURY_FLAG_LABELS)) {
+    it(`selecting ${label} stores ${code}`, () => {
+      useReferenceDataMock.mockReturnValue({ data: { injuryFlags: [{ code, label }] }, isLoading: false } as any);
+      renderScreen();
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(setDraftMock).toHaveBeenCalledWith({ injuryFlags: [code] });
+    });
+  }
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
     await act(async () => {});
@@ -172,7 +181,7 @@ describe("Step1GoalsScreen", () => {
     mockStore(buildDraft({
       goals: ["Strength"],
       fitnessLevel: "Intermediate",
-      injuryFlags: ["No known issues"],
+      injuryFlags: ["no_known_issues"],
     }));
     const navigation = renderScreen();
 
@@ -182,7 +191,7 @@ describe("Step1GoalsScreen", () => {
       expect(updateProfileMutateAsyncMock).toHaveBeenCalledWith({
         goals: ["Strength"],
         fitnessLevel: "Intermediate",
-        injuryFlags: ["No known issues"],
+        injuryFlags: ["no_known_issues"],
         onboardingStepCompleted: 1,
       });
       expect(navigation.replace).toHaveBeenCalledWith("Step2Equipment");
@@ -207,7 +216,7 @@ describe("Step1GoalsScreen", () => {
     mockStore(buildDraft({
       goals: ["Strength"],
       fitnessLevel: "Intermediate",
-      injuryFlags: ["No known issues"],
+      injuryFlags: ["no_known_issues"],
     }));
     const navigation = renderScreen();
 

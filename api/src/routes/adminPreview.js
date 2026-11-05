@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import express from "express";
 import { pool } from "../db.js";
 import { runPipeline } from "../../engine/runPipeline.js";
@@ -194,7 +195,7 @@ export async function buildPreviewInputs(
 
     allowedIds = await getAllowed(client, {
       fitness_rank: resolvedFitnessRank,
-      injury_flags_slugs: Array.isArray(profile?.injuryFlags) ? profile.injuryFlags.map((x) => toSlug(x)).filter(Boolean) : [],
+      injury_flags_slugs: normalizeInjuryFlags(profile?.injuryFlags),
       equipment_items_slugs: equipmentSlugs,
     });
 

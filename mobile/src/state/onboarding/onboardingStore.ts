@@ -5,7 +5,7 @@ import {
   DEFAULT_ONBOARDING_DRAFT,
   FITNESS_LEVELS,
   GOAL_TYPES,
-  INJURY_FLAGS,
+  normalizeInjuryFlag,
   MINUTES_PER_SESSION,
   NO_KNOWN_ISSUES,
   SEX_OPTIONS,
@@ -66,9 +66,7 @@ function toFitnessLevel(value: unknown): FitnessLevel | null {
 }
 
 function toInjuryFlags(value: unknown): InjuryFlag[] {
-  return toStringArray(value).filter((item): item is InjuryFlag =>
-    (INJURY_FLAGS as readonly string[]).includes(item),
-  );
+  return toStringArray(value).map(normalizeInjuryFlag).filter((item): item is InjuryFlag => item !== null);
 }
 
 function toEquipmentPreset(value: unknown): EquipmentPreset | null {
@@ -104,7 +102,7 @@ function toAgeRange(value: unknown): AgeRange | null {
 
 function applyExclusivity(flags: InjuryFlag[]): InjuryFlag[] {
   const unique = Array.from(new Set(flags));
-  if (unique.includes(NO_KNOWN_ISSUES)) {
+  if (unique.length === 1 && unique.includes(NO_KNOWN_ISSUES)) {
     return [NO_KNOWN_ISSUES];
   }
   return unique.filter((flag) => flag !== NO_KNOWN_ISSUES);
