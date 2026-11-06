@@ -70,3 +70,19 @@ test("own patches persist and retain split validation and anchor stamping", asyn
     assert.deepEqual(await profileRow(a.profileId), before);
   });
 });
+
+test("injury labels are canonicalised and unknown flags are rejected", async t => {
+  if (!await ensureDb(t)) return;
+  const [a, b] = await seedPair(t);
+  await withServer(app(), async base => {
+    const path = `/api/client-profiles/${a.profileId}`;
+    const ok = await request(base, path, a.userId, "PATCH", { injuryFlags: ["Wrist / Elbow"] });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.body.injuryFlags, ["wrist_elbow"]);
+    assert.deepEqual((await profileRow(a.profileId)).injury_flags, ["wrist_elbow"]);
+    const invalid = await request(base, path, a.userId, "PATCH", { injuryFlags: ["unknown"] });
+    assert.equal(invalid.status, 400); assert.equal(invalid.body.code, "invalid_injury_flag");
+    assert.deepEqual((await profileRow(a.profileId)).injury_flags, ["wrist_elbow"]);
+    assert.equal((await request(base, path, b.userId, "PATCH", { injuryFlags: ["Wrist / Elbow"] })).status, 404);
+  });
+});

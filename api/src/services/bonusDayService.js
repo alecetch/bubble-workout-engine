@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { buildInputsFromProfile } from "./buildInputsFromProfile.js";
@@ -59,7 +60,7 @@ function rowToProfile(row, preferredDays) {
     userId: row.user_id,
     goals: row.main_goals_slugs ?? [],
     fitnessLevel: row.fitness_level_slug ?? null,
-    injuryFlags: row.injury_flags ?? [],
+    injuryFlags: normalizeInjuryFlags(row.injury_flags),
     goalNotes: row.goal_notes ?? "",
     equipmentPreset: row.equipment_preset_slug ?? "",
     equipmentItemCodes: normalizeTextArray(row.equipment_items_slugs),
@@ -399,7 +400,7 @@ export async function addBonusDay(db, {
 
   const allowedIds = await getAllowedExerciseIds(db, {
     fitness_rank: mapFitnessRank(profileRow.fitness_level_slug),
-    injury_flags_slugs: normalizeTextArray(profileRow.injury_flags),
+    injury_flags_slugs: normalizeInjuryFlags(profileRow.injury_flags),
     equipment_items_slugs: normalizeTextArray(profileRow.equipment_items_slugs),
   });
   if (allowedIds.length === 0) {

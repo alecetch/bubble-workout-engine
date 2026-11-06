@@ -5,7 +5,7 @@ function makeValidDraft(): OnboardingDraft {
         ...DEFAULT_ONBOARDING_DRAFT,
         goals: ["Strength"],
         fitnessLevel: "Intermediate",
-        injuryFlags: ["No known issues"],
+        injuryFlags: ["no_known_issues"],
         equipmentPresetCode: "commercial_gym",
         selectedEquipmentCodes: ["barbell"],
         equipmentPreset: "commercial_gym",

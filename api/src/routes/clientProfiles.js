@@ -1,3 +1,4 @@
+import { InvalidInjuryFlagError } from "../utils/injuryFlags.js";
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -111,6 +112,9 @@ export function createClientProfilesRouter({ db = pool } = {}) {
         // ignore rollback failures
       }
       req.log.error({ event: "profile.patch.error", err: err?.message }, "PATCH /client-profiles/:id error");
+      if (err instanceof InvalidInjuryFlagError) {
+        return res.status(400).json({ ok: false, code: err.code, error: err.message });
+      }
       if (err instanceof RequestValidationError) {
         return res.status(400).json({ ok: false, code: "validation_error", error: err.message, details: err.details });
       }

@@ -56,16 +56,28 @@ export const FITNESS_LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"] 
 export type FitnessLevel = (typeof FITNESS_LEVELS)[number];
 
 export const INJURY_FLAGS = [
-  "Shoulder issues",
-  "Knee issues",
-  "Lower back / spine",
-  "Ankle / Foot",
-  "Wrist / Elbow",
-  "Cardiovascular limitations",
-  "No known issues",
+  "shoulder_issues",
+  "knee_issues",
+  "lower_back_spine",
+  "ankle_foot",
+  "wrist_elbow",
+  "cardiovascular_limitations",
+  "no_known_issues",
 ] as const;
-
 export type InjuryFlag = (typeof INJURY_FLAGS)[number];
+export const INJURY_FLAG_LABELS: Record<InjuryFlag, string> = {
+  shoulder_issues: "Shoulder issues",
+  knee_issues: "Knee issues",
+  lower_back_spine: "Lower back / spine",
+  ankle_foot: "Ankle / Foot",
+  wrist_elbow: "Wrist / Elbow",
+  cardiovascular_limitations: "Cardiovascular limitations",
+  no_known_issues: "No known issues",
+};
+export function normalizeInjuryFlag(value: string): InjuryFlag | null {
+  const code = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return (INJURY_FLAGS as readonly string[]).includes(code) ? code as InjuryFlag : null;
+}
 
 export const MINUTES_PER_SESSION = [40, 50, 60] as const;
 export type MinutesPerSession = (typeof MINUTES_PER_SESSION)[number];
@@ -116,7 +128,7 @@ export type FieldErrors = Record<string, string>;
 
 export type ProfileLike = Partial<OnboardingDraft> & Record<string, unknown>;
 
-export const NO_KNOWN_ISSUES: InjuryFlag = "No known issues";
+export const NO_KNOWN_ISSUES: InjuryFlag = "no_known_issues";
 
 export const DEFAULT_ONBOARDING_DRAFT: OnboardingDraft = {
   goals: [],

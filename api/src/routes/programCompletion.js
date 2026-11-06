@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import { displayLabel } from "../utils/displayLabels.js";
 import express from "express";
 import { pool } from "../db.js";
@@ -345,7 +346,7 @@ export function createProgramCompletionHandlers(db = pool) {
           fitness_rank: currentRank,
           fitness_level_slug: row.fitness_level_slug ?? null,
           goals: Array.isArray(row.goals) ? row.goals : [],
-          injury_flags: Array.isArray(row.injury_flags) ? row.injury_flags : [],
+          injury_flags: normalizeInjuryFlags(row.injury_flags),
           goal_notes: row.goal_notes ?? "",
           minutes_per_session: row.minutes_per_session == null ? null : toFiniteNumber(row.minutes_per_session, null),
           preferred_days: Array.isArray(row.preferred_days) ? row.preferred_days : [],

@@ -1,10 +1,11 @@
+import { INJURY_FLAG_LABELS } from "./types.js";
 import { DEFAULT_ONBOARDING_DRAFT, type ProfileLike } from "./types.js";
 import { fromProfile } from "./onboardingStore.js";
 test("fromProfile maps camelCase profile fields into onboarding draft", () => {
     const draft = fromProfile({
         goals: ["Strength"],
         fitnessLevel: "Intermediate",
-        injuryFlags: ["Shoulder issues", "No known issues"],
+        injuryFlags: ["shoulder_issues", "no_known_issues"],
         goalNotes: "Build strength",
         equipmentPresetCode: "commercial_gym",
         selectedEquipmentCodes: ["barbell", "bench"],
@@ -32,7 +33,7 @@ test("fromProfile maps camelCase profile fields into onboarding draft", () => {
         ...DEFAULT_ONBOARDING_DRAFT,
         goals: ["Strength"],
         fitnessLevel: "Intermediate",
-        injuryFlags: ["No known issues"],
+        injuryFlags: ["shoulder_issues"],
         goalNotes: "Build strength",
         equipmentPresetCode: "commercial_gym",
         selectedEquipmentCodes: ["barbell", "bench"],
@@ -72,7 +73,7 @@ test("fromProfile maps snake_case profile fields into onboarding draft", () => {
         ...DEFAULT_ONBOARDING_DRAFT,
         goals: ["Hypertrophy"],
         fitnessLevel: "Advanced",
-        injuryFlags: ["Knee issues"],
+        injuryFlags: ["knee_issues"],
         goalNotes: "Muscle gain",
         equipmentPresetCode: "home_gym",
         selectedEquipmentCodes: ["dumbbell", "bands"],
@@ -125,3 +126,11 @@ test("fromProfile restores anchorLiftsSkipped and always resets anchorLifts to a
     expect(draft.anchorLiftsSkipped).toBe(true);
     expect(draft.anchorLifts).toEqual([]);
 });
+
+for (const [code, label] of Object.entries(INJURY_FLAG_LABELS)) {
+  for (const value of [code, label, label.toLowerCase(), label.replace(/\b\w/g, c => c.toUpperCase()), code.replaceAll("_", "_/_")]) {
+    test(`fromProfile preserves ${value}`, () => {
+      expect(fromProfile({ injury_flags: [value] }).injuryFlags).toEqual([code]);
+    });
+  }
+}

@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import express from "express";
 import { pool } from "../db.js";
 import { entitledUserAuth } from "../middleware/chains.js";
@@ -213,7 +214,7 @@ export function createGenerateProgramV2Handler({
 
   const mappedFitnessRank = mapFitnessRank(devProfile.fitnessLevel);
   const mappedEquipmentSlugs = ensureArray(devProfile.equipmentItemCodes, toSlug);
-  const mappedInjuryFlags = ensureArray(devProfile.injuryFlags, toSlug);
+  const mappedInjuryFlags = normalizeInjuryFlags(devProfile.injuryFlags);
   const mappedPreferredDays = ensureArray(devProfile.preferredDays, toPreferredDayCode);
   const mappedGoals = ensureArray(devProfile.goals, toSlug);
   const mappedMinutesPerSession = Number.isFinite(Number(devProfile.minutesPerSession))

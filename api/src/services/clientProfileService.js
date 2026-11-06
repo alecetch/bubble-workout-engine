@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import { pool as defaultPool } from "../db.js";
 
 const profileFieldToColumn = new Map([
@@ -142,7 +143,7 @@ export function makeClientProfileService(db = defaultPool) {
       const column = profileFieldToColumn.get(field);
       if (!column) continue;
       if (value === undefined) continue;
-      values.push(value);
+      values.push(field === "injuryFlags" ? normalizeInjuryFlags(value) : value);
       assignments.push(`${column} = $${values.length}`);
     }
 
@@ -186,7 +187,7 @@ export function toApiShape(row) {
     userId: row.user_id ?? null,
     goals: row.main_goals_slugs ?? [],
     fitnessLevel: row.fitness_level_slug ?? null,
-    injuryFlags: row.injury_flags ?? [],
+    injuryFlags: normalizeInjuryFlags(row.injury_flags),
     goalNotes: row.goal_notes ?? "",
     equipmentPreset: row.equipment_preset_slug ?? null,
     equipmentItemCodes: row.equipment_items_slugs ?? [],

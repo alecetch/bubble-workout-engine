@@ -73,7 +73,7 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
     if (fromReferenceData.length > 0) {
       return fromReferenceData.map((injury) => ({
         label: injury.label,
-        value: injury.label,
+        value: injury.code,
       }));
     }
     return [];
@@ -82,11 +82,9 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
   const noneInjurySlug = useMemo(() => {
     const options = referenceDataQuery.data?.injuryFlags ?? [];
     const matched = options.find((option) => {
-      const label = String(option.label ?? "").toLowerCase();
-      const code = String(option.code ?? "").toLowerCase();
-      return label.includes("no known") || label.includes("none") || code.includes("no_known") || code.includes("none");
+      return option.code === "no_known_issues";
     });
-    return matched?.label ?? "No known issues";
+    return matched?.code ?? "no_known_issues";
   }, [referenceDataQuery.data?.injuryFlags]);
 
   const updateDraftWithValidation = (partial: Partial<typeof draft>): void => {

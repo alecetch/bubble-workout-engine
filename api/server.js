@@ -1,3 +1,4 @@
+import { INJURY_FLAG_OPTIONS } from "./src/utils/injuryFlags.js";
 import { createMediaAssetsHandler } from "./src/routes/mediaAssets.js";
 import "./instrument.js";
 import * as Sentry from "@sentry/node";
@@ -221,15 +222,7 @@ const devReferenceData = {
     { rank: 3, code: "advanced", label: "Advanced" },
     { rank: 4, code: "elite", label: "Elite" },
   ],
-  injuryFlags: [
-    { code: "shoulder_issues", label: "Shoulder Issues" },
-    { code: "knee_issues", label: "Knee Issues" },
-    { code: "lower_back_spine", label: "Lower Back / Spine" },
-    { code: "ankle_foot", label: "Ankle / Foot" },
-    { code: "wrist_elbow", label: "Wrist / Elbow" },
-    { code: "cardiovascular_limitations", label: "Cardiovascular Limitations" },
-    { code: "no_known_issues", label: "No Known Issues" },
-  ],
+  injuryFlags: INJURY_FLAG_OPTIONS,
   minutesOptions: [
     { minutes: 40, label: "40" },
     { minutes: 50, label: "50" },

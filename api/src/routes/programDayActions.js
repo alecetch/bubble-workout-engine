@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import { randomUUID } from "node:crypto";
 import express from "express";
 import { pool } from "../db.js";
@@ -349,7 +350,7 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
       const profile = profileResult.rows[0];
       if (!profile) return res.status(404).json({ ok: false, code: "not_found", error: "Client profile not found" });
       const fitnessRank = mapFitnessRank(profile.fitness_level_slug);
-      const injuryFlags = Array.isArray(profile.injury_flags) ? profile.injury_flags : [];
+      const injuryFlags = normalizeInjuryFlags(profile.injury_flags);
 
       const jobId = randomUUID();
       jobs.set(jobId, {

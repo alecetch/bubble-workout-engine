@@ -1,3 +1,4 @@
+import { INJURY_FLAG_LABELS, normalizeInjuryFlag } from "../../state/onboarding/types";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -259,7 +260,7 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
           <Text style={styles.rowLabel}>Fitness level</Text>
           <Text style={styles.rowValue}>{formatValue(profile.fitnessLevel as string | undefined)}</Text>
           <Text style={styles.rowLabel}>Injury flags</Text>
-          <Text style={styles.rowValue}>{formatList(profile.injuryFlags as string[] | undefined)}</Text>
+          <Text style={styles.rowValue}>{formatList(profile.injuryFlags?.map(value => { const code = normalizeInjuryFlag(value); return code ? INJURY_FLAG_LABELS[code] : value; }))}</Text>
         </View>
 
         <View style={styles.card}>
