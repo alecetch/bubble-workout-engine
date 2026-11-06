@@ -185,12 +185,16 @@ jobs:
   # killed it, so the `||` retries never got a chance to fire.
   #
   # Each leg's `timeout` (job-level minutes) looks generous for how little it does,
-  # but the APK cache key includes a hash of `mobile/src/**`, so any PR touching
-  # mobile source - most of them - forces every leg to independently cold-build the
-  # APK from scratch (observed ~18-20 min alone). A tight per-leg budget that only
-  # accounts for the flow itself will spuriously time out during that build, not
-  # during Maestro - confirmed the hard way (see PR #386's first run, where a 20-min
-  # single-flow leg died mid-`Build debug APK`, before a single `maestro test` ran).
+  # but a change to native inputs (mobile/android, package files, app.json) forces
+  # every leg to cold-build the APK (~19 min for all four ABIs before it was limited
+  # to x86_64). A tight per-leg budget that only accounts for the flow itself will
+  # spuriously time out during that build, not during Maestro - confirmed the hard
+  # way (see PR #386's first run, where a 20-min single-flow leg died mid-`Build
+  # debug APK`, before a single `maestro test` ran).
+  #
+  # The APK cache key deliberately excludes JS (mobile/src): the debug build loads
+  # its JS bundle from Metro at runtime (`expo start --dev-client` below) and embeds
+  # none, so JS-only changes can reuse the cached APK.
   e2e-flows:
     # Without this, GitHub concatenates every matrix field (including the full
     # multi-line script) into the auto-generated check name - unreadable in the UI.
@@ -336,8 +340,12 @@ jobs:
           java-version: "17"
           distribution: temurin
 
+      # Restore-only here; saved from main only (see "Save Gradle cache"). Each Gradle
+      # cache is ~4 GB, and saving one per PR ref pushed the repo past its 10 GB cache
+      # quota, which evicted the caches every run depends on.
       - name: Gradle cache
-        uses: actions/cache@v6
+        id: gradle-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.gradle/caches
@@ -386,12 +394,26 @@ jobs:
         uses: actions/cache@v6
         with:
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
-          key: apk-debug-${{ hashFiles('mobile/android/**/*.gradle*', 'mobile/android/gradle/wrapper/gradle-wrapper.properties', 'mobile/src/**', 'mobile/assets/**', 'mobile/package-lock.json') }}
+          # Native inputs only (see the comment above e2e-flows). mobile/android is
+          # committed and drift-checked against app.json, and package-lock.json pins
+          # every native module's source.
+          key: apk-debug-x86_64-${{ hashFiles('mobile/android/**', '!mobile/android/**/build/**', '!mobile/android/.gradle/**', 'mobile/package.json', 'mobile/package-lock.json', 'mobile/app.json') }}
 
+      # The emulator is x86_64, so build native code for that ABI only. The committed
+      # gradle.properties lists all four ABIs and still applies to local and EAS builds.
       - name: Build debug APK
         if: steps.apk-cache.outputs.cache-hit != 'true'
         working-directory: mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=x86_64
+
+      - name: Save Gradle cache
+        if: github.ref == 'refs/heads/main' && steps.gradle-cache.outputs.cache-hit != 'true' && steps.apk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.gradle-cache.outputs.cache-primary-key }}
 
       - name: Maestro cache
         id: maestro-cache
