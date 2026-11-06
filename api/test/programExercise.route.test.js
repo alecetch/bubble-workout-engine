@@ -49,8 +49,9 @@ for (const [label, currentId, rank, equipment] of [
     catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
     const client = { release() {}, async query(sql, params) {
       if (sql.includes('pe.id AS program_exercise_id')) return { rowCount: 1, rows: [{ exercise_id: currentId, program_day_id: VALID_UUID }] };
-      if (/FROM client_profile\s+WHERE/.test(sql)) return { rowCount: 1, rows: [{ fitness_rank: rank, injury_flags_slugs: [], equipment_items_slugs: equipment }] };
+      if (/FROM client_profile\s+WHERE/.test(sql)) return { rowCount: 1, rows: [{ fitness_rank: rank, injury_flags_slugs: ['Wrist / Elbow'], equipment_items_slugs: equipment }] };
       if (/SELECT exercise_id\s+FROM program_exercise/.test(sql)) return { rowCount: 0, rows: [] };
+      if (sql.includes('ec.contraindications_slugs && $4')) assert.deepEqual(params[3], ['wrist_elbow'], 'Swap query must filter the stored label as a canonical code');
       return pool.query(sql, params);
     } };
     const handlers = createProgramExerciseHandlers({ db: { connect: async () => client } });
@@ -59,6 +60,8 @@ for (const [label, currentId, rank, equipment] of [
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     const ids = res.body.options.map(row => row.exercise_id);
     assert.ok(ids.length > 0);
+    const unsafe = (await pool.query("SELECT exercise_id FROM exercise_catalogue WHERE 'wrist_elbow' = ANY(contraindications_slugs)")).rows.map(r => r.exercise_id);
+    assert.ok(!ids.some(id => unsafe.includes(id)));
     if (currentId === 'towel_push') {
       assert.ok(ids.includes('dead_tread'), 'Expected an eligible substitute for comparison');
       assert.ok(ids.indexOf('sled_push') >= 0 && ids.indexOf('sled_push') < ids.indexOf('dead_tread'), JSON.stringify(ids));

@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../src/utils/injuryFlags.js";
 // api/engine/runPipeline.js
 //
 // DROP-IN REPLACEMENT
@@ -298,7 +299,7 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
     inputs?.clientProfile?.response?.equipment_items_slugs,
   );
 
-  const injuryFlags = normalizeArray(
+  const injuryFlags = normalizeInjuryFlags(
     request?.injury_flags_slugs ??
     request?.injuryFlagsSlugs ??
     inputs?.clientProfile?.response?.injury_flags_slugs,

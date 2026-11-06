@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 // api/src/routes/debugAllowedExercises.js
 import express from "express";
 import { pool } from "../db.js";
@@ -78,7 +79,7 @@ debugAllowedExercisesRouter.get("/client_profile/:id/allowed_exercises", async (
 
     const profile = profileR.rows[0];
     const fitness_rank = Number.isFinite(profile.fitness_rank) ? profile.fitness_rank : Number(profile.fitness_rank || 0);
-    const injury_flags_slugs = Array.isArray(profile.injury_flags_slugs) ? profile.injury_flags_slugs : [];
+    const injury_flags_slugs = normalizeInjuryFlags(profile.injury_flags_slugs);
     const equipment_items_slugs = Array.isArray(profile.equipment_items_slugs) ? profile.equipment_items_slugs : [];
 
     const allowedIds = await getAllowedExerciseIds(client, {

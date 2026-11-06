@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import express from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -167,7 +168,7 @@ export function createProgramExerciseHandlers(options = pool) {
     const row = result.rows[0] ?? {};
     return {
       fitness_rank: Number.isFinite(Number(row.fitness_rank)) ? Number(row.fitness_rank) : 0,
-      injury_flags_slugs: asTextArray(row.injury_flags_slugs),
+      injury_flags_slugs: normalizeInjuryFlags(row.injury_flags_slugs),
       equipment_items_slugs: asTextArray(row.equipment_items_slugs),
     };
   }

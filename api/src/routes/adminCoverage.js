@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import express from "express";
 import { pool } from "../db.js";
 import { requireInternalToken } from "../middleware/auth.js";
@@ -194,7 +195,7 @@ export async function fetchSlotCounts(client, presets, slot, excludedClasses, in
     requirePref,
     unconstrained,
     excluded,
-    asTextArray(injuryFlags),
+    normalizeInjuryFlags(injuryFlags),
   ];
 
   const result = await client.query(sql, params);
@@ -319,7 +320,7 @@ export async function fetchCoverageReport({
       }
     }
 
-    return { presets, ranks: RANKS, rows, injury_flags: asTextArray(injury_flags) };
+    return { presets, ranks: RANKS, rows, injury_flags: normalizeInjuryFlags(injury_flags) };
 }
 
 adminCoverageRouter.get("/coverage-report", async (req, res) => {

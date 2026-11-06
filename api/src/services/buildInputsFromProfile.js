@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 function asArray(value) {
   if (Array.isArray(value)) return value;
   if (value == null || value === "") return [];
@@ -99,9 +100,7 @@ export function buildInputsFromProfile(profile, exerciseRows, physiqueContext = 
   const equipmentItems = asArray(profile?.equipmentItemCodes)
     .map((x) => toSlug(x))
     .filter(Boolean);
-  const injuryFlags = asArray(profile?.injuryFlags)
-    .map((x) => toSlug(x))
-    .filter(Boolean);
+  const injuryFlags = normalizeInjuryFlags(profile?.injuryFlags);
   const goals = asArray(profile?.goals)
     .map((x) => toSlug(x))
     .filter(Boolean);

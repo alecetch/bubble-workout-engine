@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import { runPipeline } from "../../engine/runPipeline.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 import { buildInputsFromProfile } from "./buildInputsFromProfile.js";
@@ -228,7 +229,7 @@ export async function regenerateDaysWithEquipment(
     userId: contextR.rows[0].user_id,
     goals: contextR.rows[0].main_goals_slugs ?? [],
     fitnessLevel: contextR.rows[0].fitness_level_slug ?? null,
-    injuryFlags: contextR.rows[0].injury_flags ?? [],
+    injuryFlags: normalizeInjuryFlags(contextR.rows[0].injury_flags),
     goalNotes: contextR.rows[0].goal_notes ?? "",
     equipmentPreset: equipmentPresetSlug,
     equipmentItemCodes: normalizeTextArray(equipmentItemSlugs),
@@ -248,7 +249,7 @@ export async function regenerateDaysWithEquipment(
 
   const allowedExerciseIds = await getAllowedExerciseIds(db, {
     fitness_rank: mapFitnessRank(overrideProfile.fitnessLevel),
-    injury_flags_slugs: Array.isArray(overrideProfile.injuryFlags) ? overrideProfile.injuryFlags : [],
+    injury_flags_slugs: normalizeInjuryFlags(overrideProfile.injuryFlags),
     equipment_items_slugs: normalizeTextArray(equipmentItemSlugs),
   });
   if (allowedExerciseIds.length === 0) {

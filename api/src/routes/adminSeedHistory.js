@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import express from "express";
 import { pool } from "../db.js";
 import { runPipeline } from "../../engine/runPipeline.js";
@@ -451,7 +452,7 @@ async function getProfileForPgUserId(db, pgUserId, rawUserId) {
       userId: row.user_id ?? null,
       goals: row.main_goals_slugs ?? [],
       fitnessLevel: row.fitness_level_slug ?? null,
-      injuryFlags: row.injury_flags_slugs ?? row.injury_flags ?? [],
+      injuryFlags: normalizeInjuryFlags(row.injury_flags_slugs ?? row.injury_flags),
       goalNotes: row.goal_notes ?? "",
       equipmentPreset: row.equipment_preset_slug ?? null,
       equipmentItemCodes: row.equipment_items_slugs ?? [],
@@ -845,7 +846,7 @@ export function createAdminSeedHistoryHandler({
       const fitnessRank = mapFitnessRank(profile.fitnessLevel);
       const allowedIds = await getAllowed(db, {
         fitness_rank: fitnessRank,
-        injury_flags_slugs: (profile.injuryFlags ?? []).map(toSlug),
+        injury_flags_slugs: normalizeInjuryFlags(profile.injuryFlags),
         equipment_items_slugs: (profile.equipmentItemCodes ?? []).map(toSlug),
       });
 

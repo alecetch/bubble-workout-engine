@@ -463,3 +463,36 @@ test("regenerateDaysWithEquipment regenerates a bonus day whose key is not in th
     await cleanupFixture(pool, fixture);
   }
 });
+
+for (const mode of ["bonus", "partial"]) test(`${mode} filters stored Wrist / Elbow labels`, async t => {
+  if (!await ensureDb(t)) return;
+  const fixture = await seedProgramFixture(pool);
+  try {
+    await pool.query("UPDATE client_profile SET injury_flags = ARRAY['Wrist / Elbow'] WHERE user_id=$1", [fixture.ownerUserId]);
+    let dayId = fixture.dayIds.pending;
+    if (mode === "bonus") {
+      const result = await addBonusDay(pool, {
+        programId: fixture.programId, userId: fixture.ownerUserId, programType: "hypertrophy",
+        targetDate: isoDate(new Date(nextWeekday(1).getTime() + 86400000)), scope: "today",
+      });
+      dayId = result.programDayId;
+    } else {
+      const result = await regenerateDaysWithEquipment(pool, {
+        programId: fixture.programId, userId: fixture.ownerUserId, dayIds: [dayId],
+        equipmentPresetSlug: "bodyweight", equipmentItemSlugs: [],
+      });
+      assert.equal(result.regenerated, 1);
+    }
+    const { rows } = await pool.query(`SELECT pe.exercise_id,
+      CASE WHEN pe.segment_type='warmup' THEN we.contraindications_slugs
+           WHEN pe.segment_type='cooldown' THEN ce.contraindications_slugs
+           ELSE ec.contraindications_slugs END AS flags
+      FROM program_exercise pe
+      LEFT JOIN exercise_catalogue ec ON ec.exercise_id=pe.exercise_id
+      LEFT JOIN warmup_exercise we ON we.warmup_exercise_id=pe.exercise_id
+      LEFT JOIN cooldown_exercise ce ON ce.cooldown_exercise_id=pe.exercise_id
+      WHERE pe.program_day_id=$1`, [dayId]);
+    assert.ok(rows.length > 0);
+    assert.deepEqual(rows.filter(r => r.flags?.includes("wrist_elbow")), []);
+  } finally { await cleanupFixture(pool, fixture); }
+});

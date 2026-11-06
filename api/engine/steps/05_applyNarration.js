@@ -1,3 +1,4 @@
+import { normalizeInjuryFlags } from "../../src/utils/injuryFlags.js";
 import { displayLabel } from "../../src/utils/displayLabels.js";
 // api/engine/steps/05_applyNarration.js
 //
@@ -1255,9 +1256,7 @@ export async function applyNarration({
   const normalizedEffectiveEquipment = Array.isArray(effectiveEquipment)
     ? effectiveEquipment.map((value) => s(value)).filter(Boolean)
     : [];
-  const normalizedInjuryFlags = Array.isArray(injuryFlags)
-    ? injuryFlags.map((value) => s(value)).filter((value) => value && value !== "no_known_issues")
-    : [];
+  const normalizedInjuryFlags = normalizeInjuryFlags(injuryFlags).filter(value => value !== "no_known_issues");
 
   // Split adoption into template vs weeks, plus totals (and mirror Step 4 week-by-week stats)
   const adoption = {
