@@ -1,6 +1,6 @@
 import { onlineManager } from "@tanstack/react-query";
 import React from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, configure, fireEvent, render, screen } from "@testing-library/react";
 import { ApiError, NetworkTimeoutError } from "../../api/client";
 import { _resetForTest } from "../../utils/localWorkoutLog";
 import { SegmentCard } from "./SegmentCard";
@@ -24,6 +24,14 @@ const { getSegmentPresentationMock } = vi.hoisted(() => ({
 }));
 
 const mutateAsyncMock = vi.fn().mockResolvedValue({ saved: 1, prs: [] });
+
+// Several tests here chain multiple save-and-rerender steps (start, fill, mark
+// round complete, close, confirm effort). The default 1s findBy/waitFor budget
+// is tight on loaded CI runners and caused intermittent timeouts after #485.
+configure({ asyncUtilTimeout: 5000 });
+// Keep the per-test limit well above one wait's budget, so a slow step reports
+// which element it was waiting for instead of a bare test timeout.
+vi.setConfig({ testTimeout: 15000 });
 const initEntryMock = vi.fn();
 const startRestMock = vi.fn();
 const stopRestMock = vi.fn();
@@ -126,7 +134,9 @@ function runningRestEntry(segmentId: string) {
 
 describe("SegmentCard", () => {
   beforeEach(() => {
-    mutateAsyncMock.mockClear();
+    // mockReset, not mockClear: mockClear keeps queued mock*Once results, so a
+    // test that times out before consuming one leaks it into the next test.
+    mutateAsyncMock.mockReset();
     mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
     initEntryMock.mockClear();
     startRestMock.mockClear();
@@ -638,7 +648,9 @@ describe("SegmentCard — sequential standard-segment logging", () => {
   }
 
   beforeEach(() => {
-    mutateAsyncMock.mockClear();
+    // mockReset, not mockClear: mockClear keeps queued mock*Once results, so a
+    // test that times out before consuming one leaks it into the next test.
+    mutateAsyncMock.mockReset();
     mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
     initEntryMock.mockClear();
     startRestMock.mockClear();
@@ -710,7 +722,9 @@ describe("SegmentCard — sequential standard-segment logging", () => {
 
 describe("SegmentCard — unloaded exercises, button state machine, and collapsed summary", () => {
   beforeEach(() => {
-    mutateAsyncMock.mockClear();
+    // mockReset, not mockClear: mockClear keeps queued mock*Once results, so a
+    // test that times out before consuming one leaks it into the next test.
+    mutateAsyncMock.mockReset();
     mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
     _resetForTest();
     initEntryMock.mockClear();
@@ -834,7 +848,9 @@ describe("SegmentCard — round-based logging (superset)", () => {
   }
 
   beforeEach(() => {
-    mutateAsyncMock.mockClear();
+    // mockReset, not mockClear: mockClear keeps queued mock*Once results, so a
+    // test that times out before consuming one leaks it into the next test.
+    mutateAsyncMock.mockReset();
     mutateAsyncMock.mockResolvedValue({ saved: 1, prs: [] });
     initEntryMock.mockClear();
     startRestMock.mockClear();
@@ -1133,8 +1149,8 @@ describe("SegmentCard — round-based logging (superset)", () => {
     fireEvent.click(screen.getByText("Close Log"));
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(402, "subscription"));
     fireEvent.click(await screen.findByText("Done"));
-    await vi.waitFor(() => expect(subscription).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    await vi.waitFor(() => expect(subscription).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0), { timeout: 5000 });
     expect(complete).not.toHaveBeenCalled();
     expect(screen.getByText("Done")).toBeInTheDocument();
   });
