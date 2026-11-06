@@ -1,6 +1,7 @@
+import type { SetSaveStatus } from "../hooks/useSetSaveStatus";
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ProgramDayFullResponse } from "../../../api/programViewer";
 import { colors } from "../../../theme/colors";
 import { radii } from "../../../theme/components";
@@ -17,6 +18,7 @@ type InlineExerciseLogBlockProps = {
   exercise: Exercise;
   setInputs: SetInputState[];
   doneSetKeys: Set<string>;
+  saveStatuses?: Record<string, SetSaveStatus>;
   activeSetKey: string | null;
   pbSetKeys: Set<string>;
   exerciseRir: number | null;
@@ -46,6 +48,7 @@ export function InlineExerciseLogBlock({
   exercise,
   setInputs,
   doneSetKeys,
+  saveStatuses = {},
   activeSetKey,
   pbSetKeys,
   exerciseRir,
@@ -62,10 +65,12 @@ export function InlineExerciseLogBlock({
     <View style={styles.inlineExerciseBlock}>
       {setInputs.map((setInput, setIndex) => {
         const setKey = buildSetKey(exercise, setIndex);
+        const status = saveStatuses[setKey];
+        const pending = status === "saving" || status === "waiting";
         const isDone = doneSetKeys.has(setKey);
         const isActive = activeSetKey === setKey;
         return (
-          <View key={setKey} style={[styles.setRow, isDone && styles.setRowDone, isActive && styles.setRowActive]}>
+          <View key={setKey} style={[styles.setRow, isDone && styles.setRowDone, isActive && styles.setRowActive, pending && styles.setRowDone]}>
             <Text style={[styles.setLabel, isDone && styles.setLabelDone]}>{`Set ${setIndex + 1}`}</Text>
             {isDone && pbSetKeys.has(setKey) ? (
               <View style={styles.pbBadge}>
@@ -79,6 +84,7 @@ export function InlineExerciseLogBlock({
             ) : (
               <View style={styles.weightInputGroup}>
                 <TextInput
+                  editable={!pending}
                   value={setInput.weight}
                   onChangeText={(value) => {
                     const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
@@ -96,6 +102,7 @@ export function InlineExerciseLogBlock({
             )}
             <View style={styles.repsInputGroup}>
               <TextInput
+                editable={!pending}
                 value={setInput.reps}
                 onChangeText={(value) => {
                   const sanitized = value.replace(/[^0-9]/g, "");
@@ -109,18 +116,28 @@ export function InlineExerciseLogBlock({
             </View>
             <PressableScale
               style={styles.checkboxButton}
-              accessibilityLabel={`${exercise.name} set ${setIndex + 1} complete`}
+              accessibilityLabel={`${exercise.name} set ${setIndex + 1} ${status === "failed" ? "not saved. Double-tap to retry." : status === "waiting" ? "waiting for connection" : status === "saving" ? "saving" : "complete"}`}
+              disabled={pending}
               onPress={() => { void onSetComplete(exercise, setIndex); }}
             >
-              <Ionicons
-                name={isDone ? "checkbox" : "checkbox-outline"}
-                size={22}
-                color={isDone ? colors.success : colors.textSecondary}
-              />
+              {pending ? <ActivityIndicator size="small" color={colors.textSecondary} /> : null}
+              {status !== "saving" ? (
+                <Ionicons
+                  name={status === "waiting" ? "cloud-offline-outline" : status === "failed" ? "warning-outline" : isDone ? "checkbox" : "checkbox-outline"}
+                  size={22}
+                  color={status === "failed" ? colors.error : isDone ? colors.success : colors.textSecondary}
+                />
+              ) : null}
             </PressableScale>
           </View>
         );
       })}
+      {setInputs.some((_row, index) => saveStatuses[buildSetKey(exercise, index)] === "waiting") ? (
+        <Text style={{ color: colors.textSecondary }}>Will save when you&apos;re back online</Text>
+      ) : null}
+      {setInputs.some((_row, index) => saveStatuses[buildSetKey(exercise, index)] === "failed") ? (
+        <Text style={{ color: colors.error }}>Not saved. Tap the set to retry.</Text>
+      ) : null}
       <View style={styles.setMutationRow}>
         <PressableScale
           style={[styles.setMutationButton, setInputs.length <= 1 && styles.setMutationButtonDisabled]}

@@ -92,6 +92,28 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [equipmentSheetVisible, setEquipmentSheetVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
   useEffect(() => { setCompletionLocalDate(undefined); }, [programDayId]);
+  const [segmentUnsavedCounts, setSegmentUnsavedCounts] = useState<Record<string, number>>({});
+  const [retryRequest, setRetryRequest] = useState(0);
+  const allowLeaveRef = useRef(false);
+  const unsavedCount = Object.values(segmentUnsavedCounts).reduce((total, count) => total + count, 0);
+  const handleUnsavedSetsChange = useCallback((segmentId: string, count: number) => {
+    setSegmentUnsavedCounts(current => current[segmentId] === count ? current : { ...current, [segmentId]: count });
+  }, []);
+  useEffect(() => {
+    allowLeaveRef.current = false;
+    setSegmentUnsavedCounts(current => Object.keys(current).length === 0 ? current : {});
+  }, [programDayId]);
+  useEffect(() => navigation.addListener("beforeRemove", event => {
+    if (!unsavedCount || allowLeaveRef.current) return;
+    event.preventDefault();
+    Alert.alert("Leave without saving?", `${unsavedCount} set(s) haven't saved yet.`, [
+      { text: "Stay", style: "cancel" },
+      { text: "Leave", style: "destructive", onPress: () => {
+        allowLeaveRef.current = true;
+        navigation.dispatch(event.data.action);
+      } },
+    ]);
+  }), [navigation, unsavedCount]);
   const [segmentDoneSetCounts, setSegmentDoneSetCounts] = useState<Record<string, number>>({});
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollViewInstance>(null);
@@ -348,7 +370,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     } else show();
   }, [day?.scheduledDate, completionLocalDate]);
 
-  const handleCompletePress = useCallback(() => {
+  const continueComplete = useCallback(() => {
     if (completedExerciseCount < totalExercises) {
       const remaining = totalExercises - completedExerciseCount;
       Alert.alert(
@@ -363,6 +385,17 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     }
     openSummary();
   }, [completedExerciseCount, totalExercises, openSummary]);
+
+  const handleCompletePress = useCallback(() => {
+    if (unsavedCount > 0) {
+      Alert.alert("Some sets haven't saved", `${unsavedCount} set(s) haven't saved yet.`, [
+        { text: "Retry now", isPreferred: true, onPress: () => setRetryRequest(current => current + 1) },
+        { text: "Finish anyway", onPress: continueComplete },
+      ]);
+      return;
+    }
+    continueComplete();
+  }, [unsavedCount, continueComplete]);
 
   if (dayQuery.isLoading) {
     return (
@@ -492,6 +525,8 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             onInlinePanelOpen={handleInlinePanelOpen}
             onInlinePanelClose={handleInlinePanelClose}
             onSetsLoggedChange={handleSetsLoggedChange}
+            onUnsavedSetsChange={handleUnsavedSetsChange}
+            retryRequest={retryRequest}
           />
         ))}
       </ScrollView>
