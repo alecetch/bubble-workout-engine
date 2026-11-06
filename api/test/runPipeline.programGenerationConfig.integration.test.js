@@ -1,3 +1,4 @@
+import { parseEmitterRows } from "../src/services/importEmitterService.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runPipeline } from "../engine/runPipeline.js";
@@ -575,4 +576,33 @@ test("unfillable slot adds exactly +1 set to fill_fallback_slot target", async (
   // A stays at 5; B gets config(4) + 1 fill = 5 (applied exactly once by step 02, not twice)
   assert.equal(getSetsForSlot(out.program, "A:squat"), 5, "Block A unaffected by fill");
   assert.equal(getSetsForSlot(out.program, "B:lunge"), 5, "Block B = config(4) + 1 fill (not +2)");
+});
+
+test("six-week Layer C emission uses overrides in week four and suppresses them in final week six", async () => {
+  const base = makeDb();
+  const db = { query(sql, params) {
+    if (sql.includes("FROM exercise_progression_state")) return Promise.resolve({ rows: [{
+      exercise_id: "ex1", purpose: "main", current_set_override: 9, current_rep_target_override: 12,
+      current_rest_sec_override: 99, current_load_kg_override: 80, last_outcome: "increase_load",
+    }] });
+    return base.query(sql, params);
+  } };
+  const out = await runPipeline({ db, userId: "test-user", inputs: makeInputs(), programType: "hypertrophy", request: {
+    fitness_rank: 0, program_length: 6,
+    program_generation_config_json: makeFullProgramGenerationConfigJson({
+      progression_by_rank_json: { beginner: { weekly_set_step: 0, max_extra_sets: 0,
+        deload: { week: 4, set_multiplier: 0.65, rir_bump: 2, apply_to_all: true } } },
+      progression: { apply_to_purposes: ["main"], decision_engine_version: "v2" },
+    }),
+  } });
+  const parsed = parseEmitterRows(out.rows);
+  const fourth = parsed.exs.find(row => row.program_day_key === "PD_W4_D1" && row.exercise_id === "ex1");
+  const final = parsed.exs.find(row => row.program_day_key === "PD_W6_D1" && row.exercise_id === "ex1");
+  assert.equal(fourth.sets_prescribed, 9);
+  assert.equal(fourth.reps_prescribed, "12");
+  assert.equal(fourth.rest_seconds, 99);
+  assert.equal(final.sets_prescribed, 2);
+  assert.notEqual(final.reps_prescribed, "12");
+  assert.notEqual(final.rest_seconds, 99);
+  assert.equal(final.intensity_prescription, "~4 RIR");
 });

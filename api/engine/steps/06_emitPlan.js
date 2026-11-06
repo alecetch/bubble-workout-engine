@@ -3,6 +3,7 @@
 // DROP-IN replacement for Toolbox Emitter v8.1 as a Node pipeline step.
 //
 // Emits pipe-delimited rows (PRG/WEEK/DAY/SEG/EX) from narration-enriched program.
+// Week days come from program.weeks, with program.days as a compatibility fallback.
 // - FIX: SEG col 5=score_type, col 6/7 labels, col 9=segment_notes/body (from narration)
 // - Warmup/Cooldown segments emitted if present
 // - Timings: Sum(SEG seconds) == day.duration_mins * 60
@@ -638,18 +639,26 @@ export async function emitPlanRows({
     rows.push(["WEEK", String(wk), focus, notes].join("|"));
   }
 
-  function findBaseDay(dayNum) {
-    for (let i = 0; i < program.days.length; i++) {
-      if (toInt(program.days[i].day_index, 0) === dayNum) return program.days[i];
+  let weekDaysUsed = 0;
+  let templateFallbackDays = 0;
+  const setsByWeek = {};
+  function findDayForWeek(weekNum, dayNum) {
+    const week = (Array.isArray(program.weeks) ? program.weeks : []).find(entry => toInt(entry.week_index, 0) === weekNum);
+    const day = (Array.isArray(week?.days) ? week.days : []).find(entry => toInt(entry.day_index, 0) === dayNum);
+    if (day) {
+      weekDaysUsed++;
+      return day;
     }
-    return null;
+    templateFallbackDays++;
+    return program.days.find(entry => toInt(entry.day_index, 0) === dayNum) ?? null;
   }
 
   let globalDayIndex = 0;
 
   for (let wk2 = 1; wk2 <= program_length_weeks; wk2++) {
+    setsByWeek[wk2] = 0;
     for (let dnum = 1; dnum <= days_per_week; dnum++) {
-      const baseDay = findBaseDay(dnum);
+      const baseDay = findDayForWeek(wk2, dnum);
       if (!baseDay) continue;
 
       globalDayIndex++;
@@ -744,6 +753,7 @@ export async function emitPlanRows({
           const it = items[ii];
           const itemExerciseId = s(it.ex_id || it.exercise_id);
           const itemSets = it.sets ?? it.sets_prescribed;
+          setsByWeek[wk2] += toInt(itemSets, 0);
           const itemRepsUnit = s(it.reps_unit) || "reps";
           const itemNotes = s(it.notes) || buildWarmup(byId[String(itemExerciseId)]);
 
@@ -784,6 +794,9 @@ export async function emitPlanRows({
     rows,
     debug: {
       ok: true,
+      source: weekDaysUsed > 0 ? "weeks" : "template",
+      template_fallback_days: templateFallbackDays,
+      sets_by_week: setsByWeek,
       weeks_emitted: program_length_weeks,
       days_per_week,
       preferred_days: prefsIdx.map((i) => weekdayLabel(i)),

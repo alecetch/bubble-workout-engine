@@ -1,3 +1,6 @@
+import { runPipeline } from "../engine/runPipeline.js";
+import { parseEmitterRows } from "../src/services/importEmitterService.js";
+import { makeWeeklyInputs } from "./helpers/weeklyProgression.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -494,5 +497,43 @@ for (const mode of ["bonus", "partial"]) test(`${mode} filters stored Wrist / El
       WHERE pe.program_day_id=$1`, [dayId]);
     assert.ok(rows.length > 0);
     assert.deepEqual(rows.filter(r => r.flags?.includes("wrist_elbow")), []);
+  } finally { await cleanupFixture(pool, fixture); }
+});
+
+test("regenerating the final week delivers fewer sets than the matching week-one day", async t => {
+  if (!await ensureDb(t)) return;
+  const fixture = await seedProgramFixture(pool);
+  try {
+    await pool.query("UPDATE program SET weeks_count=4 WHERE id=$1", [fixture.programId]);
+    const week = (await pool.query("INSERT INTO program_week(program_id,week_number,focus,notes) VALUES ($1,4,'Deload','') RETURNING id", [fixture.programId])).rows[0];
+    const day = (await pool.query(`INSERT INTO program_day(program_id,program_week_id,week_number,day_number,global_day_index,
+      program_day_key,day_label,day_type,session_duration_mins,scheduled_offset_days,scheduled_weekday,scheduled_date,is_completed)
+      SELECT program_id,$2,4,day_number,12,'PD_W4_D3','Deload',day_type,session_duration_mins,scheduled_offset_days+21,
+      scheduled_weekday,scheduled_date+21,false FROM program_day WHERE id=$1 RETURNING id`, [fixture.dayIds.pending, week.id])).rows[0];
+    const equipment = (await pool.query("SELECT exercise_slug FROM equipment_items")).rows.map(row => row.exercise_slug);
+    // Use real segment keys: narration inserts bookends ahead of the main work,
+    // so the old minimal B1-only fixture would regenerate warm-ups only.
+    const plan = parseEmitterRows((await runPipeline({ db: pool, userId: null, programType: "hypertrophy",
+      inputs: await makeWeeklyInputs(pool, "hypertrophy", "beginner"), request: { fitness_rank: 0 } })).rows);
+    const dayIds = [fixture.dayIds.pending, day.id];
+    await pool.query("DELETE FROM program_exercise WHERE program_day_id=ANY($1::uuid[])", [dayIds]);
+    await pool.query("DELETE FROM workout_segment WHERE program_day_id=ANY($1::uuid[])", [dayIds]);
+    for (const [index, dayId] of dayIds.entries()) {
+      const key = `PD_W${index === 0 ? 1 : 4}_D3`;
+      for (const seg of plan.segs.filter(seg => seg.program_day_key === key)) {
+        await pool.query(`INSERT INTO workout_segment(program_id,program_day_id,program_day_key,segment_key,block_key,block_order,
+          segment_order_in_block,segment_type,purpose,purpose_label,segment_title,segment_notes,rounds,score_type,primary_score_label,
+          secondary_score_label,segment_scheme_json,segment_duration_seconds,segment_duration_mmss)
+          VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,$9,'','',$10,'none','','','{}'::jsonb,0,'')`,
+          [fixture.programId, dayId, key, seg.segment_key, seg.block_key, seg.block_order, seg.segment_type, seg.purpose, seg.purpose_label, seg.rounds]);
+      }
+    }
+    const result = await regenerateDaysWithEquipment(pool, { programId: fixture.programId, userId: fixture.ownerUserId,
+      dayIds: [fixture.dayIds.pending, day.id], equipmentPresetSlug: "commercial_gym", equipmentItemSlugs: equipment });
+    assert.equal(result.regenerated, 2);
+    const totals = (await pool.query("SELECT program_day_id,sum(sets_prescribed)::int AS sets FROM program_exercise WHERE program_day_id=ANY($1::uuid[]) GROUP BY program_day_id", [[fixture.dayIds.pending, day.id]])).rows;
+    const first = totals.find(row => row.program_day_id === fixture.dayIds.pending)?.sets;
+    const final = totals.find(row => row.program_day_id === day.id)?.sets;
+    assert.ok(first > 0 && final > 0 && final < first, JSON.stringify(totals));
   } finally { await cleanupFixture(pool, fixture); }
 });

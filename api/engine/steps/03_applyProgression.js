@@ -1,3 +1,4 @@
+import { resolveDeloadWeek } from "../progression/deloadWeek.js";
 // api/engine/steps/03_applyProgression.js
 
 function toStr(v){ return (v===null||v===undefined) ? "" : String(v); }
@@ -58,7 +59,7 @@ function pickActiveConfig(rows, programType, schemaVersion){
   return null;
 }
 
-function computeSetsForWeek(baseSets, weekIndex, purpose, progCfg){
+function computeSetsForWeek(baseSets, weekIndex, purpose, progCfg, totalWeeks){
   baseSets = toInt(baseSets, 0);
   if (baseSets <= 0) return 0;
 
@@ -72,7 +73,7 @@ function computeSetsForWeek(baseSets, weekIndex, purpose, progCfg){
 
   // deload
   const dl = progCfg.deload || null;
-  if (dl && toInt(dl.week, 0) === toInt(weekIndex, 0)){
+  if (dl && resolveDeloadWeek(progCfg, totalWeeks) === toInt(weekIndex, 0)){
     const dlAll = dl.apply_to_all !== undefined ? yes(dl.apply_to_all) : true;
     if (dlAll || purposeAllowed){
       let mult = (dl.set_multiplier === undefined || dl.set_multiplier === null || dl.set_multiplier === "") ? 0.7 : Number(dl.set_multiplier);
@@ -159,11 +160,16 @@ export async function applyProgression({
     rank_key: rk,
     apply_to_purposes: (progCfg && progCfg.apply_to_purposes) ? progCfg.apply_to_purposes : ["main","secondary","accessory"],
     deload: progCfg ? (progCfg.deload || null) : null,
+    deload_week: resolveDeloadWeek(progCfg, weeks),
     items_total: 0,
     items_progressed: 0,
     circuit_rounds_progressed: 0,
     notes: [],
   };
+
+  if (progCfg.deload?.week != null && toInt(progCfg.deload.week, 0) !== dbg.deload_week) {
+    dbg.notes.push(`Configured deload week ${progCfg.deload.week} differs from resolved final week ${dbg.deload_week ?? "none"}.`);
+  }
 
   for (let w=1; w<=weeks; w++){
     const weekObj = { week_index: w, days: [] };
@@ -184,7 +190,7 @@ export async function applyProgression({
               seg.rounds_base = toInt(seg.rounds, 1);
             }
             const baseRounds = toInt(seg.rounds_base, 1);
-            const progressedRounds = computeSetsForWeek(baseRounds, w, purpose, progCfg);
+            const progressedRounds = computeSetsForWeek(baseRounds, w, purpose, progCfg, weeks);
             seg.rounds = progressedRounds;
             if (progressedRounds !== baseRounds) dbg.circuit_rounds_progressed += 1;
 
@@ -203,14 +209,14 @@ export async function applyProgression({
             }
 
             const baseSets = toInt(it.sets_base, 0);
-            const progressed = computeSetsForWeek(baseSets, w, purpose, progCfg);
+            const progressed = computeSetsForWeek(baseSets, w, purpose, progCfg, weeks);
 
             it.sets = progressed;
             if (progressed !== baseSets) dbg.items_progressed += 1;
 
             // RIR bump for deload week — written here, applied in 04_applyRepRules after rule matching
             const dlCfg = progCfg.deload || null;
-            if (dlCfg && toInt(dlCfg.week, 0) === w) {
+            if (dlCfg && resolveDeloadWeek(progCfg, weeks) === w) {
               const rirBump = toInt(dlCfg.rir_bump, 0);
               if (rirBump > 0) it.deload_rir_bump = rirBump;
             }

@@ -1,3 +1,4 @@
+import { resolveDeloadWeek } from "../../progression/deloadWeek.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyProgression } from "../03_applyProgression.js";
@@ -229,4 +230,24 @@ test("template days preserved in program.days", async () => {
 
   assert.equal(result.program.days.length, program.days.length);
   assert.deepEqual(result.program.days, result.program.template_days);
+});
+
+test("resolveDeloadWeek uses the final multi-week block only", () => {
+  assert.equal(resolveDeloadWeek({ deload: { week: 4 } }, 6), 6);
+  assert.equal(resolveDeloadWeek({}, 6), null);
+  assert.equal(resolveDeloadWeek({ deload: {} }, 1), null);
+  for (const deload of [null, [], "bad"]) assert.equal(resolveDeloadWeek({ deload }, 4), null);
+});
+test("six-week programs deload week six, not the configured legacy week four", async () => {
+  const out = await applyProgression({ program: makeSegmentedProgram(), programType: "strength", fitnessRank: 1, programLength: 6,
+    programGenerationConfigs: [makeConfigRow({ progression_by_rank_json: { intermediate: {
+      weekly_set_step: 1, max_extra_sets: 2, deload: { week: 4, apply_to_all: true, set_multiplier: 0.65, rir_bump: 2 },
+    } } })],
+  });
+  const week4 = out.program.weeks[3].days[0].segments[0].items[0];
+  const week6 = out.program.weeks[5].days[0].segments[0].items[0];
+  assert.equal(week4.sets, 6); assert.equal(week4.deload_rir_bump, undefined);
+  assert.equal(week6.sets, 3); assert.equal(week6.deload_rir_bump, 2);
+  assert.equal(out.debug.deload_week, 6);
+  assert.ok(out.debug.notes.some(note => /4.*6/.test(note)));
 });

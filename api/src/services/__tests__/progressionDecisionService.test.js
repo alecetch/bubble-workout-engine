@@ -653,3 +653,45 @@ test("blank RIR rows are not treated as zero and do not trigger a false deload",
   assert.equal(result.decisions[0].evidence.latest_rir, 3);
   assert.equal(result.decisions[0].evidence.underperformance_exposures, 0);
 });
+
+for (const outcome of ["increase_load", "increase_reps", "deload_local"]) {
+  test(`weekly deload holds ${outcome} only on final-week rows`, async () => {
+    const base = createDbMock();
+    const calls = [];
+    const db = { async query(sql, params) {
+      calls.push({ sql, params });
+      const result = await base.query(sql, params);
+      if (sql.includes("FROM program_generation_config")) result.rows[0].progression_by_rank_json.intermediate.deload = { week: 4 };
+      if (sql.includes("FROM program_exercise pe") && sql.includes("JOIN program_day pd")) {
+        const row = result.rows[0];
+        result.rows = [1, 2, 3, 4].map(week => ({ ...row, program_exercise_id: `pe-${week}`, program_day_id: `pd-${week}`, global_day_index: week, week_number: week }));
+      }
+      if (sql.includes("FROM segment_exercise_log sel")) {
+        if (outcome === "increase_reps") result.rows = [{ ...result.rows[0], reps_completed: 4 }];
+        if (outcome === "deload_local") result.rows.forEach(row => { row.reps_completed = 1; row.rir_actual = 0; });
+      }
+      return result;
+    } };
+    const result = await makeProgressionDecisionService(db).applyProgressionRecommendations({ programId: "p", userId: "u", programType: "strength", fitnessRank: 1, completedProgramDayId: "pd-1" });
+    assert.equal(result.decisions[0].outcome, outcome);
+    const writes = calls.filter(call => call.sql.includes("WHERE id = ANY($1::uuid[])"));
+    const final = writes.find(call => call.params[0].includes("pe-4"));
+    const build = writes.find(call => call.params[0].includes("pe-2"));
+    assert.ok(final); assert.ok(build);
+    if (outcome === "deload_local") {
+      assert.equal(final.params[1], outcome);
+      assert.ok(final.params[6] < 100);
+    } else {
+      assert.equal(final.params[1], "hold");
+      assert.equal(final.params[6], 100);
+      assert.equal(final.params[7], null);
+      assert.ok(JSON.parse(final.params[5]).includes("Deload week: keep load steady."));
+      assert.equal(build.params[1], outcome);
+      if (outcome === "increase_load") assert.equal(build.params[6], 105);
+      else assert.equal(build.params[7], 5);
+    }
+    // Global progression state still records the earned decision, not the deload row hold.
+    const state = calls.find(call => call.sql.includes("INSERT INTO exercise_progression_state"));
+    assert.equal(state.params[9], outcome);
+  });
+}

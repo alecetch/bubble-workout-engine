@@ -1,3 +1,4 @@
+import { resolveDeloadWeek } from "./progression/deloadWeek.js";
 import { normalizeInjuryFlags } from "../src/utils/injuryFlags.js";
 // api/engine/runPipeline.js
 //
@@ -250,8 +251,8 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
   }
 
   const progressionByRank = safeJsonParseMaybe(pgcSelectedRow?.progression_by_rank_json, {});
-  const deloadCfg = progressionByRank?.[rankKey(fitnessRank)]?.deload ?? null;
-  const deloadWeekIndex = deloadCfg?.week ? Number(deloadCfg.week) : null;
+  const progCfg = progressionByRank?.[rankKey(fitnessRank)] ?? progressionByRank?.[String(fitnessRank)] ?? progressionByRank?.beginner ?? {};
+  const deloadWeekIndex = resolveDeloadWeek(progCfg, step3.program.weeks_count);
 
   let step7 = {
     program: step4.program,

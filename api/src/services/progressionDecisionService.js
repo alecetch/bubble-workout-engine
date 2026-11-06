@@ -1,3 +1,4 @@
+import { resolveDeloadWeek } from "../../engine/progression/deloadWeek.js";
 import {
   fetchProgramGenerationConfigs,
 } from "./programGenerationConfig.js";
@@ -421,6 +422,9 @@ export function makeProgressionDecisionService(db) {
       return { decisions: [], updated: 0 };
     }
 
+    const weeksCount = Math.max(...rows.map(row => toInt(row.week_number, 0)));
+    const deloadWeek = resolveDeloadWeek(rankOverride, weeksCount);
+
     const completedGlobalDayIndex =
       completedProgramDayId == null
         ? null
@@ -598,34 +602,52 @@ export function makeProgressionDecisionService(db) {
     }
 
     for (const decision of decisions) {
-      await db.query(
-        `
-        UPDATE program_exercise
-        SET
-          progression_outcome = $2,
-          progression_primary_lever = $3,
-          progression_confidence = $4,
-          progression_source = $5,
-          progression_reasoning_json = $6::jsonb,
-          recommended_load_kg = $7,
-          recommended_reps_target = $8,
-          recommended_sets = $9,
-          recommended_rest_seconds = $10
-        WHERE id = ANY($1::uuid[])
-        `,
-        [
-          decision.target_program_exercise_ids,
-          decision.outcome,
-          decision.primary_lever,
-          decision.confidence,
-          decision.source,
-          JSON.stringify(decision.reasons),
-          decision.recommended_load_kg,
-          decision.recommended_reps_target,
-          decision.recommended_sets,
-          decision.recommended_rest_seconds,
-        ],
-      );
+      const deloadIds = ["increase_load", "increase_reps"].includes(decision.outcome)
+        ? rows.filter(row => decision.target_program_exercise_ids.includes(row.program_exercise_id)
+          && Number(row.week_number) === deloadWeek).map(row => row.program_exercise_id)
+        : [];
+      const rowDecisions = [];
+      const regularIds = decision.target_program_exercise_ids.filter(id => !deloadIds.includes(id));
+      if (regularIds.length) rowDecisions.push({ ...decision, target_program_exercise_ids: regularIds });
+      if (deloadIds.length) {
+        const recent = (historyByExercisePurpose.get(`${decision.exercise_id}::${decision.purpose}`) ?? [])
+          .slice(0, decision.evidence.exposures_considered);
+        const baselineLoad = toNumber(mostRecentPositiveLoad(recent)?.weight_kg, decision.evidence.latest_weight_kg);
+        rowDecisions.push({ ...decision, target_program_exercise_ids: deloadIds,
+          outcome: "hold", recommended_load_kg: baselineLoad, recommended_reps_target: null,
+          reasons: [...decision.reasons, "Deload week: keep load steady."],
+        });
+      }
+      for (const rowDecision of rowDecisions) {
+        await db.query(
+          `
+          UPDATE program_exercise
+          SET
+            progression_outcome = $2,
+            progression_primary_lever = $3,
+            progression_confidence = $4,
+            progression_source = $5,
+            progression_reasoning_json = $6::jsonb,
+            recommended_load_kg = $7,
+            recommended_reps_target = $8,
+            recommended_sets = $9,
+            recommended_rest_seconds = $10
+          WHERE id = ANY($1::uuid[])
+          `,
+          [
+            rowDecision.target_program_exercise_ids,
+            rowDecision.outcome,
+            rowDecision.primary_lever,
+            rowDecision.confidence,
+            rowDecision.source,
+            JSON.stringify(rowDecision.reasons),
+            rowDecision.recommended_load_kg,
+            rowDecision.recommended_reps_target,
+            rowDecision.recommended_sets,
+            rowDecision.recommended_rest_seconds,
+          ],
+        );
+      }
       await db.query(
         `
         INSERT INTO exercise_progression_decision (
