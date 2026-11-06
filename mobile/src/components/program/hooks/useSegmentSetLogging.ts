@@ -39,6 +39,7 @@ export function useSegmentSetLogging(params: {
   inlineLoggingOpen: boolean;
   isRoundBased: boolean;
   totalRounds: number;
+  preserveInputs?: boolean;
   onRoundStateReset?: () => void;
 }): {
   inputMap: Record<string, SetInputState[]>;
@@ -58,6 +59,7 @@ export function useSegmentSetLogging(params: {
     isRoundBased,
     totalRounds,
     onRoundStateReset,
+    preserveInputs,
   } = params;
   const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
   const [exerciseRirMap, setExerciseRirMap] = useState<Record<string, number | null>>({});
@@ -66,13 +68,13 @@ export function useSegmentSetLogging(params: {
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (!inlineLoggingOpen) {
+    if (!inlineLoggingOpen && !preserveInputs) {
       setInitialized(false);
     }
-  }, [inlineLoggingOpen]);
+  }, [inlineLoggingOpen, preserveInputs]);
 
   useEffect(() => {
-    if (!inlineLoggingOpen || initialized || existingLogsQuery.isLoading) return;
+    if (!inlineLoggingOpen || initialized || preserveInputs || existingLogsQuery.isLoading) return;
     const existingRows = existingLogsQuery.data ?? [];
     if (isRoundBased) {
       const nextInputMap = Object.fromEntries(
@@ -126,6 +128,7 @@ export function useSegmentSetLogging(params: {
     existingLogsQuery.isLoading,
     inlineLoggingOpen,
     initialized,
+    preserveInputs,
     isRoundBased,
     loggableExercises,
     totalRounds,

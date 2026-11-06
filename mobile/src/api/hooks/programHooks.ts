@@ -5,7 +5,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { authGetJson, authPatchJson } from "../client";
+import { ApiError, NetworkTimeoutError, authGetJson, authPatchJson } from "../client";
 import {
   createClientProfile,
   getClientProfile,
@@ -398,10 +398,23 @@ export function useApplyExerciseSwap(): UseMutationResult<
   });
 }
 
+export function shouldRetrySegmentSave(failureCount: number, error: unknown): boolean {
+  return failureCount < 2 && (
+    error instanceof NetworkTimeoutError || error instanceof TypeError ||
+    (error instanceof ApiError && error.status >= 500)
+  );
+}
+
+export function segmentSaveRetryDelay(attemptIndex: number): number {
+  return attemptIndex === 0 ? 1000 : 3000;
+}
+
 export function useSaveSegmentLogs(): UseMutationResult<SaveSegmentLogResult, Error, SaveSegmentLogPayload> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<SaveSegmentLogResult, Error, SaveSegmentLogPayload>({
     mutationFn: saveSegmentExerciseLogs,
+    retry: shouldRetrySegmentSave,
+    retryDelay: segmentSaveRetryDelay,
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.yearProgress });
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyOverview });

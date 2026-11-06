@@ -30,6 +30,7 @@ import { SessionExerciseSegmentSection } from "./SessionExerciseSegmentSection";
 import { setExerciseComplete } from "../../utils/localWorkoutLog";
 import { useLocalExerciseCompletion } from "./hooks/useLocalExerciseCompletion";
 import { useRoundBasedLogging } from "./hooks/useRoundBasedLogging";
+import { useSetSaveStatus } from "./hooks/useSetSaveStatus";
 import { useSegmentSetLogging } from "./hooks/useSegmentSetLogging";
 import { InlineExerciseLogBlock } from "./segmentCard/InlineExerciseLogBlock";
 import { InlineRestStrip } from "./segmentCard/InlineRestStrip";
@@ -61,6 +62,8 @@ type SegmentCardProps = {
   onLayout?: (event: LayoutChangeEvent) => void;
   onInlinePanelOpen?: (pageY: number) => void;
   onInlinePanelClose?: (pageY: number) => void;
+  onUnsavedSetsChange?: (segmentId: string, count: number) => void;
+  retryRequest?: number;
   onSetsLoggedChange?: (segmentId: string, doneCount: number) => void;
 };
 
@@ -146,6 +149,8 @@ export const SegmentCard = React.memo(function SegmentCard({
   onInlinePanelOpen,
   onInlinePanelClose,
   onSetsLoggedChange,
+  onUnsavedSetsChange,
+  retryRequest = 0,
 }: SegmentCardProps): React.JSX.Element {
   const presentation = getSegmentPresentation({
     segmentType: segment.segmentType,
@@ -176,6 +181,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   const [restDisplaySeconds, setRestDisplaySeconds] = useState(0);
   const [showAdjustControls, setShowAdjustControls] = useState(false);
   const pendingEmptyRoundRef = useRef(false);
+  const unsavedCountRef = useRef(0);
   const {
     activeRoundIndex,
     setActiveRoundIndex,
@@ -205,11 +211,40 @@ export const SegmentCard = React.memo(function SegmentCard({
     inlineLoggingOpen,
     isRoundBased,
     totalRounds,
+    preserveInputs: unsavedCountRef.current > 0,
     onRoundStateReset: () => {
       resetRoundState();
       pendingEmptyRoundRef.current = false;
     },
   });
+  const saveStatus = useSetSaveStatus({
+    save: payload => saveLogsMutation.mutateAsync(payload),
+    onSaved: keys => setDoneSetKeys(current => new Set([...current, ...keys])),
+  });
+  unsavedCountRef.current = saveStatus.unsavedCount;
+  useEffect(() => {
+    onUnsavedSetsChange?.(segment.id, saveStatus.unsavedCount);
+  }, [onUnsavedSetsChange, segment.id, saveStatus.unsavedCount]);
+  useEffect(() => () => { onUnsavedSetsChange?.(segment.id, 0); }, [onUnsavedSetsChange, segment.id]);
+  const retryRequestRef = useRef(retryRequest);
+  useEffect(() => {
+    if (retryRequestRef.current === retryRequest) return;
+    retryRequestRef.current = retryRequest;
+    void retryFailedSets();
+  }, [retryRequest]);
+
+  async function retryFailedSets(): Promise<void> {
+    if (!Object.values(saveStatus.statuses).includes("failed")) return;
+    if (isRoundBased) {
+      if (showPostStopRir) await handlePostStopRirDone();
+      else await handleRoundComplete(activeRoundIndex);
+      return;
+    }
+    await saveStatus.retryFailed(async key => {
+      const exercise = loggableExercises.find(ex => key.startsWith(`${ex.id}:`));
+      if (exercise) await handleSetComplete(exercise, Number(key.slice(key.lastIndexOf(":") + 1)));
+    });
+  }
   const { completedExerciseIds, setCompletedExerciseIds } = useLocalExerciseCompletion(
     loggableExercises,
     programDayId,
@@ -299,6 +334,13 @@ export const SegmentCard = React.memo(function SegmentCard({
       return sum + (inputMap[key]?.length ?? getExerciseSetCount(ex));
     }, 0);
   }, [initialized, inputMap, loggableExercises]);
+  const allSetsSavedNotified = useRef(false);
+  useEffect(() => {
+    const allSaved = !isRoundBased && totalSetCount > 0 && doneSetKeys.size >= totalSetCount;
+    if (allSaved && !allSetsSavedNotified.current) onAllSetsSaved(segment.id);
+    allSetsSavedNotified.current = allSaved;
+  }, [doneSetKeys, isRoundBased, totalSetCount, onAllSetsSaved, segment.id]);
+
   const activeExerciseIndex = useMemo(
     () => loggableExercises.findIndex((exercise) => !isExerciseFullyLogged(exercise, doneSetKeys)),
     [doneSetKeys, loggableExercises],
@@ -325,11 +367,13 @@ export const SegmentCard = React.memo(function SegmentCard({
   }
 
   function closeInlinePanel(options: { clearInputs?: boolean } = {}): void {
-    const clearInputs = options.clearInputs ?? true;
+    const clearInputs = (options.clearInputs ?? true) && unsavedCountRef.current === 0;
     setInlineLoggingOpen(false);
     setShowAdjustControls(false);
-    setRoundSaveError(null);
-    setShowPostStopRir(false);
+    if (unsavedCountRef.current === 0) {
+      setRoundSaveError(null);
+      setShowPostStopRir(false);
+    }
     pendingEmptyRoundRef.current = false;
     panelScrolledRef.current = false;
     if (clearInputs) {
@@ -412,7 +456,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   }
 
   async function handleRoundComplete(roundIndex: number): Promise<void> {
-    if (completedRoundIndices.has(roundIndex)) return;
+    if (completedRoundIndices.has(roundIndex) || loggableExercises.some(ex => saveStatus.isPending(buildSetKey(ex, roundIndex)))) return;
     const allEmpty = loggableExercises.every((exercise) => {
       const row = inputMap[exercise.id ?? ""]?.[roundIndex];
       return !row || (row.weight === "" && row.reps === "");
@@ -429,13 +473,13 @@ export const SegmentCard = React.memo(function SegmentCard({
     const rows = buildRoundRows(roundIndex, isLastRound);
 
     try {
-      await saveLogsMutation.mutateAsync({
+      await saveStatus.saveRows({
         userId,
         programId,
         programDayId,
         workoutSegmentId: segment.id,
         rows,
-      });
+      }, { confirm: false });
     } catch (error) {
       if (error instanceof ApiError && error.status === 402) {
         onSubscriptionRequired?.();
@@ -490,20 +534,24 @@ export const SegmentCard = React.memo(function SegmentCard({
 
   async function handlePostStopRirDone(): Promise<void> {
     const lastCompletedRound = Math.max(...Array.from(completedRoundIndices));
+    if (loggableExercises.some(ex => saveStatus.isPending(buildSetKey(ex, lastCompletedRound)))) return;
+    setRoundSaveError(null);
     if (Number.isFinite(lastCompletedRound) && lastCompletedRound >= 0) {
       try {
-        await saveLogsMutation.mutateAsync({
+        await saveStatus.saveRows({
           userId,
           programId,
           programDayId,
           workoutSegmentId: segment.id,
           rows: buildRoundRows(lastCompletedRound, true),
-        });
+        }, { confirm: false });
       } catch (error) {
         if (error instanceof ApiError && error.status === 402) {
           onSubscriptionRequired?.();
           return;
         }
+        setRoundSaveError("Failed to save \u2014 please try again.");
+        return;
       }
     }
 
@@ -557,7 +605,7 @@ export const SegmentCard = React.memo(function SegmentCard({
       next[setIndex] = { ...(next[setIndex] ?? { weight: "", reps: "", rirActual: null }), [field]: value };
       for (let i = setIndex + 1; i < next.length; i += 1) {
         const key = buildSetKey(exercise, i);
-        if (!doneSetKeys.has(key)) {
+        if (!doneSetKeys.has(key) && !saveStatus.isPending(key)) {
           next[i] = { ...(next[i] ?? { weight: "", reps: "", rirActual: null }), [field]: value };
         }
       }
@@ -569,13 +617,10 @@ export const SegmentCard = React.memo(function SegmentCard({
     const programExerciseId = exercise.id;
     if (!programExerciseId) return;
     const setKey = buildSetKey(exercise, setIndex);
-    if (doneSetKeys.has(setKey)) return;
+    if (doneSetKeys.has(setKey) || saveStatus.isPending(setKey)) return;
 
     const row = inputMap[programExerciseId]?.[setIndex] ?? { weight: "", reps: "", rirActual: null };
     const exerciseRir = exerciseRirMap[programExerciseId] ?? null;
-    const nextDoneSetKeys = new Set(doneSetKeys);
-    nextDoneSetKeys.add(setKey);
-    setDoneSetKeys(nextDoneSetKeys);
     setActiveSetKey(setKey);
 
     const payload: SaveSegmentLogPayload = {
@@ -596,7 +641,9 @@ export const SegmentCard = React.memo(function SegmentCard({
 
     let result: SaveSegmentLogResult;
     try {
-      result = await saveLogsMutation.mutateAsync(payload);
+      const saved = await saveStatus.saveRows(payload);
+      if (!saved) return;
+      result = saved;
     } catch (error) {
       if (error instanceof ApiError && error.status === 402) {
         onSubscriptionRequired?.();
@@ -626,9 +673,7 @@ export const SegmentCard = React.memo(function SegmentCard({
         return next;
       });
     }
-    if (nextDoneSetKeys.size >= totalSetCount) {
-      onAllSetsSaved(segment.id);
-    }
+
   }
 
   function handleAddSet(exercise: Exercise): void {
@@ -646,7 +691,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   function handleRemoveSet(exercise: Exercise): void {
     const exerciseKey = exercise.id ?? "";
     const currentLength = inputMap[exerciseKey]?.length ?? 1;
-    if (currentLength <= 1) return;
+    if (currentLength <= 1 || saveStatus.statuses[`${exerciseKey}:${currentLength - 1}`]) return;
 
     setInputMap((current) => {
       const existing = current[exerciseKey] ?? [];
@@ -681,17 +726,12 @@ export const SegmentCard = React.memo(function SegmentCard({
     const uncheckedRows: Array<{ setIndex: number; row: SetInputState }> = [];
     for (let setIndex = 0; setIndex < sets.length; setIndex += 1) {
       const setKey = buildSetKey(exercise, setIndex);
-      if (!doneSetKeys.has(setKey)) {
+      if (!doneSetKeys.has(setKey) && !saveStatus.isPending(setKey)) {
         uncheckedRows.push({ setIndex, row: sets[setIndex] });
       }
     }
     if (uncheckedRows.length === 0) return;
 
-    const nextDoneSetKeys = new Set(doneSetKeys);
-    for (const { setIndex } of uncheckedRows) {
-      nextDoneSetKeys.add(buildSetKey(exercise, setIndex));
-    }
-    setDoneSetKeys(nextDoneSetKeys);
     setActiveSetKey(buildSetKey(exercise, uncheckedRows[uncheckedRows.length - 1].setIndex));
 
     const payload: SaveSegmentLogPayload = {
@@ -712,7 +752,9 @@ export const SegmentCard = React.memo(function SegmentCard({
 
     let result: SaveSegmentLogResult;
     try {
-      result = await saveLogsMutation.mutateAsync(payload);
+      const saved = await saveStatus.saveRows(payload);
+      if (!saved) return;
+      result = saved;
     } catch (error) {
       if (error instanceof ApiError && error.status === 402) {
         onSubscriptionRequired?.();
@@ -745,9 +787,7 @@ export const SegmentCard = React.memo(function SegmentCard({
         return next;
       });
     }
-    if (nextDoneSetKeys.size >= totalSetCount) {
-      onAllSetsSaved(segment.id);
-    }
+
   }
 
   function formatRoundExerciseValue(exercise: Exercise, roundIndex: number): string | null {
@@ -966,6 +1006,17 @@ export const SegmentCard = React.memo(function SegmentCard({
         </View>
       </View>
 
+      {!inlineLoggingOpen && saveStatus.unsavedCount > 0 ? (
+        <PressableScale
+          accessibilityLabel={Object.values(saveStatus.statuses).includes("failed") ? "Retry unsaved sets" : "Open pending sets"}
+          onPress={() => { setInlineLoggingOpen(true); void retryFailedSets(); }}
+        >
+          <Text style={{ color: Object.values(saveStatus.statuses).includes("failed") ? colors.error : colors.textSecondary }}>
+            {Object.values(saveStatus.statuses).includes("failed") ? `${saveStatus.unsavedCount} set(s) not saved. Tap to retry.`
+              : Object.values(saveStatus.statuses).includes("waiting") ? "Will save when you're back online" : "Saving sets..."}
+          </Text>
+        </PressableScale>
+      ) : null}
       {inlineLoggingOpen ? (
         <View
           ref={inlinePanelRef}
@@ -986,6 +1037,11 @@ export const SegmentCard = React.memo(function SegmentCard({
             </PressableScale>
           </View>
 
+          {isRoundBased && Object.values(saveStatus.statuses).some(status => status !== "failed") ? (
+            <Text accessibilityLabel={Object.values(saveStatus.statuses).includes("waiting") ? "Sets waiting for connection" : "Sets saving"} style={{ color: colors.textSecondary }}>
+              {Object.values(saveStatus.statuses).includes("waiting") ? "Will save when you're back online" : "Saving sets..."}
+            </Text>
+          ) : null}
           {!initialized && existingLogsQuery.isLoading ? (
             <View style={styles.loadingBlock}>
               <SkeletonBlock height={160} />
@@ -1091,6 +1147,7 @@ export const SegmentCard = React.memo(function SegmentCard({
                     exercise={exercise}
                     setInputs={setInputs}
                     doneSetKeys={doneSetKeys}
+                    saveStatuses={saveStatus.statuses}
                     activeSetKey={activeSetKey}
                     pbSetKeys={pbSetKeys}
                     exerciseRir={exerciseRir}
