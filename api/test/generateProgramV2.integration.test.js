@@ -157,3 +157,38 @@ test("generate-plan-v2: profile found -> pipeline called -> 200 response with pr
     await cleanupTestUser(pool);
   }
 });
+
+test("generated strength weeks deliver build sets, final deload and higher RIR", async t => {
+  try { await pool.query("SELECT 1"); } catch (e) { t.skip(`Postgres unavailable: ${e.code}`); return; }
+  const subject = `weekly-route-${Date.now()}`;
+  const user = (await pool.query("INSERT INTO app_user(subject_id) VALUES ($1) RETURNING id", [subject])).rows[0];
+  try {
+    const profile = (await pool.query("INSERT INTO client_profile(user_id) VALUES ($1) RETURNING id", [user.id])).rows[0];
+    const equipment = (await pool.query("SELECT exercise_slug FROM equipment_items")).rows.map(r => r.exercise_slug);
+    const handler = createGenerateProgramV2Handler({ db: pool, getProfileByUser: async () => ({
+      id: profile.id, goals: ["strength"], fitnessLevel: "intermediate", injuryFlags: [],
+      equipmentPreset: "commercial_gym", equipmentItemCodes: equipment, preferredDays: ["mon", "wed", "fri"], minutesPerSession: 60,
+    }) });
+    const res = mockRes();
+    await handler({ request_id: subject, body: { user_id: subject, programType: "strength", anchor_date_ms: Date.UTC(2026, 0, 5) }, log: { info() {}, debug() {}, warn() {}, error() {} } }, res);
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+    const rows = (await pool.query(`SELECT pd.week_number, pd.day_number, pe.* FROM program_exercise pe
+      JOIN program_day pd ON pd.id=pe.program_day_id WHERE pe.program_id=$1 AND pe.segment_type NOT IN ('warmup','cooldown')`, [res.body.program_id])).rows;
+    const totals = [1, 2, 3, 4].map(week => rows.filter(row => row.week_number === week).reduce((sum, row) => sum + row.sets_prescribed, 0));
+    assert.ok(new Set(totals).size > 1, JSON.stringify(totals));
+    assert.ok(totals[3] < totals[0], JSON.stringify(totals));
+    const first = rows.find(row => row.week_number === 1 && row.purpose === "main" && row.segment_type === "single");
+    const last = rows.find(row => row.week_number === 4 && row.day_number === first.day_number && row.exercise_id === first.exercise_id && row.purpose === "main");
+    assert.equal(Number(last.intensity_prescription.match(/~(\d+)/)[1]), Number(first.intensity_prescription.match(/~(\d+)/)[1]) + 2);
+    // Spec audit query 2, restricted to this newly generated local program.
+    const audit = await pool.query(`WITH weekly AS (
+      SELECT pd.week_number, sum(pe.sets_prescribed) total_sets FROM program_day pd JOIN program_exercise pe ON pe.program_day_id=pd.id
+      WHERE pd.program_id=$1 AND pd.is_bonus IS NOT TRUE AND pe.segment_type NOT IN ('warmup','cooldown') GROUP BY pd.week_number)
+      SELECT count(DISTINCT total_sets)=1 AS flat FROM weekly`, [res.body.program_id]);
+    assert.equal(audit.rows[0].flat, false);
+  } finally {
+    await pool.query("DELETE FROM generation_run WHERE program_id IN (SELECT id FROM program WHERE user_id=$1)", [user.id]);
+    await pool.query("DELETE FROM program WHERE user_id=$1", [user.id]);
+    await pool.query("DELETE FROM app_user WHERE id=$1", [user.id]);
+  }
+});
