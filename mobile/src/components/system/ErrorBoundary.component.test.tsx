@@ -66,6 +66,8 @@ describe("ErrorBoundary", () => {
       ),
     ).not.toThrow();
 
+    expect(screen.getByText(/Sets you'd already saved are safe. Check the last ones you logged./)).toBeInTheDocument();
+    expect(screen.queryByText(/saved locally/)).not.toBeInTheDocument();
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });

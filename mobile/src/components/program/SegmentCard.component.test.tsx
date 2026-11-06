@@ -1,6 +1,7 @@
+import { onlineManager } from "@tanstack/react-query";
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { ApiError } from "../../api/client";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { ApiError, NetworkTimeoutError } from "../../api/client";
 import { _resetForTest } from "../../utils/localWorkoutLog";
 import { SegmentCard } from "./SegmentCard";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
@@ -84,6 +85,9 @@ function segmentCardElement(
       onAllSetsSaved={props.onAllSetsSaved ?? vi.fn()}
       onSubscriptionRequired={props.onSubscriptionRequired}
       onInlinePanelClose={props.onInlinePanelClose}
+      onExerciseCompleteChange={props.onExerciseCompleteChange}
+      onUnsavedSetsChange={props.onUnsavedSetsChange}
+      retryRequest={props.retryRequest}
       onSetsLoggedChange={props.onSetsLoggedChange}
     />
   );
@@ -134,6 +138,126 @@ describe("SegmentCard", () => {
     setMockTimerState();
   });
 
+  for (const error of [new NetworkTimeoutError(), new ApiError(503, "unavailable"), new ApiError(400, "invalid")]) {
+    it(`save regression: single set ${error.name} ${error instanceof ApiError ? error.status : "timeout"}`, async () => {
+      const counts = vi.fn(); const allSaved = vi.fn(); const unsaved = vi.fn();
+      mutateAsyncMock.mockRejectedValueOnce(error);
+      renderCard({ onSetsLoggedChange: counts, onAllSetsSaved: allSaved, onUnsavedSetsChange: unsaved });
+      fireEvent.click(screen.getByText("Start Exercise"));
+      fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+      expect(await screen.findByRole("button", { name: "Barbell Squat set 1 not saved. Double-tap to retry." })).toBeInTheDocument();
+      expect(screen.getByText("Not saved. Tap the set to retry.")).toBeInTheDocument();
+      expect(counts).not.toHaveBeenCalledWith(expect.anything(), 1);
+      expect(allSaved).not.toHaveBeenCalled();
+      expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 1);
+    });
+  }
+  it("save regression: log-all failure leaves every row unsaved", async () => {
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    const allSaved = vi.fn(); const unsaved = vi.fn();
+    renderCard({ onAllSetsSaved: allSaved, onUnsavedSetsChange: unsaved });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByText("Log all sets as complete"));
+    expect((await screen.findAllByRole("button", { name: /not saved. Double-tap to retry/ })).length).toBe(3);
+    expect(allSaved).not.toHaveBeenCalled();
+    expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 3);
+  });
+  it("retries a failed set with its original row, then counts it only after success", async () => {
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    const counts = vi.fn(); const unsaved = vi.fn();
+    renderCard({ onSetsLoggedChange: counts, onUnsavedSetsChange: unsaved });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+    const retry = await screen.findByRole("button", { name: /Barbell Squat set 1 not saved/ });
+    const original = mutateAsyncMock.mock.calls[0][0];
+    fireEvent.click(retry);
+    await vi.waitFor(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
+    expect(mutateAsyncMock).toHaveBeenLastCalledWith(original);
+    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+  });
+  it("shows saving and prevents a second send while the request is pending", async () => {
+    let resolve!: (value: any) => void;
+    mutateAsyncMock.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    renderCard();
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+    const pending = await screen.findByRole("button", { name: "Barbell Squat set 1 saving" });
+    fireEvent.click(pending);
+    expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
+    await act(async () => resolve({ saved: 1, prs: [] }));
+    expect(screen.getByRole("button", { name: "Barbell Squat set 1 complete" })).toBeInTheDocument();
+  });
+  it("shows waiting offline and confirms only once the paused save succeeds", async () => {
+    onlineManager.setOnline(false);
+    let resolve!: (value: any) => void;
+    mutateAsyncMock.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    try {
+      renderCard();
+      fireEvent.click(screen.getByText("Start Exercise"));
+      fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+      expect(await screen.findByRole("button", { name: "Barbell Squat set 1 waiting for connection" })).toBeInTheDocument();
+      expect(screen.getByText("Will save when you're back online")).toBeInTheDocument();
+      await act(async () => { onlineManager.setOnline(true); resolve({ saved: 1, prs: [] }); });
+      expect(screen.getByRole("button", { name: "Barbell Squat set 1 complete" })).toBeInTheDocument();
+    } finally { onlineManager.setOnline(true); }
+  });
+  it("log-all retries only failed rows and uses edited inputs", async () => {
+    const complete = vi.fn();
+    renderCard({ onAllSetsSaved: complete });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+    await vi.waitFor(() => expect(screen.queryByRole("button", { name: "Barbell Squat set 1 saving" })).not.toBeInTheDocument());
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(400, "invalid"));
+    fireEvent.click(screen.getByText("Log all sets as complete"));
+    expect((await screen.findAllByRole("button", { name: /not saved. Double-tap to retry/ })).length).toBe(2);
+    const inputs = screen.getAllByPlaceholderText("0");
+    fireEvent.change(inputs[2], { target: { value: "75" } });
+    fireEvent.click(screen.getByText("Log all sets as complete"));
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledWith("seg-1"));
+    expect(mutateAsyncMock.mock.lastCall?.[0].rows).toEqual([
+      expect.objectContaining({ orderIndex: 2, weightKg: 75 }),
+      expect.objectContaining({ orderIndex: 3, weightKg: 75 }),
+    ]);
+  });
+  for (const batch of [false, true]) it(`402 clears ${batch ? "batch" : "single"} saving state and opens the paywall`, async () => {
+    const subscription = vi.fn(); const unsaved = vi.fn();
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(402, "subscription"));
+    renderCard({ onSubscriptionRequired: subscription, onUnsavedSetsChange: unsaved });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    if (batch) fireEvent.click(await screen.findByText("Log all sets as complete"));
+    else fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+    await vi.waitFor(() => expect(subscription).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    expect(screen.queryByRole("button", { name: /set \d+ saving/ })).not.toBeInTheDocument();
+  });
+  it("a screen retry request retries failed rows with current inputs", async () => {
+    const counts = vi.fn();
+    const props = { onSetsLoggedChange: counts, retryRequest: 0 };
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    const { rerender } = renderCard(props);
+    fireEvent.click(screen.getByText("Start Exercise"));
+    fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
+    await screen.findByRole("button", { name: /Barbell Squat set 1 not saved/ });
+    fireEvent.change(screen.getAllByPlaceholderText("0")[0], { target: { value: "70" } });
+    rerender(segmentCardElement({ ...props, retryRequest: 1 }));
+    await vi.waitFor(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
+    expect(mutateAsyncMock.mock.lastCall?.[0].rows).toEqual([expect.objectContaining({ weightKg: 70 })]);
+  });
+  it("keeps failed input and a retry available after closing the panel", async () => {
+    const counts = vi.fn();
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    renderCard({ onSetsLoggedChange: counts });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    const inputs = await screen.findAllByPlaceholderText("0");
+    fireEvent.change(inputs[0], { target: { value: "65" } });
+    fireEvent.change(inputs[1], { target: { value: "9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Barbell Squat set 1 complete" }));
+    await screen.findByRole("button", { name: /Barbell Squat set 1 not saved/ });
+    fireEvent.click(screen.getByText("Close"));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry unsaved sets" }));
+    await vi.waitFor(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
+    expect(mutateAsyncMock.mock.lastCall?.[0].rows).toEqual([expect.objectContaining({ weightKg: 65, repsCompleted: 9 })]);
+  });
   it("renders Start Exercise for loadable segments", () => {
     renderCard();
     expect(screen.getByText("Start Exercise")).toBeInTheDocument();
@@ -544,7 +668,7 @@ describe("SegmentCard — sequential standard-segment logging", () => {
     fireEvent.click(await screen.findByText("Log all sets as complete"));
 
     await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(/Barbell Squat ✓.*3 x 7 @ 0 kg/)).toBeInTheDocument();
+    expect(await screen.findByText(/Barbell Squat ✓.*3 x 7 @ 0 kg/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Leg Press set 1 complete" })).toBeInTheDocument();
     expect(screen.queryByText(/Leg Press.*complete Barbell Squat to unlock/)).not.toBeInTheDocument();
   });
@@ -564,13 +688,14 @@ describe("SegmentCard — sequential standard-segment logging", () => {
     // reopening the panel, and reopening always re-hydrates doneSetKeys from the (empty, in
     // this mock) server log rows — so a resumed segment legitimately restarts the sequence
     // from exercise 1 rather than preserving prior in-session completion.
-    renderCard({ segment: standardMultiExerciseSegment() });
+    const saved = vi.fn();
+    renderCard({ segment: standardMultiExerciseSegment(), onAllSetsSaved: saved });
 
     fireEvent.click(screen.getAllByText("Start Exercise")[0]);
     fireEvent.click(await screen.findByText("Log all sets as complete"));
     await vi.waitFor(() => expect(screen.getByRole("button", { name: "Leg Press set 1 complete" })).toBeInTheDocument());
     fireEvent.click(screen.getByText("Log all sets as complete"));
-    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(saved).toHaveBeenCalledWith("seg-1"));
     fireEvent.click(screen.getByText("Close Log"));
     fireEvent.click(await screen.findByText("Resume"));
 
@@ -972,7 +1097,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
     for (let i = 0; i < 2; i += 1) {
       fillActiveRound();
       fireEvent.click(screen.getByText("Mark round complete"));
-      await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1));
+      await vi.waitFor(() => expect(screen.getByText(`Round ${i + 2}`)).toBeInTheDocument());
     }
 
     fireEvent.click(screen.getByText("Close Log"));
@@ -982,6 +1107,37 @@ describe("SegmentCard — round-based logging (superset)", () => {
     expect(screen.getByText("Done")).toBeInTheDocument();
   });
 
+  it("save regression: post-stop effort failure keeps the panel open", async () => {
+    const complete = vi.fn();
+    renderCard({ segment: supersetSegment(), onExerciseCompleteChange: complete });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await screen.findByText("Round 1");
+    fillActiveRound();
+    fireEvent.click(screen.getByText("Mark round complete"));
+    await screen.findByText("Round 2");
+    fireEvent.click(screen.getByText("Close Log"));
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    fireEvent.click(await screen.findByText("Done"));
+    expect(await screen.findByText(/Failed to save.*please try again/)).toBeInTheDocument();
+    expect(screen.getByText("Done")).toBeInTheDocument();
+    expect(complete).not.toHaveBeenCalled();
+  });
+  it("402 on post-stop effort preserves the panel and clears saving", async () => {
+    const subscription = vi.fn(); const unsaved = vi.fn(); const complete = vi.fn();
+    renderCard({ segment: supersetSegment(), onSubscriptionRequired: subscription, onUnsavedSetsChange: unsaved, onExerciseCompleteChange: complete });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await screen.findByText("Round 1");
+    fillActiveRound();
+    fireEvent.click(screen.getByText("Mark round complete"));
+    await screen.findByText("Round 2");
+    fireEvent.click(screen.getByText("Close Log"));
+    mutateAsyncMock.mockRejectedValueOnce(new ApiError(402, "subscription"));
+    fireEvent.click(await screen.findByText("Done"));
+    await vi.waitFor(() => expect(subscription).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    expect(complete).not.toHaveBeenCalled();
+    expect(screen.getByText("Done")).toBeInTheDocument();
+  });
   it("applies post-stop combined effort to both rows from the last completed superset round", async () => {
     await openSupersetPanel();
 

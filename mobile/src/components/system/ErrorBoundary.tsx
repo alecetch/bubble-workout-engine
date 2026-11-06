@@ -38,8 +38,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
         <View style={styles.container}>
           <Text style={styles.title}>Something went wrong</Text>
           <Text style={styles.body}>
-            The app hit an unexpected error. Your workout data is saved locally — tap below to
-            try again.
+            The app hit an unexpected error. Sets you'd already saved are safe. Check the last ones you logged. Tap below to try again.
           </Text>
           <PressableScale
             onPress={this.handleReset}

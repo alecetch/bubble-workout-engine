@@ -224,6 +224,7 @@ export function RoundBasedLoggingPanel({
               <Text style={styles.rirHintText}>{useCombinedEffort ? "Comfortable" : "Too easy"}</Text>
               <Text style={styles.rirHintText}>Max effort</Text>
             </View>
+            {roundSaveError ? <Text style={styles.roundSaveError}>{roundSaveError}</Text> : null}
             <PressableScale
               style={styles.markRoundButton}
               onPress={() => { void onPostStopRirDone(); }}

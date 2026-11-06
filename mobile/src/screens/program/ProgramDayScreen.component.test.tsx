@@ -298,6 +298,8 @@ function renderScreen() {
     goBack: vi.fn(),
     getParent: vi.fn(() => parentNavigation),
     setOptions: vi.fn(),
+    addListener: vi.fn((_event: string, _listener: any) => vi.fn()),
+    dispatch: vi.fn(),
   };
 
   ({ queryClient } = renderWithProviders(
@@ -395,6 +397,47 @@ describe("ProgramDayScreen", () => {
   });
 
 
+  it("warns about unsaved sets before completion and Retry now triggers every card", async () => {
+    getExerciseCompleteMock.mockResolvedValue(false);
+    renderScreen(); await waitForLocalStateLoad();
+    const card = swapSheetMocks.segmentCardProps.at(-1);
+    act(() => card.onUnsavedSetsChange(card.segment.id, 2));
+    fireEvent.click(screen.getByRole("button", { name: "Workout complete" }));
+    const warning = alertSpy.mock.calls.find(call => call[0] === "Some sets haven't saved");
+    expect(warning?.[1]).toBe("2 set(s) haven't saved yet.");
+    const buttons = warning?.[2] as any[];
+    expect(buttons[0].text).toBe("Retry now");
+    act(() => buttons[0].onPress());
+    expect(swapSheetMocks.segmentCardProps.at(-1).retryRequest).toBe(1);
+    act(() => buttons[1].onPress());
+    expect(alertSpy.mock.calls.some(call => call[0] === "Workout not finished")).toBe(true);
+  });
+  it("blocks leaving with unsaved sets, then dispatches the confirmed action", async () => {
+    const { navigation } = renderScreen(); await waitForLocalStateLoad();
+    const card = swapSheetMocks.segmentCardProps.at(-1);
+    act(() => card.onUnsavedSetsChange(card.segment.id, 1));
+    const listener = navigation.addListener.mock.calls.at(-1)![1] as any;
+    const action = { type: "GO_BACK" }; const preventDefault = vi.fn();
+    act(() => listener({ preventDefault, data: { action } }));
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    const warning = alertSpy.mock.calls.find(call => call[0] === "Leave without saving?");
+    expect(warning?.[1]).toBe("1 set(s) haven't saved yet.");
+    const buttons = warning?.[2] as any[];
+    expect(buttons[0].text).toBe("Stay");
+    act(() => buttons[1].onPress());
+    expect(navigation.dispatch).toHaveBeenCalledWith(action);
+    preventDefault.mockClear();
+    listener({ preventDefault, data: { action } });
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+  it("does not block leaving when every set is saved", async () => {
+    const { navigation } = renderScreen(); await waitForLocalStateLoad();
+    const listener = navigation.addListener.mock.calls.at(-1)![1] as any;
+    const preventDefault = vi.fn();
+    listener({ preventDefault, data: { action: { type: "GO_BACK" } } });
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(alertSpy.mock.calls.some(call => call[0] === "Leave without saving?")).toBe(false);
+  });
   it("renders loading skeletons while the workout day loads", async () => {
     useProgramDayFullMock.mockReturnValueOnce({
       data: undefined,
