@@ -37,7 +37,7 @@ function createMockDb({ referrerId = null } = {}) {
       }
 
       if (/INSERT INTO auth_refresh_token/i.test(sql)) {
-        return { rowCount: 1, rows: [] };
+        return { rowCount: 1, rows: [{ id: "refresh-new" }] };
       }
 
       if (/SELECT subscription_status, trial_expires_at FROM app_user WHERE id = \$1/i.test(sql)) {

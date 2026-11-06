@@ -1,5 +1,5 @@
-import { http, HttpResponse } from "msw";
-import { ApiError, authenticatedFetch } from "./client";
+import { delay, http, HttpResponse } from "msw";
+import { ApiError, NetworkTimeoutError, isSessionExpiredError, authenticatedFetch } from "./client";
 import { queryClient } from "./queryClient";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
 import { server } from "./__tests__/msw-server";
@@ -159,5 +159,78 @@ describe("authenticatedFetch session expiry handling", () => {
     expect(clearTokens).not.toHaveBeenCalled();
     expect(useSessionStore.getState().isAuthenticated).toBe(true);
     expectQueryCachePreserved();
+  });
+});
+
+describe("transient refresh errors preserve the signed-in session", () => {
+  function expiredRequest() {
+    seedQueryCache();
+    vi.mocked(getRefreshToken).mockResolvedValue("refresh-token-1");
+    server.use(http.get(`${API_URL}/api/protected`, () => HttpResponse.json({ code: "token_expired" }, { status: 401 })));
+  }
+  function expectCredentialsKept() {
+    expect(clearTokens).not.toHaveBeenCalled();
+    expect(saveTokens).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().isAuthenticated).toBe(true);
+    expectQueryCachePreserved();
+  }
+  it.each([503, 500, 429, 400])("preserves credentials on refresh HTTP %s", async status => {
+    expiredRequest();
+    server.use(http.post(`${API_URL}/api/auth/refresh`, () => HttpResponse.json({ code: "temporary" }, { status })));
+    await expect(authenticatedFetch("/api/protected")).rejects.toMatchObject({ name: "ApiError", status, details: { code: "temporary" } });
+    expectCredentialsKept();
+  });
+  it("preserves credentials on refresh network error", async () => {
+    expiredRequest();
+    server.use(http.post(`${API_URL}/api/auth/refresh`, () => HttpResponse.error()));
+    await expect(authenticatedFetch("/api/protected")).rejects.toBeInstanceOf(TypeError);
+    expectCredentialsKept();
+  });
+  it("preserves credentials on refresh timeout", async () => {
+    expiredRequest();
+    const originalFetch = globalThis.fetch;
+    const timeout = new NetworkTimeoutError();
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      if (String(input).endsWith("/api/auth/refresh")) return Promise.reject(timeout);
+      return originalFetch(input, init);
+    });
+    try {
+      await expect(authenticatedFetch("/api/protected")).rejects.toBe(timeout);
+      expectCredentialsKept();
+    } finally { spy.mockRestore(); }
+  });
+  it("still clears credentials on refresh 403", async () => {
+    expiredRequest();
+    server.use(http.post(`${API_URL}/api/auth/refresh`, () => HttpResponse.json({ code: "invalid_token" }, { status: 403 })));
+    await expectSessionExpiredRejection(authenticatedFetch("/api/protected"));
+    expect(clearTokens).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().isAuthenticated).toBe(false);
+    expectQueryCacheCleared();
+  });
+  it("shares one in-flight refresh across concurrent expired calls", async () => {
+    seedQueryCache();
+    vi.mocked(getRefreshToken).mockResolvedValue("refresh-token-1");
+    let refreshCount = 0;
+    server.use(
+      http.get(`${API_URL}/api/protected`, ({ request }) => request.headers.get("Authorization") === "Bearer new-access"
+        ? HttpResponse.json({ ok: true }) : HttpResponse.json({ code: "token_expired" }, { status: 401 })),
+      http.post(`${API_URL}/api/auth/refresh`, async () => {
+        refreshCount++;
+        await delay(40);
+        return HttpResponse.json({ access_token: "new-access", refresh_token: "new-refresh" });
+      }),
+    );
+    const results = await Promise.all([authenticatedFetch("/api/protected"), authenticatedFetch("/api/protected")]);
+    expect(results).toEqual([{ ok: true }, { ok: true }]);
+    expect(refreshCount).toBe(1);
+    expect(saveTokens).toHaveBeenCalledTimes(1);
+    expect(clearTokens).not.toHaveBeenCalled();
+    expectQueryCachePreserved();
+  });
+  it("recognizes only the explicit session-expired error", () => {
+    expect(isSessionExpiredError(new ApiError(401, "expired", { code: "session_expired" }))).toBe(true);
+    for (const error of [new Error("session_expired"), new ApiError(401, "expired", { code: "token_expired" }), new ApiError(403, "expired", { code: "session_expired" })]) {
+      expect(isSessionExpiredError(error)).toBe(false);
+    }
   });
 });
