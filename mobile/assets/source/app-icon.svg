@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- 200 Days app icon. Colours from mobile/src/theme/colors.ts; ring mirrors WeekProgressRing. -->
+  <!-- Background: colors.background, full-bleed square (iOS/Android apply their own masks). -->
+  <rect id="background" width="200" height="200" fill="#0F172A"/>
+  <!-- Mark: everything inside this group. Its bounds are the ring's outer edge:
+       circle centre (100,100), radius 78.5 (r 72 + half of stroke 13). -->
+  <g id="mark" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Ring track: colors.surface -->
+    <circle id="ring-track" cx="100" cy="100" r="72" stroke="#1E293B" stroke-width="13"/>
+    <!-- Progress arc: colors.accent, 12 o'clock clockwise through 240 degrees -->
+    <path id="ring-progress" d="M100,28 A72,72 0 1 1 37.646,136" stroke="#3B82F6" stroke-width="13"/>
+    <!-- "200" drawn as strokes (no font dependency): colors.textPrimary -->
+    <g id="digits" stroke="#F8FAFC" stroke-width="9">
+      <path d="M54,89 A10,10 0 0 1 74,89 C74,97 70,101 65,106 L54,121 L74,121"/>
+      <rect x="90" y="79" width="20" height="42" rx="10"/>
+      <rect x="126" y="79" width="20" height="42" rx="10"/>
+    </g>
+  </g>
+</svg>
