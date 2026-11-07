@@ -849,6 +849,18 @@ describe("SegmentCard — round-based logging (superset)", () => {
     expect(await screen.findByText("Round 1")).toBeInTheDocument();
   }
 
+  // Complete the active round and let its save settle inside act. If the save
+  // commits outside act, react-native-web's Pressable keeps the previous onPress
+  // until its passive effect runs (usePressEvents configures it in useEffect).
+  // Under load a following "Close Log" tap can then call a stale handler that
+  // still sees no completed rounds, so the post-stop effort prompt never opens.
+  async function completeRound(): Promise<void> {
+    await act(async () => {
+      fireEvent.click(screen.getByText("Mark round complete"));
+      await Promise.allSettled(mutateAsyncMock.mock.results.map((result) => result.value));
+    });
+  }
+
   function fillActiveRound(weight = "80", reps = "8") {
     const inputs = screen.getAllByPlaceholderText("0");
     inputs.forEach((input, index) => {
@@ -1121,8 +1133,8 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     for (let i = 0; i < 2; i += 1) {
       fillActiveRound();
-      fireEvent.click(screen.getByText("Mark round complete"));
-      await vi.waitFor(() => expect(screen.getByText(`Round ${i + 2}`)).toBeInTheDocument());
+      await completeRound();
+      expect(screen.getByText(`Round ${i + 2}`)).toBeInTheDocument();
     }
 
     fireEvent.click(screen.getByText("Close Log"));
@@ -1138,8 +1150,8 @@ describe("SegmentCard — round-based logging (superset)", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     await screen.findByText("Round 1");
     fillActiveRound();
-    fireEvent.click(screen.getByText("Mark round complete"));
-    await screen.findByText("Round 2");
+    await completeRound();
+    expect(screen.getByText("Round 2")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Close Log"));
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
     fireEvent.click(await screen.findByText("Done"));
@@ -1153,8 +1165,8 @@ describe("SegmentCard — round-based logging (superset)", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     await screen.findByText("Round 1");
     fillActiveRound();
-    fireEvent.click(screen.getByText("Mark round complete"));
-    await screen.findByText("Round 2");
+    await completeRound();
+    expect(screen.getByText("Round 2")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Close Log"));
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(402, "subscription"));
     fireEvent.click(await screen.findByText("Done"));
@@ -1168,11 +1180,9 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     for (let i = 0; i < 2; i += 1) {
       fillActiveRound("80", "8");
-      fireEvent.click(screen.getByText("Mark round complete"));
-      await vi.waitFor(() => {
-        expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1);
-        expect(screen.getByText(new RegExp(`Round ${i + 1} .*`))).toBeInTheDocument();
-      });
+      await completeRound();
+      expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1);
+      expect(screen.getByText(new RegExp(`Round ${i + 1} .*`))).toBeInTheDocument();
     }
 
     fireEvent.click(screen.getByText("Close Log"));
