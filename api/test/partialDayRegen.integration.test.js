@@ -467,11 +467,12 @@ test("regenerateDaysWithEquipment regenerates a bonus day whose key is not in th
   }
 });
 
-for (const mode of ["bonus", "partial"]) test(`${mode} filters stored Wrist / Elbow labels`, async t => {
+// Labels such as "Wrist / Elbow" can no longer be stored (V153 CHECK constraint); the stored code must filter.
+for (const mode of ["bonus", "partial"]) test(`${mode} filters the stored wrist_elbow flag`, async t => {
   if (!await ensureDb(t)) return;
   const fixture = await seedProgramFixture(pool);
   try {
-    await pool.query("UPDATE client_profile SET injury_flags = ARRAY['Wrist / Elbow'] WHERE user_id=$1", [fixture.ownerUserId]);
+    await pool.query("UPDATE client_profile SET injury_flags = ARRAY['wrist_elbow'] WHERE user_id=$1", [fixture.ownerUserId]);
     let dayId = fixture.dayIds.pending;
     if (mode === "bonus") {
       const result = await addBonusDay(pool, {
