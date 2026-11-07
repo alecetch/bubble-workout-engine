@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Modal,
+  Pressable,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -10,6 +11,8 @@ import {
   Text,
   View,
 } from "react-native";
+import Constants from "expo-constants";
+import { DiagnosticsSheet } from "../../components/settings/DiagnosticsSheet";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
@@ -161,6 +164,8 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const ent = entitlementQuery.data;
   const referralQuery = useReferralInfo();
   const referralStatsQuery = useReferralStats();
+  const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
+  const version = Constants.expoConfig?.version ?? "unknown";
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [notifSaveError, setNotifSaveError] = useState<string | null>(null);
   const [dangerError, setDangerError] = useState<string | null>(null);
@@ -547,7 +552,17 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
           </View>
           {dangerError ? <Text style={styles.inlineError}>{dangerError}</Text> : null}
         </View>
+        <Pressable
+          onLongPress={() => setDiagnosticsVisible(true)}
+          delayLongPress={2000}
+          accessibilityRole="text"
+          accessibilityLabel={`App version ${version}`}
+          style={{ padding: spacing.md, alignItems: "center" }}
+        >
+          <Text style={{ color: colors.textSecondary, ...typography.small }}>Version {version}</Text>
+        </Pressable>
       </ScrollView>
+      <DiagnosticsSheet visible={diagnosticsVisible} onClose={() => setDiagnosticsVisible(false)} />
 
       <Modal
         transparent

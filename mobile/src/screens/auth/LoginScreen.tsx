@@ -89,7 +89,6 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       logger.error(
         "auth",
         "LoginScreen sign-in failed",
-        error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
       );
       if (error instanceof ApiError && error.status === 401) {
         setErrorMessage("Incorrect email or password.");

@@ -21,17 +21,6 @@ vi.mock("../../api/hooks", () => ({
   useReferralStats: referralMocks.stats,
 }));
 
-vi.mock("react-native", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-native")>();
-  return {
-    ...actual,
-    Share: {
-      ...actual.Share,
-      share: vi.fn().mockResolvedValue({ action: "sharedAction" }),
-    },
-  };
-});
-
 vi.mock("../../state/session/sessionStore", () => ({
   useSessionStore: vi.fn((selector: any) => selector({ clearSession: vi.fn() })),
 }));
@@ -73,6 +62,21 @@ vi.mock("../../components/interaction/PressableScale", () => ({
     </button>
   ),
 }));
+
+vi.mock("expo-constants", () => ({ default: { expoConfig: { version: "1.0.0" } } }));
+vi.mock("../../components/settings/DiagnosticsSheet", () => ({
+  DiagnosticsSheet: ({ visible }: any) => visible ? <div>Diagnostics</div> : null,
+}));
+vi.mock("react-native", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-native")>();
+  return {
+    ...actual,
+    Share: { ...actual.Share, share: vi.fn().mockResolvedValue({ action: "sharedAction" }) },
+    Pressable: ({ children, onLongPress, delayLongPress, accessibilityLabel }: any) => (
+      <div aria-label={accessibilityLabel} data-delay={delayLongPress} onContextMenu={() => onLongPress?.()}>{children}</div>
+    ),
+  };
+});
 
 import { SettingsScreen } from "./SettingsScreen";
 
@@ -516,5 +520,19 @@ describe("delete account modal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
 
     expect(vi.mocked(deleteAccount)).toHaveBeenCalled();
+  });
+});
+
+describe("Settings diagnostics entry", () => {
+  beforeEach(resetSettingsMocks);
+  it("renders an accessible version and opens diagnostics only on a two-second long press", () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    expect(screen.getByText("Version 1.0.0")).toBeInTheDocument();
+    const version = screen.getByLabelText("App version 1.0.0");
+    expect(version).toHaveAttribute("data-delay", "2000");
+    fireEvent.click(version);
+    expect(screen.queryByText("Diagnostics")).not.toBeInTheDocument();
+    fireEvent.contextMenu(version);
+    expect(screen.getByText("Diagnostics")).toBeInTheDocument();
   });
 });

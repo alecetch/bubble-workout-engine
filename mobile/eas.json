@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://bubble-workout-api.fly.dev"
+        "EXPO_PUBLIC_API_BASE_URL": "https://bubble-workout-api.fly.dev",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "development"
       }
     },
     "preview": {
@@ -18,7 +19,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://bubble-workout-api.fly.dev"
+        "EXPO_PUBLIC_API_BASE_URL": "https://bubble-workout-api.fly.dev",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "beta"
       }
     },
     "production": {
@@ -27,7 +29,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://bubble-workout-api.fly.dev"
+        "EXPO_PUBLIC_API_BASE_URL": "https://bubble-workout-api.fly.dev",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production"
       }
     }
   },

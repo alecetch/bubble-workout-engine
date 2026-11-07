@@ -3,6 +3,14 @@
   "entries": [
     {
       "type": "component",
+      "source": "src/components/settings/DiagnosticsSheet.tsx",
+      "test": "src/components/settings/DiagnosticsSheet.component.test.tsx",
+      "status": "covered",
+      "tags": ["settings"],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/history/YearHeatmap.tsx",
       "test": "src/components/history/YearHeatmap.component.test.tsx",
       "status": "covered",

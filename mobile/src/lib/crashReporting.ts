@@ -5,11 +5,47 @@ declare const __DEV__: boolean;
 
 const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN ?? "";
 
+export function getCrashReportingEnvironment(): string {
+  return process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT || (__DEV__ ? "development" : "production");
+}
+
+export function isCrashReportingEnabled(): boolean {
+  return Boolean(dsn);
+}
+
+export function sendTestError(): void {
+  if (!dsn) return;
+  Sentry.captureException(new Error("Sentry test error"), { tags: { diagnostic: "true" } });
+}
+
+export function triggerNativeCrash(): void {
+  if (!dsn) return;
+  Sentry.nativeCrash();
+}
+
 export function initCrashReporting(): void {
   Sentry.init({
     dsn,
     enabled: Boolean(dsn),
-    environment: __DEV__ ? "development" : "production",
+    environment: getCrashReportingEnvironment(),
+    sendDefaultPii: false,
+    beforeBreadcrumb(breadcrumb) {
+      if (breadcrumb.category !== "fetch" && breadcrumb.category !== "xhr") return breadcrumb;
+      const data = breadcrumb.data ?? {};
+      // Rebuild network breadcrumbs from an allowlist, including top-level fields:
+      // their message or arbitrary data can contain URLs, bodies, or headers.
+      return {
+        category: breadcrumb.category,
+        type: breadcrumb.type,
+        level: breadcrumb.level,
+        timestamp: breadcrumb.timestamp,
+        data: {
+          ...(typeof data.method === "string" ? { method: data.method } : {}),
+          ...(typeof data.url === "string" ? { url: data.url.split(/[?#]/, 1)[0] } : {}),
+          ...(typeof data.status_code === "number" ? { status_code: data.status_code } : {}),
+        },
+      };
+    },
     // Error capture only for v1 - no performance tracing.
     tracesSampleRate: 0,
   });
