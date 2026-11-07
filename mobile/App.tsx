@@ -18,6 +18,7 @@ import {
   setCrashReportingUser,
   wrapWithCrashReporting,
 } from "./src/lib/crashReporting";
+import { preventSplashAutoHide, useHideSplashWhenReady } from "./src/lib/splash";
 import { initNetworkMonitoring } from "./src/lib/network";
 import { initQueryFocusManagement } from "./src/lib/queryFocus";
 import { registerPushToken } from "./src/api/notifications";
@@ -32,6 +33,7 @@ import { captureReferralLinks } from "./src/navigation/referralLinks";
 import { useSessionRestoration } from "./src/state/session/useSessionRestoration";
 import { SessionRestoreErrorScreen } from "./src/components/session/SessionRestoreErrorScreen";
 
+preventSplashAutoHide();
 initCrashReporting();
 initNetworkMonitoring();
 initQueryFocusManagement();
@@ -98,6 +100,7 @@ function App(): React.JSX.Element {
   logger.boot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
 
   const sessionRestoration = useSessionRestoration();
+  useHideSplashWhenReady(sessionRestoration.state !== "restoring");
 
   React.useEffect(() => captureReferralLinks(Linking, code =>
     getAppStorage().setItem("pendingReferralCode", code)), []);

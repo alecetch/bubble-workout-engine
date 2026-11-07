@@ -20,7 +20,8 @@
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "icon": "./assets/icon.png"
     },
     "android": {
       "package": "fit.getforma.app",
@@ -42,7 +43,9 @@
         }
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#0F172A"
+        "backgroundColor": "#0F172A",
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
       }
     },
     "web": {
@@ -62,6 +65,19 @@
             "enableMinifyInReleaseBuilds": false
           }
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#0F172A",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#0F172A"
+          }
+        }
       ]
     ],
     "extra": {
@@ -69,6 +85,7 @@
         "projectId": "720b39f5-a083-4b4f-8546-bff9cd9ffe12"
       }
     },
-    "owner": "alecetch"
+    "owner": "alecetch",
+    "icon": "./assets/icon.png"
   }
 }
