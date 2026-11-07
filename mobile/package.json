@@ -14,7 +14,8 @@
     "check:ios-signoff": "node scripts/validate-ios-signoff.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:all": "vitest run --coverage"
+    "test:all": "vitest run --coverage",
+    "assets:generate": "node scripts/generate-app-assets.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
@@ -43,6 +44,7 @@
     "expo-notifications": "~58.1.8",
     "expo-secure-store": "~58.0.2",
     "expo-sharing": "~58.0.22",
+    "expo-splash-screen": "~58.0.13",
     "expo-status-bar": "~58.0.4",
     "expo-store-review": "~58.0.2",
     "expo-video": "~58.0.13",
