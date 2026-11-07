@@ -215,8 +215,17 @@ describe("SegmentCard", () => {
     const complete = vi.fn();
     renderCard({ onAllSetsSaved: complete });
     fireEvent.click(screen.getByText("Start Exercise"));
-    fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
-    await vi.waitFor(() => expect(screen.queryByRole("button", { name: "Barbell Squat set 1 saving" })).not.toBeInTheDocument());
+    const setOne = await screen.findByRole("button", { name: "Barbell Squat set 1 complete" });
+    // Settle set 1's save inside act so its "done" state is committed before
+    // "Log all" runs. Waiting for the "saving" label to disappear isn't enough:
+    // "saving" is read from a ref, "done" is React state, and under load a render
+    // can drop "saving" before "done" commits, leaving the Log all handler with a
+    // stale doneSetKeys that re-sends set 1 (3 failed rows instead of 2).
+    await act(async () => {
+      fireEvent.click(setOne);
+      await mutateAsyncMock.mock.results[0]?.value;
+    });
+    expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(400, "invalid"));
     fireEvent.click(screen.getByText("Log all sets as complete"));
     expect((await screen.findAllByRole("button", { name: /not saved. Double-tap to retry/ })).length).toBe(2);
