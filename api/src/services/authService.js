@@ -1,3 +1,4 @@
+import pg from "pg";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { createHash, randomBytes } from "node:crypto";
@@ -7,6 +8,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_ISSUER = process.env.JWT_ISSUER;
 const JWT_ACCESS_TTL_SECONDS = Number(process.env.JWT_ACCESS_TTL_SECONDS || 3600);
 const JWT_REFRESH_TTL_DAYS = Number(process.env.JWT_REFRESH_TTL_DAYS || 30);
+
+export const REFRESH_REUSE_GRACE_SECONDS = 60;
 
 const BCRYPT_COST_FACTOR = 12;
 const MAX_PASSWORD_LENGTH = 72;
@@ -44,15 +47,16 @@ async function issueTokenPair(db, userId) {
   const tokenHash = sha256Hex(refreshToken);
   const expiresAt = new Date(Date.now() + JWT_REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000);
 
-  await db.query(
+  const inserted = await db.query(
     `
     INSERT INTO auth_refresh_token (user_id, token_hash, expires_at)
     VALUES ($1, $2, $3)
+    RETURNING id
     `,
     [userId, tokenHash, expiresAt],
   );
 
-  return { accessToken, refreshToken };
+  return { accessToken, refreshToken, refreshTokenId: inserted.rows[0].id };
 }
 
 export async function registerUser(db, { email, password, referredByCode = null }) {
@@ -127,7 +131,7 @@ export async function registerUser(db, { email, password, referredByCode = null 
   }
 
   const clientProfileId = profileResult.rows[0].id;
-  const { accessToken, refreshToken } = await issueTokenPair(db, userId, clientProfileId);
+  const { accessToken, refreshToken } = await issueTokenPair(db, userId);
   const subResult = await db.query(
     "SELECT subscription_status, trial_expires_at FROM app_user WHERE id = $1",
     [userId],
@@ -179,7 +183,7 @@ export async function loginUser(db, { email, password }) {
   );
 
   const clientProfileId = profileResult.rows[0]?.id ?? null;
-  const { accessToken, refreshToken } = await issueTokenPair(db, userRow.id, clientProfileId);
+  const { accessToken, refreshToken } = await issueTokenPair(db, userRow.id);
   const subResult = await db.query(
     "SELECT subscription_status, trial_expires_at FROM app_user WHERE id = $1",
     [userRow.id],
@@ -197,52 +201,38 @@ export async function loginUser(db, { email, password }) {
 }
 
 export async function refreshTokens(db, { refreshToken }) {
-  const tokenHash = sha256Hex(String(refreshToken || ""));
-  const tokenResult = await db.query(
-    `
-    SELECT id, user_id, expires_at
-    FROM auth_refresh_token
-    WHERE token_hash = $1
-    LIMIT 1
-    `,
-    [tokenHash],
-  );
-
-  if (tokenResult.rowCount === 0) {
-    throw { code: "invalid_token", message: "Invalid or expired refresh token" };
+  // pg.Client also has connect(); caller-owned clients must stay in their transaction.
+  const ownsTransaction = typeof db.connect === "function" && !(db instanceof pg.Client) && typeof db.release !== "function";
+  const client = ownsTransaction ? await db.connect() : db;
+  try {
+    if (ownsTransaction) await client.query("BEGIN");
+    const tokenHash = sha256Hex(String(refreshToken || ""));
+    const tokenResult = await client.query(`
+      SELECT id, user_id, expires_at, rotated_at
+      FROM auth_refresh_token WHERE token_hash = $1
+      LIMIT 1 FOR UPDATE`, [tokenHash]);
+    const tokenRow = tokenResult.rows[0];
+    const now = Date.now();
+    if (!tokenRow || new Date(tokenRow.expires_at).getTime() <= now ||
+        (tokenRow.rotated_at && now - new Date(tokenRow.rotated_at).getTime() > REFRESH_REUSE_GRACE_SECONDS * 1000)) {
+      throw { code: "invalid_token", message: "Invalid or expired refresh token" };
+    }
+    const profileResult = await client.query("SELECT id FROM client_profile WHERE user_id = $1 LIMIT 1", [tokenRow.user_id]);
+    const { accessToken, refreshToken: nextRefreshToken, refreshTokenId } = await issueTokenPair(client, tokenRow.user_id);
+    if (!tokenRow.rotated_at) {
+      await client.query("UPDATE auth_refresh_token SET rotated_at = now(), replaced_by = $2 WHERE id = $1", [tokenRow.id, refreshTokenId]);
+    }
+    await client.query("DELETE FROM auth_refresh_token WHERE user_id = $1 AND rotated_at < now() - interval '1 day'", [tokenRow.user_id]);
+    if (ownsTransaction) await client.query("COMMIT");
+    return { accessToken, refreshToken: nextRefreshToken, userId: tokenRow.user_id, clientProfileId: profileResult.rows[0]?.id ?? null };
+  } catch (error) {
+    if (ownsTransaction) {
+      try { await client.query("ROLLBACK"); } catch { /* retain the original error */ }
+    }
+    throw error;
+  } finally {
+    if (ownsTransaction) client.release();
   }
-
-  const tokenRow = tokenResult.rows[0];
-  if (new Date(tokenRow.expires_at).getTime() < Date.now()) {
-    await db.query(`DELETE FROM auth_refresh_token WHERE id = $1`, [tokenRow.id]);
-    throw { code: "invalid_token", message: "Invalid or expired refresh token" };
-  }
-
-  await db.query(`DELETE FROM auth_refresh_token WHERE id = $1`, [tokenRow.id]);
-
-  const profileResult = await db.query(
-    `
-    SELECT id
-    FROM client_profile
-    WHERE user_id = $1
-    LIMIT 1
-    `,
-    [tokenRow.user_id],
-  );
-
-  const clientProfileId = profileResult.rows[0]?.id ?? null;
-  const { accessToken, refreshToken: nextRefreshToken } = await issueTokenPair(
-    db,
-    tokenRow.user_id,
-    clientProfileId,
-  );
-
-  return {
-    accessToken,
-    refreshToken: nextRefreshToken,
-    userId: tokenRow.user_id,
-    clientProfileId,
-  };
 }
 
 export async function logoutUser(db, { refreshToken }) {

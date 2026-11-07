@@ -1081,6 +1081,16 @@
         "year-recap"
       ],
       "reason": ""
+    },
+    {
+      "type": "component",
+      "source": "src/components/session/SessionRestoreErrorScreen.tsx",
+      "test": "src/components/session/SessionRestoreErrorScreen.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "session"
+      ],
+      "reason": ""
     }
   ]
 }

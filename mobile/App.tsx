@@ -29,7 +29,8 @@ import { colors } from "./src/theme/colors";
 import { getAppStorage } from "./src/utils/appStorage";
 import { logger } from "./src/utils/logger";
 import { captureReferralLinks } from "./src/navigation/referralLinks";
-import { restoreSession } from "./src/state/session/restoreSession";
+import { useSessionRestoration } from "./src/state/session/useSessionRestoration";
+import { SessionRestoreErrorScreen } from "./src/components/session/SessionRestoreErrorScreen";
 
 initCrashReporting();
 initNetworkMonitoring();
@@ -96,14 +97,7 @@ function App(): React.JSX.Element {
 
   logger.boot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
 
-  const [restoringSession, setRestoringSession] = React.useState(true);
-  React.useEffect(() => {
-    let active = true;
-    void restoreSession(() => active)
-      .catch(() => { logger.boot("session restoration failed; showing sign-in"); })
-      .finally(() => { if (active) setRestoringSession(false); });
-    return () => { active = false; };
-  }, []);
+  const sessionRestoration = useSessionRestoration();
 
   React.useEffect(() => captureReferralLinks(Linking, code =>
     getAppStorage().setItem("pendingReferralCode", code)), []);
@@ -217,7 +211,14 @@ function App(): React.JSX.Element {
     flushPendingNotificationResponse();
   }, [isAuthenticated]);
 
-  if (restoringSession) {
+  if (sessionRestoration.state === "unreachable") {
+    return <QueryClientProvider client={queryClient}>
+      <SessionRestoreErrorScreen onRetry={() => { void sessionRestoration.retry(); }}
+        onSignOut={() => { void sessionRestoration.signOut(); }} isRetrying={sessionRestoration.isRetrying} />
+    </QueryClientProvider>;
+  }
+
+  if (sessionRestoration.state === "restoring") {
     return <View style={{ flex: 1, justifyContent: "center", backgroundColor: colors.background }}>
       <ActivityIndicator accessibilityLabel="Restoring session" />
     </View>;

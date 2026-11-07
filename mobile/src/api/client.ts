@@ -232,17 +232,22 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   return requestJson<T>(path, options);
 }
 
-let refreshPromise: Promise<string | null> | null = null;
+type RefreshResult =
+  | { kind: "refreshed"; accessToken: string }
+  | { kind: "invalid" }
+  | { kind: "transient"; error: unknown };
 
-async function refreshAccessToken(): Promise<string | null> {
+let refreshPromise: Promise<RefreshResult> | null = null;
+
+async function refreshAccessToken(): Promise<RefreshResult> {
   if (!refreshPromise) {
-    refreshPromise = (async () => {
+    refreshPromise = (async (): Promise<RefreshResult> => {
       try {
         const refreshToken = await getRefreshToken();
         if (!refreshToken) {
           await clearTokens();
           handleSessionExpired();
-          return null;
+          return { kind: "invalid" };
         }
 
         const refreshed = await apiFetch<{ access_token: string; refresh_token: string }>(
@@ -253,11 +258,14 @@ async function refreshAccessToken(): Promise<string | null> {
           },
         );
         await saveTokens(refreshed.access_token, refreshed.refresh_token);
-        return refreshed.access_token;
-      } catch {
-        await clearTokens();
-        handleSessionExpired();
-        return null;
+        return { kind: "refreshed", accessToken: refreshed.access_token };
+      } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          await clearTokens();
+          handleSessionExpired();
+          return { kind: "invalid" };
+        }
+        return { kind: "transient", error };
       } finally {
         refreshPromise = null;
       }
@@ -270,6 +278,10 @@ async function refreshAccessToken(): Promise<string | null> {
 function getErrorCode(details: unknown): string | undefined {
   if (!details || typeof details !== "object") return undefined;
   return (details as ApiErrorPayload).code;
+}
+
+export function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401 && getErrorCode(error.details) === "session_expired";
 }
 
 export async function authenticatedFetch<T>(
@@ -297,15 +309,16 @@ export async function authenticatedFetch<T>(
       throw error;
     }
 
-    const nextAccessToken = await refreshAccessToken();
-    if (!nextAccessToken) {
+    const refresh = await refreshAccessToken();
+    if (refresh.kind === "transient") throw refresh.error;
+    if (refresh.kind === "invalid") {
       throw new ApiError(401, "Session expired", { code: "session_expired" });
     }
 
     try {
       return await apiFetch<T>(path, {
         ...options,
-        headers: makeHeaders(nextAccessToken),
+        headers: makeHeaders(refresh.accessToken),
       });
     } catch (retryError) {
       const retryApiError = retryError instanceof ApiError ? retryError : null;
