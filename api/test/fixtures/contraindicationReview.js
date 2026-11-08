@@ -1,5 +1,7 @@
 // Reviewed against catalogue-injury-contraindications-spec.md on 2026-10-15.
 // Review and tag each new exercise before adding its id here.
+// Calf/vertical-pull additions reviewed in catalogue-calves-vertical-pull-variety-spec.md:
+// Step Calf Raise excludes ankle_foot; bent-knee and towel variations have no flags.
 export const REVIEWED_EXERCISE_IDS = [
   "air_bike_sprint",
   "air_squat",
@@ -23,6 +25,7 @@ export const REVIEWED_EXERCISE_IDS = [
   "banded_glute_bridge",
   "barbell_rollout",
   "battle_ropes",
+  "bent_knee_calf_raise",
   "bb_back_squat",
   "bb_bench_press",
   "bb_bentover_row",
@@ -193,6 +196,7 @@ export const REVIEWED_EXERCISE_IDS = [
   "squat_to_overhead_reach",
   "standing_calf_raise",
   "standing_calf_raise_bodyweight",
+  "step_calf_raise",
   "step_back_burpee",
   "stepup_weighted",
   "straightarm_pulldown",
@@ -203,6 +207,7 @@ export const REVIEWED_EXERCISE_IDS = [
   "towel_hamstring_curl",
   "towel_push",
   "towel_row",
+  "towel_lat_pulldown",
   "trap_bar_deadlift",
   "trx_biceps_curl",
   "trx_chest_press",

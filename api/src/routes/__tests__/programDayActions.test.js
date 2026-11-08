@@ -20,7 +20,9 @@ for (const [label, fitnessLevel, rank, injuries, currentId, equipment] of [
   ['beginner minimum rank', 'beginner', 0, [], 'bb_bench_press', ['bodyweight']],
   ['advanced rank ceiling', 'advanced', 2, [], 'bb_bench_press', ['bodyweight']],
   ['real equipment before substitute', 'intermediate', 1, [], 'towel_push', ['bodyweight', 'sled', 'treadmill']],
-  ['no compatible replacement', 'elite', 3, [], 'single_leg_standing_calf_raise', ['unknown_equipment']],
+  // Calves now have multiple equipment-free replacements; weighted carries
+  // retain a genuine no-compatible-equipment case in the live catalogue.
+  ['no compatible replacement', 'elite', 3, [], 'farmer_carry_weighted', ['unknown_equipment']],
 ]) {
   test(`equipment substitution respects live catalogue ${label}`, async t => {
     try { await pool.query('SELECT 1'); }

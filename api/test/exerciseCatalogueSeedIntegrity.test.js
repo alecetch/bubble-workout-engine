@@ -41,6 +41,27 @@ const equipmentSlugs = fields => fields.equipment_items_slugs === "'{}'::text[]"
   [...fields.equipment_items_slugs.matchAll(/'((?:''|[^'])*)'/g)].map(match => match[1]);
 const exerciseIds = [...catalogue.matchAll(/\) VALUES \(\r?\n  '([^']+)',/g)].map(match => match[1]);
 
+test('beginner calf and vertical-pull additions stay active and protected by the snapshot', () => {
+  assert.equal(exerciseValues('single_leg_standing_calf_raise').rank, 0);
+  const retained = catalogue.match(/WHERE exercise_id NOT IN \(([\s\S]*?)\);/)[1];
+  for (const id of ['bent_knee_calf_raise', 'step_calf_raise', 'towel_lat_pulldown']) {
+    const { fields, rank, archived } = exerciseValues(id);
+    assert.equal(rank, 0, id);
+    assert.equal(archived, false, id);
+    assert.ok(retained.includes(`'${id}'`), `${id} must survive Step 1 deletion`);
+    assert.equal(fields.is_loadable, 'false', id);
+  }
+  const step = exerciseValues('step_calf_raise').fields;
+  assert.equal(step.contraindications_slugs, "ARRAY['ankle_foot']::text[]");
+  assert.deepEqual(equipmentSlugs(step), ['box']);
+  const towel = exerciseValues('towel_lat_pulldown').fields;
+  assert.deepEqual(JSON.parse(sqlText(towel.preferred_in_json.replace(/::jsonb$/, ''))),
+    ['hypertrophy_accessory', 'strength_accessory']);
+  assert.equal(towel.swap_group_id_1, "'pull_vertical'");
+  assert.equal(towel.swap_group_id_2, "'pull_vertical_compound'");
+  assert.deepEqual(equipmentSlugs(towel), []);
+});
+
 const bandTrxIds = ['band_row', 'band_pull_apart', 'band_face_pull', 'band_biceps_curl', 'band_triceps_pushdown', 'band_lat_pulldown',
   'band_lateral_raise', 'band_overhead_press', 'band_chest_press', 'band_good_morning', 'banded_glute_bridge', 'band_squat',
   'trx_row', 'trx_chest_press', 'trx_biceps_curl', 'trx_triceps_extension', 'trx_y_raise', 'trx_hamstring_curl', 'trx_split_squat'];
