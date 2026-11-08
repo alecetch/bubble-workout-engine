@@ -129,7 +129,6 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
       logger.error(
         "auth",
         "RegisterScreen saveTokens failed",
-        error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error),
       );
       // Account created — navigate to login so they can sign in.
       navigation.navigate("Login");
@@ -159,7 +158,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
         trialExpiresAt: result.trial_expires_at ?? null,
       });
     } catch (error) {
-      logger.error("auth", "RegisterScreen post-registration profile fetch failed", error);
+      logger.error("auth", "RegisterScreen post-registration profile fetch failed");
       navigation.navigate("Login");
     } finally {
       setIsSubmitting(false);

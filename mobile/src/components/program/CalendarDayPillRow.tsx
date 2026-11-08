@@ -68,7 +68,7 @@ function formatCalendarParts(item: CalendarDayPillItem): { weekday: string; dayN
   const valid = Boolean(parsed && Number.isFinite(parsed.getTime()) && Number.isFinite(dayNumValue));
 
   if (!valid) {
-    logger.warn("calendar", "Missing or invalid scheduledDate for day pill", item);
+    logger.warn("calendar", "Missing or invalid scheduledDate for day pill");
   }
 
   // Always derive weekday from the date, never from scheduledWeekday.

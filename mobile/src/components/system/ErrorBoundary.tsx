@@ -21,10 +21,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
-    logger.error("errorBoundary", error.message, {
-      stack: error.stack,
-      componentStack: info.componentStack,
-    });
+    logger.error("errorBoundary", "Screen render failed");
     this.props.onError?.(error, info.componentStack ?? "");
   }
 

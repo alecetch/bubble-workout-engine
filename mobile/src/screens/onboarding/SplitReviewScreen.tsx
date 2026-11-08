@@ -99,7 +99,7 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
         await updateProfile.mutateAsync({ preferredSplitJson });
       }
     } catch (err) {
-      logger.error("split-review", "profile patch failed, proceeding", err);
+      logger.error("split-review", "profile patch failed, proceeding");
       setSaveError("We could not save this split, but you can continue.");
     }
 
@@ -113,7 +113,7 @@ export function SplitReviewScreen({ navigation, route }: Props): React.JSX.Eleme
         await patchProgramSplit(route.params.programId, currentFocuses);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Please try again.";
-        logger.error("split-review", "split patch failed", err);
+        logger.error("split-review", "split patch failed");
         setSaveError(`Your split was saved, but the active program could not be updated. ${message}`);
         setIsSaving(false);
         return;

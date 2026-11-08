@@ -2,6 +2,9 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SettingsScreen } from "../SettingsScreen";
 
+beforeEach(() => { vi.stubGlobal("__DEV__", false); });
+afterEach(() => { vi.unstubAllGlobals(); });
+
 type MockPreferences = {
   reminderEnabled: boolean;
   reminderTimeLocalHhmm: string;
