@@ -70,6 +70,30 @@ function makeStats() {
   };
 }
 
+for (const varied of [true, false]) {
+  test(`two weekly calf slots ${varied ? 'choose different exercises with variety' : 'repeat when only one candidate exists'}`, () => {
+    const ids = varied
+      ? ['standing_calf_raise_bodyweight', 'single_leg_standing_calf_raise', 'bent_knee_calf_raise']
+      : ['standing_calf_raise_bodyweight'];
+    const { byId, allowedSet } = makeSelectorPool(ids.map(id => makeExercise({
+      id, name: id, mp: 'calf', sw: 'calf_iso', sw2: 'calf_accessory',
+      mc: 'isolation', pref: ['hypertrophy_accessory'],
+    })));
+    const usedWeek = new Set();
+    const selector = { sw: 'calf_iso', requirePref: 'hypertrophy_accessory', prefMode: 'soft', rankValue: 0 };
+    const pick = () => pickWithFallback(allowedSet, byId, selector, new Set(), makeStats(), usedWeek, new Set(), new Set());
+    const first = pick();
+    assert.ok(first);
+    usedWeek.add(first.id);
+    const second = pick();
+    assert.ok(second);
+    assert.equal(first.sw, 'calf_iso');
+    assert.equal(second.sw, 'calf_iso');
+    if (varied) assert.notEqual(first.id, second.id);
+    else assert.equal(first.id, second.id);
+  });
+}
+
 test('a real exercise beats an otherwise identical substitute by exactly two points', () => {
   const rows = [makeExercise({ id: 'sub', mp: 'squat', pref: ['hypertrophy_accessory'] }), makeExercise({ id: 'real', mp: 'squat', pref: ['hypertrophy_accessory'] })];
   rows[0].is_substitute = true;

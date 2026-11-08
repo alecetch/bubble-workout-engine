@@ -7,6 +7,25 @@ export const KNOWN_EMPTY = emptySlots.flatMap(parts =>
 
 export const MIN_COUNTS = [
   ...[
+    ['hypertrophy_default_v1', 'day1', 'D:calves'],
+    ['hypertrophy_default_v1', 'day3', 'C:calves'],
+    ['hypertrophy_default_v1', 'legs_day', 'D:calves'],
+    ['strength_default_v1', 'day3', 'C:calves_strength'],
+  ].flatMap(([config_key, day_key, slot]) => [0, 1, 2, 3].flatMap(rank => [
+    { config_key, day_key, slot, rank, preset: 'no_equipment', min: 3,
+      reason: 'Beginner single-leg and bent-knee raises provide weekly calf variety' },
+    { config_key, day_key, slot, rank, preset: 'minimal_equipment', min: 4,
+      reason: 'Step Calf Raise adds a box-specific Minimal calf alternative' },
+  ])),
+  ...[
+    ['strength_default_v1', 'day2', 'C:pull_vertical_strength'],
+    ['hypertrophy_default_v1', 'day4', 'B:pull_vertical'],
+    ['hypertrophy_default_v1', 'pull_day', 'B:pull_vertical'],
+  ].flatMap(([config_key, day_key, slot]) => [0, 1, 2, 3].map(rank => ({
+    config_key, day_key, slot, rank, preset: 'no_equipment', min: 2,
+    reason: 'Towel Lat Pulldown adds an unanchored accessory vertical pull',
+  }))),
+  ...[
     ['pull_day', 'A:pull_horizontal', 10, 'Band and TRX rows expand horizontal pulling'],
     ['pull_day', 'D:biceps', 12, 'Band and TRX curls expand Minimal arm choices'],
     ['push_day', 'D:triceps', 6, 'Band pushdowns expand Minimal triceps choices'],
@@ -39,7 +58,6 @@ export const MIN_COUNTS = [
     config_key, day_key, slot, preset: 'no_equipment', rank, min, reason,
   }))),
   ...[
-    ['hypertrophy_default_v1', 'pull_day', 'B:pull_vertical', 'no_equipment', 1, 'Prone Lat Pulldown replaces Table Row'],
     ['hyrox_default_v1', 'hyrox_simulation', 'C:sled_pull', 'no_equipment', 1, 'Backward Bear Crawl replaces Wheelbarrow Pull'],
     ['hyrox_default_v1', 'hyrox_simulation', 'F:carry', 'no_equipment', 1, 'Household Load Carry kept'],
     ['hyrox_default_v1', 'hyrox_simulation', 'C:sled_pull', 'decent_home_gym', 2, 'Sandbag Backward Drag'],
