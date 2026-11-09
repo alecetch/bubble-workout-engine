@@ -55,6 +55,48 @@ function cooldownItems(out, weekIndex = 0, dayIndex = 0) {
   return out.program.weeks[weekIndex].days[dayIndex].segments.find((seg) => seg.segment_type === "cooldown").items;
 }
 
+test('glute tags rotate lower-back stretches into hinge days without losing hamstring stretches', async () => {
+  const glutes = [
+    cooldown('cooldown-pigeon-stretch', ['glutes'], [], 1, 'ready'),
+    cooldown('cooldown-figure-four-stretch', ['glutes'], [], 1, 'ready'),
+    cooldown('cooldown-seated-glute-stretch', ['glutes'], [], 1, 'ready'),
+    cooldown('cooldown-kneeling-hip-flexor-stretch', ['quads', 'glutes'], [], 1, 'ready'),
+    cooldown('cooldown-butterfly-stretch', ['glutes'], [], 1, 'ready'),
+    cooldown('cooldown-childs-pose', ['lats', 'upper_back', 'glutes'], [], 1, 'ready'),
+    cooldown('cooldown-supine-twist-hold', ['core', 'glutes'], [], 1, 'ready'),
+  ];
+  const hamstrings = [
+    cooldown('cooldown-supine-hamstring-stretch', ['hamstrings'], [], 1, 'ready'),
+    cooldown('cooldown-staggered-standing-hamstring-stretch', ['hamstrings'], [], 1, 'ready'),
+  ];
+  for (const updated of [true, false]) {
+    const cooldownCatalog = [...glutes.map(row => ({ ...row,
+      target_regions_json: updated ? row.target_regions_json : row.target_regions_json.filter(region =>
+        !['cooldown-childs-pose', 'cooldown-supine-twist-hold'].includes(row.cooldown_exercise_id) || region !== 'glutes'),
+    })), ...hamstrings];
+    const out = await narrate({
+      // Only two requested regions, so the five-region cap cannot exclude glutes.
+      catalog: [{ id: 'hinge', tr: ['hamstrings', 'glutes'], mp: 'hinge' }],
+      cooldownCatalog,
+      // Seven weeks exhaust the seven-row glute pool regardless of the day hash.
+      weeks: Array.from({ length: 7 }, (_, i) => ({ week_index: i + 1, days: [{
+        week_index: i + 1, day_index: 1, program_day_key: `W${i + 1}D1`,
+        segments: [segment('main', [ex('hinge')])],
+      }] })),
+    });
+    const picked = new Set();
+    for (let week = 0; week < 7; week++) {
+      const items = cooldownItems(out, week);
+      assert.ok(items.some(item => hamstrings.some(row => row.cooldown_exercise_id === item.exercise_id)),
+        `Week ${week + 1} must retain a hamstring stretch (updated=${updated})`);
+      for (const item of items) picked.add(item.exercise_id);
+    }
+    for (const id of ['cooldown-childs-pose', 'cooldown-supine-twist-hold']) {
+      assert.equal(picked.has(id), updated, `${id}: updated=${updated}`);
+    }
+  }
+});
+
 function videoPreferenceFixture(cooldownCatalog, overrides = {}) {
   return {
     catalog: [{ id: 'main', tr: ['glutes'] }],
