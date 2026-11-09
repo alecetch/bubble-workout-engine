@@ -1,4 +1,5 @@
 import test from "node:test";
+import { exerciseValues as parseExerciseValues } from "./fixtures/exerciseCatalogueSnapshot.js";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { REVIEWED_EXERCISE_IDS } from './fixtures/contraindicationReview.js';
@@ -11,21 +12,7 @@ const catalogue = readMigration("R__exercise_catalogue_edits.sql");
 const backfill = readMigration("R__exercise_catalogue_zz_sync_program_exercise_names.sql");
 const equipment = readMigration("R__seed_equipment_items.sql");
 
-function exerciseValues(id) {
-  const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const blocks = [...catalogue.matchAll(new RegExp(`INSERT INTO (?:public\\.)?exercise_catalogue \\(\\s*([^)]*)\\) VALUES \\(\\r?\\n  '${escapedId}',([\\s\\S]*?)\\r?\\n\\)\\r?\\nON CONFLICT`, 'g'))];
-  assert.equal(blocks.length, 1, `Expected one INSERT block for ${id}`);
-  const columns = blocks[0][1].split(',').map(column => column.trim());
-  // Each SQL value occupies its own line. Never split on commas, which may
-  // occur inside quoted names, ARRAY[...] expressions, or JSON values.
-  const values = [`'${id}'`, ...blocks[0][2].trim().split(/\r?\n/).map(line => line.trim().replace(/,$/, ''))];
-  assert.equal(values.length, columns.length, `Column/value mismatch for ${id}`);
-  return {
-    fields: Object.fromEntries(columns.map((column, i) => [column, values[i]])),
-    rank: Number(values[4]), archived: values[5] === 'true',
-    hyroxRole: columns.includes('hyrox_role') ? values[columns.indexOf('hyrox_role')] : undefined,
-  };
-}
+const exerciseValues = id => parseExerciseValues(catalogue, id);
 
 function equipmentRows(sql = equipment) {
   // Both seed VALUES lists have one complete row per line. Quoted SQL tokens
