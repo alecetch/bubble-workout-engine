@@ -16,7 +16,7 @@ SELECT * FROM (VALUES
   ('cooldown-bent-knee-calf-stretch', 'Bent-knee Calf Wall Stretch', '["calves"]'::jsonb, '{}'::text[], 'Facing a wall, bend the rear knee slightly with the heel down and hold. Hold each side.', '30 sec', 2, 'stretch'),
   ('cooldown-doorway-pec-stretch', 'Doorway Pec Stretch', '["chest"]'::jsonb, '{}'::text[], 'Rest one forearm against a doorway and hold a gentle chest opening. Hold each side.', '30 sec', 2, 'stretch'),
   ('cooldown-supine-chest-stretch', 'Supine Chest Stretch', '["chest"]'::jsonb, '{}'::text[], 'Lie on your back with arms open and palms up. Rest in a comfortable chest stretch.', '30 sec', 1, 'stretch'),
-  ('cooldown-childs-pose', 'Childs Pose', '["lats","upper_back"]'::jsonb, '{}'::text[], 'Sit hips toward heels, reach arms forward, and hold while breathing slowly.', '30 sec', 1, 'stretch'),
+  ('cooldown-childs-pose', 'Childs Pose', '["lats","upper_back","glutes"]'::jsonb, '{}'::text[], 'Sit hips toward heels, reach arms forward, and let the lower back relax as you breathe slowly.', '30 sec', 1, 'stretch'),
   ('cooldown-side-reach-childs-pose', 'Side-reach Childs Pose', '["lats"]'::jsonb, '{}'::text[], 'From childs pose, place both hands to one side and hold the side-body stretch. Hold each side.', '30 sec', 2, 'stretch'),
   ('cooldown-cross-body-shoulder-stretch', 'Cross-body Shoulder Stretch', '["shoulders","rear_delts"]'::jsonb, '{}'::text[], 'Hold one arm across the chest with the shoulder relaxed. Hold each side.', '30 sec', 2, 'stretch'),
   ('cooldown-side-lying-rear-shoulder-stretch', 'Side-lying Rear Shoulder Stretch', '["rear_delts"]'::jsonb, '{}'::text[], 'Lie on your side and hold the top arm across your chest with gentle support. Hold each side.', '30 sec', 2, 'stretch'),
@@ -30,7 +30,7 @@ SELECT * FROM (VALUES
   ('cooldown-rounded-back-hold', 'Rounded-back Hold', '["upper_back"]'::jsonb, '{}'::text[], 'On hands and knees, gently round the upper back and hold still while breathing.', '30 sec', 1, 'stretch'),
   ('cooldown-seated-upper-back-stretch', 'Seated Upper-back Stretch', '["upper_back"]'::jsonb, '{}'::text[], 'Clasp hands forward and gently reach away, holding the shoulder blades apart.', '30 sec', 1, 'stretch'),
   ('cooldown-sphinx-hold', 'Sphinx Hold', '["core"]'::jsonb, '{}'::text[], 'Lie on your front supported on forearms and hold a gentle abdominal stretch.', '30 sec', 1, 'stretch'),
-  ('cooldown-supine-twist-hold', 'Supine Twist Hold', '["core"]'::jsonb, '{}'::text[], 'Lie back with bent knees resting to one side and shoulders relaxed. Hold each side.', '30 sec', 2, 'stretch'),
+  ('cooldown-supine-twist-hold', 'Supine Twist Hold', '["core","glutes"]'::jsonb, '{}'::text[], 'Lie back with bent knees resting to one side and shoulders relaxed. Feel the stretch through the lower back and outer hip. Hold each side.', '30 sec', 2, 'stretch'),
   ('cooldown-kneeling-hip-flexor-stretch', 'Kneeling Hip-flexor Stretch', '["quads","glutes"]'::jsonb, '{}'::text[], 'In a half-kneeling position, tuck the pelvis gently and hold with the torso upright. Hold each side.', '30 sec', 2, 'stretch'),
   ('cooldown-standing-biceps-stretch', 'Standing Biceps Stretch', '["biceps"]'::jsonb, '{}'::text[], 'Clasp hands behind your hips with palms together, gently straighten the elbows, and hold without lifting the shoulders.', '30 sec', 1, 'stretch'),
   ('cooldown-prone-pec-stretch', 'Prone Pec Stretch', '["chest"]'::jsonb, '{}'::text[], 'Lie face down with one arm extended to the side. Gently turn the chest away from that arm and hold a comfortable stretch. Hold each side.', '30 sec', 2, 'stretch'),
@@ -56,7 +56,7 @@ SELECT * FROM (VALUES
   ('cooldown-box-breathing', 'Box Breathing', '["cardio"]'::jsonb, '{}'::text[], 'Sit or lie comfortably. Breathe in for 4, hold for 4, out for 4, hold for 4.', '1 min', 1, 'breathing'),
   ('cooldown-supine-90-90-breathing', 'Supine 90/90 Breathing', '["cardio","core"]'::jsonb, '{}'::text[], 'Lie on your back with calves on a bench or chair, knees and hips at 90 degrees. Breathe slowly into your belly and ribs.', '1 min', 1, 'breathing'),
   ('cooldown-couch-stretch', 'Couch Stretch', '["quads"]'::jsonb, '{}'::text[], 'Kneel with one shin up against a wall or sofa and the other foot forward. Tuck the pelvis and stay upright. Hold each side.', '30 sec', 2, 'stretch'),
-  ('cooldown-butterfly-stretch', 'Seated Butterfly Stretch', '["glutes"]'::jsonb, '{}'::text[], 'Sit with the soles of the feet together and knees falling out. Sit tall and let the knees relax toward the floor.', '30 sec', 1, 'stretch'),
+  ('cooldown-butterfly-stretch', 'Seated Butterfly Stretch', '["glutes"]'::jsonb, '{}'::text[], 'Sit with the soles of the feet together and knees falling out. Sit tall and let the knees relax toward the floor to stretch the inner thighs.', '30 sec', 1, 'stretch'),
   ('cooldown-downward-dog-hold', 'Downward Dog Hold', '["calves","hamstrings","shoulders"]'::jsonb, '{}'::text[], 'From hands and feet, lift the hips high, press the chest toward the thighs, and let the heels sink toward the floor.', '30 sec', 1, 'stretch'),
   ('cooldown-bench-lat-stretch', 'Bench Lat Stretch', '["lats","triceps"]'::jsonb, '{bench}'::text[], 'Kneel beside a bench, rest one elbow on it with the hand behind your head, and sit the hips back until the side of your back stretches. Hold each side.', '30 sec', 2, 'stretch'),
   ('cooldown-cobra-hold', 'Cobra to Child''s Pose', '["core","chest"]'::jsonb, '{}'::text[], 'Lie face down with hands under the shoulders and gently press the chest up, hips down. Hold briefly, then push the hips back to your heels into child''s pose. Move slowly between the two.', '5 slow reps', 1, 'stretch')
@@ -106,3 +106,19 @@ FROM (VALUES
   ('cooldown-pigeon-stretch', ARRAY['knee_issues']::text[])
 ) AS tags(id, flags)
 WHERE e.cooldown_exercise_id = tags.id;
+
+-- 2026-11-09 (cooldown-lower-back-on-hinge-days): tag lower-back stretches for glutes so they
+-- rotate into hinge, squat and lunge day cool-downs, and make cue text say what each stretch is for.
+-- This re-runs whenever the file's checksum changes and overrides admin-UI edits to these three rows'
+-- regions and cue text; to change them permanently, edit the values here.
+UPDATE cooldown_exercise e
+SET target_regions_json = v.regions,
+    cue_text = v.cue,
+    updated_at = now()
+FROM (VALUES
+  ('cooldown-childs-pose', '["lats","upper_back","glutes"]'::jsonb, 'Sit hips toward heels, reach arms forward, and let the lower back relax as you breathe slowly.'),
+  ('cooldown-supine-twist-hold', '["core","glutes"]'::jsonb, 'Lie back with bent knees resting to one side and shoulders relaxed. Feel the stretch through the lower back and outer hip. Hold each side.'),
+  ('cooldown-butterfly-stretch', '["glutes"]'::jsonb, 'Sit with the soles of the feet together and knees falling out. Sit tall and let the knees relax toward the floor to stretch the inner thighs.')
+) AS v(id, regions, cue)
+WHERE e.cooldown_exercise_id = v.id
+  AND (e.target_regions_json IS DISTINCT FROM v.regions OR e.cue_text IS DISTINCT FROM v.cue);
