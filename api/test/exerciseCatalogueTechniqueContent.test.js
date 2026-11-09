@@ -55,3 +55,13 @@ test('every active exercise meets the Part A technique content standard', () => 
   assert.ok(ids.length > 0, 'Expected catalogue blocks');
   assert.deepEqual(failures, [], `Technique content failures:\n${failures.join('\n')}`);
 });
+
+test('owner-reviewed atomic push-up uses floor support rather than TRX', () => {
+  const { fields } = exerciseValues(catalogue, 'atomic_push_ups');
+  assert.equal(fields.equipment_items_slugs, "'{}'::text[]");
+  assert.equal(fields.equipment_json, "'[]'::jsonb");
+  const guidance = [fields.technique_setup, fields.coaching_cues_json,
+    fields.technique_execution_json, fields.technique_mistakes_json].join(' ');
+  assert.doesNotMatch(guidance, /TRX|straps|cradles|suspend/i);
+  assert.match(fields.technique_execution_json, /Jump your feet back while bending your elbows/i);
+});
