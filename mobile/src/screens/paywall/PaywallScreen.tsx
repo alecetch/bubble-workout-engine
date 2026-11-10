@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { syncEntitlement } from "../../api/entitlement";
 import { queryKeys } from "../../api/hooks";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { LegalLinksRow } from "../../components/legal/LegalLinksRow";
@@ -77,15 +78,22 @@ export function PaywallScreen({ navigation }: Props): React.JSX.Element {
         return;
       }
       const customerInfo = await restorePurchasesSdk();
-      const entitlement = customerInfo.entitlements.active.pro;
-      if (entitlement) {
+      const serverEntitlement = await syncEntitlement();
+      const isActive = serverEntitlement?.is_active ?? Boolean(customerInfo.entitlements.active.pro);
+      if (serverEntitlement) {
+        setEntitlement(serverEntitlement.subscription_status, serverEntitlement.trial_expires_at);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.entitlement });
+      } else if (isActive) {
         setEntitlement("active", null);
         await queryClient.invalidateQueries({ queryKey: queryKeys.entitlement });
+      }
+      if (isActive) {
         Alert.alert("Purchase restored", "Your subscription is active again.", [
           { text: "Continue", onPress: () => navigation.goBack() },
         ]);
       } else {
-        Alert.alert("No purchase found", "We couldn't find an active subscription for this Apple ID.");
+        const account = Platform.OS === "android" ? "Google account" : "Apple ID";
+        Alert.alert("No purchase found", `We couldn't find an active subscription for this ${account}.`);
       }
     } catch {
       Alert.alert("Restore failed", "Unable to restore purchases. Please try again.");

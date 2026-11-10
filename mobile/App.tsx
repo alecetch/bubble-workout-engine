@@ -11,7 +11,7 @@ import { queryClient } from "./src/api/queryClient";
 import { AuthNavigator } from "./src/navigation/AuthNavigator";
 import { AppTabs } from "./src/navigation/AppTabs";
 import { ErrorBoundary } from "./src/components/system/ErrorBoundary";
-import { configurePurchases } from "./src/lib/purchases";
+import { configurePurchases, getRevenueCatApiKey } from "./src/lib/purchases";
 import {
   initCrashReporting,
   reportError,
@@ -157,7 +157,7 @@ function App(): React.JSX.Element {
   }, [isAuthenticated, userId]);
 
   React.useEffect(() => {
-    const key = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ?? "";
+    const key = getRevenueCatApiKey();
     logger.boot("configurePurchases start", { hasKey: Boolean(key) });
     configurePurchases(key);
     logger.boot("configurePurchases done");

@@ -1,9 +1,11 @@
 import React from "react";
 import { axe } from "jest-axe";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CustomerInfo, PurchasesOfferings, PurchasesPackage } from "react-native-purchases";
+import { syncEntitlement } from "../../api/entitlement";
 import { queryKeys } from "../../api/hooks";
 import {
   getPurchaseOfferings,
@@ -32,6 +34,11 @@ vi.mock("../../lib/purchases", () => ({
   isPurchasesAvailable: vi.fn(),
 }));
 
+vi.mock("../../api/entitlement", () => ({ syncEntitlement: vi.fn() }));
+
+const originalPlatform = Platform.OS;
+afterEach(() => { Platform.OS = originalPlatform; });
+
 vi.mock("../../state/session/sessionStore", () => ({
   useSessionStore: vi.fn(),
 }));
@@ -47,10 +54,10 @@ vi.mock("../../components/interaction/PressableScale", () => ({
 const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 const setEntitlementMock = vi.fn();
 const invalidateQueriesMock = vi.fn();
-const MOCK_PACKAGE = { identifier: "$rc_monthly" };
+const MOCK_PACKAGE = { identifier: "$rc_monthly" } as PurchasesPackage;
 const MOCK_OFFERINGS = {
   current: { availablePackages: [MOCK_PACKAGE] },
-};
+} as PurchasesOfferings;
 
 const getPurchaseOfferingsMock = vi.mocked(getPurchaseOfferings);
 const isPurchaseCancelledErrorMock = vi.mocked(isPurchaseCancelledError);
@@ -89,7 +96,9 @@ describe("PaywallScreen", () => {
     purchasePackageMock.mockResolvedValue(undefined);
     restorePurchasesMock.mockResolvedValue({
       entitlements: { active: { pro: { identifier: "pro", isActive: true } } },
-    });
+    } as unknown as CustomerInfo);
+    vi.mocked(syncEntitlement).mockResolvedValue(null);
+    Platform.OS = "ios";
     isPurchaseCancelledErrorMock.mockReturnValue(false);
     isPurchasesAvailableMock.mockReturnValue(true);
   });
@@ -260,5 +269,64 @@ describe("PaywallScreen", () => {
       expect.any(String),
       expect.any(Array),
     );
+  });
+});
+
+
+describe("restore server reconciliation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Platform.OS = "ios";
+    invalidateQueriesMock.mockReset();
+    mockZustandSelector(useSessionStoreMock as any, { setEntitlement: setEntitlementMock });
+    vi.mocked(useQueryClient).mockReturnValue({ invalidateQueries: invalidateQueriesMock } as any);
+    isPurchasesAvailableMock.mockReturnValue(true);
+    restorePurchasesMock.mockResolvedValue({ entitlements: { active: { pro: {} } } } as unknown as CustomerInfo);
+  });
+
+  it("uses active server state even when the SDK has no entitlement", async () => {
+    restorePurchasesMock.mockResolvedValue({ entitlements: { active: {} } } as unknown as CustomerInfo);
+    vi.mocked(syncEntitlement).mockResolvedValue({ is_active: true, subscription_status: "active", trial_expires_at: "2026-01-01" } as any);
+    renderScreen();
+    fireEvent.click(screen.getByText("Restore purchase"));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Purchase restored", expect.any(String), expect.any(Array)));
+    expect(syncEntitlement).toHaveBeenCalledOnce();
+    expect(setEntitlementMock).toHaveBeenCalledWith("active", "2026-01-01");
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: queryKeys.entitlement });
+  });
+
+  it("uses inactive server state even when the SDK has pro", async () => {
+    vi.mocked(syncEntitlement).mockResolvedValue({ is_active: false, subscription_status: "expired", trial_expires_at: "2026-01-01" } as any);
+    renderScreen();
+    fireEvent.click(screen.getByText("Restore purchase"));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("No purchase found", expect.stringContaining("Apple ID")));
+    expect(setEntitlementMock).toHaveBeenCalledWith("expired", "2026-01-01");
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: queryKeys.entitlement });
+  });
+
+  it("falls back to SDK state when the endpoint is unavailable", async () => {
+    vi.mocked(syncEntitlement).mockResolvedValue(null);
+    renderScreen();
+    fireEvent.click(screen.getByText("Restore purchase"));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Purchase restored", expect.any(String), expect.any(Array)));
+    expect(setEntitlementMock).toHaveBeenCalledWith("active", null);
+  });
+
+  it("names the Google account on Android when no purchase is found", async () => {
+    Platform.OS = "android";
+    vi.mocked(syncEntitlement).mockResolvedValue(null);
+    restorePurchasesMock.mockResolvedValue({ entitlements: { active: {} } } as unknown as CustomerInfo);
+    renderScreen();
+    fireEvent.click(screen.getByText("Restore purchase"));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("No purchase found", expect.stringContaining("Google account")));
+    expect(setEntitlementMock).not.toHaveBeenCalled();
+  });
+
+  it("reports sync failure without granting the SDK entitlement", async () => {
+    vi.mocked(syncEntitlement).mockRejectedValue(new Error("server error"));
+    renderScreen();
+    fireEvent.click(screen.getByText("Restore purchase"));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Restore failed", expect.any(String)));
+    expect(setEntitlementMock).not.toHaveBeenCalled();
   });
 });
