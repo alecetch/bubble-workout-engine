@@ -1,4 +1,4 @@
-appId: fit.getforma.app
+appId: fit.get200days.app
 ---
 - openLink: "forma://ref/ABCD2345"
 - extendedWaitUntil:

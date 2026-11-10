@@ -89,9 +89,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'fit.getforma.app'
+    namespace 'fit.get200days.app'
     defaultConfig {
-        applicationId 'fit.getforma.app'
+        applicationId 'fit.get200days.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

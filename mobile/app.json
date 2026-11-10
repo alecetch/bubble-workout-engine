@@ -14,7 +14,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "fit.getforma.app",
+      "bundleIdentifier": "fit.get200days.app",
       "associatedDomains": [
         "applinks:getforma.fit"
       ],
@@ -24,7 +24,7 @@
       "icon": "./assets/icon.png"
     },
     "android": {
-      "package": "fit.getforma.app",
+      "package": "fit.get200days.app",
       "intentFilters": [
         {
           "action": "VIEW",
