@@ -1,4 +1,4 @@
-appId: fit.getforma.app
+appId: fit.get200days.app
 ---
 - runFlow:
     file: auth-program-session.yaml

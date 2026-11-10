@@ -1,4 +1,4 @@
-package fit.getforma.app
+package fit.get200days.app
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

@@ -1,4 +1,4 @@
-package fit.getforma.app
+package fit.get200days.app
 
 import android.app.Application
 import android.content.res.Configuration
