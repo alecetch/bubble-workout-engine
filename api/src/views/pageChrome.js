@@ -31,6 +31,10 @@ function header() {
   </header>`;
 }
 
+export const COMPANY_LEGAL_LINE =
+  "Engle Consulting Limited is registered in England and Wales, company number 06771687. "
+  + "Registered office: Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY.";
+
 function footer() {
   const previewLinks = marketingPreviewEnabled() ? '<a href="/support">Support</a>' : "";
   return `
@@ -43,6 +47,7 @@ function footer() {
       </div>
       <p class="footer-copy">© 2026 Engle Consulting Limited. All rights reserved.</p>
       <a href="/download" class="app-store-badge">Get launch updates</a>
+      <p class="footer-legal">${COMPANY_LEGAL_LINE}</p>
     </div>
   </footer>`;
 }
@@ -105,6 +110,7 @@ const SHARED_CSS = `
   .footer-links { display: flex; gap: 24px; }
   .footer-links a { color: #94A3B8; font-size: 14px; }
   .footer-copy { color: #475569; font-size: 13px; }
+  .footer-legal { flex-basis: 100%; color: #475569; font-size: 12px; }
   .app-store-badge {
     background: #1E293B;
     color: #F1F5F9 !important;

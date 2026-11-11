@@ -68,3 +68,9 @@ test("gatePage returns styled 404 unless preview is enabled", () => {
     assert.equal(called, true);
   });
 });
+
+test("wrapPage footer shows the company's registered details", () => {
+  const html = withPreview(null, () => wrapPage("Home", "<p>Hello</p>"));
+  assert.match(html, /Engle Consulting Limited is registered in England and Wales, company number 06771687\./);
+  assert.match(html, /Registered office: Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY\./);
+});
