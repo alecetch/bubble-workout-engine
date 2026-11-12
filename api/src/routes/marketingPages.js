@@ -207,7 +207,7 @@ const PRIVACY_HTML = `
 <p>This Privacy Policy explains how Forma ("we", "us", or "our") collects, uses, and protects your personal information when you use the Forma mobile application and website at getforma.fit (together, the "Service").</p>
 <p>By using the Service, you agree to the collection and use of information as described in this policy.</p>
 <h2>1. Who We Are</h2>
-<p>Forma is operated by Engle Consulting Limited, a company registered in England and Wales. If you have any questions about this policy, contact us at alecpringle@outlook.com.</p>
+<p>Forma is operated by Engle Consulting Limited, a company registered in England and Wales (company number 06771687), whose registered office is at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY. If you have any questions about this policy, contact us at alecpringle@outlook.com.</p>
 <h2>2. Information We Collect</h2>
 <h3>Information you provide directly</h3>
 <ul>
@@ -269,7 +269,7 @@ const PRIVACY_HTML = `
 const TERMS_HTML = `
 <h1>Terms of Service</h1>
 <p class="effective">Effective date: 15th May 2026</p>
-<p>These Terms of Service ("Terms") govern your use of the Forma mobile application and website at getforma.fit (together, the "Service"), operated by Engle Consulting Limited ("Forma", "we", "us", or "our").</p>
+<p>These Terms of Service ("Terms") govern your use of the Forma mobile application and website at getforma.fit (together, the "Service"), operated by Engle Consulting Limited, a company registered in England and Wales (company number 06771687) with its registered office at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY ("Forma", "we", "us", or "our").</p>
 <p>By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.</p>
 <h2>1. Eligibility</h2><p>You must be at least 16 years old to use the Service. The Service is intended for personal, non-commercial fitness training use.</p>
 <h2>2. Your Account</h2><p>You are responsible for maintaining the security of your account credentials. If you suspect unauthorised access, contact us immediately at alecpringle@outlook.com.</p>
