@@ -207,7 +207,7 @@ const PRIVACY_HTML = `
 <p>This Privacy Policy explains how Forma ("we", "us", or "our") collects, uses, and protects your personal information when you use the Forma mobile application and website at getforma.fit (together, the "Service").</p>
 <p>By using the Service, you agree to the collection and use of information as described in this policy.</p>
 <h2>1. Who We Are</h2>
-<p>Forma is operated by Engle Consulting Limited, a company registered in England and Wales (company number 06771687), whose registered office is at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY. If you have any questions about this policy, contact us at alecpringle@outlook.com.</p>
+<p>Forma is operated by Engle Consulting Limited, a company registered in England and Wales (company number 06771687), whose registered office is at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY. If you have any questions about this policy, contact us at support@200days.app.</p>
 <h2>2. Information We Collect</h2>
 <h3>Information you provide directly</h3>
 <ul>
@@ -256,13 +256,13 @@ const PRIVACY_HTML = `
 <li><strong>Export</strong> your workout data</li>
 <li><strong>Withdraw consent</strong> for optional processing</li>
 </ul>
-<p>To exercise these rights, contact us at alecpringle@outlook.com. To delete your account, go to Settings - Account - Delete Account in the app.</p>
+<p>To exercise these rights, contact us at support@200days.app. To delete your account, go to Settings - Account - Delete Account in the app.</p>
 <h2>8. Children</h2>
 <p>The Service is not directed at children under 16. We do not knowingly collect personal data from anyone under 16.</p>
 <h2>9. Changes to This Policy</h2>
 <p>We may update this policy from time to time. If we make material changes, we will notify you via the app or by email at least 14 days before the changes take effect.</p>
 <h2>10. Contact</h2>
-<p><strong>Email:</strong> alecpringle@outlook.com<br><strong>Website:</strong> getforma.fit/support</p>
+<p><strong>Email:</strong> support@200days.app<br><strong>Website:</strong> getforma.fit/support</p>
 <p>As a UK-based company, our lead supervisory authority is the <strong>Information Commissioner's Office (ICO)</strong>. You have the right to lodge a complaint with the ICO at <a href="https://ico.org.uk">ico.org.uk</a> or by calling 0303 123 1113.</p>
 <p>If you are resident in the European Union, you may also lodge a complaint with your national data protection authority.</p>`;
 
@@ -272,7 +272,7 @@ const TERMS_HTML = `
 <p>These Terms of Service ("Terms") govern your use of the Forma mobile application and website at getforma.fit (together, the "Service"), operated by Engle Consulting Limited, a company registered in England and Wales (company number 06771687) with its registered office at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY ("Forma", "we", "us", or "our").</p>
 <p>By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.</p>
 <h2>1. Eligibility</h2><p>You must be at least 16 years old to use the Service. The Service is intended for personal, non-commercial fitness training use.</p>
-<h2>2. Your Account</h2><p>You are responsible for maintaining the security of your account credentials. If you suspect unauthorised access, contact us immediately at alecpringle@outlook.com.</p>
+<h2>2. Your Account</h2><p>You are responsible for maintaining the security of your account credentials. If you suspect unauthorised access, contact us immediately at support@200days.app.</p>
 <h2>3. Subscription and Billing</h2>
 <h3>Launch access</h3><p>Access terms, trial availability, and referral rewards will be displayed before purchase once the app is available.</p>
 <h3>Subscription</h3><p>After your trial period, continued access requires a paid subscription. Pricing and billing intervals are displayed in the app before purchase.</p>
@@ -295,7 +295,7 @@ const TERMS_HTML = `
 <h3>Consumer rights</h3><p>If you are a consumer resident in the United Kingdom or European Union, nothing affects your statutory rights. EU consumers may use the European Commission's Online Dispute Resolution platform at <a href="https://ec.europa.eu/consumers/odr">ec.europa.eu/consumers/odr</a>.</p>
 <h3>No class actions</h3><p>To the extent permitted by law, disputes must be brought on an individual basis and not as part of a class, consolidated, or representative action.</p>
 <h2>13. Changes to These Terms</h2><p>We may update these Terms from time to time and will notify you of material changes via the app or email.</p>
-<h2>14. Contact</h2><p><strong>Email:</strong> alecpringle@outlook.com<br><strong>Website:</strong> getforma.fit/support</p>`;
+<h2>14. Contact</h2><p><strong>Email:</strong> support@200days.app<br><strong>Website:</strong> getforma.fit/support</p>`;
 
 const softwareAppSchema = {
   "@context": "https://schema.org",
