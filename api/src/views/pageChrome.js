@@ -1,4 +1,4 @@
-import { getBrand } from "../config/brand.js";
+import { getBrand, getFormaBrand } from "../config/brand.js";
 import { escapeHtml } from "../routes/referralLanding.js";
 
 function marketingPreviewEnabled() {
@@ -6,6 +6,10 @@ function marketingPreviewEnabled() {
 }
 
 function header() {
+  const brand = getBrand();
+  const logo = brand.variant === "200days"
+    ? `<img src="${brand.logo.header}" width="32" height="32" alt=""><span class="logo-text">${brand.name}</span>`
+    : `<img src="${brand.logo.header}" width="110" alt="${brand.logo.headerAlt}" class="logo-img">`;
   const previewLinks = marketingPreviewEnabled() ? `
       <a href="/pricing">Pricing</a>
       <a href="/hyrox">Hyrox</a>
@@ -21,7 +25,7 @@ function header() {
   return `
   <header class="site-header">
     <a href="/" class="logo-link">
-      <img src="${getBrand().logo.header}" width="110" alt="${getBrand().logo.headerAlt}" class="logo-img">
+      ${logo}
     </a>
     <nav class="site-nav">
       <a href="/">Home</a>
@@ -33,7 +37,7 @@ function header() {
 }
 
 export const COMPANY_LEGAL_LINE =
-  `${getBrand().operator} is registered in England and Wales, company number 06771687. `
+  `${getFormaBrand().operator} is registered in England and Wales, company number 06771687. `
   + "Registered office: Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY.";
 
 function footer() {
@@ -80,7 +84,8 @@ const SHARED_CSS = `
     background: #0F172A;
     z-index: 10;
   }
-  .logo-link { display: flex; align-items: center; }
+  .logo-link { display: flex; align-items: center; gap: 10px; }
+  .logo-text { font-weight: 600; font-size: 18px; color: #F1F5F9; white-space: nowrap; }
   .logo-img { width: 110px; }
   .site-nav { display: flex; align-items: center; gap: 24px; }
   .site-nav a { color: #94A3B8; font-size: 14px; font-weight: 500; }
@@ -147,33 +152,41 @@ export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
   const isOptions = extraCssOrOptions !== null && typeof extraCssOrOptions === "object";
   const extraCss = isOptions ? (extraCssOrOptions.extraCss ?? "") : extraCssOrOptions;
   const opts = isOptions ? extraCssOrOptions : {};
-  const description = opts.description ?? `${getBrand().name} - personalised strength and conditioning programs that adapt to your performance.`;
-  const ogImage = opts.ogImage ?? getBrand().logo.ogImage;
+  const brand = getBrand();
+  const description = opts.description ?? brand.defaultDescription;
+  const image = opts.ogImage ?? brand.logo.ogImage;
+  const ogImage = /^https?:\/\//i.test(image) ? image : brand.siteUrl + image;
   const ogType = opts.ogType ?? "website";
-  const baseUrl = process.env.BASE_URL ?? "";
-  const canonicalTag = baseUrl && opts.canonical
-    ? `<link rel="canonical" href="${escapeHtml(baseUrl + opts.canonical)}">`
+  const canonicalTag = opts.canonical
+    ? `<link rel="canonical" href="${escapeHtml(brand.siteUrl + opts.canonical)}">`
     : "";
   const jsonLdTag = opts.jsonLd
     ? `<script type="application/ld+json">${JSON.stringify(opts.jsonLd)}</script>`
     : "";
+  const iconTags = brand.variant === "200days"
+    ? `<link rel="icon" href="${brand.logo.favicon}" type="image/svg+xml">
+  <link rel="icon" href="${brand.logo.favicon32}" sizes="32x32">
+  <link rel="alternate icon" href="${brand.logo.faviconIco}">
+  <link rel="apple-touch-icon" href="${brand.logo.appleTouchIcon}">
+  <meta name="theme-color" content="#0F172A">`
+    : `<link rel="icon" type="image/png" href="${brand.logo.favicon}">`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)} - ${getBrand().titleSuffix}</title>
+  <title>${escapeHtml(title)} - ${brand.titleSuffix}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta property="og:title" content="${escapeHtml(title)} - ${getBrand().name}">
+  <meta property="og:title" content="${escapeHtml(title)} - ${brand.titleSuffix}">
   <meta property="og:description" content="${escapeHtml(description)}">
   <meta property="og:image" content="${escapeHtml(ogImage)}">
   <meta property="og:type" content="${escapeHtml(ogType)}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${escapeHtml(title)} - ${getBrand().name}">
+  <meta name="twitter:title" content="${escapeHtml(title)} - ${brand.titleSuffix}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
   <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-  <link rel="icon" type="image/png" href="${getBrand().logo.favicon}">
+  ${iconTags}
   ${canonicalTag}
   ${jsonLdTag}
   <style>${SHARED_CSS}${extraCss}</style>

@@ -115,3 +115,53 @@ test("all marketing routes return HTML", async () => {
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
   }
 });
+
+
+for (const variant of ["forma", "200days"]) {
+  test(`home and download JSON-LD follow ${variant} at request time`, async () => {
+    const saved = { BRAND_VARIANT: process.env.BRAND_VARIANT, BASE_URL: process.env.BASE_URL };
+    try {
+      process.env.BRAND_VARIANT = variant;
+      for (const override of [undefined, "https://preview.example///"]) {
+        if (override === undefined) delete process.env.BASE_URL; else process.env.BASE_URL = override;
+        const expected = override ? "https://preview.example" : variant === "200days" ? "https://200days.app" : "https://getforma.fit";
+        for (const path of ["/", "/download"]) {
+          const { response, body } = await get(path);
+          assert.equal(response.status, 200);
+          const schema = JSON.parse(body.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]);
+          assert.equal(schema.name, variant === "200days" ? "200 Days" : "Forma");
+          assert.equal(schema.url, expected);
+          assert.equal(schema.image, expected + (variant === "200days" ? "/images/brand/200days-icon-1024.png" : "/images/forma_icon.png"));
+          assert.deepEqual(schema.publisher, { "@type": "Organization", name: "Engle Consulting Limited" });
+          // Copy migration follows separately; flag only affects chrome and metadata.
+          if (path === "/download") assert.match(body, /<h1>Forma is coming soon<\/h1>/);
+        }
+      }
+      const { body: privacy } = await get("/privacy");
+      assert.match(privacy, /Forma is operated by Engle Consulting Limited/);
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
+  });
+}
+
+
+test("brand flag preserves all published marketing body copy and footer", async () => {
+  const saved = process.env.BRAND_VARIANT;
+  try {
+    for (const path of ["/", "/download", "/privacy", "/terms", "/hyrox", "/strength", "/press", "/support", "/testimonials"]) {
+      delete process.env.BRAND_VARIANT;
+      const original = await get(path, { preview: true });
+      process.env.BRAND_VARIANT = "200days";
+      const switched = await get(path, { preview: true });
+      assert.equal(switched.response.status, original.response.status, path);
+      for (const pattern of [/<main>([\s\S]*?)<\/main>/, /<footer([\s\S]*?)<\/footer>/]) {
+        assert.equal(switched.body.match(pattern)[0], original.body.match(pattern)[0], path);
+      }
+    }
+  } finally {
+    if (saved === undefined) delete process.env.BRAND_VARIANT; else process.env.BRAND_VARIANT = saved;
+  }
+});

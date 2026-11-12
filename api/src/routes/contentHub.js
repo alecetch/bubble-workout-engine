@@ -1,4 +1,4 @@
-import { getBrand } from "../config/brand.js";
+import { getBrand, getFormaBrand } from "../config/brand.js";
 import express from "express";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
@@ -231,13 +231,13 @@ export function createGuideSignupHandler(db = pool) {
       console.error("guide email_signups insert error", err);
     }
 
-    const baseUrl = process.env.BASE_URL ?? getBrand().siteUrl;
+    const baseUrl = process.env.BASE_URL ?? getFormaBrand().siteUrl;
     const downloadUrl = `${baseUrl}${meta.leadMagnetFile}`;
     sendEmail({
       to: email,
-      subject: `Your download - ${meta.title ?? `${getBrand().name} Guide`}`,
-      text: `Here's your download:\n\n${downloadUrl}\n\nHappy training,\n${getBrand().name}`,
-      html: `<p>Here's your download: <a href="${escapeHtml(downloadUrl)}">${escapeHtml(meta.leadMagnetTitle ?? "Download")}</a></p><p>Happy training,<br>${getBrand().name}</p>`,
+      subject: `Your download - ${meta.title ?? `${getFormaBrand().name} Guide`}`,
+      text: `Here's your download:\n\n${downloadUrl}\n\nHappy training,\n${getFormaBrand().name}`,
+      html: `<p>Here's your download: <a href="${escapeHtml(downloadUrl)}">${escapeHtml(meta.leadMagnetTitle ?? "Download")}</a></p><p>Happy training,<br>${getFormaBrand().name}</p>`,
     }).catch(() => {});
 
     return res.redirect(302, meta.leadMagnetFile);

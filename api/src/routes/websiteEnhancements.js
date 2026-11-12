@@ -1,4 +1,4 @@
-import { getBrand } from "../config/brand.js";
+import { getBrand, getFormaBrand } from "../config/brand.js";
 import express from "express";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
@@ -123,7 +123,7 @@ function readBlogPosts() {
 
 function renderSignupForm(res, errorMsg = "") {
   const body = `<div class="signup-page">
-  <h1>Join the ${getBrand().name} launch list.</h1>
+  <h1>Join the ${getFormaBrand().name} launch list.</h1>
   <p class="signup-sub">Training insights, app updates, and early access to new features. No spam. Unsubscribe anytime.</p>
   ${errorMsg ? `<p class="signup-error">${escapeHtml(errorMsg)}</p>` : ""}
   <form method="POST" action="/signup" class="signup-form">
@@ -152,9 +152,9 @@ export async function insertEmailSignupAndNotify(email, source = "website", db =
 
   sendEmail({
     to: email,
-    subject: `You're on the ${getBrand().name} list`,
-    text: `Hi,\n\nYou're signed up for ${getBrand().name} updates. We'll send training tips and app news - no spam.\n\nWe'll email you when ${getBrand().name} is ready.\n\nTo unsubscribe, reply with 'unsubscribe'.\n\n${getBrand().name}`,
-    html: `<p>You're signed up for ${getBrand().name} updates. We'll send training tips and app news - no spam.</p><p>We'll email you when ${getBrand().name} is ready.</p><p style="color:#94A3B8;font-size:12px;">To unsubscribe, reply with 'unsubscribe'.</p>`,
+    subject: `You're on the ${getFormaBrand().name} list`,
+    text: `Hi,\n\nYou're signed up for ${getFormaBrand().name} updates. We'll send training tips and app news - no spam.\n\nWe'll email you when ${getFormaBrand().name} is ready.\n\nTo unsubscribe, reply with 'unsubscribe'.\n\n${getFormaBrand().name}`,
+    html: `<p>You're signed up for ${getFormaBrand().name} updates. We'll send training tips and app news - no spam.</p><p>We'll email you when ${getFormaBrand().name} is ready.</p><p style="color:#94A3B8;font-size:12px;">To unsubscribe, reply with 'unsubscribe'.</p>`,
   }).catch((err) => console.error("confirmation email error", err));
 }
 
@@ -195,14 +195,14 @@ export function createAdminEmailSignupsHandler(db = pool) {
 }
 
 websiteEnhancementsRouter.get("/robots.txt", (_req, res) => {
-  const baseUrl = process.env.BASE_URL ?? getBrand().siteUrl;
+  const baseUrl = getBrand().siteUrl;
   res
     .setHeader("Content-Type", "text/plain; charset=utf-8")
     .send(`User-agent: *\nAllow: /\nSitemap: ${baseUrl}/sitemap.xml\n`);
 });
 
 websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
-  const baseUrl = process.env.BASE_URL ?? getBrand().siteUrl;
+  const baseUrl = getBrand().siteUrl;
   const today = new Date().toISOString().slice(0, 10);
   const previewEnabled = process.env.MARKETING_PREVIEW_ENABLED === "true";
   const staticPaths = previewEnabled
@@ -239,7 +239,7 @@ websiteEnhancementsRouter.get("/pricing", gatePage, (_req, res) => {
   const annual = escapeHtml(process.env.ANNUAL_PRICE ?? "");
   const monthlyDisplay = monthly || "See App Store for pricing";
   const annualDisplay = annual || "See App Store for pricing";
-  const body = `<div class="pricing-page"><div class="pricing-hero"><h1>Start free. Train smarter.</h1><p>Preview pricing for the ${getBrand().name} app launch.</p></div><div class="container"><div class="trial-card"><h2>Launch pricing</h2><ul><li>Full access to every feature, every day</li><li>Your data is yours - export or delete anytime</li><li>Pricing will be confirmed before launch</li></ul></div><div class="plan-row"><div class="plan-card"><h3>Monthly</h3><div class="plan-price">${monthlyDisplay}</div><div class="plan-billing">Billed monthly</div><a href="/download" class="cta-btn">Get launch updates</a></div><div class="plan-card featured"><div class="plan-badge">Best value</div><h3>Annual</h3><div class="plan-price">${annualDisplay}</div><div class="plan-billing">Billed once per year</div>${annual ? '<div class="plan-saving">Save ~33% vs monthly</div>' : ""}<a href="/download" class="cta-btn">Get launch updates</a></div></div><div class="pricing-faq"><h2>Common questions</h2><div class="pfaq-item"><p class="pfaq-q">Is the app available yet?</p><p class="pfaq-a">Not yet. Join the launch list and we will email you when ${getBrand().name} is ready.</p></div><div class="pfaq-item"><p class="pfaq-q">Can I switch between monthly and annual?</p><p class="pfaq-a">Yes. Subscription management will be handled through your device once the app is live.</p></div></div><div style="text-align:center;"><a href="/download" class="cta-btn">Get launch updates</a></div></div></div>`;
+  const body = `<div class="pricing-page"><div class="pricing-hero"><h1>Start free. Train smarter.</h1><p>Preview pricing for the ${getFormaBrand().name} app launch.</p></div><div class="container"><div class="trial-card"><h2>Launch pricing</h2><ul><li>Full access to every feature, every day</li><li>Your data is yours - export or delete anytime</li><li>Pricing will be confirmed before launch</li></ul></div><div class="plan-row"><div class="plan-card"><h3>Monthly</h3><div class="plan-price">${monthlyDisplay}</div><div class="plan-billing">Billed monthly</div><a href="/download" class="cta-btn">Get launch updates</a></div><div class="plan-card featured"><div class="plan-badge">Best value</div><h3>Annual</h3><div class="plan-price">${annualDisplay}</div><div class="plan-billing">Billed once per year</div>${annual ? '<div class="plan-saving">Save ~33% vs monthly</div>' : ""}<a href="/download" class="cta-btn">Get launch updates</a></div></div><div class="pricing-faq"><h2>Common questions</h2><div class="pfaq-item"><p class="pfaq-q">Is the app available yet?</p><p class="pfaq-a">Not yet. Join the launch list and we will email you when ${getFormaBrand().name} is ready.</p></div><div class="pfaq-item"><p class="pfaq-q">Can I switch between monthly and annual?</p><p class="pfaq-a">Yes. Subscription management will be handled through your device once the app is live.</p></div></div><div style="text-align:center;"><a href="/download" class="cta-btn">Get launch updates</a></div></div></div>`;
   return sendHtml(res, "Pricing", body, {
     description: `${getBrand().name} pricing preview for the upcoming training app.`,
     canonical: "/pricing",
@@ -302,7 +302,7 @@ websiteEnhancementsRouter.get("/changelog", gatePage, (_req, res) => {
   } catch {
     html = "<p style='color:#94A3B8;'>Changelog coming soon.</p>";
   }
-  const body = `<div class="container-narrow changelog-page"><h1>Changelog</h1><p class="changelog-intro">A running record of what's new in ${getBrand().name}.</p><a class="changelog-download" href="/download">Get launch updates</a><div class="changelog-body">${html}</div></div>`;
+  const body = `<div class="container-narrow changelog-page"><h1>Changelog</h1><p class="changelog-intro">A running record of what's new in ${getFormaBrand().name}.</p><a class="changelog-download" href="/download">Get launch updates</a><div class="changelog-body">${html}</div></div>`;
   return sendHtml(res, "Changelog", body, {
     description: `${getBrand().name} changelog - see what's new in every version of the app.`,
     canonical: "/changelog",
