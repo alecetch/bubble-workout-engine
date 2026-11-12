@@ -1,3 +1,4 @@
+import { getBrand } from "../config/brand.js";
 import { escapeHtml } from "../routes/referralLanding.js";
 
 function marketingPreviewEnabled() {
@@ -20,7 +21,7 @@ function header() {
   return `
   <header class="site-header">
     <a href="/" class="logo-link">
-      <img src="/images/forma_masthead.png" width="110" alt="Forma - Measure. Understand. Improve." class="logo-img">
+      <img src="${getBrand().logo.header}" width="110" alt="${getBrand().logo.headerAlt}" class="logo-img">
     </a>
     <nav class="site-nav">
       <a href="/">Home</a>
@@ -32,7 +33,7 @@ function header() {
 }
 
 export const COMPANY_LEGAL_LINE =
-  "Engle Consulting Limited is registered in England and Wales, company number 06771687. "
+  `${getBrand().operator} is registered in England and Wales, company number 06771687. `
   + "Registered office: Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY.";
 
 function footer() {
@@ -45,7 +46,7 @@ function footer() {
         <a href="/terms">Terms</a>
         ${previewLinks}
       </div>
-      <p class="footer-copy">© 2026 Engle Consulting Limited. All rights reserved.</p>
+      <p class="footer-copy">© 2026 ${getBrand().operator}. All rights reserved.</p>
       <a href="/download" class="app-store-badge">Get launch updates</a>
       <p class="footer-legal">${COMPANY_LEGAL_LINE}</p>
     </div>
@@ -146,8 +147,8 @@ export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
   const isOptions = extraCssOrOptions !== null && typeof extraCssOrOptions === "object";
   const extraCss = isOptions ? (extraCssOrOptions.extraCss ?? "") : extraCssOrOptions;
   const opts = isOptions ? extraCssOrOptions : {};
-  const description = opts.description ?? "Forma - personalised strength and conditioning programs that adapt to your performance.";
-  const ogImage = opts.ogImage ?? "/images/forma_masthead.png";
+  const description = opts.description ?? `${getBrand().name} - personalised strength and conditioning programs that adapt to your performance.`;
+  const ogImage = opts.ogImage ?? getBrand().logo.ogImage;
   const ogType = opts.ogType ?? "website";
   const baseUrl = process.env.BASE_URL ?? "";
   const canonicalTag = baseUrl && opts.canonical
@@ -162,17 +163,17 @@ export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)} - Forma</title>
+  <title>${escapeHtml(title)} - ${getBrand().titleSuffix}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta property="og:title" content="${escapeHtml(title)} - Forma">
+  <meta property="og:title" content="${escapeHtml(title)} - ${getBrand().name}">
   <meta property="og:description" content="${escapeHtml(description)}">
   <meta property="og:image" content="${escapeHtml(ogImage)}">
   <meta property="og:type" content="${escapeHtml(ogType)}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${escapeHtml(title)} - Forma">
+  <meta name="twitter:title" content="${escapeHtml(title)} - ${getBrand().name}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
   <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-  <link rel="icon" type="image/png" href="/images/forma_icon.png">
+  <link rel="icon" type="image/png" href="${getBrand().logo.favicon}">
   ${canonicalTag}
   ${jsonLdTag}
   <style>${SHARED_CSS}${extraCss}</style>

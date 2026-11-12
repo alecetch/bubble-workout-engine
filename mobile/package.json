@@ -15,7 +15,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:all": "vitest run --coverage",
-    "assets:generate": "node scripts/generate-app-assets.mjs"
+    "assets:generate": "node scripts/generate-app-assets.mjs",
+    "assets:wordmark": "node scripts/build-wordmark.mjs",
+    "assets:web": "node scripts/generate-web-brand-assets.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
@@ -74,6 +76,7 @@
     "jest-axe": "^10.0.0",
     "jsdom": "^26.1.0",
     "msw": "^2.14.5",
+    "opentype.js": "^2.0.0",
     "tsx": "^4.21.0",
     "typescript": "~6.0.3",
     "vitest": "^4.1.7",

@@ -1,3 +1,4 @@
+import { getBrand } from "../config/brand.js";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { readFile } from "node:fs/promises";
@@ -60,6 +61,8 @@ export function createLandingPageHandler(db = pool, templatePath = TEMPLATE_PATH
       const referrerName = referrer ? deriveReferrerName(referrer.email) : "A friend";
       const template = await readFile(templatePath, "utf8");
       const html = template
+        .replaceAll("{{BRAND_NAME_UPPER}}", escapeHtml(getBrand().name.toUpperCase()))
+        .replaceAll("{{BRAND_NAME}}", escapeHtml(getBrand().name))
         .replaceAll("{{REFERRER_NAME}}", escapeHtml(referrerName))
         .replaceAll("{{REFERRAL_CODE}}", escapeHtml(code))
         .replaceAll("{{APP_STORE_URL}}", escapeHtml(process.env.APP_STORE_URL ?? ""));

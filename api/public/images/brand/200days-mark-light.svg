@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="157" height="157" viewBox="21.5 21.5 157 157"><g id="mark" fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+    <circle id="ring-track" cx="100" cy="100" r="72" stroke="#CBD5E1" stroke-width="13"/>
+
+    <path id="ring-progress" d="M100,28 A72,72 0 1 1 37.646,136" stroke="#22D3EE" stroke-width="13"/>
+
+    <g id="digits" stroke="#0F172A" stroke-width="9">
+      <path d="M54,89 A10,10 0 0 1 74,89 C74,97 70,101 65,106 L54,121 L74,121"/>
+      <rect x="90" y="79" width="20" height="42" rx="10"/>
+      <rect x="126" y="79" width="20" height="42" rx="10"/>
+    </g>
+  </g></svg>
