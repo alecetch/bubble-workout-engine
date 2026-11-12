@@ -87,6 +87,14 @@ test("GET /terms renders published terms content", async () => {
   assert.equal(body.includes("STATUS: DRAFT"), false);
 });
 
+test("privacy and terms list the company support address, not a personal one", async () => {
+  for (const path of ["/privacy", "/terms"]) {
+    const { body } = await get(path);
+    assert.match(body, /support@200days\.app/, path);
+    assert.equal(body.includes("outlook.com"), false, path);
+  }
+});
+
 test("GET /support renders FAQs and support email", async () => {
   const previous = process.env.SUPPORT_EMAIL;
   process.env.SUPPORT_EMAIL = "help@example.com";
