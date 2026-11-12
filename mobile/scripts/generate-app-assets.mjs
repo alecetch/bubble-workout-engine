@@ -1,3 +1,4 @@
+import { withoutBackground, scaleMark } from "./lib/iconSvg.mjs";
 import { createRequire } from "node:module";
 import { readFile, mkdir } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -5,19 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const sharp = createRequire(new URL("../../api/package.json", import.meta.url))("sharp");
 const assets = new URL("../assets/", import.meta.url);
 const canvasUnits = 200;
-const markDiameter = 157; // ring radius 72 + half-stroke 6.5, doubled
 const outputPixels = 1024;
-
-function withoutBackground(svg) {
-  const result = svg.replace(/<rect\b[^>]*\bid="background"[^>]*\/>/, "");
-  if (result === svg) throw new Error("Source SVG must contain the background rect");
-  return result;
-}
-function scaleMark(svg, fraction) {
-  const scale = (fraction * canvasUnits) / markDiameter;
-  return svg.replace(/<g\b(?=[^>]*\bid="mark")/, `<g transform="translate(100 100) scale(${scale}) translate(-100 -100)"><g`)
-    .replace("</svg>", "</g></svg>");
-}
 
 export async function generateAppAssets() {
   const source = await readFile(new URL("source/app-icon.svg", assets), "utf8");

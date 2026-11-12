@@ -1,3 +1,4 @@
+import { getBrand } from "../config/brand.js";
 import express from "express";
 import { escapeHtml } from "./referralLanding.js";
 import { gatePage, wrapPage } from "../views/pageChrome.js";
@@ -55,7 +56,7 @@ export function createAffiliateHandlers(db = pool) {
     const selected = (value) => (values.platform === value ? " selected" : "");
     const body = `<div class="container affiliate-page">
 <div class="affiliate-hero">
-  <h1>Partner with Forma</h1>
+  <h1>Partner with ${getBrand().name}</h1>
   <p>Are you a personal trainer, Hyrox coach, or fitness content creator? Partner with us and earn ${commission} for every user who subscribes through your link.</p>
 </div>
 
@@ -119,8 +120,8 @@ export function createAffiliateHandlers(db = pool) {
 </div>`;
 
     res.setHeader("Content-Type", "text/html; charset=utf-8").send(
-      wrapPage("Partner with Forma", body, {
-        description: "Partner with Forma as a coach or content creator and earn commission for every subscriber you refer.",
+      wrapPage(`Partner with ${getBrand().name}`, body, {
+        description: `Partner with ${getBrand().name} as a coach or content creator and earn commission for every subscriber you refer.`,
         canonical: "/partners",
         extraCss: AFFILIATE_CSS,
       }),
@@ -161,9 +162,9 @@ export function createAffiliateHandlers(db = pool) {
 
     sendEmail({
       to: email,
-      subject: "Thanks for applying to partner with Forma",
-      text: `Hi ${name},\n\nThanks for applying to the Forma affiliate programme. We'll review your application and get back to you within 5 business days.\n\nWe'll email you when Forma is ready.\n\nForma`,
-      html: `<p>Hi ${escapeHtml(name)},</p><p>Thanks for applying to the Forma affiliate programme. We'll review your application and get back to you within 5 business days.</p><p>We'll email you when Forma is ready.</p>`,
+      subject: `Thanks for applying to partner with ${getBrand().name}`,
+      text: `Hi ${name},\n\nThanks for applying to the ${getBrand().name} affiliate programme. We'll review your application and get back to you within 5 business days.\n\nWe'll email you when ${getBrand().name} is ready.\n\n${getBrand().name}`,
+      html: `<p>Hi ${escapeHtml(name)},</p><p>Thanks for applying to the ${getBrand().name} affiliate programme. We'll review your application and get back to you within 5 business days.</p><p>We'll email you when ${getBrand().name} is ready.</p>`,
     }).catch((err) => console.error("affiliate confirmation email error", err));
 
     return res.redirect(302, "/partners/applied");
@@ -197,12 +198,12 @@ affiliateProgramRouter.get("/partners/applied", gatePage, (_req, res) => {
   const body = `<div class="container applied-page">
     <h1>Application received.</h1>
     <p>Thanks for applying. We'll review your details and get back to you within 5 business days.</p>
-    <p style="color:#64748B;margin-bottom:32px;">We'll email you when Forma is ready.</p>
+    <p style="color:#64748B;margin-bottom:32px;">We'll email you when ${getBrand().name} is ready.</p>
     <a href="/download" class="cta-btn">Get launch updates</a>
   </div>`;
   res.setHeader("Content-Type", "text/html; charset=utf-8").send(
     wrapPage("Application received", body, {
-      description: "Your Forma affiliate application has been received.",
+      description: `Your ${getBrand().name} affiliate application has been received.`,
       extraCss: AFFILIATE_CSS,
     }),
   );

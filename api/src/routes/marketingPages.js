@@ -1,3 +1,4 @@
+import { getBrand } from "../config/brand.js";
 import express from "express";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -201,13 +202,14 @@ const SUPPORT_CSS = `
 .contact-section a { color: #22D3EE; font-weight: 600; }
 `;
 
-const PRIVACY_HTML = `
+function privacyHtml() {
+  return `
 <h1>Privacy Policy</h1>
 <p class="effective">Effective date: 15 May 2026</p>
-<p>This Privacy Policy explains how Forma ("we", "us", or "our") collects, uses, and protects your personal information when you use the Forma mobile application and website at getforma.fit (together, the "Service").</p>
+<p>This Privacy Policy explains how ${getBrand().name} ("we", "us", or "our") collects, uses, and protects your personal information when you use the ${getBrand().name} mobile application and website at ${getBrand().domain} (together, the "Service").</p>
 <p>By using the Service, you agree to the collection and use of information as described in this policy.</p>
 <h2>1. Who We Are</h2>
-<p>Forma is operated by Engle Consulting Limited, a company registered in England and Wales (company number 06771687), whose registered office is at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY. If you have any questions about this policy, contact us at support@200days.app.</p>
+<p>${getBrand().name} is operated by ${getBrand().operator}, a company registered in England and Wales (company number 06771687), whose registered office is at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY. If you have any questions about this policy, contact us at support@200days.app.</p>
 <h2>2. Information We Collect</h2>
 <h3>Information you provide directly</h3>
 <ul>
@@ -240,7 +242,7 @@ const PRIVACY_HTML = `
 <tr><td><strong>RevenueCat</strong></td><td>Subscription billing and entitlement management</td><td>Your App Store receipt; no personally identifying information</td></tr>
 <tr><td><strong>Sentry</strong></td><td>Error monitoring and crash reporting</td><td>Device info and app state at time of error</td></tr>
 <tr><td><strong>Expo</strong></td><td>Delivering push notifications</td><td>Your device push token</td></tr>
-<tr><td><strong>Fly.io</strong></td><td>Hosting the Forma API and database</td><td>All data stored in our database</td></tr>
+<tr><td><strong>Fly.io</strong></td><td>Hosting the ${getBrand().name} API and database</td><td>All data stored in our database</td></tr>
 <tr><td><strong>AWS S3-compatible storage</strong></td><td>Storing physique photos and media assets</td><td>Physique photos encrypted at rest</td></tr>
 <tr><td><strong>OpenAI</strong></td><td>AI analysis of physique photos if you use this feature</td><td>The photo you submit for that check-in only</td></tr>
 </tbody></table>
@@ -262,31 +264,33 @@ const PRIVACY_HTML = `
 <h2>9. Changes to This Policy</h2>
 <p>We may update this policy from time to time. If we make material changes, we will notify you via the app or by email at least 14 days before the changes take effect.</p>
 <h2>10. Contact</h2>
-<p><strong>Email:</strong> support@200days.app<br><strong>Website:</strong> getforma.fit/support</p>
+<p><strong>Email:</strong> support@200days.app<br><strong>Website:</strong> ${getBrand().domain}/support</p>
 <p>As a UK-based company, our lead supervisory authority is the <strong>Information Commissioner's Office (ICO)</strong>. You have the right to lodge a complaint with the ICO at <a href="https://ico.org.uk">ico.org.uk</a> or by calling 0303 123 1113.</p>
 <p>If you are resident in the European Union, you may also lodge a complaint with your national data protection authority.</p>`;
+}
 
-const TERMS_HTML = `
+function termsHtml() {
+  return `
 <h1>Terms of Service</h1>
 <p class="effective">Effective date: 15th May 2026</p>
-<p>These Terms of Service ("Terms") govern your use of the Forma mobile application and website at getforma.fit (together, the "Service"), operated by Engle Consulting Limited, a company registered in England and Wales (company number 06771687) with its registered office at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY ("Forma", "we", "us", or "our").</p>
+<p>These Terms of Service ("Terms") govern your use of the ${getBrand().name} mobile application and website at ${getBrand().domain} (together, the "Service"), operated by ${getBrand().operator}, a company registered in England and Wales (company number 06771687) with its registered office at Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY ("${getBrand().name}", "we", "us", or "our").</p>
 <p>By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.</p>
 <h2>1. Eligibility</h2><p>You must be at least 16 years old to use the Service. The Service is intended for personal, non-commercial fitness training use.</p>
 <h2>2. Your Account</h2><p>You are responsible for maintaining the security of your account credentials. If you suspect unauthorised access, contact us immediately at support@200days.app.</p>
 <h2>3. Subscription and Billing</h2>
 <h3>Launch access</h3><p>Access terms, trial availability, and referral rewards will be displayed before purchase once the app is available.</p>
 <h3>Subscription</h3><p>After your trial period, continued access requires a paid subscription. Pricing and billing intervals are displayed in the app before purchase.</p>
-<h3>Billing through Apple</h3><ul><li>You authorise Apple to charge your Apple ID payment method on a recurring basis.</li><li>Your subscription renews unless cancelled at least 24 hours before the current billing period ends.</li><li>You can manage and cancel via iPhone Settings - [Your Name] - Subscriptions - Forma.</li></ul>
+<h3>Billing through Apple</h3><ul><li>You authorise Apple to charge your Apple ID payment method on a recurring basis.</li><li>Your subscription renews unless cancelled at least 24 hours before the current billing period ends.</li><li>You can manage and cancel via iPhone Settings - [Your Name] - Subscriptions - ${getBrand().name}.</li></ul>
 <p><strong>We do not process payment information directly.</strong> Billing disputes and refund requests must be directed to Apple.</p>
 <h3>Refunds</h3><p>Refund requests are handled by Apple under their standard App Store refund policy. To request a refund, visit <a href="https://reportaproblem.apple.com">reportaproblem.apple.com</a>.</p>
 <h3>Price changes</h3><p>We reserve the right to change subscription pricing and will provide at least 30 days' notice of any price increase.</p>
 <h2>4. Referral Programme</h2><p>You may share your referral link to invite new users. Referral rewards may be granted when a referred user becomes a paying subscriber. Abuse of the referral programme may result in account termination.</p>
 <h2>5. Acceptable Use</h2><ul><li>Do not use the Service for unlawful purposes.</li><li>Do not reverse-engineer or extract source code.</li><li>Do not disrupt the Service or its servers.</li><li>Do not create multiple accounts to abuse the free trial.</li><li>Do not scrape data or build a competing product.</li></ul>
-<h2>6. Your Content</h2><p>You retain ownership of your fitness data and optional physique photos. By submitting Your Content, you grant Forma a limited licence to store and process it solely to provide the Service.</p>
+<h2>6. Your Content</h2><p>You retain ownership of your fitness data and optional physique photos. By submitting Your Content, you grant ${getBrand().name} a limited licence to store and process it solely to provide the Service.</p>
 <h2>7. Health and Safety Disclaimer</h2><p><strong>The Service provides training programming and fitness guidance. It is not a substitute for professional medical advice, diagnosis, or treatment.</strong></p><p>Train within your limits. Stop any exercise that causes pain or discomfort.</p>
-<h2>8. Intellectual Property</h2><p>The Service, including its design, code, content, and branding, is owned by Forma. Your account data and workout logs belong to you.</p>
+<h2>8. Intellectual Property</h2><p>The Service, including its design, code, content, and branding, is owned by ${getBrand().name}. Your account data and workout logs belong to you.</p>
 <h2>9. Termination</h2><p>We may suspend or terminate your account if you violate these Terms or engage in fraudulent activity. You may close your account at any time via Settings - Account - Delete Account.</p>
-<h2>10. Limitation of Liability</h2><p>To the maximum extent permitted by law, Forma shall not be liable for indirect, incidental, special, consequential, or punitive damages. Nothing limits liability for death or personal injury caused by negligence, fraud, or any liability that cannot be excluded by law.</p>
+<h2>10. Limitation of Liability</h2><p>To the maximum extent permitted by law, ${getBrand().name} shall not be liable for indirect, incidental, special, consequential, or punitive damages. Nothing limits liability for death or personal injury caused by negligence, fraud, or any liability that cannot be excluded by law.</p>
 <h2>11. Disclaimer of Warranties</h2><p>The Service is provided "as is" and "as available" without warranties of any kind.</p>
 <h2>12. Governing Law and Dispute Resolution</h2><p>These Terms are governed by the laws of England and Wales.</p>
 <h3>Informal resolution first</h3><p>Before raising any formal dispute, you agree to contact us and give us 30 days to attempt an informal resolution.</p>
@@ -295,22 +299,26 @@ const TERMS_HTML = `
 <h3>Consumer rights</h3><p>If you are a consumer resident in the United Kingdom or European Union, nothing affects your statutory rights. EU consumers may use the European Commission's Online Dispute Resolution platform at <a href="https://ec.europa.eu/consumers/odr">ec.europa.eu/consumers/odr</a>.</p>
 <h3>No class actions</h3><p>To the extent permitted by law, disputes must be brought on an individual basis and not as part of a class, consolidated, or representative action.</p>
 <h2>13. Changes to These Terms</h2><p>We may update these Terms from time to time and will notify you of material changes via the app or email.</p>
-<h2>14. Contact</h2><p><strong>Email:</strong> support@200days.app<br><strong>Website:</strong> getforma.fit/support</p>`;
+<h2>14. Contact</h2><p><strong>Email:</strong> support@200days.app<br><strong>Website:</strong> ${getBrand().domain}/support</p>`;
+}
 
-const softwareAppSchema = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "Forma",
-  operatingSystem: "iOS",
-  applicationCategory: "HealthApplication",
-  offers: {
-    "@type": "Offer",
-    price: "0",
-    priceCurrency: "GBP",
-    description: "Coming soon",
-  },
-  url: "https://getforma.fit",
-};
+function softwareAppSchema() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: getBrand().name,
+    operatingSystem: "iOS",
+    applicationCategory: "HealthApplication",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "GBP",
+      description: "Coming soon",
+    },
+    // Preserve the historical fixed schema URL while leaving explicit route URL overrides alone.
+    url: getBrand({ ...process.env, BASE_URL: undefined }).siteUrl,
+  };
+}
 
 const AVATAR_COLOURS = ["#22D3EE", "#A7F3D0", "#FDE68A", "#FCA5A5", "#C4B5FD", "#F9A8D4", "#93C5FD", "#FDBA74"];
 
@@ -370,21 +378,21 @@ function homeHandler(_req, res) {
   const featuredTestimonials = readTestimonials().slice(0, 3);
   const testimonialStripCards = featuredTestimonials.length ? featuredTestimonials.map(testimonialCardHtml).join("") : "";
   const testimonialsStripHtml = featuredTestimonials.length
-    ? `<section class="testimonials-strip"><h2>What athletes are saying</h2><p class="testimonials-intro">Hyrox competitors and serious lifters already training with Forma.</p><div class="strip-grid">${testimonialStripCards}</div><a href="/testimonials" class="strip-link">See all reviews -&gt;</a></section>`
+    ? `<section class="testimonials-strip"><h2>What athletes are saying</h2><p class="testimonials-intro">Hyrox competitors and serious lifters already training with ${getBrand().name}.</p><div class="strip-grid">${testimonialStripCards}</div><a href="/testimonials" class="strip-link">See all reviews -&gt;</a></section>`
     : "";
   const body = `
 <section class="hero">
-  <img src="/images/forma_masthead.png" alt="Forma" class="hero-img">
+  <img src="/images/forma_masthead.png" alt="${getBrand().name}" class="hero-img">
   <h1>Train with your data,<br>not your guesswork.</h1>
-  <p>Forma builds personalised strength and conditioning programs that adapt to your performance - every session.</p>
+  <p>${getBrand().name} builds personalised strength and conditioning programs that adapt to your performance - every session.</p>
   <a href="/hyrox-calculator" class="cta-btn">Try the free HYROX calculator</a>
-  <p class="trial-note"><a href="/download">The Forma app is coming soon</a></p>
+  <p class="trial-note"><a href="/download">The ${getBrand().name} app is coming soon</a></p>
 </section>
 <div class="container">
   <section class="who-section"><h2>Built for serious athletes</h2><div class="two-col"><div><h3>Hyrox athletes</h3><ul><li>Station-specific conditioning blocks</li><li>Race-day simulation workouts</li><li>Pace and time-to-complete progression</li></ul></div><div><h3>Strength athletes</h3><ul><li>Auto-regulating load progression</li><li>Programmes built around your equipment</li><li>Adapts based on your results each session</li></ul></div></div></section>
-  <section class="how-section"><h2>How it works</h2><div class="steps"><div class="step"><div class="step-num">1</div><h3>Complete your assessment</h3><p>Tell us your goals, experience, equipment, and schedule. Takes 5 minutes.</p></div><div class="step"><div class="step-num">2</div><h3>Get your programme</h3><p>Forma generates a personalised programme built around your life and training goals.</p></div><div class="step"><div class="step-num">3</div><h3>It adapts as you improve</h3><p>Every session you log sharpens the engine. Loads, reps, and intensity update automatically.</p></div></div></section>
+  <section class="how-section"><h2>How it works</h2><div class="steps"><div class="step"><div class="step-num">1</div><h3>Complete your assessment</h3><p>Tell us your goals, experience, equipment, and schedule. Takes 5 minutes.</p></div><div class="step"><div class="step-num">2</div><h3>Get your programme</h3><p>${getBrand().name} generates a personalised programme built around your life and training goals.</p></div><div class="step"><div class="step-num">3</div><h3>It adapts as you improve</h3><p>Every session you log sharpens the engine. Loads, reps, and intensity update automatically.</p></div></div></section>
   ${testimonialsStripHtml}
-  <section class="features-section"><h2>What sets Forma apart</h2><div class="feature-grid"><div class="feature-card"><h3>Personalised progression</h3><p>Loads and reps adjust based on your actual performance.</p></div><div class="feature-card"><h3>Hyrox-ready conditioning</h3><p>Station-by-station programming with pace and time-to-complete tracking.</p></div><div class="feature-card"><h3>Physique tracking</h3><p>Optional AI-assisted progress check-ins with week-on-week comparisons.</p></div><div class="feature-card"><h3>Coach-quality cues</h3><p>Technique guidance and form cues for every exercise.</p></div></div></section>
+  <section class="features-section"><h2>What sets ${getBrand().name} apart</h2><div class="feature-grid"><div class="feature-card"><h3>Personalised progression</h3><p>Loads and reps adjust based on your actual performance.</p></div><div class="feature-card"><h3>Hyrox-ready conditioning</h3><p>Station-by-station programming with pace and time-to-complete tracking.</p></div><div class="feature-card"><h3>Physique tracking</h3><p>Optional AI-assisted progress check-ins with week-on-week comparisons.</p></div><div class="feature-card"><h3>Coach-quality cues</h3><p>Technique guidance and form cues for every exercise.</p></div></div></section>
 </div>
 ${emailCaptureStripHtml()}
 <section class="bottom-cta"><h2>Ready to train smarter?</h2><a href="/hyrox-calculator" class="cta-btn">Try the free HYROX calculator</a><p class="trial-note"><a href="/download">Get launch updates for the app</a></p></section>`;
@@ -392,7 +400,7 @@ ${emailCaptureStripHtml()}
     description: "Personalised strength and Hyrox training programs that adapt to your performance - every session.",
     canonical: "/",
     extraCss: HOME_CSS,
-    jsonLd: softwareAppSchema,
+    jsonLd: softwareAppSchema(),
   });
 }
 
@@ -406,14 +414,14 @@ function testimonialsHandler(_req, res) {
   const body = `<div class="container testimonials-page">
   <section class="testimonials-hero">
     <h1>What Athletes Are Saying</h1>
-    <p>Real feedback from people using Forma to prepare for races, rebuild consistency, and train with programmes that respond to their progress.</p>
+    <p>Real feedback from people using ${getBrand().name} to prepare for races, rebuild consistency, and train with programmes that respond to their progress.</p>
     ${ratingBadge}
   </section>
   <section class="testimonials-grid">${cards}</section>
   <section class="testimonials-cta"><h2>Ready to train with your data?</h2><a href="/download" class="cta-btn">Get launch updates</a></section>
 </div>`;
   sendHtml(res, "What Athletes Are Saying", body, {
-    description: "Read Forma testimonials from Hyrox competitors, strength athletes, beginner lifters, and home gym users.",
+    description: `Read ${getBrand().name} testimonials from Hyrox competitors, strength athletes, beginner lifters, and home gym users.`,
     canonical: "/testimonials",
     extraCss: TESTIMONIALS_CSS,
   });
@@ -431,13 +439,13 @@ function hyroxHandler(_req, res) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Forma",
+    name: getBrand().name,
     operatingSystem: "iOS",
     applicationCategory: "HealthApplication",
     applicationSubCategory: "FitnessApplication",
     description: "AI-powered Hyrox training programs - strength base, conditioning progression, and race-day taper.",
     offers: { "@type": "Offer", price: "0", priceCurrency: "GBP", description: "Coming soon" },
-    url: `${process.env.BASE_URL ?? "https://getforma.fit"}/hyrox`,
+    url: `${process.env.BASE_URL ?? getBrand().siteUrl}/hyrox`,
   };
   const testimonial = landingTestimonialHtml(
     /hyrox/i,
@@ -447,13 +455,13 @@ function hyroxHandler(_req, res) {
 <section class="landing-hero">
   <div class="container">
     <h1>Your Hyrox race prep,<br>built by AI.</h1>
-    <p class="subhead">Forma builds personalised 8-12 week race-prep blocks for Hyrox athletes. Every session adapts to your performance data - no coach required.</p>
+    <p class="subhead">${getBrand().name} builds personalised 8-12 week race-prep blocks for Hyrox athletes. Every session adapts to your performance data - no coach required.</p>
     <a href="/download" class="cta-btn">Get launch updates</a>
   </div>
 </section>
 <section class="landing-why">
   <h2>Why Hyrox training is different</h2>
-  <p>Hyrox demands two things at once: a functional strength base and the conditioning to push hard through 8 stations after running a kilometre. Standard strength programs do not develop station-specific pacing, and standard conditioning programs do not build the strength to move a loaded sled when you are already fatigued. Forma builds both, in the right ratio, for your race date.</p>
+  <p>Hyrox demands two things at once: a functional strength base and the conditioning to push hard through 8 stations after running a kilometre. Standard strength programs do not develop station-specific pacing, and standard conditioning programs do not build the strength to move a loaded sled when you are already fatigued. ${getBrand().name} builds both, in the right ratio, for your race date.</p>
   <div class="landing-icons">
     <div class="landing-icon-item"><div class="icon">01</div><div class="label">Strength base</div><div class="sublabel">Compound lifts, race-relevant patterns</div></div>
     <div class="landing-icon-item"><div class="icon">02</div><div class="label">Station conditioning</div><div class="sublabel">Sled, ski erg, wall balls, rowing</div></div>
@@ -461,20 +469,20 @@ function hyroxHandler(_req, res) {
   </div>
 </section>
 <section class="landing-features">
-  <h2>How Forma handles it</h2>
+  <h2>How ${getBrand().name} handles it</h2>
   <div class="feature-grid">
     <div class="feature-card"><h3>Periodised blocks</h3><p>Base to build to peak. The engine structures your weeks so your strength base and conditioning capacity both peak in the final fortnight before race day.</p></div>
     <div class="feature-card"><h3>Station conditioning</h3><p>Tracks your sled push, ski erg, wall ball, and rowing times separately. Progresses each station at its own rate, not as a single generic conditioning score.</p></div>
     <div class="feature-card"><h3>Hybrid session design</h3><p>Combines functional strength with conditioning in the right ratio for each training phase. Your build phase looks different from your base phase because it should.</p></div>
-    <div class="feature-card"><h3>Automatic load adjustment</h3><p>Every session, Forma reads your logged reps and times and sets next week's targets accordingly. You never manually update a spreadsheet.</p></div>
+    <div class="feature-card"><h3>Automatic load adjustment</h3><p>Every session, ${getBrand().name} reads your logged reps and times and sets next week's targets accordingly. You never manually update a spreadsheet.</p></div>
   </div>
 </section>
 <section class="landing-testimonial">${testimonial}</section>
 <section class="landing-faq">
   <h2>Common questions</h2>
-  <div class="faq-item"><p class="faq-q">Does Forma work for Hyrox beginners?</p><p class="faq-a">Yes. The onboarding assessment sets starting loads and conditioning volume relative to your current level. A beginner's programme looks different from an experienced competitor's.</p></div>
-  <div class="faq-item"><p class="faq-q">How does Forma handle combined Hyrox stations?</p><p class="faq-a">Each station is tracked as its own exercise with its own progression metric. You log each station separately; Forma tracks your times and adjusts targets independently.</p></div>
-  <div class="faq-item"><p class="faq-q">Can I follow Forma alongside my running plan?</p><p class="faq-a">Yes. During onboarding you set your available training days. Forma builds around your schedule, leaving your running days free.</p></div>
+  <div class="faq-item"><p class="faq-q">Does ${getBrand().name} work for Hyrox beginners?</p><p class="faq-a">Yes. The onboarding assessment sets starting loads and conditioning volume relative to your current level. A beginner's programme looks different from an experienced competitor's.</p></div>
+  <div class="faq-item"><p class="faq-q">How does ${getBrand().name} handle combined Hyrox stations?</p><p class="faq-a">Each station is tracked as its own exercise with its own progression metric. You log each station separately; ${getBrand().name} tracks your times and adjusts targets independently.</p></div>
+  <div class="faq-item"><p class="faq-q">Can I follow ${getBrand().name} alongside my running plan?</p><p class="faq-a">Yes. During onboarding you set your available training days. ${getBrand().name} builds around your schedule, leaving your running days free.</p></div>
 </section>
 <div class="landing-cta"><a href="/download" class="cta-btn">Get launch updates</a></div>
 ${emailCaptureStripHtml()}`;
@@ -490,13 +498,13 @@ function strengthHandler(_req, res) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Forma",
+    name: getBrand().name,
     operatingSystem: "iOS",
     applicationCategory: "HealthApplication",
     applicationSubCategory: "FitnessApplication",
     description: "Personalised strength and hypertrophy programs that adjust your load and volume automatically based on what you actually lift.",
     offers: { "@type": "Offer", price: "0", priceCurrency: "GBP", description: "Coming soon" },
-    url: `${process.env.BASE_URL ?? "https://getforma.fit"}/strength`,
+    url: `${process.env.BASE_URL ?? getBrand().siteUrl}/strength`,
   };
   const testimonial = landingTestimonialHtml(
     /lifter|powerlifter|strength/i,
@@ -506,13 +514,13 @@ function strengthHandler(_req, res) {
 <section class="landing-hero">
   <div class="container">
     <h1>A strength program that<br>gets stronger as you do.</h1>
-    <p class="subhead">Forma builds personalised strength and hypertrophy programs and adjusts your load and volume automatically - every session, based on what you actually lifted.</p>
+    <p class="subhead">${getBrand().name} builds personalised strength and hypertrophy programs and adjusts your load and volume automatically - every session, based on what you actually lifted.</p>
     <a href="/download" class="cta-btn">Get launch updates</a>
   </div>
 </section>
 <section class="landing-why">
   <h2>Why generic programs stop working</h2>
-  <p>Linear periodisation works for beginners. After six months, intermediate lifters need a program that reads actual performance and adjusts accordingly: more weight when you are ahead of target, more volume when load progression has stalled, and a deload when fatigue accumulates. Forma does this automatically, every session.</p>
+  <p>Linear periodisation works for beginners. After six months, intermediate lifters need a program that reads actual performance and adjusts accordingly: more weight when you are ahead of target, more volume when load progression has stalled, and a deload when fatigue accumulates. ${getBrand().name} does this automatically, every session.</p>
   <div class="landing-icons">
     <div class="landing-icon-item"><div class="icon">01</div><div class="label">Autoregulated load</div><div class="sublabel">Weight moves when you are ready</div></div>
     <div class="landing-icon-item"><div class="icon">02</div><div class="label">PR tracking</div><div class="sublabel">Every new estimated 1RM logged</div></div>
@@ -520,9 +528,9 @@ function strengthHandler(_req, res) {
   </div>
 </section>
 <section class="landing-features">
-  <h2>How Forma handles it</h2>
+  <h2>How ${getBrand().name} handles it</h2>
   <div class="feature-grid">
-    <div class="feature-card"><h3>Autoregulated loading</h3><p>Forma targets a rep range, not a fixed weight. Hit the top of the range and load goes up. Fall short and volume is adjusted before load is pushed.</p></div>
+    <div class="feature-card"><h3>Autoregulated loading</h3><p>${getBrand().name} targets a rep range, not a fixed weight. Hit the top of the range and load goes up. Fall short and volume is adjusted before load is pushed.</p></div>
     <div class="feature-card"><h3>Strength and hypertrophy modes</h3><p>Choose your goal. Strength mode prioritises heavy compound lifts at lower rep ranges. Hypertrophy mode adds volume and emphasises time-under-tension.</p></div>
     <div class="feature-card"><h3>Personal record tracking</h3><p>Every new estimated 1RM is logged. See your strength curve over time on every exercise and get notified the moment you set a PR.</p></div>
     <div class="feature-card"><h3>Automatic deload weeks</h3><p>The engine monitors accumulated load and performance trends. When a deload is due, it is inserted automatically with lighter loads and lower volume.</p></div>
@@ -531,14 +539,14 @@ function strengthHandler(_req, res) {
 <section class="landing-testimonial">${testimonial}</section>
 <section class="landing-faq">
   <h2>Common questions</h2>
-  <div class="faq-item"><p class="faq-q">Does Forma support powerlifting - squat, bench, deadlift?</p><p class="faq-a">Yes. Squat, bench press, and deadlift are first-class exercises in the programme engine. Forma tracks your estimated 1RM on each and structures your programme around them.</p></div>
-  <div class="faq-item"><p class="faq-q">Can I specify which days I train?</p><p class="faq-a">Yes. During onboarding you set your available training days and session duration. Forma builds around your schedule.</p></div>
-  <div class="faq-item"><p class="faq-q">How does Forma handle a deload week?</p><p class="faq-a">Automatically. The engine monitors accumulated load and performance trends. When a deload is due, loads drop, volume reduces, and movement patterns stay the same.</p></div>
+  <div class="faq-item"><p class="faq-q">Does ${getBrand().name} support powerlifting - squat, bench, deadlift?</p><p class="faq-a">Yes. Squat, bench press, and deadlift are first-class exercises in the programme engine. ${getBrand().name} tracks your estimated 1RM on each and structures your programme around them.</p></div>
+  <div class="faq-item"><p class="faq-q">Can I specify which days I train?</p><p class="faq-a">Yes. During onboarding you set your available training days and session duration. ${getBrand().name} builds around your schedule.</p></div>
+  <div class="faq-item"><p class="faq-q">How does ${getBrand().name} handle a deload week?</p><p class="faq-a">Automatically. The engine monitors accumulated load and performance trends. When a deload is due, loads drop, volume reduces, and movement patterns stay the same.</p></div>
 </section>
 <div class="landing-cta"><a href="/download" class="cta-btn">Get launch updates</a></div>
 ${emailCaptureStripHtml()}`;
   sendHtml(res, "Strength Training App - Progressive Programs That Adapt", body, {
-    description: "Forma writes personalised strength and hypertrophy programs and adjusts your load and volume automatically based on what you actually lift.",
+    description: `${getBrand().name} writes personalised strength and hypertrophy programs and adjusts your load and volume automatically based on what you actually lift.`,
     canonical: "/strength",
     extraCss: LANDING_CSS,
     jsonLd,
@@ -546,7 +554,11 @@ ${emailCaptureStripHtml()}`;
 }
 
 function pressHandler(_req, res) {
-  const pressEmail = escapeHtml(process.env.PRESS_EMAIL || process.env.SUPPORT_EMAIL || "hello@getforma.fit");
+  // This handler historically treats empty email env values as absent.
+  const pressEmail = escapeHtml(getBrand({
+    ...process.env, PRESS_EMAIL: process.env.PRESS_EMAIL || undefined,
+    SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || undefined,
+  }).pressEmail);
   let imagesDir = [];
   try {
     imagesDir = readdirSync(join(__dirname, "../../public/images"));
@@ -572,21 +584,21 @@ function pressHandler(_req, res) {
   <div class="mention-headline"><a href="${escapeHtml(mention.url ?? "#")}" target="_blank" rel="noopener">${escapeHtml(mention.headline ?? "")}</a></div>
   <div class="mention-date">${escapeHtml(mention.date ?? "")}</div>
 </div>`).join("")}</div>`
-    : `<div class="mention-placeholder">Be the first to cover Forma. <a href="mailto:${pressEmail}" style="color:#22D3EE;">Get in touch -&gt;</a></div>`;
+    : `<div class="mention-placeholder">Be the first to cover ${getBrand().name}. <a href="mailto:${pressEmail}" style="color:#22D3EE;">Get in touch -&gt;</a></div>`;
 
   const body = `<div class="container press-page">
   <div class="press-hero">
     <h1>Press &amp; Media</h1>
-    <p>Everything you need to write about Forma. Logos, screenshots, and background in one place.</p>
+    <p>Everything you need to write about ${getBrand().name}. Logos, screenshots, and background in one place.</p>
     <p class="press-contact-line">Press enquiries: <a href="mailto:${pressEmail}">${pressEmail}</a> - we aim to respond within 2 business days.</p>
   </div>
 
   <div class="press-section press-about-section">
-    <h2>About Forma</h2>
+    <h2>About ${getBrand().name}</h2>
     <div class="press-about">
-      <p>Forma is an AI-powered strength and Hyrox training app for iOS. It builds personalised training programmes and adapts every session to the athlete's logged performance, so load, volume, and conditioning targets update automatically based on what they actually did.</p>
-      <p>Forma is built for Hyrox competitors preparing for races, strength athletes pursuing progressive overload, and anyone who wants a coach-quality programme without hiring a coach. The app combines race-prep conditioning, structured strength work, and practical progression logic in one place.</p>
-      <p>The programme engine is rules-based and grounded in periodisation principles, so athletes can see why loads change instead of trusting a black box. Forma is preparing for launch.</p>
+      <p>${getBrand().name} is an AI-powered strength and Hyrox training app for iOS. It builds personalised training programmes and adapts every session to the athlete's logged performance, so load, volume, and conditioning targets update automatically based on what they actually did.</p>
+      <p>${getBrand().name} is built for Hyrox competitors preparing for races, strength athletes pursuing progressive overload, and anyone who wants a coach-quality programme without hiring a coach. The app combines race-prep conditioning, structured strength work, and practical progression logic in one place.</p>
+      <p>The programme engine is rules-based and grounded in periodisation principles, so athletes can see why loads change instead of trusting a black box. ${getBrand().name} is preparing for launch.</p>
     </div>
   </div>
 
@@ -636,7 +648,7 @@ function pressHandler(_req, res) {
 </div>`;
 
   sendHtml(res, "Press", body, {
-    description: "Press resources for Forma - company background, downloadable brand assets, and press contact.",
+    description: `Press resources for ${getBrand().name} - company background, downloadable brand assets, and press contact.`,
     canonical: "/press",
     extraCss: PRESS_CSS,
   });
@@ -644,18 +656,18 @@ function pressHandler(_req, res) {
 
 function renderDownloadPage(res, { errorMsg = "", notified = false } = {}) {
   const feedback = notified
-    ? `<p class="download-success">You're on the list. We'll email you the moment Forma is available.</p>`
+    ? `<p class="download-success">You're on the list. We'll email you the moment ${getBrand().name} is available.</p>`
     : `${errorMsg ? `<p class="download-error">${escapeHtml(errorMsg)}</p>` : ""}
   <form method="POST" action="/download/notify" class="strip-form">
     <input type="email" name="email" placeholder="you@example.com" required autocomplete="email">
     <button type="submit" class="cta-btn">Notify me</button>
   </form>`;
-  const body = `<div class="download-page"><img src="/images/forma_icon.png" alt="Forma" class="download-icon"><h1>Forma is coming soon</h1><p class="tagline">The app is not available yet. Join the launch list and we will let you know when it is ready.</p>${feedback}</div>`;
+  const body = `<div class="download-page"><img src="${getBrand().logo.favicon}" alt="${getBrand().name}" class="download-icon"><h1>${getBrand().name} is coming soon</h1><p class="tagline">The app is not available yet. Join the launch list and we will let you know when it is ready.</p>${feedback}</div>`;
   sendHtml(res, "Download", body, {
-    description: "Forma is coming soon. Join the launch list and we will email you when the app is ready.",
+    description: `${getBrand().name} is coming soon. Join the launch list and we will email you when the app is ready.`,
     canonical: "/download",
     extraCss: DOWNLOAD_CSS,
-    jsonLd: softwareAppSchema,
+    jsonLd: softwareAppSchema(),
   });
 }
 
@@ -678,36 +690,36 @@ export function createDownloadNotifyHandler(db = pool) {
 }
 
 function privacyHandler(_req, res) {
-  sendHtml(res, "Privacy Policy", `<div class="container-narrow legal-page">${PRIVACY_HTML}</div>`, {
-    description: "Forma Privacy Policy - how we collect, use, and protect your data.",
+  sendHtml(res, "Privacy Policy", `<div class="container-narrow legal-page">${privacyHtml()}</div>`, {
+    description: `${getBrand().name} Privacy Policy - how we collect, use, and protect your data.`,
     canonical: "/privacy",
     extraCss: LEGAL_CSS,
   });
 }
 
 function termsHandler(_req, res) {
-  sendHtml(res, "Terms of Service", `<div class="container-narrow legal-page">${TERMS_HTML}</div>`, {
-    description: "Forma Terms of Service - subscription, billing, referral programme, and governing law.",
+  sendHtml(res, "Terms of Service", `<div class="container-narrow legal-page">${termsHtml()}</div>`, {
+    description: `${getBrand().name} Terms of Service - subscription, billing, referral programme, and governing law.`,
     canonical: "/terms",
     extraCss: LEGAL_CSS,
   });
 }
 
 function supportHandler(_req, res) {
-  const supportEmail = escapeHtml(process.env.SUPPORT_EMAIL ?? "support@getforma.fit");
+  const supportEmail = escapeHtml(process.env.SUPPORT_EMAIL ?? getBrand().supportEmail);
   const body = `<div class="container-narrow support-page">
   <h1>Support</h1><p class="intro">Get answers to common questions, or contact us directly.</p><h2>Frequently asked questions</h2>
-  <div class="faq-item"><p class="faq-q">How do I cancel my subscription?</p><p class="faq-a">Subscriptions will be managed through your device once Forma is available.</p></div>
-  <div class="faq-item"><p class="faq-q">Can I use Forma without a subscription?</p><p class="faq-a">Launch access details will be announced before the app is available.</p></div>
+  <div class="faq-item"><p class="faq-q">How do I cancel my subscription?</p><p class="faq-a">Subscriptions will be managed through your device once ${getBrand().name} is available.</p></div>
+  <div class="faq-item"><p class="faq-q">Can I use ${getBrand().name} without a subscription?</p><p class="faq-a">Launch access details will be announced before the app is available.</p></div>
   <div class="faq-item"><p class="faq-q">How do I delete my account and data?</p><p class="faq-a">Go to Settings - Account - Delete Account in the app.</p></div>
   <div class="faq-item"><p class="faq-q">The app isn't connecting - what do I do?</p><p class="faq-a">Try closing and reopening the app. If errors continue, contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p></div>
   <div class="faq-item"><p class="faq-q">How do I update my training schedule or equipment?</p><p class="faq-a">Go to Settings - Recalibrate in the app.</p></div>
-  <div class="faq-item"><p class="faq-q">What is Hyrox and does Forma support it?</p><p class="faq-a">Hyrox combines running and functional workout stations. Forma has native support for Hyrox conditioning.</p></div>
-  <div class="faq-item"><p class="faq-q">How does the programme adapt to my performance?</p><p class="faq-a">After each session, Forma analyses your logged sets, reps, and weights against your target ranges.</p></div>
+  <div class="faq-item"><p class="faq-q">What is Hyrox and does ${getBrand().name} support it?</p><p class="faq-a">Hyrox combines running and functional workout stations. ${getBrand().name} has native support for Hyrox conditioning.</p></div>
+  <div class="faq-item"><p class="faq-q">How does the programme adapt to my performance?</p><p class="faq-a">After each session, ${getBrand().name} analyses your logged sets, reps, and weights against your target ranges.</p></div>
   <div class="contact-section"><h2>Contact us</h2><p>Can't find what you're looking for? We're happy to help.</p><p>Email: <a href="mailto:${supportEmail}">${supportEmail}</a></p><p>We aim to respond within 2 business days.</p></div>
 </div>`;
   sendHtml(res, "Support", body, {
-    description: "Forma support and FAQ - get help with your subscription, account, and training programme.",
+    description: `${getBrand().name} support and FAQ - get help with your subscription, account, and training programme.`,
     canonical: "/support",
     extraCss: SUPPORT_CSS,
   });

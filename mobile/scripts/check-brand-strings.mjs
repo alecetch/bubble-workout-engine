@@ -103,13 +103,41 @@ export function checkBrandStrings(rootDir) {
   };
 }
 
+export function checkWebsiteBrandStrings(repoRoot) {
+  const files = [];
+  function collect(dir, extensions) {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory() && !/^(?:__tests__|tests?|fixtures)$/.test(entry.name)) collect(full, extensions);
+      else if (entry.isFile() && extensions.includes(path.extname(entry.name)) && !/\.(?:test|spec)\./.test(entry.name)) files.push(full);
+    }
+  }
+  for (const dir of ["routes", "views", "config"]) collect(path.join(repoRoot, "api/src", dir), [".js", ".html"]);
+  collect(path.join(repoRoot, "api/content"), [".md", ".json"]);
+  return files.sort().flatMap(file => {
+    const relative = toPosix(path.relative(repoRoot, file));
+    if (relative === "api/src/config/brand.js") return [];
+    let count = 0;
+    for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+      if (/forma:\/\/|\/images\/formai?_/.test(line)) continue;
+      count += [...line.matchAll(/\bforma\b|getforma\.|\bformai\b|getformai|forma:\/\//gi)].length;
+    }
+    return count ? [{ file: relative, count }] : [];
+  });
+}
+
 async function main() {
   const scriptUrl = pathToFileURL(path.resolve(process.argv[1])).href;
   if (import.meta.url !== scriptUrl) return;
 
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-  const rootDir = path.resolve(scriptDir, "..");
+  const rootFlag = process.argv.indexOf("--root");
+  const rootDir = rootFlag >= 0 ? path.resolve(process.argv[rootFlag + 1]) : path.resolve(scriptDir, "..");
   const result = checkBrandStrings(rootDir);
+  for (const item of checkWebsiteBrandStrings(path.resolve(rootDir, ".."))) {
+    console.warn(`Website brand report (warning): ${item.file}: ${item.count}`);
+  }
 
   if (!result.ok) {
     console.error(result.message);

@@ -3,7 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { checkBrandStrings } from "../check-brand-strings.mjs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { checkBrandStrings, checkWebsiteBrandStrings } from "../check-brand-strings.mjs";
 
 function makeFixture() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "brand-strings-"));
@@ -115,4 +117,35 @@ test("flags the retired bubbleworkout app ID and formai scheme in app.json", () 
   const result = checkBrandStrings(rootDir);
 
   assert.equal(result.ok, false);
+});
+
+test("website Forma findings warn per file without failing the CLI", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeCleanAppJson(path.join(root, "mobile"));
+  writeFile(root, "api/src/routes/home.js", 'const title = "Forma";');
+  assert.deepEqual(checkWebsiteBrandStrings(root), [{ file: "api/src/routes/home.js", count: 1 }]);
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("../check-brand-strings.mjs", import.meta.url)), "--root", path.join(root, "mobile")], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /api\/src\/routes\/home\.js: 1/);
+  writeFile(root, "mobile/src/bad.ts", 'const title = "bubble workout";');
+  const failed = spawnSync(process.execPath, [fileURLToPath(new URL("../check-brand-strings.mjs", import.meta.url)), "--root", path.join(root, "mobile")], { encoding: "utf8" });
+  assert.equal(failed.status, 1);
+});
+
+test("website scan avoids substrings and ignores tests", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFile(root, "api/src/routes/home.js", 'const format = performance + targetFormatted;');
+  writeFile(root, "api/src/routes/__tests__/home.test.js", '"Forma"');
+  writeFile(root, "api/src/views/page.test.js", '"Forma"');
+  assert.deepEqual(checkWebsiteBrandStrings(root), []);
+});
+
+test("website brand module, retained scheme and old assets are allowlisted", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFile(root, "api/src/config/brand.js", '"Forma getforma.fit"');
+  writeFile(root, "api/src/views/page.html", '<a href="forma://">Forma</a>\n<img src="/images/forma_icon.png" alt="Forma">\n<img src="/images/formai_icon.svg" alt="Formai">');
+  assert.deepEqual(checkWebsiteBrandStrings(root), []);
 });
