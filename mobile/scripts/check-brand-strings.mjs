@@ -127,6 +127,29 @@ export function checkWebsiteBrandStrings(repoRoot) {
   });
 }
 
+// Counts left by the forma variant. Lower these, never raise them; the clean-up PR removes them.
+export const WEBSITE_BRAND_BASELINE = Object.freeze({
+  "api/src/config/validateProductionEnv.js": 3,
+  "api/src/routes/adminContentStudio.js": 1,
+  "api/src/routes/adminHyroxTestHarness.js": 1,
+  "api/src/routes/marketingPages.js": 3,
+  "api/src/routes/referral.js": 1,
+  "api/src/routes/websiteEnhancements.js": 1,
+});
+
+export function evaluateWebsiteBrandStrings(results, baseline) {
+  const counts = new Map(results.map(({ file, count }) => [file, count]));
+  const failures = results.flatMap(({ file, count }) => {
+    const allowed = Object.hasOwn(baseline, file) ? baseline[file] : 0;
+    return count > allowed ? [{ file, count, allowed }] : [];
+  });
+  const notes = Object.entries(baseline).flatMap(([file, allowed]) => {
+    const count = counts.get(file) ?? 0;
+    return count < allowed ? [{ file, count, allowed }] : [];
+  });
+  return { ok: failures.length === 0, failures, notes };
+}
+
 async function main() {
   const scriptUrl = pathToFileURL(path.resolve(process.argv[1])).href;
   if (import.meta.url !== scriptUrl) return;
@@ -135,9 +158,15 @@ async function main() {
   const rootFlag = process.argv.indexOf("--root");
   const rootDir = rootFlag >= 0 ? path.resolve(process.argv[rootFlag + 1]) : path.resolve(scriptDir, "..");
   const result = checkBrandStrings(rootDir);
-  for (const item of checkWebsiteBrandStrings(path.resolve(rootDir, ".."))) {
-    console.warn(`Website brand report (warning): ${item.file}: ${item.count}`);
+  const website = evaluateWebsiteBrandStrings(checkWebsiteBrandStrings(path.resolve(rootDir, "..")), WEBSITE_BRAND_BASELINE);
+  for (const item of website.failures) {
+    console.error(`Website brand guard: ${item.file}: ${item.count} (allowed ${item.allowed})`);
   }
+  for (const item of website.notes) {
+    console.log(`Website brand guard: ${item.file}: ${item.count} (allowed ${item.allowed}); lower the baseline to ${item.count}.`);
+  }
+  if (!website.ok) process.exitCode = 1;
+  else console.log("Website brand guard passed.");
 
   if (!result.ok) {
     console.error(result.message);

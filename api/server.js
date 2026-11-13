@@ -42,6 +42,7 @@ import { trainingHistoryImportRouter } from "./src/routes/trainingHistoryImport.
 import { referralRouter } from "./src/routes/referral.js";
 import { referralLandingRouter } from "./src/routes/referralLanding.js";
 import { marketingRouter } from "./src/routes/marketingPages.js";
+import { wellKnownRouter } from "./src/routes/wellKnown.js";
 import { websiteEnhancementsRouter } from "./src/routes/websiteEnhancements.js";
 import { contentHubRouter } from "./src/routes/contentHub.js";
 import { affiliateProgramRouter } from "./src/routes/affiliateProgram.js";
@@ -108,6 +109,7 @@ import { requireAuth } from "./src/middleware/requireAuth.js";
 import { adminOnly, userAuth, entitledUserAuth, premiumUserAuth } from "./src/middleware/chains.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
+import { canonicalHost } from "./src/middleware/canonicalHost.js";
 import { createClientProfilesRouter } from "./src/routes/clientProfiles.js";
 import { createUsersMeRouter } from "./src/routes/usersMe.js";
 import {
@@ -256,6 +258,7 @@ const devReferenceData = {
 // Assign/echo request_id before any other middleware or route handler.
 app.use(requestId);
 app.use(requestLogger);
+app.use(canonicalHost);
 app.use(
   helmet({
     contentSecurityPolicy: false,
@@ -283,6 +286,7 @@ app.use("/assets/exercise-media", (_req, res) => res.status(404).end());
 app.use("/admin-ui", adminCspMiddleware, express.static(join(__dirname, "admin")));
 app.use("/images", express.static(join(__dirname, "public/images")));
 app.use("/downloads", express.static(join(__dirname, "public/downloads")));
+app.use(wellKnownRouter);
 // Must be registered before any app.use("/admin", ...adminOnly, ...) mount below —
 // those apply requireInternalToken to any path under /admin by prefix, which would
 // otherwise 401 this plain <script src> request (browsers never attach the internal
