@@ -289,3 +289,31 @@ test("GET /pricing with price env vars renders prices", async () => {
     else process.env.ANNUAL_PRICE = savedAnnual;
   }
 });
+
+
+for (const variant of ["forma", "200days"]) {
+  for (const override of [undefined, "https://preview.example///"]) {
+    test(`SEO routes use ${variant} domain with BASE_URL=${override}`, async () => {
+      const saved = { BRAND_VARIANT: process.env.BRAND_VARIANT, BASE_URL: process.env.BASE_URL };
+      try {
+        process.env.BRAND_VARIANT = variant;
+        if (override === undefined) delete process.env.BASE_URL; else process.env.BASE_URL = override;
+        const expected = override ? "https://preview.example" : variant === "200days" ? "https://200days.app" : "https://getforma.fit";
+        const robots = await get("/robots.txt");
+        assert.equal(robots.response.status, 200);
+        assert.equal(robots.body, `User-agent: *\nAllow: /\nSitemap: ${expected}/sitemap.xml\n`);
+        const sitemap = await get("/sitemap.xml");
+        assert.equal(sitemap.response.status, 200);
+        const locations = [...sitemap.body.matchAll(/<loc>(.*?)<\/loc>/g)].map(match => match[1]);
+        assert.ok(locations.length > 4);
+        assert.ok(locations.includes(`${expected}/`));
+        assert.ok(locations.includes(`${expected}/privacy`));
+        for (const location of locations) assert.ok(location.startsWith(`${expected}/`) && !location.startsWith(`${expected}//`), location);
+      } finally {
+        for (const [key, value] of Object.entries(saved)) {
+          if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+      }
+    });
+  }
+}
