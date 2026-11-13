@@ -1,3 +1,4 @@
+import { withWebsiteBrand, websiteApp, requestWebsite, assert200DaysPage } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -186,3 +187,17 @@ test("GET /admin/affiliate-applications with auth returns csv", async () => {
     else process.env.INTERNAL_API_TOKEN = saved;
   }
 });
+
+test("200days copy on /partners", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/partners");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("Partner with 200 Days"));
+  assert200DaysPage(body, "/partners");
+}));
+
+test("200days copy on /partners/applied", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/partners/applied");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("We'll email you when 200 Days is ready."));
+  assert200DaysPage(body, "/partners/applied");
+}));

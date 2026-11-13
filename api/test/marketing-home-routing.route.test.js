@@ -1,3 +1,4 @@
+import { withWebsiteBrand } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -55,3 +56,14 @@ test("GET /hyrox-calculator still receives the React shell", async () => {
     assert.match(body, /<div id="root"/);
   }));
 });
+
+
+test("200days home keeps marketing priority while calculator still receives the React shell", () => withWebsiteBrand("200days", async () => {
+  await withFixtureWebRoot(webRoot => withServer(createRoutedApp(webRoot), async baseUrl => {
+    const home = await (await fetch(`${baseUrl}/`)).text();
+    assert.match(home, /200 days changes everything/);
+    assert.doesNotMatch(home, /<div id="root"/);
+    const calculator = await (await fetch(`${baseUrl}/hyrox-calculator`)).text();
+    assert.match(calculator, /<div id="root"/);
+  }));
+}));

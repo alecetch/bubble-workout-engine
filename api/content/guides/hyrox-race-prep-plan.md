@@ -5,6 +5,7 @@ excerpt: "Everything you need to structure your Hyrox race prep - periodisation,
 readTime: 14
 leadMagnetTitle: "Get the 12-week printable template"
 leadMagnetFile: /downloads/hyrox-race-prep-template.pdf
+leadMagnetFile200days: /downloads/200days-hyrox-race-prep-template.pdf
 ---
 
 Hyrox rewards athletes who can repeat hard efforts without falling apart. It is not simply a strength test with some running attached, and it is not a running race with a few gym stations sprinkled in. A good Hyrox plan has to build hybrid functional strength, aerobic durability, and station-specific conditioning at the same time.
@@ -90,4 +91,4 @@ A deload does not mean doing nothing. It means keeping the movement patterns whi
 
 Recovery also includes race logistics. In the final week, plan food, travel, kit, warm-up, and station pacing. Decision fatigue is real. The fewer choices you need to make on race day, the easier it is to execute the plan you trained for.
 
-Ready to get a personalised Hyrox prep programme built for your race date and available training days? [Download Formai on the App Store](#) - your 12-week plan is ready in minutes.
+Ready to get a personalised Hyrox prep programme built for your race date and available training days? [Join the {{brand}} launch list](/signup) - your 12-week plan is ready in minutes.

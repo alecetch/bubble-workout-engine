@@ -1,3 +1,4 @@
+import { withWebsiteBrand, websiteApp, requestWebsite, assert200DaysPage } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -90,3 +91,10 @@ test("GET /sitemap.xml includes press page", async () => {
   const { body } = await request(buildSitemapApp(), "/sitemap.xml");
   assert.match(body, /\/press/);
 });
+
+test("200days copy on /press", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/press");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("200days-lockup.svg"));
+  assert200DaysPage(body, "/press");
+}));

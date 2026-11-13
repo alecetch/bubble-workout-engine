@@ -45,11 +45,12 @@ function buildBrand(env, is200Days) {
       appIcon: "/images/forma_icon.png",
     }),
     operator: "Engle Consulting Limited",
+    legalUpdated: is200Days ? (env.LEGAL_UPDATED_DATE ?? "15 May 2026") : "15 May 2026",
     operatorLine: is200Days ? "Engle Consulting Limited, trading as 200 Days" : "",
   });
 }
 
-// Page bodies and emails retain the published Forma copy until the copy migration.
+// Explicit Forma values for the published legacy copy branches.
 export function getFormaBrand(env = process.env) {
   return buildBrand(env, false);
 }

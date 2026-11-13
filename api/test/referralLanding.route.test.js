@@ -1,3 +1,4 @@
+import { withWebsiteBrand, websiteApp, requestWebsite, assert200DaysPage } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -132,3 +133,10 @@ test("GET /api/referral/preview/VALIDCODE does not expose the referrer's email",
     assert.equal(body.includes("alec@example.com"), false);
   });
 });
+
+test("200days copy on /ref/TEST123", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/ref/TEST123");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("Alex invited you to train 200 days with us."));
+  assert200DaysPage(body, "/ref/TEST123");
+}));

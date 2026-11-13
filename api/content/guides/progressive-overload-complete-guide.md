@@ -71,4 +71,4 @@ The fifth mistake is skipping deloads because they feel like lost time. Deloads 
 
 Progressive overload is simple in principle and nuanced in practice. Increase the training demand over time, choose the right lever for the situation, recover from the work, and keep enough records to know what is actually happening.
 
-Formai tracks your progressive overload automatically - every session is logged, every PR recorded, and your programme updates based on what you actually lifted. [Download Formai](#).
+{{brand}} tracks your progressive overload automatically - every session is logged, every PR recorded, and your programme updates based on what you actually lifted. [Join the {{brand}} launch list](/signup).

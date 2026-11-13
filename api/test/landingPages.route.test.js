@@ -1,3 +1,4 @@
+import { withWebsiteBrand, websiteApp, requestWebsite, assert200DaysPage } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -114,3 +115,17 @@ test("GET /sitemap.xml includes sport landing pages", async () => {
   assert.match(body, /\/hyrox/);
   assert.match(body, /\/strength/);
 });
+
+test("200days copy on /hyrox", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/hyrox");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("Your HYROX prep counts toward your 200."));
+  assert200DaysPage(body, "/hyrox");
+}));
+
+test("200days copy on /strength", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/strength");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("Every strength session counts toward your 200."));
+  assert200DaysPage(body, "/strength");
+}));
