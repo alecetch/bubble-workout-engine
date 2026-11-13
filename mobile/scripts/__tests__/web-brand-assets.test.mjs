@@ -35,6 +35,12 @@ test("web brand outputs meet dimensions, alpha, SVG, ICO and byte determinism re
         assert.match(svg, /id="digits"[^>]*stroke-width="12"/);
       }
     }
+    // Ring + "Days" lockup: "Days" sits on the ring digits' baseline (y=99.5 in the
+    // 157-unit box) and the whole lockup is about 2:1, not the old ~3.9:1 ring + "200 Days".
+    const lockupSvg = await readFile(join(outDir, "200days-lockup.svg"), "utf8");
+    assert.match(lockupSvg, /translate\([\d.]+ 99\.5\) scale\(/);
+    const lockupPngWidth = pngs.get("200days-lockup@2x.png").readUInt32BE(16);
+    assert.ok(lockupPngWidth > 200 && lockupPngWidth < 280, `lockup width ${lockupPngWidth}`);
     const ico = await readFile(join(outDir, "favicon.ico"));
     assert.equal(ico.readUInt16LE(2), 1);
     assert.equal(ico.readUInt16LE(4), 2);

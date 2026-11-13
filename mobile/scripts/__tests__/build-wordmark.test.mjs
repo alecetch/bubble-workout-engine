@@ -18,6 +18,10 @@ test("vendored Inter produces deterministic single-path wordmark and tagline out
       assert.match(svg, /viewBox="[^\"]+"/);
       before.push(svg);
     }
+    // The ring supplies "200", so the wordmark is "Days" alone (about 2.5:1).
+    // "200 Days" would be about 4.4:1.
+    const [, , w, h] = before[0].match(/viewBox="([^"]+)"/)[1].split(/\s+/).map(Number);
+    assert.ok(w / h > 2 && w / h < 3, `wordmark aspect ${w / h} should match "Days" alone`);
     await buildWordmark({ outDir });
     assert.deepEqual(await Promise.all(["wordmark.svg", "tagline.svg"].map(name => readFile(join(outDir, name), "utf8"))), before);
   } finally { await rm(outDir, { recursive: true, force: true }); }

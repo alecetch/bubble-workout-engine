@@ -21,7 +21,7 @@ export async function buildWordmark({ outDir = new URL("../assets/source/", impo
   }
   const cap = outline("H").getBoundingBox();
   await mkdir(outDir, { recursive: true });
-  for (const [name, text, fill] of [["wordmark.svg", "200 Days", "#F8FAFC"], ["tagline.svg", "200 days changes everything", "#94A3B8"]]) {
+  for (const [name, text, fill] of [["wordmark.svg", "Days", "#F8FAFC"], ["tagline.svg", "200 days changes everything", "#94A3B8"]]) {
     const path = outline(text);
     const b = path.getBoundingBox();
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.x1} ${b.y1} ${b.x2 - b.x1} ${b.y2 - b.y1}" data-cap-height="${cap.y2 - cap.y1}"><path fill="${fill}" d="${path.toPathData(3)}"/></svg>\n`;
