@@ -133,12 +133,16 @@ for (const variant of ["forma", "200days"]) {
           assert.equal(schema.url, expected);
           assert.equal(schema.image, expected + (variant === "200days" ? "/images/brand/200days-icon-1024.png" : "/images/forma_icon.png"));
           assert.deepEqual(schema.publisher, { "@type": "Organization", name: "Engle Consulting Limited" });
-          // Copy migration follows separately; flag only affects chrome and metadata.
-          if (path === "/download") assert.match(body, /<h1>Forma is coming soon<\/h1>/);
+          // Each variant retains its own download and legal copy.
+          if (path === "/download") {
+            if (variant === "forma") assert.match(body, /<h1>Forma is coming soon<\/h1>/);
+            else assert.match(body, /<h1>200 Days is coming soon<\/h1>/);
+          }
         }
       }
       const { body: privacy } = await get("/privacy");
-      assert.match(privacy, /Forma is operated by Engle Consulting Limited/);
+      if (variant === "forma") assert.match(privacy, /Forma is operated by Engle Consulting Limited/);
+      else assert.match(privacy, /200 Days is operated by Engle Consulting Limited, trading as 200 Days/);
     } finally {
       for (const [key, value] of Object.entries(saved)) {
         if (value === undefined) delete process.env[key]; else process.env[key] = value;
@@ -148,13 +152,13 @@ for (const variant of ["forma", "200days"]) {
 }
 
 
-test("brand flag preserves all published marketing body copy and footer", async () => {
+test("unset flag preserves explicit Forma marketing body copy and footer", async () => {
   const saved = process.env.BRAND_VARIANT;
   try {
     for (const path of ["/", "/download", "/privacy", "/terms", "/hyrox", "/strength", "/press", "/support", "/testimonials"]) {
       delete process.env.BRAND_VARIANT;
       const original = await get(path, { preview: true });
-      process.env.BRAND_VARIANT = "200days";
+      process.env.BRAND_VARIANT = "forma";
       const switched = await get(path, { preview: true });
       assert.equal(switched.response.status, original.response.status, path);
       for (const pattern of [/<main>([\s\S]*?)<\/main>/, /<footer([\s\S]*?)<\/footer>/]) {

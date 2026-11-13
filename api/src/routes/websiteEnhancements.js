@@ -1,3 +1,4 @@
+import { renderBrandContent } from "../views/brandContent.js";
 import { getBrand, getFormaBrand } from "../config/brand.js";
 import express from "express";
 import { readFileSync, readdirSync } from "node:fs";
@@ -108,7 +109,7 @@ function readBlogPosts() {
   return files
     .map((file) => {
       const src = readFileSync(join(BLOG_DIR, file), "utf8");
-      const { meta, body } = parseFrontmatter(src);
+      const { meta, body } = parseFrontmatter(renderBrandContent(src));
       return {
         slug: basename(file, ".md"),
         title: meta.title ?? "",
@@ -121,8 +122,8 @@ function readBlogPosts() {
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
-function renderSignupForm(res, errorMsg = "") {
-  const body = `<div class="signup-page">
+function signupBodyForma(errorMsg) {
+  return `<div class="signup-page">
   <h1>Join the ${getFormaBrand().name} launch list.</h1>
   <p class="signup-sub">Training insights, app updates, and early access to new features. No spam. Unsubscribe anytime.</p>
   ${errorMsg ? `<p class="signup-error">${escapeHtml(errorMsg)}</p>` : ""}
@@ -133,6 +134,24 @@ function renderSignupForm(res, errorMsg = "") {
   <p class="trial-note" style="margin-top:24px;">Or get notified when the app launches.</p>
   <a href="/download" class="cta-btn" style="margin-top:12px;">Get launch updates</a>
 </div>`;
+}
+
+function signupBody200Days(errorMsg) {
+  return `<div class="signup-page">
+  <h1>Join the ${getBrand().name} launch list.</h1>
+  <p class="signup-sub">Training insights, app updates, and early access to new features. No spam. Unsubscribe anytime.</p>
+  ${errorMsg ? `<p class="signup-error">${escapeHtml(errorMsg)}</p>` : ""}
+  <form method="POST" action="/signup" class="signup-form">
+    <input type="email" name="email" placeholder="you@example.com" required autocomplete="email">
+    <button type="submit" class="cta-btn">Sign me up</button>
+  </form>
+  <p class="trial-note" style="margin-top:24px;">Or get notified when the app launches.</p>
+  <a href="/download" class="cta-btn" style="margin-top:12px;">Get launch updates</a>
+</div>`;
+}
+
+function renderSignupForm(res, errorMsg = "") {
+  const body = getBrand().variant === "200days" ? signupBody200Days(errorMsg) : signupBodyForma(errorMsg);
   return sendHtml(res, "Sign up for updates", body, {
     description: "Get Hyrox and strength training tips in your inbox.",
     canonical: "/signup",
@@ -140,7 +159,7 @@ function renderSignupForm(res, errorMsg = "") {
   });
 }
 
-export async function insertEmailSignupAndNotify(email, source = "website", db = pool) {
+export async function insertEmailSignupAndNotify(email, source = "website", db = pool, emailSender = sendEmail) {
   try {
     await db.query(
       "INSERT INTO email_signups (email, source) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING",
@@ -150,15 +169,19 @@ export async function insertEmailSignupAndNotify(email, source = "website", db =
     console.error("email_signups insert error", err);
   }
 
-  sendEmail({
+  const is200Days = getBrand().variant === "200days";
+  const confirmation = "Thanks for signing up. We'll send training tips and app news, no spam, and email you the day 200 Days is ready.";
+  emailSender({
     to: email,
-    subject: `You're on the ${getFormaBrand().name} list`,
-    text: `Hi,\n\nYou're signed up for ${getFormaBrand().name} updates. We'll send training tips and app news - no spam.\n\nWe'll email you when ${getFormaBrand().name} is ready.\n\nTo unsubscribe, reply with 'unsubscribe'.\n\n${getFormaBrand().name}`,
-    html: `<p>You're signed up for ${getFormaBrand().name} updates. We'll send training tips and app news - no spam.</p><p>We'll email you when ${getFormaBrand().name} is ready.</p><p style="color:#94A3B8;font-size:12px;">To unsubscribe, reply with 'unsubscribe'.</p>`,
+    subject: `You're on the ${getBrand().name} list`,
+    text: is200Days ? `${confirmation}\n\nTo unsubscribe, reply with 'unsubscribe'.`
+      : `Hi,\n\nYou're signed up for ${getFormaBrand().name} updates. We'll send training tips and app news - no spam.\n\nWe'll email you when ${getFormaBrand().name} is ready.\n\nTo unsubscribe, reply with 'unsubscribe'.\n\n${getFormaBrand().name}`,
+    html: is200Days ? `<p>${escapeHtml(confirmation)}</p><p style="color:#94A3B8;font-size:12px;">To unsubscribe, reply with 'unsubscribe'.</p>`
+      : `<p>You're signed up for ${getFormaBrand().name} updates. We'll send training tips and app news - no spam.</p><p>We'll email you when ${getFormaBrand().name} is ready.</p><p style="color:#94A3B8;font-size:12px;">To unsubscribe, reply with 'unsubscribe'.</p>`,
   }).catch((err) => console.error("confirmation email error", err));
 }
 
-export function createSignupHandlers(db = pool) {
+export function createSignupHandlers(db = pool, emailSender = sendEmail) {
   function getHandler(_req, res) {
     return renderSignupForm(res);
   }
@@ -172,7 +195,7 @@ export function createSignupHandlers(db = pool) {
     }
 
     const email = raw.toLowerCase();
-    await insertEmailSignupAndNotify(email, "website", db);
+    await insertEmailSignupAndNotify(email, "website", db, emailSender);
 
     return res.redirect(302, "/signup/confirmed");
   }
@@ -234,12 +257,20 @@ websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
     .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
 });
 
+function pricingBodyForma(monthlyDisplay, annualDisplay, annual) {
+  return `<div class="pricing-page"><div class="pricing-hero"><h1>Start free. Train smarter.</h1><p>Preview pricing for the ${getFormaBrand().name} app launch.</p></div><div class="container"><div class="trial-card"><h2>Launch pricing</h2><ul><li>Full access to every feature, every day</li><li>Your data is yours - export or delete anytime</li><li>Pricing will be confirmed before launch</li></ul></div><div class="plan-row"><div class="plan-card"><h3>Monthly</h3><div class="plan-price">${monthlyDisplay}</div><div class="plan-billing">Billed monthly</div><a href="/download" class="cta-btn">Get launch updates</a></div><div class="plan-card featured"><div class="plan-badge">Best value</div><h3>Annual</h3><div class="plan-price">${annualDisplay}</div><div class="plan-billing">Billed once per year</div>${annual ? '<div class="plan-saving">Save ~33% vs monthly</div>' : ""}<a href="/download" class="cta-btn">Get launch updates</a></div></div><div class="pricing-faq"><h2>Common questions</h2><div class="pfaq-item"><p class="pfaq-q">Is the app available yet?</p><p class="pfaq-a">Not yet. Join the launch list and we will email you when ${getFormaBrand().name} is ready.</p></div><div class="pfaq-item"><p class="pfaq-q">Can I switch between monthly and annual?</p><p class="pfaq-a">Yes. Subscription management will be handled through your device once the app is live.</p></div></div><div style="text-align:center;"><a href="/download" class="cta-btn">Get launch updates</a></div></div></div>`;
+}
+
+function pricingBody200Days(monthlyDisplay, annualDisplay, annual) {
+  return `<div class="pricing-page"><div class="pricing-hero"><h1>Start free. Train smarter.</h1><p>Preview pricing for the 200 Days launch.</p></div><div class="container"><div class="trial-card"><h2>Launch pricing</h2><ul><li>Full access to every feature, every day</li><li>Your data is yours - export or delete anytime</li><li>Pricing will be confirmed before launch</li></ul></div><div class="plan-row"><div class="plan-card"><h3>Monthly</h3><div class="plan-price">${monthlyDisplay}</div><div class="plan-billing">Billed monthly</div><a href="/download" class="cta-btn">Get launch updates</a></div><div class="plan-card featured"><div class="plan-badge">Best value</div><h3>Annual</h3><div class="plan-price">${annualDisplay}</div><div class="plan-billing">Billed once per year</div>${annual ? '<div class="plan-saving">Save ~33% vs monthly</div>' : ""}<a href="/download" class="cta-btn">Get launch updates</a></div></div><div class="pricing-faq"><h2>Common questions</h2><div class="pfaq-item"><p class="pfaq-q">Is the app available yet?</p><p class="pfaq-a">Not yet. Join the launch list and we will email you when ${getBrand().name} is ready.</p></div><div class="pfaq-item"><p class="pfaq-q">Can I switch between monthly and annual?</p><p class="pfaq-a">Yes. Subscription management will be handled through your device once the app is live.</p></div></div><div style="text-align:center;"><a href="/download" class="cta-btn">Get launch updates</a></div></div></div>`;
+}
+
 websiteEnhancementsRouter.get("/pricing", gatePage, (_req, res) => {
   const monthly = escapeHtml(process.env.MONTHLY_PRICE ?? "");
   const annual = escapeHtml(process.env.ANNUAL_PRICE ?? "");
   const monthlyDisplay = monthly || "See App Store for pricing";
   const annualDisplay = annual || "See App Store for pricing";
-  const body = `<div class="pricing-page"><div class="pricing-hero"><h1>Start free. Train smarter.</h1><p>Preview pricing for the ${getFormaBrand().name} app launch.</p></div><div class="container"><div class="trial-card"><h2>Launch pricing</h2><ul><li>Full access to every feature, every day</li><li>Your data is yours - export or delete anytime</li><li>Pricing will be confirmed before launch</li></ul></div><div class="plan-row"><div class="plan-card"><h3>Monthly</h3><div class="plan-price">${monthlyDisplay}</div><div class="plan-billing">Billed monthly</div><a href="/download" class="cta-btn">Get launch updates</a></div><div class="plan-card featured"><div class="plan-badge">Best value</div><h3>Annual</h3><div class="plan-price">${annualDisplay}</div><div class="plan-billing">Billed once per year</div>${annual ? '<div class="plan-saving">Save ~33% vs monthly</div>' : ""}<a href="/download" class="cta-btn">Get launch updates</a></div></div><div class="pricing-faq"><h2>Common questions</h2><div class="pfaq-item"><p class="pfaq-q">Is the app available yet?</p><p class="pfaq-a">Not yet. Join the launch list and we will email you when ${getFormaBrand().name} is ready.</p></div><div class="pfaq-item"><p class="pfaq-q">Can I switch between monthly and annual?</p><p class="pfaq-a">Yes. Subscription management will be handled through your device once the app is live.</p></div></div><div style="text-align:center;"><a href="/download" class="cta-btn">Get launch updates</a></div></div></div>`;
+  const body = getBrand().variant === "200days" ? pricingBody200Days(monthlyDisplay, annualDisplay, annual) : pricingBodyForma(monthlyDisplay, annualDisplay, annual);
   return sendHtml(res, "Pricing", body, {
     description: `${getBrand().name} pricing preview for the upcoming training app.`,
     canonical: "/pricing",
@@ -251,8 +282,16 @@ const { getHandler: signupGet, postHandler: signupPost } = createSignupHandlers(
 websiteEnhancementsRouter.get("/signup", gatePage, signupGet);
 websiteEnhancementsRouter.post("/signup", express.urlencoded({ extended: false }), signupPost);
 
+function signupConfirmedBodyForma() {
+  return `<div class="signup-page" style="text-align:center;"><h1>You're on the list.</h1><p class="signup-sub">We'll be in touch with training tips and app updates.</p><p style="color:#94A3B8;margin-top:16px;">In the meantime, you can also join the app launch list.</p><a href="/download" class="cta-btn" style="margin-top:24px;">Get launch updates</a></div>`;
+}
+
+function signupConfirmedBody200Days() {
+  return `<div class="signup-page" style="text-align:center;"><h1>You're on the list.</h1><p class="signup-sub">We'll be in touch with training tips and app updates.</p><p style="color:#94A3B8;margin-top:16px;">In the meantime, you can also join the app launch list.</p><a href="/download" class="cta-btn" style="margin-top:24px;">Get launch updates</a></div>`;
+}
+
 websiteEnhancementsRouter.get("/signup/confirmed", gatePage, (_req, res) => {
-  const body = `<div class="signup-page" style="text-align:center;"><h1>You're on the list.</h1><p class="signup-sub">We'll be in touch with training tips and app updates.</p><p style="color:#94A3B8;margin-top:16px;">In the meantime, you can also join the app launch list.</p><a href="/download" class="cta-btn" style="margin-top:24px;">Get launch updates</a></div>`;
+  const body = getBrand().variant === "200days" ? signupConfirmedBody200Days() : signupConfirmedBodyForma();
   return sendHtml(res, "You're signed up", body, {
     description: `You're on the ${getBrand().name} list.`,
     canonical: "/signup/confirmed",
@@ -284,7 +323,7 @@ websiteEnhancementsRouter.get("/blog/:slug", gatePage, (req, res) => {
   } catch {
     return res.status(404).send(wrapPage("Not Found", "<p style='padding:80px 24px;text-align:center;color:#94A3B8;'>Post not found.</p>"));
   }
-  const { meta, body: mdBody } = parseFrontmatter(src);
+  const { meta, body: mdBody } = parseFrontmatter(renderBrandContent(src));
   const html = marked.parse(mdBody);
   const body = `<div class="container-narrow blog-post"><a href="/blog" class="back-link">&lt;- Back to blog</a><h1>${escapeHtml(meta.title ?? "")}</h1><div class="post-date">${escapeHtml(meta.date ?? "")}</div><div class="blog-post-body">${html}</div></div>`;
   return sendHtml(res, meta.title ?? "Post", body, {
@@ -302,7 +341,10 @@ websiteEnhancementsRouter.get("/changelog", gatePage, (_req, res) => {
   } catch {
     html = "<p style='color:#94A3B8;'>Changelog coming soon.</p>";
   }
-  const body = `<div class="container-narrow changelog-page"><h1>Changelog</h1><p class="changelog-intro">A running record of what's new in ${getFormaBrand().name}.</p><a class="changelog-download" href="/download">Get launch updates</a><div class="changelog-body">${html}</div></div>`;
+  if (getBrand().variant === "200days") {
+    html = `<h2>Forma is now 200 Days</h2><p>${escapeHtml(getBrand().legalUpdated)}</p>` + html;
+  }
+  const body = `<div class="container-narrow changelog-page"><h1>Changelog</h1><p class="changelog-intro">A running record of what's new in ${getBrand().name}${getBrand().variant === "200days" ? "" : "."}</p><a class="changelog-download" href="/download">Get launch updates</a><div class="changelog-body">${html}</div></div>`;
   return sendHtml(res, "Changelog", body, {
     description: `${getBrand().name} changelog - see what's new in every version of the app.`,
     canonical: "/changelog",

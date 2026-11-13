@@ -1,4 +1,4 @@
-import { getBrand, getFormaBrand } from "../config/brand.js";
+import { getBrand } from "../config/brand.js";
 import express from "express";
 import { escapeHtml } from "./referralLanding.js";
 import { gatePage, wrapPage } from "../views/pageChrome.js";
@@ -48,7 +48,7 @@ function csvEscape(val) {
   return str;
 }
 
-export function createAffiliateHandlers(db = pool) {
+export function createAffiliateHandlers(db = pool, emailSender = sendEmail) {
   function renderForm(res, errorMsg = "", values = {}) {
     const commission = escapeHtml(process.env.AFFILIATE_COMMISSION_TEXT ?? "a generous commission");
     const errorHtml = errorMsg ? `<p class="form-error">${escapeHtml(errorMsg)}</p>` : "";
@@ -56,7 +56,7 @@ export function createAffiliateHandlers(db = pool) {
     const selected = (value) => (values.platform === value ? " selected" : "");
     const body = `<div class="container affiliate-page">
 <div class="affiliate-hero">
-  <h1>Partner with ${getFormaBrand().name}</h1>
+  <h1>Partner with ${getBrand().name}</h1>
   <p>Are you a personal trainer, Hyrox coach, or fitness content creator? Partner with us and earn ${commission} for every user who subscribes through your link.</p>
 </div>
 
@@ -150,21 +150,22 @@ export function createAffiliateHandlers(db = pool) {
       console.error("affiliate_applications insert error", err);
     }
 
+    const applicationLabel = getBrand().variant === "200days" ? "New 200 Days affiliate application" : "New affiliate application";
     const notifyAddress = process.env.AFFILIATE_NOTIFY_EMAIL || process.env.FROM_EMAIL || process.env.SUPPORT_EMAIL || null;
     if (notifyAddress) {
-      sendEmail({
+      emailSender({
         to: notifyAddress,
-        subject: `New affiliate application - ${name}`,
-        text: `New affiliate application:\n\nName: ${name}\nEmail: ${email}\nPlatform: ${platform}\nAudience size: ${audience || "not provided"}\nNote: ${note || "not provided"}\nTime: ${new Date().toISOString()}`,
-        html: `<h2>New affiliate application</h2><table><tr><td><strong>Name</strong></td><td>${escapeHtml(name)}</td></tr><tr><td><strong>Email</strong></td><td>${escapeHtml(email)}</td></tr><tr><td><strong>Platform</strong></td><td>${escapeHtml(platform)}</td></tr><tr><td><strong>Audience</strong></td><td>${escapeHtml(audience || "-")}</td></tr><tr><td><strong>Note</strong></td><td>${escapeHtml(note || "-")}</td></tr></table>`,
+        subject: `${applicationLabel} - ${name}`,
+        text: `${applicationLabel}:\n\nName: ${name}\nEmail: ${email}\nPlatform: ${platform}\nAudience size: ${audience || "not provided"}\nNote: ${note || "not provided"}\nTime: ${new Date().toISOString()}`,
+        html: `<h2>${applicationLabel}</h2><table><tr><td><strong>Name</strong></td><td>${escapeHtml(name)}</td></tr><tr><td><strong>Email</strong></td><td>${escapeHtml(email)}</td></tr><tr><td><strong>Platform</strong></td><td>${escapeHtml(platform)}</td></tr><tr><td><strong>Audience</strong></td><td>${escapeHtml(audience || "-")}</td></tr><tr><td><strong>Note</strong></td><td>${escapeHtml(note || "-")}</td></tr></table>`,
       }).catch((err) => console.error("affiliate notify email error", err));
     }
 
-    sendEmail({
+    emailSender({
       to: email,
-      subject: `Thanks for applying to partner with ${getFormaBrand().name}`,
-      text: `Hi ${name},\n\nThanks for applying to the ${getFormaBrand().name} affiliate programme. We'll review your application and get back to you within 5 business days.\n\nWe'll email you when ${getFormaBrand().name} is ready.\n\n${getFormaBrand().name}`,
-      html: `<p>Hi ${escapeHtml(name)},</p><p>Thanks for applying to the ${getFormaBrand().name} affiliate programme. We'll review your application and get back to you within 5 business days.</p><p>We'll email you when ${getFormaBrand().name} is ready.</p>`,
+      subject: `Thanks for applying to partner with ${getBrand().name}`,
+      text: `Hi ${name},\n\nThanks for applying to the ${getBrand().name} affiliate programme. We'll review your application and get back to you within 5 business days.\n\nWe'll email you when ${getBrand().name} is ready.\n\n${getBrand().name}`,
+      html: `<p>Hi ${escapeHtml(name)},</p><p>Thanks for applying to the ${getBrand().name} affiliate programme. We'll review your application and get back to you within 5 business days.</p><p>We'll email you when ${getBrand().name} is ready.</p>`,
     }).catch((err) => console.error("affiliate confirmation email error", err));
 
     return res.redirect(302, "/partners/applied");
@@ -198,7 +199,7 @@ affiliateProgramRouter.get("/partners/applied", gatePage, (_req, res) => {
   const body = `<div class="container applied-page">
     <h1>Application received.</h1>
     <p>Thanks for applying. We'll review your details and get back to you within 5 business days.</p>
-    <p style="color:#64748B;margin-bottom:32px;">We'll email you when ${getFormaBrand().name} is ready.</p>
+    <p style="color:#64748B;margin-bottom:32px;">We'll email you when ${getBrand().name} is ready.</p>
     <a href="/download" class="cta-btn">Get launch updates</a>
   </div>`;
   res.setHeader("Content-Type", "text/html; charset=utf-8").send(

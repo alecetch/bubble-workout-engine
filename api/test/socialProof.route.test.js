@@ -1,3 +1,4 @@
+import { withWebsiteBrand, websiteApp, requestWebsite, assert200DaysPage } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -88,3 +89,10 @@ test("testimonials page includes open graph metadata", async () => {
   const { body } = await request(createApp(), "/testimonials");
   assert.match(body, /og:title/);
 });
+
+test("200days copy on /testimonials", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/testimonials");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("200 Days"));
+  assert200DaysPage(body, "/testimonials");
+}));

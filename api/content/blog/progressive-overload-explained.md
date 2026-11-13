@@ -22,14 +22,14 @@ Linear load progression — adding 2.5 kg every session — works for beginners 
 
 The solution isn't to give up on progression. It's to rotate between the four levers based on where you are in your training cycle.
 
-## How Formai handles this
+## How {{brand}} handles this
 
-Formai doesn't use a fixed weekly increment. It watches your actual session performance — the reps you complete, the RPE you log, the sets where you miss — and decides when to progress load versus volume versus density.
+{{brand}} doesn't use a fixed weekly increment. It watches your actual session performance — the reps you complete, the RPE you log, the sets where you miss — and decides when to progress load versus volume versus density.
 
 If you complete every set cleanly and finish feeling like you could do more, the engine increases load next session. If you're grinding out the last reps and your form is slipping, it increases volume or density instead, building the capacity you'll need before adding load.
 
-This is what coaches do. They don't blindly add weight. They watch you train and adjust based on what they see. Formai does the same thing, automatically, from the data your sessions generate.
+This is what coaches do. They don't blindly add weight. They watch you train and adjust based on what they see. {{brand}} does the same thing, automatically, from the data your sessions generate.
 
 ## Try adaptive programming
 
-If you're stuck on a plateau, the issue probably isn't your work ethic — it's the programme. [Download Formai](#) and start your free 14-day trial. The engine adapts from session one.
+If you're stuck on a plateau, the issue probably isn't your work ethic — it's the programme. [Join the {{brand}} launch list](/signup) and start your free 14-day trial. The engine adapts from session one.

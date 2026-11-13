@@ -1,4 +1,5 @@
-import { getBrand, getFormaBrand } from "../config/brand.js";
+import { renderBrandContent, guideDownloadFile } from "../views/brandContent.js";
+import { getBrand } from "../config/brand.js";
 import express from "express";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
@@ -73,7 +74,7 @@ function readGuides() {
     .map((file) => {
       try {
         const src = readFileSync(join(GUIDES_DIR, file), "utf8");
-        const { meta } = parseFrontmatter(src);
+        const { meta } = parseFrontmatter(renderBrandContent(src));
         return {
           slug: basename(file, ".md"),
           title: meta.title ?? "",
@@ -81,7 +82,7 @@ function readGuides() {
           excerpt: meta.excerpt ?? "",
           readTime: meta.readTime ?? "",
           leadMagnetTitle: meta.leadMagnetTitle ?? "",
-          leadMagnetFile: meta.leadMagnetFile ?? "",
+          leadMagnetFile: guideDownloadFile(meta) ?? "",
         };
       } catch {
         return null;
@@ -164,14 +165,14 @@ contentHubRouter.get("/guides/:slug", gatePage, (req, res) => {
     return notFound(res);
   }
 
-  const { meta, body: mdBody } = parseFrontmatter(src);
+  const { meta, body: mdBody } = parseFrontmatter(renderBrandContent(src));
   let renderedHtml = marked.parse(mdBody);
   renderedHtml = addHeadingIds(renderedHtml);
   const toc = extractToc(renderedHtml);
   const tocHtml = toc
     ? `<nav class="guide-toc"><h3>Contents</h3><ol>${toc.map((heading) => `<li><a href="#${escapeHtml(heading.id)}">${escapeHtml(heading.text)}</a></li>`).join("")}</ol></nav>`
     : "";
-  const hasLeadMagnet = Boolean(meta.leadMagnetTitle && meta.leadMagnetFile);
+  const hasLeadMagnet = Boolean(meta.leadMagnetTitle && guideDownloadFile(meta));
   const errorHtml = req.query.error === "invalid-email" ? '<p class="lead-form-error">Please enter a valid email address.</p>' : "";
   const leadMagnetHtml = hasLeadMagnet ? `<div class="lead-magnet-box lead-box">
   <h3>${escapeHtml(meta.leadMagnetTitle)}</h3>
@@ -201,7 +202,7 @@ ${leadMagnetHtml}
   );
 });
 
-export function createGuideSignupHandler(db = pool) {
+export function createGuideSignupHandler(db = pool, emailSender = sendEmail) {
   return async function guideSignupHandler(req, res) {
     const { slug } = req.params;
     if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).send("Invalid guide.");
@@ -209,12 +210,13 @@ export function createGuideSignupHandler(db = pool) {
     let meta;
     try {
       const src = readFileSync(join(GUIDES_DIR, `${slug}.md`), "utf8");
-      ({ meta } = parseFrontmatter(src));
+      ({ meta } = parseFrontmatter(renderBrandContent(src)));
     } catch {
       return res.status(404).send("Guide not found.");
     }
 
-    if (!meta.leadMagnetFile) return res.status(400).send("This guide has no downloadable resource.");
+    const leadMagnetFile = guideDownloadFile(meta);
+    if (!leadMagnetFile) return res.status(400).send("This guide has no downloadable resource.");
 
     const rawEmail = (req.body?.email ?? "").toString().trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
@@ -231,16 +233,17 @@ export function createGuideSignupHandler(db = pool) {
       console.error("guide email_signups insert error", err);
     }
 
-    const baseUrl = process.env.BASE_URL ?? getFormaBrand().siteUrl;
-    const downloadUrl = `${baseUrl}${meta.leadMagnetFile}`;
-    sendEmail({
+    const baseUrl = process.env.BASE_URL ?? getBrand().siteUrl;
+    const downloadUrl = `${baseUrl}${leadMagnetFile}`;
+    const signature = getBrand().variant === "200days" ? "The 200 Days team" : getBrand().name;
+    emailSender({
       to: email,
-      subject: `Your download - ${meta.title ?? `${getFormaBrand().name} Guide`}`,
-      text: `Here's your download:\n\n${downloadUrl}\n\nHappy training,\n${getFormaBrand().name}`,
-      html: `<p>Here's your download: <a href="${escapeHtml(downloadUrl)}">${escapeHtml(meta.leadMagnetTitle ?? "Download")}</a></p><p>Happy training,<br>${getFormaBrand().name}</p>`,
+      subject: `Your download - ${meta.title ?? `${getBrand().name} Guide`}`,
+      text: `Here's your download:\n\n${downloadUrl}\n\nHappy training,\n${signature}`,
+      html: `<p>Here's your download: <a href="${escapeHtml(downloadUrl)}">${escapeHtml(meta.leadMagnetTitle ?? "Download")}</a></p><p>Happy training,<br>${signature}</p>`,
     }).catch(() => {});
 
-    return res.redirect(302, meta.leadMagnetFile);
+    return res.redirect(302, leadMagnetFile);
   };
 }
 

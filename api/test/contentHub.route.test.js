@@ -1,3 +1,4 @@
+import { withWebsiteBrand, websiteApp, requestWebsite, assert200DaysPage } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -157,3 +158,21 @@ test("GET /sitemap.xml includes guides and guide slugs", async () => {
   assert.match(body, /\/guides\/hyrox-race-prep-plan/);
   assert.match(body, /\/guides\/progressive-overload-complete-guide/);
 });
+
+test("200days copy on /guides/hyrox-race-prep-plan", () => withWebsiteBrand("200days", async () => {
+  const { response, body } = await requestWebsite(websiteApp(), "/guides/hyrox-race-prep-plan");
+  assert.equal(response.status, 200);
+  assert.ok(body.includes("The Complete Hyrox Race Prep Guide"));
+  assert200DaysPage(body, "/guides/hyrox-race-prep-plan");
+}));
+
+
+for (const variant of ["forma", "200days"]) {
+  test(`${variant} guide signup selects its PDF`, () => withWebsiteBrand(variant, async () => {
+    const { response } = await request(buildPostApp(mockDb()), "/guides/hyrox-race-prep-plan/signup", {
+      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "email=reader%40example.test", redirect: "manual",
+    });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), variant === "200days" ? "/downloads/200days-hyrox-race-prep-template.pdf" : "/downloads/hyrox-race-prep-template.pdf");
+  }));
+}

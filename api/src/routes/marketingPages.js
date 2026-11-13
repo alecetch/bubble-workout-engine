@@ -302,6 +302,16 @@ function termsHtml() {
 <h2>14. Contact</h2><p><strong>Email:</strong> support@200days.app<br><strong>Website:</strong> ${getFormaBrand().domain}/support</p>`;
 }
 
+function legalBody200Days(publishedHtml) {
+  const brand = getBrand();
+  return publishedHtml
+    .replace(/15(?:th)? May 2026/g, () => escapeHtml(brand.legalUpdated))
+    .replaceAll("Forma", brand.name)
+    .replaceAll("getforma.fit", brand.domain)
+    .replaceAll(brand.operator, brand.operatorLine)
+    .replace("</h1>", "</h1><p>200 Days was previously called Forma. The service, operator and your data are unchanged.</p>");
+}
+
 function softwareAppSchema() {
   const brand = getBrand();
   return {
@@ -326,7 +336,7 @@ const AVATAR_COLOURS = ["#22D3EE", "#A7F3D0", "#FDE68A", "#FCA5A5", "#C4B5FD", "
 
 function readTestimonials() {
   try {
-    return JSON.parse(readFileSync(TESTIMONIALS_FILE, "utf8"));
+    return JSON.parse(readFileSync(TESTIMONIALS_FILE, "utf8").replaceAll("{{brand}}", getBrand().name));
   } catch {
     return [];
   }
@@ -376,13 +386,8 @@ function emailCaptureStripHtml() {
 </section>`;
 }
 
-function homeHandler(_req, res) {
-  const featuredTestimonials = readTestimonials().slice(0, 3);
-  const testimonialStripCards = featuredTestimonials.length ? featuredTestimonials.map(testimonialCardHtml).join("") : "";
-  const testimonialsStripHtml = featuredTestimonials.length
-    ? `<section class="testimonials-strip"><h2>What athletes are saying</h2><p class="testimonials-intro">Hyrox competitors and serious lifters already training with ${getFormaBrand().name}.</p><div class="strip-grid">${testimonialStripCards}</div><a href="/testimonials" class="strip-link">See all reviews -&gt;</a></section>`
-    : "";
-  const body = `
+function homeBodyForma(testimonialsStripHtml) {
+  return `
 <section class="hero">
   <img src="/images/forma_masthead.png" alt="${getFormaBrand().name}" class="hero-img">
   <h1>Train with your data,<br>not your guesswork.</h1>
@@ -398,10 +403,47 @@ function homeHandler(_req, res) {
 </div>
 ${emailCaptureStripHtml()}
 <section class="bottom-cta"><h2>Ready to train smarter?</h2><a href="/hyrox-calculator" class="cta-btn">Try the free HYROX calculator</a><p class="trial-note"><a href="/download">Get launch updates for the app</a></p></section>`;
+}
+
+function homeBody200Days(testimonialsStripHtml) {
+  return `
+<section class="hero">
+  <h1>200 days changes everything.</h1>
+  <p>Train 200 days this year: about four a week, with room for life. We plan every session and adapt it to how you're actually performing.</p>
+  <a href="/signup" class="cta-btn">Get launch updates</a>
+  <p class="trial-note"><a href="/hyrox-calculator">Try the free HYROX calculator</a></p>
+</section>
+<div class="container">
+  <section class="who-section"><h2>Why 200</h2><div class="feature-grid">
+    <div class="feature-card"><h3>Miss a week? Make it up.</h3><p>A missed week isn't failure; it's a gap you can make up.</p></div>
+    <div class="feature-card"><h3>Resets every 1 January.</h3><p>It renews every year, on 1 January for everyone.</p></div>
+    <div class="feature-card"><h3>Fit people train about 200 days a year</h3><p>It's a standard, not a gimmick.</p></div>
+  </div></section>
+  <section class="how-section"><h2>How it works</h2><div class="steps">
+    <div class="step"><div class="step-num">1</div><h3>Tell us your goals and kit</h3><p>Tell us your goals, experience, equipment, and schedule. Takes 5 minutes.</p></div>
+    <div class="step"><div class="step-num">2</div><h3>Train the plan we build</h3><p>We generate a personalised programme built around your life and training goals.</p></div>
+    <div class="step"><div class="step-num">3</div><h3>Watch the count climb</h3><p>Every session you log sharpens the engine. Loads, reps, and intensity update automatically.</p></div>
+  </div></section>
+  <section class="clubs-strip"><p>Hit 200 and you're in for the year. Keep going for Club 250 and Club 300.</p></section>
+  <blockquote class="founder-line">I train 200 days every year. It keeps me honest when I slack, because a missed week is a gap I can make up, not a streak I've broken.</blockquote>
+  ${testimonialsStripHtml}
+  <section class="features-section"><h2>What we do for you</h2><div class="two-col"><div><h3>Hyrox athletes</h3><ul><li>Station-specific conditioning blocks</li><li>Race-day simulation workouts</li><li>Pace and time-to-complete progression</li></ul></div><div><h3>Strength athletes</h3><ul><li>Auto-regulating load progression</li><li>Programmes built around your equipment</li><li>Adapts based on your results each session</li></ul></div></div><div class="feature-grid"><div class="feature-card"><h3>Personalised progression</h3><p>Loads and reps adjust based on your actual performance.</p></div><div class="feature-card"><h3>Hyrox-ready conditioning</h3><p>Station-by-station programming with pace and time-to-complete tracking.</p></div><div class="feature-card"><h3>Physique tracking</h3><p>Optional AI-assisted progress check-ins with week-on-week comparisons.</p></div><div class="feature-card"><h3>Coach-quality cues</h3><p>Technique guidance and form cues for every exercise.</p></div></div></section>
+</div>
+${emailCaptureStripHtml()}
+<section class="bottom-cta"><h2>Start your 200.</h2><a href="/signup" class="cta-btn">Start your 200.</a></section>`;
+}
+
+function homeHandler(_req, res) {
+  const featuredTestimonials = readTestimonials().slice(0, 3);
+  const testimonialStripCards = featuredTestimonials.length ? featuredTestimonials.map(testimonialCardHtml).join("") : "";
+  const testimonialsStripHtml = featuredTestimonials.length
+    ? `<section class="testimonials-strip"><h2>What athletes are saying</h2><p class="testimonials-intro">${getBrand().variant === "200days" ? "Athletes already training with us." : `Hyrox competitors and serious lifters already training with ${getFormaBrand().name}.`}</p><div class="strip-grid">${testimonialStripCards}</div><a href="/testimonials" class="strip-link">See all reviews -&gt;</a></section>`
+    : "";
+  const body = getBrand().variant === "200days" ? homeBody200Days(testimonialsStripHtml) : homeBodyForma(testimonialsStripHtml);
   sendHtml(res, "Home", body, {
     description: "Personalised strength and Hyrox training programs that adapt to your performance - every session.",
     canonical: "/",
-    extraCss: HOME_CSS,
+    extraCss: HOME_CSS + (getBrand().variant === "200days" ? "\n.clubs-strip { padding: 24px 0; text-align: center; }\n.founder-line { max-width: 680px; margin: 32px auto 48px; padding: 0 24px; color: #94A3B8; font-style: italic; }" : ""),
     jsonLd: softwareAppSchema(),
   });
 }
@@ -416,7 +458,7 @@ function testimonialsHandler(_req, res) {
   const body = `<div class="container testimonials-page">
   <section class="testimonials-hero">
     <h1>What Athletes Are Saying</h1>
-    <p>Real feedback from people using ${getFormaBrand().name} to prepare for races, rebuild consistency, and train with programmes that respond to their progress.</p>
+    <p>Real feedback from people using ${getBrand().name} to prepare for races, rebuild consistency, and train with programmes that respond to their progress.</p>
     ${ratingBadge}
   </section>
   <section class="testimonials-grid">${cards}</section>
@@ -437,23 +479,8 @@ function landingTestimonialHtml(matchPattern, fallbackText) {
   <div class="attribution">- ${escapeHtml(testimonial.name ?? "")}, ${escapeHtml(testimonial.handle ?? "")}</div>`;
 }
 
-function hyroxHandler(_req, res) {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: getBrand().name,
-    operatingSystem: "iOS",
-    applicationCategory: "HealthApplication",
-    applicationSubCategory: "FitnessApplication",
-    description: "AI-powered Hyrox training programs - strength base, conditioning progression, and race-day taper.",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "GBP", description: "Coming soon" },
-    url: `${getBrand().siteUrl}/hyrox`,
-  };
-  const testimonial = landingTestimonialHtml(
-    /hyrox/i,
-    "<blockquote>The conditioning progression is what sets this apart. My sled push times improved by 15 seconds over 8 weeks. Measurable.</blockquote><div class=\"attribution\">- Dan R., Hyrox qualifier, Northwest</div>",
-  );
-  const body = `
+function hyroxBodyForma(testimonial) {
+  return `
 <section class="landing-hero">
   <div class="container">
     <h1>Your Hyrox race prep,<br>built by AI.</h1>
@@ -488,6 +515,63 @@ function hyroxHandler(_req, res) {
 </section>
 <div class="landing-cta"><a href="/download" class="cta-btn">Get launch updates</a></div>
 ${emailCaptureStripHtml()}`;
+}
+
+function hyroxBody200Days(testimonial) {
+  return `
+<section class="landing-hero">
+  <div class="container">
+    <h1>Your HYROX prep counts toward your 200.</h1>
+    <p class="subhead">We build personalised 8-12 week race-prep blocks for Hyrox athletes. Every session adapts to your performance data - no coach required.</p>
+    <a href="/download" class="cta-btn">Get launch updates</a>
+  </div>
+</section>
+<section class="landing-why">
+  <h2>Why Hyrox training is different</h2>
+  <p>Hyrox demands two things at once: a functional strength base and the conditioning to push hard through 8 stations after running a kilometre. Standard strength programs do not develop station-specific pacing, and standard conditioning programs do not build the strength to move a loaded sled when you are already fatigued. We build both, in the right ratio, for your race date.</p>
+  <div class="landing-icons">
+    <div class="landing-icon-item"><div class="icon">01</div><div class="label">Strength base</div><div class="sublabel">Compound lifts, race-relevant patterns</div></div>
+    <div class="landing-icon-item"><div class="icon">02</div><div class="label">Station conditioning</div><div class="sublabel">Sled, ski erg, wall balls, rowing</div></div>
+    <div class="landing-icon-item"><div class="icon">03</div><div class="label">Race-day taper</div><div class="sublabel">Peak on the day that matters</div></div>
+  </div>
+</section>
+<section class="landing-features">
+  <h2>How we handle it</h2>
+  <div class="feature-grid">
+    <div class="feature-card"><h3>Periodised blocks</h3><p>Base to build to peak. The engine structures your weeks so your strength base and conditioning capacity both peak in the final fortnight before race day.</p></div>
+    <div class="feature-card"><h3>Station conditioning</h3><p>Tracks your sled push, ski erg, wall ball, and rowing times separately. Progresses each station at its own rate, not as a single generic conditioning score.</p></div>
+    <div class="feature-card"><h3>Hybrid session design</h3><p>Combines functional strength with conditioning in the right ratio for each training phase. Your build phase looks different from your base phase because it should.</p></div>
+    <div class="feature-card"><h3>Automatic load adjustment</h3><p>Every session, we read your logged reps and times and set next week's targets accordingly. You never manually update a spreadsheet.</p></div>
+  </div>
+</section>
+<section class="landing-testimonial">${testimonial}</section>
+<section class="landing-faq">
+  <h2>Common questions</h2>
+  <div class="faq-item"><p class="faq-q">Does ${getBrand().name} work for Hyrox beginners?</p><p class="faq-a">Yes. The onboarding assessment sets starting loads and conditioning volume relative to your current level. A beginner's programme looks different from an experienced competitor's.</p></div>
+  <div class="faq-item"><p class="faq-q">How does ${getBrand().name} handle combined Hyrox stations?</p><p class="faq-a">Each station is tracked as its own exercise with its own progression metric. You log each station separately; we track your times and adjust targets independently.</p></div>
+  <div class="faq-item"><p class="faq-q">Can I follow ${getBrand().name} alongside my running plan?</p><p class="faq-a">Yes. During onboarding you set your available training days. We build around your schedule, leaving your running days free.</p></div>
+</section>
+<div class="landing-cta"><a href="/download" class="cta-btn">Get launch updates</a></div>
+${emailCaptureStripHtml()}`;
+}
+
+function hyroxHandler(_req, res) {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: getBrand().name,
+    operatingSystem: "iOS",
+    applicationCategory: "HealthApplication",
+    applicationSubCategory: "FitnessApplication",
+    description: "AI-powered Hyrox training programs - strength base, conditioning progression, and race-day taper.",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "GBP", description: "Coming soon" },
+    url: `${getBrand().siteUrl}/hyrox`,
+  };
+  const testimonial = landingTestimonialHtml(
+    /hyrox/i,
+    "<blockquote>The conditioning progression is what sets this apart. My sled push times improved by 15 seconds over 8 weeks. Measurable.</blockquote><div class=\"attribution\">- Dan R., Hyrox qualifier, Northwest</div>",
+  );
+  const body = getBrand().variant === "200days" ? hyroxBody200Days(testimonial) : hyroxBodyForma(testimonial);
   sendHtml(res, "Hyrox Training App - Personalised Race Prep", body, {
     description: "AI-powered Hyrox training programs that build your strength base, develop station-specific conditioning, and taper you into race day. Start your free 14-day trial.",
     canonical: "/hyrox",
@@ -496,23 +580,8 @@ ${emailCaptureStripHtml()}`;
   });
 }
 
-function strengthHandler(_req, res) {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: getBrand().name,
-    operatingSystem: "iOS",
-    applicationCategory: "HealthApplication",
-    applicationSubCategory: "FitnessApplication",
-    description: "Personalised strength and hypertrophy programs that adjust your load and volume automatically based on what you actually lift.",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "GBP", description: "Coming soon" },
-    url: `${getBrand().siteUrl}/strength`,
-  };
-  const testimonial = landingTestimonialHtml(
-    /lifter|powerlifter|strength/i,
-    "<blockquote>I've tried six different apps. This is the only one where I feel like the program is actually responding to how my training is going, not just incrementing a spreadsheet.</blockquote><div class=\"attribution\">- James T., Powerlifter, 4 years</div>",
-  );
-  const body = `
+function strengthBodyForma(testimonial) {
+  return `
 <section class="landing-hero">
   <div class="container">
     <h1>A strength program that<br>gets stronger as you do.</h1>
@@ -547,6 +616,63 @@ function strengthHandler(_req, res) {
 </section>
 <div class="landing-cta"><a href="/download" class="cta-btn">Get launch updates</a></div>
 ${emailCaptureStripHtml()}`;
+}
+
+function strengthBody200Days(testimonial) {
+  return `
+<section class="landing-hero">
+  <div class="container">
+    <h1>Every strength session counts toward your 200.</h1>
+    <p class="subhead">We build personalised strength and hypertrophy programs and adjust your load and volume automatically - every session, based on what you actually lifted.</p>
+    <a href="/download" class="cta-btn">Get launch updates</a>
+  </div>
+</section>
+<section class="landing-why">
+  <h2>Why generic programs stop working</h2>
+  <p>Linear periodisation works for beginners. After six months, intermediate lifters need a program that reads actual performance and adjusts accordingly: more weight when you are ahead of target, more volume when load progression has stalled, and a deload when fatigue accumulates. We do this automatically, every session.</p>
+  <div class="landing-icons">
+    <div class="landing-icon-item"><div class="icon">01</div><div class="label">Autoregulated load</div><div class="sublabel">Weight moves when you are ready</div></div>
+    <div class="landing-icon-item"><div class="icon">02</div><div class="label">PR tracking</div><div class="sublabel">Every new estimated 1RM logged</div></div>
+    <div class="landing-icon-item"><div class="icon">03</div><div class="label">Deload weeks</div><div class="sublabel">Scheduled automatically</div></div>
+  </div>
+</section>
+<section class="landing-features">
+  <h2>How we handle it</h2>
+  <div class="feature-grid">
+    <div class="feature-card"><h3>Autoregulated loading</h3><p>We target a rep range, not a fixed weight. Hit the top of the range and load goes up. Fall short and volume is adjusted before load is pushed.</p></div>
+    <div class="feature-card"><h3>Strength and hypertrophy modes</h3><p>Choose your goal. Strength mode prioritises heavy compound lifts at lower rep ranges. Hypertrophy mode adds volume and emphasises time-under-tension.</p></div>
+    <div class="feature-card"><h3>Personal record tracking</h3><p>Every new estimated 1RM is logged. See your strength curve over time on every exercise and get notified the moment you set a PR.</p></div>
+    <div class="feature-card"><h3>Automatic deload weeks</h3><p>The engine monitors accumulated load and performance trends. When a deload is due, it is inserted automatically with lighter loads and lower volume.</p></div>
+  </div>
+</section>
+<section class="landing-testimonial">${testimonial}</section>
+<section class="landing-faq">
+  <h2>Common questions</h2>
+  <div class="faq-item"><p class="faq-q">Does ${getBrand().name} support powerlifting - squat, bench, deadlift?</p><p class="faq-a">Yes. Squat, bench press, and deadlift are first-class exercises in the programme engine. We track your estimated 1RM on each and structure your programme around them.</p></div>
+  <div class="faq-item"><p class="faq-q">Can I specify which days I train?</p><p class="faq-a">Yes. During onboarding you set your available training days and session duration. We build around your schedule.</p></div>
+  <div class="faq-item"><p class="faq-q">How does ${getBrand().name} handle a deload week?</p><p class="faq-a">Automatically. The engine monitors accumulated load and performance trends. When a deload is due, loads drop, volume reduces, and movement patterns stay the same.</p></div>
+</section>
+<div class="landing-cta"><a href="/download" class="cta-btn">Get launch updates</a></div>
+${emailCaptureStripHtml()}`;
+}
+
+function strengthHandler(_req, res) {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: getBrand().name,
+    operatingSystem: "iOS",
+    applicationCategory: "HealthApplication",
+    applicationSubCategory: "FitnessApplication",
+    description: "Personalised strength and hypertrophy programs that adjust your load and volume automatically based on what you actually lift.",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "GBP", description: "Coming soon" },
+    url: `${getBrand().siteUrl}/strength`,
+  };
+  const testimonial = landingTestimonialHtml(
+    /lifter|powerlifter|strength/i,
+    "<blockquote>I've tried six different apps. This is the only one where I feel like the program is actually responding to how my training is going, not just incrementing a spreadsheet.</blockquote><div class=\"attribution\">- James T., Powerlifter, 4 years</div>",
+  );
+  const body = getBrand().variant === "200days" ? strengthBody200Days(testimonial) : strengthBodyForma(testimonial);
   sendHtml(res, "Strength Training App - Progressive Programs That Adapt", body, {
     description: `${getBrand().name} writes personalised strength and hypertrophy programs and adjusts your load and volume automatically based on what you actually lift.`,
     canonical: "/strength",
@@ -557,23 +683,24 @@ ${emailCaptureStripHtml()}`;
 
 function pressHandler(_req, res) {
   // This handler historically treats empty email env values as absent.
-  const pressEmail = escapeHtml(getFormaBrand({
+  const pressEmail = escapeHtml(getBrand().variant === "200days" ? getBrand().pressEmail : getFormaBrand({
     ...process.env, PRESS_EMAIL: process.env.PRESS_EMAIL || undefined,
     SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || undefined,
   }).pressEmail);
   let imagesDir = [];
   try {
-    imagesDir = readdirSync(join(__dirname, "../../public/images"));
+    imagesDir = readdirSync(join(__dirname, getBrand().variant === "200days" ? "../../public/images/brand" : "../../public/images"));
   } catch {
     imagesDir = [];
   }
 
-  function assetCard(filename, label, previewSrc = `/images/${filename}`) {
+  const assetBase = getBrand().variant === "200days" ? "/images/brand" : "/images";
+  function assetCard(filename, label, previewSrc = `${assetBase}/${filename}`) {
     if (!imagesDir.includes(filename)) return "";
-    const src = escapeHtml(`/images/${filename}`);
+    const src = escapeHtml(`${assetBase}/${filename}`);
     const ext = escapeHtml(filename.split(".").pop()?.toUpperCase() ?? "");
     return `<div class="asset-card">
-  <div class="asset-preview"><img src="${escapeHtml(previewSrc)}" alt="${escapeHtml(label)}"></div>
+  <div class="asset-preview"${filename === "200days-mark-light.svg" ? ' style="background:#F1F5F9;"' : ""}><img src="${escapeHtml(previewSrc)}" alt="${escapeHtml(label)}"></div>
   <div class="asset-name">${escapeHtml(label)}</div>
   <a href="${src}" download class="asset-download">Download ${ext}</a>
 </div>`;
@@ -586,22 +713,23 @@ function pressHandler(_req, res) {
   <div class="mention-headline"><a href="${escapeHtml(mention.url ?? "#")}" target="_blank" rel="noopener">${escapeHtml(mention.headline ?? "")}</a></div>
   <div class="mention-date">${escapeHtml(mention.date ?? "")}</div>
 </div>`).join("")}</div>`
-    : `<div class="mention-placeholder">Be the first to cover ${getFormaBrand().name}. <a href="mailto:${pressEmail}" style="color:#22D3EE;">Get in touch -&gt;</a></div>`;
+    : `<div class="mention-placeholder">Be the first to cover ${getBrand().name}. <a href="mailto:${pressEmail}" style="color:#22D3EE;">Get in touch -&gt;</a></div>`;
 
   const body = `<div class="container press-page">
   <div class="press-hero">
     <h1>Press &amp; Media</h1>
-    <p>Everything you need to write about ${getFormaBrand().name}. Logos, screenshots, and background in one place.</p>
+    <p>Everything you need to write about ${getBrand().name}. Logos, screenshots, and background in one place.</p>
     <p class="press-contact-line">Press enquiries: <a href="mailto:${pressEmail}">${pressEmail}</a> - we aim to respond within 2 business days.</p>
   </div>
 
   <div class="press-section press-about-section">
-    <h2>About ${getFormaBrand().name}</h2>
-    <div class="press-about">
-      <p>${getFormaBrand().name} is an AI-powered strength and Hyrox training app for iOS. It builds personalised training programmes and adapts every session to the athlete's logged performance, so load, volume, and conditioning targets update automatically based on what they actually did.</p>
-      <p>${getFormaBrand().name} is built for Hyrox competitors preparing for races, strength athletes pursuing progressive overload, and anyone who wants a coach-quality programme without hiring a coach. The app combines race-prep conditioning, structured strength work, and practical progression logic in one place.</p>
-      <p>The programme engine is rules-based and grounded in periodisation principles, so athletes can see why loads change instead of trusting a black box. ${getFormaBrand().name} is preparing for launch.</p>
-    </div>
+    <h2>About ${getBrand().name}</h2>
+    <div class="press-about">${getBrand().variant === "200days" ? `<p>200 Days is a training app built around one standard: 200 training days a year. It's made by Engle Consulting Limited in East Sussex, UK.</p>` : `
+      <p>${getBrand().name} is an AI-powered strength and Hyrox training app for iOS. It builds personalised training programmes and adapts every session to the athlete's logged performance, so load, volume, and conditioning targets update automatically based on what they actually did.</p>
+      <p>${getBrand().name} is built for Hyrox competitors preparing for races, strength athletes pursuing progressive overload, and anyone who wants a coach-quality programme without hiring a coach. The app combines race-prep conditioning, structured strength work, and practical progression logic in one place.</p>
+      <p>The programme engine is rules-based and grounded in periodisation principles, so athletes can see why loads change instead of trusting a black box. ${getBrand().name} is preparing for launch.</p>
+`}</div>
+
   </div>
 
   <div class="press-section">
@@ -619,9 +747,14 @@ function pressHandler(_req, res) {
   <div class="press-section">
     <h2>Downloadable brand assets</h2>
     <div class="asset-grid">
-      ${assetCard("formai_icon.svg", "App icon (SVG)")}
+      ${getBrand().variant === "200days" ? `${assetCard("200days-lockup.svg", "Lockup (SVG)")}
+${assetCard("200days-lockup@2x.png", "Lockup (PNG)")}
+${assetCard("200days-mark.svg", "Mark (SVG)")}
+${assetCard("200days-mark-light.svg", "Light mark (SVG)")}
+${assetCard("200days-icon-1024.png", "App icon (PNG)")}
+` : `      ${assetCard("formai_icon.svg", "App icon (SVG)")}
       ${assetCard("formai_wordmark_only@2x.png", "Wordmark (PNG)")}
-      ${assetCard("formai_hero@2x.png", "Hero image (PNG)")}
+      ${assetCard("formai_hero@2x.png", "Hero image (PNG)")}`}
     </div>
   </div>
 
@@ -656,15 +789,23 @@ function pressHandler(_req, res) {
   });
 }
 
+function downloadBodyForma(feedback) {
+  return `<div class="download-page"><img src="${getFormaBrand().logo.favicon}" alt="${getFormaBrand().name}" class="download-icon"><h1>${getFormaBrand().name} is coming soon</h1><p class="tagline">The app is not available yet. Join the launch list and we will let you know when it is ready.</p>${feedback}</div>`;
+}
+
+function downloadBody200Days(feedback) {
+  return `<div class="download-page"><img src="${getBrand().logo.appIcon}" alt="${getBrand().name}" class="download-icon"><h1>${getBrand().name} is coming soon</h1><p class="tagline">Join the launch list and we'll tell you the day it's on the App Store and Google Play.</p>${feedback}</div>`;
+}
+
 function renderDownloadPage(res, { errorMsg = "", notified = false } = {}) {
   const feedback = notified
-    ? `<p class="download-success">You're on the list. We'll email you the moment ${getFormaBrand().name} is available.</p>`
+    ? `<p class="download-success">You're on the list. We'll email you the moment ${getBrand().name} is available.</p>`
     : `${errorMsg ? `<p class="download-error">${escapeHtml(errorMsg)}</p>` : ""}
   <form method="POST" action="/download/notify" class="strip-form">
     <input type="email" name="email" placeholder="you@example.com" required autocomplete="email">
     <button type="submit" class="cta-btn">Notify me</button>
   </form>`;
-  const body = `<div class="download-page"><img src="${getFormaBrand().logo.favicon}" alt="${getFormaBrand().name}" class="download-icon"><h1>${getFormaBrand().name} is coming soon</h1><p class="tagline">The app is not available yet. Join the launch list and we will let you know when it is ready.</p>${feedback}</div>`;
+  const body = getBrand().variant === "200days" ? downloadBody200Days(feedback) : downloadBodyForma(feedback);
   sendHtml(res, "Download", body, {
     description: `${getBrand().name} is coming soon. Join the launch list and we will email you when the app is ready.`,
     canonical: "/download",
@@ -692,7 +833,7 @@ export function createDownloadNotifyHandler(db = pool) {
 }
 
 function privacyHandler(_req, res) {
-  sendHtml(res, "Privacy Policy", `<div class="container-narrow legal-page">${privacyHtml()}</div>`, {
+  sendHtml(res, "Privacy Policy", `<div class="container-narrow legal-page">${getBrand().variant === "200days" ? legalBody200Days(privacyHtml()) : privacyHtml()}</div>`, {
     description: `${getBrand().name} Privacy Policy - how we collect, use, and protect your data.`,
     canonical: "/privacy",
     extraCss: LEGAL_CSS,
@@ -700,7 +841,7 @@ function privacyHandler(_req, res) {
 }
 
 function termsHandler(_req, res) {
-  sendHtml(res, "Terms of Service", `<div class="container-narrow legal-page">${termsHtml()}</div>`, {
+  sendHtml(res, "Terms of Service", `<div class="container-narrow legal-page">${getBrand().variant === "200days" ? legalBody200Days(termsHtml()) : termsHtml()}</div>`, {
     description: `${getBrand().name} Terms of Service - subscription, billing, referral programme, and governing law.`,
     canonical: "/terms",
     extraCss: LEGAL_CSS,
@@ -708,16 +849,16 @@ function termsHandler(_req, res) {
 }
 
 function supportHandler(_req, res) {
-  const supportEmail = escapeHtml(process.env.SUPPORT_EMAIL ?? getFormaBrand().supportEmail);
+  const supportEmail = escapeHtml(process.env.SUPPORT_EMAIL ?? getBrand().supportEmail);
   const body = `<div class="container-narrow support-page">
   <h1>Support</h1><p class="intro">Get answers to common questions, or contact us directly.</p><h2>Frequently asked questions</h2>
-  <div class="faq-item"><p class="faq-q">How do I cancel my subscription?</p><p class="faq-a">Subscriptions will be managed through your device once ${getFormaBrand().name} is available.</p></div>
-  <div class="faq-item"><p class="faq-q">Can I use ${getFormaBrand().name} without a subscription?</p><p class="faq-a">Launch access details will be announced before the app is available.</p></div>
+  <div class="faq-item"><p class="faq-q">How do I cancel my subscription?</p><p class="faq-a">Subscriptions will be managed through your device once ${getBrand().name} is available.</p></div>
+  <div class="faq-item"><p class="faq-q">Can I use ${getBrand().name} without a subscription?</p><p class="faq-a">Launch access details will be announced before the app is available.</p></div>
   <div class="faq-item"><p class="faq-q">How do I delete my account and data?</p><p class="faq-a">Go to Settings - Account - Delete Account in the app.</p></div>
   <div class="faq-item"><p class="faq-q">The app isn't connecting - what do I do?</p><p class="faq-a">Try closing and reopening the app. If errors continue, contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p></div>
   <div class="faq-item"><p class="faq-q">How do I update my training schedule or equipment?</p><p class="faq-a">Go to Settings - Recalibrate in the app.</p></div>
-  <div class="faq-item"><p class="faq-q">What is Hyrox and does ${getFormaBrand().name} support it?</p><p class="faq-a">Hyrox combines running and functional workout stations. ${getFormaBrand().name} has native support for Hyrox conditioning.</p></div>
-  <div class="faq-item"><p class="faq-q">How does the programme adapt to my performance?</p><p class="faq-a">After each session, ${getFormaBrand().name} analyses your logged sets, reps, and weights against your target ranges.</p></div>
+  <div class="faq-item"><p class="faq-q">What is Hyrox and does ${getBrand().name} support it?</p><p class="faq-a">Hyrox combines running and functional workout stations. ${getBrand().variant === "200days" ? "We have" : `${getBrand().name} has`} native support for Hyrox conditioning.</p></div>
+  <div class="faq-item"><p class="faq-q">How does the programme adapt to my performance?</p><p class="faq-a">After each session, ${getBrand().variant === "200days" ? "we analyse" : `${getBrand().name} analyses`} your logged sets, reps, and weights against your target ranges.</p></div>
   <div class="contact-section"><h2>Contact us</h2><p>Can't find what you're looking for? We're happy to help.</p><p>Email: <a href="mailto:${supportEmail}">${supportEmail}</a></p><p>We aim to respond within 2 business days.</p></div>
 </div>`;
   sendHtml(res, "Support", body, {
