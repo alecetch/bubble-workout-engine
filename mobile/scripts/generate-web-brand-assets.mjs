@@ -38,12 +38,15 @@ export async function generateWebBrandAssets({ outDir = fileURLToPath(new URL(".
   const light = mark.replace('stroke="#F8FAFC"', 'stroke="#0F172A"').replace('stroke="#1E293B"', 'stroke="#CBD5E1"');
   const word = await readFile(new URL("wordmark.svg", sourceDir), "utf8");
   const tag = await readFile(new URL("tagline.svg", sourceDir), "utf8");
-  const [wx, wy, ww, wh] = bounds(word);
+  const [wx, , ww] = bounds(word);
   const capHeight = Number(word.match(/data-cap-height="([^"]+)"/)[1]);
-  const factor = 157 * 0.42 / capHeight;
-  const width = 157 + 157 * 0.25 + ww * factor;
-  const wordHeight = wh * factor;
-  const lockBody = `<g transform="translate(-21.5 -21.5)">${inside(clear)}</g><g transform="translate(${196.25 - wx * factor} ${(157 - wordHeight) / 2 - wy * factor}) scale(${factor})">${inside(word)}</g>`;
+  // The ring's "200" reads as the first half of the name, so the wordmark is just "Days":
+  // sized close to the digits' visible height and sitting on their baseline (y=121 in the
+  // 200-unit icon canvas, 99.5 in the 157-unit mark box), with a tight gap.
+  const factor = 157 * 0.30 / capHeight;
+  const wordX = 157 + 157 * 0.12;
+  const width = wordX + ww * factor;
+  const lockBody = `<g transform="translate(-21.5 -21.5)">${inside(clear)}</g><g transform="translate(${wordX - wx * factor} ${121 - 21.5}) scale(${factor})">${inside(word)}</g>`;
   const lockup = wrap(lockBody, width, 157);
   const favicon = wrap(`<circle cx="100" cy="100" r="100" fill="${navy}"/>${inside(clear)
     .replace(/<circle\b[^>]*id="ring-track"[^>]*\/>/, "")
