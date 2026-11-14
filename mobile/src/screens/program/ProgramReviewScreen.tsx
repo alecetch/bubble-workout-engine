@@ -1,11 +1,12 @@
+import { ApiError } from "../../api/client";
 import { INJURY_FLAG_LABELS, normalizeInjuryFlag } from "../../state/onboarding/types";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PressableScale } from "../../components/interaction/PressableScale";
-import { useActivePrograms, useClientProfile, useEntitlement, useEquipmentItems, useMe, useReferenceData } from "../../api/hooks";
+import { queryKeys, useActivePrograms, useClientProfile, useEntitlement, useEquipmentItems, useMe, useReferenceData } from "../../api/hooks";
 import { extractProgramId, generateProgram } from "../../api/program";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -122,7 +123,24 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
     navigation.navigate(target);
   };
 
-  const handleGenerate = async (): Promise<void> => {
+  const activePrograms = activeProgramsQuery.data?.programs ?? [];
+  const primaryProgramId = activeProgramsQuery.data?.primary_program_id;
+  const currentProgram = activePrograms.find(program =>
+    program.is_primary || (primaryProgramId && program.program_id === primaryProgramId),
+  ) ?? activePrograms[0];
+  const confirmReplacement = (type = currentProgram?.program_type): void => {
+    const label = typeof type === "string" && type.trim() ? type.trim() : "current";
+    Alert.alert(
+      "Replace your current program?",
+      `Your ${label} program will end. Workouts you've logged stay in History and still count toward your year.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Replace program", style: "destructive", onPress: () => { void runGeneration(true); } },
+      ],
+    );
+  };
+
+  const runGeneration = async (replaceActiveProgram = false): Promise<void> => {
     if (!meQuery.data?.id || !profileId) {
       setGenerationError("Unable to generate: missing user profile link.");
       return;
@@ -143,8 +161,15 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
         clientProfileId: profileId,
         programType: "default",
         anchor_date_ms: Date.now(),
+        ...(replaceActiveProgram ? { replaceActiveProgram: true } : {}),
       });
 
+      await Promise.all([
+        queryKeys.activePrograms,
+        queryKeys.programOverviews,
+        queryKeys.sessionsByDate,
+        queryKeys.combinedCalendar,
+      ].map(queryKey => queryClient.invalidateQueries({ queryKey })));
       const programId = extractProgramId(response);
       if (programId) {
         setActiveProgramId(programId);
@@ -162,6 +187,25 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
 
       setGenerationMessage("Generation completed. Open program from dashboard.");
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        const payload = error.details as { code?: string; details?: { active_program_type?: string; conflict_dates?: unknown } } | undefined;
+        if (payload?.code === "conflict_active_program_same_type") {
+          confirmReplacement(payload.details?.active_program_type);
+          return;
+        }
+        if (payload?.code === "schedule_conflict") {
+          const dates = Array.isArray(payload.details?.conflict_dates)
+            ? payload.details.conflict_dates.filter((date): date is string => typeof date === "string")
+            : [];
+          const shown = dates.slice(0, 3).map(date => {
+            const parsed = new Date(`${date}T12:00:00Z`);
+            return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+          });
+          const dateText = shown.length ? `${shown.join(", ")}${dates.length > 3 ? ` and ${dates.length - 3} more` : ""}` : "your selected dates";
+          setGenerationError(`This plan clashes with another active program on ${dateText}. Change your training days or end that program first.`);
+          return;
+        }
+      }
       if (error instanceof Error && error.message.includes("(402)")) {
         navigation.navigate("Paywall");
         return;
@@ -170,6 +214,16 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleGenerate = (): void => {
+    if (isGenerating) return;
+    if (entitlementQuery.isSuccess && entitlementQuery.data?.is_active === false) {
+      navigation.navigate("Paywall");
+      return;
+    }
+    if (hasActiveProgram) confirmReplacement();
+    else void runGeneration();
   };
 
   if (meQuery.isLoading || (profileId && profileQuery.isLoading)) {

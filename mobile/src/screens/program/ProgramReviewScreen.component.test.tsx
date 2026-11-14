@@ -1,3 +1,7 @@
+import { Alert } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "../../api/client";
+import { queryKeys } from "../../api/hooks/shared";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -9,7 +13,8 @@ import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
 import { buildClientProfile, mockZustandSelector } from "../../__test-utils__";
 
-vi.mock("../../api/hooks", () => ({
+vi.mock("../../api/hooks", async () => ({
+  queryKeys: (await import("../../api/hooks/shared")).queryKeys,
   useActivePrograms: vi.fn(),
   useClientProfile: vi.fn(),
   useEntitlement: vi.fn(),
@@ -52,6 +57,15 @@ const useSessionStoreMock = vi.mocked(useSessionStore);
 const generateProgramMock = vi.mocked(generateProgram);
 const extractProgramIdMock = vi.mocked(extractProgramId);
 
+const alertMock = vi.spyOn(Alert, "alert");
+const invalidateQueriesMock = vi.fn();
+
+function confirmReplace() {
+  const buttons = alertMock.mock.calls.at(-1)?.[2];
+  const replace = buttons?.find(button => button.text === "Replace program");
+  act(() => { replace?.onPress?.(); });
+}
+
 const resetFromProfileMock = vi.fn();
 const setIdentityMock = vi.fn();
 const setActiveProgramIdMock = vi.fn();
@@ -91,6 +105,9 @@ function renderScreen(params: Record<string, unknown> = {}) {
 
 describe("ProgramReviewScreen", () => {
   beforeEach(() => {
+    alertMock.mockReset();
+    invalidateQueriesMock.mockReset();
+    vi.mocked(useQueryClient).mockReturnValue({ invalidateQueries: invalidateQueriesMock } as any);
     resetFromProfileMock.mockReset();
     setIdentityMock.mockReset();
     setActiveProgramIdMock.mockReset();
@@ -249,11 +266,68 @@ describe("ProgramReviewScreen", () => {
     navigation.getParent.mockReturnValue(parentNavigation as any);
 
     fireEvent.click(screen.getByRole("button", { name: "Generate a new program" }));
+    confirmReplace();
 
     await waitFor(() => expect(parentNavigation.navigate).toHaveBeenCalledWith("ProgramsTab", {
       screen: "ProgramDashboard",
       params: { programId: "prog-1" },
     }));
+  });
+
+  it("confirms replacing the primary type and Cancel sends nothing", () => {
+    useActiveProgramsMock.mockReturnValue({ data: { programs: [
+      { program_type: "conditioning", is_primary: false }, { program_type: "strength", is_primary: true },
+    ] } } as any);
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Generate a new program" }));
+    expect(alertMock).toHaveBeenCalledWith("Replace your current program?",
+      "Your strength program will end. Workouts you've logged stay in History and still count toward your year.", expect.any(Array));
+    const buttons = alertMock.mock.calls[0][2]!;
+    expect(buttons.find(button => button.text === "Replace program")?.style).toBe("destructive");
+    act(() => { buttons.find(button => button.text === "Cancel")?.onPress?.(); });
+    expect(generateProgramMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the replacement flag only after confirmation", async () => {
+    useActiveProgramsMock.mockReturnValue({ data: { programs: [{ program_type: "hypertrophy" }] } } as any);
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Generate a new program" }));
+    expect(generateProgramMock).not.toHaveBeenCalled();
+    confirmReplace();
+    await waitFor(() => expect(generateProgramMock).toHaveBeenCalledWith(expect.objectContaining({ replaceActiveProgram: true })));
+  });
+
+  it("confirms a same-type conflict and retries with the flag", async () => {
+    generateProgramMock.mockRejectedValueOnce(new ApiError(409, "Archive it before generating a new one.", {
+      code: "conflict_active_program_same_type", details: { active_program_type: "hypertrophy" },
+    }));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Generate Program" }));
+    await waitFor(() => expect(alertMock).toHaveBeenCalledWith("Replace your current program?", expect.stringContaining("Your hypertrophy program will end."), expect.any(Array)));
+    expect(screen.queryByText(/Archive it/)).not.toBeInTheDocument();
+    confirmReplace();
+    await waitFor(() => expect(generateProgramMock).toHaveBeenCalledTimes(2));
+    expect(generateProgramMock.mock.calls[1][0].replaceActiveProgram).toBe(true);
+  });
+
+  it("formats schedule conflict dates without rendering server text", async () => {
+    generateProgramMock.mockRejectedValueOnce(new ApiError(409, "RAW_SERVER_ARCHIVE_INSTRUCTION", {
+      code: "schedule_conflict", details: { conflict_dates: ["2026-11-16", "2026-11-18", "2026-11-20", "2026-11-23", "2026-11-25"] },
+    }));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Generate Program" }));
+    expect(await screen.findByText("This plan clashes with another active program on 16 Nov, 18 Nov, 20 Nov and 2 more. Change your training days or end that program first.")).toBeInTheDocument();
+    expect(screen.queryByText(/RAW_SERVER/)).not.toBeInTheDocument();
+  });
+
+  it("refreshes active programs, Today overviews/sessions and calendar before navigation", async () => {
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Generate Program" }));
+    await waitFor(() => expect(setActiveProgramIdMock).toHaveBeenCalled());
+    for (const queryKey of [queryKeys.activePrograms, queryKeys.programOverviews, queryKeys.sessionsByDate, queryKeys.combinedCalendar]) {
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey });
+    }
+    expect(alertMock).not.toHaveBeenCalled();
   });
 
   it("View Today's Workout navigates to TodayTab without generating", () => {

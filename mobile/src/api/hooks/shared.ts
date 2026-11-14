@@ -17,6 +17,8 @@ export const queryKeys = {
   yearProgress: ["yearProgress"] as const,
   historyOverview: ["historyOverview"] as const,
   historyPrograms: ["historyPrograms"] as const,
+  programOverviews: ["programOverview"] as const,
+  sessionsByDate: ["sessionsByDate"] as const,
   activePrograms: ["activePrograms"] as const,
   combinedCalendar: ["combinedCalendar"] as const,
   historyTimeline: ["historyTimeline"] as const,
