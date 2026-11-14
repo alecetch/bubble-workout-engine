@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..", "..");
 
-test("mobile app-link hosts match the backend referral default host", async () => {
+test("mobile app-link hosts include the backend referral default host", async () => {
   const [referralSource, appJsonSource] = await Promise.all([
     readFile(join(repoRoot, "api", "src", "routes", "referral.js"), "utf8"),
     readFile(join(repoRoot, "mobile", "app.json"), "utf8"),
@@ -18,9 +18,10 @@ test("mobile app-link hosts match the backend referral default host", async () =
 
   const referralHost = new URL(defaultUrlMatch[1]).host;
   const appConfig = JSON.parse(appJsonSource).expo;
-  const iosHost = String(appConfig.ios.associatedDomains[0]).replace(/^applinks:/, "");
-  const androidHost = appConfig.android.intentFilters[0].data[0].host;
+  const iosHosts = appConfig.ios.associatedDomains.map((d) => String(d).replace(/^applinks:/, ""));
+  const androidHosts = appConfig.android.intentFilters.flatMap((f) => f.data.map((d) => d.host));
 
-  assert.equal(iosHost, referralHost);
-  assert.equal(androidHost, referralHost);
+  assert.ok(iosHosts.includes(referralHost), `iOS associatedDomains must include ${referralHost}`);
+  assert.ok(androidHosts.includes(referralHost), `Android intent filters must include ${referralHost}`);
+  assert.deepEqual([...androidHosts].sort(), [...iosHosts].sort(), "iOS and Android must claim the same hosts");
 });
