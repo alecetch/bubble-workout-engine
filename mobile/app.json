@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Forma",
+    "name": "200 Days",
     "slug": "bubble-workout-mobile",
     "version": "1.0.0",
     "scheme": "forma",
@@ -16,6 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "fit.get200days.app",
       "associatedDomains": [
+        "applinks:200days.app",
         "applinks:getforma.fit"
       ],
       "infoPlist": {
@@ -30,6 +31,11 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
+            {
+              "scheme": "https",
+              "host": "200days.app",
+              "pathPrefix": "/ref/"
+            },
             {
               "scheme": "https",
               "host": "getforma.fit",

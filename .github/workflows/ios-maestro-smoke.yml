@@ -97,7 +97,7 @@ jobs:
         if: ${{ !inputs.cold_build }}
         uses: actions/cache/restore@v6
         with:
-          path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/Forma.app
+          path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/200Days.app
           key: ios-smoke-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.6-ios26.5-${{ hashFiles('mobile/**', '!mobile/node_modules/**', '!mobile/.expo/**', '!mobile/android/**', '!mobile/ios/**', '!mobile/ios-smoke-build/**', 'scripts/ios-smoke-build.sh', '.github/workflows/ios-maestro-smoke.yml') }}
       - name: Build bundled simulator app without distribution signing
         timeout-minutes: 35
@@ -107,7 +107,7 @@ jobs:
         if: ${{ !inputs.cold_build && steps.app-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
-          path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/Forma.app
+          path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/200Days.app
           key: ${{ steps.app-cache.outputs.cache-primary-key }}
       - name: Run iOS smoke cases
         timeout-minutes: 25

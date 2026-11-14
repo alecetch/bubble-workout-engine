@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-app="$GITHUB_WORKSPACE/mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/Forma.app"
+app="$GITHUB_WORKSPACE/mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/200Days.app"
 artifacts="$GITHUB_WORKSPACE/artifacts/ios-smoke"
 simulator=""
 case_name=""
 collect_and_delete() {
   if [[ -n "$simulator" ]]; then
     xcrun simctl io "$simulator" screenshot "$artifacts/$case_name/final.png" || true
-    gtimeout --kill-after=5s 60 xcrun simctl spawn "$simulator" log show --last 15m --style compact --predicate 'process == "Forma"' > "$artifacts/$case_name/simulator.log" 2>&1 || true
+    gtimeout --kill-after=5s 60 xcrun simctl spawn "$simulator" log show --last 15m --style compact --predicate 'process == "200Days"' > "$artifacts/$case_name/simulator.log" 2>&1 || true
     mkdir -p "$artifacts/$case_name/crashes"
     if [[ -d "$HOME/Library/Logs/DiagnosticReports" ]]; then
-      for report in "$HOME/Library/Logs/DiagnosticReports"/Forma*; do
+      for report in "$HOME/Library/Logs/DiagnosticReports"/200Days*; do
         [[ ! -f "$report" ]] || cp "$report" "$artifacts/$case_name/crashes/" || true
       done
     fi
