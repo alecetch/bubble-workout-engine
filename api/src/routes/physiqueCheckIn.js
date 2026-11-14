@@ -1,3 +1,4 @@
+import { requirePhysiqueEnabled } from "../middleware/requirePhysiqueEnabled.js";
 import express from "express";
 import multer from "multer";
 import { pool } from "../db.js";
@@ -226,68 +227,74 @@ export function createTriggerAnalysisHandler({
 
 export const handleTriggerAnalysis = createTriggerAnalysisHandler();
 
-export const physiqueReadRouter = express.Router();
+export function createPhysiqueReadRouter({ db = pool, deleteObjectFn = deleteObject, getPresignedUrlFn = getPresignedUrl } = {}) {
+  const physiqueReadRouter = express.Router();
 
-physiqueReadRouter.get("/physique/check-ins", async (req, res) => {
-  const userId = req.auth.user_id;
-  const limit = Math.min(Number(req.query.limit ?? 20), 50);
-  try {
-    const { rows } = await pool.query(
-      `SELECT id, submitted_at, photo_s3_key, analysis_json, program_emphasis_json
-       FROM physique_check_in
-       WHERE user_id = $1
-       ORDER BY submitted_at DESC
-       LIMIT $2`,
-      [userId, limit],
-    );
-    const checkIns = await Promise.all(
-      rows.map(async (row) => {
-        let photoUrl = null;
-        try {
-          photoUrl = await getPresignedUrl(row.photo_s3_key, 3600, PHYSIQUE_BUCKET);
-        } catch {
-          // Non-fatal
-        }
-        return {
-          id: row.id,
-          submitted_at: row.submitted_at,
-          photo_url: photoUrl,
-          analysis: row.analysis_json,
-          program_emphasis: row.program_emphasis_json,
-        };
-      }),
-    );
-    return res.json({ ok: true, check_ins: checkIns });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: publicInternalError(err) });
-  }
-});
-
-physiqueReadRouter.delete("/physique/check-ins/:id", async (req, res) => {
-  const userId = req.auth.user_id;
-  const checkInId = req.params.id;
-  try {
-    const fetchR = await pool.query(
-      `SELECT id, photo_s3_key FROM physique_check_in WHERE id = $1 AND user_id = $2`,
-      [checkInId, userId],
-    );
-    if (fetchR.rowCount === 0) {
-      return res.status(404).json({ ok: false, error: "Check-in not found." });
+  physiqueReadRouter.get("/physique/check-ins", async (req, res) => {
+    const userId = req.auth.user_id;
+    const limit = Math.min(Number(req.query.limit ?? 20), 50);
+    try {
+      const { rows } = await db.query(
+        `SELECT id, submitted_at, photo_s3_key, analysis_json, program_emphasis_json
+         FROM physique_check_in
+         WHERE user_id = $1
+         ORDER BY submitted_at DESC
+         LIMIT $2`,
+        [userId, limit],
+      );
+      const checkIns = await Promise.all(
+        rows.map(async (row) => {
+          let photoUrl = null;
+          try {
+            photoUrl = await getPresignedUrlFn(row.photo_s3_key, 3600, PHYSIQUE_BUCKET);
+          } catch {
+            // Non-fatal
+          }
+          return {
+            id: row.id,
+            submitted_at: row.submitted_at,
+            photo_url: photoUrl,
+            analysis: row.analysis_json,
+            program_emphasis: row.program_emphasis_json,
+          };
+        }),
+      );
+      return res.json({ ok: true, check_ins: checkIns });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
     }
-    await deleteObject(fetchR.rows[0].photo_s3_key, PHYSIQUE_BUCKET).catch(() => {});
-    await pool.query(`DELETE FROM physique_check_in WHERE id = $1`, [checkInId]);
-    return res.json({ ok: true });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: publicInternalError(err) });
-  }
-});
+  });
 
-physiqueReadRouter.post("/physique/consent", async (req, res) => {
-  const userId = req.auth.user_id;
-  try {
-    await pool.query(`UPDATE app_user SET physique_consent_at = now() WHERE id = $1`, [userId]);
-    return res.json({ ok: true });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: publicInternalError(err) });
-  }
-});
+  physiqueReadRouter.delete("/physique/check-ins/:id", async (req, res) => {
+    const userId = req.auth.user_id;
+    const checkInId = req.params.id;
+    try {
+      const fetchR = await db.query(
+        `SELECT id, photo_s3_key FROM physique_check_in WHERE id = $1 AND user_id = $2`,
+        [checkInId, userId],
+      );
+      if (fetchR.rowCount === 0) {
+        return res.status(404).json({ ok: false, error: "Check-in not found." });
+      }
+      await deleteObjectFn(fetchR.rows[0].photo_s3_key, PHYSIQUE_BUCKET).catch(() => {});
+      await db.query(`DELETE FROM physique_check_in WHERE id = $1`, [checkInId]);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  physiqueReadRouter.post("/physique/consent", requirePhysiqueEnabled, async (req, res) => {
+    const userId = req.auth.user_id;
+    try {
+      await db.query(`UPDATE app_user SET physique_consent_at = now() WHERE id = $1`, [userId]);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: publicInternalError(err) });
+    }
+  });
+
+  return physiqueReadRouter;
+}
+
+export const physiqueReadRouter = createPhysiqueReadRouter();

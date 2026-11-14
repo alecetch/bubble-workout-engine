@@ -1,3 +1,4 @@
+import { PHYSIQUE_ENABLED } from "../config/features";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { HistoryScreen } from "../screens/history/HistoryScreen";
@@ -34,31 +35,35 @@ export function HistoryStackNavigator(): React.JSX.Element {
         name="ProgressOverview"
         getComponent={() => require("../screens/history/ProgressOverviewScreen").ProgressOverviewScreen}
       />
-      <Stack.Screen
-        name="PhysiqueCheckIn"
-        getComponent={() => require("../screens/physique/PhysiqueCheckInScreen").PhysiqueCheckInScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="PhysiqueIntelligence"
-        getComponent={() => require("../screens/physique/PhysiqueIntelligenceScreen").PhysiqueIntelligenceScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="PhysiqueHistory"
-        getComponent={() => require("../screens/physique/PhysiqueHistoryScreen").PhysiqueHistoryScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="PhysiqueMilestones"
-        getComponent={() => require("../screens/physique/PhysiqueMilestonesScreen").PhysiqueMilestonesScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="PhysiqueScanDetail"
-        getComponent={() => require("../screens/physique/PhysiqueScanDetail").PhysiqueScanDetailScreen}
-        options={{ headerShown: false }}
-      />
+      {PHYSIQUE_ENABLED ? (
+        <>
+          <Stack.Screen
+            name="PhysiqueCheckIn"
+            getComponent={() => require("../screens/physique/PhysiqueCheckInScreen").PhysiqueCheckInScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PhysiqueIntelligence"
+            getComponent={() => require("../screens/physique/PhysiqueIntelligenceScreen").PhysiqueIntelligenceScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PhysiqueHistory"
+            getComponent={() => require("../screens/physique/PhysiqueHistoryScreen").PhysiqueHistoryScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PhysiqueMilestones"
+            getComponent={() => require("../screens/physique/PhysiqueMilestonesScreen").PhysiqueMilestonesScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PhysiqueScanDetail"
+            getComponent={() => require("../screens/physique/PhysiqueScanDetail").PhysiqueScanDetailScreen}
+            options={{ headerShown: false }}
+          />
+        </>
+      ) : null}
     </Stack.Navigator>
   );
 }

@@ -20,10 +20,11 @@ import {
 } from "../physiqueScan";
 import { queryKeys } from "./shared";
 
-export function usePhysiqueCheckIns(limit = 20): UseQueryResult<CheckInListResponse> {
+export function usePhysiqueCheckIns(limit = 20, { enabled = true }: { enabled?: boolean } = {}): UseQueryResult<CheckInListResponse> {
   return useQuery({
     queryKey: [...queryKeys.physiqueCheckIns, limit],
     queryFn: () => getCheckIns(limit),
+    enabled,
     staleTime: 5 * 60 * 1000,
   });
 }

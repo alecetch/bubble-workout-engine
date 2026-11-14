@@ -1,3 +1,4 @@
+import { PHYSIQUE_ENABLED } from "../../config/features";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -171,7 +172,7 @@ export function HistoryScreen(): React.JSX.Element {
   const prsFeedQuery = usePrsFeed(userId);
   const programsQuery = useHistoryPrograms(10, userId);
   const timelineQuery = useHistoryTimeline(40, userId);
-  const checkInsQuery = usePhysiqueCheckIns(1);
+  const checkInsQuery = usePhysiqueCheckIns(1, { enabled: PHYSIQUE_ENABLED });
   const entitlementQuery = useEntitlement();
   const lastCheckIn = checkInsQuery.data?.check_ins[0] ?? null;
   const isPremium = entitlementQuery.data?.is_premium ?? entitlementQuery.data?.subscription_status === "active";
@@ -384,41 +385,45 @@ export function HistoryScreen(): React.JSX.Element {
         <Text style={styles.progressCardSubtitle}>Volume trends & strength snapshots</Text>
       </PressableScale>
 
-      <PressableScale
-        onPress={() => navigation.navigate("PhysiqueCheckIn")}
-        style={styles.progressCard}
-      >
-        <Text style={styles.progressCardTitle}>Physique Check-In</Text>
-        <Text style={styles.progressCardSubtitle}>
-          {lastCheckIn
-            ? `Last check-in: ${new Date(lastCheckIn.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
-            : "Track your visual progress with AI"}
-        </Text>
-      </PressableScale>
-
-      <PressableScale
-        onPress={() => {
-          if (isPremium) {
-            navigation.navigate("PhysiqueIntelligence");
-            return;
-          }
-          const parent = navigation.getParent() as any;
-          parent?.navigate?.("HomeTab", { screen: "Paywall" });
-        }}
-        style={styles.progressCard}
-      >
-        <View style={styles.physiquePremiumRow}>
-          <View style={styles.physiquePremiumText}>
-            <Text style={styles.progressCardTitle}>Physique Intelligence</Text>
+      {PHYSIQUE_ENABLED ? (
+        <>
+          <PressableScale
+            onPress={() => navigation.navigate("PhysiqueCheckIn")}
+            style={styles.progressCard}
+          >
+            <Text style={styles.progressCardTitle}>Physique Check-In</Text>
             <Text style={styles.progressCardSubtitle}>
-              {isPremium
-                ? "Score trends, region breakdowns, streaks, and milestones"
-                : "Premium • Unlock score trends and milestone tracking"}
+              {lastCheckIn
+                ? `Last check-in: ${new Date(lastCheckIn.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                : "Track your visual progress with AI"}
             </Text>
-          </View>
-          {!isPremium ? <Text style={styles.premiumBadge}>PREMIUM</Text> : null}
-        </View>
-      </PressableScale>
+          </PressableScale>
+
+          <PressableScale
+            onPress={() => {
+              if (isPremium) {
+                navigation.navigate("PhysiqueIntelligence");
+                return;
+              }
+              const parent = navigation.getParent() as any;
+              parent?.navigate?.("HomeTab", { screen: "Paywall" });
+            }}
+            style={styles.progressCard}
+          >
+            <View style={styles.physiquePremiumRow}>
+              <View style={styles.physiquePremiumText}>
+                <Text style={styles.progressCardTitle}>Physique Intelligence</Text>
+                <Text style={styles.progressCardSubtitle}>
+                  {isPremium
+                    ? "Score trends, region breakdowns, streaks, and milestones"
+                    : "Premium • Unlock score trends and milestone tracking"}
+                </Text>
+              </View>
+              {!isPremium ? <Text style={styles.premiumBadge}>PREMIUM</Text> : null}
+            </View>
+          </PressableScale>
+        </>
+      ) : null}
 
       <View style={styles.metricsGrid}>
         <View style={styles.metricsGridCard}>

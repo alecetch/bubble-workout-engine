@@ -1,3 +1,5 @@
+import logger from "../utils/logger.js";
+import { isPhysiqueEnabled } from "./features.js";
 import { getBrand } from "./brand.js";
 
 const LOCAL_HOST_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i;
@@ -31,6 +33,9 @@ export function findLocalhostProductionEnvErrors(env = process.env) {
 }
 
 export function validateProductionEnv(env = process.env) {
+  if (isPhysiqueEnabled(env) && !env.OPENAI_API_KEY?.trim()) {
+    logger.warn("PHYSIQUE_ENABLED=true without OPENAI_API_KEY; physique analysis is unavailable.");
+  }
   const errors = findLocalhostProductionEnvErrors(env);
   if (errors.length > 0) {
     throw new Error(

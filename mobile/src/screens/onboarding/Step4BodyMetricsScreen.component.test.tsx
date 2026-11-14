@@ -1,10 +1,13 @@
+const featureFlags = vi.hoisted(() => ({ PHYSIQUE_ENABLED: true }));
+vi.mock("../../config/features", () => featureFlags);
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as ImagePicker from "expo-image-picker";
 import { Step4BodyMetricsScreen } from "./Step4BodyMetricsScreen";
 import { useMe, useUpdateClientProfile } from "../../api/hooks";
-import { submitCheckIn } from "../../api/physique";
+import { setPendingPhysiqueUpload } from "../../utils/pendingPhysiqueUpload";
+import { recordConsent, submitCheckIn } from "../../api/physique";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { buildOnboardingDraft, buildOnboardingStoreState, mockZustandSelector } from "../../__test-utils__";
 
@@ -107,7 +110,20 @@ function renderScreen() {
 }
 
 describe("Step4BodyMetricsScreen", () => {
+  it("hides Starting photo and completes without consent, queueing or upload when off", async () => {
+    featureFlags.PHYSIQUE_ENABLED = false;
+    const navigation = renderScreen();
+    expect(screen.queryByText("Starting photo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Library")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Finish"));
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith("SplitReview", { daysPerWeek: 2 }));
+    expect(recordConsent).not.toHaveBeenCalled();
+    expect(setPendingPhysiqueUpload).not.toHaveBeenCalled();
+    expect(submitCheckInMock).not.toHaveBeenCalled();
+    expect(ImagePicker.launchImageLibraryAsync).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
+    featureFlags.PHYSIQUE_ENABLED = true;
     vi.clearAllMocks();
     useMeMock.mockReturnValue({
       data: { id: "user-1", clientProfileId: "profile-1" },
