@@ -1,3 +1,5 @@
+import { getBrand } from "../../../config/brand.js";
+import { lockupSvgInline } from "../brandAssets.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
@@ -13,7 +15,7 @@ function fixtureData(overrides = {}) {
     finishTime: "1:35:38",
     targetTime: "1:20:00",
     percentileText: "38th percentile",
-    formaScore: 72,
+    raceScore: 72,
     mode: "target",
     strongestStation: { name: "Sled Pull", percentile: "Ahead by 0:18" },
     biggestLimiter: { name: "Wall Balls", rankText: "1:06 slower", potentialGain: "2:44" },
@@ -183,16 +185,16 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.doesNotMatch(header, /class="h-right"/);
     assert.doesNotMatch(header, /id="rgl"/);
     assert.doesNotMatch(header, /brand-site|www\.getforma\.fit/);
-    assert.match(header, /aria-label="FORMA SCORE 72"/);
+    assert.match(header, /aria-label="RACE SCORE 72"/);
   });
 
-  it("does not show a composite-score caption when formaScoreBasis is percentile or omitted", () => {
+  it("does not show a composite-score caption when raceScoreBasis is percentile or omitted", () => {
     const html = buildRaceCardHtml(fixtureData());
     assert.doesNotMatch(html, /Composite training score/);
   });
 
-  it("shows a composite-score caption when formaScoreBasis is composite", () => {
-    const html = buildRaceCardHtml(fixtureData({ formaScoreBasis: "composite" }));
+  it("shows a composite-score caption when raceScoreBasis is composite", () => {
+    const html = buildRaceCardHtml(fixtureData({ raceScoreBasis: "composite" }));
     assert.match(html, /Composite training score/);
   });
 
@@ -506,18 +508,15 @@ describe("buildRaceCardHtml asset-backed artwork", () => {
     assert.match(html, /<div class="smeta"[^>]*>BENCHMARK MEDIAN<\/div>/);
   });
 
-  it("uses the real Forma logo image once (header only) and drops the old tagline text", () => {
+  it("uses the active brand lockup once in the header", () => {
     const html = buildRaceCardHtml(fixtureData());
-
-    // The real forma-logo.png asset, not the hand-drawn SVG approximation (which had visible
-    // seams between its three polygon bars and colour-fringed text) -- and only in the header;
-    // the footer previously repeated it for no reason.
-    assert.equal((html.match(/<img src="data:image\/png;base64,[^"]+" alt="Forma"/g) ?? []).length, 1, "expected exactly one real Forma logo image (header only)");
+    const lockup = lockupSvgInline({ height: 38 });
+    assert.equal(html.split(lockup).length - 1, 1);
     assert.equal(html.includes("PERFORMANCE ENGINEER"), false);
     assert.equal(html.includes("YOUR RACE"), false);
     assert.equal(html.includes("DECODED"), false);
-    assert.match(html, /www\.getforma\.fit/);
-    assert.doesNotMatch(html, /Measure\. Understand\. Improve\./);
+    assert.ok(html.includes(getBrand().domain));
+
     assert.doesNotMatch(html, /Data\. Insight\. Performance\./);
   });
 

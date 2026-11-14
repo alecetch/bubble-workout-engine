@@ -125,15 +125,15 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}, contra
     ? benchmarkContext?.confidenceLabel === "insufficient" || benchmarkContext?.doublesBenchmarkedAsSingles === true ? "directional" : null
     : null;
 
-  // Forma Score — use the total-population percentile from comparisonOptions (same source as
+  // Race Score — use the total-population percentile from comparisonOptions (same source as
   // "TOP N% WORLDWIDE" label) so both figures are always consistent. overallPerformanceScore is
   // benchmarked against the athlete's performance-band peer group in analyse mode, which produces
   // a misleadingly low number (e.g. 40) for a globally top-1% athlete.
   const percentileScore = narrative.rankPolicy.displays[0]?.percentile ?? compOpts[0]?.percentile ?? null;
-  const formaScore = benchmarkPercentilesAvailable
+  const raceScore = benchmarkPercentilesAvailable
     ? percentileScore ?? scores.overallPerformanceScore ?? null
     : null;
-  const formaScoreBasis = !benchmarkPercentilesAvailable
+  const raceScoreBasis = !benchmarkPercentilesAvailable
     ? null
     : percentileScore != null
       ? "percentile"
@@ -217,8 +217,11 @@ export function buildHyroxRaceCardData(analysisJson, athleteContext = {}, contra
     targetGapTone,
 	    percentileText,
     confidenceQualifier,
-    formaScore,
-    formaScoreBasis,
+    raceScore,
+    raceScoreBasis,
+    // Additive aliases for existing admin/API consumers.
+    formaScore: raceScore,
+    formaScoreBasis: raceScoreBasis,
     mode,
     comparisonBasis,
     comparisonProfileLabel,

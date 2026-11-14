@@ -1,3 +1,4 @@
+import { getBrand } from "../../../config/brand.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildTemplateA } from "../../reports/templateSlotMapper.js";
@@ -23,6 +24,8 @@ describe("buildCaption", () => {
       analysisJson,
     });
 
+    assert.ok(caption.startsWith(`I ran my HYROX result through ${getBrand().name}.`));
+    assert.ok(caption.endsWith(`#${getBrand().name.replace(/\s+/g, "")}`));
     assert.match(caption, /Finish time: 1:02:10/);
     assert.match(caption, /Target: 55:00/);
     assert.match(caption, /Penalties: 1:30 to clean up/);

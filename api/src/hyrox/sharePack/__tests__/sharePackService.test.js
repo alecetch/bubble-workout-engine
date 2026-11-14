@@ -1,3 +1,4 @@
+import { getBrand } from "../../../config/brand.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { screenshotSlidesWithRetry, getOrCreateRaceCard, getOrCreateSharePack } from "../sharePackService.js";
@@ -217,6 +218,7 @@ test("getOrCreateSharePack reuses an already-cached race_card_key instead of re-
 
   const pack = await getOrCreateSharePack("sub-1", db, deps);
 
+  assert.ok(pack.zip_key.includes(`${getBrand().variant}-hyrox-test-runner-hyrox-test.zip`));
   assert.equal(renderRaceCardCalled, false, "should not re-render when a cached race card key exists");
   assert.equal(getObjectCalledWith, "hyrox-share-packs/sub-1/race-card.png");
   assert.equal(pack.race_card_key, "hyrox-share-packs/sub-1/race-card.png");

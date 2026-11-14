@@ -364,7 +364,7 @@ function raceCardMarkdown(raceCardData) {
     `- Target gap: ${markdownValue(raceCardData.targetGapFormatted)}`,
 	    `- Percentile text: ${markdownValue(raceCardData.percentileText)}`,
     `- Confidence qualifier: ${markdownValue(raceCardData.confidenceQualifier)}`,
-    `- Forma score: ${markdownValue(raceCardData.formaScore)}`,
+    `- Race score: ${markdownValue(raceCardData.raceScore ?? raceCardData.formaScore)}`,
     `- Is doubles: ${markdownValue(raceCardData.isDoubles)}`,
     `- ${markdownValue(strongest?.markdownLabel ?? strongest?.cardHeader ?? "Strongest station")}: ${strongest ? `${markdownValue(strongest.name)} (${markdownValue(strongest.percentile)})` : "-"}`,
     `- Biggest limiter: ${limiter ? `${markdownValue(limiter.name)} — potential gain ${markdownValue(limiter.potentialGain)}, ${markdownValue(limiter.rankText)}${limiter.isPenalty ? " [penalty]" : ""}` : "-"}`,

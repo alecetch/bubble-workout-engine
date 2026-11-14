@@ -1,3 +1,5 @@
+import { getBrand } from "../../../config/brand.js";
+import { lockupSvgInline } from "../brandAssets.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildCarouselPage } from "../carouselPageBuilder.js";
@@ -20,17 +22,17 @@ describe("buildCarouselPage", () => {
     assert.match(html, /regional-context/);
   });
 
-  it("renders the Forma masthead logo and drops the old brand text", () => {
+  it("renders the active brand lockup and drops the old brand text", () => {
     const html = buildCarouselPage({
       brand: { site: "www.getforma.fit", product: "FORMA", strapline: "Measure. Understand. Improve." },
       slides: [{ athlete_name: "Alex Smith", percentile: "Alex Smith is in the Top 45%" }],
     });
 
-    assert.match(html, /alt="Forma — Measure\. Understand\. Improve\."/);
+    assert.ok(html.includes(lockupSvgInline({ height: 36 })));
     assert.equal(html.includes("PERFORMANCE ENGINEER"), false);
     assert.equal(html.includes("Performance Analytics for Hybrid Athletes"), false);
     assert.equal(/(^|[^.])forma\.fit/i.test(html.replace(/getforma\.fit/gi, "")), false, "should not contain bare forma.fit");
-    assert.match(html, /www\.getforma\.fit/);
+    assert.ok(html.includes(getBrand().domain));
   });
 
   it("removes the slide 1 hero/athlete image", () => {

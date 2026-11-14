@@ -1,3 +1,4 @@
+import { getBrand } from "../../config/brand.js";
 import { SEGMENT_MAP, STATION_KEYS } from "../config/segmentMap.js";
 import { getBenchmarkStats } from "../engine/benchmarkService.js";
 import { hasBenchmarkPercentileData } from "./comparisonOptions.js";
@@ -332,13 +333,14 @@ export function buildTemplateA(analysisJson = {}, resolvedInsights = [], athlete
     value: hasTarget ? (formatTime(targetSecs) ?? "UNAVAILABLE") : "UNAVAILABLE",
   };
 
+  const brand = getBrand();
   return {
     template_id: "A",
     template_name: "Athlete Breakdown",
     brand: {
-      product: "FORMA",
-      site: "www.getforma.fit",
-      strapline: "Measure. Understand. Improve.",
+      product: brand.name.toUpperCase(),
+      site: brand.domain,
+      strapline: brand.tagline,
     },
     slides: [
       {
@@ -520,6 +522,7 @@ function sampleDisplay(rows) {
 }
 
 export function buildTemplateB(benchmarkGroupKey, targetBand = "sub-75") {
+  const brand = getBrand();
   const rows = gapRows(benchmarkGroupKey);
   const top = rows[0] ?? { name: "Wall Balls", gapSeconds: 0 };
   const sledTopTwo = rows.slice(0, 2).some((row) => ["sled_push", "sled_pull"].includes(row.segmentKey));
@@ -528,10 +531,10 @@ export function buildTemplateB(benchmarkGroupKey, targetBand = "sub-75") {
 
   return {
     template: "population-research",
-    brand: "FORMA",
+    brand: brand.name.toUpperCase(),
     category: "HYROX POPULATION RESEARCH",
-    footerUrl: "www.getforma.fit",
-    footerMeta: `FORMA | MEASURE. UNDERSTAND. IMPROVE. | ${sample} RESULTS`,
+    footerUrl: brand.domain,
+    footerMeta: `${brand.name.toUpperCase()} | ${sample} RESULTS`,
     hook: {
       sampleSize: `${sample} RESULTS ANALYSED`,
       question: `What stops athletes breaking ${targetBand.replace("sub-", "")} minutes?`,
@@ -584,7 +587,7 @@ export function buildTemplateB(benchmarkGroupKey, targetBand = "sub-75") {
       title: "Discover your HYROX bottleneck",
       bullets: [...DEFAULT_FEATURES],
       button: "Analyse my HYROX result",
-      brandLine: "Measure. Understand. Improve.",
+      brandLine: brand.tagline,
     },
   };
 }

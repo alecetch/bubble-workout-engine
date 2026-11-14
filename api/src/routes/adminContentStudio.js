@@ -353,7 +353,7 @@ adminContentStudioRouter.get("/content-studio/jobs/:jobId/export", async (req, r
       athleteHandles: carouselItem?.athlete_handles ?? [],
       exportedAt: new Date().toISOString(),
     };
-    res.setHeader("Content-Disposition", `attachment; filename="forma-content-${rows[0].id.slice(0, 8)}.json"`);
+    res.setHeader("Content-Disposition", `attachment; filename="200days-content-${rows[0].id.slice(0, 8)}.json"`);
     return res.json(exportPayload);
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });

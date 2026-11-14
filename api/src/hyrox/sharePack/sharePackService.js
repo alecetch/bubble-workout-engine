@@ -1,3 +1,4 @@
+import { getBrand } from "../../config/brand.js";
 import { pool } from "../../db.js";
 import { buildCarouselPage, resolveCarouselData } from "../reports/carouselPageBuilder.js";
 import { buildTemplateA } from "../reports/templateSlotMapper.js";
@@ -263,7 +264,7 @@ export async function getOrCreateSharePack(submissionId, db = pool, deps = {}) {
   const zipBuffer = await buildZip(slideBuffers, caption, { raceCardBuffer });
   const athleteSlug = toSlug(row.display_name);
   const eventSlug = toSlug(row.race_name);
-  const zipFilename = `forma-hyrox-${athleteSlug}-${eventSlug}.zip`;
+  const zipFilename = `${getBrand().variant}-hyrox-${athleteSlug}-${eventSlug}.zip`;
   const zipKey = `${slidePrefix}${zipFilename}`;
   await putObjectFn(zipKey, zipBuffer, "application/zip");
 

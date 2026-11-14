@@ -158,13 +158,13 @@ describe("buildHyroxReportContract", () => {
     assert.equal(contract.artifactSlots.carousel.ctaHeadline, contract.targetAssessment.ctaHeadline);
   });
 
-  it("owns analyse-mode carousel slide 1 Forma Score metric without duplicating standing copy", () => {
+  it("owns analyse-mode carousel slide 1 Race Score metric without duplicating standing copy", () => {
     const contract = buildHyroxReportContract({
       analysisJson: baseAnalysis({ calculatorMode: "analyse" }),
       calculatorMode: "analyse",
     });
 
-    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "FORMA SCORE");
+    assert.equal(contract.artifactSlots.carousel.slide1Metric2.label, "RACE SCORE");
     assert.equal(contract.artifactSlots.carousel.slide1Metric2.value, "72/100");
     assert.equal(contract.artifactSlots.carousel.slide1Metric2.source, "rank_policy_primary_percentile");
     assert.equal(contract.artifactSlots.carousel.slide1Metric2.fallbackReason, null);

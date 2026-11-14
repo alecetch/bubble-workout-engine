@@ -1,3 +1,4 @@
+import { getBrand } from "../../src/config/brand.js";
 import assert from "node:assert/strict";
 import express from "express";
 import test from "node:test";
@@ -63,6 +64,8 @@ test("GET /hyrox/carousel/:submissionId renders stored carousel", async () => {
   assert.match(response.headers.get("content-type") ?? "", /text\/html/);
   assert.match(body, /YOUR HYROX PERFORMANCE SLIDES/);
   assert.match(body, /Test Athlete/);
+  assert.ok(body.includes(getBrand().domain));
+  assert.ok(body.includes(`${getBrand().name} athlete analysis carousel`));
 });
 
 test("GET /api/hyrox/carousel/:submissionId renders same carousel for API proxy path", async () => {

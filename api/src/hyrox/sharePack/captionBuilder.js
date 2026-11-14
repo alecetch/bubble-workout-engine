@@ -1,8 +1,10 @@
+import { getBrand } from "../../config/brand.js";
 import { ensureHyroxReportContract } from "../reports/reportContractBuilder.js";
 
 export function buildCaption({ slide0 = {}, athleteContext = {}, analysisJson = {}, contract = null } = {}) {
+  const brand = getBrand();
   const narrative = ensureHyroxReportContract({ analysisJson, athleteContext, contract });
-  const lines = ["I ran my HYROX result through Forma.", ""];
+  const lines = [`I ran my HYROX result through ${brand.name}.`, ""];
 
   lines.push(`Finish time: ${slide0.overall_time ?? "-"}`);
 
@@ -41,7 +43,7 @@ export function buildCaption({ slide0 = {}, athleteContext = {}, analysisJson = 
   }
 
   lines.push("", "Now I know exactly what to work on next.", "");
-  lines.push("#HYROX #HYROXTraining #HybridAthlete #HybridTraining #Forma");
+  lines.push(`#HYROX #HYROXTraining #HybridAthlete #HybridTraining #${brand.name.replace(/\s+/g, "")}`);
 
   return lines.join("\n");
 }
