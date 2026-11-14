@@ -1,3 +1,4 @@
+import { getBrand } from "../brand.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -67,4 +68,13 @@ test("validateProductionEnv throws when errors exist and does not throw for vali
     FORMA_APP_BASE_URL: "https://www.getforma.fit",
     BASE_URL: "https://www.getforma.fit",
   }));
+});
+
+test("production URL defaults follow either brand and preserve explicit overrides", () => {
+  for (const BRAND_VARIANT of ["forma", "200days"]) {
+    const env = { NODE_ENV: "production", BRAND_VARIANT, APP_DOMAIN: getBrand({ BRAND_VARIANT }).siteUrl };
+    assert.deepEqual(findLocalhostProductionEnvErrors(env), []);
+    assert.ok(findLocalhostProductionEnvErrors({ ...env, BASE_URL: "http://localhost:3000" }).length > 0);
+    assert.ok(findLocalhostProductionEnvErrors({ ...env, FORMA_APP_BASE_URL: "http://localhost:3000" }).length > 0);
+  }
 });

@@ -1,3 +1,4 @@
+import { getBrand } from "../../../config/brand.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildPredictorEmailContent } from "../predictorEmailTemplate.js";
@@ -26,4 +27,10 @@ test("buildPredictorEmailContent handles minimal predictions without undefined o
   assert.ok(content.text.length > 0);
   assert.doesNotMatch(content.html, /undefined|null/);
   assert.doesNotMatch(content.text, /undefined|null/);
+});
+
+test("predictor signature uses the active brand", () => {
+  const email = buildPredictorEmailContent({}, {});
+  assert.ok(email.html.includes(getBrand().name));
+  assert.ok(email.text.includes(getBrand().name));
 });

@@ -1,3 +1,5 @@
+import { getBrand } from "../../src/config/brand.js";
+import { buildRunningProfilerEmail } from "../../src/hyrox/running/runningProfilerEmailService.js";
 import assert from "node:assert/strict";
 import express from "express";
 import test from "node:test";
@@ -335,4 +337,12 @@ test("GET /api/running/health returns 200", async () => {
   const { response, body } = await request(app, "/api/running/health");
   assert.equal(response.status, 200);
   assert.equal(body.status, "ok");
+});
+
+test("running profile email is built from analysis using the active brand", () => {
+  const input = validBody();
+  const result = analyseRunningProfile(input);
+  const email = buildRunningProfilerEmail({ display_name: input.athlete.name, email: input.athlete.email }, result);
+  assert.ok(email.html.includes(getBrand().name));
+  assert.ok(email.text.includes(getBrand().variant === "200days" ? getBrand().name : getBrand().name.toUpperCase()));
 });

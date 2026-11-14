@@ -1,3 +1,4 @@
+import { getBrand } from "../../config/brand.js";
 import { bandScoreLabel, formatGain, formatPercent, formatTime, label } from "./copyFormatter.js";
 import { buildRecommendations, buildGapBreakdown, formatGapBreakdown } from "./recommendationBuilder.js";
 import { buildBackgroundSection } from "./backgroundPersonaliser.js";
@@ -367,7 +368,7 @@ function warningLabel(code, analysisJson = {}) {
   const labels = (analysisJson.dataQuality?.estimatedSplitKeys ?? []).map(getSegmentLabel).filter(Boolean);
   const joined = joinLabels(labels);
   const plural = labels.length > 1;
-  return `The ${joined} split${plural ? "s were" : " was"} missing from official results. Forma estimated ${plural ? "them" : "it"} from your total race time so station and transition totals still reconcile - treat the ${joined} figure${plural ? "s" : ""} as directional.`;
+  return `The ${joined} split${plural ? "s were" : " was"} missing from official results. ${getBrand().variant === "200days" ? "We" : getBrand().name} estimated ${plural ? "them" : "it"} from your total race time so station and transition totals still reconcile - treat the ${joined} figure${plural ? "s" : ""} as directional.`;
 }
 
 function dataConfidenceSection(analysisJson = {}) {
@@ -385,16 +386,18 @@ function dataConfidenceSection(analysisJson = {}) {
 }
 
 function ctaCopy(calculatorMode = "target", primaryCategory = null) {
+  const brand = getBrand();
+  const app = brand.variant === "200days" ? `the ${brand.name} app` : brand.name;
   if (primaryCategory === "high_performer") {
-    return "Use Forma to build a training plan that preserves your strengths and finds marginal gains.";
+    return `Use ${app} to build a training plan that preserves your strengths and finds marginal gains.`;
   }
   if (calculatorMode === "analyse" && primaryCategory === "data_quality") {
-    return "Use Forma to build a plan once your full split data is available.";
+    return `Use ${app} to build a plan once your full split data is available.`;
   }
   if (calculatorMode === "analyse") {
-    return "Use Forma to build a plan targeting your race-profile opportunities.";
+    return `Use ${app} to build a plan targeting your race-profile opportunities.`;
   }
-  return "Use Forma to build a training plan targeting your bottleneck.";
+  return `Use ${app} to build a training plan targeting your bottleneck.`;
 }
 
 export function buildPersonalReport(analysisJson = {}, insights = [], athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null) {

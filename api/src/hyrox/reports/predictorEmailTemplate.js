@@ -1,3 +1,5 @@
+import { getBrand } from "../../config/brand.js";
+
 function esc(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
@@ -23,6 +25,8 @@ export function buildPredictorEmailContent(predictionResult = {}, athlete = {}) 
   const target = predictionResult.targetComparison?.gapFormatted
     ? `${predictionResult.targetComparison.gapFormatted} ${predictionResult.targetComparison.gapSeconds >= 0 ? "under" : "over"} your target`
     : null;
+  const brand = getBrand();
+  const signoff = brand.variant === "200days" ? `The ${brand.name} team` : brand.name;
   const subject = `Your HYROX prediction${predictionResult.predictedFinishFormatted ? `: ${predictionResult.predictedFinishFormatted}` : ""}`;
   const reengagement = "After your first HYROX, come back to the Hit a target time / analyse tool to compare this prediction with your real result.";
   const rows = [
@@ -32,7 +36,7 @@ export function buildPredictorEmailContent(predictionResult = {}, athlete = {}) 
     textLine("Top opportunity", opportunity),
     textLine("Target check", target),
   ].filter(Boolean);
-  const text = [`Hi ${firstName(athlete)},`, "", "Here is your Predict My First HYROX result.", "", ...rows, "", reengagement, "", "Forma"].join("\n");
+  const text = [`Hi ${firstName(athlete)},`, "", "Here is your Predict My First HYROX result.", "", ...rows, "", reengagement, "", signoff, ...(brand.variant === "200days" ? [brand.siteUrl] : [])].join("\n");
   const listItems = rows.map((row) => {
     const [label, ...rest] = row.split(": ");
     return `<li><strong>${esc(label)}:</strong> ${esc(rest.join(": "))}</li>`;
@@ -44,7 +48,8 @@ export function buildPredictorEmailContent(predictionResult = {}, athlete = {}) 
       ${predictionResult.predictedFinishFormatted ? `<div style="background:#0f172a;color:#fff;padding:18px;margin:0 0 18px;"><div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#67e8f9;">Predicted finish</div><div style="font-size:34px;font-weight:700;">${esc(predictionResult.predictedFinishFormatted)}</div></div>` : ""}
       ${listItems ? `<ul style="padding-left:20px;margin:0 0 18px;line-height:1.6;">${listItems}</ul>` : ""}
       <p style="margin:0 0 12px;line-height:1.5;">${esc(reengagement)}</p>
-      <p style="margin:20px 0 0;color:#475569;font-size:13px;">Forma</p>
+      <p style="margin:20px 0 0;color:#475569;font-size:13px;">${esc(signoff)}</p>${brand.variant === "200days" ? `
+      <p><a href="${esc(brand.siteUrl)}">${esc(brand.domain)}</a></p>` : ""}
     </div>
   `.trim();
   return { subject, html, text };

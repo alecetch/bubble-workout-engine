@@ -1,3 +1,4 @@
+import { getBrand } from "../config/brand.js";
 import QRCode from "qrcode";
 import { pool } from "../db.js";
 import { getPresignedUrl } from "../services/s3Service.js";
@@ -74,15 +75,19 @@ export function createSharePackHandlers(db = pool, deps = {}) {
       const pack = await createPack(submissionId, db, { sessionId });
       const downloadUrl = await getDownloadUrl(pack, db);
 
+      const brand = getBrand();
+      const modern = brand.variant === "200days";
+      const opening = modern ? "Your HYROX carousel pack is ready." : `Your ${brand.name} HYROX carousel pack is ready.`;
+      const signoff = `The ${brand.name} team`;
       await emailSender({
         to: email,
-        subject: "Your Forma HYROX Instagram Pack",
-        html: `<p>Your Forma HYROX carousel pack is ready.</p>
+        subject: modern ? `Your HYROX Instagram pack from ${brand.name}` : `Your ${brand.name} HYROX Instagram Pack`,
+        html: `<p>${opening}</p>
                <p><a href="${downloadUrl}">Download your pack</a></p>
                <p>The ZIP includes numbered carousel slides and a ready-to-copy caption.<br/>
                Download on your phone, then upload to Instagram in numbered order.</p>
-               <p><small>This link expires in 7 days.</small></p>`,
-        text: `Your Forma HYROX carousel pack is ready.\n\nDownload: ${downloadUrl}\n\nThis link expires in 7 days.`,
+               <p><small>This link expires in 7 days.</small></p>${modern ? `<p>${signoff}</p>` : ""}`,
+        text: `${opening}\n\nDownload: ${downloadUrl}\n\nThis link expires in 7 days.${modern ? `\n\n${signoff}` : ""}`,
       });
 
       return res.json({ sent: true });

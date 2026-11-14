@@ -1,3 +1,4 @@
+import { getBrand } from "../src/config/brand.js";
 import assert from "node:assert/strict";
 import express from "express";
 import test from "node:test";
@@ -17,7 +18,7 @@ function pack(overrides = {}) {
   };
 }
 
-function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "HYROX London" }], createPack, logCalculatorEvent } = {}) {
+function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "HYROX London" }], createPack, logCalculatorEvent, emailSender } = {}) {
   const db = {
     async query(sql, params) {
       if (sql.includes("SELECT share_token FROM hyrox_share_packs")) {
@@ -38,7 +39,7 @@ function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "
     }),
     getPackDownloadUrl: async () => "https://signed.example/pack.zip",
     getPresignedUrl: async (key) => `https://signed.example/${key}`,
-    sendEmail: async () => undefined,
+    sendEmail: emailSender ?? (async () => undefined),
     qrToString: async () => "<svg></svg>",
     ...(logCalculatorEvent ? { logCalculatorEvent } : {}),
   });
@@ -175,4 +176,15 @@ test("GET /hyrox/share/:shareToken handles missing and expired packs", async () 
     mobileRows: [{ ...pack({ expires_at: new Date(Date.now() - 86400000).toISOString() }), race_name: "HYROX London" }],
   }), "/hyrox/share/expired");
   assert.equal(expired.response.status, 410);
+});
+
+test("share-pack route uses the active brand in its email", async () => {
+  let email;
+  const app = buildApp({ emailSender: async value => { email = value; } });
+  const { response } = await request(app, `/api/hyrox/share-pack/${SUBMISSION_ID}/email`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "runner@example.test" }),
+  });
+  assert.equal(response.status, 200);
+  assert.ok(email.subject.includes(getBrand().name));
+  assert.match(email.html, /https:\/\/signed.example\/pack.zip/);
 });

@@ -1,3 +1,5 @@
+import { getBrand } from "./brand.js";
+
 const LOCAL_HOST_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i;
 
 export function findLocalhostProductionEnvErrors(env = process.env) {
@@ -9,18 +11,18 @@ export function findLocalhostProductionEnvErrors(env = process.env) {
   if (LOCAL_HOST_PATTERN.test(appDomain)) {
     errors.push(
       `APP_DOMAIN resolves to a local host in production ("${appDomain}"). ` +
-      "Set APP_DOMAIN to the public site URL (e.g. https://www.getforma.fit).",
+      `Set APP_DOMAIN to the public site URL (e.g. ${getBrand(env).siteUrl}).`,
     );
   }
 
-  const ctaBase = env.FORMA_APP_BASE_URL ?? env.FORMA_CTA_URL ?? "https://www.getforma.fit";
+  const ctaBase = env.FORMA_APP_BASE_URL ?? env.FORMA_CTA_URL ?? getBrand(env).siteUrl;
   if (LOCAL_HOST_PATTERN.test(ctaBase)) {
     errors.push(
       `FORMA_APP_BASE_URL/FORMA_CTA_URL resolves to a local host in production ("${ctaBase}").`,
     );
   }
 
-  const splitTableBase = env.BASE_URL ?? "https://www.getforma.fit";
+  const splitTableBase = env.BASE_URL ?? getBrand(env).siteUrl;
   if (LOCAL_HOST_PATTERN.test(splitTableBase)) {
     errors.push(`BASE_URL resolves to a local host in production ("${splitTableBase}").`);
   }
