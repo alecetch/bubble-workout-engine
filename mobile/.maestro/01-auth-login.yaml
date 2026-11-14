@@ -68,7 +68,7 @@ appId: fit.get200days.app
 - tapOn:
     id: "login-submit-button"
 - extendedWaitUntil:
-    visible: "Start Workout"
+    visible: "Start Workout|Resume Workout|Rest day\\."
     timeout: 20000
 - runFlow:
     when:
@@ -102,7 +102,7 @@ appId: fit.get200days.app
       - tapOn:
           id: "login-submit-button"
       - extendedWaitUntil:
-          visible: "Start Workout"
+          visible: "Start Workout|Resume Workout|Rest day\\."
           timeout: 20000
 - tapOn: "Programs"
 - extendedWaitUntil:
