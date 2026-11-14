@@ -1,9 +1,11 @@
+import { getCheckIns } from "./physique";
 import React from "react";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   queryKeys,
+  usePhysiqueCheckIns,
   useActivePrograms,
   useProgramDayFull,
   useProgramOverview,
@@ -15,6 +17,7 @@ import { updateNotificationPreferences } from "./notifications";
 import { getProgramDayFull, getProgramOverview } from "./programViewer";
 
 vi.unmock("@tanstack/react-query");
+vi.mock("./physique", () => ({ getCheckIns: vi.fn().mockResolvedValue({ ok: true, check_ins: [] }) }));
 
 vi.mock("./programViewer", () => ({
   getProgramOverview: vi.fn(),
@@ -94,6 +97,17 @@ describe("api hooks", () => {
 
   afterEach(() => {
     queryClient.clear();
+  });
+
+  it("does not fetch disabled check-ins and resumes when enabled", async () => {
+    vi.mocked(getCheckIns).mockClear();
+    const { result, rerender } = renderHook(({ enabled }) => usePhysiqueCheckIns(1, { enabled }), {
+      initialProps: { enabled: false }, wrapper: makeWrapper(queryClient),
+    });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(getCheckIns).not.toHaveBeenCalled();
+    rerender({ enabled: true });
+    await waitFor(() => expect(getCheckIns).toHaveBeenCalledWith(1));
   });
 
   describe("queryKey shapes", () => {

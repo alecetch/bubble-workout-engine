@@ -1,3 +1,4 @@
+import { PHYSIQUE_ENABLED } from "../../config/features";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -110,6 +111,7 @@ export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element
   }
 
   async function pickFromLibrary(): Promise<void> {
+    if (!PHYSIQUE_ENABLED) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -122,6 +124,7 @@ export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element
   }
 
   async function takePhoto(): Promise<void> {
+    if (!PHYSIQUE_ENABLED) return;
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) return;
     const result = await ImagePicker.launchCameraAsync({
@@ -135,6 +138,7 @@ export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element
   }
 
   async function startBackgroundPhotoUpload(uri: string): Promise<void> {
+    if (!PHYSIQUE_ENABLED) return;
     setIsUploadingPhoto(true);
     try {
       await setPendingPhysiqueUpload(uri);
@@ -168,7 +172,7 @@ export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element
         onboardingStepCompleted: 4,
         onboardingCompletedAt: new Date().toISOString(),
       });
-      if (photoUri) {
+      if (PHYSIQUE_ENABLED && photoUri) {
         void startBackgroundPhotoUpload(photoUri);
       }
       navigation.navigate("SplitReview", {
@@ -266,36 +270,38 @@ export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element
         )}
       </SectionCard>
 
-      <SectionCard
-        title="Starting photo"
-        subtitle="Optional - capture a private baseline to track progress over time."
-      >
-        {photoUri ? (
-          <View style={styles.photoPreviewRow}>
-            <Image
-              testID="starting-photo-preview"
-              source={{ uri: photoUri }}
-              style={styles.photoThumb}
-              resizeMode="cover"
-            />
-            <Pressable style={styles.clearPhoto} onPress={() => setPhotoUri(null)}>
-              <Text style={styles.clearPhotoLabel}>Remove</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.photoButtonRow}>
-            <Pressable style={styles.photoBtn} onPress={() => void takePhoto()}>
-              <Text style={styles.photoBtnLabel}>Camera</Text>
-            </Pressable>
-            <Pressable style={styles.photoBtn} onPress={() => void pickFromLibrary()}>
-              <Text style={styles.photoBtnLabel}>Library</Text>
-            </Pressable>
-          </View>
-        )}
-        {isUploadingPhoto ? (
-          <ActivityIndicator size="small" color={colors.accent} style={styles.photoSpinner} />
-        ) : null}
+      {PHYSIQUE_ENABLED ? (
+        <SectionCard
+          title="Starting photo"
+          subtitle="Optional - capture a private baseline to track progress over time."
+        >
+          {photoUri ? (
+            <View style={styles.photoPreviewRow}>
+              <Image
+                testID="starting-photo-preview"
+                source={{ uri: photoUri }}
+                style={styles.photoThumb}
+                resizeMode="cover"
+              />
+              <Pressable style={styles.clearPhoto} onPress={() => setPhotoUri(null)}>
+                <Text style={styles.clearPhotoLabel}>Remove</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.photoButtonRow}>
+              <Pressable style={styles.photoBtn} onPress={() => void takePhoto()}>
+                <Text style={styles.photoBtnLabel}>Camera</Text>
+              </Pressable>
+              <Pressable style={styles.photoBtn} onPress={() => void pickFromLibrary()}>
+                <Text style={styles.photoBtnLabel}>Library</Text>
+              </Pressable>
+            </View>
+          )}
+          {isUploadingPhoto ? (
+            <ActivityIndicator size="small" color={colors.accent} style={styles.photoSpinner} />
+      ) : null}
       </SectionCard>
+      ) : null}
     </OnboardingScaffold>
   );
 }

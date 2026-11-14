@@ -1,3 +1,5 @@
+const featureFlags = vi.hoisted(() => ({ PHYSIQUE_ENABLED: true }));
+vi.mock("../../config/features", () => featureFlags);
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -152,7 +154,21 @@ function setAllHooksLoading() {
 }
 
 describe("HistoryScreen", () => {
+  it("hides physique entry points and disables the check-in query when off", () => {
+    featureFlags.PHYSIQUE_ENABLED = false;
+    renderScreen();
+    expect(screen.queryByText("Physique Check-In")).not.toBeInTheDocument();
+    expect(screen.queryByText("Physique Intelligence")).not.toBeInTheDocument();
+    expect(usePhysiqueCheckInsMock).toHaveBeenCalledWith(1, { enabled: false });
+  });
+  it("retains both physique cards when enabled", () => {
+    renderScreen();
+    expect(screen.getByText("Physique Check-In")).toBeInTheDocument();
+    expect(screen.getByText("Physique Intelligence")).toBeInTheDocument();
+    expect(usePhysiqueCheckInsMock).toHaveBeenCalledWith(1, { enabled: true });
+  });
   beforeEach(() => {
+    featureFlags.PHYSIQUE_ENABLED = true;
     sharing.shareCard.mockClear(); sharing.isSharing = false;
     vi.mocked(useOutsideSessions).mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() } as any);
     vi.mocked(useDeleteOutsideSession).mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue(undefined) } as any);

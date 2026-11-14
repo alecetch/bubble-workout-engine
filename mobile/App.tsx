@@ -1,3 +1,4 @@
+import { clearDisabledPhysiqueUpload } from "./src/utils/physiqueStartup";
 import "react-native-gesture-handler";
 import React from "react";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
@@ -101,6 +102,12 @@ function App(): React.JSX.Element {
 
   const sessionRestoration = useSessionRestoration();
   useHideSplashWhenReady(sessionRestoration.state !== "restoring");
+  const physiqueQueueCleared = React.useRef(false);
+  React.useEffect(() => {
+    if (["restoring", "unreachable"].includes(sessionRestoration.state) || physiqueQueueCleared.current) return;
+    physiqueQueueCleared.current = true;
+    void clearDisabledPhysiqueUpload().catch(() => logger.warn("boot", "Could not clear disabled physique upload queue."));
+  }, [sessionRestoration.state]);
 
   React.useEffect(() => captureReferralLinks(Linking, code =>
     getAppStorage().setItem("pendingReferralCode", code)), []);

@@ -1,3 +1,6 @@
+import { requireEntitlement } from "./src/middleware/requireEntitlement.js";
+import { requirePremium } from "./src/middleware/requirePremium.js";
+import { requirePhysiqueEnabled } from "./src/middleware/requirePhysiqueEnabled.js";
 import { INJURY_FLAG_OPTIONS } from "./src/utils/injuryFlags.js";
 import { createMediaAssetsHandler } from "./src/routes/mediaAssets.js";
 import "./instrument.js";
@@ -515,9 +518,9 @@ app.use("/api/admin/observability/hyrox", ...adminOnly, createAdminHyroxObservab
 // RevenueCat webhook uses a shared secret header, not user JWT auth.
 app.use("/api", webhookRevenuecatRouter);
 app.use("/api/exercise", exerciseGuidanceRouter);
-app.post("/api/physique/check-in", ...entitledUserAuth, uploadSingle, handleCheckInSubmit);
-app.post("/api/physique/check-ins/:id/analyse", ...entitledUserAuth, handleTriggerAnalysis);
-app.post("/api/physique/scan", ...premiumUserAuth, uploadSingle, handleScanSubmit);
+app.post("/api/physique/check-in", ...userAuth, requirePhysiqueEnabled, requireEntitlement, uploadSingle, handleCheckInSubmit);
+app.post("/api/physique/check-ins/:id/analyse", ...userAuth, requirePhysiqueEnabled, requireEntitlement, handleTriggerAnalysis);
+app.post("/api/physique/scan", ...userAuth, requirePhysiqueEnabled, requirePremium, uploadSingle, handleScanSubmit);
 app.use("/api", physiquePhotoRouter);
 // Serve the React web app before marketing pages so /hyrox-calculator and / hit the SPA first.
 // index.html must not be cached — it references content-hashed bundle filenames that change on deploy.

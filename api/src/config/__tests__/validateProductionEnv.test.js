@@ -1,3 +1,4 @@
+import logger from "../../utils/logger.js";
 import { getBrand } from "../brand.js";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -77,4 +78,19 @@ test("production URL defaults follow either brand and preserve explicit override
     assert.ok(findLocalhostProductionEnvErrors({ ...env, BASE_URL: "http://localhost:3000" }).length > 0);
     assert.ok(findLocalhostProductionEnvErrors({ ...env, FORMA_APP_BASE_URL: "http://localhost:3000" }).length > 0);
   }
+});
+
+test("physique startup warning requires enabled production flag and a missing key", () => {
+  const original = logger.warn;
+  const warnings = [];
+  logger.warn = message => warnings.push(message);
+  try {
+    const base = { NODE_ENV: "production", APP_DOMAIN: "https://example.test" };
+    for (const PHYSIQUE_ENABLED of [undefined, "false", "TRUE"]) validateProductionEnv({ ...base, PHYSIQUE_ENABLED });
+    validateProductionEnv({ ...base, PHYSIQUE_ENABLED: "true", OPENAI_API_KEY: "test-key" });
+    assert.equal(warnings.length, 0);
+    validateProductionEnv({ ...base, PHYSIQUE_ENABLED: "true" });
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /PHYSIQUE_ENABLED.*OPENAI_API_KEY/);
+  } finally { logger.warn = original; }
 });
