@@ -180,3 +180,28 @@ test("real repository scan passes the baseline budget and CLI exits zero", () =>
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Website brand guard passed/);
 });
+
+
+test("web source, CSS and index branding have no baseline allowance", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeCleanAppJson(path.join(root, "mobile"));
+  for (const file of ["web/src/pages/Home.tsx", "web/src/config/name.ts", "web/src/style.css", "web/index.html"]) writeFile(root, file, '"Forma"');
+  writeFile(root, "web/src/__tests__/brand.test.tsx", '"Forma"');
+  writeFile(root, "web/src/other.test.ts", '"Forma"');
+  const findings = checkWebsiteBrandStrings(root);
+  assert.equal(findings.length, 4);
+  assert.equal(evaluateWebsiteBrandStrings(findings, {}).ok, false);
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("../check-brand-strings.mjs", import.meta.url)), "--root", path.join(root, "mobile")], { encoding: "utf8" });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Website brand guard: web\/src\/pages\/Home.tsx: 1 \(allowed 0\)/);
+});
+
+test("quoted legacy storage keys pass without masking other branding on the same line", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFile(root, "web/src/storage.ts", ['"forma.hyroxCalculatorDraft"', "'forma.hyroxPredictorDraft'", '`forma.raceCardPreviewed.`'].join("\n"));
+  assert.deepEqual(checkWebsiteBrandStrings(root), []);
+  writeFile(root, "web/src/storage.ts", 'const key = "forma.hyroxCalculatorDraft"; const title = "Forma";');
+  assert.deepEqual(checkWebsiteBrandStrings(root), [{ file: "web/src/storage.ts", count: 1 }]);
+});

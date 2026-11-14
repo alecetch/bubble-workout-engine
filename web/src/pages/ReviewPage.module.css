@@ -222,7 +222,7 @@
 
 .emailInput:focus {
   outline: none;
-  border-color: var(--accent-blue);
+  border-color: var(--brand-accent);
 }
 
 .emailInputError {
@@ -338,7 +338,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
   font-size: 12px;
   font-weight: 800;
   padding: 8px 10px;

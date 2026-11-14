@@ -1,3 +1,4 @@
+import { BRAND } from "../../config/brand";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import { PrimaryButton } from "../../components/PrimaryButton";
@@ -30,7 +31,7 @@ export function RunningProfilerLandingPage() {
       <div className={styles.page} data-testid="landing-page">
         <div className={styles.layout}>
           <div className={styles.heroCol}>
-            <div className={styles.eyebrow}>Forma — MEASURE. UNDERSTAND. IMPROVE.</div>
+            <div className={styles.eyebrow}>{BRAND.wordmark} — {BRAND.toolTagline.toUpperCase()}</div>
             <h1 className={styles.headline} data-testid="landing-headline">
               Running is a tool.
               <br />

@@ -138,6 +138,12 @@ jobs:
         working-directory: mobile
         run: npx vitest run --coverage
 
+      - name: Run web tests
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+
   native-drift-check:
     runs-on: ubuntu-latest
 

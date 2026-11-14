@@ -45,9 +45,9 @@
 }
 
 .step.active .circle {
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
-  color: #fff;
+  background: var(--brand-accent);
+  border-color: var(--brand-accent);
+  color: var(--brand-accent-contrast);
 }
 
 .step.active .label {

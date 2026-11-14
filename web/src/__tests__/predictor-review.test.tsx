@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -111,7 +112,7 @@ describe("PredictorReviewPage", () => {
     renderPage();
 
     const research = screen.getByRole("checkbox", { name: /help improve future hyrox predictions/i });
-    const marketing = screen.getByRole("checkbox", { name: /send me hyrox training updates/i });
+    const marketing = screen.getByRole("checkbox", { name: new RegExp(`Send me HYROX training updates and other emails from ${BRAND.name}`, "i") });
     expect(research).not.toBeChecked();
     expect(marketing).not.toBeChecked();
 
@@ -147,8 +148,8 @@ describe("PredictorReviewPage", () => {
     });
     renderPage();
 
-    const appLink = screen.getByRole("checkbox", { name: /link this result to my forma account/i });
-    const marketing = screen.getByRole("checkbox", { name: /send me hyrox training updates/i });
+    const appLink = screen.getByRole("checkbox", { name: new RegExp(`link this result to my ${BRAND.name} account`, "i") });
+    const marketing = screen.getByRole("checkbox", { name: new RegExp(`Send me HYROX training updates and other emails from ${BRAND.name}`, "i") });
     const research = screen.getByRole("checkbox", { name: /help improve future hyrox predictions/i });
     expect(appLink).not.toBeChecked();
     expect(marketing).not.toBeChecked();

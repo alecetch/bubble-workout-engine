@@ -193,7 +193,7 @@ export function AthleteContextPage() {
               <div className={styles.sideKicker}>WHY THIS MATTERS</div>
               <h2 className={styles.sideTitle}>Context changes the advice</h2>
               <p className={styles.sideCopy}>
-                Two athletes can have the same split loss for different reasons. This step helps Forma tell the difference.
+                Two athletes can have the same split loss for different reasons. This step helps us tell the difference.
               </p>
               <div className={styles.reasonRows}>
                 <ReasonRow title="Running volume" copy="Separates under-trained run fitness from race-day pacing." />

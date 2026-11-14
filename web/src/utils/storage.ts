@@ -1,5 +1,6 @@
 import type { HyroxCalculatorDraft } from "../types";
 
+// Deliberately retain this storage key so saved drafts and sessions survive.
 const DRAFT_KEY = "forma.hyroxCalculatorDraft";
 
 export function loadDraft(): HyroxCalculatorDraft | null {

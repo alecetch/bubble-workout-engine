@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormPanel } from "../components/FormPanel";
@@ -187,7 +188,7 @@ export function ReviewPage() {
         <FormPanel className={styles.introCard}>
           <div className={styles.introCopy}>
             <h1>Review and receive your analysis</h1>
-            <p>Check the details below, add your email, and Forma will generate your personalised HYROX performance report.</p>
+            <p>Check the details below, add your email, and we'll generate your personalised HYROX performance report.</p>
           </div>
           <div className={styles.chips}>
             <span className={styles.chipCyan}>FINAL STEP</span>
@@ -241,7 +242,7 @@ export function ReviewPage() {
             <FormPanel className={styles.emailCard}>
               <div className={styles.sectionTitle}>WHERE SHOULD WE SEND IT?</div>
               <h2 className={styles.emailHeading}>Get your HYROX analysis</h2>
-              <p className={styles.cardCopy}>Enter your email to generate the report. We'll use it to send this analysis and related Forma updates.</p>
+              <p className={styles.cardCopy}>Enter your email to generate the report. We'll use it to send this analysis and other updates from {BRAND.name}.</p>
 
               {validationErrors.length > 0 && (
                 <div className={styles.errorMsg}>
@@ -284,11 +285,11 @@ export function ReviewPage() {
 
               <label className={`${styles.checkRow} ${styles.checkbox}`}>
                 <input type="checkbox" checked={appLinkConsent} onChange={(event) => setAppLinkConsent(event.target.checked)} />
-                <span>Link this result to my Forma account if I create one, so my training can use it.</span>
+                <span>Link this result to my {BRAND.name} account if I create one, so my training can use it.</span>
               </label>
               <div className={styles.privacyNote}>
                 <strong>Privacy note</strong>
-                <span>No spam. Unsubscribe any time. Your result is used to generate this report, and may be used, in aggregate, to improve future HYROX predictions. If you check the box above and later create a Forma app account with the same email, we'll link this result to that account to skip repeat questions and personalize your training. You can unlink it at any time from the app.</span>
+                <span>No spam. Unsubscribe any time. Your result is used to generate this report, and may be used, in aggregate, to improve future HYROX predictions. If you check the box above and later create a {BRAND.name} app account with the same email, we'll link this result to that account to skip repeat questions and personalize your training. You can unlink it at any time from the app.</span>
               </div>
             </FormPanel>
 
@@ -315,7 +316,7 @@ export function ReviewPage() {
           <div className={styles.rightColumn}>
             <FormPanel className={styles.nextPanel}>
               <div className={styles.sectionTitle}>WHAT HAPPENS NEXT</div>
-              <p>Forma will generate the report, email it to you, then show the result confirmation screen.</p>
+              <p>We'll generate the report, email it to you, then show the result confirmation screen.</p>
             </FormPanel>
 
             <FormPanel className={styles.qualityPanel}>

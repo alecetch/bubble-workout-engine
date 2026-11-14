@@ -367,8 +367,8 @@ export function RaceDetailsPage() {
           </h1>
           <p className={styles.subline}>
             {isTargetMode
-              ? "Start with your latest HYROX result. Forma will use your splits as the baseline, then show what needs to change to reach your goal."
-              : "Paste your result URL and Forma will benchmark your race, find the biggest time gaps, and show what to train next."}
+              ? "Start with your latest HYROX result. We'll use your splits as the baseline, then show what needs to change to reach your goal."
+              : "Paste your result URL and we'll benchmark your race, find the biggest time gaps, and show what to train next."}
           </p>
           <ul className={styles.benefits}>
             {benefits.map(([title, body]) => (
@@ -406,8 +406,8 @@ export function RaceDetailsPage() {
               </h2>
               <p className={styles.formIntro}>
                 {calculatorMode === "target"
-                  ? "Paste your HYROX result URL and Forma will use your splits as your baseline."
-                  : "Paste your HYROX result URL and Forma will benchmark your race."}
+                  ? "Paste your HYROX result URL and we'll use your splits as your baseline."
+                  : "Paste your HYROX result URL and we'll benchmark your race."}
               </p>
             </div>
             {restoreMessage && (

@@ -50,6 +50,9 @@ export function assert200DaysPage(body, path) {
   if (path === "/changelog") {
     assert.equal(body.split("<h2>Forma is now 200 Days</h2>").length - 1, 1);
     body = body.replace("<h2>Forma is now 200 Days</h2>", "");
+    const consent = "<p>The HYROX calculator's consent wording now names 200 Days instead of Forma. What you agreed to is unchanged.</p>";
+    assert.equal(body.split(consent).length - 1, 1);
+    body = body.replace(consent, "");
   }
   if (path.startsWith("/ref/")) {
     assert.equal(body.split('href="forma://"').length - 1, 1);

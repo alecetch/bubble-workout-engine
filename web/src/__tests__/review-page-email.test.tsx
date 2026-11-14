@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -112,7 +113,7 @@ describe("ReviewPage email collection", () => {
     seedDraft(calculatorMode);
     renderPage();
 
-    expect(screen.getByText(/later create a Forma app account with the same email/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`later create a ${BRAND.name} app account with the same email`, "i"))).toBeInTheDocument();
     expect(screen.getByText(/You can unlink it at any time from the app/i)).toBeInTheDocument();
   });
 
@@ -157,7 +158,7 @@ describe("ReviewPage email collection", () => {
     vi.mocked(submitHyroxAnalysis).mockResolvedValue(mockResponse);
     renderPage();
 
-    const appLink = screen.getByRole("checkbox", { name: /link this result to my forma account/i });
+    const appLink = screen.getByRole("checkbox", { name: new RegExp(`link this result to my ${BRAND.name} account`, "i") });
     expect(appLink).not.toBeChecked();
     fireEvent.click(appLink);
     fireEvent.change(screen.getByTestId("email-input"), { target: { value: "test@example.com" } });

@@ -115,13 +115,17 @@ export function checkWebsiteBrandStrings(repoRoot) {
   }
   for (const dir of ["routes", "views", "config"]) collect(path.join(repoRoot, "api/src", dir), [".js", ".html"]);
   collect(path.join(repoRoot, "api/content"), [".md", ".json"]);
+  collect(path.join(repoRoot, "web/src"), [".ts", ".tsx", ".css"]);
+  const webIndex = path.join(repoRoot, "web/index.html");
+  if (fs.existsSync(webIndex)) files.push(webIndex);
   return files.sort().flatMap(file => {
     const relative = toPosix(path.relative(repoRoot, file));
     if (relative === "api/src/config/brand.js") return [];
     let count = 0;
     for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
       if (/forma:\/\/|\/images\/formai?_/.test(line)) continue;
-      count += [...line.matchAll(/\bforma\b|getforma\.|\bformai\b|getformai|forma:\/\//gi)].length;
+      const withoutStorageKeys = line.replace(/(["'`])forma\.[A-Za-z][^"'`\r\n]*\1/g, "");
+      count += [...withoutStorageKeys.matchAll(/\bforma\b|getforma\.|\bformai\b|getformai|forma:\/\//gi)].length;
     }
     return count ? [{ file: relative, count }] : [];
   });

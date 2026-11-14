@@ -1,3 +1,4 @@
+// Deliberately retain this storage key so saved drafts and sessions survive.
 const PREVIEWED_KEY_PREFIX = "forma.raceCardPreviewed.";
 
 export function hasTrackedRaceCardPreview(submissionId: string): boolean {

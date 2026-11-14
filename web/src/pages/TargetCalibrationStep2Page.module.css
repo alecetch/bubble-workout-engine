@@ -80,7 +80,7 @@
 .numberField input:focus,
 .dateInput:focus {
   outline: none;
-  border-color: var(--accent-blue);
+  border-color: var(--brand-accent);
 }
 
 .numberField span,
