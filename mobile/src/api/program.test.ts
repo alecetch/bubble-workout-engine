@@ -53,6 +53,20 @@ describe("generateProgram", () => {
     expect(result).toEqual({ program_id: "prog-1" });
   });
 
+  it("sends the snake-case replacement flag only for true", async () => {
+    authenticatedFetchMock.mockResolvedValue({ program_id: "new", replaced_program_ids: ["old"] });
+    await generateProgram({ ...payload, replaceActiveProgram: true });
+    expect(authenticatedFetchMock).toHaveBeenLastCalledWith("/generate-plan-v2", expect.objectContaining({ body: expect.objectContaining({ replace_active_program: true }) }));
+    await generateProgram({ ...payload, replaceActiveProgram: false });
+    expect((authenticatedFetchMock.mock.calls.at(-1)?.[1]?.body as any).replace_active_program).toBeUndefined();
+  });
+
+  it("preserves structured conflict errors for screen handling", async () => {
+    const error = new ApiError(409, "Conflict", { code: "schedule_conflict", details: { conflict_dates: ["2026-11-16"] } });
+    authenticatedFetchMock.mockRejectedValue(error);
+    await expect(generateProgram(payload)).rejects.toBe(error);
+  });
+
   it("does not retry a legacy endpoint on 401 or 403 - regression guard for the removed fallback chain", async () => {
     authenticatedFetchMock.mockRejectedValue(new ApiError(401, "Unauthorized", { code: "unauthorized" }));
 

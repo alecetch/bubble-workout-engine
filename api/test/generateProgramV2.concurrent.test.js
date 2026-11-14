@@ -116,8 +116,10 @@ test("generate-plan-v2 sets new different-type program as secondary when primary
     },
     release() {},
   };
+  let connections = 0;
   const db = {
     async connect() {
+      if (connections++) return { query: (...args) => db.query(...args), release() {} };
       return setupClient;
     },
     async query(sql, params) {
@@ -195,7 +197,7 @@ test("generate-plan-v2 sets new different-type program as secondary when primary
   assert.equal(programUpdateCall.params.includes(false), true);
 });
 
-test("generate-plan-v2 clears completed program calendar rows before importing a new plan", async () => {
+test("generate-plan-v2 clears only eligible non-active future calendar rows before importing a new plan", async () => {
   const setupCalls = [];
   const setupClient = {
     async query(sql, params) {
@@ -232,8 +234,10 @@ test("generate-plan-v2 clears completed program calendar rows before importing a
     },
     release() {},
   };
+  let connections = 0;
   const db = {
     async connect() {
+      if (connections++) return { query: (...args) => db.query(...args), release() {} };
       return setupClient;
     },
     async query(sql) {
@@ -304,4 +308,6 @@ test("generate-plan-v2 clears completed program calendar rows before importing a
   const cleanupCall = setupCalls.find((call) => call.sql.includes("DELETE FROM program_calendar_day"));
   assert.ok(cleanupCall);
   assert.match(cleanupCall.sql, /'completed'/);
+  assert.match(cleanupCall.sql, /scheduled_date >= CURRENT_DATE/);
+  assert.match(cleanupCall.sql, /pd.is_completed = TRUE/);
 });

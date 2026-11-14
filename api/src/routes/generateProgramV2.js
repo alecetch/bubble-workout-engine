@@ -162,6 +162,7 @@ export function createGenerateProgramV2Handler({
       req.body?.clientProfileId,
     );
     const programTypeInput = s(req.body?.programType);
+    const replaceActiveProgram = req.body?.replace_active_program === true;
     const anchorInput = req.body?.anchor_date_ms;
     const anchor_date_ms = anchorInput == null ? Date.now() : Number(anchorInput);
 
@@ -273,22 +274,25 @@ export function createGenerateProgramV2Handler({
       pg_user_id = userR.rows[0].id;
     }
 
-    const sameTypeR = await setupClient.query(
-      `SELECT id
-       FROM program
-       WHERE user_id = $1
-         AND program_type = $2
-         AND status = 'active'
-       LIMIT 1`,
-      [pg_user_id, programType],
-    );
-    if (sameTypeR.rowCount > 0) {
-      await setupClient.query("ROLLBACK");
-      return res.status(409).json({
-        ok: false,
-        code: "conflict_active_program_same_type",
-        error: `You already have an active ${programType} program. Archive it before generating a new one.`,
-      });
+    if (!replaceActiveProgram) {
+      const sameTypeR = await setupClient.query(
+        `SELECT id
+         FROM program
+         WHERE user_id = $1
+           AND program_type = $2
+           AND status = 'active'
+         LIMIT 1`,
+        [pg_user_id, programType],
+      );
+      if (sameTypeR.rowCount > 0) {
+        await setupClient.query("ROLLBACK");
+        return res.status(409).json({
+          ok: false,
+          code: "conflict_active_program_same_type",
+          error: `You already have an active ${programType} program. Archive it before generating a new one.`,
+          details: { active_program_type: programType },
+        });
+      }
     }
 
     // Phase 1b: Refresh client_profile from the current API profile shape
@@ -393,16 +397,22 @@ export function createGenerateProgramV2Handler({
     );
     created_program_id = programR.rows[0].id;
 
-    await setupClient.query(
-      `
-      DELETE FROM program_calendar_day pcd
-      USING program p
-      WHERE pcd.program_id = p.id
-        AND p.user_id = $1
-        AND p.status IN ('failed', 'generating', 'archived', 'completed')
-      `,
-      [pg_user_id],
-    );
+    // Never remove another in-flight generation's calendar reservations. Replacement
+    // also preserves historical calendar rows from earlier archived programs.
+    if (!replaceActiveProgram) {
+      await setupClient.query(
+        `
+        DELETE FROM program_calendar_day pcd
+        USING program p
+        WHERE pcd.program_id = p.id
+          AND p.user_id = $1
+          AND p.status IN ('failed', 'archived', 'completed')
+          AND pcd.scheduled_date >= CURRENT_DATE
+          AND NOT EXISTS (SELECT 1 FROM program_day pd WHERE pd.id = pcd.program_day_id AND pd.is_completed = TRUE)
+        `,
+        [pg_user_id],
+      );
+    }
 
     // Phase 2b: Pre-create generation_run
     const runR = await setupClient.query(
@@ -489,6 +499,7 @@ export function createGenerateProgramV2Handler({
       .catch((e) => req.log.error({ event: "pipeline.mark_failed.error", err: e?.message }, "markFailed program error"));
   }
 
+  let activationClient = null;
   try {
     const hasProgramTypeColumn = await ensureProgramTypeColumn(db, req.log);
 
@@ -606,8 +617,24 @@ export function createGenerateProgramV2Handler({
     const programSummary = prgData.program_summary
       || `Auto-generated ${programType} program.`;
 
-    const hasProgramCalendarDayUserId = await programCalendarDayHasUserIdColumn(db);
-    const conflictR = await db.query(
+    const replacementHasPrimary = replaceActiveProgram && await programHasIsPrimaryColumn(db);
+    const replaceIds = replaceActiveProgram
+      ? (await db.query(
+        `SELECT id FROM program
+         WHERE user_id = $1 AND id <> $2 AND status = 'active'
+           AND (program_type = $3 ${replacementHasPrimary ? "OR is_primary = TRUE" : ""})`,
+        [pg_user_id, created_program_id, programType],
+      )).rows.map(row => row.id)
+      : [];
+    let removedFutureDays = 0;
+    // Calendar dates may coexist across generating/archived programs. Serialize the
+    // final conflict check and activation for every generation by this user.
+    activationClient = await db.connect();
+    await activationClient.query("BEGIN");
+    await activationClient.query("SELECT id FROM app_user WHERE id = $1 FOR UPDATE", [pg_user_id]);
+    const activationDb = activationClient;
+    const hasProgramCalendarDayUserId = await programCalendarDayHasUserIdColumn(activationDb);
+    const conflictR = await activationDb.query(
       hasProgramCalendarDayUserId
         ? `
           SELECT
@@ -622,6 +649,7 @@ export function createGenerateProgramV2Handler({
           JOIN program ep
             ON ep.id = pcd_existing.program_id
            AND ep.status = 'active'
+           ${replaceIds.length ? 'AND ep.id <> ALL($2::uuid[])' : ''}
           WHERE pcd_new.program_id = $1
             AND pcd_new.is_training_day = TRUE
           ORDER BY pcd_new.scheduled_date
@@ -640,17 +668,21 @@ export function createGenerateProgramV2Handler({
           JOIN program ep
             ON ep.id = pcd_existing.program_id
            AND ep.status = 'active'
+           ${replaceIds.length ? 'AND ep.id <> ALL($2::uuid[])' : ''}
            AND ep.user_id = p_new.user_id
           WHERE pcd_new.program_id = $1
             AND pcd_new.is_training_day = TRUE
           ORDER BY pcd_new.scheduled_date
           `,
-      [created_program_id],
+      replaceIds.length ? [created_program_id, replaceIds] : [created_program_id],
     );
 
     if (conflictR.rowCount > 0) {
       const conflictDates = [...new Set(conflictR.rows.map((row) => row.conflict_date))];
       const existingTypes = [...new Set(conflictR.rows.map((row) => row.existing_type).filter(Boolean))];
+      await activationClient.query("ROLLBACK");
+      activationClient.release();
+      activationClient = null;
       await markFailed("schedule_conflict");
       return res.status(409).json({
         ok: false,
@@ -664,10 +696,10 @@ export function createGenerateProgramV2Handler({
       });
     }
 
-    const hasProgramIsPrimaryColumn = await programHasIsPrimaryColumn(db);
+    const hasProgramIsPrimaryColumn = replaceActiveProgram ? replacementHasPrimary : await programHasIsPrimaryColumn(activationDb);
     let isPrimary = true;
-    if (hasProgramIsPrimaryColumn) {
-      const hasPrimaryR = await db.query(
+    if (hasProgramIsPrimaryColumn && replaceIds.length === 0) {
+      const hasPrimaryR = await activationDb.query(
         `SELECT id
          FROM program
          WHERE user_id = $1
@@ -718,7 +750,24 @@ export function createGenerateProgramV2Handler({
     }
     programUpdateParams.push(created_program_id);
 
-    await db.query(
+    if (replaceIds.length) {
+      // Release the partial unique indexes before activating the replacement.
+      const archived = await activationClient.query(
+        `UPDATE program SET status = 'archived', ${hasProgramIsPrimaryColumn ? "is_primary = FALSE," : ""} updated_at = now()
+         WHERE user_id = $1 AND id = ANY($2::uuid[]) AND status = 'active'
+         RETURNING id`,
+        [pg_user_id, replaceIds],
+      );
+      if (archived.rowCount !== replaceIds.length) throw new Error("Active programs changed during generation; please retry.");
+      const removed = await activationClient.query(
+        `DELETE FROM program_calendar_day pcd
+         WHERE program_id = ANY($1::uuid[]) AND scheduled_date >= CURRENT_DATE
+           AND NOT EXISTS (SELECT 1 FROM program_day pd WHERE pd.id = pcd.program_day_id AND pd.is_completed = TRUE)`,
+        [replaceIds],
+      );
+      removedFutureDays = removed.rowCount;
+    }
+    await activationDb.query(
       `
       UPDATE program SET
         ${programUpdateAssignments.join(",\n        ")}
@@ -743,7 +792,7 @@ export function createGenerateProgramV2Handler({
       }
     }
     for (const [heroId, progId, weekNum, dayNum] of dayHeroUpdates) {
-      await db.query(
+      await activationDb.query(
         `UPDATE program_day
             SET hero_media_id = $1
           WHERE program_id = $2
@@ -769,7 +818,7 @@ export function createGenerateProgramV2Handler({
       }
     }
     for (const [focusType, progId, weekNum, dayNum] of dayFocusUpdates) {
-      await db.query(
+      await activationDb.query(
         `UPDATE program_day
             SET focus_type = $1
           WHERE program_id = $2
@@ -782,37 +831,28 @@ export function createGenerateProgramV2Handler({
     // Phase 5b: Fill recovery (rest) days into program_calendar_day.
     // Must run after the program row has its final start_date + weeks_count
     // and after importEmitterPayload has committed the training-day rows.
-    await db.query(
+    await activationDb.query(
       `UPDATE generation_run SET last_stage='calendar_coverage', updated_at=now() WHERE id=$1`,
       [generation_run_id],
     );
-    await ensureCalendar(db, created_program_id);
+    await ensureCalendar(activationDb, created_program_id);
 
-    try {
-      // This generation-time pass is a non-fatal backstop, not the primary trigger.
-      // The intended canonical trigger for progression is PATCH /api/day/:program_day_id/complete
-      // once a day is marked completed and real history exists. Keeping this pass here lets us
-      // re-derive recommendations for regenerated programs or existing athletes who already have
-      // completed history, while still no-oping safely for brand-new programs with no history.
-      await db.query(
-        `UPDATE generation_run SET last_stage='progression', updated_at=now() WHERE id=$1`,
-        [generation_run_id],
-      );
-      await progressionService.applyProgressionRecommendations({
-        programId: created_program_id,
-        userId: pg_user_id,
-        programType,
-        fitnessRank: mappedFitnessRank,
-      });
-    } catch (progressionErr) {
-      req.log.warn(
-        { event: "pipeline.progression.error", err: progressionErr?.message, generation_run_id },
-        "progression recommendation pass failed (non-fatal)",
-      );
+    async function applyProgression() {
+      try {
+        // Non-fatal backstop; completion remains the canonical progression trigger.
+        await progressionService.applyProgressionRecommendations({
+          programId: created_program_id,
+          userId: pg_user_id,
+          programType,
+          fitnessRank: mappedFitnessRank,
+        });
+      } catch (progressionErr) {
+        req.log.warn({ event: "pipeline.progression.error", err: progressionErr?.message, generation_run_id }, "progression recommendation pass failed (non-fatal)");
+      }
     }
 
     // Phase 6: Mark generation_run complete
-    await db.query(
+    await activationDb.query(
       `
       UPDATE generation_run SET
         status = 'complete',
@@ -826,6 +866,14 @@ export function createGenerateProgramV2Handler({
       [importResult.counts?.days ?? 0, rows.length, generation_run_id],
     );
 
+    if (activationClient) {
+      await activationClient.query("COMMIT");
+      activationClient.release();
+      activationClient = null;
+      if (replaceIds.length) req.log.info({ event: "program.replaced", replaced_count: replaceIds.length, removed_future_days: removedFutureDays }, "Program replaced");
+      await applyProgression();
+    }
+
     return res.json({
       ok: true,
       program_id: created_program_id,
@@ -833,8 +881,14 @@ export function createGenerateProgramV2Handler({
       program_type: programType,
       counts: importResult.counts,
       idempotent: importResult.idempotent,
+      ...(replaceIds.length ? { replaced_program_ids: replaceIds } : {}),
     });
   } catch (err) {
+    if (activationClient) {
+      try { await activationClient.query("ROLLBACK"); }
+      catch (rollbackErr) { req.log.error({ event: "pipeline.rollback.error", err: rollbackErr?.message }, "Activation rollback failed"); }
+      finally { activationClient.release(); activationClient = null; }
+    }
     req.log.error({ event: "pipeline.error", err: err?.message, stack: err?.stack }, "generate-plan-v2 pipeline/import error");
     await markFailed(err?.message || "unknown error");
     return res.status(500).json({

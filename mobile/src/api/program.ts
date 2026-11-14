@@ -5,11 +5,13 @@ export type GenerateProgramPayload = {
   clientProfileId: string;
   programType: "default";
   anchor_date_ms: number;
+  replaceActiveProgram?: boolean;
 };
 
 export type GenerateProgramResponse = {
   program_id?: string;
   programId?: string;
+  replaced_program_ids?: string[];
   [key: string]: unknown;
 };
 
@@ -24,6 +26,8 @@ function stringifyDetails(details: unknown): string {
 }
 
 function toGenerationError(error: unknown): Error {
+  // Keep structured conflict details available to Program Review.
+  if (error instanceof ApiError && error.status === 409) return error;
   if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
     return new Error(
       `Generation unauthorized (${error.status}) at /generate-plan-v2. body=${stringifyDetails(error.details)} Auth token or subscription entitlement required.`,
@@ -47,6 +51,7 @@ export async function generateProgram(payload: GenerateProgramPayload): Promise<
         client_profile_id: payload.clientProfileId,
         programType: payload.programType,
         anchor_date_ms: payload.anchor_date_ms,
+        ...(payload.replaceActiveProgram === true ? { replace_active_program: true } : {}),
       },
     });
   } catch (error) {
