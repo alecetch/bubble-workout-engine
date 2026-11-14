@@ -217,13 +217,7 @@ test("HYROX and admin scope reject new branding but exclude insight posts and te
   assert.equal(findings.length, 2);
   assert.equal(evaluateWebsiteBrandStrings(findings, WEBSITE_BRAND_BASELINE).ok, false);
 });
-test("H3 files pass at their frozen budget and fail above it", t => {
-  const root = makeFixture();
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const file = "api/src/hyrox/reports/raceCardBuilder.js";
-  const budget = WEBSITE_BRAND_BASELINE[file];
-  writeFile(root, file, Array(budget).fill('"Forma"').join("\n"));
-  assert.equal(evaluateWebsiteBrandStrings(checkWebsiteBrandStrings(root), WEBSITE_BRAND_BASELINE).ok, true);
-  writeFile(root, file, Array(budget + 1).fill('"Forma"').join("\n"));
-  assert.equal(evaluateWebsiteBrandStrings(checkWebsiteBrandStrings(root), WEBSITE_BRAND_BASELINE).ok, false);
+test("HYROX and admin artifacts have no remaining baseline allowances", () => {
+  assert.deepEqual(Object.keys(WEBSITE_BRAND_BASELINE).filter(key => key.startsWith("api/src/hyrox/") || key.startsWith("api/admin/")), []);
+  assert.equal(Object.hasOwn(WEBSITE_BRAND_BASELINE, "api/src/routes/adminContentStudio.js"), false);
 });

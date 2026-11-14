@@ -751,7 +751,7 @@ function buildCarouselSlide1Metric({ inputFacts = {}, rankPolicy = {} } = {}) {
   if (rankPolicy.allowed && Number.isFinite(primaryPercentile)) {
     const score = Math.max(0, Math.min(100, Math.round(primaryPercentile)));
     return {
-      label: "FORMA SCORE",
+      label: "RACE SCORE",
       value: `${score}/100`,
       source: "rank_policy_primary_percentile",
       fallbackReason: null,

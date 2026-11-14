@@ -1002,6 +1002,9 @@ test("generates markdown for both harness modes", async () => {
   assert.match(response.headers.get("x-hyrox-harness-run-dir") ?? "", new RegExp(runId));
   assert.match(body, new RegExp(`Run ID: ${runId}`));
   assert.match(body, /# HYROX QA Test Harness/);
+  assert.match(body, /"raceScore":/);
+  assert.match(body, /"formaScore":/);
+  assert.match(body, /Race score:/);
   assert.match(body, /## Mode 1: Analyse my race/);
   assert.match(body, /## Mode 3: Hit a target time/);
   assert.doesNotMatch(body, /## Mode 2/);

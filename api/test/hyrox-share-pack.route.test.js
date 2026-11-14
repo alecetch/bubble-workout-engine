@@ -166,6 +166,7 @@ test("GET /hyrox/share/:shareToken renders mobile landing", async () => {
   const { response, body } = await request(buildApp(), "/hyrox/share/token-123");
   assert.equal(response.status, 200);
   assert.match(body, /Download ZIP/);
+  assert.ok(body.includes(`Your HYROX Instagram Pack | ${getBrand().name}`));
 });
 
 test("GET /hyrox/share/:shareToken handles missing and expired packs", async () => {
@@ -176,6 +177,8 @@ test("GET /hyrox/share/:shareToken handles missing and expired packs", async () 
     mobileRows: [{ ...pack({ expires_at: new Date(Date.now() - 86400000).toISOString() }), race_name: "HYROX London" }],
   }), "/hyrox/share/expired");
   assert.equal(expired.response.status, 410);
+  assert.ok(expired.body.includes(getBrand().name.toUpperCase()));
+  assert.match(expired.body, /Generate a new pack from your HYROX report/);
 });
 
 test("share-pack route uses the active brand in its email", async () => {

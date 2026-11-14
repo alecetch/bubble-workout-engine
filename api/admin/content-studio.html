@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Forma Content Studio</title>
+    <title>200 Days Content Studio</title>
     <style>
       :root { --bg:#f4f6f8; --panel:#fff; --border:#d8dee6; --text:#1f2937; --muted:#6b7280; --primary:#0f62fe; --danger:#dc3545; --ok:#0f766e; }
       * { box-sizing: border-box; }
@@ -68,7 +68,7 @@
     <div class="page">
       <section class="header">
         <div class="top-row">
-          <h1 class="title">Forma Content Studio</h1>
+          <h1 class="title">200 Days Content Studio</h1>
         </div>
         <div class="controls">
           <div class="control wide">
@@ -838,7 +838,7 @@
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
-          a.download = `forma-content-${jobId.slice(0, 8)}.json`;
+          a.download = `200days-content-${jobId.slice(0, 8)}.json`;
           a.click();
           URL.revokeObjectURL(a.href);
           currentStatus = "exported";

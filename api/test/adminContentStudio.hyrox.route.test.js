@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -91,4 +92,20 @@ test("POST scrape with enrichSplits=false returns athleteCount without fetching 
   } finally {
     if (raceEventId) await pool.query("DELETE FROM cs_race_events WHERE id = $1", [raceEventId]);
   }
+});
+
+test("Content Studio page uses the current title and download prefix", () => {
+  const html = readFileSync(new URL("../admin/content-studio.html", import.meta.url), "utf8");
+  assert.match(html, /<title>200 Days Content Studio<\/title>/);
+  assert.match(html, /<h1 class="title">200 Days Content Studio<\/h1>/);
+  assert.match(html, /200days-content-\$\{jobId/);
+});
+test("Content Studio export downloads use the 200days prefix", async t => {
+  if (!await dbReady(t)) return;
+  const { rows } = await pool.query("INSERT INTO cs_content_jobs (content_mode, status) VALUES ('auto_pick', 'approved') RETURNING id");
+  const id = rows[0].id;
+  const result = await request(buildApp(), `/api/admin/content-studio/jobs/${id}/export`);
+  assert.equal(result.response.status, 200);
+  assert.equal(result.response.headers.get("content-disposition"), `attachment; filename="200days-content-${id.slice(0, 8)}.json"`);
+  assert.equal(result.body.jobId, id);
 });

@@ -75,7 +75,7 @@ test("golden path — all fields populated", () => {
   assert.equal(data.finishTime, "59:08");
   assert.equal(data.targetTime, "55:00");
   assert.equal(data.percentileText, "TOP 1% WORLDWIDE");
-  assert.equal(data.formaScore, 99); // comparisonOptions[0].percentile, not overallPerformanceScore
+  assert.equal(data.raceScore, 99); // comparisonOptions[0].percentile, not overallPerformanceScore
   assert.equal(data.mode, "target");
   assert.equal(data.isDoubles, false);
 
@@ -89,44 +89,44 @@ test("golden path — all fields populated", () => {
   assert.equal(data.biggestLimiter.rankText, "1:21 slower");
 });
 
-// ── formaScore fallback ──────────────────────────────────────────────────────
+// ── raceScore fallback ──────────────────────────────────────────────────────
 
-test("formaScore uses contract rank display when no comparison options and no overallPerformanceScore", () => {
+test("raceScore uses contract rank display when no comparison options and no overallPerformanceScore", () => {
   const aj = makeAnalysisJson({ scores: {}, benchmarkContext: { comparisonOptions: null } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.formaScore, 99);
+  assert.equal(data.raceScore, 99);
 });
 
-test("formaScore uses comparisonOptions[0].percentile when available", () => {
+test("raceScore uses comparisonOptions[0].percentile when available", () => {
   // scores.overallPerformanceScore = 40 (band-mode peer score) but global percentile = 99
   const aj = makeAnalysisJson({ scores: { overallPerformanceScore: 40 } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.formaScore, 99); // picks compOpts[0].percentile, not 40
+  assert.equal(data.raceScore, 99); // picks compOpts[0].percentile, not 40
 });
 
-test("formaScore prefers contract rank display when comparisonOptions is empty", () => {
+test("raceScore prefers contract rank display when comparisonOptions is empty", () => {
   const aj = makeAnalysisJson({ benchmarkContext: { comparisonOptions: { defaultId: "global", options: [] } } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.formaScore, 99);
+  assert.equal(data.raceScore, 99);
 });
 
-// ── formaScoreBasis disclosure ────────────────────────────────────────────────
-// Discloses which of two genuinely different calculations produced formaScore, so the race
+// ── raceScoreBasis disclosure ────────────────────────────────────────────────
+// Discloses which of two genuinely different calculations produced raceScore, so the race
 // card never silently shows a benchmarked percentile and a composite training score under the
-// exact same "FORMA SCORE" label with no way to tell them apart.
+// exact same "RACE SCORE" label with no way to tell them apart.
 
-test("formaScoreBasis is 'percentile' when a comparison option resolves", () => {
+test("raceScoreBasis is 'percentile' when a comparison option resolves", () => {
   const data = buildHyroxRaceCardData(makeAnalysisJson());
-  assert.equal(data.formaScoreBasis, "percentile");
+  assert.equal(data.raceScoreBasis, "percentile");
 });
 
-test("formaScoreBasis is 'percentile' when only the contract rank-display fallback resolves", () => {
+test("raceScoreBasis is 'percentile' when only the contract rank-display fallback resolves", () => {
   const aj = makeAnalysisJson({ scores: {}, benchmarkContext: { comparisonOptions: null } });
   const data = buildHyroxRaceCardData(aj);
-  assert.equal(data.formaScoreBasis, "percentile");
+  assert.equal(data.raceScoreBasis, "percentile");
 });
 
-test("formaScoreBasis is 'composite' when benchmarks are allowed but no percentile source resolves", () => {
+test("raceScoreBasis is 'composite' when benchmarks are allowed but no percentile source resolves", () => {
   // Not reachable via buildHyroxReportContract today (a rankPolicy display always carries a
   // finite percentile whenever `allowed` is true) — this exercises the mapper's own defensive
   // fallback directly via an injected contract, independent of the real builder's invariants.
@@ -145,14 +145,14 @@ test("formaScoreBasis is 'composite' when benchmarks are allowed but no percenti
     headlineMode: null,
   };
   const data = buildHyroxRaceCardData(aj, {}, contract);
-  assert.equal(data.formaScoreBasis, "composite");
-  assert.equal(data.formaScore, 72);
+  assert.equal(data.raceScoreBasis, "composite");
+  assert.equal(data.raceScore, 72);
 });
 
-test("formaScoreBasis is null when benchmark percentiles are unavailable", () => {
+test("raceScoreBasis is null when benchmark percentiles are unavailable", () => {
   const data = buildHyroxRaceCardData(null);
-  assert.equal(data.formaScoreBasis, null);
-  assert.equal(data.formaScore, null);
+  assert.equal(data.raceScoreBasis, null);
+  assert.equal(data.raceScore, null);
 });
 
 test("percentileText falls back to demographic percentile when comparisonOptions is empty", () => {
@@ -311,6 +311,6 @@ test("returns safe defaults when analysisJson is null", () => {
   const data = buildHyroxRaceCardData(null);
   assert.equal(data.athleteName, "HYROX Athlete");
   assert.equal(data.finishTime, null);
-  assert.equal(data.formaScore, null);
+  assert.equal(data.raceScore, null);
   assert.equal(data.splitRows.length, 0);
 });

@@ -1,3 +1,4 @@
+import { getBrand } from "../../../config/brand.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildHyroxRaceCardData } from "../raceCardDataMapper.js";
@@ -119,7 +120,7 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 4% WORLDWIDE (directional)");
   });
 
-  it("uses contract-owned Forma Score for analyse-mode slide 1 metric without repeating standing copy", () => {
+  it("uses contract-owned Race Score for analyse-mode slide 1 metric without repeating standing copy", () => {
     const carousel = buildTemplateA(analysis({
       calculatorMode: "analyse",
       benchmarkContext: {
@@ -132,7 +133,7 @@ describe("buildTemplateA", () => {
     }), [], { displayName: "Marcus Fernandes", calculatorMode: "analyse" });
 
     assert.equal(carousel.slides[0].percentile, "Marcus Fernandes is in the TOP 18% WORLDWIDE");
-    assert.equal(carousel.slides[0].metric2_label, "FORMA SCORE");
+    assert.equal(carousel.slides[0].metric2_label, "RACE SCORE");
     assert.equal(carousel.slides[0].metric2_value, "82/100");
     assert.equal(carousel.slides[0].world_rank, "82/100");
     assert.notEqual(carousel.slides[0].metric2_label, "WORLD RANK");
@@ -246,7 +247,7 @@ describe("buildTemplateA", () => {
     const raceCard = buildHyroxRaceCardData(noBenchmarkAnalysis, { displayName: "Marcus Fernandes", overallPercentile: 99 });
 
     assert.equal(raceCard.percentileText, null);
-    assert.equal(raceCard.formaScore, null);
+    assert.equal(raceCard.raceScore, null);
     assert.equal(carousel.slides[0].percentile, "Benchmark data is not available for this race format");
     assert.equal(carousel.slides[0].metric2_label, "BENCHMARK");
     assert.equal(carousel.slides[0].metric2_value, "UNAVAILABLE");
@@ -534,7 +535,7 @@ describe("buildTemplateA", () => {
     assert.equal(carousel.slides[0].athlete_name, "John Smith & Jane Doe");
     assert.equal(carousel.slides[4].athlete_first_name, "John & Jane");
     assert.match(carousel.slides[4].insight, /John & Jane/);
-    assert.match(html, /<title>HYROX Analysis . John Smith &amp; Jane Doe \| FORMA<\/title>/);
+    assert.ok(html.includes(`<title>HYROX Analysis — John Smith &amp; Jane Doe | ${getBrand().name.toUpperCase()}</title>`));
     assert.doesNotMatch(html, /SMITH, John &amp; DOE, Jane/);
   });
 

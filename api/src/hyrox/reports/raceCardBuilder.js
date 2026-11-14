@@ -1,3 +1,5 @@
+import { getBrand } from "../../config/brand.js";
+import { lockupSvgInline } from "./brandAssets.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -98,31 +100,6 @@ function renderNameLine(line) {
 
 // ── SVG assets ────────────────────────────────────────────────────────────────
 
-const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
-const FORMA_BRAND_BLUE = "#00a3f5";
-
-function formaLogoFallback(size) {
-  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
-  const iconWidth = size;
-  const barHeight = Math.round(size * 0.24);
-  const barGap = Math.round(size * 0.06);
-  const textSize = Math.max(21, Math.round(size * 0.6));
-  const textX = iconWidth + 12;
-  return `<svg viewBox="0 0 ${width} ${size}" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${size}" aria-label="Forma" style="display:block;width:${width}px;height:${size}px;flex-shrink:0;">
-  <polygon points="2,0 ${iconWidth},0 ${iconWidth - barHeight * 0.6},${barHeight} 2,${barHeight}" fill="#ffffff"/>
-  <polygon points="2,${barHeight + barGap} ${iconWidth - barHeight * 0.35},${barHeight + barGap} ${iconWidth - barHeight * 0.95},${barHeight * 2 + barGap} 2,${barHeight * 2 + barGap}" fill="${FORMA_BRAND_BLUE}"/>
-  <polygon points="2,${barHeight * 2 + barGap * 2} ${iconWidth - barHeight * 1.3},${barHeight * 2 + barGap * 2} ${iconWidth - barHeight * 1.9},${size},2,${size}" fill="#ffffff"/>
-  <text x="${textX}" y="${Math.round(size * 0.72)}" font-family="'Inter Tight',Arial,sans-serif" font-size="${textSize}" font-weight="800" fill="#f8fafc">FORMA</text>
-</svg>`;
-}
-
-function formaLogoMark(size = 38) {
-  const logoB64 = loadIconB64("forma-logo.png");
-  if (!logoB64) return formaLogoFallback(size);
-  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
-  return `<img src="${logoB64}" alt="Forma" width="${width}" height="${size}" style="display:block;width:${width}px;height:${size}px;flex-shrink:0;" />`;
-}
-
 const STATION_ARTWORK = Object.freeze({
   run: { hexFile: "hex-running.png", simpleFile: "simple-running.png" },
   ski: { hexFile: "hex-skierg.png", simpleFile: "simple-skierg.png" },
@@ -201,17 +178,17 @@ function runnerSvg() {
 </svg>`;
 }
 
-function scoreRingSvg(formaScore) {
+function scoreRingSvg(raceScore) {
   const r = 92;
   const circ = 2 * Math.PI * r;
-  const has = Number.isFinite(formaScore) && formaScore !== null;
-  const filled = has ? (Math.max(0, Math.min(100, formaScore)) / 100) * circ : 0;
+  const has = Number.isFinite(raceScore) && raceScore !== null;
+  const filled = has ? (Math.max(0, Math.min(100, raceScore)) / 100) * circ : 0;
   const gap = circ - filled;
-  const num = has ? String(Math.round(formaScore)) : "—";
+  const num = has ? String(Math.round(raceScore)) : "—";
   const numSize = has && num.length >= 3 ? 64 : 76;
   const numY = 112 + numSize * 0.78;
 
-  return `<svg viewBox="0 0 248 248" xmlns="http://www.w3.org/2000/svg" width="248" height="248" aria-label="FORMA SCORE ${num}">
+  return `<svg viewBox="0 0 248 248" xmlns="http://www.w3.org/2000/svg" width="248" height="248" aria-label="RACE SCORE ${num}">
   <defs>
     <filter id="ringglow" x="-40%" y="-40%" width="180%" height="180%">
       <feGaussianBlur stdDeviation="5" result="b"/>
@@ -222,7 +199,7 @@ function scoreRingSvg(formaScore) {
   ${has ? `<circle cx="124" cy="124" r="${r}" fill="none" stroke="#22d3ee" stroke-width="16"
     stroke-dasharray="${filled.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="round"
     transform="rotate(-90 124 124)" filter="url(#ringglow)"/>` : ""}
-  <text x="124" y="74"  text-anchor="middle" fill="#94a3b8" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="21" letter-spacing="2">FORMA</text>
+  <text x="124" y="74"  text-anchor="middle" fill="#94a3b8" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="21" letter-spacing="2">RACE</text>
   <text x="124" y="98" text-anchor="middle" fill="#94a3b8" font-family="'Inter Tight',Arial,sans-serif" font-weight="700" font-size="21" letter-spacing="2">SCORE</text>
   <text x="124" y="${numY.toFixed(0)}" text-anchor="middle" fill="#f0f6ff" font-family="'Inter Tight',Arial,sans-serif" font-weight="900" font-size="${numSize}">${num}</text>
   ${has ? `<text x="124" y="${(numY + 28).toFixed(0)}" text-anchor="middle" fill="#94a3b8" font-family="Inter,Arial,sans-serif" font-weight="700" font-size="21">/100</text>` : ""}
@@ -480,6 +457,10 @@ function buildChart(splitRows) {
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export function buildRaceCardHtml(data) {
+  const brand = getBrand();
+  // Retain inputs from previously exposed race-card payloads.
+  const raceScore = data.raceScore ?? data.formaScore ?? null;
+  const raceScoreBasis = data.raceScoreBasis ?? data.formaScoreBasis ?? null;
   const {
     athleteName = "HYROX Athlete",
 	    finishTime   = "--:--",
@@ -489,8 +470,6 @@ export function buildRaceCardHtml(data) {
     targetGapTone = null,
 	    percentileText = null,
     confidenceQualifier = null,
-    formaScore   = null,
-    formaScoreBasis = null,
     mode         = "analyse",
     comparisonBasis = mode === "target" ? "TARGET" : "MEDIAN",
     comparisonProfileLabel = null,
@@ -645,8 +624,8 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <!-- ── HEADER ── -->
   <div class="header">
     <div class="h-left">
-      <div class="logo-row">
-        ${formaLogoMark(57)}
+      <div class="logo-row" role="img" aria-label="${escapeHtml(brand.name)}">
+        ${lockupSvgInline({ height: 38, brand })}
       </div>
       <div class="t-hyrox">HYROX</div>
       <div class="t-perf">PERFORMANCE</div>
@@ -664,7 +643,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
       <div class="stime h-stime" style="font-size:32px;color:var(--cyan);margin-top:4px;">${modeTitle}</div>
       <div class="smeta" style="margin-top:6px;">${escapeHtml(modeSubtitle)}</div>`}
     </div>
-    <div class="h-score">${scoreRingSvg(formaScore)}${formaScoreBasis === "composite" ? `<div class="smeta" style="text-align:center;margin-top:2px;">Composite training score</div>` : ""}</div>
+    <div class="h-score">${scoreRingSvg(raceScore)}${raceScoreBasis === "composite" ? `<div class="smeta" style="text-align:center;margin-top:2px;">Composite training score</div>` : ""}</div>
   </div>
 
   <div class="hr"></div>
@@ -746,7 +725,7 @@ html, body { width: 1080px; min-height: 1350px; background: var(--bg); color: va
   <!-- ── FOOTER ── -->
   <div class="footer">
 	    <div class="f-left"></div>
-	    <div class="f-right">www.getforma.fit</div>
+	    <div class="f-right">${escapeHtml(brand.domain)}</div>
 	  </div>
 
 </div>

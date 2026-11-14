@@ -1,48 +1,23 @@
+import { getBrand, getFormaBrand } from "../../config/brand.js";
+import { lockupSvgInline } from "./brandAssets.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname_carousel = dirname(fileURLToPath(import.meta.url));
 
-let FORMA_LOGO_B64 = "";
-for (const rel of ["./assets/forma-logo.png", "../../../../web/src/assets/forma-logo.png"]) {
-  try {
-    FORMA_LOGO_B64 = `data:image/png;base64,${readFileSync(resolve(__dirname_carousel, rel)).toString("base64")}`;
-    break;
-  } catch {
-    // try next path; falls back to CSS "F" mark
+const backgroundCache = new Map();
+function backgroundArtwork(brand) {
+  const filename = brand.variant === "200days" ? "instagram-bg-200days.jpg" : "instagram-watermark.jpg";
+  if (!backgroundCache.has(filename)) {
+    try { backgroundCache.set(filename, `data:image/jpeg;base64,${readFileSync(resolve(__dirname_carousel, "assets", filename)).toString("base64")}`); }
+    catch { backgroundCache.set(filename, ""); }
   }
+  return { filename, src: backgroundCache.get(filename) };
 }
 
-// Pre-sized to 1080x1080 (the slide's rendered dimensions) and re-encoded as JPEG so the
-// data URI embedded once in <style> stays small — it's shared by all 6 slides via one CSS
-// rule, not repeated per-slide the way an <img> per slide would be.
-let WATERMARK_B64 = "";
-try {
-  WATERMARK_B64 = `data:image/jpeg;base64,${readFileSync(resolve(__dirname_carousel, "./assets/instagram-watermark.jpg")).toString("base64")}`;
-} catch {
-  // missing file — CSS background-image simply won't render
-}
-
-const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
-const FORMA_BRAND_BLUE = "#00a3f5";
-
-function formaMark(size) {
-  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
-  if (FORMA_LOGO_B64) {
-    return `<img src="${FORMA_LOGO_B64}" alt="Forma — Measure. Understand. Improve." width="${width}" height="${size}" style="width:${width}px;height:${size}px;display:block;flex-shrink:0;" />`;
-  }
-  const r = Math.round(size * 0.22);
-  return `<span style="display:inline-flex;align-items:center;gap:${Math.round(size * 0.2)}px;flex-shrink:0;">
-    <span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;background:${FORMA_BRAND_BLUE};border-radius:${r}px;color:#fff;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;font-weight:800;line-height:1;">F</span>
-    <span style="font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:${Math.round(size * 0.55)}px;font-weight:700;color:#fff;">FORMA</span>
-  </span>`;
-}
-
-function formaBrandHeader() {
-  return `<header class="forma-brand">
-    ${formaMark(36)}
-  </header>`;
+function brandHeader(brand) {
+  return `<header class="brand-lockup">${lockupSvgInline({ height: 36, brand })}</header>`;
 }
 
 const CAROUSEL_CSS = `
@@ -89,7 +64,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
   border-bottom: 3px solid var(--blue);
   color: var(--text);
 }
-.forma-brand { position: absolute; top: 48px; left: 70px; display: flex; align-items: center; z-index: 3; }
+.brand-lockup { position: absolute; top: 48px; left: 70px; display: flex; align-items: center; z-index: 3; }
 .site { position: absolute; right: 72px; bottom: 28px; color: var(--muted); font-size: var(--fs-meta); z-index: 2; }
 .cta-url { color: var(--blue); font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.02em; margin-top: 18px; }
 .footer { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; color: var(--muted-2); font-size: var(--fs-meta); letter-spacing: 0.03em; }
@@ -122,7 +97,7 @@ html, body { margin: 0; background: #03060c; color: var(--text); font-family: va
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-image: url("${WATERMARK_B64}");
+  background-image: url("__BACKGROUND_IMAGE__");
   background-size: cover;
   background-position: center;
   opacity: 0.16;
@@ -255,9 +230,21 @@ function htmlEsc(value) {
 }
 
 export function buildCarouselPage(carouselData = {}) {
+  const brand = getBrand();
+  const slots = { product: brand.name.toUpperCase(), site: brand.domain, strapline: brand.tagline };
+  // Stored template slots can predate a brand switch; apply current chrome on every render.
+  carouselData = {
+    ...carouselData,
+    brand: slots,
+    slides: carouselData.slides?.map(slide => ({
+      ...slide,
+      metric2_label: slide.metric2_label === `${getFormaBrand().name.toUpperCase()} SCORE` ? "RACE SCORE" : slide.metric2_label,
+    })),
+  };
+  const background = backgroundArtwork(brand);
   const athleteName = carouselData.slides?.[0]?.athlete_name ?? "Athlete";
   const dataJson = JSON.stringify(carouselData).replace(/<\/script>/gi, "<\\/script>");
-  const brandHeader = formaBrandHeader();
+  const header = brandHeader(brand);
   const watermark = `<div class="watermark"></div>`;
 
   return `<!doctype html>
@@ -265,18 +252,19 @@ export function buildCarouselPage(carouselData = {}) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HYROX Analysis — ${htmlEsc(athleteName)} | FORMA</title>
-  <style>${CAROUSEL_CSS}</style>
+  <title>HYROX Analysis — ${htmlEsc(athleteName)} | ${htmlEsc(slots.product)}</title>
+  <style>${CAROUSEL_CSS.replace("__BACKGROUND_IMAGE__", background.src)}
+/* Background artwork: ${background.filename} */</style>
 </head>
 <body>
   <div class="page-header">
     <h1>YOUR HYROX PERFORMANCE SLIDES</h1>
     <p>Screenshot each slide to share on Instagram &mdash; or use your browser&rsquo;s print / save as PDF option.</p>
   </div>
-  <main id="carousel" class="carousel" aria-label="Forma athlete analysis carousel">
+  <main id="carousel" class="carousel" aria-label="${htmlEsc(brand.name)} athlete analysis carousel">
     <section class="slide slide-hook" data-slide="A1_ATHLETE_HOOK">
       ${watermark}
-      ${brandHeader}
+      ${header}
       <div class="slide-hook-body">
         <div class="hook-copy">
           <div class="small-kicker" data-field="slides.0.percentile">BENCHMARKED RESULT</div>
@@ -307,12 +295,12 @@ export function buildCarouselPage(carouselData = {}) {
         </div>
         <div class="swipe-prompt"><span class="blue">&#8594;</span> <span data-field="slides.0.swipe_prompt">Swipe to see where time was gained and lost.</span></div>
       </div>
-      <div class="site" data-field="brand.site">www.getforma.fit</div>
+      <div class="site" data-field="brand.site">${htmlEsc(slots.site)}</div>
     </section>
 
     <section class="slide slide-flow" data-slide="A2_POSITION_FLOW">
       ${watermark}
-      ${brandHeader}
+      ${header}
       <h2 class="slide-title">HOW THE RACE UNFOLDED</h2>
       <div class="flow-summary">
         <div class="summary-box positive">
@@ -330,12 +318,12 @@ export function buildCarouselPage(carouselData = {}) {
         <span class="legend-item"><span class="legend-dot blue"></span>FASTER THAN <span data-field="slides.1.comparison_basis">TARGET</span></span>
         <span class="legend-item"><span class="legend-dot danger"></span>SLOWER THAN <span data-field="slides.1.comparison_basis">TARGET</span></span>
       </div>
-      <div class="footer">FORMA &nbsp;|&nbsp; <span data-field="brand.site">www.getforma.fit</span></div>
+      <div class="footer"><span data-field="brand.product">${htmlEsc(slots.product)}</span> &nbsp;|&nbsp; <span data-field="brand.site">${htmlEsc(slots.site)}</span></div>
     </section>
 
     <section class="slide slide-stat" data-slide="A3_BIGGEST_STRENGTH">
       ${watermark}
-      ${brandHeader}
+      ${header}
       <div class="center-stack">
         <div class="kicker" data-field="slides.2.strength_heading">BIGGEST STRENGTH</div>
         <h2 class="station-title" data-field="slides.2.station">-</h2>
@@ -354,7 +342,7 @@ export function buildCarouselPage(carouselData = {}) {
 
     <section class="slide slide-stat" data-slide="A4_BIGGEST_OPPORTUNITY">
       ${watermark}
-      ${brandHeader}
+      ${header}
       <div class="center-stack opportunity-stack">
         <div class="kicker">BIGGEST OPPORTUNITY</div>
         <h2 class="station-title" data-field="slides.3.station">-</h2>
@@ -371,7 +359,7 @@ export function buildCarouselPage(carouselData = {}) {
 
     <section class="slide slide-insight" data-slide="A5_KEY_INSIGHT">
       ${watermark}
-      ${brandHeader}
+      ${header}
       <div class="insight-wrap">
         <h2 class="slide-title two-line">WHAT THE<br>DATA SHOWS</h2>
         <div class="short-rule"></div>
@@ -399,21 +387,21 @@ export function buildCarouselPage(carouselData = {}) {
         <p class="payoff" data-field="slides.4.insight_short">Closing this gap could move you closer to your next PB.</p>
         <div class="top-ten blue" data-field="slides.4.outcome_text">YOUR NEXT PB</div>
       </div>
-      <div class="footer">FORMA &nbsp;|&nbsp; <span data-field="brand.site">www.getforma.fit</span></div>
+      <div class="footer"><span data-field="brand.product">${htmlEsc(slots.product)}</span> &nbsp;|&nbsp; <span data-field="brand.site">${htmlEsc(slots.site)}</span></div>
     </section>
 
     <section class="slide slide-cta" data-slide="A6_CTA">
       ${watermark}
-      ${brandHeader}
+      ${header}
       <div class="cta-wrap">
         <h2 class="slide-title two-line" data-field="slides.5.headline">DISCOVER YOUR HYROX BOTTLENECK</h2>
         <div class="short-rule"></div>
         <ul class="feature-list" data-repeat="slides.5.features"></ul>
         <button class="cta-button" data-field="slides.5.button">ANALYSE MY HYROX RESULT</button>
-        <div class="cta-url" data-field="brand.site">www.getforma.fit</div>
+        <div class="cta-url" data-field="brand.site">${htmlEsc(slots.site)}</div>
         <div class="short-rule lower"></div>
-        <div class="cta-brand" data-field="brand.product">FORMA</div>
-        <div class="cta-subtitle" data-field="brand.strapline">Measure. Understand. Improve.</div>
+        <div class="cta-brand" data-field="brand.product">${htmlEsc(slots.product)}</div>
+        <div class="cta-subtitle" data-field="brand.strapline">${htmlEsc(slots.strapline)}</div>
       </div>
       <div class="footer">DATA SOURCE: HYROX OFFICIAL</div>
     </section>

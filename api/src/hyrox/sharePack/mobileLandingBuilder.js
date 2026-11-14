@@ -1,3 +1,5 @@
+import { getBrand } from "../../config/brand.js";
+
 function escapeHtml(value = "") {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -8,7 +10,7 @@ function escapeHtml(value = "") {
 
 export function buildMobileLandingPage({ eventName, caption = "", downloadUrl = "#", slideLinks = [], expired = false, notFound = false } = {}) {
   if (notFound) return errorPage("We couldn't find this share pack. Please check the link or generate a new one.");
-  if (expired) return errorPage("This share pack link has expired. Please generate a new pack from your Forma report.");
+  if (expired) return errorPage("This share pack link has expired. Generate a new pack from your HYROX report.");
 
   const slideItems = slideLinks
     .map((url, i) => `<li><a class="slide-link" href="${escapeHtml(url)}" download>Download slide ${i + 1}</a></li>`)
@@ -19,7 +21,7 @@ export function buildMobileLandingPage({ eventName, caption = "", downloadUrl = 
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Your HYROX Instagram Pack | Forma</title>
+  <title>Your HYROX Instagram Pack | ${escapeHtml(getBrand().name)}</title>
   <style>
     body { margin: 0; background: #080e1a; color: #f5f7fb; font-family: system-ui, sans-serif; padding: 28px 20px; }
     h1 { color: #08a7f5; font-size: 22px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -60,8 +62,8 @@ export function buildMobileLandingPage({ eventName, caption = "", downloadUrl = 
 }
 
 function errorPage(message) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>Forma</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>${escapeHtml(getBrand().name)}</title>
   <style>body{margin:0;background:#080e1a;color:#f5f7fb;font-family:system-ui,sans-serif;padding:40px 24px;text-align:center}
   h1{color:#08a7f5;font-size:20px}p{color:rgba(232,238,248,0.6);font-size:15px}</style></head>
-  <body><h1>FORMA</h1><p>${escapeHtml(message)}</p></body></html>`;
+  <body><h1>${escapeHtml(getBrand().name.toUpperCase())}</h1><p>${escapeHtml(message)}</p></body></html>`;
 }

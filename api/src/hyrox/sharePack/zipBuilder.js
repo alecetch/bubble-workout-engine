@@ -1,7 +1,7 @@
 import { ZipArchive } from "archiver";
 import { SLIDE_FILENAMES } from "./slideAssets.js";
 
-const POSTING_INSTRUCTIONS = `How to post your Forma HYROX carousel to Instagram
+const POSTING_INSTRUCTIONS = `How to post your HYROX carousel to Instagram
 
 1. Save all PNG slides to your phone.
 2. Open Instagram and start a new post.

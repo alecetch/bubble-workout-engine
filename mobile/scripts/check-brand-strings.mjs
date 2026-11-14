@@ -136,20 +136,6 @@ export function checkWebsiteBrandStrings(repoRoot) {
 
 // Counts left by the forma variant. Lower these, never raise them; the clean-up PR removes them.
 export const WEBSITE_BRAND_BASELINE = Object.freeze({
-  // H3 owns the remaining image and share-pack content.
-  "api/src/hyrox/reports/carouselPageBuilder.js": 15,
-  "api/src/hyrox/reports/raceCardBuilder.js": 7,
-  "api/src/hyrox/reports/raceCardDataMapper.js": 1,
-  "api/src/hyrox/reports/reportContractBuilder.js": 1,
-  "api/src/hyrox/reports/templateSlotMapper.js": 5,
-  "api/src/hyrox/sharePack/captionBuilder.js": 2,
-  "api/src/hyrox/sharePack/mobileLandingBuilder.js": 4,
-  "api/src/hyrox/sharePack/sharePackService.js": 1,
-  "api/src/hyrox/sharePack/zipBuilder.js": 1,
-  "api/admin/content-studio.html": 3,
-
-  "api/src/routes/adminContentStudio.js": 1,
-  "api/src/routes/adminHyroxTestHarness.js": 1,
   "api/src/routes/marketingPages.js": 3,
   "api/src/routes/referral.js": 1,
   "api/src/routes/websiteEnhancements.js": 1,
