@@ -201,7 +201,7 @@ describe("RegisterScreen", () => {
     fillRegistration();
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     await waitFor(() =>
-      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "OnboardingEntry" })),
+      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "OnboardingEntry", initialTab: "HomeTab" })),
     );
     expect(createClientProfileMock).toHaveBeenCalledWith({});
   });
@@ -211,7 +211,7 @@ describe("RegisterScreen", () => {
     fillRegistration();
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     await waitFor(() =>
-      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "ProgramReview" })),
+      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "ProgramReview", initialTab: "TodayTab" })),
     );
     expect(saveTokensMock).toHaveBeenCalledWith("access-token", "refresh-token");
     expect(resetFromProfileMock).toHaveBeenCalledWith(completeProfile);

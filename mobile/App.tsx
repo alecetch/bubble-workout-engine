@@ -24,7 +24,7 @@ import { initNetworkMonitoring } from "./src/lib/network";
 import { initQueryFocusManagement } from "./src/lib/queryFocus";
 import { registerPushToken } from "./src/api/notifications";
 import { navigationRef } from "./src/navigation/navigationRef";
-import { navigateFromNotificationResponse } from "./src/navigation/notificationRouting";
+import { createNotificationResponseQueue } from "./src/navigation/notificationRouting";
 import { OfflineBanner } from "./src/components/system/OfflineBanner";
 import { useSessionStore } from "./src/state/session/sessionStore";
 import { colors } from "./src/theme/colors";
@@ -78,25 +78,16 @@ if (ENABLE_NOTIFICATION_RESPONSE_HANDLERS) {
   }
 }
 
-let pendingNotificationResponse: Notifications.NotificationResponse | null = null;
-
-function handleNotificationResponse(response: Notifications.NotificationResponse | null): void {
-  if (!navigateFromNotificationResponse(response)) {
-    pendingNotificationResponse = response;
-  }
-}
-
-function flushPendingNotificationResponse(): void {
-  if (!pendingNotificationResponse) return;
-  if (navigateFromNotificationResponse(pendingNotificationResponse)) {
-    pendingNotificationResponse = null;
-  }
-}
+const {
+  handle: handleNotificationResponse,
+  flush: flushPendingNotificationResponse,
+} = createNotificationResponseQueue();
 
 function App(): React.JSX.Element {
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const userId = useSessionStore((state) => state.userId);
   const entryRoute = useSessionStore((state) => state.entryRoute);
+  const initialTab = useSessionStore((state) => state.initialTab);
 
   logger.boot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
 
@@ -247,7 +238,7 @@ function App(): React.JSX.Element {
           onError={(error, componentStack) => reportError(error, { componentStack })}
         >
           {isAuthenticated ? (
-            <AppTabs homeInitialRoute={entryRoute} />
+            <AppTabs homeInitialRoute={entryRoute} initialTab={initialTab} />
           ) : (
             <AuthNavigator />
           )}

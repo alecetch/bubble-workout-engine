@@ -6,7 +6,7 @@ import { OnboardingNavigator, type OnboardingStackParamList } from "./Onboarding
 import type { HistoryStackParamList } from "./HistoryStackNavigator";
 import type { ProgramsStackParamList } from "./ProgramsStackNavigator";
 import type { SettingsStackParamList } from "./SettingsStackNavigator";
-import type { AppEntryRoute } from "../state/session/sessionStore";
+import type { AppEntryRoute, AppInitialTab } from "../state/session/sessionStore";
 import { colors } from "../theme/colors";
 import { logger } from "../utils/logger";
 
@@ -22,6 +22,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 
 type AppTabsProps = {
   homeInitialRoute: AppEntryRoute;
+  initialTab: AppInitialTab;
 };
 
 function ProgramsTabScreen(): React.JSX.Element {
@@ -52,12 +53,12 @@ function SettingsTabScreen(): React.JSX.Element {
   return <mod.SettingsStackNavigator />;
 }
 
-export function AppTabs({ homeInitialRoute }: AppTabsProps): React.JSX.Element {
-  logger.boot("AppTabs render", { homeInitialRoute });
+export function AppTabs({ homeInitialRoute, initialTab }: AppTabsProps): React.JSX.Element {
+  logger.boot("AppTabs render", { homeInitialRoute, initialTab });
 
   return (
     <Tab.Navigator
-      initialRouteName="HomeTab"
+      initialRouteName={initialTab}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.accent,

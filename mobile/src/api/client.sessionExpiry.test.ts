@@ -22,7 +22,7 @@ function setAuthenticatedSession(): void {
     userId: "user-1",
     clientProfileId: "profile-1",
     activeProgramId: null,
-    entryRoute: "ProgramReview",
+    entryRoute: "ProgramReview", initialTab: "TodayTab",
     subscriptionStatus: "active",
     trialExpiresAt: null,
   });

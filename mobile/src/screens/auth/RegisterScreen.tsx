@@ -1,3 +1,4 @@
+import { entryFor } from "../../state/session/onboardingStatus";
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { TextInputInstance } from "react-native";
@@ -22,11 +23,6 @@ import { getAppStorage } from "../../utils/appStorage";
 import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
-
-function isOnboardingComplete(profile: { onboardingCompletedAt?: string | null; onboardingStepCompleted?: number }): boolean {
-  if (profile.onboardingCompletedAt) return true;
-  return Number(profile.onboardingStepCompleted ?? 0) >= 3;
-}
 
 export function RegisterScreen({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -139,7 +135,6 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
     try {
       const profile = await resolveClientProfile(result.client_profile_id);
       const resolvedClientProfileId = profile.id;
-      const entryRoute = isOnboardingComplete(profile) ? "ProgramReview" : "OnboardingEntry";
 
       queryClient.setQueryData(["me"], {
         id: result.user_id,
@@ -153,7 +148,7 @@ export function RegisterScreen({ navigation }: Props): React.JSX.Element {
       setSession({
         userId: result.user_id,
         clientProfileId: resolvedClientProfileId,
-        entryRoute,
+        ...entryFor(profile),
         subscriptionStatus: result.subscription_status,
         trialExpiresAt: result.trial_expires_at ?? null,
       });
