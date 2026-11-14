@@ -3,6 +3,7 @@ import type { HyroxParseResult } from "./hyroxResultsParser";
 import { loadDraft } from "./storage";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+// Deliberately retain this storage key so saved drafts and sessions survive.
 const SESSION_ID_KEY = "forma.hyroxSessionId";
 
 export class ValidationError extends Error {

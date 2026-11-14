@@ -86,14 +86,14 @@
   gap: 6px;
   width: fit-content;
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--brand-accent);
   text-decoration: none;
   padding: 6px 0;
   transition: color 0.15s;
 }
 
 .externalLink:hover {
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
   text-decoration: none;
 }
 
@@ -163,7 +163,7 @@
 .urlInput:focus,
 .select:focus {
   outline: none;
-  border-color: var(--accent-blue);
+  border-color: var(--brand-accent);
 }
 
 .importAction {

@@ -46,7 +46,7 @@
 }
 
 .link:hover {
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
   text-decoration: none;
 }
 

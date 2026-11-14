@@ -1,3 +1,4 @@
+import { BRAND } from "../../config/brand";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormPanel } from "../../components/FormPanel";
@@ -156,7 +157,7 @@ export function PredictorReviewPage() {
               </label>
               <label className={`${styles.checkRow} ${styles.checkbox}`}>
                 <input type="checkbox" checked={marketingConsent} onChange={(event) => setMarketingConsent(event.target.checked)} />
-                <span>Send me HYROX training updates and related Forma emails.</span>
+                <span>Send me HYROX training updates and other emails from {BRAND.name}.</span>
               </label>
               <label className={`${styles.checkRow} ${styles.checkbox}`}>
                 <input type="checkbox" checked={researchConsent} onChange={(event) => setResearchConsent(event.target.checked)} />
@@ -164,9 +165,9 @@ export function PredictorReviewPage() {
               </label>
               <label className={`${styles.checkRow} ${styles.checkbox}`}>
                 <input type="checkbox" checked={appLinkConsent} onChange={(event) => setAppLinkConsent(event.target.checked)} />
-                <span>Link this result to my Forma account if I create one, so my training can use it.</span>
+                <span>Link this result to my {BRAND.name} account if I create one, so my training can use it.</span>
               </label>
-              <PrivacyNotice text="Your inputs are used to generate this prediction, and we'll email you your result. You can unsubscribe from emails at any time. If you check the box above and later create a Forma app account with the same email, we'll link this result to that account to skip repeat questions and personalize your training. You can unlink it at any time from the app." />
+              <PrivacyNotice text={`Your inputs are used to generate this prediction, and we'll email you your result. You can unsubscribe from emails at any time. If you check the box above and later create a ${BRAND.name} app account with the same email, we'll link this result to that account to skip repeat questions and personalize your training. You can unlink it at any time from the app.`} />
               <PrimaryButton type="button" fullWidth loading={loading} disabled={!emailIsValid || loading} onClick={() => void handleSubmit()}>
                 Get prediction
               </PrimaryButton>

@@ -227,14 +227,14 @@
 .tertiaryLink {
   display: inline-flex;
   margin-top: 16px;
-  color: var(--text-secondary);
+  color: var(--brand-accent);
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
 }
 
 .tertiaryLink:hover {
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
 }
 
 @media (max-width: 560px) {

@@ -32,7 +32,7 @@ describe("RaceDetailsPage inline import panel", () => {
     expect(screen.getByTestId("inline-import-panel")).toBeInTheDocument();
     expect(screen.getByTestId("inline-url-input")).toBeInTheDocument();
     expect(screen.getByText(/ANALYSE MY RACE/i)).toBeInTheDocument();
-    expect(screen.getByText(/Paste your HYROX result URL and Forma will benchmark your race/i)).toBeInTheDocument();
+    expect(screen.getByText(/Paste your HYROX result URL and we'll benchmark your race/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/HYROX result URL/i)).toBeInTheDocument();
     expect(screen.queryByText(/Next: Check Splits/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/No account needed\. Email capture happens at review/i)).not.toBeInTheDocument();

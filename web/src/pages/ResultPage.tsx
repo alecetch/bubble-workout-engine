@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 import { useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { Shell } from "../components/Shell";
@@ -309,7 +310,7 @@ export function ResultPage() {
                 <article className={styles.nextStepCard}>
                   <div>
                     <h3>Get a HYROX training plan</h3>
-                    <p>Continue in the Forma app and start training for your next result.</p>
+                    <p>Continue in the {BRAND.name} app and start training for your next result.</p>
                   </div>
                   <a href={`/download?submissionId=${encodeURIComponent(submissionId)}`} onClick={handleAppDownloadClick}>
                     <SecondaryButton type="button">Continue in the app</SecondaryButton>

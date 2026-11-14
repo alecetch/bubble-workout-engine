@@ -38,8 +38,8 @@ export function TargetCalibrationStep1Page() {
   const heading = variant === "target-direct" ? "Fitness markers" : "Current fitness markers";
   const subtitle =
     variant === "target-direct"
-      ? "Add a few current fitness markers so Forma can estimate what needs to change to hit your target time."
-      : "We already have your HYROX race data. Add a few current fitness markers so Forma can estimate what needs to change to hit your target.";
+      ? "Add a few current fitness markers so we can estimate what needs to change to hit your target time."
+      : "We already have your HYROX race data. Add a few current fitness markers so we can estimate what needs to change to hit your target.";
 
   const [run5k, setRun5k] = useState(timeText(ctx.run5kPbSeconds));
   const [run10k, setRun10k] = useState(timeText(ctx.run10kPbSeconds));

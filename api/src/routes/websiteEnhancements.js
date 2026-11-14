@@ -342,7 +342,7 @@ websiteEnhancementsRouter.get("/changelog", gatePage, (_req, res) => {
     html = "<p style='color:#94A3B8;'>Changelog coming soon.</p>";
   }
   if (getBrand().variant === "200days") {
-    html = `<h2>Forma is now 200 Days</h2><p>${escapeHtml(getBrand().legalUpdated)}</p>` + html;
+    html = `<h2>Forma is now 200 Days</h2><p>${escapeHtml(getBrand().legalUpdated)}</p><p>The HYROX calculator's consent wording now names 200 Days instead of ${getFormaBrand().name}. What you agreed to is unchanged.</p>` + html;
   }
   const body = `<div class="container-narrow changelog-page"><h1>Changelog</h1><p class="changelog-intro">A running record of what's new in ${getBrand().name}${getBrand().variant === "200days" ? "" : "."}</p><a class="changelog-download" href="/download">Get launch updates</a><div class="changelog-body">${html}</div></div>`;
   return sendHtml(res, "Changelog", body, {

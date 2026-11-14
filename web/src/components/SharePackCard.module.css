@@ -94,9 +94,9 @@
 }
 
 .download {
-  background: var(--accent-cyan);
-  border-color: var(--accent-cyan);
-  color: #07101e;
+  background: var(--brand-accent);
+  border-color: var(--brand-accent);
+  color: var(--brand-accent-contrast);
 }
 
 .button:hover,

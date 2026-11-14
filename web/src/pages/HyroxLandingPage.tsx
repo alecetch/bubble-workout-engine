@@ -66,7 +66,7 @@ export function HyroxLandingPage() {
             <h2>Hit a target time</h2>
             <p>Set a goal time and see the gaps you need to close.</p>
             <p className={styles.helperText}>
-              Works best once Forma has your latest race data.
+              Works best once we have your latest race data.
             </p>
             <Link
               to="/hyrox-calculator/race-details"

@@ -107,8 +107,8 @@
   margin-top: 22px;
   padding: 0 16px;
   border-radius: var(--radius-sm);
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+  color: var(--brand-accent-contrast);
+  background: var(--brand-accent);
   font-weight: 800;
   text-decoration: none;
 }
@@ -146,12 +146,12 @@
 .textLink {
   display: block;
   margin-top: 10px;
-  color: var(--text-secondary);
+  color: var(--brand-accent);
   font-size: 13px;
   text-decoration: none;
   cursor: pointer;
 }
 
 .textLink:hover {
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
 }

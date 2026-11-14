@@ -43,7 +43,7 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--accent-blue);
+  border-color: var(--brand-accent);
 }
 
 .input.error {

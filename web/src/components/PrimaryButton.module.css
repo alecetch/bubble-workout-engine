@@ -12,8 +12,8 @@
   letter-spacing: 0.2px;
   cursor: pointer;
   transition: all 0.18s;
-  background: linear-gradient(135deg, var(--accent-blue), #1a7fff);
-  color: #fff;
+  background: var(--brand-accent);
+  color: var(--brand-accent-contrast);
   box-shadow: 0 4px 24px rgba(15, 111, 255, 0.3);
 }
 

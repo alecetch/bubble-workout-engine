@@ -1,6 +1,8 @@
 import type { HyroxPredictionResponse, HyroxPredictorDraft } from "../types";
 
+// Deliberately retain this storage key so saved drafts and sessions survive.
 const DRAFT_KEY = "forma.hyroxPredictorDraft";
+// Deliberately retain this storage key so saved drafts and sessions survive.
 const RESULT_KEY = "forma.hyroxPredictorResult";
 
 const EMPTY_DRAFT: HyroxPredictorDraft = {

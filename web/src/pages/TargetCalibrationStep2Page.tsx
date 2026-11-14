@@ -192,7 +192,7 @@ export function TargetCalibrationStep2Page() {
             <div className={styles.sideKicker}>Optional, useful</div>
             <h2 className={styles.sideTitle}>Benchmarks refine the station read</h2>
             <p className={styles.sideCopy}>
-              These markers help Forma understand whether station gaps are limited by raw capacity, repeatability, or race execution.
+              These markers help us understand whether station gaps are limited by raw capacity, repeatability, or race execution.
             </p>
           </FormPanel>
         </div>

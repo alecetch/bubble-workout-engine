@@ -100,7 +100,7 @@
 .dateInput:focus,
 .emailInput:focus {
   outline: none;
-  border-color: var(--accent-blue);
+  border-color: var(--brand-accent);
 }
 
 .error {
@@ -181,7 +181,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
   font-weight: 800;
   padding: 7px 10px;
 }
@@ -369,8 +369,8 @@
   min-height: 42px;
   border-radius: var(--radius-sm);
   padding: 0 14px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+  color: var(--brand-accent-contrast);
+  background: var(--brand-accent);
   font-weight: 800;
   text-decoration: none;
 }
@@ -382,7 +382,7 @@
 }
 
 .crossLink a {
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
   text-decoration: none;
 }
 
@@ -406,7 +406,7 @@
 }
 
 .nextStepLink {
-  color: var(--accent-cyan);
+  color: var(--brand-accent);
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
