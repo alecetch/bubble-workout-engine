@@ -26,6 +26,9 @@ function buildBrand(env, is200Days) {
     supportEmail: env.SUPPORT_EMAIL ?? `support@${domain}`,
     pressEmail: env.PRESS_EMAIL ?? env.SUPPORT_EMAIL ?? `hello@${domain}`,
     logo: Object.freeze(is200Days ? {
+      lockup: "/images/brand/200days-lockup@2x.png",
+      lockupSvg: "/images/brand/200days-lockup.svg",
+      lockupAspect: 326.02 / 157,
       header: "/images/brand/200days-mark.svg",
       headerAlt: "",
       favicon: "/images/brand/favicon.svg",
@@ -35,6 +38,9 @@ function buildBrand(env, is200Days) {
       ogImage: "/images/brand/og-200days.png",
       appIcon: "/images/brand/200days-icon-1024.png",
     } : {
+      lockup: "/images/forma_masthead.png",
+      lockupSvg: null,
+      lockupAspect: 401 / 70,
       header: "/images/forma_masthead.png",
       headerAlt: "Forma - Measure. Understand. Improve.",
       favicon: "/images/forma_icon.png",

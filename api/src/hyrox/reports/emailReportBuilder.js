@@ -1,3 +1,5 @@
+import { getBrand } from "../../config/brand.js";
+import { emailLogoImg, brandFooterLine } from "./brandAssets.js";
 import { bandScoreColor, bandScoreLabel, enforceTone, formatGain, formatOverallStanding, formatPercentileRank, formatPerformancePercentile, formatTime, regionalContextLine } from "./copyFormatter.js";
 import { buildHeroCopy } from "../interpretation/hyroxInterpretationEngine.js";
 import { nextPerformanceBand, PERFORMANCE_BAND_ORDER, performanceBandForGoal } from "../engine/benchmarkSelector.js";
@@ -14,28 +16,6 @@ import { ensureHyroxReportContract } from "./reportContractBuilder.js";
 import { roxzoneActionability } from "./roxzoneActionability.js";
 import { resolveReportStrength } from "./reportSelections.js";
 import { displaySegmentLabel, segmentSubject, segmentVerb } from "./segmentDisplay.js";
-import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const __dirname_email = dirname(fileURLToPath(import.meta.url));
-
-let FORMA_LOGO_B64 = "";
-const FORMA_LOGO_PATHS = [
-  "./assets/forma-logo.png",
-  "../../../../web/src/assets/forma-logo.png",
-  "../../../../docs/planning/login_page_logos/Forma logo.png",
-];
-for (const relativeLogoPath of FORMA_LOGO_PATHS) {
-  try {
-    const logoPath = resolve(__dirname_email, relativeLogoPath);
-    FORMA_LOGO_B64 = `data:image/png;base64,${readFileSync(logoPath).toString("base64")}`;
-    break;
-  } catch {
-    // Try the next bundled logo path; header and footer fall back to text mark if none load.
-  }
-}
-
 function eliteBandLabel(bsLabel) {
   if (bsLabel === "Priority") return "Next refinement";
   if (bsLabel === "Opportunity") return "Marginal gain";
@@ -315,33 +295,14 @@ function headingDot(accentColor) {
   return `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${accentColor};margin-right:6px;vertical-align:middle;"></span>`;
 }
 
-const FORMA_MASTHEAD_ASPECT_RATIO = 401 / 70;
-const FORMA_BRAND_BLUE = "#00a3f5";
-
-function logoMark(size = 28) {
-  const width = Math.round(size * FORMA_MASTHEAD_ASPECT_RATIO);
-  if (FORMA_LOGO_B64) {
-    return `<img src="${FORMA_LOGO_B64}" alt="Forma — Measure. Understand. Improve." width="${width}" height="${size}"
-      style="width:${width}px;height:${size}px;display:block;" />`;
-  }
-  return `<span style="display:inline-flex;align-items:center;gap:${Math.round(size * 0.2)}px;">
-    <span style="display:inline-flex;align-items:center;justify-content:center;
-      width:${size}px;height:${size}px;background-color:${FORMA_BRAND_BLUE};border-radius:6px;
-      color:#ffffff;font-family:'Inter Tight',Arial,sans-serif;font-size:${Math.round(size * 0.5)}px;
-      font-weight:800;line-height:1;">F</span>
-    <span style="font-family:'Inter Tight','Arial Narrow',Arial,sans-serif;font-size:${Math.round(size * 0.6)}px;
-      font-weight:700;color:#f8fafc;letter-spacing:0.5px;line-height:1;">FORMA</span>
-  </span>`;
-}
-
 function renderHeader() {
   return `<tr>
     <td style="background-color:#07111f;padding:20px 32px;border-radius:8px 8px 0 0;">
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         <tr>
-          <td style="vertical-align:middle;">${logoMark(28)}</td>
+          <td style="vertical-align:middle;">${emailLogoImg({ height: 28 })}</td>
           <td style="text-align:right;vertical-align:middle;">
-            <span style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:11px;">www.getforma.fit</span>
+            <span style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:11px;">${esc(brandFooterLine())}</span>
           </td>
         </tr>
       </table>
@@ -1105,10 +1066,12 @@ function renderRecommendations(section, analysisJson = {}) {
 }
 
 function buildCtaCopy(calculatorMode, primaryCategory) {
+  const brand = getBrand();
+  const app = brand.variant === "200days" ? `the ${brand.name} app` : brand.name;
   if (primaryCategory === "high_performer") {
     return calculatorMode === "analyse"
       ? "Use this result as your baseline and see which marginal gains would matter most for your next HYROX target."
-      : "Use Forma to preserve your strengths and find the marginal gains that matter next.";
+      : `Use ${app} to preserve your strengths and find the marginal gains that matter next.`;
   }
   if (calculatorMode === "analyse" && primaryCategory === "data_quality") {
     return "Use this result as your baseline, then add a target time when your full split data is available.";
@@ -1116,12 +1079,12 @@ function buildCtaCopy(calculatorMode, primaryCategory) {
   if (calculatorMode === "analyse") {
     return "Use this result as your baseline and see what needs to change to hit your next HYROX target.";
   }
-  return "Use Forma to turn this analysis into the next race-profile decision.";
+  return `Use ${app} to turn this analysis into ${brand.variant === "200days" ? "your" : "the"} next race-profile decision.`;
 }
 
 function renderCta(section, analysisJson = {}, ctaCopy = null, calculatorMode = "target") {
-  const appBaseUrl = (process.env.FORMA_APP_BASE_URL ?? process.env.FORMA_CTA_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
-  const baseUrl = (process.env.BASE_URL ?? "https://www.getforma.fit").replace(/\/$/, "");
+  const appBaseUrl = (process.env.FORMA_APP_BASE_URL ?? process.env.FORMA_CTA_URL ?? getBrand().siteUrl).replace(/\/$/, "");
+  const baseUrl = getBrand().siteUrl;
   const submissionId = analysisJson.submissionId ?? null;
   const carouselUrl = analysisJson.carouselUrl ?? (submissionId ? `${baseUrl}/api/hyrox/carousel/${submissionId}` : null);
   const rawContent = ctaCopy ?? (Array.isArray(section.content) ? section.content.join(" ") : String(section.content ?? ""));
@@ -1134,7 +1097,7 @@ function renderCta(section, analysisJson = {}, ctaCopy = null, calculatorMode = 
     : "Want to work towards a target time?";
   const primaryCta = `<a href="${esc(targetCtaUrl)}" target="_blank" style="${inlineStyle({
     display: "inline-block",
-    "background-color": "#0f6fff",
+    "background-color": getBrand().variant === "200days" ? "#3B82F6" : "#0f6fff",
     color: "#ffffff",
     "font-family": "'Inter Tight','Arial Narrow',Arial,sans-serif",
     "font-size": "13px",
@@ -2800,14 +2763,14 @@ function renderFooter() {
       border-top:1px solid rgba(148,163,184,0.12);">
       <table cellpadding="0" cellspacing="0" border="0" role="presentation">
         <tr>
-          <td style="vertical-align:middle;padding-right:8px;">${logoMark(20)}</td>
+          <td style="vertical-align:middle;padding-right:8px;">${emailLogoImg({ height: 20 })}</td>
           <td style="vertical-align:middle;">
             <p style="color:#64748b;font-family:Inter,Arial,sans-serif;font-size:11px;
               letter-spacing:0.04em;margin:0 0 3px;">
-              www.getforma.fit
+              ${esc(brandFooterLine())}
             </p>
             <p style="color:#4a5568;font-family:Inter,Arial,sans-serif;font-size:10px;margin:0;">
-              This analysis is for guidance only. Individual results vary.
+              ${getBrand().variant === "200days" ? `<span style="display:block;margin-bottom:3px;">${esc(getBrand().tagline)}</span>` : ""}This analysis is for guidance only. Individual results vary.
             </p>
           </td>
         </tr>
@@ -2818,7 +2781,7 @@ function renderFooter() {
 
 function renderAppDownloadCta(submissionId) {
   if (!submissionId) return "";
-  const baseUrl = (process.env.APP_BASE_URL ?? "https://getforma.fit").replace(/\/$/, "");
+  const baseUrl = (process.env.APP_BASE_URL ?? getBrand().siteUrl).replace(/\/$/, "");
   const href = `${baseUrl}/api/hyrox/download-redirect/${encodeURIComponent(submissionId)}`;
   return `
   <tr>
@@ -2826,13 +2789,13 @@ function renderAppDownloadCta(submissionId) {
       <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
         <tr>
           <td style="padding:0 0 14px;">
-            <p style="color:#e2e8f0;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:18px;font-weight:800;line-height:1.25;margin:0 0 7px;">Build your next HYROX block in Forma</p>
+            <p style="color:#e2e8f0;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:18px;font-weight:800;line-height:1.25;margin:0 0 7px;">Build your next HYROX block in ${getBrand().variant === "200days" ? `the ${esc(getBrand().name)} app` : esc(getBrand().name)}</p>
             <p style="color:#64748b;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;margin:0;">Continue in the app and turn this result into your next training plan.</p>
           </td>
         </tr>
         <tr>
           <td>
-            <a href="${esc(href)}" style="display:inline-block;background-color:#22d3ee;color:#07111f;font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:13px;font-weight:800;text-decoration:none;border-radius:6px;padding:11px 16px;">Continue in the Forma app</a>
+            <a href="${esc(href)}" style="display:inline-block;background-color:${getBrand().variant === "200days" ? "#3B82F6" : "#22d3ee"};color:${getBrand().variant === "200days" ? "#ffffff" : "#07111f"};font-family:'Inter Tight','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:13px;font-weight:800;text-decoration:none;border-radius:6px;padding:11px 16px;">Continue in the ${esc(getBrand().name)} app</a>
           </td>
         </tr>
       </table>

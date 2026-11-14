@@ -205,3 +205,25 @@ test("quoted legacy storage keys pass without masking other branding on the same
   writeFile(root, "web/src/storage.ts", 'const key = "forma.hyroxCalculatorDraft"; const title = "Forma";');
   assert.deepEqual(checkWebsiteBrandStrings(root), [{ file: "web/src/storage.ts", count: 1 }]);
 });
+
+test("HYROX and admin scope reject new branding but exclude insight posts and tests", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFile(root, "api/src/hyrox/new.js", '"Forma"');
+  writeFile(root, "api/admin/new.html", 'Forma');
+  writeFile(root, "api/src/hyrox/reports/insightPosts/legacy.js", '"Forma"');
+  writeFile(root, "api/src/hyrox/__tests__/legacy.test.js", '"Forma"');
+  const findings = checkWebsiteBrandStrings(root);
+  assert.equal(findings.length, 2);
+  assert.equal(evaluateWebsiteBrandStrings(findings, WEBSITE_BRAND_BASELINE).ok, false);
+});
+test("H3 files pass at their frozen budget and fail above it", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = "api/src/hyrox/reports/raceCardBuilder.js";
+  const budget = WEBSITE_BRAND_BASELINE[file];
+  writeFile(root, file, Array(budget).fill('"Forma"').join("\n"));
+  assert.equal(evaluateWebsiteBrandStrings(checkWebsiteBrandStrings(root), WEBSITE_BRAND_BASELINE).ok, true);
+  writeFile(root, file, Array(budget + 1).fill('"Forma"').join("\n"));
+  assert.equal(evaluateWebsiteBrandStrings(checkWebsiteBrandStrings(root), WEBSITE_BRAND_BASELINE).ok, false);
+});

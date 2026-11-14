@@ -1,3 +1,5 @@
+import { getBrand } from "../../../config/brand.js";
+import { brandFooterLine } from "../brandAssets.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildEmailReport, gapPill } from "../emailReportBuilder.js";
@@ -123,7 +125,7 @@ describe("buildEmailReport visual redesign", () => {
       const submissionId = "11111111-1111-4111-8111-111111111111";
       const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse", null, submissionId);
 
-      assert.ok(htmlBody.includes("Continue in the Forma app"));
+      assert.ok(htmlBody.includes(`Continue in the ${getBrand().name} app`));
       assert.ok(htmlBody.includes(`/api/hyrox/download-redirect/${submissionId}`));
     } finally {
       if (previous === undefined) delete process.env.APP_BASE_URL;
@@ -134,7 +136,7 @@ describe("buildEmailReport visual redesign", () => {
   it("omits app download CTA when submissionId is absent", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext(), null, "analyse", null, undefined);
 
-    assert.equal(htmlBody.includes("Continue in the Forma app"), false);
+    assert.equal(htmlBody.includes(`Continue in the ${getBrand().name} app`), false);
     assert.equal(htmlBody.includes("/api/hyrox/download-redirect/"), false);
     assert.equal(/href=["']\s*["']/.test(htmlBody), false);
   });
@@ -296,7 +298,7 @@ describe("buildEmailReport visual redesign", () => {
     assert.equal((htmlBody.match(/alt="Forma — Measure\. Understand\. Improve\."/g) ?? []).length, 2, "expected the masthead image in both header and footer");
     assert.equal(htmlBody.includes("PERFORMANCE ENGINEER"), false);
     assert.equal(htmlBody.includes("Performance Analytics for Hybrid Athletes"), false);
-    assert.ok(htmlBody.includes("www.getforma.fit"));
+    assert.ok(htmlBody.includes(brandFooterLine()));
   });
 
   it("replaces the old blue accent", () => {
@@ -446,7 +448,7 @@ describe("buildEmailReport visual redesign", () => {
 
   it("renders getforma.fit in footer", () => {
     const { htmlBody } = buildEmailReport(mockReport(), mockAnalysis(), mockContext());
-    assert.match(htmlBody, /www\.getforma\.fit/);
+    assert.ok(htmlBody.includes(brandFooterLine()));
   });
 
   it("renders athlete background section when present", () => {

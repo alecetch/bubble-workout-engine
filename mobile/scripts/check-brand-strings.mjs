@@ -109,18 +109,21 @@ export function checkWebsiteBrandStrings(repoRoot) {
     if (!fs.existsSync(dir)) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory() && !/^(?:__tests__|tests?|fixtures)$/.test(entry.name)) collect(full, extensions);
+      if (entry.isDirectory() && !/^(?:__tests__|tests?|fixtures|insightPosts)$/.test(entry.name)) collect(full, extensions);
       else if (entry.isFile() && extensions.includes(path.extname(entry.name)) && !/\.(?:test|spec)\./.test(entry.name)) files.push(full);
     }
   }
   for (const dir of ["routes", "views", "config"]) collect(path.join(repoRoot, "api/src", dir), [".js", ".html"]);
+  collect(path.join(repoRoot, "api/src/hyrox"), [".js"]);
+  collect(path.join(repoRoot, "api/admin"), [".html", ".js"]);
   collect(path.join(repoRoot, "api/content"), [".md", ".json"]);
   collect(path.join(repoRoot, "web/src"), [".ts", ".tsx", ".css"]);
   const webIndex = path.join(repoRoot, "web/index.html");
   if (fs.existsSync(webIndex)) files.push(webIndex);
   return files.sort().flatMap(file => {
     const relative = toPosix(path.relative(repoRoot, file));
-    if (relative === "api/src/config/brand.js") return [];
+    // Shared brand definitions and the asset helper retain the legacy variant until cleanup.
+    if (["api/src/config/brand.js", "api/src/hyrox/reports/brandAssets.js"].includes(relative)) return [];
     let count = 0;
     for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
       if (/forma:\/\/|\/images\/formai?_/.test(line)) continue;
@@ -133,7 +136,18 @@ export function checkWebsiteBrandStrings(repoRoot) {
 
 // Counts left by the forma variant. Lower these, never raise them; the clean-up PR removes them.
 export const WEBSITE_BRAND_BASELINE = Object.freeze({
-  "api/src/config/validateProductionEnv.js": 3,
+  // H3 owns the remaining image and share-pack content.
+  "api/src/hyrox/reports/carouselPageBuilder.js": 15,
+  "api/src/hyrox/reports/raceCardBuilder.js": 7,
+  "api/src/hyrox/reports/raceCardDataMapper.js": 1,
+  "api/src/hyrox/reports/reportContractBuilder.js": 1,
+  "api/src/hyrox/reports/templateSlotMapper.js": 5,
+  "api/src/hyrox/sharePack/captionBuilder.js": 2,
+  "api/src/hyrox/sharePack/mobileLandingBuilder.js": 4,
+  "api/src/hyrox/sharePack/sharePackService.js": 1,
+  "api/src/hyrox/sharePack/zipBuilder.js": 1,
+  "api/admin/content-studio.html": 3,
+
   "api/src/routes/adminContentStudio.js": 1,
   "api/src/routes/adminHyroxTestHarness.js": 1,
   "api/src/routes/marketingPages.js": 3,
