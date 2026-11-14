@@ -20,6 +20,14 @@ describe("referral link capture", () => {
     await flush();
     expect(context.save).toHaveBeenLastCalledWith("WXYZ6789");
   });
+  it("captures referrals on the 200days.app host", async () => {
+    const context = setup(Promise.resolve("https://200days.app/ref/ABCD2345"));
+    await flush();
+    expect(context.save).toHaveBeenCalledWith("ABCD2345");
+    context.emit("https://200days.app/ref/WXYZ6789?source=share");
+    await flush();
+    expect(context.save).toHaveBeenLastCalledWith("WXYZ6789");
+  });
   it("does not let a slow initial URL overwrite a newer event", async () => {
     let resolve!: (url: string) => void;
     const context = setup(new Promise(r => { resolve = r; }));
