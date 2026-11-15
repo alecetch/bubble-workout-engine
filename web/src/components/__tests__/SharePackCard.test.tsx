@@ -64,12 +64,13 @@ describe("SharePackCard", () => {
     expect(trackServerEvent).toHaveBeenCalledWith("instagram_caption_copied", { submissionId: "sub-123" });
   });
 
-  test("send to phone expands email input and buttons", async () => {
+  test("send to phone shows the masked recipient and no editable email input", async () => {
     mockFetchSuccess();
     render(<SharePackCard submissionId="sub-123" prefillEmail="test@example.com" />);
 
     fireEvent.click(await screen.findByRole("button", { name: /Send to phone/i }));
-    expect(screen.getByLabelText(/Email address for Instagram pack/i)).toHaveValue("test@example.com");
+    expect(screen.getByText("We'll send it to t•••@example.com")).toBeInTheDocument();
+    expect(document.querySelector('input[type="email"]')).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Email me the pack/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Show QR code/i })).toBeInTheDocument();
   });
@@ -111,8 +112,28 @@ describe("SharePackCard", () => {
     await waitFor(() => {
       const emailCall = fetchSpy.mock.calls.find(([url]) => typeof url === "string" && url.includes("/email"));
       expect(emailCall).toBeTruthy();
-      expect(JSON.parse((emailCall![1] as RequestInit).body as string)).toMatchObject({ sessionId: "test-session-id" });
+      expect(emailCall![0]).toBe("/api/hyrox/share-pack/sub-123/email");
+      expect(JSON.parse((emailCall![1] as RequestInit).body as string)).toEqual({ sessionId: "test-session-id" });
     });
+    expect(await screen.findByText("Sent. Check your inbox on your phone.")).toBeInTheDocument();
+  });
+
+  test.each([undefined, "", "invalid-email"])("hides email controls for invalid or missing prefill %s and keeps QR", async prefillEmail => {
+    mockFetchSuccess();
+    render(<SharePackCard submissionId="sub-123" prefillEmail={prefillEmail} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Send to phone/i }));
+    expect(screen.queryByRole("button", { name: /Email me the pack/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/We'll send it to/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Show QR code/i })).toBeInTheDocument();
+  });
+
+  test.each([429, 500])("shows the existing email error for HTTP %i", async status => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/email") ? {} : packResponse), { status: url.endsWith("/email") ? status : 200, headers: { "Content-Type": "application/json" } })));
+    render(<SharePackCard submissionId="sub-123" prefillEmail="test@example.com" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Send to phone/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Email me the pack/i }));
+    expect(await screen.findByText("We couldn't send the email. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText("Sent. Check your inbox on your phone.")).not.toBeInTheDocument();
   });
 
   test("error state shows retry button when initial fetch fails", async () => {

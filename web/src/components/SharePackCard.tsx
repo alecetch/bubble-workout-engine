@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getHyroxSessionId, trackEvent, trackServerEvent } from "../utils/api";
+import { maskEmail } from "../lib/maskEmail";
 import styles from "./SharePackCard.module.css";
 
 interface SharePackCardProps {
@@ -23,7 +24,7 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
   const [error, setError] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
-  const [email, setEmail] = useState(prefillEmail);
+  const maskedEmail = maskEmail(prefillEmail);
   const [emailStatus, setEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -70,7 +71,7 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
       const res = await fetch(`${BASE_URL}/api/hyrox/share-pack/${encodeURIComponent(submissionId)}/email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, sessionId: getHyroxSessionId() }),
+        body: JSON.stringify({ sessionId: getHyroxSessionId() }),
       });
       if (!res.ok) throw new Error("email_failed");
       setEmailStatus("sent");
@@ -145,22 +146,12 @@ export function SharePackCard({ submissionId, prefillEmail = "" }: SharePackCard
 
           {sendOpen && (
             <div className={styles.panel}>
-              <div className={styles.emailRow}>
-                <input
-                  className={styles.input}
-                  type="email"
-                  value={email}
-                  placeholder="you@example.com"
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    setEmailStatus("idle");
-                  }}
-                  aria-label="Email address for Instagram pack"
-                />
+              {maskedEmail && <div className={styles.emailRow}>
+                <p className={styles.recipient}>We'll send it to {maskedEmail}</p>
                 <button className={styles.button} type="button" onClick={() => void sendEmail()} disabled={emailStatus === "sending"}>
                   {emailStatus === "sending" ? "Sending..." : "Email me the pack"}
                 </button>
-              </div>
+              </div>}
               {emailStatus === "sent" && <div className={styles.message}>Sent. Check your inbox on your phone.</div>}
               {emailStatus === "error" && <div className={styles.error}>We couldn't send the email. Try again.</div>}
               <button className={styles.button} type="button" onClick={() => void showQrCode()} disabled={qrLoading}>

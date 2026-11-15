@@ -117,14 +117,12 @@
   margin-bottom: 14px;
 }
 
-.input {
-  background: var(--bg-950);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  color: var(--text-primary);
-  min-height: 44px;
-  padding: 0 12px;
+.recipient {
+  margin: 0;
+  align-self: center;
+  color: var(--text-muted);
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .message {

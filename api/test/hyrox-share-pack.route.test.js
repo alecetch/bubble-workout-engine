@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import test from "node:test";
 import { createSharePackHandlers } from "../src/hyrox/hyroxSharePackController.js";
+import { createShareEmailRateLimiters } from "../src/hyrox/hyroxValidator.js";
 
 const SUBMISSION_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -18,9 +19,11 @@ function pack(overrides = {}) {
   };
 }
 
-function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "HYROX London" }], createPack, logCalculatorEvent, emailSender } = {}) {
+function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "HYROX London" }], submissionRows = [{ email: "athlete@example.com" }], queries = [], limiters = [], createPack, logCalculatorEvent, emailSender } = {}) {
   const db = {
     async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes("SELECT email FROM hyrox_submissions")) return { rows: submissionRows };
       if (sql.includes("SELECT share_token FROM hyrox_share_packs")) {
         return { rows: packRows.map((row) => ({ share_token: row.share_token })) };
       }
@@ -46,7 +49,7 @@ function buildApp({ packRows = [pack()], mobileRows = [{ ...pack(), race_name: "
   const app = express();
   app.use(express.json());
   app.post("/api/hyrox/share-pack/:submissionId", handlers.generatePack);
-  app.post("/api/hyrox/share-pack/:submissionId/email", handlers.sendPackEmail);
+  app.post("/api/hyrox/share-pack/:submissionId/email", ...limiters, handlers.sendPackEmail);
   app.get("/api/hyrox/share-pack/:submissionId/qr", handlers.getQrCode);
   app.get("/hyrox/share/:shareToken", handlers.mobileLandingPage);
   return app;
@@ -190,4 +193,55 @@ test("share-pack route uses the active brand in its email", async () => {
   assert.equal(response.status, 200);
   assert.ok(email.subject.includes(getBrand().name));
   assert.match(email.html, /https:\/\/signed.example\/pack.zip/);
+});
+
+test("email recipient is stored on the submission and ignores body overrides", async () => {
+  for (const body of [{ email: "attacker@example.com" }, {}]) {
+    const sent = [];
+    const app = buildApp({ emailSender: async message => sent.push(message) });
+    const result = await request(app, `/api/hyrox/share-pack/${SUBMISSION_ID}/email`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    assert.equal(result.response.status, 200); assert.deepEqual(result.body, { sent: true });
+    assert.equal(sent[0].to, "athlete@example.com");
+  }
+});
+
+test("unknown or empty submission email returns 404 before pack generation or email", async () => {
+  for (const submissionRows of [[], [{ email: "" }], [{ email: "   " }]]) {
+    let packs = 0, emails = 0;
+    const app = buildApp({ submissionRows, createPack: async () => { packs++; return pack(); }, emailSender: async () => { emails++; } });
+    const result = await request(app, `/api/hyrox/share-pack/${SUBMISSION_ID}/email`, { method: "POST" });
+    assert.equal(result.response.status, 404); assert.deepEqual(result.body, { sent: false, error: "Submission not found" });
+    assert.equal(packs, 0); assert.equal(emails, 0);
+  }
+});
+
+test("invalid submission UUID returns 404 without querying or generating", async () => {
+  const queries = []; let packs = 0, emails = 0;
+  const app = buildApp({ queries, createPack: async () => { packs++; }, emailSender: async () => { emails++; } });
+  const result = await request(app, "/api/hyrox/share-pack/not-a-uuid/email", { method: "POST" });
+  assert.equal(result.response.status, 404); assert.deepEqual(result.body, { sent: false, error: "Submission not found" });
+  assert.equal(queries.length, 0); assert.equal(packs, 0); assert.equal(emails, 0);
+});
+
+test("submission limit blocks the fourth send, while a different submission still works", async () => {
+  const { hyroxShareEmailIpRateLimiter: ip, hyroxShareEmailSubmissionRateLimiter: submission } = createShareEmailRateLimiters({ ipMax: 10, submissionMax: 3 });
+  let emails = 0;
+  const app = buildApp({ limiters: [ip, submission], emailSender: async () => { emails++; } });
+  const id = "abcdefab-1234-4123-8123-123456789abc";
+  for (let i = 0; i < 3; i++) assert.equal((await request(app, `/api/hyrox/share-pack/${id}/email`, { method: "POST" })).response.status, 200);
+  const limited = await request(app, `/api/hyrox/share-pack/${id.toUpperCase()}/email`, { method: "POST" });
+  assert.equal(limited.response.status, 429); assert.deepEqual(limited.body, { error: "too_many_requests" });
+  assert.equal((await request(app, `/api/hyrox/share-pack/${SUBMISSION_ID}/email`, { method: "POST" })).response.status, 200);
+  assert.equal(emails, 4);
+});
+
+test("IP limit applies across submission IDs and returns standard rate headers", async () => {
+  const { hyroxShareEmailIpRateLimiter: ip, hyroxShareEmailSubmissionRateLimiter: submission } = createShareEmailRateLimiters({ ipMax: 1, submissionMax: 3 });
+  const app = buildApp({ limiters: [ip, submission] });
+  assert.equal((await request(app, `/api/hyrox/share-pack/${SUBMISSION_ID}/email`, { method: "POST" })).response.status, 200);
+  const result = await request(app, "/api/hyrox/share-pack/22222222-2222-4222-8222-222222222222/email", { method: "POST" });
+  assert.equal(result.response.status, 429); assert.deepEqual(result.body, { error: "too_many_requests" });
+  assert.ok(result.response.headers.get("ratelimit-limit")); assert.equal(result.response.headers.get("x-ratelimit-limit"), null);
 });
