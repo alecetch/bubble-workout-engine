@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Modal,
@@ -272,7 +273,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     const shareUrl = referralQuery.data?.shareUrl ?? "";
     if (!shareUrl) return;
     await Share.share({
-      message: `Train smarter with Forma. Start your free trial: ${shareUrl}`,
+      message: `Train smarter with ${BRAND_WORDMARK}. Start your free trial: ${shareUrl}`,
     });
   };
 
@@ -422,7 +423,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               <>
                 <SettingsRow
                   label="Your referral code"
-                  description="Share Forma with a friend. Get a free month when they subscribe."
+                  description={`Share ${BRAND_WORDMARK} with a friend. Get a free month when they subscribe.`}
                   value={referralQuery.data.code}
                   showDivider
                 />

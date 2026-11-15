@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useIsOffline } from "../../lib/network";
@@ -20,7 +21,7 @@ export function SessionRestoreErrorScreen({ onRetry, onSignOut, isRetrying }: Pr
 
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>Can&apos;t reach Forma</Text>
+      <Text style={styles.title}>{`Can't reach ${BRAND_WORDMARK}`}</Text>
       <Text style={styles.body}>Check your connection. You&apos;re still signed in.</Text>
       <PressableScale accessibilityLabel="Retry" disabled={isRetrying}
         style={[styles.primary, isRetrying && styles.disabled]} onPress={onRetry}>

@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +10,9 @@ describe("SessionRestoreErrorScreen", () => {
   it("renders honest recovery copy with retry and sign-out actions", () => {
     const onRetry = vi.fn(); const onSignOut = vi.fn();
     render(<SessionRestoreErrorScreen onRetry={onRetry} onSignOut={onSignOut} isRetrying={false} />);
-    expect(screen.getByText("Can't reach Forma")).toBeInTheDocument();
+    expect(screen.getByText(`Can't reach ${BRAND_WORDMARK}`)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bForma\b/);
+    expect(document.body.textContent).not.toContain("Formai");
     expect(screen.getByText("Check your connection. You're still signed in.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledTimes(1);

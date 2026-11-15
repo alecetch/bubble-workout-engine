@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -33,7 +34,8 @@ describe("PhysiqueShareCard", () => {
       />,
     );
 
-    expect(screen.getByText("Forma")).toBeInTheDocument();
+    expect(screen.getByText(BRAND_WORDMARK)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bForma\b/);
     expect(screen.getByText("Track your physique at 200days.app")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("getforma.fit");
     expect(document.body.textContent).not.toContain("Formai");

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import type { ScanResult } from "../../api/physiqueScan";
-import { BRAND_DOMAIN } from "../../config/brand";
+import { BRAND_DOMAIN, BRAND_WORDMARK } from "../../config/brand";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -50,7 +50,7 @@ export function PhysiqueShareCard({ scanResult }: { scanResult: ScanResult }): R
     <View style={styles.hiddenCanvas}>
       <ViewShot ref={viewShotRef} options={{ format: "png", quality: 1 }} style={styles.canvas}>
         <View style={styles.card}>
-          <Text style={styles.brand}>Forma</Text>
+          <Text style={styles.brand} numberOfLines={1} adjustsFontSizeToFit>{BRAND_WORDMARK}</Text>
           <Text style={styles.label}>Physique Score</Text>
           <Text style={styles.score}>{scanResult.physique_score.toFixed(1)}</Text>
           <View style={styles.deltaChip}>

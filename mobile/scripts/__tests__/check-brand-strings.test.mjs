@@ -24,7 +24,7 @@ function writeCleanAppJson(rootDir) {
     JSON.stringify(
       {
         expo: {
-          name: "Forma",
+          name: "200 Days",
           slug: "forma",
           scheme: "forma",
           ios: { bundleIdentifier: "com.forma.mobile" },
@@ -37,10 +37,32 @@ function writeCleanAppJson(rootDir) {
   );
 }
 
+test("rejects the standalone retired mobile name", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeCleanAppJson(root);
+  writeFile(root, "src/title.ts", 'export const title = "Forma";');
+  const result = checkBrandStrings(root);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.violations, [{ file: "src/title.ts", line: 1, match: "Forma" }]);
+});
+
+test("allows substrings and retained lowercase mobile links", t => {
+  const root = makeFixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeCleanAppJson(root);
+  writeFile(root, "src/links.ts", 'const format = targetFormatted + performance; const links = ["forma://", "https://getforma.fit"];');
+  assert.equal(checkBrandStrings(root).ok, true);
+});
+
+test("real mobile repository passes", () => {
+  assert.equal(checkBrandStrings(fileURLToPath(new URL("../../", import.meta.url))).ok, true);
+});
+
 test("passes a clean fixture tree", () => {
   const rootDir = makeFixture();
   writeCleanAppJson(rootDir);
-  writeFile(rootDir, "src/screens/Home.tsx", `export const label = "Forma";\n`);
+  writeFile(rootDir, "src/screens/Home.tsx", `export const label = "200 Days";\n`);
 
   const result = checkBrandStrings(rootDir);
 
@@ -78,7 +100,7 @@ test("allows Forma native identifiers in app.json", () => {
     JSON.stringify(
       {
         expo: {
-          name: "Forma",
+          name: "200 Days",
           slug: "bubble-workout-mobile",
           scheme: "forma",
           ios: { bundleIdentifier: "fit.getforma.app" },
@@ -104,7 +126,7 @@ test("flags the retired bubbleworkout app ID and formai scheme in app.json", () 
     JSON.stringify(
       {
         expo: {
-          name: "Forma",
+          name: "200 Days",
           scheme: "formai",
           ios: { bundleIdentifier: "com.bubbleworkout.mobile" },
         },

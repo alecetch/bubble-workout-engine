@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { ViewInstance } from "react-native";
@@ -21,7 +22,7 @@ export function PRShareCard({
     <View style={styles.offscreen} pointerEvents="none">
       <View ref={cardRef} style={styles.card} collapsable={false}>
         <View style={styles.topBar}>
-          <Text style={styles.brandName}>Forma</Text>
+          <Text style={styles.brandName} numberOfLines={1} adjustsFontSizeToFit>{BRAND_WORDMARK}</Text>
         </View>
         <View style={styles.body}>
           <Text style={styles.prLabel}>Personal Record</Text>
@@ -31,7 +32,7 @@ export function PRShareCard({
         </View>
         <View style={styles.footer}>
           <Text style={styles.dateLabel}>{dateLabel}</Text>
-          <Text style={styles.tagline}>Training with Forma</Text>
+          <Text style={styles.tagline} numberOfLines={1} adjustsFontSizeToFit>{`Training with ${BRAND_WORDMARK}`}</Text>
         </View>
       </View>
     </View>

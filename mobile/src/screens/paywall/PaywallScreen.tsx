@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React, { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -109,7 +110,7 @@ export function PaywallScreen({ navigation }: Props): React.JSX.Element {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>Forma</Text>
+        <Text style={styles.eyebrow} numberOfLines={1} adjustsFontSizeToFit>{BRAND_WORDMARK}</Text>
         <Text style={styles.title}>Your trial has ended</Text>
         <Text style={styles.subtitle}>
           Subscribe to continue your training. Cancel anytime.
