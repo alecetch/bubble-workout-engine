@@ -16,7 +16,7 @@ appId: fit.get200days.app
       - tapOn: "Connect"
       - extendedWaitUntil:
           visible: "Continue"
-          timeout: 20000
+          timeout: 240000
       - tapOn: "Continue"
 - tapOn:
     text: "Close"
@@ -38,6 +38,17 @@ appId: fit.get200days.app
       - extendedWaitUntil:
           visible: "Welcome"
           timeout: 15000
+# A retry can relaunch onto the Login screen with the previous attempt's text
+# still in the fields. Go back so "Sign in" mounts it again with empty fields;
+# that is what lets this flow type without eraseText (see the note below).
+- runFlow:
+    when:
+      visible: "Forgot password?"
+    commands:
+      - back
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 30000
 - runFlow:
     when:
       visible: "Welcome"
@@ -46,13 +57,14 @@ appId: fit.get200days.app
 - extendedWaitUntil:
     visible: "Email"
     timeout: 10000
+# No eraseText: the login fields always mount empty. On a struggling CI emulator
+# each erased character waits for the UI to go idle, so erasing an empty field
+# could outrun Maestro's 120s driver deadline (DEADLINE_EXCEEDED, seen on #518).
 - tapOn:
     id: "email-input"
-- eraseText
 - inputText: ${TEST_EMAIL}
 - tapOn:
     id: "password-input"
-- eraseText
 - inputText: ${TEST_PASSWORD}
 - hideKeyboard
 - tapOn:

@@ -38,7 +38,7 @@ appId: fit.get200days.app
       - tapOn: "Connect"
       - extendedWaitUntil:
           visible: "Continue"
-          timeout: 120000
+          timeout: 240000
       - tapOn: "Continue"
 # Dismiss any overlays left from previous runs.
 - tapOn:
@@ -76,6 +76,18 @@ appId: fit.get200days.app
       - extendedWaitUntil:
           visible: "Welcome"
           timeout: 15000
+# If a previous attempt left the app on the Register screen, go back so it
+# mounts again with empty fields (this flow types without eraseText: erasing on
+# a struggling CI emulator outran Maestro's 120s driver deadline, seen on #520).
+- runFlow:
+    when:
+      visible:
+        id: "register-email-input"
+    commands:
+      - back
+      - extendedWaitUntil:
+          visible: "Welcome"
+          timeout: 30000
 # If a previous run left the app on the Login screen, go back and push Register.
 # "Forgot password?" is unique to the Login screen.
 - runFlow:
@@ -98,27 +110,24 @@ appId: fit.get200days.app
     commands:
       - tapOn: "Create account"
 
-# We are now on the Register screen after run.ps1 clears app state for onboarding
-# flows, so fields start empty and avoid stale autocomplete/form contents.
+# We are now on a freshly mounted Register screen, so its fields are empty (the
+# body-metrics fields below are also tapped by placeholder, so they're empty too).
 - extendedWaitUntil:
     visible: "Create account"
     timeout: 15000
 - tapOn:
     id: "register-email-input"
     optional: true
-- eraseText: 200
 - inputText: ${ONBOARDING_TEST_EMAIL}
 - hideKeyboard
 - tapOn:
     id: "register-password-input"
     optional: true
-- eraseText: 200
 - inputText: ${ONBOARDING_TEST_PASSWORD}
 - hideKeyboard
 - tapOn:
     id: "register-confirm-password-input"
     optional: true
-- eraseText: 200
 - inputText: ${ONBOARDING_TEST_PASSWORD}
 - hideKeyboard
 - tapOn:
@@ -211,7 +220,6 @@ appId: fit.get200days.app
       text: "e.g. 175"
     direction: DOWN
 - tapOn: "e.g. 175"
-- eraseText: 200
 - inputText: "178"
 - hideKeyboard
 - scrollUntilVisible:
@@ -219,7 +227,6 @@ appId: fit.get200days.app
       text: "e.g. 72.5"
     direction: DOWN
 - tapOn: "e.g. 72.5"
-- eraseText: 200
 - inputText: "80"
 - hideKeyboard
 - scrollUntilVisible:

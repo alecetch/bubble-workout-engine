@@ -210,13 +210,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Each flow here retries once, but only on exit 124 (killed by `timeout`).
-          # About 1 run in 20, Maestro wedges inside a `launchApp` - before it even
-          # reaches its permission grants - and never returns (seen on 02 and 04, after
-          # earlier flows' identical launches took ~1.5s). No app code runs during that
-          # hang, so it's infrastructure, not a product failure; a fresh Maestro process
-          # gets past it. Assertion failures exit 1 and still fail the leg immediately.
-          # Retrying is safe: all four flows reuse one fixed, already-registered account.
+          # Each flow here retries once on any failure, with a ::warning:: so the flake
+          # stays visible. Until 2026-11-15 only exit 124 (killed by `timeout`) retried,
+          # for the ~1-in-20 Maestro wedge inside `launchApp`. But the emulator also
+          # flakes in ways that exit 1: a dev-client bundle load longer than the
+          # "Continue" wait (#521's first run) and the driver's 120s gRPC
+          # DEADLINE_EXCEEDED (#518). A real regression still fails twice and fails
+          # the leg. Retrying is safe: all four flows reuse one fixed, already-
+          # registered account and start by logging out any session they find.
+          # 01 runs first and pays for the first bundle load, so it gets 600s.
           # Single-line form because the emulator runner runs each line in its own sh -c.
           - name: auth-workout-settings-paywall
             timeout: 60
@@ -227,11 +229,11 @@ jobs:
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
               adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
-              timeout 480 maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; rc=$?; if [ $rc -eq 124 ]; then echo "::warning::01-auth-login hung (Maestro killed by timeout); retrying once"; timeout 480 maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; else exit $rc; fi
-              timeout 480 maestro test mobile/.maestro/02-start-workout.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; rc=$?; if [ $rc -eq 124 ]; then echo "::warning::02-start-workout hung (Maestro killed by timeout); retrying once"; timeout 480 maestro test mobile/.maestro/02-start-workout.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; else exit $rc; fi
-              timeout 480 maestro test mobile/.maestro/03-settings-edit-name.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; rc=$?; if [ $rc -eq 124 ]; then echo "::warning::03-settings-edit-name hung (Maestro killed by timeout); retrying once"; timeout 480 maestro test mobile/.maestro/03-settings-edit-name.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; else exit $rc; fi
+              timeout 600 maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi || { echo "::warning::01-auth-login failed (exit $?); retrying once"; timeout 480 maestro test mobile/.maestro/01-auth-login.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; }
+              timeout 480 maestro test mobile/.maestro/02-start-workout.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi || { echo "::warning::02-start-workout failed (exit $?); retrying once"; timeout 480 maestro test mobile/.maestro/02-start-workout.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; }
+              timeout 480 maestro test mobile/.maestro/03-settings-edit-name.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi || { echo "::warning::03-settings-edit-name failed (exit $?); retrying once"; timeout 480 maestro test mobile/.maestro/03-settings-edit-name.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; }
               psql -v ON_ERROR_STOP=1 -c "UPDATE app_user SET subscription_status = 'expired', trial_expires_at = now() - interval '1 day', subscription_expires_at = NULL WHERE lower(email) = lower('$E2E_EMAIL');"
-              timeout 480 maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; rc=$?; if [ $rc -eq 124 ]; then echo "::warning::04-paywall hung (Maestro killed by timeout); retrying once"; timeout 480 maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; else exit $rc; fi
+              timeout 480 maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi || { echo "::warning::04-paywall failed (exit $?); retrying once"; timeout 480 maestro test mobile/.maestro/04-paywall.yaml -e TEST_EMAIL="$E2E_EMAIL" -e TEST_PASSWORD="$E2E_PASSWORD" --no-ansi; }
           # Unlike the other single-flow legs (06/07), this one shipped with no
           # retry, on the assumption one flow was inherently low-risk. Post-merge
           # data said otherwise: 3 of 4 real runs failed on the exact same
@@ -250,7 +252,7 @@ jobs:
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
               adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
-              timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
+              timeout 600 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/05-program-complete.yaml -e TEST_EMAIL="$E2E_COMPLETE_EMAIL" -e TEST_PASSWORD="$E2E_COMPLETE_PASSWORD" --no-ansi
           # Flows 06/07 register a fresh account and pass through several real,
           # network-backed onboarding screens. Repeated investigation (see the
           # comments in both flow files) found the CI Android emulator can
@@ -277,7 +279,7 @@ jobs:
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
               adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
-              timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
+              timeout 600 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/06-onboarding-beginner.yaml -e ONBOARDING_TEST_EMAIL="${ONBOARDING_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
           - name: onboarding-intermediate
             timeout: 60
             script: |
@@ -287,7 +289,7 @@ jobs:
               adb shell settings put global package_verifier_enable 0
               adb shell settings put global verifier_verify_adb_installs 0
               adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
-              timeout 480 maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
+              timeout 600 maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r1" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r2" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi || timeout 480 maestro test mobile/.maestro/07-onboarding-intermediate.yaml -e ONBOARDING2_TEST_EMAIL="${ONBOARDING2_TEST_EMAIL}-r3" -e ONBOARDING_TEST_PASSWORD="$ONBOARDING_TEST_PASSWORD" --no-ansi
     timeout-minutes: ${{ matrix.timeout }}
 
     services:
