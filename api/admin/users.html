@@ -53,6 +53,7 @@
       .sub-btn:hover { background: #f0f4ff; border-color: var(--primary); }
       .sub-btn.active-btn { border-color: var(--ok); color: var(--ok); }
       .sub-btn.trial-btn { border-color: #854d0e; color: #854d0e; }
+      .sub-btn.expire-btn { border-color: #991b1b; color: #991b1b; }
     </style>
   </head>
   <body>
@@ -193,6 +194,7 @@
                     <div class="sub-actions">
                       <button class="sub-btn trial-btn set-sub-btn" data-id="${esc(u.id)}" data-status="trialing" title="Reset to 14-day trial">Trial</button>
                       <button class="sub-btn active-btn set-sub-btn" data-id="${esc(u.id)}" data-status="active" title="Set active subscription (unlocks premium physique scan)">Active</button>
+                      <button class="sub-btn expire-btn set-sub-btn" data-id="${esc(u.id)}" data-status="expired" title="End trial or subscription now (shows the paywall)">Expire</button>
                       <button class="danger-btn delete-btn" data-id="${esc(u.id)}" data-email="${esc(u.email)}" type="button" style="font-size:11px;padding:3px 8px">Delete</button>
                     </div>
                   </td>
