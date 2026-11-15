@@ -85,12 +85,25 @@ test("physique startup warning requires enabled production flag and a missing ke
   const warnings = [];
   logger.warn = message => warnings.push(message);
   try {
-    const base = { NODE_ENV: "production", APP_DOMAIN: "https://example.test" };
+    const base = { NODE_ENV: "production", APP_DOMAIN: "https://example.test", REMINDER_SCHEDULER_ENABLED: "true" };
     for (const PHYSIQUE_ENABLED of [undefined, "false", "TRUE"]) validateProductionEnv({ ...base, PHYSIQUE_ENABLED });
     validateProductionEnv({ ...base, PHYSIQUE_ENABLED: "true", OPENAI_API_KEY: "test-key" });
     assert.equal(warnings.length, 0);
     validateProductionEnv({ ...base, PHYSIQUE_ENABLED: "true" });
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /PHYSIQUE_ENABLED.*OPENAI_API_KEY/);
+  } finally { logger.warn = original; }
+});
+
+test("production warns when reminder scheduler is disabled", () => {
+  const original = logger.warn, warnings = [];
+  logger.warn = message => warnings.push(message);
+  try {
+    const base = { APP_DOMAIN: "https://example.test", NODE_ENV: "production" };
+    validateProductionEnv({ ...base, REMINDER_SCHEDULER_ENABLED: "true" });
+    validateProductionEnv({ ...base, NODE_ENV: "test" });
+    assert.equal(warnings.length, 0);
+    validateProductionEnv(base);
+    assert.equal(warnings.length, 1); assert.match(warnings[0], /REMINDER_SCHEDULER_ENABLED/);
   } finally { logger.warn = original; }
 });

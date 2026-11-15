@@ -968,15 +968,6 @@ export function createReadProgramHandlers(options = pool) {
               title: "Easy week incoming",
               body: "Your body showed signs of fatigue \u2014 your program has been adjusted to help you recover.",
               data: { event: "deload", programDayId: program_day_id },
-              emailSubject: "Recovery week \u2014 your program adjusted",
-              emailText: [
-                "Easy week ahead.",
-                "",
-                "Based on your recent sessions, your program has been adjusted to reduce load on some exercises.",
-                "This is a normal and necessary part of long-term progress.",
-                "",
-                "Open the app to see what changed.",
-              ].join("\n"),
             });
 
             return decisionResult;

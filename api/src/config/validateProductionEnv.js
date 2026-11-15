@@ -33,6 +33,9 @@ export function findLocalhostProductionEnvErrors(env = process.env) {
 }
 
 export function validateProductionEnv(env = process.env) {
+  if (env.NODE_ENV === "production" && env.REMINDER_SCHEDULER_ENABLED !== "true") {
+    logger.warn("REMINDER_SCHEDULER_ENABLED is not set to true; workout reminders will not be sent automatically.");
+  }
   if (isPhysiqueEnabled(env) && !env.OPENAI_API_KEY?.trim()) {
     logger.warn("PHYSIQUE_ENABLED=true without OPENAI_API_KEY; physique analysis is unavailable.");
   }
