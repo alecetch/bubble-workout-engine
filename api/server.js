@@ -1,3 +1,4 @@
+import { shouldStartReminderScheduler, startWorkoutReminderScheduler } from "./src/services/workoutReminderJob.js";
 import { requireEntitlement } from "./src/middleware/requireEntitlement.js";
 import { requirePremium } from "./src/middleware/requirePremium.js";
 import { requirePhysiqueEnabled } from "./src/middleware/requirePhysiqueEnabled.js";
@@ -678,9 +679,14 @@ app.use((err, req, res, next) => {
   });
 });
 
+let reminderScheduler;
 const port = Number(process.env.PORT || 3000);
 const server = app.listen(port, "0.0.0.0", () => {
   logger.info({ event: "server.listening", port }, `API listening on :${port}`);
+  if (shouldStartReminderScheduler()) {
+    reminderScheduler = startWorkoutReminderScheduler({ db: pool, logger });
+    logger.info({ event: "notification.reminder.scheduler.started", interval_ms: reminderScheduler.intervalMs });
+  }
   loadBenchmarkData(pool)
     .then((summary) => logger.info({ event: "hyrox.benchmarks.loaded", ...summary }, "Loaded HYROX benchmark cache"))
     .catch((err) => logger.warn({ event: "hyrox.benchmarks.load_failed", err: err?.message }, "HYROX benchmark cache unavailable"));
@@ -698,6 +704,7 @@ let shuttingDown = false;
 async function gracefulShutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+  reminderScheduler?.stop();
   logger.info({ event: "server.shutdown.start", signal }, "Shutting down API");
   try {
     await pool.query(

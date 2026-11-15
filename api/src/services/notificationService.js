@@ -1,4 +1,3 @@
-import { sendEmail } from "./emailService.js";
 import { firstValidTimezone } from "../utils/timezone.js";
 import { localDateInZone } from "./trainingYear.js";
 
@@ -9,7 +8,7 @@ const NON_RETRIABLE_EXPO_ERRORS = new Set([
 ]);
 
 export function makeNotificationService(db, { now = () => new Date() } = {}) {
-  async function send({ userId, title, body, data, emailSubject, emailText, emailHtml, isReminder = false, isPaceMessage = false }) {
+  async function send({ userId, title, body, data, isReminder = false, isPaceMessage = false }) {
     try {
       const userR = await db.query(
         `SELECT au.device_push_token, au.email, au.timezone, np.reminder_timezone
@@ -17,7 +16,7 @@ export function makeNotificationService(db, { now = () => new Date() } = {}) {
         [userId],
       );
       const user = userR.rows[0];
-      if (!user || (!user.device_push_token && !(emailText && user.email))) return { sent: false, reason: "no_channel" };
+      if (!user?.device_push_token) return { sent: false, reason: "no_channel" };
       const today = localDateInZone(now(), firstValidTimezone(user.timezone, user.reminder_timezone));
       // Reserve before delivery: concurrent jobs and PR/deload/physique alerts share one daily slot.
       // Keep the reservation after failure; retrying an ambiguous push could send twice.
@@ -74,16 +73,7 @@ export function makeNotificationService(db, { now = () => new Date() } = {}) {
         }
       }
 
-      if (!pushSucceeded && emailText && user.email) {
-        await sendEmail({
-          to: user.email,
-          subject: emailSubject ?? title,
-          text: emailText,
-          html: emailHtml,
-        });
-        return { sent: true };
-      }
-      return { sent: pushSucceeded, reason: pushSucceeded ? undefined : "delivery_failed" };
+      return pushSucceeded ? { sent: true } : { sent: false, reason: "delivery_failed" };
     } catch (err) {
       console.warn("[notificationService] send() error:", err?.message);
       return { sent: false, reason: "delivery_failed" };

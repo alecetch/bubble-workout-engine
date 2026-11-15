@@ -309,14 +309,6 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
                   title: "New PR!",
                   body: `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exerciseName}.`,
                   data: { event: "pr", exerciseId: pr.exerciseId, e1rmKg: Number(pr.estimated1rmKg) },
-                  emailSubject: `New PR \u2014 ${pr.exerciseName}`,
-                  emailText: [
-                    "Personal record!",
-                    "",
-                    `You hit a new estimated 1RM of ${e1rm} kg on ${pr.exerciseName}.`,
-                    "",
-                    "Keep it up.",
-                  ].join("\n"),
                 });
                 return;
               }
@@ -326,15 +318,6 @@ export function createSegmentLogHandlers(db = pool, notificationService = null) 
                 title: "New PRs!",
                 body: `You set ${prs.length} personal records this session.`,
                 data: { event: "pr_multi", count: prs.length },
-                emailSubject: `${prs.length} new PRs this session`,
-                emailText: [
-                  "Personal records!",
-                  "",
-                  `You set ${prs.length} PRs this session:`,
-                  ...prs.map((pr) => `  * ${pr.exerciseName}: ${Number(pr.estimated1rmKg).toFixed(1)} kg`),
-                  "",
-                  "Keep it up.",
-                ].join("\n"),
               });
             } catch (notificationErr) {
               console.warn("[segmentLog] PR notification error:", notificationErr?.message);

@@ -14,10 +14,10 @@ const res = () => ({ statusCode: 200, status(code) { this.statusCode = code; ret
 function scopedDatabase(db, ids) {
   return { query(sql, params) {
     if (sql.includes("reminder_training_candidates")) {
-      return db.query(sql.replace("AND COALESCE", "AND au.id = ANY($1::uuid[]) AND COALESCE"), [ids]);
+      return db.query(sql.replaceAll("CURRENT_DATE", "DATE '2026-07-01'").replace("AND COALESCE", "AND au.id = ANY($1::uuid[]) AND COALESCE"), [ids]);
     }
     if (sql.includes("reminder_rest_candidates")) {
-      return db.query(sql.replace("WHERE COALESCE", "WHERE au.id = ANY($1::uuid[]) AND COALESCE"), [ids]);
+      return db.query(sql.replaceAll("CURRENT_DATE", "DATE '2026-07-01'").replace("WHERE COALESCE", "WHERE au.id = ANY($1::uuid[]) AND COALESCE"), [ids]);
     }
     return db.query(sql, params);
   } };
@@ -44,7 +44,7 @@ test("real reminder SQL combines once, stamps both dates, and suppresses repeats
     const [p] = await setup(db, ids);
     await db.query(`INSERT INTO program_calendar_day (program_id, user_id, program_week_id, week_number,
       scheduled_offset_days, scheduled_weekday, scheduled_date, global_day_index, program_day_key, is_training_day, program_day_id)
-      SELECT program_id, $2, program_week_id, 1, 0, 'mon', CURRENT_DATE, 1, program_day_key, TRUE, id
+      SELECT program_id, $2, program_week_id, 1, 0, 'mon', '2026-07-01', 1, program_day_key, TRUE, id
       FROM program_day WHERE id = $1`, [p.days[0], ids[0]]);
     await db.query(`INSERT INTO training_session (user_id, local_date, source)
       VALUES ($1, '2026-01-01', 'apple_health'), ($1, '2026-01-01', 'apple_health')`, [ids[0]]);
@@ -55,7 +55,7 @@ test("real reminder SQL combines once, stamps both dates, and suppresses repeats
     const first = res();
     await handler({}, first);
     assert.equal(first.statusCode, 200);
-    assert.deepEqual(first.body, { ok: true, eligible: 1, sent: 1, failed: 0, pace_sent: 1 });
+    assert.deepEqual(first.body, { ok: true, eligible: 1, sent: 1, failed: 0, pace_sent: 1, not_due: 0 });
     assert.equal(messages.length, 1);
     assert.match(messages[0].body, /Today could be day 2/);
     const dates = (await db.query(`SELECT last_reminder_sent_date::text, last_pace_message_sent_on::text
@@ -113,4 +113,18 @@ test("internal reminder route rejects absent/incorrect tokens", { skip: DATABASE
       assert.equal((await fetch(`${url}/reminders`, { method: "POST", headers: { "x-internal-token": process.env.INTERNAL_API_TOKEN } })).status, 200);
     });
   } finally { if (original === undefined) delete process.env.INTERNAL_API_TOKEN; else process.env.INTERNAL_API_TOKEN = original; }
+});
+
+test("users with email but no push token get no reminders or reservation", { skip: DATABASE_SKIP }, async t => {
+  let pushes = 0;
+  t.mock.method(globalThis, "fetch", async () => { pushes++; throw Error("unexpected send"); });
+  await withUsers(async (db, ids) => {
+    await setup(db, ids);
+    await db.query("UPDATE app_user SET device_push_token = NULL WHERE id = ANY($1::uuid[])", [ids]);
+    const response = res();
+    await createWorkoutRemindersHandler(scopedDatabase(db, ids), makeNotificationService(db, { now }), { now })({}, response);
+    assert.deepEqual(response.body, { ok: true, eligible: 0, sent: 0, failed: 0, pace_sent: 0, not_due: 0 });
+    assert.equal(pushes, 0);
+    assert.equal(Number((await db.query("SELECT count(*) FROM notification_preference WHERE user_id = ANY($1::uuid[])", [ids])).rows[0].count), 0);
+  });
 });

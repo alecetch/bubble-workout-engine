@@ -50,8 +50,6 @@ export async function maybeSendPhysiqueNudge(db, userId) {
       title: "How are you looking? \ud83d\udcf7",
       body: "Your weekly physique check-in is ready. See how your training is paying off.",
       data: { screen: "PhysiqueCheckIn" },
-      emailSubject: "Weekly physique check-in ready",
-      emailText: "Log in to Forma to take your weekly physique check-in and see your AI-powered progress assessment.",
     });
   } catch {
     // Non-fatal

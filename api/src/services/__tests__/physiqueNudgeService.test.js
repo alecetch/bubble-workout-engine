@@ -29,7 +29,10 @@ test("physique nudge query counts completed sessions via program_day", async () 
   assert.doesNotMatch(capturedSql, /pcd\.completed_at/);
 });
 
-test("physique nudge email text uses Forma brand copy", async () => {
+test("physique nudge does not email users without a push token", async t => {
+  const queries = [];
+  let networkCalls = 0;
+  t.mock.method(globalThis, "fetch", async () => { networkCalls++; throw Error("unexpected send"); });
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => {
@@ -38,6 +41,7 @@ test("physique nudge email text uses Forma brand copy", async () => {
 
   const db = {
     async query(sql) {
+      queries.push(sql);
       if (/SELECT au.device_push_token, au.email/.test(sql)) {
         return { rows: [{ device_push_token: null, email: "alec@example.com" }] };
       }
@@ -60,6 +64,7 @@ test("physique nudge email text uses Forma brand copy", async () => {
   }
 
   const output = logs.join("\n");
-  assert.match(output, /Log in to Forma to take your weekly physique check-in/);
-  assert.doesNotMatch(output, /Formai/);
+  assert.equal(output, "");
+  assert.equal(networkCalls, 0);
+  assert.equal(queries.some(sql => sql.includes("INSERT INTO notification_preference")), false);
 });

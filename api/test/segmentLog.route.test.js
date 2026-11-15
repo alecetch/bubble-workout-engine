@@ -665,3 +665,111 @@ test("postSegmentLog does not send PR notification for null weight rows", async 
   assert.equal(res.statusCode, 200);
   assert.equal(notificationService.send.mock.calls.length, 0);
 });
+
+test("postSegmentLog sends 1 PR notifications payload without email fields", async () => {
+  const notificationService = { send: mock.fn() };
+  const db = {
+    async query(sql) {
+      if (sql.includes("SELECT pr_notification_enabled")) {
+        return { rows: [{ pr_notification_enabled: true }], rowCount: 1 };
+      }
+      if (sql.includes("WITH new_rows AS")) return { rows: Array.from({ length: 1 }, (_, i) => ({ program_exercise_id: VALID_UUID, exercise_id: `exercise-${i}`, exercise_name: `Exercise ${i}`, new_e1rm: 120, prev_e1rm: 100 })), rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    },
+    async connect() {
+      return {
+        async query(sql) {
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) return { rows: [], rowCount: 1 };
+          if (sql.includes("WITH new_rows AS")) return { rows: Array.from({ length: 1 }, (_, i) => ({ program_exercise_id: VALID_UUID, exercise_id: `exercise-${i}`, exercise_name: `Exercise ${i}`, new_e1rm: 120, prev_e1rm: 100 })), rowCount: 1 };
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  };
+  const handlers = createSegmentLogHandlers(db, notificationService);
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: 80, reps_completed: 10 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(notificationService.send.mock.calls.length, 1);
+  const payload = notificationService.send.mock.calls[0].arguments[0];
+  assert.equal("emailText" in payload, false);
+  assert.equal("emailSubject" in payload, false);
+  assert.equal("emailHtml" in payload, false);
+});
+
+test("postSegmentLog sends 2 PR notifications payload without email fields", async () => {
+  const notificationService = { send: mock.fn() };
+  const db = {
+    async query(sql) {
+      if (sql.includes("SELECT pr_notification_enabled")) {
+        return { rows: [{ pr_notification_enabled: true }], rowCount: 1 };
+      }
+      if (sql.includes("WITH new_rows AS")) return { rows: Array.from({ length: 2 }, (_, i) => ({ program_exercise_id: VALID_UUID, exercise_id: `exercise-${i}`, exercise_name: `Exercise ${i}`, new_e1rm: 120, prev_e1rm: 100 })), rowCount: 2 };
+      return { rows: [], rowCount: 0 };
+    },
+    async connect() {
+      return {
+        async query(sql) {
+          if (sql.includes("SELECT pd.id FROM program_day")) return { rows: [{ id: VALID_UUID }], rowCount: 1 };
+          if (sql.includes("cp.onboarding_completed_at")) return { rows: [{ created_at: "2020-01-01", timezone: "UTC" }], rowCount: 1 };
+          if (sql === "SELECT id FROM app_user WHERE id = $1 FOR UPDATE") return { rows: [], rowCount: 0 };
+          if (sql.includes("INSERT INTO training_session")) return { rows: [], rowCount: 1 };
+          if (sql === "BEGIN" || sql === "COMMIT") return { rows: [], rowCount: 0 };
+          if (sql.includes("SELECT pe.id AS program_exercise_id")) {
+            return { rows: [{ program_exercise_id: VALID_UUID, strength_primary_region: "upper" }], rowCount: 1 };
+          }
+          if (sql.includes("INSERT INTO segment_exercise_log")) return { rows: [], rowCount: 1 };
+          if (sql.includes("WITH new_rows AS")) return { rows: Array.from({ length: 2 }, (_, i) => ({ program_exercise_id: VALID_UUID, exercise_id: `exercise-${i}`, exercise_name: `Exercise ${i}`, new_e1rm: 120, prev_e1rm: 100 })), rowCount: 2 };
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  };
+  const handlers = createSegmentLogHandlers(db, notificationService);
+  const req = {
+    request_id: "t",
+    body: {
+      program_id: VALID_UUID,
+      program_day_id: VALID_UUID,
+      workout_segment_id: VALID_UUID,
+      rows: [{ program_exercise_id: VALID_UUID, order_index: 1, weight_kg: 80, reps_completed: 10 }],
+    },
+    auth: { user_id: VALID_UUID },
+    log: { error() {} },
+  };
+  const res = mockRes();
+
+  await handlers.postSegmentLog(req, res);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(notificationService.send.mock.calls.length, 1);
+  const payload = notificationService.send.mock.calls[0].arguments[0];
+  assert.equal("emailText" in payload, false);
+  assert.equal("emailSubject" in payload, false);
+  assert.equal("emailHtml" in payload, false);
+});
