@@ -1,5 +1,6 @@
 import { BRAND_WORDMARK } from "../../config/brand";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import type { PurchasesPackage } from "react-native-purchases";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Alert, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -12,8 +13,10 @@ import {
   isPurchaseCancelledError,
   isPurchasesAvailable,
   purchasePackage,
+  selectMonthlyPackage,
   restorePurchases as restorePurchasesSdk,
 } from "../../lib/purchases";
+import { reportError } from "../../lib/crashReporting";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import type { ProgramsStackParamList } from "../../navigation/ProgramsStackNavigator";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -34,30 +37,58 @@ type Props = NativeStackScreenProps<PaywallParamList, "Paywall">;
 
 export function PaywallScreen({ navigation }: Props): React.JSX.Element {
   const setEntitlement = useSessionStore((state) => state.setEntitlement);
+  const subscriptionStatus = useSessionStore((state) => state.subscriptionStatus);
+  const trialExpiresAt = useSessionStore((state) => state.trialExpiresAt);
   const queryClient = useQueryClient();
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [offering, setOffering] = useState<
+    { status: "loading" | "unavailable" } | { status: "ready"; pkg: PurchasesPackage }
+  >({ status: "loading" });
+  const [offeringRetry, setOfferingRetry] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setOffering({ status: "loading" });
+    void (async () => {
+      try {
+        const pkg = isPurchasesAvailable() ? selectMonthlyPackage(await getPurchaseOfferings()) : null;
+        if (!cancelled) setOffering(pkg ? { status: "ready", pkg } : { status: "unavailable" });
+      } catch (error) {
+        reportError(error instanceof Error ? error : new Error("Offerings unavailable"), { area: "purchases.offerings_failed" });
+        if (!cancelled) setOffering({ status: "unavailable" });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [offeringRetry]);
+
+  const expires = trialExpiresAt ? new Date(trialExpiresAt).getTime() : 0;
+  const inTrial = subscriptionStatus === "trialing" && expires > Date.now();
+  const trialDays = Math.max(1, Math.ceil((expires - Date.now()) / 86_400_000));
+  const price = offering.status === "ready" ? offering.pkg.product.priceString : null;
+  const store = Platform.OS === "android" ? "Google Play" : "App Store";
+  const paymentAccount = Platform.OS === "android" ? "Google Play account" : "Apple ID";
 
   const handlePurchase = async (): Promise<void> => {
+    if (offering.status !== "ready" || isPurchasing || isRestoring) return;
     setIsPurchasing(true);
     try {
-      const offerings = await getPurchaseOfferings();
-      if (!offerings) {
-        Alert.alert("Unavailable", "Subscriptions aren't available in this client build yet.");
-        return;
+      const customerInfo = await purchasePackage(offering.pkg);
+      const sdkActive = Boolean(customerInfo.entitlements.active.pro);
+      let serverEntitlement = null;
+      try {
+        serverEntitlement = await syncEntitlement();
+      } catch (error) {
+        reportError(error instanceof Error ? error : new Error("Purchase sync failed"), { area: "purchases.sync_failed" });
       }
-      const current = offerings.current;
-      if (!current) {
-        Alert.alert("Unavailable", "No subscription offering found. Please try again later.");
-        return;
+      if (serverEntitlement?.is_active) {
+        setEntitlement(serverEntitlement.subscription_status, serverEntitlement.trial_expires_at);
+      } else if (sdkActive) {
+        setEntitlement("active", null);
+        if (serverEntitlement) reportError(new Error("Purchased entitlement not yet active on server"), { area: "purchases.sync_mismatch" });
+      } else if (serverEntitlement) {
+        setEntitlement(serverEntitlement.subscription_status, serverEntitlement.trial_expires_at);
       }
-      const pkg = current.availablePackages[0];
-      if (!pkg) {
-        Alert.alert("Unavailable", "No package available. Please try again later.");
-        return;
-      }
-      await purchasePackage(pkg);
-      setEntitlement("active", null);
       await queryClient.invalidateQueries({ queryKey: queryKeys.entitlement });
       Alert.alert("You're subscribed", "Welcome back — your training is unlocked.", [
         { text: "Continue", onPress: () => navigation.goBack() },
@@ -111,9 +142,9 @@ export function PaywallScreen({ navigation }: Props): React.JSX.Element {
     >
       <View style={styles.header}>
         <Text style={styles.eyebrow} numberOfLines={1} adjustsFontSizeToFit>{BRAND_WORDMARK}</Text>
-        <Text style={styles.title}>Your trial has ended</Text>
+        <Text style={styles.title}>{inTrial ? `Keep training with ${BRAND_WORDMARK} Pro` : "Your trial has ended"}</Text>
         <Text style={styles.subtitle}>
-          Subscribe to continue your training. Cancel anytime.
+          {inTrial ? `Your free trial ends in ${trialDays} day${trialDays === 1 ? "" : "s"}. Subscribe now and you won't lose a session.` : "Subscribe to continue your training. Cancel anytime."}
         </Text>
       </View>
 
@@ -127,15 +158,22 @@ export function PaywallScreen({ navigation }: Props): React.JSX.Element {
       </View>
 
       <PressableScale
-        style={[styles.primaryButton, (isPurchasing || isRestoring) && styles.buttonDisabled]}
+        style={[styles.primaryButton, (offering.status !== "ready" || isPurchasing || isRestoring) && styles.buttonDisabled]}
         onPress={() => void handlePurchase()}
-        disabled={isPurchasing || isRestoring}
+        disabled={offering.status !== "ready" || isPurchasing || isRestoring}
       >
         <Text style={styles.primaryLabel}>
-          {isPurchasing ? "Processing..." : "Subscribe"}
+          {isPurchasing ? "Processing..." : offering.status === "loading" ? "Loading…" : price ? `Subscribe for ${price}/month` : "Subscribe"}
         </Text>
-        <Text style={styles.primarySubLabel}>Billed monthly - Cancel anytime</Text>
+        {offering.status === "ready" ? <Text style={styles.primarySubLabel}>Billed monthly. Cancel anytime.</Text> : null}
       </PressableScale>
+
+      {offering.status === "unavailable" ? <View>
+        <Text style={styles.legalNote}>Subscriptions are unavailable right now</Text>
+        <PressableScale onPress={() => setOfferingRetry(value => value + 1)}>
+          <Text style={styles.restoreLabel}>Try again</Text>
+        </PressableScale>
+      </View> : null}
 
       <PressableScale
         style={[styles.restoreButton, (isPurchasing || isRestoring) && styles.buttonDisabled]}
@@ -148,8 +186,7 @@ export function PaywallScreen({ navigation }: Props): React.JSX.Element {
       </PressableScale>
 
       <Text style={styles.legalNote}>
-        Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.
-        Manage in App Store settings.
+        {`${price ? `${price} per month. ` : ""}Payment is charged to your ${paymentAccount} at confirmation. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel in ${store} settings.`}
       </Text>
       <LegalLinksRow />
     </ScrollView>
