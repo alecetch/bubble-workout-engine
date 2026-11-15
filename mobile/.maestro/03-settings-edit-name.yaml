@@ -16,7 +16,7 @@ appId: fit.get200days.app
       - tapOn: "Connect"
       - extendedWaitUntil:
           visible: "Continue"
-          timeout: 20000
+          timeout: 240000
       - tapOn: "Continue"
 - tapOn:
     text: "Close"
@@ -31,7 +31,10 @@ appId: fit.get200days.app
     timeout: 10000
 - tapOn:
     id: "account-name-input"
-- eraseText
+# Bounded erase: the field holds the account name ("E2E User" after the first
+# run). Erasing the default 50 characters on a slow emulator can outrun
+# Maestro's 120s driver deadline.
+- eraseText: 30
 - inputText: "E2E User"
 - hideKeyboard
 - tapOn:

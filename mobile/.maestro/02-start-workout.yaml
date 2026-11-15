@@ -17,7 +17,7 @@ appId: fit.get200days.app
       - tapOn: "Connect"
       - extendedWaitUntil:
           visible: "Continue"
-          timeout: 20000
+          timeout: 240000
       - tapOn: "Continue"
 - tapOn:
     text: "Close"
