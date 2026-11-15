@@ -67,6 +67,16 @@
     },
     {
       "type": "component",
+      "source": "src/components/legal/HealthNotice.tsx",
+      "test": "src/components/legal/HealthNotice.component.test.tsx",
+      "status": "covered",
+      "tags": [
+        "legal"
+      ],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/legal/LegalLinksRow.tsx",
       "test": "src/components/legal/LegalLinksRow.component.test.tsx",
       "status": "covered",

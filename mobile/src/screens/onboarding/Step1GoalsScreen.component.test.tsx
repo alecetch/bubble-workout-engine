@@ -145,6 +145,28 @@ describe("Step1GoalsScreen", () => {
     expect(await axe(document.body)).toHaveNoViolations();
   });
 
+  it("shows the notice with no flags and updates the injury line as flags toggle", () => {
+    let draft = buildDraft({ injuryFlags: [] });
+    mockStore(draft);
+    const navigation = { replace: vi.fn(), goBack: vi.fn() };
+    const element = <Step1GoalsScreen navigation={navigation as any} route={{ params: {} } as any} />;
+    const { rerender } = render(element);
+    expect(screen.getByTestId("step1-health-notice")).toBeVisible();
+    expect(screen.queryByTestId("health-notice-injury-line")).not.toBeInTheDocument();
+    const toggle = (label: string) => {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      draft = { ...draft, ...setDraftMock.mock.calls.at(-1)![0] };
+      mockStore(draft);
+      rerender(<Step1GoalsScreen navigation={navigation as any} route={{ params: {} } as any} />);
+    };
+    toggle("No known issues");
+    expect(screen.queryByTestId("health-notice-injury-line")).not.toBeInTheDocument();
+    toggle("Shoulder issues");
+    expect(screen.getByTestId("health-notice-injury-line")).toBeVisible();
+    toggle("No known issues");
+    expect(screen.queryByTestId("health-notice-injury-line")).not.toBeInTheDocument();
+  });
+
 
   it("renders goals, fitness, and injury section headings", () => {
     renderScreen();
@@ -185,6 +207,7 @@ describe("Step1GoalsScreen", () => {
     }));
     const navigation = renderScreen();
 
+    expect(screen.getByTestId("step1-health-notice")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     await waitFor(() => {

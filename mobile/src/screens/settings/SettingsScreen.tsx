@@ -41,6 +41,7 @@ import { getPreferredHeightUnit, getPreferredUnit } from "../../api/profileApi";
 import { clearTokens, getRefreshToken } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { openLegalUrl } from "../../components/legal/LegalLinksRow";
+import { HealthNotice } from "../../components/legal/HealthNotice";
 import { logOutPurchases, subscriptionManagementUrl } from "../../lib/purchases";
 import type { RootTabParamList } from "../../navigation/AppTabs";
 import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
@@ -535,6 +536,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               showChevron
             />
           </View>
+          <HealthNotice testID="settings-health-notice" />
         </View>
 
         <View style={styles.section}>
