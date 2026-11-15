@@ -9,6 +9,7 @@ import { Alert } from "react-native";
 import { ProgramDayScreen } from "./ProgramDayScreen";
 import { useCompleteProgram, useEntitlement, useYearProgress, useMarkDayComplete, useProgramDayFull } from "../../api/hooks";
 import { getPrsFeed } from "../../api/history";
+import { getSegmentExerciseLogs } from "../../api/segmentLog";
 import { getProgramEndCheck } from "../../api/programCompletion";
 import { getProgramOverview } from "../../api/programViewer";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -200,13 +201,14 @@ vi.mock("./hooks/useExerciseSwapSheet", () => ({
 }));
 
 vi.mock("../../components/program/SessionSummaryModal", () => ({
-  SessionSummaryModal: ({ onDismiss, yearCountAfterSession, yearTarget, yearClubs, year, totalSets, totalVolumeKg, visible }: any) =>
+  SessionSummaryModal: ({ onDismiss, yearCountAfterSession, yearTarget, yearClubs, year, totalSets, totalVolumeKg, exerciseCount, visible }: any) =>
     visible ? (
       <div role="dialog" aria-label="Session summary">
         <p>Great work</p>
         {yearCountAfterSession !== null ? <p>{summaryCountCopy(yearCountAfterSession, yearTarget, year, yearClubs)}</p> : null}
-        <p>{totalSets} sets</p>
-        <p>{totalVolumeKg} kg</p>
+        <p>{totalSets ?? "–"} sets</p>
+        <p>{totalVolumeKg ?? "–"} kg</p>
+        <p>{exerciseCount ?? "–"} exercises</p>
         <button type="button" onClick={() => onDismiss?.()}>
           Finish
         </button>
@@ -323,6 +325,7 @@ async function openWorkoutSummary() {
 
 describe("ProgramDayScreen", () => {
   beforeEach(() => {
+    vi.mocked(getSegmentExerciseLogs).mockReset().mockResolvedValue([]);
     markDayMutateMock.mockReset();
     markDayMutateMock.mockResolvedValue({ ok: true });
     completeProgramMutateMock.mockReset();
@@ -389,6 +392,81 @@ describe("ProgramDayScreen", () => {
     queryClient?.clear();
     vi.useRealTimers();
   });
+  it("fetches one saved set from a partially logged three-set segment, bypassing stale cache", async () => {
+    useProgramDayFullMock.mockReturnValue({ data: { ...mockDay, segments: mockDay.segments.map(segment => ({
+      ...segment, exercises: segment.exercises.map(exercise => ({ ...exercise, sets: 3 })),
+    })) }, isLoading: false, isError: false } as any);
+    vi.mocked(getSegmentExerciseLogs).mockResolvedValue([
+      { programExerciseId: "ex-1", orderIndex: 1, weightKg: 80, repsCompleted: 5, rirActual: null },
+    ]);
+    renderScreen();
+    await waitForLocalStateLoad();
+    queryClient.setQueryData(["segmentExerciseLogs", "seg-1", "day-1"], []);
+    act(() => [...swapSheetMocks.segmentCardProps].reverse().find(props => props.segment.id === "seg-1").onSetsLoggedChange("seg-1", 1));
+    await openWorkoutSummary();
+    expect(await screen.findByText("400 kg")).toBeInTheDocument();
+    expect(screen.getByText("1 sets")).toBeInTheDocument();
+    expect(screen.getByText("1 exercises")).toBeInTheDocument();
+    expect(getSegmentExerciseLogs).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores summary totals for both segments after relaunch", async () => {
+    getSegmentLogMock.mockResolvedValue({ updatedAt: "2026-11-15", exerciseSetCounts: { "ex-1": 1 } });
+    vi.mocked(getSegmentExerciseLogs).mockImplementation(async ({ workoutSegmentId }) => [
+      { programExerciseId: workoutSegmentId, orderIndex: 1, weightKg: workoutSegmentId === "seg-1" ? 80 : 20, repsCompleted: 5, rirActual: null },
+    ]);
+    const { navigation } = renderScreen();
+    await openWorkoutSummary();
+    expect(await screen.findByText("500 kg")).toBeInTheDocument();
+    expect(screen.getByText("2 sets")).toBeInTheDocument();
+    expect(screen.getByText("2 exercises")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Finish"));
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", expect.objectContaining({ weekCompleteVolumeKg: 500 })));
+  });
+
+  it("keeps successful segment totals when another fetch fails", async () => {
+    getSegmentLogMock.mockResolvedValue({ updatedAt: "2026-11-15", exerciseSetCounts: { "ex-1": 1 } });
+    vi.mocked(getSegmentExerciseLogs).mockImplementation(async ({ workoutSegmentId }) => {
+      if (workoutSegmentId === "seg-2") throw new Error("offline");
+      return [{ programExerciseId: "ex-1", orderIndex: 1, weightKg: 80, repsCompleted: 5, rirActual: null }];
+    });
+    renderScreen();
+    queryClient.setDefaultOptions({ queries: { retry: false } });
+    await openWorkoutSummary();
+    expect(await screen.findByText("400 kg")).toBeInTheDocument();
+    expect(screen.getByText("1 sets")).toBeInTheDocument();
+  });
+
+  it("shows placeholders while fetching and lets Done complete using the fetched volume", async () => {
+    let resolveRows!: (rows: Awaited<ReturnType<typeof getSegmentExerciseLogs>>) => void;
+    vi.mocked(getSegmentExerciseLogs).mockReturnValue(new Promise(resolve => { resolveRows = resolve; }));
+    getSegmentLogMock.mockImplementation(async (_day, segment) => segment === "seg-1"
+      ? { updatedAt: "2026-11-15", exerciseSetCounts: { "ex-1": 1 } } : null);
+    const { navigation } = renderScreen();
+    await openWorkoutSummary();
+    expect(screen.getByText("– kg")).toBeInTheDocument();
+    expect(screen.getByText("– sets")).toBeInTheDocument();
+    expect(screen.getByText("– exercises")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Finish"));
+    await waitFor(() => expect(markDayMutateMock).toHaveBeenCalled());
+    await act(async () => resolveRows([{ programExerciseId: "ex-1", orderIndex: 1, weightKg: 80, repsCompleted: 5, rirActual: null }]));
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith("ProgramDashboard", expect.objectContaining({ weekCompleteVolumeKg: 400 })));
+  });
+
+  it("falls back to locally known rows for a segment whose refresh fails", async () => {
+    const rows = [{ programExerciseId: "ex-1", orderIndex: 1, weightKg: 80, repsCompleted: 5, rirActual: null }];
+    vi.mocked(getSegmentExerciseLogs).mockResolvedValueOnce(rows).mockRejectedValue(new Error("offline"));
+    renderScreen();
+    queryClient.setDefaultOptions({ queries: { retry: false } });
+    await waitForLocalStateLoad();
+    act(() => swapSheetMocks.segmentCardProps[0].onAllSetsSaved("seg-1"));
+    await waitFor(() => expect(getSegmentExerciseLogs).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    await openWorkoutSummary();
+    expect(await screen.findByText("400 kg")).toBeInTheDocument();
+    expect(getSegmentExerciseLogs).toHaveBeenCalledTimes(2);
+  });
+
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
     await act(async () => {});

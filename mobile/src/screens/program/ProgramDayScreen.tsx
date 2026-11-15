@@ -208,9 +208,40 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
     void getWorkoutStartedAt(programDayId).then(setStartedAtMs);
   }, [programDayId]);
 
+  type SessionStats = ReturnType<typeof computeSessionStatsFromLoggedRows>;
+  const [summaryStats, setSummaryStats] = useState<SessionStats | null>(null);
+  const summaryStatsRequest = useRef<Promise<SessionStats> | null>(null);
+  const summaryRequestId = useRef(0);
+  useEffect(() => {
+    summaryRequestId.current += 1;
+    summaryStatsRequest.current = null;
+    setSummaryStats(null);
+    return () => { summaryRequestId.current += 1; };
+  }, [programDayId]);
+
+  const fetchSessionStats = useCallback(async (): Promise<SessionStats> => {
+    const entries = await Promise.all(orderedSegments
+      .filter(segment => segmentDoneSetCounts[segment.id] > 0 || segmentLogs[segment.id])
+      .map(async segment => {
+        try {
+          const rows = await queryClient.fetchQuery({
+            queryKey: queryKeys.segmentExerciseLogs(segment.id, programDayId),
+            queryFn: () => getSegmentExerciseLogs({ userId, workoutSegmentId: segment.id, programDayId }),
+            staleTime: 0,
+          });
+          return [segment.id, rows.map(row => ({
+            programExerciseId: row.programExerciseId, orderIndex: row.orderIndex,
+            weightKg: row.weightKg, repsCompleted: row.repsCompleted, rirActual: row.rirActual,
+          }))] as const;
+        } catch {
+          return [segment.id, segmentLogRows[segment.id] ?? []] as const;
+        }
+      }));
+    return computeSessionStatsFromLoggedRows(Object.fromEntries(entries));
+  }, [orderedSegments, segmentDoneSetCounts, segmentLogs, segmentLogRows, queryClient, programDayId, userId]);
+
   const computeSessionStats = useCallback(
-    (): { totalVolumeKg: number; totalSets: number; exerciseCount: number } =>
-      computeSessionStatsFromLoggedRows(segmentLogRows),
+    () => summaryStatsRequest.current ?? Promise.resolve(computeSessionStatsFromLoggedRows(segmentLogRows)),
     [segmentLogRows],
   );
 
@@ -353,11 +384,18 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const openSummary = useCallback(() => {
     const today = toLocalIsoDate();
     const show = (date?: string) => {
+      const requestId = ++summaryRequestId.current;
+      setSummaryStats(null);
+      const request = fetchSessionStats();
+      summaryStatsRequest.current = request;
+      void request.then(stats => {
+        if (summaryRequestId.current === requestId) setSummaryStats(stats);
+      });
       setCompletionLocalDate(date);
       setSummaryVisible(true);
     };
     if (completionLocalDate) {
-      setSummaryVisible(true);
+      show(completionLocalDate);
     } else if (day?.scheduledDate && day.scheduledDate < today) {
       Alert.alert("When did you train?", undefined, [
         { text: "Today", onPress: () => show(today) },
@@ -368,7 +406,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         } },
       ], { cancelable: false });
     } else show();
-  }, [day?.scheduledDate, completionLocalDate]);
+  }, [day?.scheduledDate, completionLocalDate, fetchSessionStats]);
 
   const continueComplete = useCallback(() => {
     if (completedExerciseCount < totalExercises) {
@@ -433,7 +471,6 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const weekNumber = loadedDay.weekNumber ?? 1;
   const currentEquipmentPreset = loadedDay.equipmentOverridePresetSlug ?? null;
   const currentEquipmentItems = loadedDay.equipmentOverrideItemSlugs ?? [];
-  const sessionStats = computeSessionStats();
   const adaptedCount = dayQuery.data
     ? dayQuery.data.segments
         .flatMap((s) => s.exercises)
@@ -566,9 +603,9 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
       />
       <SessionSummaryModal
         visible={summaryVisible}
-        totalVolumeKg={sessionStats.totalVolumeKg}
-        totalSets={sessionStats.totalSets}
-        exerciseCount={sessionStats.exerciseCount}
+        totalVolumeKg={summaryStats?.totalVolumeKg ?? null}
+        totalSets={summaryStats?.totalSets ?? null}
+        exerciseCount={summaryStats?.exerciseCount ?? null}
         prHits={prHits}
         prE1rmKg={prE1rmKg}
         yearCountAfterSession={yearCountAfterSession}

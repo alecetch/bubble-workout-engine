@@ -236,3 +236,9 @@ test("computeSessionStatsFromLoggedRows excludes rows with null weight or zero r
     expect(stats.totalSets).toBe(3);
     expect(stats.exerciseCount).toBe(3);
 });
+
+test("bodyweight rows count as completed sets with zero volume", () => {
+  expect(computeSessionStatsFromLoggedRows({ segment: [
+    { programExerciseId: "push-up", orderIndex: 1, weightKg: null, repsCompleted: 10, rirActual: null },
+  ] })).toEqual({ totalVolumeKg: 0, totalSets: 1, exerciseCount: 1 });
+});
