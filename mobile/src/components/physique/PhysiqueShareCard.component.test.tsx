@@ -17,7 +17,7 @@ vi.mock("expo-sharing", () => ({
 }));
 
 describe("PhysiqueShareCard", () => {
-  it("renders Forma brand copy without the old brand", () => {
+  it("renders the physique card with the current share domain", () => {
     render(
       <PhysiqueShareCard
         scanResult={{
@@ -34,7 +34,8 @@ describe("PhysiqueShareCard", () => {
     );
 
     expect(screen.getByText("Forma")).toBeInTheDocument();
-    expect(screen.getByText("Track your physique at getforma.fit")).toBeInTheDocument();
+    expect(screen.getByText("Track your physique at 200days.app")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("getforma.fit");
     expect(document.body.textContent).not.toContain("Formai");
   });
 });
