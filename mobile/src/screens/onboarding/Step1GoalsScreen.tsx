@@ -9,6 +9,7 @@ import {
 import type { ScrollViewInstance } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
+import { HealthNotice } from "../../components/legal/HealthNotice";
 import { SectionCard } from "../../components/onboarding/SectionCard";
 import { useErrorPulse } from "../../components/onboarding/useErrorPulse";
 import { PillGrid } from "../../components/onboarding/PillGrid";
@@ -86,6 +87,11 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
     });
     return matched?.code ?? "no_known_issues";
   }, [referenceDataQuery.data?.injuryFlags]);
+
+  const hasRealInjury = useMemo(
+    () => draft.injuryFlags.some((flag) => flag !== noneInjurySlug),
+    [draft.injuryFlags, noneInjurySlug],
+  );
 
   const updateDraftWithValidation = (partial: Partial<typeof draft>): void => {
     const nextDraft = { ...draft, ...partial };
@@ -255,6 +261,7 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
           {fieldErrors.injuryFlags ? <Text style={styles.errorText}>{fieldErrors.injuryFlags}</Text> : null}
         </SectionCard>
       </Animated.View>
+      <HealthNotice testID="step1-health-notice" showInjuryLine={hasRealInjury} />
     </OnboardingScaffold>
   );
 }

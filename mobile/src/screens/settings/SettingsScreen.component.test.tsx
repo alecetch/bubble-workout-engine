@@ -135,6 +135,14 @@ describe("SettingsScreen", () => {
   beforeEach(() => {
     resetSettingsMocks();
   });
+  it("shows the general health notice in Legal without injury-specific copy", () => {
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    const notice = screen.getByTestId("settings-health-notice");
+    expect(notice).toBeVisible();
+    expect(notice.parentElement).toHaveTextContent("LEGAL");
+    expect(notice.parentElement).toHaveTextContent("Terms of Service");
+    expect(screen.queryByTestId("health-notice-injury-line")).not.toBeInTheDocument();
+  });
   it("has no accessibility violations in the default render state", async () => {
     render(<SettingsScreen navigation={nav as any} route={{} as any} />);
     await act(async () => {});
