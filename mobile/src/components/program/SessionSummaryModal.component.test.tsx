@@ -19,6 +19,15 @@ function defaultProps(overrides: Partial<React.ComponentProps<typeof SessionSumm
 }
 
 describe("SessionSummaryModal", () => {
+  it("shows placeholders for pending stats and real values once loaded without disabling Done", () => {
+    const { rerender } = render(<SessionSummaryModal {...defaultProps({ totalVolumeKg: null, totalSets: null, exerciseCount: null })} />);
+    expect(screen.getAllByText("–")).toHaveLength(3);
+    expect(screen.queryByText("0 kg")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Done" })).toBeEnabled();
+    rerender(<SessionSummaryModal {...defaultProps({ totalVolumeKg: 400, totalSets: 1, exerciseCount: 1 })} />);
+    expect(screen.getByText("400 kg")).toBeInTheDocument();
+    expect(screen.getAllByText("1")).toHaveLength(2);
+  });
   it("uses the pro-rated club thresholds in the yearly line", () => {
     render(<SessionSummaryModal {...defaultProps({ yearCountAfterSession: 51, yearTarget: 50,
       yearClubs: [{ tier: 100, threshold: 25 }, { tier: 200, threshold: 50 }, { tier: 250, threshold: 63 }, { tier: 300, threshold: 75 }],

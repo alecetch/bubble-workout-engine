@@ -19,9 +19,9 @@ import { summaryCountCopy } from "../../utils/yearCopy";
 
 type SessionSummaryModalProps = {
   visible: boolean;
-  totalVolumeKg: number;
-  totalSets: number;
-  exerciseCount: number;
+  totalVolumeKg: number | null;
+  totalSets: number | null;
+  exerciseCount: number | null;
   prHits: string[];
   prE1rmKg?: number | null;
   yearCountAfterSession: number | null;
@@ -50,9 +50,9 @@ export function SessionSummaryModal({
 }: SessionSummaryModalProps): React.JSX.Element {
   const prCardRef = useRef<ViewInstance>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const roundedVolume = Math.round(totalVolumeKg);
+  const roundedVolume = Math.round(totalVolumeKg ?? 0);
   const volumeDisplay =
-    roundedVolume >= 1000
+    totalVolumeKg === null ? "–" : roundedVolume >= 1000
       ? `${(roundedVolume / 1000).toFixed(1)}t`
       : `${roundedVolume.toLocaleString()} kg`;
 
@@ -124,11 +124,11 @@ export function SessionSummaryModal({
                 <Text style={styles.statLabel}>Volume lifted</Text>
               </View>
               <View style={styles.statCell}>
-                <Text style={styles.statValue}>{totalSets}</Text>
+                <Text style={styles.statValue}>{totalSets ?? "–"}</Text>
                 <Text style={styles.statLabel}>Sets completed</Text>
               </View>
               <View style={styles.statCell}>
-                <Text style={styles.statValue}>{exerciseCount}</Text>
+                <Text style={styles.statValue}>{exerciseCount ?? "–"}</Text>
                 <Text style={styles.statLabel}>Exercises</Text>
               </View>
             </View>

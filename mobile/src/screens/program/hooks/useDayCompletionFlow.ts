@@ -57,7 +57,7 @@ export function useDayCompletionFlow(params: {
   setSummaryVisible: (value: boolean) => void;
   setWorkoutCompleteState: (value: boolean) => void;
   setConfirmationText: (value: string | null) => void;
-  computeSessionStats: () => { totalVolumeKg: number };
+  computeSessionStats: () => { totalVolumeKg: number } | Promise<{ totalVolumeKg: number }>;
   day: { weekNumber?: number | null } | undefined | null;
 }): {
   prHits: string[];
@@ -157,7 +157,7 @@ export function useDayCompletionFlow(params: {
         overview,
         day?.weekNumber ?? null,
         programDayId,
-        computeSessionStats().totalVolumeKg,
+        (await computeSessionStats()).totalVolumeKg,
       );
       if (shareData) {
         weekCompleteNumber = shareData.weekNumber;
