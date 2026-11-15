@@ -49,11 +49,11 @@ test("running profile exposes a synchronous branded builder", () => {
 });
 test("share-pack email preserves the signed download URL and expiry", async () => {
   let email;
-  const handlers = createSharePackHandlers({}, {
+  const handlers = createSharePackHandlers({ query: async () => ({ rows: [{ email: "alex@example.test" }] }) }, {
     getOrCreateSharePack: async () => ({}), getPackDownloadUrl: async () => "https://download.example.test/pack.zip?signature=abc",
     sendEmail: async value => { email = value; }, logCalculatorEvent: async () => {},
   });
-  await handlers.sendPackEmail({ params: { submissionId: "test" }, body: { email: "alex@example.test" } }, { json: value => value });
+  await handlers.sendPackEmail({ params: { submissionId: "11111111-1111-4111-8111-111111111111" }, body: { email: "alex@example.test" } }, { json: value => value });
   check(email);
   assert.equal(email.subject, "Your HYROX Instagram pack from 200 Days");
   assert.match(email.text, /This link expires in 7 days\.\n\nThe 200 Days team/);
