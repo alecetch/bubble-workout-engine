@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as StoreReview from "expo-store-review";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -602,7 +603,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
           <View style={styles.reviewPromptContent}>
             <Text style={styles.reviewPromptTitle}>{reviewPromptMessage ? "Thanks" : "Nice PR."}</Text>
             <Text style={styles.reviewPromptText}>
-              {reviewPromptMessage ?? "Enjoying Forma? A quick rating helps us improve."}
+              {reviewPromptMessage ?? `Enjoying ${BRAND_WORDMARK}? A quick rating helps us improve.`}
             </Text>
           </View>
           <View style={styles.reviewPromptActions}>

@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -174,9 +175,10 @@ describe("SettingsScreen", () => {
 
     await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
     expect(Share.share).toHaveBeenCalledWith({
-      message: "Train smarter with Forma. Start your free trial: https://getforma.fit/ref/Z25TZAYC",
+      message: `Train smarter with ${BRAND_WORDMARK}. Start your free trial: https://getforma.fit/ref/Z25TZAYC`,
     });
-    expect(document.body.textContent).toContain("Share Forma with a friend");
+    expect(document.body.textContent).toContain(`Share ${BRAND_WORDMARK} with a friend`);
+    expect(document.body.textContent).not.toMatch(/\bForma\b/);
     expect(document.body.textContent).not.toContain("Formai");
   });
 });

@@ -1,10 +1,11 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PRShareCard } from "./PRShareCard";
 
 describe("PRShareCard", () => {
-  it("renders Forma brand copy without the old brand", () => {
+  it("renders current brand copy without the old brand", () => {
     render(
       <PRShareCard
         exerciseName="Back Squat"
@@ -14,8 +15,9 @@ describe("PRShareCard", () => {
       />,
     );
 
-    expect(screen.getByText("Forma")).toBeInTheDocument();
-    expect(screen.getByText("Training with Forma")).toBeInTheDocument();
+    expect(screen.getByText(BRAND_WORDMARK)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bForma\b/);
+    expect(screen.getByText(`Training with ${BRAND_WORDMARK}`)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("Formai");
   });
 });

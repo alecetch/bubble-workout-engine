@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, screen } from "@testing-library/react";
@@ -257,7 +258,8 @@ describe("ProgramDashboardScreen", () => {
     renderDashboard(undefined, { programId: "prog-1", showReviewPrompt: true });
 
     expect(screen.getByText("Nice PR.")).toBeInTheDocument();
-    expect(screen.getByText("Enjoying Forma? A quick rating helps us improve.")).toBeInTheDocument();
+    expect(screen.getByText(`Enjoying ${BRAND_WORDMARK}? A quick rating helps us improve.`)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bForma\b/);
     expect(document.body.textContent).not.toContain("Formai");
   });
 

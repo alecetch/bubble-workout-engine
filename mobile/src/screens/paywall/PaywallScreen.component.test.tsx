@@ -1,3 +1,4 @@
+import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { axe } from "jest-axe";
 import { Alert, Platform } from "react-native";
@@ -113,7 +114,8 @@ describe("PaywallScreen", () => {
   it("renders Subscribe and Restore purchase buttons", () => {
     renderScreen();
 
-    expect(screen.getByText("Forma")).toBeInTheDocument();
+    expect(screen.getByText(BRAND_WORDMARK)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bForma\b/);
     expect(document.body.textContent).not.toContain("Formai");
     expect(screen.getByText("Subscribe")).toBeInTheDocument();
     expect(screen.getByText("Restore purchase")).toBeInTheDocument();

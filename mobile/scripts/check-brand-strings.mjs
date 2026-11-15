@@ -4,6 +4,7 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const FORBIDDEN_PATTERNS = [
+  { name: "Forma", pattern: /\bForma\b/g },
   { name: "formai", pattern: /formai/gi },
   { name: "bubble workout", pattern: /bubble[\s-]?workout/gi },
 ];
